@@ -546,7 +546,7 @@ export async function executeTool(name, args = {}, context = {}) {
       if (!context.autoApprove && (!context.approval || !(await context.approval('Install the reviewed Oasis plugin bundle "' + name + '" and copy its workflow skill files into this workspace?')))) {
         return { approved: false, name, message: 'Plugin installation was not approved. No files were installed.' };
       }
-      await managePlugins(root, ['install', name]);
+      await managePlugins(root, ['install', name], { quiet: true });
       return { installed: true, name, message: 'Installed the bundled workflow instructions. External integrations still require separate setup and approval.' };
     }
     case 'edit_file': {
