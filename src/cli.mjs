@@ -1,0 +1,389 @@
+#!/usr/bin/env node
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { spawn, spawnSync } from 'node:child_process';
+import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_MODEL, validateBaseUrl } from './config.mjs';
+import { createSession, runAgentTurn } from './agent.mjs';
+import { executeTool } from './tools.mjs';
+import { parseInstallIntent, planPackageInstall } from './installer.mjs';
+import { listBackups, restoreBackup } from './backups.mjs';
+
+const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const INSTALL_URL = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
+
+function printHelp() {
+  stdout.write([
+    'Oasis OSS — a plain-English coding agent',
+    '',
+    'Usage:',
+    '  oasis                         Start an interactive agent session',
+    '  oasis "fix the failing tests"  Give a task in plain English',
+    '  oasis setup                   Configure a model provider',
+    '  oasis doctor                  Check the local environment',
+    '  oasis init                    Create OASIS.md project instructions',
+    '  oasis install pnpm            Install a tool using a detected manager',
+    '  oasis skills list             List available agent skills',
+    '  oasis skills install debugging Install a bundled skill in this workspace',
+    '  oasis backups                 List snapshots made before file changes',
+    '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
+    '  oasis update                  Update the installed Oasis CLI from GitHub',
+    '  oasis config                  Show provider settings (key is masked)',
+    '',
+    'Options:',
+    '  --workspace PATH              Choose the workspace root',
+    '  --yes, -y                     Auto-approve supported commands and installs',
+    '                                (destructive operations remain blocked or gated)',
+    '  --help, -h                    Show this help',
+    '  --version                     Show the installed version',
+    '',
+    'Setup: npm install -g ' + INSTALL_URL,
+    'Then:  oasis setup',
+    'Safety: command execution is not a sandbox. Review approvals; --yes increases risk.',
+    ''
+  ].join('\n'));
+}
+
+async function askLine(question) {
+  if (!stdin.isTTY || !stdout.isTTY) throw new Error('This action needs an interactive terminal. Re-run it from a terminal session.');
+  const rl = createInterface({ input: stdin, output: stdout });
+  try { return await rl.question(question); } finally { rl.close(); }
+}
+
+async function askSecret(question) {
+  if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function') {
+    throw new Error('Hidden API-key entry needs a real terminal. Set OASIS_API_KEY in the environment instead.');
+  }
+  return await new Promise((resolve, reject) => {
+    const wasRaw = stdin.isRaw;
+    let value = '';
+    let finished = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      stdin.off('data', onData);
+      try { stdin.setRawMode(Boolean(wasRaw)); } catch {}
+      stdin.pause();
+      stdout.write('\n');
+    };
+    const onData = (data) => {
+      const text = data.toString('utf8');
+      for (const char of text) {
+        if (char === '\u0003') {
+          cleanup();
+          reject(new Error('Setup cancelled.'));
+          return;
+        }
+        if (char === '\r' || char === '\n') {
+          cleanup();
+          resolve(value);
+          return;
+        }
+        if (char === '\u007f' || char === '\b') {
+          if (value.length) {
+            value = value.slice(0, -1);
+            stdout.write('\b \b');
+          }
+          continue;
+        }
+        if (char >= ' ' && char !== '\u007f') {
+          value += char;
+          stdout.write('*');
+        }
+      }
+    };
+    stdout.write(question);
+    try { stdin.setRawMode(true); } catch (error) { cleanup(); reject(error); return; }
+    stdin.setEncoding('utf8');
+    stdin.resume();
+    stdin.on('data', onData);
+  });
+}
+
+async function configureProvider() {
+  stdout.write('\nOasis setup — model provider\n');
+  stdout.write('Choose an OpenAI-compatible chat-completions endpoint. Local Ollama endpoints are supported when they expose /v1/chat/completions.\n');
+  const rl = createInterface({ input: stdin, output: stdout });
+  let baseURL, model;
+  try {
+    baseURL = (await rl.question('Base URL [' + DEFAULT_BASE_URL + ']: ')).trim() || DEFAULT_BASE_URL;
+    model = (await rl.question('Model name [' + DEFAULT_MODEL + ']: ')).trim() || DEFAULT_MODEL;
+  } finally { rl.close(); }
+  baseURL = validateBaseUrl(baseURL);
+  const existing = await loadConfig().catch(() => ({ apiKey: '' }));
+  let apiKey = '';
+  if (!/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|::1)(?::|\/|$)/i.test(baseURL)) {
+    apiKey = await askSecret('API key (input hidden; press Enter to use OASIS_API_KEY/OPENAI_API_KEY if set): ');
+  }
+  if (!apiKey) apiKey = process.env.OASIS_API_KEY || process.env.OPENAI_API_KEY || existing.apiKey || '';
+  const configPath = await saveConfig({ baseURL, model, apiKey });
+  stdout.write('Saved provider settings to ' + configPath + '\n');
+  stdout.write('Authentication: ' + (apiKey ? 'configured' : 'no API key stored') + '\n');
+  stdout.write('Run oasis doctor to inspect the environment, then oasis to start chatting.\n');
+}
+
+function commandAvailable(name) {
+  const probe = process.platform === 'win32' ? 'where' : 'which';
+  return spawnSync(probe, [name], { stdio: 'ignore', timeout: 1500, windowsHide: true }).status === 0;
+}
+
+async function doctor() {
+  stdout.write('Oasis environment report\n');
+  stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
+  stdout.write('  Node.js: ' + process.version + (Number(process.versions.node.split('.')[0]) >= 20 ? ' (supported)' : ' (requires Node 20+)') + '\n');
+  const probes = ['git', 'npm', 'python3', 'python', 'pipx', 'pkg', 'apt-get', 'dnf', 'pacman', 'brew', 'winget', 'ollama'];
+  for (const item of probes) stdout.write('  ' + item + ': ' + (commandAvailable(item) ? 'available' : 'not found') + '\n');
+  try {
+    const config = await loadConfig();
+    const summary = getProviderSummary(config);
+    stdout.write('  Model provider: ' + summary.provider + '\n');
+    stdout.write('  Model: ' + summary.model + '\n');
+    stdout.write('  Authentication: ' + summary.authentication + '\n');
+    stdout.write('  Config: ' + summary.configPath + '\n');
+  } catch (error) { stdout.write('  Provider config: invalid (' + error.message + ')\n'); }
+  stdout.write('  Workspace: ' + process.cwd() + '\n');
+  stdout.write('  Note: terminal commands run locally and are not sandboxed by Oasis.\n');
+}
+
+function scrubChildEnvironment() {
+  const env = {};
+  const allow = new Set(String(process.env.OASIS_COMMAND_ENV_ALLOWLIST || '').split(',').map((item) => item.trim()).filter(Boolean));
+  for (const [key, value] of Object.entries(process.env)) {
+    if (/(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i.test(key) && !allow.has(key)) continue;
+    if (key === 'OASIS_COMMAND_ENV_ALLOWLIST') continue;
+    env[key] = value;
+  }
+  return env;
+}
+
+async function runInteractiveCommand(command, args) {
+  return await new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: 'inherit', shell: false, windowsHide: true, env: scrubChildEnvironment() });
+    child.on('error', (error) => resolve({ code: null, error: error.message }));
+    child.on('close', (code, signal) => resolve({ code, signal }));
+  });
+}
+
+async function approve(prompt, forceInteractive = false, autoApprove = false) {
+  if (autoApprove && !forceInteractive) return true;
+  try {
+    stdout.write('\nPermission request\n' + prompt + '\n');
+    const answer = (await askLine('Proceed? [y/N] ')).trim().toLowerCase();
+    return ['y', 'yes'].includes(answer);
+  } catch {
+    stdout.write('No interactive approval was available; action denied.\n');
+    return false;
+  }
+}
+
+async function selfUpdate(autoApprove = false) {
+  if (!commandAvailable('npm')) throw new Error('npm was not found. Install Node.js with npm, then rerun oasis update.');
+  const command = 'npm';
+  const args = ['install', '--global', INSTALL_URL];
+  stdout.write('Oasis self-update plan\n  ' + command + ' ' + args.join(' ') + '\n');
+  stdout.write('This downloads the public Oasis source from GitHub and replaces the installed CLI package.\n');
+  if (!(await approve('Install/update Oasis from ' + INSTALL_URL + '?', false, autoApprove))) {
+    stdout.write('Update cancelled.\n');
+    return;
+  }
+  const result = await runInteractiveCommand(command, args);
+  if (result.code === 0) stdout.write('Oasis CLI update completed.\n');
+  else stdout.write('Oasis CLI update failed' + (result.code === null ? ': ' + result.error : ' with exit code ' + result.code) + '.\n');
+}
+
+async function installRequest(request, root, autoApprove) {
+  if (request.action === 'self') return await selfUpdate(autoApprove);
+  const plan = planPackageInstall({ packageName: request.packageName, ecosystem: request.ecosystem, workspaceRoot: root });
+  stdout.write('Installation plan\n');
+  stdout.write('  Package: ' + plan.packageName + '\n');
+  stdout.write('  Manager: ' + plan.ecosystem + '\n');
+  stdout.write('  Command: ' + plan.command + ' ' + plan.args.map((arg) => JSON.stringify(arg)).join(' ') + '\n');
+  stdout.write('  Note: ' + plan.note + '\n');
+  const result = await executeTool('install_package', request, {
+    root, autoApprove, approval: (message) => approve(message, false, autoApprove)
+  });
+  if (result && result.exitCode === 0) stdout.write('\nInstallation completed. You can verify it with oasis doctor or the tool’s version command.\n');
+  else if (result && result.approved === false) stdout.write('\nInstallation cancelled; no package manager was started.\n');
+  else if (result && result.exitCode !== undefined) stdout.write('\nInstallation did not complete successfully. Exit code: ' + result.exitCode + '\n');
+  else if (result && result.error) stdout.write('\nInstallation error: ' + result.error + '\n');
+  else stdout.write('\nInstallation result: ' + JSON.stringify(result) + '\n');
+}
+
+async function initWorkspace(root) {
+  const target = path.join(root, 'OASIS.md');
+  try { await access(target); stdout.write('OASIS.md already exists; leaving it unchanged.\n'); return; } catch {}
+  await writeFile(target, [
+    '# Oasis workspace instructions',
+    '',
+    '## Project purpose',
+    'Describe what this repository is for and its main constraints.',
+    '',
+    '## Development workflow',
+    '- Inspect existing code before changing it.',
+    '- Prefer small, testable changes.',
+    '- Run relevant checks before reporting completion.',
+    '- Do not commit credentials or generated user data.',
+    '- Ask before destructive commands, remote publishing, or production changes.',
+    ''
+  ].join('\n'), { encoding: 'utf8', flag: 'wx' });
+  stdout.write('Created ' + target + '. Edit it to give Oasis persistent project context.\n');
+}
+
+async function listSkills(root) {
+  const installedRoot = path.join(root, '.oasis', 'skills');
+  const installed = new Set();
+  try { for (const item of await readdir(installedRoot, { withFileTypes: true })) if (item.isDirectory()) installed.add(item.name); } catch {}
+  const bundledRoot = path.join(APP_ROOT, 'skills');
+  let bundled = [];
+  try { bundled = (await readdir(bundledRoot, { withFileTypes: true })).filter((item) => item.isDirectory()).map((item) => item.name); } catch {}
+  stdout.write('Built-in skill templates:\n');
+  for (const name of bundled) stdout.write('  ' + name + (installed.has(name) ? ' (installed in this workspace)' : '') + '\n');
+  if (!bundled.length) stdout.write('  No bundled skills were found in this installation.\n');
+  if (installed.size) stdout.write('\nAdditional workspace skills:\n  ' + [...installed].filter((name) => !bundled.includes(name)).join('\n  ') + '\n');
+}
+
+async function installSkill(root, name) {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(name || '')) throw new Error('Skill name must use lowercase letters, numbers, and hyphens.');
+  const source = path.join(APP_ROOT, 'skills', name, 'SKILL.md');
+  const destination = path.join(root, '.oasis', 'skills', name, 'SKILL.md');
+  try { await access(source); } catch { throw new Error('No bundled skill named "' + name + '". Use oasis skills list.'); }
+  try { await access(destination); stdout.write('Skill already exists at ' + destination + '; leaving it unchanged.\n'); return; } catch {}
+  await mkdir(path.dirname(destination), { recursive: true });
+  await copyFile(source, destination, 0);
+  stdout.write('Installed skill "' + name + '" into ' + destination + '. It will be loaded as project context in the next agent session.\n');
+}
+
+async function showBackups(root) {
+  const backups = await listBackups(root);
+  if (!backups.length) { stdout.write('No Oasis snapshots are stored for this workspace yet.\n'); return; }
+  stdout.write('Snapshots for ' + path.resolve(root) + ':\n');
+  for (const item of backups) stdout.write('  ' + item.id + '  ' + item.relativePath + '  (' + item.reason + ', ' + item.createdAt + ')\n');
+}
+
+async function restoreOne(root, backupId) {
+  if (!backupId) throw new Error('Usage: oasis restore BACKUP_ID');
+  const ok = await approve('Restore snapshot ' + backupId + ' into this workspace? If the target currently exists, Oasis will snapshot it first.', true, false);
+  if (!ok) { stdout.write('Restore cancelled.\n'); return; }
+  const result = await restoreBackup(root, backupId);
+  stdout.write('Restored ' + result.path + ' from snapshot ' + result.restoredFrom + '.\n');
+}
+
+function printConfig(config) {
+  const summary = getProviderSummary(config);
+  stdout.write('Oasis provider configuration\n');
+  stdout.write('  Base URL: ' + config.baseURL + '\n');
+  stdout.write('  Model: ' + config.model + '\n');
+  stdout.write('  Authentication: ' + summary.authentication + '\n');
+  stdout.write('  API key: ' + (config.apiKey ? 'configured (masked)' : 'not set') + '\n');
+  stdout.write('  Config file: ' + config.configPath + '\n');
+}
+
+async function runPrompt(prompt, root, autoApprove, session = null) {
+  const config = await loadConfig();
+  if (!config.configured) {
+    stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY in your environment. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
+    return session;
+  }
+  session = session || await createSession({ root, config });
+  if (session.root !== root) session = await createSession({ root, config });
+  session.config = config;
+  try {
+    const result = await runAgentTurn(session, prompt, {
+      autoApprove,
+      approval: (message) => approve(message, false, autoApprove),
+      onToolStart: ({ name }) => stdout.write('\n[tool] ' + name + '\n'),
+      onToolResult: ({ name, result }) => {
+        if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
+          stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
+        }
+      },
+      onText: (text) => stdout.write('\nOasis> ' + text + '\n')
+    });
+    if (!result.finished) stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+  } catch (error) {
+    stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
+  }
+  return session;
+}
+
+async function interactive(root, autoApprove) {
+  stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\n');
+  stdout.write('Type your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
+  let session = null;
+  while (true) {
+    let input;
+    try { input = await askLine('\nYou> '); } catch { break; }
+    const text = input.trim();
+    if (!text) continue;
+    if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
+    if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /exit. You can also say “install pnpm” or “install yourself”.\n'); continue; }
+    if (text === '/clear') { session = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
+    if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
+    if (text === '/setup') { try { await configureProvider(); session = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
+    if (text.startsWith('/')) { stdout.write('Unknown command. Type /help.\n'); continue; }
+    const direct = parseInstallIntent(text);
+    if (direct) {
+      try { await installRequest(direct, root, autoApprove); } catch (error) { stdout.write('Install request failed: ' + error.message + '\n'); }
+      continue;
+    }
+    session = await runPrompt(text, root, autoApprove, session);
+  }
+  stdout.write('\nOasis session closed.\n');
+}
+
+async function main() {
+  const rawArgs = process.argv.slice(2);
+  let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
+  let workspace = process.cwd();
+  const args = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+    if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; continue; }
+    if (arg === '--workspace' || arg === '-C') {
+      if (!rawArgs[i + 1]) throw new Error('--workspace requires a path.');
+      workspace = path.resolve(rawArgs[++i]);
+      continue;
+    }
+    if (arg.startsWith('--workspace=')) { workspace = path.resolve(arg.slice('--workspace='.length)); continue; }
+    args.push(arg);
+  }
+  await access(workspace);
+  const command = args[0];
+  const rest = args.slice(1);
+
+  if (!command || command === '--interactive') return await interactive(workspace, autoApprove);
+  if (command === '--help' || command === '-h' || command === 'help') return printHelp();
+  if (command === '--version' || command === '-v') {
+    const pkg = JSON.parse(await readFile(path.join(APP_ROOT, 'package.json'), 'utf8'));
+    stdout.write('Oasis OSS ' + pkg.version + '\n');
+    return;
+  }
+  if (command === 'setup') return await configureProvider();
+  if (command === 'doctor') return await doctor();
+  if (command === 'init') return await initWorkspace(workspace);
+  if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
+  if (command === 'config' || command === 'status') return printConfig(await loadConfig());
+  if (command === 'skills') {
+    if (rest[0] === 'install') return await installSkill(workspace, rest[1]);
+    return await listSkills(workspace);
+  }
+  if (command === 'backups') return await showBackups(workspace);
+  if (command === 'restore') return await restoreOne(workspace, rest[0]);
+  if (command === 'install') {
+    if (!rest.length) { stdout.write('Usage: oasis install PACKAGE_NAME  (or specify an ecosystem such as "npm package prettier")\n'); return; }
+    const request = parseInstallIntent(args.join(' '));
+    if (!request) throw new Error('Use one package name at a time. For compound setup requests, configure a provider and ask Oasis in plain English.');
+    return await installRequest(request, workspace, autoApprove);
+  }
+  const fullPrompt = args.join(' ');
+  const direct = parseInstallIntent(fullPrompt);
+  if (direct) return await installRequest(direct, workspace, autoApprove);
+  await runPrompt(fullPrompt, workspace, autoApprove);
+}
+
+main().catch((error) => {
+  stdout.write('Oasis error: ' + (error.message || String(error)) + '\n');
+  process.exitCode = 1;
+});
