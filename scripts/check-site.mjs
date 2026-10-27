@@ -16,7 +16,7 @@ const required = [
   'id="view-agent"', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"',
   'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
   'id="githubRepoSelect"', 'id="githubCloneBtn"', 'id="githubCheckBtn"', '/api/github/clone',
-  'id="exportBtn"', 'id="importFile"', 'localStorage',
+  'id="exportBtn"', 'id="importFile"', 'localStorage', 'id="providerSetupForm"', 'id="providerProtocol"', 'id="providerBaseUrl"', 'id="providerModel"', 'id="providerApiKey"',
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
   'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
