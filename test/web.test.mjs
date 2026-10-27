@@ -122,7 +122,7 @@ test('provider setup verifies a real model response before saving local configur
   const providerServer = createServer((req, res) => {
     req.resume();
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'OASIS_CONNECTION_OK' } }] }));
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'probe-call', type: 'function', function: { name: 'oasis_connection_probe', arguments: '{\"ready\":true}' } }] } }] }));
   });
   await new Promise((resolve) => providerServer.listen(0, '127.0.0.1', resolve));
   const providerPort = providerServer.address().port;
