@@ -158,8 +158,13 @@ async function snapshotRepository(rawUrl, options = {}) {
   }
   const tree = await getJson(fetchImpl, GITHUB_API + '/repos/' + encodedOwner + '/' + encodedRepo + '/git/trees/' + commitSha + '?recursive=1');
   if (!Array.isArray(tree.tree)) throw new Error('GitHub did not return a repository tree that Oasis can inspect.');
+  const promptPaths = tree.tree.filter((entry) => entry && entry.type === 'blob').map((entry) => String(entry.path || '').replace(/\\/g, '/'));
+  const promptOptions = {
+    claudePlugin: promptPaths.some((item) => item.toLowerCase() === '.claude-plugin/plugin.json'),
+    geminiPlugin: promptPaths.some((item) => item.toLowerCase() === 'gemini-extension.json')
+  };
+  const allCandidates = tree.tree.filter((entry) => isPromptCandidate(entry, promptOptions));
   const candidates = selectAgentPromptFiles(tree.tree);
-  const allCandidates = candidates;
   const executableFiles = tree.tree.filter((entry) => entry && entry.type === 'blob' && /\.(?:mjs|cjs|js|jsx|ts|tsx|py|sh|ps1|bat|cmd|exe|dll)$/i.test(String(entry.path || ''))).length;
   const license = repository.license && (repository.license.spdx_id && repository.license.spdx_id !== 'NOASSERTION' ? repository.license.spdx_id : repository.license.name) || 'Unknown / not detected';
   return {

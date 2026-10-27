@@ -73,6 +73,14 @@ test('prompt candidate selection ignores readmes and executable files and applie
     { path: 'agents/link.md', type: 'blob', mode: '120000', size: 10, sha: 'e' }
   ];
   assert.deepEqual(selectAgentPromptFiles(input).map((item) => item.path), ['engineering/agent.md']);
+  const claudePluginCommands = selectAgentPromptFiles([
+    { path: '.claude-plugin/plugin.json', type: 'blob', mode: '100644', size: 20, sha: '4' },
+    { path: 'commands/review.md', type: 'blob', mode: '100644', size: 40, sha: '5' },
+    { path: 'commands/README.md', type: 'blob', mode: '100644', size: 40, sha: '6' },
+    { path: 'commands/review.toml', type: 'blob', mode: '100644', size: 40, sha: '7' },
+    { path: 'docs/commands.md', type: 'blob', mode: '100644', size: 40, sha: '8' }
+  ]).map((item) => item.path);
+  assert.deepEqual(claudePluginCommands, ['commands/review.md']);
 });
 
 test('inspection pins a commit and reports script risk without importing code', async () => {
