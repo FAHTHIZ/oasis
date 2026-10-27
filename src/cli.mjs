@@ -113,16 +113,18 @@ async function askSecret(question) {
 
 async function configureProvider() {
   stdout.write('\nOasis setup — model provider\n');
-  stdout.write('Choose a native Anthropic API or an OpenAI-compatible chat-completions endpoint. Local Ollama-style endpoints can use OpenAI-compatible mode.\n');
+  stdout.write('Choose the native OpenAI Responses API (recommended for current OpenAI reasoning models), the native Anthropic Messages API, or an OpenAI-compatible endpoint. Local Ollama-style endpoints use OpenAI-compatible mode.\n');
   const rl = createInterface({ input: stdin, output: stdout });
   let protocol, baseURL, model;
   try {
-    const selected = (await rl.question('Protocol [openai-compatible / anthropic] (default openai-compatible): ')).trim().toLowerCase();
-    protocol = validateProtocol(selected || 'openai-compatible');
+    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase();
+    protocol = validateProtocol(selected || 'openai-responses');
     const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
     baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
-    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : DEFAULT_MODEL;
-    model = (await rl.question('Model name [' + defaultModel + ']: ')).trim() || defaultModel;
+    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
+    const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (required for a compatible endpoint): ';
+    model = (await rl.question(modelPrompt)).trim() || defaultModel;
+    if (!model) throw new Error('Enter the exact model name supported by this compatible endpoint.');
   } finally { rl.close(); }
   protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
