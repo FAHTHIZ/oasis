@@ -219,8 +219,8 @@ export function createOasisWebServer(options = {}) {
     if (result.error) {
       return { cliAvailable: false, authenticated: false, account: null, hint: 'GitHub CLI (gh) is not available in this runtime. Install GitHub CLI on the computer running oasis web, then reconnect.' };
     }
-    const output = String(result.stdout || '') + '\\n' + String(result.stderr || '');
-    const accountMatch = output.match(/Logged in to github\\.com account ([^\\s(]+)/i);
+    const output = String(result.stdout || '') + '\n' + String(result.stderr || '');
+    const accountMatch = output.match(/Logged in to github\.com account ([^\s(]+)/i);
     const authenticated = result.exitCode === 0;
     return {
       cliAvailable: true,
@@ -251,7 +251,7 @@ export function createOasisWebServer(options = {}) {
 
   async function startGithubCloneJob(input) {
     const repository = String(input.repository || '').trim();
-    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) {
       throw Object.assign(new Error('Choose a repository in owner/name format from the GitHub list.'), { statusCode: 400 });
     }
     const status = await getGithubStatus();
@@ -270,7 +270,7 @@ export function createOasisWebServer(options = {}) {
         args: ['-C', resolved.absolute, 'remote', 'get-url', 'origin'],
         timeoutSeconds: 10
       }, { root, env, autoApprove: true, maxCommandSeconds: 10 });
-      const remote = String(check.stdout || '').trim().replace(/\\.git$/i, '').replace(/\\/$/, '');
+      const remote = String(check.stdout || '').trim().replace(/\.git$/i, '').replace(/\/$/, '');
       const expected = 'https://github.com/' + repository;
       const ssh = 'git@github.com:' + repository;
       if (check.exitCode !== 0 || (remote.toLowerCase() !== expected.toLowerCase() && remote.toLowerCase() !== ssh.toLowerCase())) {
@@ -305,7 +305,7 @@ export function createOasisWebServer(options = {}) {
           args: ['repo', 'clone', repository, safe.absolute],
           timeoutSeconds: 600
         }, { root, env, autoApprove: true, maxCommandSeconds: 600 });
-        const output = [result.stdout || '', result.stderr ? '\\n' + result.stderr : '', result.error ? '\\n' + result.error : ''].join('').slice(-12000);
+        const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
         if (result.exitCode === 0 && !result.error) {
           activeRoot = safe.absolute;
           job.result = { approved: true, repository, exitCode: 0, workspaceName: path.basename(activeRoot), workspacePath: activeRoot };
@@ -326,11 +326,11 @@ export function createOasisWebServer(options = {}) {
 
   async function startTerminalJob(input) {
     const command = String(input.command || '').trim();
-    if (!command || command.length > 200 || command.includes('\\0')) {
+    if (!command || command.length > 200 || command.includes('\0')) {
       throw Object.assign(new Error('Enter one executable name or path (200 characters maximum).'), { statusCode: 400 });
     }
     const args = input.args === undefined ? [] : input.args;
-    if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\\0'))) {
+    if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\0'))) {
       throw Object.assign(new Error('Arguments must be an array of up to 80 strings; each argument is limited to 5,000 characters.'), { statusCode: 400 });
     }
     const timeoutSeconds = input.timeoutSeconds === undefined ? 120 : Number(input.timeoutSeconds);
@@ -352,7 +352,7 @@ export function createOasisWebServer(options = {}) {
           approval: (prompt) => approvalFor(job, prompt)
         });
         job.result = { ...result, jobType: 'terminal' };
-        const output = [result.stdout || '', result.stderr ? '\\n' + result.stderr : '', result.error ? '\\n' + result.error : ''].join('').slice(-12000);
+        const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
         emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), message: result.message || '' });
         job.status = 'completed';
         emit(job, 'completed', job.result);
