@@ -53,13 +53,17 @@ test('configuration never reuses a stored API key at a changed provider URL', as
   assert.equal(local.configured, true);
 });
 
-test('provider connection probe confirms a real assistant response without offering tools or leaking the API key', async (t) => {
+test('provider connection probe requires a valid inert tool call without executing it or leaking the API key', async (t) => {
   const originalFetch = globalThis.fetch;
   let seenRequest;
   globalThis.fetch = async (url, init = {}) => {
     seenRequest = { url: String(url), headers: new Headers(init.headers), body: JSON.parse(init.body) };
     return new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: 'OASIS_CONNECTION_OK' } }]
+      choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
+        id: 'probe-call',
+        type: 'function',
+        function: { name: 'oasis_connection_probe', arguments: '{"ready":true}' }
+      }] } }]
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   t.after(() => { globalThis.fetch = originalFetch; });
@@ -76,8 +80,9 @@ test('provider connection probe confirms a real assistant response without offer
   assert.equal(result.protocol, 'openai-compatible');
   assert.equal(result.provider, 'provider.example');
   assert.equal(seenRequest.headers.get('authorization'), 'Bearer connection-probe-secret');
-  assert.equal(seenRequest.body.tools, undefined);
-  assert.equal(seenRequest.body.tool_choice, undefined);
+  assert.equal(seenRequest.body.tools.length, 1);
+  assert.equal(seenRequest.body.tools[0].function.name, 'oasis_connection_probe');
+  assert.deepEqual(seenRequest.body.tool_choice, { type: 'function', function: { name: 'oasis_connection_probe' } });
   assert.equal(JSON.stringify(result).includes('connection-probe-secret'), false);
 });
 
