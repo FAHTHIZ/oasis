@@ -39,7 +39,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
 - Add streaming responses and mid-turn compaction that can preserve active task/tool-call state safely.
-- Add skills discovery, installation from trusted sources, versioning, and supply-chain review.
+- Extend the initial bundled capability catalog with remote marketplace discovery, version pinning, integrity checks, update/rollback, and supply-chain review.
 - Design a provider/model capability probe and clearer setup diagnostics.
 
 ## Milestone 3 — agent strength
@@ -54,6 +54,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Add a real isolation layer for unattended code execution; permission prompts alone are not a sandbox.
 - Define secure MCP and GitHub integrations, explicit scopes, secret management, audit logs, and recovery.
 - Establish a well-tested install/bootstrap flow for supported platforms.
+- Build the integrated mobile-first chat + terminal UI and connect it to the agent runtime through an authenticated local/remote bridge; the current static PWA cannot execute runtime commands.
 - Connect browser workspace data to the CLI only after a local API and authentication boundary are designed.
 
 ## Deliberate non-claims
