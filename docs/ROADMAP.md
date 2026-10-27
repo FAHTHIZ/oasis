@@ -59,7 +59,6 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Establish a well-tested install/bootstrap flow for supported platforms.
 - Upgrade the argv-based command runner to a real interactive PTY and terminal emulator, with lifecycle controls and platform testing.
 - Add TLS or another encrypted transport for phone-to-computer use; the current HTTP bridge is for localhost or trusted private Wi-Fi only.
-- Add embedded GitHub OAuth or GitHub App auth, repository creation, branch/push/pull-request workflows, and explicit fine-grained scopes.
 - Share browser dashboard projects/tasks/notes with the selected repository workspace through a tested sync and conflict-resolution design.
 
 ## Deliberate non-claims
