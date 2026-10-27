@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
+const NPM_GLOBAL_PACKAGES = new Set(['pnpm', 'wrangler', 'vercel', 'netlify-cli', 'npm-check-updates']);
+const NPM_PROJECT_TOOLS = new Set(['typescript', 'tsc', 'eslint', 'prettier', 'vite', 'playwright', 'vitest', 'tsx', 'nodemon', 'turbo', 'biome']);
 const NPM_CLI_PACKAGES = new Set([
   'pnpm', 'typescript', 'tsc', 'eslint', 'prettier', 'vite', 'playwright',
   'vitest', 'tsx', 'nodemon', 'serve', 'http-server', 'turbo', 'wrangler',
@@ -32,8 +34,9 @@ export function parseInstallIntent(text) {
   const prefix = rest.match(/^(npm package|node package|python package|pip package|system tool|system package|global npm package)\s+/i);
   if (prefix) {
     const kind = prefix[1].toLowerCase();
-    ecosystem = kind.includes('npm') || kind.includes('node') ? 'npm-global' :
-      (kind.includes('python') || kind.includes('pip') ? 'pip' : 'system');
+    ecosystem = kind === 'global npm package' ? 'npm-global' :
+      (kind.startsWith('npm ') || kind.startsWith('node ') ? 'npm' :
+      (kind.includes('python') || kind.includes('pip') ? 'pip' : 'system'));
     rest = rest.slice(prefix[0].length);
   }
   rest = rest.replace(/\s+(?:in|into)\s+(?:yourself|your environment|your setup|the current environment)$/i, '');
@@ -57,7 +60,9 @@ function commandExists(command) {
 export function resolveEcosystem(packageName, requested = 'auto', workspaceRoot = process.cwd()) {
   if (requested !== 'auto') return requested;
   const lower = packageName.toLowerCase();
-  if (NPM_CLI_PACKAGES.has(lower)) return 'npm-global';
+  if (NPM_GLOBAL_PACKAGES.has(lower)) return 'npm-global';
+  if (NPM_PROJECT_TOOLS.has(lower)) return 'npm';
+  if (NPM_CLI_PACKAGES.has(lower) && !existsSync(path.join(workspaceRoot, 'package.json'))) return 'npm-global';
   if (PYTHON_CLI_PACKAGES.has(lower)) return 'pipx';
   if (SYSTEM_ALIASES.has(lower) || ['git', 'jq', 'yq', 'tmux', 'docker', 'podman', 'ollama', 'bun', 'deno', 'uv', 'nodejs', 'python3'].includes(lower)) return 'system';
   if (existsSync(path.join(workspaceRoot, 'package.json'))) return 'npm';
