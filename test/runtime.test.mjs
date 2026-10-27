@@ -124,6 +124,78 @@ test('workspace file edits create recoverable snapshots; explicit restore works'
   assert.equal(afterRestoreBackups.length, 2);
 });
 
+test('edit_file replaces exact text, snapshots first, and rejects ambiguous or missing matches', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  const config = path.join(tmp, 'oasis-config');
+  await mkdir(root);
+  await writeFile(path.join(root, 'app.js'), 'const a = 1;\nconst b = 2;\nconst b2 = 2;\n');
+  const previous = process.env.OASIS_CONFIG_DIR;
+  process.env.OASIS_CONFIG_DIR = config;
+  t.after(() => { if (previous === undefined) delete process.env.OASIS_CONFIG_DIR; else process.env.OASIS_CONFIG_DIR = previous; });
+  const ok = await executeTool('edit_file', { path: 'app.js', old_string: 'const a = 1;', new_string: 'const a = 10;' }, { root });
+  assert.equal(ok.replacements, 1);
+  assert.equal(await readFile(path.join(root, 'app.js'), 'utf8'), 'const a = 10;\nconst b = 2;\nconst b2 = 2;\n');
+  assert.equal((await listBackups(root)).length, 1);
+  await assert.rejects(executeTool('edit_file', { path: 'app.js', old_string: '= 2;', new_string: '= 3;' }, { root }), /appears 2 times/);
+  await assert.rejects(executeTool('edit_file', { path: 'app.js', old_string: 'nope', new_string: 'x' }, { root }), /not found/);
+  await assert.rejects(executeTool('edit_file', { path: 'app.js', old_string: '', new_string: 'x' }, { root }), /must not be empty/);
+  await assert.rejects(executeTool('edit_file', { path: 'app.js', old_string: 'a', new_string: 'a' }, { root }), /identical/);
+  await assert.rejects(executeTool('edit_file', { path: 'missing.js', old_string: 'a', new_string: 'b' }, { root }), /does not exist/);
+  const all = await executeTool('edit_file', { path: 'app.js', old_string: '= 2;', new_string: '= 3;', replace_all: true }, { root });
+  assert.equal(all.replacements, 2);
+  assert.equal(await readFile(path.join(root, 'app.js'), 'utf8'), 'const a = 10;\nconst b = 3;\nconst b2 = 3;\n');
+  await executeTool('edit_file', { path: 'app.js', old_string: 'const a = 10;', new_string: 'const a = "$&";' }, { root });
+  assert.ok((await readFile(path.join(root, 'app.js'), 'utf8')).includes('const a = "$&";'));
+});
+
+test('edit_file refuses sensitive files, workspace escapes, and symlinks', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, '.env'), 'KEY=secret');
+  await writeFile(path.join(tmp, 'outside.txt'), 'outside');
+  await writeFile(path.join(root, 'real.txt'), 'real');
+  await symlink(path.join(root, 'real.txt'), path.join(root, 'link.txt'));
+  await assert.rejects(executeTool('edit_file', { path: '.env', old_string: 'secret', new_string: 'x' }, { root }), /sensitive/);
+  await assert.rejects(executeTool('edit_file', { path: '../outside.txt', old_string: 'outside', new_string: 'x' }, { root }), /outside the workspace/);
+  await assert.rejects(executeTool('edit_file', { path: 'link.txt', old_string: 'real', new_string: 'x' }, { root }), /symbolic link/);
+  assert.equal(await readFile(path.join(tmp, 'outside.txt'), 'utf8'), 'outside');
+  assert.equal(await readFile(path.join(root, '.env'), 'utf8'), 'KEY=secret');
+});
+
+test('read_file supports line ranges and glob_files stays inside the workspace', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(path.join(root, 'src', 'deep'), { recursive: true });
+  await mkdir(path.join(root, 'node_modules', 'pkg'), { recursive: true });
+  await writeFile(path.join(root, 'big.txt'), Array.from({ length: 10 }, (_, i) => 'line ' + (i + 1)).join('\n'));
+  await writeFile(path.join(root, 'src', 'a.mjs'), 'a');
+  await writeFile(path.join(root, 'src', 'deep', 'b.mjs'), 'b');
+  await writeFile(path.join(root, 'src', 'c.js'), 'c');
+  await writeFile(path.join(root, 'top.mjs'), 't');
+  await writeFile(path.join(root, 'node_modules', 'pkg', 'x.mjs'), 'x');
+  await writeFile(path.join(root, '.env'), 'SECRET=1');
+  const part = await executeTool('read_file', { path: 'big.txt', offset: 3, limit: 2 }, { root });
+  assert.equal(part.content, 'line 3\nline 4');
+  assert.equal(part.startLine, 3);
+  assert.equal(part.endLine, 4);
+  assert.equal(part.totalLines, 10);
+  assert.equal(part.truncated, true);
+  assert.ok((await executeTool('read_file', { path: 'big.txt' }, { root })).content.includes('line 10'));
+  const deep = await executeTool('glob_files', { pattern: 'src/**/*.mjs' }, { root });
+  assert.deepEqual(deep.matches.sort(), ['src/a.mjs', 'src/deep/b.mjs']);
+  const anywhere = await executeTool('glob_files', { pattern: '**/*.mjs' }, { root });
+  assert.deepEqual(anywhere.matches.sort(), ['src/a.mjs', 'src/deep/b.mjs', 'top.mjs']);
+  const single = await executeTool('glob_files', { pattern: 'src/*.mjs' }, { root });
+  assert.deepEqual(single.matches, ['src/a.mjs']);
+  assert.deepEqual((await executeTool('glob_files', { pattern: '.env' }, { root })).matches, []);
+  await assert.rejects(executeTool('glob_files', { pattern: '../*' }, { root }), /relative to the workspace/);
+  await assert.rejects(executeTool('glob_files', { pattern: '/etc/*' }, { root }), /relative to the workspace/);
+});
 test('delete_file requires explicit approval and leaves the file intact when denied', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
