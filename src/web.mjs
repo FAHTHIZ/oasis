@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession } from './agent.mjs';
-import { loadConfig, getProviderSummary } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
 
@@ -51,6 +51,11 @@ function hostIsLocalLiteral(req) {
   } catch {
     return false;
   }
+}
+
+function isLoopbackClient(req) {
+  const address = String(req.socket && req.socket.remoteAddress || '').toLowerCase().replace(/^::ffff:/, '');
+  return address === '::1' || /^127(?:\\.\\d{1,3}){3}$/.test(address);
 }
 
 function hasValidToken(req, token) {
@@ -446,6 +451,41 @@ export function createOasisWebServer(options = {}) {
         workspaceAccess: 'local-filesystem',
         approvalMode: 'per-action',
         setupHint
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/provider/config') {
+      // Provider credentials may only be submitted over the local loopback connection.
+      // The remote-device HTTP bridge is intentionally not allowed to receive API keys.
+      if (!isLoopbackClient(req)) {
+        json(res, 403, { error: 'Provider setup is available only from the same device over localhost. Do not send model API keys over the unencrypted phone-to-computer HTTP bridge.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const protocol = validateProtocol(body.protocol);
+      const defaultBaseURL = protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1';
+      const baseURL = validateBaseUrl(String(body.baseURL || defaultBaseURL).trim());
+      const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? 'gpt-6.1-sol' : '');
+      const model = String(body.model || defaultModel).trim();
+      const apiKey = String(body.apiKey || '').trim();
+      if (!model || model.length > 200) {
+        json(res, 400, { error: 'Enter a model name no longer than 200 characters.' });
+        return;
+      }
+      if (apiKey.length > 4096 || /[\\r\\n\\0]/.test(apiKey)) {
+        json(res, 400, { error: 'The API key is invalid or too long.' });
+        return;
+      }
+      if (!isLoopbackUrl(baseURL) && !apiKey) {
+        json(res, 400, { error: 'Enter an API key for a remote provider. Local loopback providers may omit the key.' });
+        return;
+      }
+      await saveConfig({ protocol, baseURL, model, apiKey }, { env });
+      json(res, 200, {
+        saved: true,
+        provider: { protocol, provider: new URL(baseURL).host, model, authentication: apiKey ? 'API key configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured') },
+        note: 'The API key is stored in the local Oasis configuration file and is never returned by this endpoint.'
       });
       return;
     }
