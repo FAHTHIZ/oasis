@@ -35,6 +35,46 @@
         "ship-feature",
         "testing"
       ]
+    },
+    {
+      "name": "mobile-development",
+      "version": "1.0.0",
+      "description": "Build mobile-first interfaces and verify platform-specific behavior honestly.",
+      "skills": [
+        "mobile-development",
+        "environment-setup",
+        "testing"
+      ]
+    },
+    {
+      "name": "web-app-development",
+      "version": "1.0.0",
+      "description": "Implement complete responsive web flows with accessible UI and safe state handling.",
+      "skills": [
+        "web-app-development",
+        "testing",
+        "code-review"
+      ]
+    },
+    {
+      "name": "api-development",
+      "version": "1.0.0",
+      "description": "Build validated, authenticated APIs with tested errors and safe side-effect boundaries.",
+      "skills": [
+        "api-development",
+        "testing",
+        "code-review"
+      ]
+    },
+    {
+      "name": "security-review",
+      "version": "1.0.0",
+      "description": "Review trust boundaries, credentials, dependencies, and data-loss risks.",
+      "skills": [
+        "security-review",
+        "code-review",
+        "testing"
+      ]
     }
   ]
 }
