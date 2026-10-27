@@ -473,7 +473,7 @@ async function mcpRefresh(){
   var list=document.getElementById('mcpServerList');
   if(!agentToken){list.innerHTML='<div class="integration-empty">Connect Oasis first to load the MCP configuration.</div>';return}
   try{var data=await agentApi('/api/mcp');var servers=data.servers||[];
-    list.innerHTML=servers.length?servers.map(function(server){return '<div class="mcp-row"><div class="integration-icon">MCP</div><div class="mcp-row-main"><strong>'+extensionEscape(server.name)+' '+(server.enabled?'<span class="status-dot connected">Enabled</span>':'<span class="status-dot">Disabled</span>')+'</strong><small>'+extensionEscape(server.command)+' '+extensionEscape(JSON.stringify(server.args||[]))+'</small><small>Pass environment: '+extensionEscape((server.passEnv||[]).join(', ')||'none')+'</small></div><button class="btn btn-secondary" data-mcp-toggle="'+extensionEscape(server.name)+'" type="button">'+(server.enabled?'Disable':'Enable')+'</button><button class="btn btn-danger" data-mcp-remove="'+extensionEscape(server.name)+'" type="button">Remove</button></div>'}).join(''):'<div class="integration-empty">No MCP servers configured. Add a trusted server below or run <code>oasis mcp list</code> in the host terminal.</div>';
+    list.innerHTML=servers.length?servers.map(function(server){return '<div class="mcp-row"><div class="integration-icon">MCP</div><div class="mcp-row-main"><strong>'+extensionEscape(server.name)+' '+(server.enabled?'<span class="status-dot connected">Enabled</span>':'<span class="status-dot">Disabled</span>')+'</strong><small>'+extensionEscape(server.command)+' '+extensionEscape(JSON.stringify(server.args||[]))+'</small><small>Pass environment: '+extensionEscape((server.passEnv||[]).join(', ')||'none')+'</small></div><button class="btn btn-secondary" data-mcp-env-edit="'+extensionEscape(server.name)+'" type="button">Env allowlist</button><button class="btn btn-secondary" data-mcp-toggle="'+extensionEscape(server.name)+'" type="button">'+(server.enabled?'Disable':'Enable')+'</button><button class="btn btn-danger" data-mcp-remove="'+extensionEscape(server.name)+'" type="button">Remove</button></div>'}).join(''):'<div class="integration-empty">No MCP servers configured. Add a trusted server below or run <code>oasis mcp list</code> in the host terminal.</div>';
   }catch(e){list.innerHTML='<div class="integration-empty">Could not load MCP servers: '+extensionEscape(e.message)+'</div>'}
 }
 async function mcpSave(servers,confirmText){
@@ -483,9 +483,28 @@ async function mcpSave(servers,confirmText){
   catch(e){notify('Could not save MCP configuration: '+e.message)}
 }
 document.getElementById('mcpServerList').addEventListener('click',async function(e){
-  var toggle=e.target.closest('[data-mcp-toggle]'),remove=e.target.closest('[data-mcp-remove]');if(!toggle&&!remove)return;
+  var toggle=e.target.closest('[data-mcp-toggle]'),remove=e.target.closest('[data-mcp-remove]'),editEnv=e.target.closest('[data-mcp-env-edit]');if(!toggle&&!remove&&!editEnv)return;
   if(!agentToken)return;
-  try{var data=await agentApi('/api/mcp');var name=(toggle||remove).getAttribute(toggle?'data-mcp-toggle':'data-mcp-remove');var next=(data.servers||[]).filter(function(s){return !remove||s.name!==name}).map(function(s){return toggle&&s.name===name?Object.assign({},s,{enabled:!s.enabled}):s});await mcpSave(next,(toggle?'Change enabled state for MCP server '+name+'?':'Remove MCP server '+name+' from configuration?'))}catch(err){notify('Could not update MCP configuration: '+err.message)}
+  try{
+    var data=await agentApi('/api/mcp');
+    var trigger=toggle||remove||editEnv;
+    var name=trigger.getAttribute(toggle?'data-mcp-toggle':(remove?'data-mcp-remove':'data-mcp-env-edit'));
+    var next;
+    var confirmText;
+    if(editEnv){
+      var current=(data.servers||[]).find(function(s){return s.name===name});if(!current)return;
+      var entered=window.prompt('Comma-separated environment VARIABLE NAMES to pass to '+name+' (never enter secret values here):',(current.passEnv||[]).join(', '));
+      if(entered===null)return;
+      var variables=entered.split(',').map(function(v){return v.trim()}).filter(Boolean);
+      if(variables.some(function(v){return !/^[A-Z_][A-Z0-9_]*$/.test(v)})){notify('Use uppercase environment variable names only, such as API_TOKEN. Values are not accepted.');return}
+      next=(data.servers||[]).map(function(s){return s.name===name?Object.assign({},s,{passEnv:variables}):s});
+      confirmText='Update the environment-variable allowlist for '+name+'? Values remain in the Oasis host environment; only variable names are saved.';
+    }else{
+      next=(data.servers||[]).filter(function(s){return !remove||s.name!==name}).map(function(s){return toggle&&s.name===name?Object.assign({},s,{enabled:!s.enabled}):s});
+      confirmText=toggle?'Change enabled state for MCP server '+name+'?':'Remove MCP server '+name+' from configuration?';
+    }
+    await mcpSave(next,confirmText);
+  }catch(err){notify('Could not update MCP configuration: '+err.message)}
 });
 document.getElementById('mcpAddForm').addEventListener('submit',async function(e){
   e.preventDefault();if(!agentToken){notify('Connect Oasis first.');return}

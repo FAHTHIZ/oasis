@@ -389,6 +389,12 @@ test('GitHub MCP declarations can be imported only as disabled configurations wi
   assert.equal(servers.length, 1);
   assert.equal(servers[0].enabled, false);
   assert.deepEqual(servers[0].passEnv, []);
+  const allowlistUpdate = await fetch(base + '/api/mcp', {
+    method: 'POST', headers,
+    body: JSON.stringify({ servers: servers.map((server) => ({ ...server, passEnv: ['API_TOKEN'] })) })
+  });
+  assert.equal(allowlistUpdate.status, 200);
+  assert.deepEqual((await allowlistUpdate.json()).servers[0].passEnv, ['API_TOKEN']);
   const duplicate = await fetch(base + '/api/extensions/mcp-import', {
     method: 'POST', headers,
     body: JSON.stringify({ url: 'https://github.com/acme/mcp-extension', expectedCommit: commit, serverNames: ['review_server'] })
