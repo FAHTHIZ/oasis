@@ -406,9 +406,6 @@ export async function runEvalCommand(args = [], options = {}) {
   output.write('Eval result: ' + resultPath + '\n');
   output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
-  output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '
-  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
-}
- + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
+  output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
   return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
 }
