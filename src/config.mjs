@@ -69,17 +69,19 @@ export async function loadConfig(options = {}) {
 
   let savedBaseURL = '';
   try { savedBaseURL = validateBaseUrl(saved.baseURL || ''); } catch {}
-  const requestedProtocol = env.OASIS_PROTOCOL || saved.protocol || inferProtocol(env.OASIS_BASE_URL || savedBaseURL, DEFAULT_PROTOCOL);
+  const savedProtocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL));
+  const requestedProtocol = env.OASIS_PROTOCOL || (env.OASIS_BASE_URL && env.OASIS_BASE_URL.replace(/\\/+$/, '') !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
   const protocol = validateProtocol(requestedProtocol);
   const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
   const baseURL = validateBaseUrl(env.OASIS_BASE_URL || savedBaseURL || defaultBase);
   const model = String(env.OASIS_MODEL || saved.model || DEFAULT_MODEL).trim();
   if (!model) throw new Error('No model is configured. Run oasis setup.');
 
-  const explicitKey = env.OASIS_API_KEY ||
-    (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '';
-  const sameSavedTarget = savedBaseURL === baseURL && validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL)) === protocol;
-  // Never send a saved credential to a different endpoint merely because an environment override changed the URL.
+  const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
+  const localEndpoint = isLoopbackUrl(baseURL);
+  const explicitKey = localEndpoint ? (env.OASIS_LOCAL_API_KEY || '') : (env.OASIS_API_KEY ||
+    (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '');
+  // Never send a stored/remote credential to a different endpoint or a loopback server by accident.
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
   return {
     ...saved, protocol, baseURL, model, apiKey, configPath,
