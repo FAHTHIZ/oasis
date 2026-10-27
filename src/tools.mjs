@@ -18,6 +18,8 @@ const SHELLS_AND_DANGEROUS = new Set([
 ]);
 
 export const TOOL_DEFINITIONS = [
+  { type: 'function', function: { name: 'git_status', description: 'Read the current Git branch and working-tree status without modifying the repository. This is a read-only local Git operation.', parameters: { type: 'object', properties: {} }, required: [] } },
+  { type: 'function', function: { name: 'git_diff', description: 'Read a bounded Git diff without invoking external diff drivers or text-conversion filters. Scope may be unstaged, staged, or all changes relative to HEAD. Optionally restrict to one workspace-relative, non-sensitive path.', parameters: { type: 'object', properties: { scope: { type: 'string', enum: ['unstaged', 'staged', 'all'], description: 'Which changes to inspect; defaults to all changes relative to HEAD' }, path: { type: 'string', description: 'Optional workspace-relative path' } }, required: [] } } },
   { type: 'function', function: { name: 'list_files', description: 'List workspace files and folders. Paths are relative to the workspace root. Skips dependencies, build output, Git internals, and secret files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory relative to the workspace root; default .' }, includeHidden: { type: 'boolean', description: 'Include ordinary hidden files, still excluding secret files' } }, required: [] } } },
   { type: 'function', function: { name: 'read_file', description: 'Read a text file inside the workspace. Use offset and limit to inspect line ranges in larger files. Secret files such as .env and private keys are blocked.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, offset: { type: 'integer', description: 'Optional 1-based first line to return' }, limit: { type: 'integer', description: 'Optional maximum lines to return, 1 to 2000' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
@@ -428,9 +430,87 @@ export async function loadSkillDescriptions(root) {
   return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 12000);
 }
 
+async function runReadOnlyGit(root, args) {
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let truncated = false;
+    let settled = false;
+    let timedOut = false;
+    const env = {
+      ...scrubEnvironment(),
+      GIT_OPTIONAL_LOCKS: '0',
+      GIT_PAGER: 'cat',
+      PAGER: 'cat',
+      GIT_CONFIG_NOSYSTEM: '1'
+    };
+    const safeArgs = ['--no-pager', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', ...args];
+    let child;
+    const append = (target, chunk) => {
+      const current = target === 'stdout' ? stdout : stderr;
+      const next = current + chunk.toString('utf8');
+      if (next.length > MAX_TOOL_OUTPUT) truncated = true;
+      const clipped = next.slice(-MAX_TOOL_OUTPUT);
+      if (target === 'stdout') stdout = clipped;
+      else stderr = clipped;
+    };
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        command: 'git ' + args.join(' '),
+        ...result,
+        stdout,
+        stderr,
+        output: (stdout + (stderr ? '\\n' + stderr : '')).slice(-MAX_TOOL_OUTPUT),
+        truncated
+      });
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch {}
+      const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 500);
+      killTimer.unref?.();
+    }, 15000);
+    try {
+      child = spawn('git', safeArgs, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout.on('data', (chunk) => append('stdout', chunk));
+      child.stderr.on('data', (chunk) => append('stderr', chunk));
+      child.on('error', (error) => finish({ exitCode: 127, error: error.message, timedOut }));
+      child.on('close', (code, signal) => finish({ exitCode: timedOut ? 124 : (code ?? 1), signal, timedOut }));
+    } catch (error) {
+      finish({ exitCode: 127, error: error.message, timedOut });
+    }
+  });
+}
+
+async function readGitStatus(root) {
+  return await runReadOnlyGit(root, ['status', '--short', '--branch', '--untracked-files=normal', '--no-ahead-behind']);
+}
+
+async function readGitDiff(root, args = {}) {
+  const scope = ['unstaged', 'staged', 'all'].includes(args.scope) ? args.scope : 'all';
+  const commandArgs = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=3'];
+  if (scope === 'staged') commandArgs.push('--cached');
+  else if (scope === 'all') commandArgs.push('HEAD');
+  let relativePath = '';
+  if (args.path !== undefined && args.path !== null && String(args.path).trim()) {
+    const resolved = await resolveWorkspacePath(root, String(args.path), { rejectSymlinks: true });
+    relativePath = resolved.relative === '.' ? '' : resolved.relative;
+  }
+  commandArgs.push('--');
+  if (relativePath) commandArgs.push(relativePath);
+  return await runReadOnlyGit(root, commandArgs);
+}
+
 export async function executeTool(name, args = {}, context = {}) {
   const root = path.resolve(context.root || process.cwd());
   switch (name) {
+    case 'git_status':
+      return await readGitStatus(root);
+    case 'git_diff':
+      return await readGitDiff(root, args);
     case 'list_files':
       return await listWorkspaceFiles(root, { path: args.path || '.', includeHidden: Boolean(args.includeHidden) });
     case 'read_file':
