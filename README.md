@@ -63,6 +63,7 @@ oasis plugins list
 oasis plugins install code-quality
 # Other reviewed bundles include mobile-development, web-app-development, api-development, and security-review.
 oasis mcp list
+oasis "Configure the filesystem MCP server using the reviewed executable and arguments, then show me its available tools"
 oasis extensions inspect https://github.com/owner/repository
 oasis extensions mcp-import https://github.com/owner/repository
 oasis extensions update https://github.com/owner/repository --scope project
@@ -80,7 +81,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Interactive sessions and one-shot plain-English tasks.
 - Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops, with incremental text streaming in the browser, safe cancellation of active model requests/commands, and a JSON-response fallback for gateways that do not stream.
 - Chat-driven provider switching and OmniRoute bootstrap: the agent can request approved CLI installation/startup, probe the gateway with a non-executed tool call, and change the user-level provider only after verification succeeds. Free routes and provider quotas depend on the gateway and upstream service.
-- Optional MCP stdio server integration with explicit configuration and approval for each external tool call.
+- MCP stdio server integration configured either by CLI or normal chat; chat setup requires a dedicated manual approval, validates the server handshake before persistence, and exposes discovered tools in the current session. Every MCP tool call still requires its own approval by default.
 - Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
 - Command execution through an executable plus argument array, without shell expansion.
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
@@ -110,7 +111,7 @@ Oasis separates three things that are often all called “plugins”:
 
 - **Skills** are reusable workflow instructions that guide the agent through tasks such as debugging, testing, code review, and release preparation.
 - **Capability bundles** package related built-in skills so they can be installed and removed together. Browse with `oasis plugins list`; install with `oasis plugins install code-quality`; remove with `oasis plugins remove code-quality`. Bundles are copied into the current workspace under `.oasis/`.
-- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`. Recognized Markdown commands can be invoked in the CLI or browser chat by their imported namespaced alias, for example `/owner-repo:review fix the authentication test`. Oasis wraps the source in an untrusted-command boundary and verifies its stored SHA-256 before invocation. Text argument substitution supports `$ARGUMENTS`, `$ARGUMENTS[0]`, `$1`, and `${1}`; it does not implement every source ecosystem's command semantics, shell interpolation, hooks, or executable lifecycle behavior. The extension inspector can propose supported local stdio servers from `.mcp.json`, `mcp.json`, `mcp-servers.json`, or `gemini-extension.json`. Review them with `oasis extensions inspect URL`, then use `oasis extensions mcp-import URL` (or the browser review panel) to import selected entries **disabled**. The importer does not copy manifest environment values or start processes; configure required environment variables and review the executable before enabling a server. Imported configurations retain the source repository, commit SHA, and manifest path for auditability.
+- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`, or describe the exact executable and argument list to Oasis in chat. Chat configuration always asks for manual approval—even when `--yes` is active—starts the server only after approval, and makes its discovered tools available in that session. External integrations may execute code or access data, so inspect their source, requested environment variables, and permissions before enabling them.
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
 
