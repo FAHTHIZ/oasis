@@ -398,6 +398,150 @@ test('long sessions compact completed history before the next coding request', a
   assert.equal(session.messages.length < 40, true);
 });
 
+test('post-edit verification gate asks for diff review and a passing check before completion', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await mkdir(path.join(tmp, 'src'));
+  await writeFile(path.join(tmp, 'package.json'), JSON.stringify({
+    name: 'verification-fixture',
+    private: true,
+    scripts: { test: 'node --check src/example.mjs' }
+  }));
+  await writeFile(path.join(tmp, 'src', 'example.mjs'), 'export const value = 1;\n');
+
+  const initialized = await runWorkspaceCommand(tmp, 'git', ['init'], { autoApprove: true });
+  if (initialized.exitCode !== 0) {
+    t.skip('Git is unavailable in this environment: ' + (initialized.stderr || initialized.error || initialized.exitCode));
+    return;
+  }
+  for (const args of [
+    ['config', 'user.name', 'Oasis Test'],
+    ['config', 'user.email', 'oasis-test@example.invalid'],
+    ['add', '--', '.'],
+    ['commit', '-m', 'baseline']
+  ]) {
+    const result = await runWorkspaceCommand(tmp, 'git', args, { autoApprove: true });
+    assert.equal(result.exitCode, 0, JSON.stringify(result));
+  }
+
+  let requests = 0;
+  const payloads = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    payloads.push(JSON.parse(body));
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I updated the example.',
+        tool_calls: [{ id: 'verify-write-1', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'src/example.mjs', content: 'export const value = 2;\n' })
+        } }]
+      } }] }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'That should be complete.' } }] }));
+    } else if (requests === 3) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will inspect the complete diff.',
+        tool_calls: [{ id: 'verify-diff-1', type: 'function', function: {
+          name: 'git_diff',
+          arguments: JSON.stringify({ scope: 'all' })
+        } }]
+      } }] }));
+    } else if (requests === 4) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will check the changed module.',
+        tool_calls: [{ id: 'verify-command-1', type: 'function', function: {
+          name: 'run_command',
+          arguments: JSON.stringify({ command: 'npm', args: ['test'], timeoutSeconds: 30 })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Diff reviewed and the module check passed.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 8,
+    maxCommandSeconds: 30
+  };
+  const session = await createSession({ root: tmp, config });
+  const transcript = [];
+  const result = await runAgentTurn(session, 'Change the example module value from one to two.', {
+    autoApprove: true,
+    onText: (text) => transcript.push(text)
+  });
+
+  assert.equal(result.finished, true);
+  assert.equal(result.verificationIncomplete, false);
+  assert.equal(requests, 5);
+  assert.equal(result.toolCalls, 3);
+  assert.ok(payloads[2].messages.some((message) =>
+    message.role === 'user' && String(message.content).includes('post-edit verification gate')));
+  assert.equal(transcript.includes('That should be complete.'), false, 'premature final text should be held while verification is required');
+  assert.ok(transcript.includes('Diff reviewed and the module check passed.'));
+  assert.equal(await readFile(path.join(tmp, 'src', 'example.mjs'), 'utf8'), 'export const value = 2;\n');
+});
+
+test('post-edit verification gate reports when the model ignores required review', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await mkdir(path.join(tmp, 'src'));
+  await writeFile(path.join(tmp, 'src', 'example.js'), 'module.exports = 1;\n');
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I wrote the file.',
+        tool_calls: [{ id: 'incomplete-write-1', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'src/example.js', content: 'module.exports = 2;\n' })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Done.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 4,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root: tmp, config });
+  const result = await runAgentTurn(session, 'Change the example module value.');
+  assert.equal(result.finished, false);
+  assert.equal(result.verificationIncomplete, true);
+  assert.match(result.verificationIssues.join('; '), /diff has not been reviewed/);
+  assert.match(result.verificationIssues.join('; '), /no relevant test/);
+  assert.equal(requests, 3, 'the gate should nudge once, then report any remaining gaps');
+});
+
 test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
