@@ -1,6 +1,7 @@
 diff --git a/src/lib.mjs b/src/lib.mjs
---- a/src/lib.mjs
+new file mode 100644
+--- /dev/null
 +++ b/src/lib.mjs
-@@ -1 +1 @@
--export function validateBaseUrl(raw) { const url = new URL(raw); if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS are supported'); return raw; }
-+export function isLoopbackUrl(raw) { try { const url = new URL(raw); return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase()); } catch { return false; } }\nexport function validateBaseUrl(raw) { let url; try { url = new URL(raw); } catch { throw new Error('valid HTTP or HTTPS URL required'); } if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS are supported'); if (url.protocol === 'http:' && !isLoopbackUrl(raw)) throw new Error('Non-local providers must use HTTPS'); if (url.username || url.password || url.search || url.hash) throw new Error('Credentials, query parameters, or fragments are not allowed'); return raw.replace(/\/+$/, ''); }
+@@ -0,0 +1,2 @@
++export function isLoopbackUrl(raw) { try { const url = new URL(raw); return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase()); } catch { return false; } }
++export function validateBaseUrl(raw) { let url; try { url = new URL(raw); } catch { throw new Error('valid HTTP or HTTPS URL required'); } if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS are supported'); if (url.protocol === 'http:' && !isLoopbackUrl(raw)) throw new Error('Non-local providers must use HTTPS'); if (url.username || url.password || url.search || url.hash) throw new Error('Credentials, query parameters, or fragments are not allowed'); return raw.replace(/\/+$/, ''); }
