@@ -62,6 +62,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Upgrade plan mode into persistent task checklists with explicit acceptance criteria, execution gates, and regression-oriented verifier cycles.
 - Add narrow specialist agents for review/testing/research, with bounded concurrency and shared task state.
+- **Progress:** up to two independent read-only specialist reviews can execute concurrently; parent tool-call results remain ordered. Parallel code-writing agents and shared edit coordination remain future work.
 - Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.
 - Add language/toolchain diagnostics (LSP where available) and workspace-specific policy rules.
 
@@ -77,4 +78,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, OS-level sandboxing, independent parallel subagent execution, broad cross-platform end-to-end UI tests (a Linux Chromium chat smoke test is in place), and a mature browser/GitHub execution environment. Mid-turn compaction is implemented as a bounded heuristic and still needs long-task evaluation across provider protocols.
+Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, OS-level sandboxing, parallel code-writing subagents with shared edit coordination, broad cross-platform end-to-end UI tests (a Linux Chromium chat smoke test is in place), and a mature browser/GitHub execution environment. Mid-turn compaction is implemented as a bounded heuristic and still needs long-task evaluation across provider protocols.
