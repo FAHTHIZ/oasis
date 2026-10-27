@@ -314,15 +314,17 @@ export async function executeTool(name, args = {}, context = {}) {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
       if (Buffer.byteLength(args.content, 'utf8') > MAX_TEXT_FILE) throw new Error('New file content exceeds the 256 KiB limit.');
       const target = await resolveWorkspacePath(root, args.path);
+      let backedUpExistingFile = false;
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
         if (old.isSymbolicLink()) await resolveWorkspacePath(root, args.path);
         await snapshotFile(root, target.absolute, 'before-agent-write');
+        backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       await mkdir(path.dirname(target.absolute), { recursive: true });
       await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: 0o600 });
-      return { path: target.relative.split(path.sep).join('/'), writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile: true };
+      return { path: target.relative.split(path.sep).join('/'), writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile };
     }
     case 'delete_file': {
       const target = await resolveWorkspacePath(root, args.path);
