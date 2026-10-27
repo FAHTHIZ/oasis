@@ -1,0 +1,24 @@
+name: Quality checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: oasis-quality
+  cancel-in-progress: true
+jobs:
+  integrity:
+    name: Static app integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate app structure and JavaScript syntax
+        run: node scripts/check-site.mjs
