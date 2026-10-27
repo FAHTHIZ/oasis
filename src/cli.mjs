@@ -661,8 +661,24 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
 
 async function interactive(root, autoApprove, persistence = {}) {
   stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\n');
-  stdout.write('Type your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   let session = null;
+  let providerReady = false;
+  try { providerReady = Boolean((await loadConfig()).configured); } catch { /* A malformed or missing config can be replaced through guided setup. */ }
+  if (!providerReady && stdin.isTTY && stdout.isTTY) {
+    stdout.write('\nNo model connection is configured yet.\n');
+    stdout.write('Oasis can set one up now. OmniRoute is the recommended starting point if you do not already have a provider key; keyless/free routes depend on upstream availability and limits.\n');
+    try {
+      const answer = (await askLine('Start guided setup now? [Y/n] ')).trim().toLowerCase();
+      if (!['n', 'no', 'skip', 'later'].includes(answer)) {
+        await configureProvider(root, { defaultPreset: 'omniroute' });
+      } else {
+        stdout.write('Setup skipped. Run /setup later, or type "install OmniRoute" to start its bootstrap without an AI model.\n');
+      }
+    } catch (error) {
+      stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. You can retry with /setup.\n');
+    }
+  }
+  stdout.write('Type your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   while (true) {
     let input;
     try { input = await askLine('\nYou> '); } catch { break; }
@@ -694,6 +710,19 @@ async function interactive(root, autoApprove, persistence = {}) {
         continue;
       }
       stdout.write('Unknown command. Type /help or use oasis extensions list to view imported commands.\n');
+      continue;
+    }
+    let providerReadyForThisTurn = false;
+    try { providerReadyForThisTurn = Boolean((await loadConfig()).configured); } catch {}
+    if (!providerReadyForThisTurn && /\b(?:install|setup|set\s*up|connect|use|switch|route)\b[\s\S]{0,120}\bomniroute\b/i.test(text)) {
+      try {
+        await configureOmniRoute(root);
+        closeSession(session);
+        session = null;
+        persistence.resumeId = null;
+      } catch (error) {
+        stdout.write('OmniRoute setup failed: ' + String(error && error.message || error) + '\n');
+      }
       continue;
     }
     const direct = parseInstallIntent(text);
