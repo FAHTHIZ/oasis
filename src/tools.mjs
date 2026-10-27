@@ -566,7 +566,35 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
   const workspaceRoot = path.resolve(root || process.cwd());
   const skills = await listAvailableSkills(workspaceRoot, options);
   const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
-  if (!skill || !['global-extension', 'project-extension'].includes(skill.source)) throw new Error('No installed external skill named "' + name + '" owns portable resources.');
+  if (!skill) throw new Error('No installed external skill named "' + name + '" was found.');
+  if (['portable-workspace', 'global-portable'].includes(skill.source)) {
+    const safetyRoot = skill.source === 'global-portable'
+      ? path.resolve(getUniversalGlobalSkillsDirectory(options.env || process.env))
+      : workspaceRoot;
+    const skillDirectory = skill.source === 'global-portable'
+      ? path.resolve(skill.absoluteSkillDirectory || '')
+      : path.resolve(workspaceRoot, ...(String(skill.relativeSkillDirectory || '').split('/')));
+    if (!inside(safetyRoot, skillDirectory)) throw new Error('Portable skill resource directory is outside its permitted root.');
+    const safetyRootReal = await realpath(safetyRoot);
+    const skillInfo = await lstat(skillDirectory);
+    if (skillInfo.isSymbolicLink() || !skillInfo.isDirectory()) throw new Error('Portable skill directory is not a regular directory.');
+    const skillRootReal = await realpath(skillDirectory);
+    if (!inside(safetyRootReal, skillRootReal)) throw new Error('Portable skill directory resolves outside its permitted root.');
+    let target = skillDirectory;
+    for (const part of parts) {
+      target = path.join(target, part);
+      const info = await lstat(target);
+      if (info.isSymbolicLink()) throw new Error('Portable skill resources cannot resolve through symbolic links.');
+    }
+    const targetInfo = await lstat(target);
+    if (!targetInfo.isFile() || targetInfo.size > MAX_TEXT_FILE) throw new Error('The resource is not a regular text file within the allowed size.');
+    const targetReal = await realpath(target);
+    if (!inside(skillRootReal, targetReal)) throw new Error('Portable skill resource resolves outside its skill directory.');
+    const content = await readFile(targetReal, 'utf8');
+    if (content.includes('\\0')) throw new Error('Skill resource is not valid text.');
+    return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
+  }
+  if (!['global-extension', 'project-extension'].includes(skill.source)) throw new Error('This skill does not expose managed portable resources.');
   let extensionDirectory;
   let safetyRoot;
   if (skill.source === 'global-extension') {
