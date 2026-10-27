@@ -16,7 +16,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
 - MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
 - Bounded project file listing, glob search, ranged reads, exact-string patch editing, write/delete tools, and workspace/secret-path protections.
-- Optional workspace-scoped session persistence and on-demand skill loading.
+- Optional workspace-scoped session persistence, on-demand skill loading, and between-turn history compaction with a bounded deterministic fallback.
 - Token and tool-call budgets, parallel read-only calls, and sequential handling of side effects.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
@@ -36,7 +36,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
-- Add streaming responses and robust context compaction for long-running tasks.
+- Add streaming responses and mid-turn compaction that can preserve active task/tool-call state safely.
 - Add skills discovery, installation from trusted sources, versioning, and supply-chain review.
 - Design a provider/model capability probe and clearer setup diagnostics.
 
@@ -56,4 +56,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, and bounded tool-loop safeguards. It still lacks streaming, robust context compaction, OS-level sandboxing, specialist-agent orchestration, and a mature end-to-end browser/GitHub execution environment.
+Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, and best-effort between-turn context compaction. It still lacks streaming, mid-turn compaction, OS-level sandboxing, specialist-agent orchestration, and a mature end-to-end browser/GitHub execution environment.
