@@ -57,8 +57,10 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Add a real isolation layer for unattended code execution; permission prompts alone are not a sandbox.
 - Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
 - Establish a well-tested install/bootstrap flow for supported platforms.
-- Build the integrated mobile-first chat + terminal UI and connect it to the agent runtime through an authenticated local/remote bridge; the current static PWA cannot execute runtime commands.
-- Connect browser workspace data to the CLI only after a local API and authentication boundary are designed.
+- Upgrade the argv-based command runner to a real interactive PTY and terminal emulator, with lifecycle controls and platform testing.
+- Add TLS or another encrypted transport for phone-to-computer use; the current HTTP bridge is for localhost or trusted private Wi-Fi only.
+- Add embedded GitHub OAuth or GitHub App auth, repository creation, branch/push/pull-request workflows, and explicit fine-grained scopes.
+- Share browser dashboard projects/tasks/notes with the selected repository workspace through a tested sync and conflict-resolution design.
 
 ## Deliberate non-claims
 
