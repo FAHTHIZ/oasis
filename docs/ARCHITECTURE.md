@@ -15,6 +15,7 @@ Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasi
 - \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
 - src/eval.mjs runs reference tasks in disposable copies, captures token/time/cost estimates, and stores JSON results. evals/tasks/<id>/ keeps the task prompt, pre-change snapshot, patch, and verifier outside the agent's workspace.
 - `skills/*/SKILL.md` contains bundled workflow guidance. `plugins/catalog.json` defines reviewed skill bundles; `src/plugins.mjs` installs/removes these bundles under `.oasis/plugins/` and `.oasis/skills/`. Bundles currently contain instruction files only; MCP server configuration is separate and explicit. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. Oasis also discovers portable project skills under `.agents/skills/<name>/SKILL.md` and Vercel universal global skills under `~/.config/agents/skills/<name>/SKILL.md`. `oasis skills find|inspect|add` launches the pinned `skills@1.7.4` CLI only after approval (unless the operator already enabled `--yes`), uses `--copy` and `--agent universal`, and disables telemetry; imported instructions/resources remain untrusted text. Standard skill resources are restricted to regular text files under `references/` or `assets/` with path and symlink checks.
+- The runtime exposes `setup_omniroute`, `configure_provider`, and `install_external_skill` as normal agent tools. These make provider/skill configuration available inside chat while keeping package startup, configuration persistence, and third-party skill downloads behind approval. Vercel Skills source instructions remain untrusted text; no imported hook or script is activated.
 - Project context can come from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and \`.oasis/skills\`.
 
 ### Data and trust boundaries
@@ -55,7 +56,7 @@ The browser provides tabs for Connectors, MCP servers, API & models, and Tools. 
 
 ## Model provider interface
 
-The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). GPT-6.1 Sol tool calling uses the Responses API. Set OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY, or use oasis setup. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS.
+The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). The `setup_omniroute` chat/CLI tool can install OmniRoute after approval, start its local gateway after approval, run an inert tool-call probe, and save `http://127.0.0.1:20128/v1` with model `auto` only after the probe succeeds. `configure_provider` applies the same verify-before-save rule for supported presets. Loopback endpoints can use HTTP and optional local gateway keys; non-local providers must use HTTPS. Credentials are stored in the user config and never passed through model tool arguments.
 
 ## Browser workspace
 
@@ -72,7 +73,7 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 ## Current architectural gaps
 
-OS-level container isolation, a full interactive PTY, TLS for the browser runtime, GitHub OAuth, a remote capability marketplace, streamed token output, mid-turn context compaction, multi-agent coordination, formal version migrations, and browser-to-CLI syncing for projects/tasks/notes are not implemented yet. Between-turn context compaction is best-effort and is not a substitute for a broad long-horizon benchmark. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
+OS-level container isolation, a full interactive PTY, embedded GitHub OAuth, a general remote plugin marketplace, mid-turn compaction, independent parallel subagent execution, formal configuration migrations, cross-platform end-to-end tests, and browser-to-CLI data syncing are not implemented. The browser agent supports TLS with user-provided certificates and incremental streamed model output, but certificate provisioning/device-trust onboarding and broad real-device tests remain incomplete. Between-turn compaction is best-effort and does not replace long-horizon benchmark coverage.
 
 
 ## Cross-ecosystem extension compatibility
