@@ -337,3 +337,56 @@ test('extensions and MCP integration endpoints return safe inventories and requi
   assert.deepEqual(savedBody.servers[0].passEnv, ['REVIEW_API_KEY']);
   assert.equal(savedBody.servers[0].enabled, false);
 });
+
+
+test('authenticated browser jobs can be cancelled while awaiting command approval', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const started = await fetch(base + '/api/terminal/command', {
+    method: 'POST', headers,
+    body: JSON.stringify({ command: process.execPath, args: ['-e', 'setTimeout(() => {}, 20000)'], timeoutSeconds: 30 })
+  });
+  assert.equal(started.status, 202);
+  const { jobId } = await started.json();
+
+  let approvalId = null;
+  let snapshot;
+  const deadline = Date.now() + 4000;
+  while (Date.now() < deadline && !approvalId) {
+    const response = await fetch(base + '/api/jobs/' + jobId + '?after=0', { headers });
+    assert.equal(response.status, 200);
+    snapshot = await response.json();
+    const event = (snapshot.events || []).find((item) => item.type === 'approval_required');
+    if (event) approvalId = event.data.approvalId;
+    else await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.ok(approvalId, 'The terminal command should request approval before spawning.');
+  const approved = await fetch(base + '/api/jobs/' + jobId + '/approval', {
+    method: 'POST', headers, body: JSON.stringify({ approvalId, approved: true })
+  });
+  assert.equal(approved.status, 200);
+
+  const cancelled = await fetch(base + '/api/jobs/' + jobId + '/cancel', { method: 'POST', headers });
+  assert.equal(cancelled.status, 202);
+  assert.equal((await cancelled.json()).cancelRequested, true);
+
+  const finishedBy = Date.now() + 5000;
+  while (Date.now() < finishedBy) {
+    const response = await fetch(base + '/api/jobs/' + jobId + '?after=0', { headers });
+    assert.equal(response.status, 200);
+    snapshot = await response.json();
+    if (snapshot.status === 'cancelled') break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(snapshot.status, 'cancelled');
+  assert.ok((snapshot.events || []).some((item) => item.type === 'cancel_requested'));
+  assert.ok((snapshot.events || []).some((item) => item.type === 'cancelled'));
+});

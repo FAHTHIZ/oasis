@@ -93,7 +93,7 @@ function summarizeToolResult(result) {
 }
 
 function newJob() {
-  return { id: randomUUID(), status: 'running', createdAt: new Date().toISOString(), events: [], nextEventId: 1, pendingApprovals: new Map(), result: null, error: null };
+  return { id: randomUUID(), status: 'running', createdAt: new Date().toISOString(), events: [], nextEventId: 1, pendingApprovals: new Map(), controller: new AbortController(), cancelRequested: false, result: null, error: null };
 }
 
 export function createOasisWebServer(options = {}) {
@@ -185,6 +185,7 @@ export function createOasisWebServer(options = {}) {
         const result = await runAgentTurn(session, message, {
           autoApprove: false,
           env,
+          signal: job.controller.signal,
           approval: (prompt) => approvalFor(job, prompt),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
           onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
@@ -198,12 +199,34 @@ export function createOasisWebServer(options = {}) {
           activeSessions.set(saved.id, session);
         }
         job.result = { ...result, sessionId: saved.id };
-        job.status = 'completed';
-        emit(job, 'completed', job.result);
+        if (job.cancelRequested || result.cancelled) {
+          job.result.cancelled = true;
+          job.status = 'cancelled';
+          emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: saved.id });
+        } else {
+          job.status = 'completed';
+          emit(job, 'completed', job.result);
+        }
       } catch (error) {
-        job.error = String(error && error.message || error || 'Agent request failed').slice(0, 4000);
-        job.status = 'error';
-        emit(job, 'failed', { message: job.error });
+        if (job.cancelRequested || error.name === 'AbortError') {
+          try {
+            const saved = await saveSession(session, { env });
+            if (saved.id !== activeId) {
+              activeSessions.delete(activeId);
+              activeSessions.set(saved.id, session);
+            }
+            job.result = { cancelled: true, sessionId: saved.id };
+          } catch {
+            job.result = { cancelled: true, sessionId: activeId, sessionSaved: false };
+          }
+          job.status = 'cancelled';
+          job.error = null;
+          emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId });
+        } else {
+          job.error = String(error && error.message || error || 'Agent request failed').slice(0, 4000);
+          job.status = 'error';
+          emit(job, 'failed', { message: job.error });
+        }
       } finally {
         busySessions.delete(activeId);
       }
@@ -379,17 +402,29 @@ export function createOasisWebServer(options = {}) {
           env,
           autoApprove: false,
           maxCommandSeconds: timeoutSeconds,
-          approval: (prompt) => approvalFor(job, prompt)
+          approval: (prompt) => approvalFor(job, prompt),
+          signal: job.controller.signal
         });
         job.result = { ...result, jobType: 'terminal' };
         const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
-        emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), message: result.message || '' });
-        job.status = 'completed';
-        emit(job, 'completed', job.result);
+        emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), cancelled: Boolean(result.cancelled), message: result.message || '' });
+        if (job.cancelRequested || result.cancelled) {
+          job.status = 'cancelled';
+          emit(job, 'cancelled', { message: 'Command stopped. Any side effects completed before cancellation remain.', jobType: 'terminal' });
+        } else {
+          job.status = 'completed';
+          emit(job, 'completed', job.result);
+        }
       } catch (error) {
-        job.error = String(error && error.message || error || 'Command failed').slice(0, 4000);
-        job.status = 'error';
-        emit(job, 'failed', { jobType: 'terminal', message: job.error });
+        if (job.cancelRequested || error.name === 'AbortError') {
+          job.status = 'cancelled';
+          job.error = null;
+          emit(job, 'cancelled', { message: 'Command stopped by request.', jobType: 'terminal' });
+        } else {
+          job.error = String(error && error.message || error || 'Command failed').slice(0, 4000);
+          job.status = 'error';
+          emit(job, 'failed', { jobType: 'terminal', message: job.error });
+        }
       }
     })();
     return { jobId: job.id, jobType: 'terminal' };
@@ -668,6 +703,24 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    const cancelMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/cancel$/i);
+    if (req.method === 'POST' && cancelMatch) {
+      const job = jobs.get(cancelMatch[1]);
+      if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
+      if (!['running', 'waiting_approval'].includes(job.status)) {
+        json(res, 409, { error: 'Only a running or approval-blocked job can be cancelled.', status: job.status });
+        return;
+      }
+      if (!job.cancelRequested) {
+        job.cancelRequested = true;
+        emit(job, 'cancel_requested', { message: 'Cancellation requested.' });
+        job.controller.abort(new Error('Cancelled by the user.'));
+        for (const pending of [...job.pendingApprovals.values()]) pending.resolve(false);
+      }
+      json(res, 202, { cancelRequested: true, status: job.status });
+      return;
+    }
+
     const approvalMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/approval$/i);
     if (req.method === 'POST' && approvalMatch) {
       const job = jobs.get(approvalMatch[1]);
@@ -699,6 +752,8 @@ export function createOasisWebServer(options = {}) {
     root,
     async close() {
       for (const job of jobs.values()) {
+        job.cancelRequested = true;
+        job.controller.abort(new Error('Oasis web server is closing.'));
         for (const pending of job.pendingApprovals.values()) pending.resolve(false);
       }
       for (const session of activeSessions.values()) closeSession(session);

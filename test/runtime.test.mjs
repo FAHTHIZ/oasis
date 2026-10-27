@@ -975,3 +975,19 @@ for (const fixture of [
     assert.equal(finalText, 'Hello world');
   });
 }
+
+
+test('workspace commands stop their child process when the parent signal is aborted', async (t) => {
+  const tmp = await temporaryDirectory('oasis-cancel-command-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const controller = new AbortController();
+  const running = runWorkspaceCommand(tmp, process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], {
+    autoApprove: true,
+    timeoutSeconds: 30,
+    signal: controller.signal
+  });
+  setTimeout(() => controller.abort(), 100);
+  const result = await running;
+  assert.equal(result.cancelled, true);
+  assert.ok(result.signal || result.exitCode !== 0, 'The child process should be stopped rather than complete normally.');
+});
