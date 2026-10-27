@@ -13,6 +13,7 @@ import { executeTool } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
+import { managePlugins } from './plugins.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL_URL = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
@@ -37,6 +38,9 @@ function printHelp() {
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis skills list             List available agent skills',
     '  oasis skills install debugging Install a bundled skill in this workspace',
+    '  oasis plugins list             Browse built-in capability bundles',
+    '  oasis plugins install NAME    Install a reviewed capability bundle',
+    '  oasis plugins remove NAME     Remove a bundle and its owned skills',
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
     '  oasis eval --validate         Validate evaluation tasks and reference patches',
@@ -546,6 +550,7 @@ async function main() {
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest);
+  if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
   if (command === 'sessions') return await manageSessions(workspace, rest);
   if (command === 'skills') {
     if (rest[0] === 'install') return await installSkill(workspace, rest[1]);
