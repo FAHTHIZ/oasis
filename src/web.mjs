@@ -149,6 +149,9 @@ export function createOasisWebServer(options = {}) {
     if (sessionId && busySessions.has(sessionId)) throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
 
     const config = await getConfig();
+    if (!config.configured) {
+      throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
+    }
     let session = sessionId ? activeSessions.get(sessionId) : null;
     if (sessionId && !session) {
       const restore = await loadSession(root, sessionId, { env });
@@ -279,10 +282,17 @@ export function createOasisWebServer(options = {}) {
 
     if (req.method === 'GET' && pathname === '/api/status') {
       let provider = null;
-      let providerConfigured = true;
+      let providerConfigured = false;
       let setupHint = '';
-      try { provider = getProviderSummary(await getConfig()); }
-      catch (error) { providerConfigured = false; setupHint = error.message || 'Run oasis setup in the terminal.'; }
+      try {
+        const config = await getConfig();
+        provider = getProviderSummary(config);
+        providerConfigured = Boolean(config.configured);
+        if (!providerConfigured) setupHint = 'No model API key is configured for the selected provider. Run oasis setup in the terminal, or configure OASIS_API_KEY in the runtime environment.';
+      } catch (error) {
+        providerConfigured = false;
+        setupHint = error.message || 'Run oasis setup in the terminal.';
+      }
       json(res, 200, {
         connected: true,
         providerConfigured,
