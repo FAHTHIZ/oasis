@@ -55,21 +55,21 @@ async function readInstalled(root) {
 }
 
 export async function managePlugins(root, args = [], options = {}) {
-  const log = (message) => { if (!options.quiet) log(message); };
+  const log = (message) => { if (!options.quiet) process.stdout.write(message); };
   const action = String(args[0] || 'list').toLowerCase();
   const catalog = await readCatalog();
   const { pluginsRoot, skillsRoot } = workspacePaths(root);
   if (action === 'list' || action === 'browse') {
     const installed = await readInstalled(root);
     const installedNames = new Set(installed.map((plugin) => plugin.name));
-    process.stdout.write('Oasis capability catalog (bundled, reviewed text-based skill bundles)\n\n');
+    log('Oasis capability catalog (bundled, reviewed text-based skill bundles)\n\n');
     for (const plugin of catalog) {
-      process.stdout.write((installedNames.has(plugin.name) ? '[installed] ' : '[available] ') +
+      log((installedNames.has(plugin.name) ? '[installed] ' : '[available] ') +
         plugin.name + ' — ' + plugin.description + '\n  Skills: ' + plugin.skills.join(', ') + '\n');
     }
-    if (!catalog.length) process.stdout.write('No built-in plugins are available.\n');
-    process.stdout.write('\nInstall with: oasis plugins install NAME\n');
-    process.stdout.write('External services are configured separately with oasis mcp; Oasis will not run third-party plugin code silently.\n');
+    if (!catalog.length) log('No built-in plugins are available.\n');
+    log('\nInstall with: oasis plugins install NAME\n');
+    log('External services are configured separately with oasis mcp; Oasis will not run third-party plugin code silently.\n');
     return;
   }
 
@@ -81,7 +81,7 @@ export async function managePlugins(root, args = [], options = {}) {
     const plugin = catalog.find((item) => item.name === name);
     if (!plugin) throw new Error('No built-in plugin named "' + name + '". Run oasis plugins list to browse available bundles.');
     if ((await readInstalled(root)).some((item) => item.name === name)) {
-      process.stdout.write('Plugin "' + name + '" is already installed in this workspace.\n');
+      log('Plugin "' + name + '" is already installed in this workspace.\n');
       return;
     }
 
@@ -120,9 +120,9 @@ export async function managePlugins(root, args = [], options = {}) {
       };
       await mkdir(path.join(pluginsRoot, name), { recursive: false });
       await writeFile(path.join(pluginsRoot, name, 'plugin.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
-      process.stdout.write('Installed plugin "' + name + '" in ' + path.join(pluginsRoot, name) + '\n');
-      process.stdout.write('Skills: ' + plugin.skills.join(', ') + '\n');
-      process.stdout.write('This bundle adds workflow instructions only; it does not silently install packages, start servers, or grant external access.\n');
+      log('Installed plugin "' + name + '" in ' + path.join(pluginsRoot, name) + '\n');
+      log('Skills: ' + plugin.skills.join(', ') + '\n');
+      log('This bundle adds workflow instructions only; it does not silently install packages, start servers, or grant external access.\n');
     } catch (error) {
       for (const item of installedSkills) {
         if (item.owned) await rm(path.dirname(path.join(skillsRoot, item.name, 'SKILL.md')), { recursive: true, force: true }).catch(() => {});
@@ -142,7 +142,7 @@ export async function managePlugins(root, args = [], options = {}) {
       }
     }
     await rm(path.join(pluginsRoot, name), { recursive: true, force: true });
-    process.stdout.write('Removed plugin "' + name + '" and only the skill files it owned.\n');
+    log('Removed plugin "' + name + '" and only the skill files it owned.\n');
     return;
   }
   throw new Error('Unknown plugins action "' + action + '". Use list, install, or remove.');
