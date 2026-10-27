@@ -242,7 +242,7 @@ async function ensureModelProviderSetup(root, options = {}) {
 }
 
 function isOmniRouteSetupIntent(text) {
-  return /\b(?:install|setup|set\s*up|connect|use|switch|route)\b[\s\S]{0,120}\bomniroute\b/i.test(String(text || ''));
+  return /\b(?:add|install|setup|set\s*up|configure|connect|use|switch|route)\b[\s\S]{0,120}\bomniroute\b/i.test(String(text || ''));
 }
 
 function commandAvailable(name) {
