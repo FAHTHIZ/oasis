@@ -11,6 +11,7 @@ This roadmap separates working behavior from ideas that need design and implemen
 - Browser-local persistence
 - JSON backup/export and import/restore
 - Light/dark theme toggle
+- PWA manifest, branded SVG icon, and service-worker app-shell caching
 - Static integrity check and GitHub Actions workflows
 - Privacy, architecture, contribution, and license documentation
 
