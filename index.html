@@ -234,6 +234,15 @@ body.light .extension-card,body.light .integration-card{background:#fff}
       <div class="wide integration-controls"><button class="btn btn-primary" id="mcpAddBtn" type="submit">Save MCP server</button><span class="section-sub">Configuration is saved locally; credentials are not entered here.</span></div>
     </form>
   </div>
+  <dialog class="modal" id="mcpEnvDialog" aria-labelledby="mcpEnvDialogTitle">
+    <form class="modal-card" id="mcpEnvForm">
+      <h2 class="modal-heading" id="mcpEnvDialogTitle">Configure MCP environment access</h2>
+      <p class="modal-help">Only environment-variable names are saved. Secret values must already exist in the Oasis host process environment; never paste their values here.</p>
+      <label for="mcpEnvNames">Allowed variable names<input id="mcpEnvNames" name="names" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="e.g. GITHUB_TOKEN, API_TOKEN"></label>
+      <p class="modal-help" id="mcpEnvDialogError" role="alert"></p>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" id="mcpEnvCancel">Cancel</button><button type="submit" class="btn btn-primary">Save allowlist</button></div>
+    </form>
+  </dialog>
   <div class="integration-pane" id="integration-pane-api" role="tabpanel" hidden>
     <div class="integration-grid">
       <article class="integration-card"><div class="integration-top"><div class="integration-icon">AI</div><div class="integration-copy"><strong>Model provider</strong><p id="integrationProviderDescription">Connect to an OpenAI-compatible, Anthropic, or local model endpoint from the coding workspace.</p></div></div><div class="integration-footer"><span class="status-dot" id="integrationProviderStatus">Unknown</span><button class="btn btn-secondary" type="button" data-nav="agent" data-scroll-target="provider-setup">Provider settings</button></div></article>
@@ -469,6 +478,7 @@ async function integrationRefresh(){
 document.getElementById('connectorGithubCheck').addEventListener('click',function(){void integrationRefresh()});
 document.getElementById('integrationApiRefresh').addEventListener('click',function(){void integrationRefresh()});
 document.getElementById('mcpRefreshBtn').addEventListener('click',function(){void mcpRefresh()});
+var mcpEnvEditingName=null;
 async function mcpRefresh(){
   var list=document.getElementById('mcpServerList');
   if(!agentToken){list.innerHTML='<div class="integration-empty">Connect Oasis first to load the MCP configuration.</div>';return}
@@ -478,33 +488,48 @@ async function mcpRefresh(){
 }
 async function mcpSave(servers,confirmText){
   if(!agentToken){notify('Connect Oasis before changing MCP servers.');return}
-  if(!window.confirm(confirmText+'\n\nEnabled MCP servers execute as local processes when new agent sessions start. Only continue for commands you trust.'))return;
-  try{var result=await agentApi('/api/mcp',{method:'POST',body:JSON.stringify({servers:servers})});notify('MCP configuration saved. '+(result.servers||[]).length+' server(s) configured.');await mcpRefresh()}
-  catch(e){notify('Could not save MCP configuration: '+e.message)}
+  if(!window.confirm(confirmText+'\n\nEnabled MCP servers execute as local processes when new agent sessions start. Only continue for commands you trust.'))return false;
+  try{var result=await agentApi('/api/mcp',{method:'POST',body:JSON.stringify({servers:servers})});notify('MCP configuration saved. '+(result.servers||[]).length+' server(s) configured.');await mcpRefresh();return true}
+  catch(e){notify('Could not save MCP configuration: '+e.message);return false}
 }
 document.getElementById('mcpServerList').addEventListener('click',async function(e){
-  var toggle=e.target.closest('[data-mcp-toggle]'),remove=e.target.closest('[data-mcp-remove]'),editEnv=e.target.closest('[data-mcp-env-edit]');if(!toggle&&!remove&&!editEnv)return;
+  var toggle=e.target.closest('[data-mcp-toggle]'),remove=e.target.closest('[data-mcp-remove]'),editEnv=e.target.closest('[data-mcp-env-edit]');
+  if(!toggle&&!remove&&!editEnv)return;
   if(!agentToken)return;
   try{
     var data=await agentApi('/api/mcp');
     var trigger=toggle||remove||editEnv;
     var name=trigger.getAttribute(toggle?'data-mcp-toggle':(remove?'data-mcp-remove':'data-mcp-env-edit'));
-    var next;
-    var confirmText;
     if(editEnv){
       var current=(data.servers||[]).find(function(s){return s.name===name});if(!current)return;
-      var entered=window.prompt('Comma-separated environment VARIABLE NAMES to pass to '+name+' (never enter secret values here):',(current.passEnv||[]).join(', '));
-      if(entered===null)return;
-      var variables=entered.split(',').map(function(v){return v.trim()}).filter(Boolean);
-      if(variables.some(function(v){return !/^[A-Z_][A-Z0-9_]*$/.test(v)})){notify('Use uppercase environment variable names only, such as API_TOKEN. Values are not accepted.');return}
-      next=(data.servers||[]).map(function(s){return s.name===name?Object.assign({},s,{passEnv:variables}):s});
-      confirmText='Update the environment-variable allowlist for '+name+'? Values remain in the Oasis host environment; only variable names are saved.';
-    }else{
-      next=(data.servers||[]).filter(function(s){return !remove||s.name!==name}).map(function(s){return toggle&&s.name===name?Object.assign({},s,{enabled:!s.enabled}):s});
-      confirmText=toggle?'Change enabled state for MCP server '+name+'?':'Remove MCP server '+name+' from configuration?';
+      mcpEnvEditingName=name;
+      document.getElementById('mcpEnvNames').value=(current.passEnv||[]).join(', ');
+      document.getElementById('mcpEnvDialogError').textContent='';
+      document.getElementById('mcpEnvDialog').showModal();
+      document.getElementById('mcpEnvNames').focus();
+      return;
     }
-    await mcpSave(next,confirmText);
+    var next=(data.servers||[]).filter(function(s){return !remove||s.name!==name}).map(function(s){return toggle&&s.name===name?Object.assign({},s,{enabled:!s.enabled}):s});
+    await mcpSave(next,(toggle?'Change enabled state for MCP server '+name+'?':'Remove MCP server '+name+' from configuration?'));
   }catch(err){notify('Could not update MCP configuration: '+err.message)}
+});
+document.getElementById('mcpEnvCancel').addEventListener('click',function(){document.getElementById('mcpEnvDialog').close();mcpEnvEditingName=null});
+document.getElementById('mcpEnvForm').addEventListener('submit',async function(e){
+  e.preventDefault();if(!agentToken||!mcpEnvEditingName)return;
+  var entered=document.getElementById('mcpEnvNames').value.trim();
+  var variables=entered?entered.split(',').map(function(v){return v.trim()}):[];
+  if(variables.some(function(v){return !/^[A-Z_][A-Z0-9_]*$/.test(v)})||new Set(variables).size!==variables.length){
+    document.getElementById('mcpEnvDialogError').textContent='Use unique uppercase environment variable names only, such as API_TOKEN. Secret values are not accepted.';
+    return;
+  }
+  var name=mcpEnvEditingName;
+  try{
+    var data=await agentApi('/api/mcp');
+    var next=(data.servers||[]).map(function(server){return server.name===name?Object.assign({},server,{passEnv:variables}):server});
+    if(!next.some(function(server){return server.name===name})){throw new Error('The selected MCP server no longer exists.')}
+    var saved=await mcpSave(next,'Update the environment-variable allowlist for '+name+'? Only variable names will be saved; secret values stay in the Oasis host environment.');
+    if(saved){document.getElementById('mcpEnvDialog').close();mcpEnvEditingName=null}
+  }catch(err){document.getElementById('mcpEnvDialogError').textContent=err.message||'Could not update environment access.'}
 });
 document.getElementById('mcpAddForm').addEventListener('submit',async function(e){
   e.preventDefault();if(!agentToken){notify('Connect Oasis first.');return}
