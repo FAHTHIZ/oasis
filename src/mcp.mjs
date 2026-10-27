@@ -94,7 +94,7 @@ function compactText(result) {
 
 export class McpServerClient {
   constructor(config, options = {}) {
-    this.config = validateServerConfig(config);
+    this.config = validateMcpServerConfig(config);
     this.root = options.root || process.cwd();
     this.env = options.env || process.env;
     this.child = null;
