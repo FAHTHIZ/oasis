@@ -823,7 +823,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const root = path.join(tmp, 'workspace');
   await mkdir(root);
-  await writeFile(path.join(root, 'large.txt'), ('A large but harmless context fixture.\\n').repeat(10000));
+  await writeFile(path.join(root, 'large.txt'), ('A large but harmless context fixture.\n').repeat(5000));
 
   const taskPayloads = [];
   let summaryPayload = null;
@@ -879,7 +879,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.ok(summaryPayload, 'mid-turn summarization should make a tool-free model request');
   assert.equal(summaryPayload.messages.length, 2);
   assert.equal(summaryPayload.tools, undefined);
-  assert.match(summaryPayload.messages[1].content, /large\\.txt/);
+  assert.match(summaryPayload.messages[1].content, /large\.txt/);
   const finalPayload = taskPayloads[2];
   assert.ok(finalPayload.messages.some((message) =>
     message.role === 'user' && message.content === 'Inspect large.txt repeatedly and report what you learned.'));
