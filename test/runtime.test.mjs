@@ -224,6 +224,47 @@ test('public URL fetch blocks loopback and private network addresses', async () 
   await assert.rejects(executeTool('fetch_url', { url: 'http://localhost/' }, { root: process.cwd() }), /Local and metadata/);
 });
 
+test('read-only Git tools inspect diffs while protecting sensitive paths', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await writeFile(path.join(tmp, 'README.md'), 'before line\\n');
+  await writeFile(path.join(tmp, '.env'), 'API_TOKEN=super-secret-fixture\\n');
+
+  const initialized = await runWorkspaceCommand(tmp, 'git', ['init'], { autoApprove: true });
+  if (initialized.exitCode !== 0) {
+    t.skip('Git is unavailable in this environment: ' + (initialized.stderr || initialized.error || initialized.exitCode));
+    return;
+  }
+  for (const args of [
+    ['config', 'user.name', 'Oasis Test'],
+    ['config', 'user.email', 'oasis-test@example.invalid'],
+    ['add', '--', 'README.md', '.env'],
+    ['commit', '-m', 'baseline']
+  ]) {
+    const result = await runWorkspaceCommand(tmp, 'git', args, { autoApprove: true });
+    assert.equal(result.exitCode, 0, JSON.stringify(result));
+  }
+
+  await writeFile(path.join(tmp, 'README.md'), 'after line\\n');
+  await writeFile(path.join(tmp, '.env'), 'API_TOKEN=changed-super-secret-fixture\\n');
+
+  const status = await executeTool('git_status', {}, { root: tmp });
+  assert.equal(status.exitCode, 0, JSON.stringify(status));
+  assert.match(status.output, /README\\.md/);
+
+  const diff = await executeTool('git_diff', { scope: 'all' }, { root: tmp });
+  assert.equal(diff.exitCode, 0, JSON.stringify(diff));
+  assert.match(diff.output, /-before line/);
+  assert.match(diff.output, /\\+after line/);
+  assert.doesNotMatch(diff.output, /super-secret-fixture/);
+
+  const scoped = await executeTool('git_diff', { scope: 'all', path: 'README.md' }, { root: tmp });
+  assert.equal(scoped.exitCode, 0, JSON.stringify(scoped));
+  assert.match(scoped.output, /after line/);
+  await assert.rejects(executeTool('git_diff', { path: '.env' }, { root: tmp }), /sensitive/);
+  await assert.rejects(executeTool('git_diff', { path: '../outside.txt' }, { root: tmp }), /outside the workspace/);
+});
+
 test('agent tool registry exposes a useful coding workflow tool set', () => {
   assert.ok(toolCount() >= 7);
 });
