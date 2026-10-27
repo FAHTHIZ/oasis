@@ -18,6 +18,7 @@ oasis
 During setup, choose the native OpenAI Responses API (the default), native Anthropic Messages API, or OpenAI-compatible chat completions. The default OpenAI model is `gpt-6.1-sol`; choose a model name that supports tools for any other provider. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
 
 Supported provider shapes:
+- Native OpenAI Responses API (`openai-responses`), recommended for current OpenAI reasoning models that require Responses for tool calling.
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
 - Native Anthropic Messages API endpoints. Select `anthropic` during `oasis setup`.
 - Local Ollama-style endpoints such as \`http://localhost:11434/v1\`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
@@ -43,15 +44,16 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 
 ### Terminal agent
 - Interactive sessions and one-shot plain-English tasks.
-- Multi-step native Anthropic and OpenAI-compatible tool-calling loops.
+- Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops.
 - Optional MCP stdio server integration with explicit configuration and approval for each external tool call.
-- Workspace file listing, literal search, and bounded text reads/writes.
+- Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
 - Command execution through an executable plus argument array, without shell expansion.
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
 - Bundled skills for debugging, code review, testing, environment setup, and shipping features.
 - Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
-- Automatic snapshots before overwriting files, plus snapshot listing and restore commands.
+- Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
+- Optional workspace-scoped saved sessions that can be resumed or deleted; skill descriptions load first and full skill guides load only on demand.
 - Environment diagnosis, workspace initialization, provider configuration, and self-update.
 
 ### Browser workspace
@@ -107,14 +109,14 @@ Then open \`http://localhost:8000\`.
 
 ## Development and verification
 
-Node.js 20 or newer:
+Node.js 22 or newer:
 
 ~~~bash
 npm run check
 npm pack --dry-run
 ~~~
 
-The test suite checks provider configuration, install intent parsing, package-name validation, workspace boundaries, secret-file protection, snapshots and restore, approval requirements, command environment filtering, private URL rejection, MCP calls, session persistence, and simulated model/tool-call cycles for OpenAI Responses, OpenAI-compatible chat completions, and Anthropic. The browser integrity script checks the static UI, JavaScript syntax, PWA manifest, icon, and service worker.
+The test suite checks provider configuration, install intent parsing, exact text edits and backup safety, glob matching, ranged reads, workspace boundaries, secret-file protection, command approvals, environment filtering, private URL rejection, MCP calls, optional session persistence, and simulated model/tool-call cycles for OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic.
 
 A passing test suite is not a full security audit or a substitute for exercising the CLI on Linux, macOS, Windows, Android/Termux, or against real model providers.
 
@@ -122,11 +124,11 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 - An MCP stdio client is implemented, but a plugin marketplace, broad provider adapters, and curated integrations are not yet implemented.
 - No OS-level sandbox or container isolation is provided.
-- Agent sessions are kept in memory for the current process; durable cross-session conversation history is not implemented.
+- Saved conversations are opt-in and workspace-scoped. Automatic context compaction and streaming output are not implemented, and very long conversations can still exceed provider context limits.
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
-- Tool calls are sequential. Parallel agent orchestration, automatic compaction strategies, streaming token output, and advanced conflict handling are not implemented.
+- Read-only workspace tool calls can run in parallel, while commands, edits, installs, deletes, and external MCP calls run sequentially. Parallel specialist-agent orchestration, robust context compaction, streaming token output, and advanced conflict handling are not implemented.
 - The CLI and browser dashboard are separate interfaces; they do not currently share live project/task state.
-- GitHub Pages deployment must be enabled in the repository's Pages settings. A workflow file alone does not prove the site is live.
+- GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
 
 ## Contributing
 
