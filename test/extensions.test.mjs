@@ -10,9 +10,10 @@ import {
   listInstalledExtensions,
   parseGitHubRepositoryUrl,
   removeGitHubExtension,
-  selectAgentPromptFiles
+  selectAgentPromptFiles,
+  selectPortableSkillResources
 } from '../src/extensions.mjs';
-import { listAvailableSkills, loadSkillText } from '../src/tools.mjs';
+import { executeTool, listAvailableSkills, loadSkillResource, loadSkillText } from '../src/tools.mjs';
 
 const COMMIT = 'c'.repeat(40);
 
@@ -216,4 +217,53 @@ test('inspection allows recognized non-Markdown plugins to display a compatibili
   assert.equal(inspected.importCount, 0);
   assert.equal(inspected.compatibility.formats.find((item) => item.id === 'claude-code').detected, true);
   assert.match(inspected.installationBlockedReason, /no Markdown prompts/i);
+});
+
+
+test('portable Agent Skills keep text references with integrity-checked read access and exclude scripts', async (t) => {
+  const tmp = await tempDir();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'project');
+  const env = { OASIS_CONFIG_DIR: path.join(tmp, 'config') };
+  const skillText = '---\nname: api-review\ndescription: Review API changes.\n---\n\nRead references/checklist.md before reviewing.\n';
+  const referenceText = '# API checklist\n\nVerify authentication, validation, and error behavior.\n';
+  const treeEntries = [
+    { path: 'skills/api-review/SKILL.md', type: 'blob', mode: '100644', size: skillText.length, sha: '1'.repeat(40) },
+    { path: 'skills/api-review/references/checklist.md', type: 'blob', mode: '100644', size: referenceText.length, sha: '2'.repeat(40) },
+    { path: 'skills/api-review/scripts/run.sh', type: 'blob', mode: '100755', size: 20, sha: '3'.repeat(40) }
+  ];
+  const fetchImpl = async (rawUrl) => {
+    const url = String(rawUrl);
+    const json = (value) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/vnd.github+json' } });
+    if (url === 'https://api.github.com/repos/acme/portable-skills') return json({ full_name: 'acme/portable-skills', name: 'portable-skills', description: 'Portable skills', default_branch: 'main', private: false, license: { spdx_id: 'MIT' } });
+    if (url === 'https://api.github.com/repos/acme/portable-skills/commits/main') return json({ sha: COMMIT });
+    if (url === 'https://api.github.com/repos/acme/portable-skills/git/trees/' + COMMIT + '?recursive=1') return json({ tree: treeEntries, truncated: false });
+    const prefix = 'https://raw.githubusercontent.com/acme/portable-skills/' + COMMIT + '/';
+    if (url.startsWith(prefix)) {
+      const filePath = decodeURIComponent(url.slice(prefix.length));
+      if (filePath === 'skills/api-review/SKILL.md') return new Response(skillText, { status: 200, headers: { 'content-type': 'text/markdown' } });
+      if (filePath === 'skills/api-review/references/checklist.md') return new Response(referenceText, { status: 200, headers: { 'content-type': 'text/markdown' } });
+    }
+    throw new Error('Unexpected fixture URL: ' + url);
+  };
+  const inspected = await inspectGitHubExtension('https://github.com/acme/portable-skills', { fetchImpl });
+  assert.equal(inspected.importCount, 1);
+  assert.equal(inspected.files[0].path, 'skills/api-review/SKILL.md');
+  assert.deepEqual(selectPortableSkillResources(treeEntries, 'skills/api-review/SKILL.md').map((item) => item.relativePath), ['references/checklist.md']);
+  const { installGitHubExtension } = await import('../src/extensions.mjs');
+  const installed = await installGitHubExtension('https://github.com/acme/portable-skills', {
+    root, env, scope: 'project', expectedCommit: COMMIT, fetchImpl
+  });
+  assert.equal(installed.importedFiles, 1);
+  assert.equal(installed.preservedResources, 1);
+  const skill = (await listAvailableSkills(root, { env })).find((item) => item.description === 'Review API changes.');
+  assert.ok(skill);
+  const resource = await loadSkillResource(root, skill.name, 'references/checklist.md', { env });
+  assert.match(resource.content, /authentication, validation, and error behavior/i);
+  const throughTool = await executeTool('read_skill_resource', { name: skill.name, path: 'references/checklist.md' }, { root, env });
+  assert.equal(throughTool.content, resource.content);
+  await assert.rejects(() => loadSkillResource(root, skill.name, '../SKILL.md', { env }), /text files inside references/i);
+  const resourcePath = path.join(root, '.oasis', 'extensions', 'portable-skills', 'skills', skill.name, 'references', 'checklist.md');
+  await writeFile(resourcePath, '# modified\n');
+  await assert.rejects(() => loadSkillResource(root, skill.name, 'references/checklist.md', { env }), /integrity verification failed/i);
 });

@@ -78,3 +78,8 @@ OS-level container isolation, a full interactive PTY, TLS for the browser runtim
 ## Cross-ecosystem extension compatibility
 
 Oasis's extension inspector detects portable Agent Skills layouts and Claude Code, Codex, and Gemini CLI markers from a public GitHub tree. The report separates Markdown prompts the current runtime can load from commands, MCP declarations, hooks, executable files, and plugin-specific behavior that is only detected. Finding a manifest does not mean the full extension is operational. Imported prompt content remains untrusted, commit-pinned and integrity-tracked. Future adapters must convert each ecosystem into an explicit install plan, validate paths and dependency boundaries, and gate tool servers and lifecycle code through review, permissions, audit logs and rollback.
+
+
+## Portable Agent Skills resources
+
+For standard `skills/<name>/SKILL.md` packages, Oasis preserves bounded text references/assets under `references/` and `assets/` beside the imported skill. Resource hashes are recorded in the extension manifest. `read_skill_resource` rejects traversal and symbolic links, only reads manifest-listed text files, and verifies integrity before returning content. Scripts, binaries, lifecycle hooks, MCP configuration and dependency installation remain inactive; this is portable-skill resource support, not full third-party plugin compatibility.

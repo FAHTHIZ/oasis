@@ -36,6 +36,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'edit_file', description: 'Make a precise edit to an existing text file by replacing an exact string. Prefer this over write_file for existing files. old_string must match exactly and be unique unless replace_all is true. The previous contents are snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path of an existing file' }, old_string: { type: 'string', description: 'Exact existing text to replace; must be non-empty' }, new_string: { type: 'string', description: 'Replacement text' }, replace_all: { type: 'boolean', description: 'Replace every occurrence instead of requiring a unique match' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' } }, required: ['name', 'path'] } } },
   { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
@@ -479,7 +480,11 @@ export async function listAvailableSkills(root, options = {}) {
             source,
             relativePath,
             absolutePath: source === 'global-extension' ? filePath : undefined,
-            extensionName: extension.name
+            extensionName: extension.name,
+            absoluteExtensionDirectory: source === 'global-extension' ? extensionDirectory : undefined,
+            relativeExtensionDirectory: source === 'project-extension'
+              ? path.posix.join('.oasis', 'extensions', extension.name, 'skills', skillDir.name)
+              : undefined
           });
         } catch { /* Ignore untrusted or malformed prompt files. */ }
       }
@@ -520,6 +525,58 @@ export async function loadSkillText(root, rawName, options = {}) {
   }
   if (content.includes('\0')) throw new Error('Skill content is not valid text.');
   return { name: skill.name, source: skill.source, content: content.slice(0, 24000), truncated: content.length > 24000 };
+}
+
+
+export async function loadSkillResource(root, rawName, rawRelativePath, options = {}) {
+  const name = String(rawName || '');
+  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
+  const relativePath = String(rawRelativePath || '').replace(/\\/g, '/');
+  const parts = relativePath.split('/');
+  if (relativePath.startsWith('/') || parts.length < 2 || parts.some((part) => !part || part === '.' || part === '..') ||
+      !['references', 'assets'].includes(parts[0]) || !/\.(?:md|txt|json|ya?ml|toml|csv|xml)$/i.test(relativePath)) {
+    throw new Error('Skill resources must be text files inside references/ or assets/. Scripts and executable resources are not exposed.');
+  }
+  const workspaceRoot = path.resolve(root || process.cwd());
+  const skills = await listAvailableSkills(workspaceRoot, options);
+  const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  if (!skill || !['global-extension', 'project-extension'].includes(skill.source)) throw new Error('No installed external skill named "' + name + '" owns portable resources.');
+  let extensionDirectory;
+  let safetyRoot;
+  if (skill.source === 'global-extension') {
+    extensionDirectory = path.resolve(skill.absoluteExtensionDirectory || '');
+    safetyRoot = path.resolve(getConfigDirectory(options.env || process.env), 'extensions');
+  } else {
+    extensionDirectory = path.resolve(workspaceRoot, ...(String(skill.relativeExtensionDirectory || '').split('/')));
+    safetyRoot = workspaceRoot;
+  }
+  if (!inside(safetyRoot, extensionDirectory)) throw new Error('Imported skill resource directory is outside its permitted extension root.');
+  const extensionDirectoryReal = await realpath(extensionDirectory);
+  const extensionInfo = await lstat(extensionDirectory);
+  if (extensionInfo.isSymbolicLink() || !extensionInfo.isDirectory()) throw new Error('Imported skill directory is not a regular directory.');
+  const extensionRoot = path.resolve(extensionDirectory, '..', '..');
+  const manifestPath = path.join(extensionRoot, 'extension.json');
+  const manifestInfo = await lstat(manifestPath);
+  if (manifestInfo.isSymbolicLink() || !manifestInfo.isFile()) throw new Error('The managed extension manifest is missing or unsafe.');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const relativeToExtension = path.posix.join('skills', path.basename(extensionDirectory), relativePath);
+  const record = Array.isArray(manifest.files) ? manifest.files.find((item) => item.path === relativeToExtension) : null;
+  if (!record || !/^[a-f0-9]{64}$/i.test(String(record.sha256 || ''))) throw new Error('That resource is not in the verified manifest for this skill.');
+  let target = extensionDirectory;
+  for (const part of parts) {
+    target = path.join(target, part);
+    const info = await lstat(target);
+    if (info.isSymbolicLink()) throw new Error('Skill resources cannot resolve through symbolic links.');
+  }
+  const targetInfo = await lstat(target);
+  if (!targetInfo.isFile() || targetInfo.size > MAX_TEXT_FILE) throw new Error('The resource is not a regular text file within the allowed size.');
+  const targetReal = await realpath(target);
+  if (!inside(extensionDirectoryReal, targetReal)) throw new Error('Skill resource resolved outside its extension package.');
+  const content = await readFile(targetReal, 'utf8');
+  if (content.includes('\0')) throw new Error('Skill resource is not valid text.');
+  const hash = createHash('sha256').update(content).digest('hex');
+  if (hash !== record.sha256) throw new Error('Skill resource integrity verification failed; inspect the extension before using it.');
+  return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
 }
 
 export async function loadSkillDescriptions(root, options = {}) {
@@ -636,6 +693,8 @@ export async function executeTool(name, args = {}, context = {}) {
       return { skills: await listAvailableSkills(root, { env: context.env || process.env }) };
     case 'load_skill':
       return await loadSkillText(root, args.name, { env: context.env || process.env });
+    case 'read_skill_resource':
+      return await loadSkillResource(root, args.name, args.path, { env: context.env || process.env });
     case 'install_extension': {
       const url = String(args.url || '').trim();
       const scope = String(args.scope || 'project');

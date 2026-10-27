@@ -91,12 +91,38 @@ function isPromptCandidate(entry) {
   const basename = parts[parts.length - 1].toLowerCase();
   if (/^(readme|contributing|license|licence|changelog|code_of_conduct|code-of-conduct|security|support|authors|contributors|roadmap|codeowners)(\.|$)/i.test(basename)) return false;
   const lower = normalized.toLowerCase();
+  const portableSkillPath = normalized.match(/^(?:(?:\.agents|\.claude|\.codex)\/)?skills\/[^/]+\/(.+)$/i);
+  if (portableSkillPath) return portableSkillPath[1].toLowerCase() === 'skill.md';
+  if (/(^|\/)(?:references|assets|examples|templates)\//i.test(lower)) return false;
   const clearlyAgentic = /(^|\/)(agents?|subagents?|skills?|personas?)(\/|$)/i.test(lower) ||
     /(?:^|[-_.])(agent|persona|specialist|architect|engineer|developer|designer|strategist|researcher|analyst|reviewer|tester|writer|manager|expert)(?:[-_.]|$)/i.test(basename);
   if (parts.length === 1 && !clearlyAgentic) return false;
   if (/^(docs?|website|site|blog|examples?)\//i.test(normalized) && !clearlyAgentic) return false;
   if (/^\.github\//i.test(normalized) && !clearlyAgentic) return false;
   return true;
+}
+
+
+export function selectPortableSkillResources(treeEntries, skillFilePath) {
+  const normalizedSkillPath = String(skillFilePath || '').replace(/\\/g, '/');
+  const match = normalizedSkillPath.match(/^((?:(?:\.agents|\.claude|\.codex)\/)?skills\/[^/]+)\/SKILL\.md$/i);
+  if (!match || !Array.isArray(treeEntries)) return [];
+  const packageRoot = match[1];
+  const resources = [];
+  for (const entry of treeEntries) {
+    if (!entry || entry.type !== 'blob' || entry.mode === '120000' || !Number.isFinite(Number(entry.size))) continue;
+    const fullPath = String(entry.path || '').replace(/\\/g, '/');
+    if (!fullPath.startsWith(packageRoot + '/')) continue;
+    const relativePath = fullPath.slice(packageRoot.length + 1);
+    const parts = relativePath.split('/');
+    if (parts.length < 2 || !['references', 'assets'].includes(parts[0].toLowerCase())) continue;
+    if (parts.some((part) => !part || part === '.' || part === '..' || part.includes('\\') || part.includes('\0'))) continue;
+    if (!/\.(?:md|txt|json|ya?ml|toml|csv|xml)$/i.test(relativePath)) continue;
+    const size = Number(entry.size);
+    if (size < 1 || size > MAX_FILE_BYTES) continue;
+    resources.push({ path: fullPath, relativePath, size, sha: String(entry.sha || '') });
+  }
+  return resources.sort((a, b) => a.path.localeCompare(b.path)).slice(0, 64);
 }
 
 export function selectAgentPromptFiles(treeEntries) {
@@ -252,7 +278,7 @@ async function readPromptFile(fetchImpl, owner, repo, commitSha, file) {
   const encodedPath = file.path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   const url = 'https://raw.githubusercontent.com/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo) + '/' + commitSha + '/' + encodedPath;
   const result = await getResponseText(fetchImpl, url, { maxBytes: MAX_FILE_BYTES });
-  if (result.contentType && !/(text\/|application\/octet-stream)/i.test(result.contentType)) {
+  if (result.contentType && !/(text\/|application\/(?:octet-stream|json|xml|yaml|toml))/i.test(result.contentType)) {
     throw new Error('File ' + file.path + ' is not served as text and was not imported.');
   }
   return result.body;
@@ -291,11 +317,22 @@ async function writeStagedExtension(parent, safetyRoot, extensionSlug, manifest,
   const ownedFiles = [];
   try {
     for (const skill of skills) {
-      const relative = path.posix.join('skills', skill.name, 'SKILL.md');
-      const destination = path.join(staging, ...relative.split('/'));
-      await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
-      await writeFile(destination, skill.content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
-      ownedFiles.push({ path: relative, sha256: createHash('sha256').update(skill.content).digest('hex'), sourcePath: skill.sourcePath });
+      const rootRelative = path.posix.join('skills', skill.name);
+      const entries = [{ relativePath: 'SKILL.md', content: skill.content, sourcePath: skill.sourcePath }, ...(skill.resources || [])];
+      for (const file of entries) {
+        const relativePath = String(file.relativePath || 'SKILL.md').replace(/\\/g, '/');
+        const parts = relativePath.split('/');
+        if (relativePath.startsWith('/') || parts.some((part) => !part || part === '.' || part === '..') ||
+            (relativePath !== 'SKILL.md' && (!['references', 'assets'].includes(parts[0]) || !/\.(?:md|txt|json|ya?ml|toml|csv|xml)$/i.test(relativePath)))) {
+          throw new Error('An imported skill resource has an unsafe path. No extension was installed.');
+        }
+        const relative = path.posix.join(rootRelative, relativePath);
+        const destination = path.join(staging, ...relative.split('/'));
+        if (!inside(staging, destination)) throw new Error('An imported skill resource escaped its staging directory.');
+        await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+        await writeFile(destination, file.content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+        ownedFiles.push({ path: relative, sha256: createHash('sha256').update(file.content).digest('hex'), sourcePath: file.sourcePath });
+      }
     }
     const storedManifest = {
       schemaVersion: 1,
@@ -308,12 +345,13 @@ async function writeStagedExtension(parent, safetyRoot, extensionSlug, manifest,
       scope: manifest.scope,
       trust: 'external-markdown-prompts-untrusted',
       execution: 'no scripts or dependencies executed',
-      importedFiles: ownedFiles.length,
+      importedFiles: skills.length,
+      preservedResources: skills.reduce((total, skill) => total + (skill.resources || []).length, 0),
       files: ownedFiles
     };
     await writeFile(path.join(staging, 'extension.json'), JSON.stringify(storedManifest, null, 2) + '\n', { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     await rename(staging, target);
-    return { name: storedManifest.name, scope: manifest.scope, path: target, importedFiles: ownedFiles.length, commitSha: manifest.commitSha, license: manifest.license };
+    return { name: storedManifest.name, scope: manifest.scope, path: target, importedFiles: skills.length, preservedResources: skills.reduce((total, skill) => total + (skill.resources || []).length, 0), commitSha: manifest.commitSha, license: manifest.license };
   } catch (error) {
     await rm(staging, { recursive: true, force: true }).catch(() => {});
     throw error;
@@ -352,9 +390,33 @@ export async function installGitHubExtension(rawUrl, options = {}) {
         name,
         description,
         sourcePath: item.file.path,
-        content: normalizedSkillDocument(item.rawContent, name, description, item.file.path, snapshot.repository, snapshot.repository.commitSha)
+        content: normalizedSkillDocument(item.rawContent, name, description, item.file.path, snapshot.repository, snapshot.repository.commitSha),
+        resourceCandidates: selectPortableSkillResources(snapshot.treeEntries, item.file.path),
+        resources: []
       });
     }
+  }
+  let resourceCount = 0;
+  for (const skill of skills) {
+    const candidates = skill.resourceCandidates || [];
+    for (let offset = 0; offset < candidates.length && resourceCount < 240; offset += 8) {
+      const batch = candidates.slice(offset, offset + 8);
+      const loaded = await Promise.all(batch.map(async (file) => ({
+        file,
+        content: await readPromptFile(fetchImpl, snapshot.parsed.owner, snapshot.parsed.repo, snapshot.repository.commitSha, file)
+      })));
+      for (const item of loaded) {
+        const size = Buffer.byteLength(item.content, 'utf8');
+        if (!size || size > MAX_FILE_BYTES || item.content.includes('\0')) continue;
+        totalBytes += size;
+        if (totalBytes > MAX_TOTAL_BYTES) throw new Error('This repository’s prompts and skill resources exceed the 4 MiB import limit. Use a smaller collection.');
+        skill.resources.push({ relativePath: item.file.relativePath, sourcePath: item.file.path, content: item.content });
+        resourceCount++;
+        if (resourceCount >= 240) break;
+      }
+    }
+    delete skill.resourceCandidates;
+    if (resourceCount >= 240) break;
   }
   const manifest = {
     name: extensionSlug,
@@ -446,6 +508,7 @@ export async function listInstalledExtensions(options = {}) {
         installedAt: String(manifest.installedAt || ''),
         scope: target.scope,
         importedFiles: Number(manifest.importedFiles || manifest.files.length || 0),
+        preservedResources: Number(manifest.preservedResources || 0),
         trust: String(manifest.trust || 'unverified'),
         execution: String(manifest.execution || 'unknown')
       });
