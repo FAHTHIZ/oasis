@@ -10,6 +10,7 @@ import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceComma
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
+import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 
 async function temporaryDirectory(prefix = 'oasis-test-') {
   return await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -303,4 +304,39 @@ test('restore refuses a symlink target, even when the link resolves outside the 
     if (error.code !== 'EPERM' && error.code !== 'EACCES' && error.code !== 'ENOTSUP') throw error;
     t.diagnostic('Symlink restore protection skipped because this platform does not permit file symlinks.');
   }
+});
+
+
+test('saved sessions are opt-in, workspace-scoped, and removable', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  const config = path.join(tmp, 'private-config');
+  await mkdir(root);
+  const env = { ...process.env, OASIS_CONFIG_DIR: config };
+  const session = {
+    root,
+    config: { protocol: 'openai-compatible', baseURL: 'https://provider.example/v1', model: 'fixture-model', apiKey: 'never-store-key-in-history' },
+    messages: [
+      { role: 'system', content: 'Test system context' },
+      { role: 'user', content: 'Inspect the project' },
+      { role: 'assistant', content: 'I will inspect files.' }
+    ]
+  };
+  const saved = await saveSession(session, { env });
+  assert.ok(saved.id.length >= 20);
+  assert.equal(session.sessionId, saved.id);
+  assert.equal((await listSessions(root, { env })).length, 1);
+  const restored = await loadSession(root, saved.id, { env });
+  assert.equal(restored.messages.length, 3);
+  assert.equal(restored.messages[1].content, 'Inspect the project');
+  const onDisk = await readFile(saved.path, 'utf8');
+  assert.ok(!onDisk.includes('never-store-key-in-history'));
+  if (process.platform !== 'win32') assert.equal((await stat(saved.path)).mode & 0o777, 0o600);
+  const otherRoot = path.join(tmp, 'another-workspace');
+  await mkdir(otherRoot);
+  assert.deepEqual(await listSessions(otherRoot, { env }), []);
+  const removed = await deleteSession(root, saved.id, { env });
+  assert.equal(removed.deleted, true);
+  assert.deepEqual(await listSessions(root, { env }), []);
 });
