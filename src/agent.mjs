@@ -23,14 +23,20 @@ function systemPrompt(root, projectContext) {
   ].join('\n\n');
 }
 
-export async function createSession({ root, config }) {
+export async function createSession({ root, config, restore = null }) {
   const projectContext = await loadProjectInstructions(root);
   const mcp = await connectMcpServers({ root });
   const dynamic = mcpToolDefinitions(mcp.clients);
+  const systemMessage = { role: 'system', content: systemPrompt(root, projectContext) };
+  let messages = [systemMessage];
+  if (restore && Array.isArray(restore.messages)) {
+    messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
+  }
   return {
     root,
     config,
-    messages: [{ role: 'system', content: systemPrompt(root, projectContext) }],
+    sessionId: restore && restore.id || null,
+    messages,
     mcpClients: mcp.clients,
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
