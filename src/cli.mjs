@@ -10,7 +10,7 @@ import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_A
 import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
-import { executeTool } from './tools.mjs';
+import { executeTool, listAvailableSkills } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
@@ -40,8 +40,12 @@ function printHelp() {
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp remove NAME         Remove a configured server',
-    '  oasis skills list             List available agent skills',
-    '  oasis skills install debugging Install a bundled skill in this workspace',
+    '  oasis skills list              List skills visible to Oasis',
+    '  oasis skills find [query]      Search the skills.sh ecosystem',
+    '  oasis skills inspect SOURCE    List skills available from a source',
+    '  oasis skills add SOURCE --skill NAME [--global]  Install a selected skill',
+    '  oasis skills add SOURCE --all [--global]  Install all skills from a source',
+    '  oasis skills install NAME      Install a bundled Oasis workflow skill',
     '  oasis plugins list             Browse built-in capability bundles',
     '  oasis plugins install NAME    Install a reviewed capability bundle',
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
@@ -307,27 +311,146 @@ async function initWorkspace(root) {
 }
 
 async function listSkills(root) {
-  const installedRoot = path.join(root, '.oasis', 'skills');
-  const installed = new Set();
-  try { for (const item of await readdir(installedRoot, { withFileTypes: true })) if (item.isDirectory()) installed.add(item.name); } catch {}
-  const bundledRoot = path.join(APP_ROOT, 'skills');
-  let bundled = [];
-  try { bundled = (await readdir(bundledRoot, { withFileTypes: true })).filter((item) => item.isDirectory()).map((item) => item.name); } catch {}
-  stdout.write('Built-in skill templates:\n');
-  for (const name of bundled) stdout.write('  ' + name + (installed.has(name) ? ' (installed in this workspace)' : '') + '\n');
-  if (!bundled.length) stdout.write('  No bundled skills were found in this installation.\n');
-  if (installed.size) stdout.write('\nAdditional workspace skills:\n  ' + [...installed].filter((name) => !bundled.includes(name)).join('\n  ') + '\n');
+  const skills = await listAvailableSkills(root);
+  stdout.write('Agent skills visible to Oasis (skill instructions are context, not executable code):\\n');
+  if (!skills.length) { stdout.write('  No skills found. Try "oasis skills find frontend" or install one with "oasis skills add SOURCE --skill NAME".\\n'); return; }
+  const sourceLabels = {
+    'built-in': 'bundled',
+    workspace: '.oasis/skills',
+    'portable-workspace': '.agents/skills',
+    'global-portable': 'global universal skills',
+    'global-extension': 'global extension',
+    'project-extension': 'project extension'
+  };
+  for (const skill of skills) {
+    stdout.write('  ' + skill.name + ' [' + (sourceLabels[skill.source] || skill.source) + '] — ' + skill.description + '\\n');
+  }
 }
 
-async function installSkill(root, name) {
-  if (!/^[a-z][a-z0-9-]{0,63}$/.test(name || '')) throw new Error('Skill name must use lowercase letters, numbers, and hyphens.');
-  const source = path.join(APP_ROOT, 'skills', name, 'SKILL.md');
-  const destination = path.join(root, '.oasis', 'skills', name, 'SKILL.md');
-  try { await access(source); } catch { throw new Error('No bundled skill named "' + name + '". Use oasis skills list.'); }
-  try { await access(destination); stdout.write('Skill already exists at ' + destination + '; leaving it unchanged.\n'); return; } catch {}
-  await mkdir(path.dirname(destination), { recursive: true });
-  await copyFile(source, destination, 0);
-  stdout.write('Installed skill "' + name + '" into ' + destination + '. It will be loaded as project context in the next agent session.\n');
+const SKILLS_CLI_PACKAGE = 'skills@1.7.4';
+
+function supportsSkillsCliNodeVersion() {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  return major > 22 || (major === 22 && minor >= 20);
+}
+
+function validateSkillsSource(raw) {
+  const source = String(raw || '').trim();
+  if (!source || source.length > 600 || /[\\r\\n\\0]/.test(source) || source.startsWith('-')) {
+    throw new Error('Provide a valid skill source (GitHub owner/repo, HTTPS source URL, or local path).');
+  }
+  if (/^[a-z0-9_.-]+\\/[a-z0-9_.-]+$/i.test(source)) return source;
+  if (/^(?:\\.\\.?[\\/]|[\\/]|[a-z]:[\\/])/i.test(source)) return source;
+  if (/^(?:git@|ssh:\\/\\/|git:\\/\\/)/i.test(source)) return source;
+  if (/^https:\\/\\//i.test(source)) {
+    let url;
+    try { url = new URL(source); } catch { throw new Error('The skill source URL is invalid.'); }
+    if (url.username || url.password || url.hash) throw new Error('Skill source URLs must not contain credentials or fragments.');
+    if (/[\\r\\n\\0]/.test(url.href)) throw new Error('The skill source URL contains invalid characters.');
+    return source;
+  }
+  throw new Error('Unsupported skill source. Use owner/repo, an HTTPS URL, an SSH/Git URL, or a local path.');
+}
+
+function quoteWindowsCommandArgument(raw) {
+  const value = String(raw);
+  if (/[\\r\\n%!"&|<>^]/.test(value)) throw new Error('This value contains shell metacharacters that cannot safely be passed through the Windows command launcher.');
+  return '"' + value.replace(/"/g, '""') + '"';
+}
+
+async function runVercelSkillsCli(root, cliArgs, description, autoApprove) {
+  if (!supportsSkillsCliNodeVersion()) {
+    throw new Error('The Vercel Skills CLI requires Node.js 22.20 or later. Oasis itself can run on Node 22, but upgrade Node to use the skills ecosystem integration.');
+  }
+  const approved = await approve(
+    'Run the pinned Vercel Skills CLI (' + SKILLS_CLI_PACKAGE + ') to ' + description + '?\\n' +
+    'The command may download the CLI and skill source. Oasis disables telemetry, uses shell-free argv where supported, copies skills instead of creating symlinks, and does not execute imported skill scripts. Review the skill instructions as untrusted content.',
+    false,
+    autoApprove
+  );
+  if (!approved) { stdout.write('Skills operation cancelled; no source was installed.\\n'); return; }
+
+  const args = ['--yes', SKILLS_CLI_PACKAGE, ...cliArgs];
+  const env = {
+    ...scrubChildEnvironment(),
+    DISABLE_TELEMETRY: '1',
+    DO_NOT_TRACK: '1'
+  };
+  const childCommand = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'npx';
+  const childArgs = process.platform === 'win32'
+    ? ['/d', '/v:off', '/s', '/c', ['npx.cmd', ...args].map(quoteWindowsCommandArgument).join(' ')]
+    : args;
+  const result = await new Promise((resolve) => {
+    const child = spawn(childCommand, childArgs, {
+      cwd: root,
+      env,
+      shell: false,
+      windowsHide: true,
+      stdio: 'inherit'
+    });
+    let settled = false;
+    const finish = (value) => { if (settled) return; settled = true; resolve(value); };
+    child.on('error', (error) => finish({ exitCode: null, error: error.message }));
+    child.on('close', (code, signal) => finish({ exitCode: code, signal }));
+  });
+  if (result.error) throw new Error('Could not start the Vercel Skills CLI: ' + result.error);
+  if (result.exitCode !== 0) {
+    process.exitCode = result.exitCode || 1;
+    stdout.write('The Vercel Skills CLI exited with code ' + result.exitCode + '. No success is assumed; inspect the output above.\\n');
+    return;
+  }
+  return { ok: true };
+}
+
+async function manageSkills(root, args, autoApprove) {
+  const action = String(args[0] || 'list').toLowerCase();
+  const rest = args.slice(1);
+  if (action === 'list' || action === 'ls') return await listSkills(root);
+  if (action === 'install') return await installSkill(root, rest[0]);
+  if (action === 'find' || action === 'search') {
+    if (rest.length > 4) throw new Error('Use "oasis skills find [a few keywords]" to search the skills directory.');
+    if (rest.some((value) => /^--/.test(value))) throw new Error('Search terms cannot start with command flags.');
+    const query = rest.join(' ').trim();
+    return await runVercelSkillsCli(root, ['find', ...(query ? [query] : [])], 'search the public skills directory' + (query ? ' for "' + query + '"' : ''), autoApprove);
+  }
+  if (action === 'inspect') {
+    const source = validateSkillsSource(rest[0]);
+    if (rest.length !== 1) throw new Error('Usage: oasis skills inspect SOURCE');
+    return await runVercelSkillsCli(root, ['add', source, '--list'], 'list available skills from ' + source, autoApprove);
+  }
+  if (action === 'add') {
+    const source = validateSkillsSource(rest[0]);
+    let skillName = '';
+    let allSkills = false;
+    let global = false;
+    for (let i = 1; i < rest.length; i++) {
+      const value = rest[i];
+      if (value === '--skill') {
+        if (!rest[i + 1]) throw new Error('--skill requires the exact skill name to install.');
+        skillName = rest[++i];
+      } else if (value.startsWith('--skill=')) {
+        skillName = value.slice('--skill='.length);
+      } else if (value === '--all') {
+        allSkills = true;
+      } else if (value === '--global' || value === '-g') {
+        global = true;
+      } else {
+        throw new Error('Usage: oasis skills add SOURCE --skill NAME [--global], or oasis skills add SOURCE --all [--global].');
+      }
+    }
+    if (rest.length < 1) throw new Error('Usage: oasis skills add SOURCE --skill NAME, or oasis skills add SOURCE --all.');
+    if (Boolean(skillName) === allSkills) throw new Error('Choose exactly one of --skill NAME or --all. Use "oasis skills inspect SOURCE" to review available names first.');
+    if (skillName && (skillName.length > 128 || /[\\r\\n\\0"]/ .test(skillName) || /^-/.test(skillName))) {
+      throw new Error('Skill names must be 1–128 characters and cannot contain quotes, line breaks, NUL, or start with a flag.');
+    }
+    const scopeArgs = global ? ['--global'] : [];
+    const selectionArgs = allSkills ? ['--skill', '*'] : ['--skill', skillName];
+    const cliArgs = ['add', source, ...selectionArgs, '--agent', 'universal', '--copy', ...scopeArgs, '--yes'];
+    const result = await runVercelSkillsCli(root, cliArgs, 'install ' + (allSkills ? 'all skills' : 'skill "' + skillName + '"') + ' from ' + source + (global ? ' globally' : ' into this project'), autoApprove);
+    if (result && result.ok) stdout.write('Skills installed to the Vercel universal skill path. Oasis now scans .agents/skills and the global universal skill directory on new sessions.\\n');
+    return result;
+  }
+  throw new Error('Unknown skills action. Use oasis skills list, find, inspect, add, or install.');
 }
 
 async function manageSessions(root, rest) {
@@ -881,10 +1004,7 @@ async function main() {
   if (command === 'extensions' || command === 'extension') return await manageExternalExtensions(workspace, rest, autoApprove);
   if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
   if (command === 'sessions') return await manageSessions(workspace, rest);
-  if (command === 'skills') {
-    if (rest[0] === 'install') return await installSkill(workspace, rest[1]);
-    return await listSkills(workspace);
-  }
+  if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
   if (command === 'backups') return await showBackups(workspace);
   if (command === 'restore') return await restoreOne(workspace, rest[0]);
   if (command === 'install') {
