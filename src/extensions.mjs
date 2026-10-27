@@ -773,9 +773,10 @@ async function walkOwnedFiles(directory, prefix = '') {
 export async function listInstalledExtensions(options = {}) {
   const root = path.resolve(options.root || process.cwd());
   const env = options.env || process.env;
+  const configRoot = getConfigDirectory(env);
   const targets = [
-    { scope: 'self', path: path.join(getConfigDirectory(env), 'extensions') },
-    { scope: 'project', path: path.join(root, '.oasis', 'extensions') }
+    { scope: 'self', path: path.join(configRoot, 'extensions'), safetyRoot: configRoot },
+    { scope: 'project', path: path.join(root, '.oasis', 'extensions'), safetyRoot: root }
   ];
   const extensions = [];
   for (const target of targets) {
@@ -802,13 +803,126 @@ export async function listInstalledExtensions(options = {}) {
         preservedResources: Number(manifest.preservedResources || 0),
         trust: String(manifest.trust || 'unverified'),
         execution: String(manifest.execution || 'unknown'),
-        commands: normalizeStoredCommands(manifest)
+        commands: normalizeStoredCommands(manifest),
+        backups: await listAvailableExtensionBackups(target.path, target.safetyRoot, manifest.name, String(manifest.source || ''))
       });
     }
   }
   return { extensions: extensions.sort((a, b) => a.name.localeCompare(b.name) || a.scope.localeCompare(b.scope)) };
 }
 
+
+
+async function listAvailableExtensionBackups(parent, safetyRoot, extensionName, expectedSource) {
+  const historyRoot = path.join(parent, '.oasis-backups', extensionName);
+  let entries = [];
+  try { entries = await readdir(historyRoot, { withFileTypes: true }); }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  const output = [];
+  for (const entry of entries) {
+    if (entry.isSymbolicLink() || !entry.isDirectory() || !/^[a-f0-9]{40}-[a-z0-9]+-[a-f0-9]{6}$/i.test(entry.name)) continue;
+    const absolute = path.join(historyRoot, entry.name);
+    try {
+      const verified = await verifyManagedExtensionForUpdate(absolute, safetyRoot, extensionName, expectedSource);
+      output.push({
+        commitSha: String(verified.manifest.commitSha).toLowerCase(),
+        createdAt: new Date(Number.parseInt(entry.name.split('-')[1], 36) || 0).toISOString(),
+        label: String(verified.manifest.description || extensionName).slice(0, 120)
+      });
+    } catch { /* Do not advertise modified or invalid backups as restorable. */ }
+  }
+  output.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return output.slice(0, 3);
+}
+
+export async function rollbackGitHubExtension(options = {}) {
+  const scope = String(options.scope || 'project');
+  if (!['self', 'project', 'both'].includes(scope)) throw new Error('Extension rollback scope must be self, project, or both.');
+  const name = String(options.name || '').toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(name)) throw new Error('Choose a valid installed extension name.');
+  const targetCommit = String(options.commitSha || '').toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(targetCommit)) throw new Error('Rollback requires a full 40-character commit SHA from the listed backup history.');
+  const root = path.resolve(options.root || process.cwd());
+  const env = options.env || process.env;
+  const targets = extensionScopeTargets(scope, root, env);
+  const records = [];
+  for (const target of targets) {
+    const absolute = path.join(target.parent, name);
+    const current = await verifyManagedExtensionForUpdate(absolute, target.safetyRoot, name);
+    if (current.manifest.commitSha.toLowerCase() === targetCommit) {
+      records.push({ ...target, absolute, currentManifest: current.manifest, desiredPath: null, desiredManifest: current.manifest, alreadyCurrent: true });
+      continue;
+    }
+    const historyRoot = path.join(target.parent, '.oasis-backups', name);
+    let entries = [];
+    try { entries = await readdir(historyRoot, { withFileTypes: true }); }
+    catch (error) { if (error.code === 'ENOENT') throw new Error('No rollback history exists for "' + name + '" in scope "' + target.scope + '".'); throw error; }
+    const candidates = entries.filter((entry) =>
+      entry.isDirectory() && !entry.isSymbolicLink() && entry.name.toLowerCase().startsWith(targetCommit + '-')
+    ).sort((a, b) => b.name.localeCompare(a.name));
+    let selected = null;
+    for (const entry of candidates) {
+      const candidatePath = path.join(historyRoot, entry.name);
+      try {
+        const verified = await verifyManagedExtensionForUpdate(candidatePath, target.safetyRoot, name, current.manifest.source);
+        if (verified.manifest.commitSha.toLowerCase() === targetCommit) {
+          selected = { path: candidatePath, manifest: verified.manifest };
+          break;
+        }
+      } catch { /* Skip a damaged or edited backup. */ }
+    }
+    if (!selected) throw new Error('No intact rollback backup for revision ' + targetCommit + ' exists in scope "' + target.scope + '".');
+    records.push({
+      ...target, absolute, historyRoot, desiredPath: selected.path, desiredManifest: selected.manifest,
+      currentManifest: current.manifest, alreadyCurrent: false
+    });
+  }
+  if (records.every((record) => record.alreadyCurrent)) {
+    return { rolledBack: false, alreadyCurrent: true, name, scope, commitSha: targetCommit, previousCommits: records.map((record) => ({ scope: record.scope, commitSha: record.currentManifest.commitSha })), backups: [] };
+  }
+  if (records.some((record) => record.alreadyCurrent)) {
+    throw new Error('The requested rollback revision is already active in only part of the selected scopes. Update each scope separately to avoid mismatched versions.');
+  }
+  const moved = [];
+  try {
+    for (const record of records) {
+      const parentReal = await realpath(record.parent);
+      const safetyReal = await realpath(record.safetyRoot);
+      if (!inside(safetyReal, parentReal)) throw new Error('The extension rollback directory resolves outside its permitted scope.');
+      const currentArchive = path.join(record.historyRoot, record.currentManifest.commitSha.toLowerCase() + '-' + Date.now().toString(36) + '-' + randomBytes(3).toString('hex'));
+      const item = { ...record, currentArchive, currentMoved: false, desiredMoved: false };
+      moved.push(item);
+      await rename(record.absolute, currentArchive);
+      item.currentMoved = true;
+      await rename(record.desiredPath, record.absolute);
+      item.desiredMoved = true;
+    }
+  } catch (error) {
+    for (const item of [...moved].reverse()) {
+      if (item.desiredMoved) {
+        await rename(item.absolute, item.desiredPath).catch(() => {});
+      }
+      if (item.currentMoved && !(await pathExists(item.absolute))) {
+        await rename(item.currentArchive, item.absolute).catch(() => {});
+      }
+    }
+    throw error;
+  }
+  const backups = [];
+  for (const item of moved) {
+    backups.push({ scope: item.scope, commitSha: item.currentManifest.commitSha });
+    await pruneExtensionBackups(path.join(item.parent, '.oasis-backups', name), 3).catch(() => {});
+  }
+  return {
+    rolledBack: true,
+    alreadyCurrent: false,
+    name,
+    scope,
+    commitSha: targetCommit,
+    previousCommits: moved.map((item) => ({ scope: item.scope, commitSha: item.currentManifest.commitSha })),
+    backups
+  };
+}
 
 export async function resolveImportedSlashCommand(root, rawInput, options = {}) {
   const raw = String(rawInput || '').trim();
@@ -908,7 +1022,8 @@ async function verifyManagedExtensionForUpdate(target, safetyRoot, extensionName
   try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); }
   catch { throw new Error('The existing extension manifest is unreadable. No update was made.'); }
   if (!manifest || manifest.schemaVersion !== 1 || manifest.name !== extensionName ||
-      manifest.source !== expectedSource || !/^[a-f0-9]{40}$/i.test(String(manifest.commitSha || '')) ||
+      (expectedSource !== undefined && expectedSource !== null && manifest.source !== expectedSource) ||
+      !/^[a-f0-9]{40}$/i.test(String(manifest.commitSha || '')) ||
       !Array.isArray(manifest.files) || manifest.files.length > 300) {
     throw new Error('The existing extension is not a compatible Oasis-managed install of this exact repository. No update was made.');
   }
@@ -968,7 +1083,11 @@ async function pruneExtensionBackups(historyParent, keep = 3) {
       records.push({ path: absolute, mtime: info.mtimeMs });
     } catch { /* Ignore a concurrently removed backup. */ }
   }
-  records.sort((a, b) => b.mtime - a.mtime);
+  const timestamp = (name) => {
+    const match = String(name).match(/^[a-f0-9]{40}-([a-z0-9]+)-[a-f0-9]+$/i);
+    return match ? Number.parseInt(match[1], 36) || 0 : 0;
+  };
+  records.sort((a, b) => timestamp(path.basename(b.path)) - timestamp(path.basename(a.path)) || b.mtime - a.mtime);
   for (const item of records.slice(keep)) await rm(item.path, { recursive: true, force: false });
 }
 

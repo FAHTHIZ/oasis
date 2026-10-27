@@ -14,6 +14,7 @@ import {
   selectPortableSkillResources,
   selectReviewedMcpServers,
   resolveImportedSlashCommand,
+  rollbackGitHubExtension,
   updateGitHubExtension
 } from '../src/extensions.mjs';
 import { executeTool, listAvailableSkills, loadSkillResource, loadSkillText } from '../src/tools.mjs';
@@ -307,11 +308,18 @@ test('extension updates verify old hashes, stage the new commit, and retain a ro
   assert.equal(inventory.extensions.find((item) => item.scope === 'project').commitSha, newerCommit);
   const backupManifest = JSON.parse(await readFile(path.join(updated.backups[0].path, 'extension.json'), 'utf8'));
   assert.equal(backupManifest.commitSha, COMMIT);
+  assert.equal(inventory.extensions.find((item) => item.scope === 'project').backups[0].commitSha, COMMIT);
   const noOp = await updateGitHubExtension('https://github.com/acme/agents', {
     root, env, scope: 'project', expectedCommit: newerCommit,
     fetchImpl: createFetch({ commit: newerCommit }).fetchImpl
   });
   assert.equal(noOp.alreadyCurrent, true);
+  const rolledBack = await rollbackGitHubExtension({ root, env, scope: 'project', name: 'agents', commitSha: COMMIT });
+  assert.equal(rolledBack.rolledBack, true);
+  assert.equal(rolledBack.commitSha, COMMIT);
+  const restored = await listInstalledExtensions({ root, env });
+  assert.equal(restored.extensions.find((item) => item.scope === 'project').commitSha, COMMIT);
+  assert.equal(restored.extensions.find((item) => item.scope === 'project').backups[0].commitSha, newerCommit);
 });
 
 test('extension updates refuse modified imported files instead of discarding user edits', async (t) => {
