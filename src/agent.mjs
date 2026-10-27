@@ -487,7 +487,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['list_files', 'glob_files', 'read_file', 'search_files', 'fetch_url', 'list_skills', 'load_skill']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'fetch_url', 'list_skills', 'load_skill']);
 const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 30;
 const MAX_SESSION_TOOL_CALLS = 250;
