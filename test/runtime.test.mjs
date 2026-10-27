@@ -46,6 +46,9 @@ test('configuration never reuses a stored API key at a changed provider URL', as
   assert.equal(changed.configured, false);
   const same = await loadConfig({ configPath, env: {} });
   assert.equal(same.apiKey, 'provider-one-secret');
+  const local = await loadConfig({ configPath, env: { OASIS_BASE_URL: 'http://localhost:11434/v1', OPENAI_API_KEY: 'remote-provider-secret' } });
+  assert.equal(local.apiKey, '');
+  assert.equal(local.configured, true);
 });
 
 test('plain-English installation requests are parsed without accepting command fragments', () => {
