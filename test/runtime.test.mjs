@@ -6,7 +6,8 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from '
 import { createServer } from 'node:http';
 import { loadConfig, saveConfig, validateBaseUrl, getConfigPath, isNodeVersionSupported } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
-import { TOOL_DEFINITIONS, executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, updateTodos, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
+import { microcompact, estimateTokens, contextWindowSize } from '../src/context.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
@@ -1218,6 +1219,131 @@ test('agent completes an OpenAI-compatible tool cycle against a local fixture se
   assert.ok(transcript.some((text) => text.includes('completed the inspection')));
 });
 
+
+
+test('microcompact prunes only old bulky tool output and preserves message and tool-call structure', () => {
+  const big = (label) => label + ' ' + 'x'.repeat(4000);
+  const messages = [{ role: 'system', content: 'system' }];
+  for (let i = 0; i < 12; i++) {
+    messages.push({ role: 'user', content: 'task ' + i });
+    messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'c' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }] });
+    messages.push({ role: 'tool', tool_call_id: 'c' + i, name: 'read_file', content: big('file ' + i) });
+  }
+  const unchanged = microcompact(messages, { windowTokens: 1_000_000 });
+  assert.equal(unchanged.pruned, 0);
+  assert.equal(unchanged.messages, messages);
+  const result = microcompact(messages, { windowTokens: 8_000, keepRecentTokens: 2_200 });
+  assert.ok(result.pruned > 0);
+  assert.equal(result.messages.length, messages.length);
+  assert.ok(result.after < result.before);
+  const shape = (list) => list.map((message) => message.role + (message.tool_call_id || ''));
+  assert.deepEqual(shape(result.messages), shape(messages));
+  assert.match(result.messages[3].content, /^\[Older tool output compacted/);
+  assert.equal(result.messages.at(-1).content, messages.at(-1).content, 'most recent tool output stays intact');
+  assert.match(messages[3].content, /^file 0 x/, 'the input array must not be mutated');
+  assert.equal(estimateTokens([{ role: 'user', content: 'abcdefgh' }]), 2);
+  assert.equal(contextWindowSize({}, { OASIS_CONTEXT_WINDOW: '64000' }), 64000);
+});
+
+test('todo_write validates atomically and keeps only one in-progress item', async () => {
+  const todos = [];
+  const context = { root: process.cwd(), todos };
+  const result = await executeTool('todo_write', { todos: [
+    { content: 'Inspect', status: 'completed' },
+    { content: 'Implement', status: 'in_progress' },
+    { content: 'Verify', status: 'pending' }
+  ] }, context);
+  assert.equal(result.remaining, 2);
+  assert.equal(todos.length, 3);
+  const before = todos.map((item) => ({ ...item }));
+  await assert.rejects(executeTool('todo_write', { todos: [
+    { content: 'A', status: 'in_progress' },
+    { content: 'B', status: 'in_progress' }
+  ] }, context), /Only one item/);
+  await assert.rejects(executeTool('todo_write', { todos: [{ content: 'bad status', status: 'done' }] }, context), /invalid status/);
+  await assert.rejects(executeTool('todo_write', { todos: 'not a list' }, context), /array/);
+  assert.deepEqual(todos, before, 'invalid updates must not corrupt the previous checklist');
+  assert.equal(updateTodos(todos, []).remaining, 0);
+});
+
+test('agent preserves requested tool order while running consecutive read-only calls concurrently', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const previous = process.env.OASIS_CONFIG_DIR;
+  process.env.OASIS_CONFIG_DIR = path.join(tmp, 'oasis-config');
+  t.after(() => { if (previous === undefined) delete process.env.OASIS_CONFIG_DIR; else process.env.OASIS_CONFIG_DIR = previous; });
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'a.txt'), 'alpha');
+  await writeFile(path.join(root, 'b.txt'), 'bravo');
+  let requests = 0;
+  let followUp = null;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [
+        call('r1', 'read_file', { path: 'a.txt' }),
+        call('r2', 'read_file', { path: 'b.txt' }),
+        call('r3', 'glob_files', { pattern: '*.txt' }),
+        call('w1', 'edit_file', { path: 'a.txt', old_string: 'alpha', new_string: 'ALPHA' }),
+        call('r4', 'read_file', { path: 'a.txt' })
+      ] } }] }));
+    } else {
+      followUp = JSON.parse(body);
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture', apiKey: '', maxSteps: 4, maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  const events = [];
+  const result = await runAgentTurn(session, 'Update a text value in the correct order.', {
+    autoApprove: true,
+    onToolStart: ({ call }) => events.push('start:' + call.id),
+    onToolResult: ({ call }) => events.push('result:' + call.id)
+  });
+  assert.equal(result.finished, true);
+  assert.deepEqual(events.slice(0, 3), ['start:r1', 'start:r2', 'start:r3'], 'a consecutive run of reads starts together');
+  assert.ok(events.indexOf('start:w1') > events.indexOf('result:r3'), 'the edit waits for all earlier reads');
+  assert.ok(events.indexOf('start:r4') > events.indexOf('result:w1'), 'the later read waits for the edit');
+  const toolMessages = followUp.messages.filter((message) => message.role === 'tool');
+  assert.deepEqual(toolMessages.map((message) => message.tool_call_id), ['r1', 'r2', 'r3', 'w1', 'r4']);
+  assert.match(toolMessages[0].content, /alpha/);
+  assert.match(toolMessages[4].content, /ALPHA/);
+  assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'ALPHA');
+});
+
+test('saved sessions preserve a bounded task checklist', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  const configRoot = path.join(tmp, 'config');
+  await mkdir(root);
+  const session = {
+    root,
+    sessionId: null,
+    config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:11434/v1', model: 'fixture' },
+    messages: [{ role: 'system', content: 'system' }, { role: 'user', content: 'hello' }],
+    todos: [
+      { content: 'Inspect the code', status: 'completed' },
+      { content: 'Implement the fix', status: 'in_progress' },
+      { content: 'Verify the fix', status: 'pending' }
+    ]
+  };
+  const saved = await saveSession(session, { env: { OASIS_CONFIG_DIR: configRoot } });
+  const restored = await loadSession(root, saved.id, { env: { OASIS_CONFIG_DIR: configRoot } });
+  assert.deepEqual(restored.todos, session.todos);
+  assert.equal(restored.messages.length, 2);
+});
 
 test('native OpenAI Responses API can call an Oasis tool and replay the complete response items', async (t) => {
   const tmp = await temporaryDirectory();

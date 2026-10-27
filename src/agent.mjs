@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
+import { microcompact, contextWindowSize } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 
 const MAX_REPLY_CHARS = 24000;
@@ -116,6 +117,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '') {
     'Your job is to turn ordinary-English requests into completed, verified work, using tools instead of merely describing steps.',
     'Work in short, meaningful loops: inspect the repository; make the smallest coherent change; run relevant tests or checks; inspect the result; report what truly happened.',
     'For every non-trivial task, maintain a compact checklist of acceptance criteria and implementation steps. Re-check the original request before declaring completion; clearly mark unfinished criteria instead of silently dropping them.',
+    'For tasks with three or more steps, use todo_write before implementation and keep it current. Mark a step completed only after its result is verified, and keep at most one step in_progress.',
     'Before editing, inspect the current working-tree state with git_status when available so you do not overwrite or misattribute the user\'s existing changes. Never assume a dirty file was created by you.',
     'After changing files in a Git workspace, inspect git_diff before finishing. Use the project\'s own scripts and package metadata to select focused tests, type checks, lint, or build checks; run relevant checks when permitted and fix failures rather than only reporting them.',
     'Treat a successful file write as progress, not proof of completion. If code was changed, explain which verification commands actually ran and their exit results; when checks were blocked, unavailable, or skipped, say so explicitly.',
@@ -160,7 +162,9 @@ export async function createSession({ root, config, restore = null }) {
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
     toolDefinitions: TOOL_DEFINITIONS.concat(dynamic.definitions),
-    toolCallsThisSession: 0
+    toolCallsThisSession: 0,
+    todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
+    baseSystemPrompt: systemMessage.content
   };
 }
 
@@ -1078,6 +1082,21 @@ function throwIfCancelled(signal) {
   }
 }
 
+function refreshTodoPrompt(session) {
+  if (!session || !Array.isArray(session.messages) || !session.messages[0] ||
+      session.messages[0].role !== 'system') return;
+  const base = typeof session.baseSystemPrompt === 'string'
+    ? session.baseSystemPrompt
+    : String(session.messages[0].content || '');
+  session.baseSystemPrompt = base;
+  const todos = Array.isArray(session.todos) ? session.todos : [];
+  const checklist = todos.length
+    ? '\n\nCurrent task checklist (authoritative; update with todo_write):\n' +
+      todos.map((item, index) => (index + 1) + '. [' + item.status + '] ' + item.content).join('\n')
+    : '';
+  session.messages[0].content = base + checklist;
+}
+
 export async function runAgentTurn(session, prompt, options = {}) {
   const request = String(prompt || '').trim();
   if (!request) throw new Error('Enter a task or question.');
@@ -1097,7 +1116,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
     maxCommandSeconds: session.config.maxCommandSeconds,
     env: options.env || process.env,
     signal: options.signal,
-    specialistBudget: options.specialistBudget || { used: 0 }
+    specialistBudget: options.specialistBudget || { used: 0 },
+    todos: session.todos
   };
   let totalToolCalls = 0;
   let tokensUsed = Number(compaction.tokensUsed || 0);
@@ -1105,6 +1125,20 @@ export async function runAgentTurn(session, prompt, options = {}) {
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
+    refreshTodoPrompt(session);
+    const compacted = microcompact(session.messages, {
+      windowTokens: contextWindowSize(session.config, options.env || process.env)
+    });
+    if (compacted.pruned > 0) {
+      session.messages = compacted.messages;
+      if (typeof options.onContextPruned === 'function') {
+        options.onContextPruned({
+          pruned: compacted.pruned,
+          before: compacted.before,
+          after: compacted.after
+        });
+      }
+    }
     let streamedText = '';
     const assistant = await requestCompletion(session, {
       ...(options.signal ? { signal: options.signal } : {}),
@@ -1189,20 +1223,22 @@ export async function runAgentTurn(session, prompt, options = {}) {
     const denied = calls.slice(executeCount);
     const outputs = new Map();
 
-    // Read-only workspace tools can run concurrently. Commands, writes, installs, deletes,
-    // and every external MCP call stay sequential so approvals and side effects remain ordered.
-    const reads = eligible.filter((call) => {
+    // Preserve the model's ordering across reads and side effects. Consecutive read-only
+    // workspace calls can run concurrently, but a later read must not overtake an earlier edit.
+    const isReadOnly = (call) => {
       const name = call.function && call.function.name;
       return READ_ONLY_TOOLS.has(name) && !(session.mcpToolMap && session.mcpToolMap.has(name));
-    });
-    const sideEffects = eligible.filter((call) => !reads.includes(call));
-
-    const readResults = await Promise.all(reads.map((call) => executeOneCall(session, call, context, options)));
-    for (const item of readResults) outputs.set(item.tool_call_id, item);
-
-    for (const call of sideEffects) {
-      const item = await executeOneCall(session, call, context, options);
-      outputs.set(item.tool_call_id, item);
+    };
+    let cursor = 0;
+    while (cursor < eligible.length) {
+      let end = cursor + 1;
+      if (isReadOnly(eligible[cursor])) {
+        while (end < eligible.length && isReadOnly(eligible[end])) end++;
+      }
+      const group = eligible.slice(cursor, end);
+      const results = await Promise.all(group.map((call) => executeOneCall(session, call, context, options)));
+      for (const item of results) outputs.set(item.tool_call_id, item);
+      cursor = end;
     }
 
     for (const call of denied) {

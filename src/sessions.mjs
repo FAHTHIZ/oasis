@@ -35,6 +35,23 @@ function validateMessages(messages) {
   return messages;
 }
 
+function sanitizeTodos(value) {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set(['pending', 'in_progress', 'completed']);
+  const todos = [];
+  let hasInProgress = false;
+  for (const item of value.slice(0, 50)) {
+    if (!item || typeof item.content !== 'string' || !item.content.trim() || !allowed.has(item.status)) continue;
+    let status = item.status;
+    if (status === 'in_progress') {
+      if (hasInProgress) status = 'pending';
+      else hasInProgress = true;
+    }
+    todos.push({ content: item.content.trim().slice(0, 200), status });
+  }
+  return todos;
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
@@ -50,7 +67,8 @@ export async function saveSession(session, options = {}) {
       baseURL: session.config && session.config.baseURL || '',
       model: session.config && session.config.model || ''
     },
-    messages
+    messages,
+    todos: sanitizeTodos(session.todos)
   };
   const body = JSON.stringify(payload, null, 2) + '\n';
   if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) throw new Error('Session is too large to save safely. Start a fresh session or disable persistence.');
@@ -82,7 +100,8 @@ export async function loadSession(root, id, options = {}) {
     id: validateId(payload.id),
     updatedAt: String(payload.updatedAt || ''),
     provider: payload.provider || {},
-    messages: validateMessages(payload.messages)
+    messages: validateMessages(payload.messages),
+    todos: sanitizeTodos(payload.todos)
   };
 }
 
