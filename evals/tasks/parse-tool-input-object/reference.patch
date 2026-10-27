@@ -1,6 +1,6 @@
 diff --git a/src/lib.mjs b/src/lib.mjs
---- a/src/lib.mjs
+new file mode 100644
+--- /dev/null
 +++ b/src/lib.mjs
-@@ -1 +1 @@
--export function parseToolInput(raw) { try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return {}; } }
+@@ -0,0 +1,1 @@
 +export function parseToolInput(raw) { try { const value = typeof raw === 'string' ? JSON.parse(raw) : raw; return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } }
