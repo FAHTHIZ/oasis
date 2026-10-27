@@ -40,7 +40,7 @@ try {
             name: 'write_file',
             arguments: JSON.stringify({
               path: 'browser-e2e-output.txt',
-              content: 'Created by the authenticated browser agent tool cycle.\\n'
+              content: 'Created by the authenticated browser agent tool cycle.\n'
             })
           }
         }]
