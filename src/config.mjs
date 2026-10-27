@@ -97,7 +97,8 @@ export async function loadConfig(options = {}) {
     ...saved, protocol, baseURL, model, apiKey, configPath,
     configured: Boolean(apiKey) || isLoopbackUrl(baseURL),
     maxSteps: clampInteger(saved.maxSteps, 12, 1, 30),
-    maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600)
+    maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600),
+    maxOutputTokens: clampInteger(saved.maxOutputTokens, 8192, 1024, 131072)
   };
 }
 
@@ -112,7 +113,8 @@ export async function saveConfig(config, options = {}) {
     model: String(config.model || (protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : ''))).trim(),
     apiKey: String(config.apiKey || ''),
     maxSteps: clampInteger(config.maxSteps, 12, 1, 30),
-    maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
+    maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600),
+    maxOutputTokens: clampInteger(config.maxOutputTokens, 8192, 1024, 131072)
   };
   if (!safe.model) throw new Error('The model name cannot be empty.');
   await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
