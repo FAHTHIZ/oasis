@@ -497,6 +497,30 @@ const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 30;
 const MAX_SESSION_TOOL_CALLS = 250;
 
+const SOURCE_PATH_PATTERN = /\\.(?:[cm]?js|jsx|ts|tsx|py|go|rs|java|cs|c|cc|cpp|h|hpp|rb|php|swift|kt|kts|vue|svelte|html|css|json|toml|yaml|yml)$/i;
+const VERIFICATION_COMMAND_PATTERN = /(?:^|[\\s:])(?:test|check|lint|build|typecheck|type-check|verify|pytest|vitest|jest|mocha|eslint|prettier|tsc)(?:$|[\\s:])/i;
+
+function normalizeReviewPath(value) {
+  return String(value || '').replace(/\\\\/g, '/').replace(/^\\.\\//, '').replace(/\\/+/g, '/');
+}
+
+function isVerificationCommand(command, args) {
+  return VERIFICATION_COMMAND_PATTERN.test([command, ...(Array.isArray(args) ? args : [])].join(' ').toLowerCase());
+}
+
+function verificationIssues(state) {
+  if (!state.changedPaths.size) return [];
+  const changed = [...state.changedPaths];
+  const issues = [];
+  if (!state.diffReviewedAll && !changed.every((item) => state.diffReviewedPaths.has(item))) {
+    issues.push('the changed-file diff has not been reviewed');
+  }
+  if (changed.some((item) => SOURCE_PATH_PATTERN.test(item)) && state.lastVerificationExitCode !== 0) {
+    issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
+  }
+  return issues;
+}
+
 async function executeOneCall(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
@@ -542,6 +566,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   };
   let totalToolCalls = 0;
   let tokensUsed = Number(compaction.tokensUsed || 0);
+  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, nudgeUsed: false };
 
   for (let step = 0; step < maxSteps; step++) {
     const assistant = await requestCompletion(session);
@@ -560,13 +585,36 @@ export async function runAgentTurn(session, prompt, options = {}) {
     session.messages.push(assistantMessage);
 
     const text = typeof assistant.content === 'string' ? assistant.content.trim() : '';
-    if (text && options.onText) options.onText(text);
-
     const calls = assistantMessage.tool_calls || [];
     if (!calls.length) {
+      const issues = verificationIssues(verification);
+      if (issues.length && !verification.nudgeUsed) {
+        verification.nudgeUsed = true;
+        session.messages.push({
+          role: 'user',
+          content: [
+            'Before finalizing, complete the post-edit verification gate. You changed: ' + [...verification.changedPaths].join(', ') + '.',
+            'Outstanding items: ' + issues.join('; ') + '.',
+            'Use git_diff to review the complete change set. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
+            'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
+          ].join('\\n')
+        });
+        continue;
+      }
+      if (text && options.onText) options.onText(text);
       pruneHistory(session);
-      return { text, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: true, budgetExceeded: tokensUsed > tokenBudget };
+      return {
+        text,
+        toolCalls: totalToolCalls,
+        tokensUsed,
+        tokenBudget,
+        finished: issues.length === 0,
+        verificationIncomplete: issues.length > 0,
+        verificationIssues: issues,
+        budgetExceeded: tokensUsed > tokenBudget
+      };
     }
+    if (text && options.onText) options.onText(text);
 
     // A model response may contain several calls at once. If the budget has run out,
     // return a matching error result for every call without executing any side effects.
@@ -625,6 +673,30 @@ export async function runAgentTurn(session, prompt, options = {}) {
 
     for (const call of calls) {
       const item = outputs.get(call.id);
+      const name = call.function && call.function.name;
+      const result = item && item.result;
+      if (name === 'git_diff' && result && result.exitCode === 0) {
+        const args = safeToolArguments(call.function && call.function.arguments);
+        const scopedPath = normalizeReviewPath(args.path);
+        if (!scopedPath || scopedPath === '.') verification.diffReviewedAll = true;
+        else verification.diffReviewedPaths.add(scopedPath);
+      }
+      if (name === 'run_command' && result) {
+        const args = safeToolArguments(call.function && call.function.arguments);
+        if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
+          verification.lastVerificationExitCode = result.exitCode;
+        }
+      }
+      if (result && result.path && (
+        name === 'edit_file' && result.changed === true ||
+        name === 'write_file' && typeof result.writtenBytes === 'number' ||
+        name === 'delete_file' && result.deleted === true
+      )) {
+        verification.changedPaths.add(normalizeReviewPath(result.path));
+        verification.diffReviewedAll = false;
+        verification.diffReviewedPaths.clear();
+        verification.lastVerificationExitCode = null;
+      }
       session.messages.push({
         role: 'tool',
         tool_call_id: item.tool_call_id,
@@ -648,7 +720,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
     }
   }
 
-  session.messages.push({ role: 'user', content: 'The tool-step budget has been reached. Give a concise and honest report of what is completed, which checks ran, and anything unfinished. Do not request more tools.' });
+  const pendingVerification = verificationIssues(verification);
+  session.messages.push({ role: 'user', content: 'The tool-step budget has been reached. Give a concise and honest report of what is completed, which checks ran, and anything unfinished. Do not request more tools.' + (pendingVerification.length ? '\\nVerification still incomplete: ' + pendingVerification.join('; ') : '') });
   let final = { content: '' };
   try {
     final = await requestCompletion(session, { noTools: true });
@@ -659,7 +732,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
     pruneHistory(session);
     return { text, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, limitReached: true };
   }
-  const finalText = typeof final.content === 'string' ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
+  const baseFinalText = typeof final.content === 'string' ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
+  const finalIssues = verificationIssues(verification);
+  const finalText = finalIssues.length ? baseFinalText + '\\n\\nVerification incomplete: ' + finalIssues.join('; ') + '.' : baseFinalText;
   const finalMessage = { role: 'assistant', content: finalText };
   if (Array.isArray(final.responseItems)) finalMessage.responseItems = final.responseItems;
   session.messages.push(finalMessage);
@@ -672,6 +747,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
     tokenBudget,
     finished: false,
     limitReached: true,
+    verificationIncomplete: finalIssues.length > 0,
+    verificationIssues: finalIssues,
     budgetExceeded: tokensUsed > tokenBudget
   };
 }
