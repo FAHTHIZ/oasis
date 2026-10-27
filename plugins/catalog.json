@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "source": "Oasis built-in catalog",
+  "plugins": [
+    {
+      "name": "code-quality",
+      "version": "1.0.0",
+      "description": "Review changes for correctness and security, and run focused verification.",
+      "skills": [
+        "code-review",
+        "testing"
+      ]
+    },
+    {
+      "name": "project-onboarding",
+      "version": "1.0.0",
+      "description": "Understand an unfamiliar repository and prepare its development environment.",
+      "skills": [
+        "environment-setup"
+      ]
+    },
+    {
+      "name": "debugging",
+      "version": "1.0.0",
+      "description": "Reproduce problems, identify root causes, and verify focused fixes.",
+      "skills": [
+        "debugging"
+      ]
+    },
+    {
+      "name": "ship-feature",
+      "version": "1.0.0",
+      "description": "Plan implementation, test acceptance criteria, and prepare changes for review.",
+      "skills": [
+        "shipping-features",
+        "testing"
+      ]
+    }
+  ]
+}
