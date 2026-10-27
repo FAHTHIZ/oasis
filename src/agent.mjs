@@ -605,9 +605,9 @@ async function requestCompletion(session, options = {}) {
 }
 
 /**
- * Verify that the selected provider can return an assistant response before Oasis
- * persists the configuration or begins tool-driven work. The probe exposes no tools,
- * requests no code execution, and never returns the provider's raw response body.
+ * Verify that the selected model can emit a valid tool call before Oasis persists
+ * the configuration. One inert schema is offered; the returned call is inspected
+ * only and is never executed. Provider response bodies and credentials are not returned.
  */
 export async function testProviderConnection(rawConfig, options = {}) {
   if (!rawConfig || typeof rawConfig !== 'object') throw new Error('Provider configuration is required.');
