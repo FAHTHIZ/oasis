@@ -27,6 +27,7 @@ export function parseInstallIntent(text) {
   if (!/^(?:please\s+)?(?:can you\s+)?install\b/i.test(original)) return null;
   if (/\b(?:and then|then configure|and configure|and set up|and setup|and build|and test)\b/i.test(original)) return null;
   let rest = original.replace(/^(?:please\s+)?(?:can you\s+)?install\s+/i, '').trim();
+  if (/^(?:yourself|the oasis cli|oasis|oasis-oss|oasis oss)[.!?]*$/i.test(rest)) return { action: 'self' };
   let ecosystem = 'auto';
   const prefix = rest.match(/^(npm package|node package|python package|pip package|system tool|system package|global npm package)\s+/i);
   if (prefix) {
