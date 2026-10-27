@@ -23,17 +23,13 @@ try {
     for await (const chunk of req) raw += chunk.toString('utf8');
     const request = JSON.parse(raw || '{}');
     completionCalls++;
+    console.log('Browser E2E fixture provider request ' + completionCalls + ' (' +
+      (Array.isArray(request.messages) ? request.messages.length : 0) + ' messages)');
 
-    // Emulate a small but real agent cycle: create a file, read it back, then report.
-    const toolResults = Array.isArray(request.messages)
-      ? request.messages.filter((message) => message && message.role === 'tool')
-      : [];
-    const hasWritten = toolResults.some((message) => message.name === 'write_file');
-    const hasReadBack = toolResults.some((message) => message.name === 'read_file');
+    // Keep the fixture deterministic: first create a file, then read it, then report.
     let assistantMessage;
     let finishReason = 'tool_calls';
-
-    if (!hasWritten) {
+    if (completionCalls === 1) {
       assistantMessage = {
         role: 'assistant',
         content: null,
@@ -44,12 +40,12 @@ try {
             name: 'write_file',
             arguments: JSON.stringify({
               path: 'browser-e2e-output.txt',
-              content: 'Created by the authenticated browser agent tool cycle.\n'
+              content: 'Created by the authenticated browser agent tool cycle.\\n'
             })
           }
         }]
       };
-    } else if (!hasReadBack) {
+    } else if (completionCalls === 2) {
       assistantMessage = {
         role: 'assistant',
         content: null,
@@ -113,9 +109,18 @@ try {
 
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
-  await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
-    .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
-  null, { timeout: timeoutMs });
+  try {
+    await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
+      .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
+    null, { timeout: timeoutMs });
+  } catch (error) {
+    const messages = await page.locator('#agentMessages').innerText().catch(() => '[messages unavailable]');
+    throw new Error(String(error && error.message || error) +
+      '; fixture provider calls=' + completionCalls +
+      '; runtime state=' + await page.locator('#agentRuntimeState').innerText().catch(() => '[state unavailable]') +
+      '; chat messages=' + JSON.stringify(messages) +
+      '; page errors=' + JSON.stringify(pageErrors));
+  }
 
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
