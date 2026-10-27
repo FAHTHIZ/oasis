@@ -65,6 +65,23 @@ test('plugin installation installs skill files and a manifest; removal preserves
   await assert.rejects(access(path.join(root, '.oasis', 'skills', 'code-review')));
 });
 
+test('specialist capability bundles install every declared skill into the workspace', async (t) => {
+  const root = await temporaryDirectory();
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  for (const bundle of ['mobile-development', 'web-app-development', 'api-development', 'security-review']) {
+    const result = await runCli(root, ['plugins', 'install', bundle]);
+    assert.equal(result.code, 0, bundle + ': ' + result.stderr + result.stdout);
+    const manifestPath = path.join(root, '.oasis', 'plugins', bundle, 'plugin.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    assert.equal(manifest.name, bundle);
+    for (const skill of manifest.skills) {
+      const installed = await readFile(path.join(root, '.oasis', 'skills', skill.name, 'SKILL.md'), 'utf8');
+      assert.ok(installed.length > 100, bundle + ' should install the full ' + skill.name + ' skill');
+    }
+  }
+});
+
 test('unknown plugin names fail without modifying workspace files', async (t) => {
   const root = await temporaryDirectory();
   t.after(() => rm(root, { recursive: true, force: true }));
