@@ -1753,7 +1753,7 @@ test('independent read-only specialist reviews run concurrently and preserve too
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const root = path.join(tmp, 'workspace');
   await mkdir(root);
-  await writeFile(path.join(root, 'README.md'), '# Parallel review fixture\\n');
+  await writeFile(path.join(root, 'README.md'), '# Parallel review fixture\n');
 
   const { TOOL_DEFINITIONS } = await import('../src/tools.mjs');
   const originalFetch = globalThis.fetch;
@@ -1841,7 +1841,7 @@ test('independent read-only specialist reviews run concurrently and preserve too
   assert.equal(maxActiveSpecialists, 2, 'Two separate read-only specialist sessions should overlap.');
   assert.equal(activeSpecialists, 0, 'All specialist sessions should settle before the parent continues.');
   assert.equal(session.toolCallsThisSession, 2, 'Both parent delegations count toward the session tool budget.');
-  assert.equal(await readFile(path.join(root, 'README.md'), 'utf8'), '# Parallel review fixture\\n');
+  assert.equal(await readFile(path.join(root, 'README.md'), 'utf8'), '# Parallel review fixture\n');
 });
 
 
