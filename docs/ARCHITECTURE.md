@@ -6,7 +6,7 @@ Oasis has a local-first browser workspace and a separate terminal agent runtime.
 
 - \`src/cli.mjs\` is the command-line entry point exposed by the \`oasis\` executable in \`package.json\`.
 - \`src/config.mjs\` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
-- src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage.
+- src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage. Long histories are compacted between turns using a tool-free model summary, with a deterministic bounded fallback if summarization fails.
 - src/tools.mjs exposes file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching.
 - \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
 - \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
@@ -41,4 +41,4 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 ## Current architectural gaps
 
-OS-level container isolation, model-written context summaries, streamed model output, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
+OS-level container isolation, streamed model output, mid-turn context compaction, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet. Between-turn context compaction is best-effort and is not a substitute for a broad long-horizon benchmark. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
