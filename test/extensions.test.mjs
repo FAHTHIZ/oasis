@@ -182,7 +182,7 @@ test('compatibility inventory recognizes Claude Code, Codex, Gemini CLI and port
   assert.equal(result.components.find((item) => item.id === 'skills').count, 1);
   assert.equal(result.components.find((item) => item.id === 'commands').count, 1);
   assert.equal(result.components.find((item) => item.id === 'mcp').count, 1);
-  assert.equal(result.components.find((item) => item.id === 'hooks').count, 1);
+  assert.equal(result.components.find((item) => item.id === 'hooks').count, 2);
   assert.equal(result.components.find((item) => item.id === 'executables').count, 1);
   assert.ok(result.notActivated.some((item) => /hooks/i.test(item)));
   assert.match(result.warning, /not runtime compatibility/i);
