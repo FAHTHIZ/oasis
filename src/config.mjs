@@ -3,7 +3,9 @@ import path from 'node:path';
 import os from 'node:os';
 
 export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 export const DEFAULT_MODEL = 'gpt-4.1';
+export const DEFAULT_PROTOCOL = 'openai-compatible';
 
 export function getConfigDirectory(env = process.env, home = os.homedir()) {
   if (env.OASIS_CONFIG_DIR) return path.resolve(env.OASIS_CONFIG_DIR);
@@ -20,9 +22,23 @@ export function isLoopbackUrl(raw) {
   try {
     const url = new URL(raw);
     return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase());
-  } catch {
-    return false;
+  } catch { return false; }
+}
+
+export function inferProtocol(baseURL, fallback = DEFAULT_PROTOCOL) {
+  try {
+    const host = new URL(baseURL).hostname.toLowerCase();
+    if (host === 'api.anthropic.com' || host.endsWith('.anthropic.com')) return 'anthropic';
+  } catch {}
+  return fallback;
+}
+
+export function validateProtocol(raw) {
+  const protocol = String(raw || DEFAULT_PROTOCOL).trim().toLowerCase();
+  if (!['openai-compatible', 'anthropic'].includes(protocol)) {
+    throw new Error('Provider protocol must be openai-compatible or anthropic.');
   }
+  return protocol;
 }
 
 export function validateBaseUrl(raw) {
@@ -50,14 +66,24 @@ export async function loadConfig(options = {}) {
   } catch (error) {
     if (error.code !== 'ENOENT') throw new Error('Could not read Oasis configuration: ' + error.message);
   }
-  const baseURL = validateBaseUrl(env.OASIS_BASE_URL || saved.baseURL || DEFAULT_BASE_URL);
+
+  let savedBaseURL = '';
+  try { savedBaseURL = validateBaseUrl(saved.baseURL || ''); } catch {}
+  const requestedProtocol = env.OASIS_PROTOCOL || saved.protocol || inferProtocol(env.OASIS_BASE_URL || savedBaseURL, DEFAULT_PROTOCOL);
+  const protocol = validateProtocol(requestedProtocol);
+  const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+  const baseURL = validateBaseUrl(env.OASIS_BASE_URL || savedBaseURL || defaultBase);
   const model = String(env.OASIS_MODEL || saved.model || DEFAULT_MODEL).trim();
   if (!model) throw new Error('No model is configured. Run oasis setup.');
-  const apiKey = env.OASIS_API_KEY || env.OPENAI_API_KEY || saved.apiKey || '';
-  const localProvider = isLoopbackUrl(baseURL);
+
+  const explicitKey = env.OASIS_API_KEY ||
+    (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '';
+  const sameSavedTarget = savedBaseURL === baseURL && validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL)) === protocol;
+  // Never send a saved credential to a different endpoint merely because an environment override changed the URL.
+  const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
   return {
-    ...saved, baseURL, model, apiKey, configPath,
-    configured: Boolean(apiKey) || localProvider,
+    ...saved, protocol, baseURL, model, apiKey, configPath,
+    configured: Boolean(apiKey) || isLoopbackUrl(baseURL),
     maxSteps: clampInteger(saved.maxSteps, 12, 1, 30),
     maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600)
   };
@@ -67,8 +93,10 @@ export async function saveConfig(config, options = {}) {
   const env = options.env || process.env;
   const configPath = options.configPath || getConfigPath(env);
   await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  const protocol = validateProtocol(config.protocol || DEFAULT_PROTOCOL);
   const safe = {
-    baseURL: validateBaseUrl(config.baseURL || DEFAULT_BASE_URL),
+    protocol,
+    baseURL: validateBaseUrl(config.baseURL || (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL)),
     model: String(config.model || DEFAULT_MODEL).trim(),
     apiKey: String(config.apiKey || ''),
     maxSteps: clampInteger(config.maxSteps, 12, 1, 30),
@@ -85,6 +113,7 @@ export function getProviderSummary(config) {
   try { host = new URL(config.baseURL).host; } catch {}
   return {
     provider: host,
+    protocol: config.protocol || DEFAULT_PROTOCOL,
     model: config.model || DEFAULT_MODEL,
     authentication: config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
     configPath: config.configPath || getConfigPath()
