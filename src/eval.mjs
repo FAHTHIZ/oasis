@@ -10,7 +10,7 @@ const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const DEFAULT_TASKS_DIR = path.join(APP_ROOT, 'evals', 'tasks');
 const OUTPUT_LIMIT = 12000;
 const DEFAULT_TIMEOUT_MS = 120000;
-const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target', '.oasis', 'eval-results']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target', '.oasis', 'eval-results', '.ssh', '.aws', '.gnupg', '.azure', '.kube', '.docker']);
 
 function safeId(value) {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value);
@@ -19,7 +19,7 @@ function safeId(value) {
 function isSensitiveName(name) {
   const lower = name.toLowerCase();
   return lower === '.env' || lower.startsWith('.env.') ||
-    ['id_rsa', 'id_ed25519', 'credentials', 'secrets.json', 'token.json'].includes(lower) ||
+    ['id_rsa', 'id_ed25519', 'credentials', 'secrets.json', 'token.json', '.ssh', '.aws', '.gnupg', '.azure', '.kube', '.docker'].includes(lower) ||
     /\.(pem|key|p12|pfx)$/i.test(lower);
 }
 
@@ -80,10 +80,15 @@ async function assertTaskShape(taskDir) {
   const verifierSh = path.join(taskDir, 'verify.sh');
   const info = await lstat(repoDir).catch(() => null);
   if (!info || !info.isDirectory() || info.isSymbolicLink()) throw new Error(id + ': missing repo/ directory');
-  const taskText = await readFile(taskPath, 'utf8').catch(() => '');
+  const taskInfo = await lstat(taskPath).catch(() => null);
+  if (!taskInfo || !taskInfo.isFile() || taskInfo.isSymbolicLink()) throw new Error(id + ': task.md must be a regular file');
+  if (taskInfo.size > 30000) throw new Error(id + ': task.md is larger than 30 KB');
+  const taskText = await readFile(taskPath, 'utf8');
   if (!taskText.trim()) throw new Error(id + ': task.md is missing or empty');
-  if (taskText.length > 30000) throw new Error(id + ': task.md is larger than 30 KB');
-  const patch = await readFile(patchPath, 'utf8').catch(() => '');
+  const patchInfo = await lstat(patchPath).catch(() => null);
+  if (!patchInfo || !patchInfo.isFile() || patchInfo.isSymbolicLink()) throw new Error(id + ': reference.patch must be a regular file');
+  if (patchInfo.size > 2 * 1024 * 1024) throw new Error(id + ': reference.patch is larger than 2 MiB');
+  const patch = await readFile(patchPath, 'utf8');
   if (!patch.trim()) throw new Error(id + ': reference.patch is missing or empty');
   let verifierPath = null;
   for (const candidate of [verifierMjs, verifierSh]) {
@@ -96,9 +101,10 @@ async function assertTaskShape(taskDir) {
     const match = line.match(/^(?:---|\+\+\+) [ab]\/(.+?)(?:\t.*)?$/);
     if (!match) continue;
     const target = match[1];
-    if (target === '/dev/null' || path.posix.isAbsolute(target) ||
-        target.split('/').some((part) => part === '..' || part === '.')) {
-      throw new Error(id + ': reference.patch contains an unsafe file path');
+    const normalized = target.replace(/\\/g, '/');
+    if (target === '/dev/null' || path.posix.isAbsolute(normalized) || /^[a-z]:/i.test(normalized) ||
+        normalized.split('/').some((part) => part === '..' || part === '.' || isSensitiveName(part))) {
+      throw new Error(id + ': reference.patch contains an unsafe or sensitive file path');
     }
   }
   return { id, taskDir, repoDir, taskPath, taskText, patchPath, verifierPath };
