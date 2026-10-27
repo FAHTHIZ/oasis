@@ -10,7 +10,7 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -655,6 +655,32 @@ export function createOasisWebServer(options = {}) {
       } catch (error) {
         const message = String(error && error.message || error);
         const status = /changed after inspection|already exists|destination|outside its permitted scope/i.test(message) ? 409 : (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422);
+        json(res, status, { error: message.slice(0, 2500) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/extensions/rollback') {
+      const body = await readJsonBody(req);
+      const name = String(body.name || '');
+      const scope = String(body.scope || 'project');
+      const commitSha = String(body.commitSha || '');
+      if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(name)) { json(res, 400, { error: 'Choose a valid installed extension name.' }); return; }
+      if (!['self', 'project', 'both'].includes(scope)) { json(res, 400, { error: 'Scope must be self, project, or both.' }); return; }
+      if (!/^[a-f0-9]{40}$/i.test(commitSha)) { json(res, 400, { error: 'Rollback requires a full 40-character commit SHA from the available backup list.' }); return; }
+      try {
+        const result = await rollbackGitHubExtension({ root: activeRoot, env, scope, name, commitSha });
+        json(res, 200, {
+          rolledBack: result.rolledBack, alreadyCurrent: result.alreadyCurrent,
+          name: result.name, scope: result.scope, commitSha: result.commitSha,
+          previousCommits: result.previousCommits, backups: result.backups,
+          note: result.alreadyCurrent ? 'The requested revision is already active.' : 'Rollback completed. The previously active verified revision was retained in history.'
+        });
+      } catch (error) {
+        const message = String(error && error.message || error);
+        const status = /valid installed extension name|full 40-character/i.test(message) ? 400 :
+          (/No rollback history|No intact rollback backup|not found|ENOENT/i.test(message) ? 404 :
+          (/modified|unexpected|outside|regular file|regular directory|manifest/i.test(message) ? 409 : 422));
         json(res, status, { error: message.slice(0, 2500) });
       }
       return;

@@ -439,7 +439,7 @@ async function extensionRefreshInstalled(){
   var list=document.getElementById('installedExtensions');if(!list)return;
   if(!agentToken){list.innerHTML='<div class="integration-empty">Connect the Oasis runtime to load the managed extension inventory.</div>';return}
   try{var result=await agentApi('/api/extensions');var extensions=result.extensions||[];
-    list.innerHTML=extensions.length?extensions.map(function(item){var commands=(item.commands||[]).map(function(command){return '<span class="extension-chip">/'+extensionEscape(command.alias)+'</span>'}).join('');return '<article class="extension-card"><div class="extension-card-head"><div class="extension-card-icon">⬡</div><div class="extension-card-main"><div class="extension-card-title">'+extensionEscape(item.name)+'</div><div class="extension-card-desc">'+extensionEscape(item.description||item.source)+'</div><div class="extension-meta"><span class="extension-chip good">'+extensionEscape(item.scope==='self'?'Oasis · all projects':'Current project')+'</span><span class="extension-chip">'+extensionEscape(String(item.importedFiles))+' skills · '+extensionEscape(String(item.preservedResources||0))+' resources</span><span class="extension-chip">'+extensionEscape(item.license||'Unknown license')+'</span><span class="extension-chip">Commit '+extensionEscape((item.commitSha||'').slice(0,12))+'</span>'+commands+'</div></div><button class="btn btn-secondary" data-update-extension="'+extensionEscape(item.name)+'" data-update-scope="'+extensionEscape(item.scope)+'" data-update-source="'+extensionEscape(item.source)+'" data-update-commit="'+extensionEscape(item.commitSha)+'" type="button">Update</button><button class="btn btn-danger" data-remove-extension="'+extensionEscape(item.name)+'" data-remove-scope="'+extensionEscape(item.scope)+'" type="button">Remove</button></div><div class="extension-warning">Imported instructions remain untrusted. '+extensionEscape(item.execution||'No code executed.')+'</div></article>'}).join(''):'<div class="integration-empty">No external extensions installed yet. Paste a GitHub collection above to bring your first specialist into Oasis.</div>';
+    list.innerHTML=extensions.length?extensions.map(function(item){var commands=(item.commands||[]).map(function(command){return '<span class="extension-chip">/'+extensionEscape(command.alias)+'</span>'}).join('');var rollbacks=(item.backups||[]).map(function(backup){return '<button class="btn btn-secondary" data-rollback-extension="'+extensionEscape(item.name)+'" data-rollback-scope="'+extensionEscape(item.scope)+'" data-rollback-commit="'+extensionEscape(backup.commitSha)+'" type="button">Rollback '+extensionEscape(backup.commitSha.slice(0,12))+'</button>'}).join('');return '<article class="extension-card"><div class="extension-card-head"><div class="extension-card-icon">⬡</div><div class="extension-card-main"><div class="extension-card-title">'+extensionEscape(item.name)+'</div><div class="extension-card-desc">'+extensionEscape(item.description||item.source)+'</div><div class="extension-meta"><span class="extension-chip good">'+extensionEscape(item.scope==='self'?'Oasis · all projects':'Current project')+'</span><span class="extension-chip">'+extensionEscape(String(item.importedFiles))+' skills · '+extensionEscape(String(item.preservedResources||0))+' resources</span><span class="extension-chip">'+extensionEscape(item.license||'Unknown license')+'</span><span class="extension-chip">Commit '+extensionEscape((item.commitSha||'').slice(0,12))+'</span>'+commands+'</div></div><div class="integration-controls"><button class="btn btn-secondary" data-update-extension="'+extensionEscape(item.name)+'" data-update-scope="'+extensionEscape(item.scope)+'" data-update-source="'+extensionEscape(item.source)+'" data-update-commit="'+extensionEscape(item.commitSha)+'" type="button">Update</button>'+rollbacks+'<button class="btn btn-danger" data-remove-extension="'+extensionEscape(item.name)+'" data-remove-scope="'+extensionEscape(item.scope)+'" type="button">Remove</button></div></div><div class="extension-warning">Imported instructions remain untrusted. '+extensionEscape(item.execution||'No code executed.')+'</div></article>'}).join(''):'<div class="integration-empty">No external extensions installed yet. Paste a GitHub collection above to bring your first specialist into Oasis.</div>';
   }catch(e){list.innerHTML='<div class="integration-empty">Could not load extensions: '+extensionEscape(e.message)+'</div>'}
 }
 async function extensionUpdate(name,scope,source,oldCommit){
@@ -472,9 +472,25 @@ async function extensionRemove(name,scope){
   try{var result=await agentApi('/api/extensions/remove',{method:'POST',body:JSON.stringify({name:name,scope:scope})});notify('Removed '+result.name+' from '+scope+'.');await extensionRefreshInstalled()}
   catch(e){notify('Extension removal was blocked: '+e.message)}
 }
+async function extensionRollback(name,scope,commitSha){
+  if(!agentToken||extensionBusy)return;
+  if(!window.confirm('Restore '+name+' ('+scope+') to verified commit '+commitSha.slice(0,12)+'? The active version will be preserved as a new rollback backup.'))return;
+  extensionSetBusy(true);
+  try{
+    extensionStatus('Verifying rollback backup '+commitSha.slice(0,12)+'…');
+    var result=await agentApi('/api/extensions/rollback',{method:'POST',body:JSON.stringify({name:name,scope:scope,commitSha:commitSha})});
+    if(result.alreadyCurrent){extensionStatus(name+' is already at that revision.');return}
+    await extensionRefreshInstalled();
+    extensionStatus('Restored '+name+' to '+result.commitSha.slice(0,12)+'. The previous revision remains available in rollback history.');
+    notify('Extension rollback completed.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
 document.getElementById('installedExtensions').addEventListener('click',function(e){
   var update=e.target.closest('[data-update-extension]');
   if(update){void extensionUpdate(update.getAttribute('data-update-extension'),update.getAttribute('data-update-scope'),update.getAttribute('data-update-source'),update.getAttribute('data-update-commit'));return}
+  var rollback=e.target.closest('[data-rollback-extension]');
+  if(rollback){void extensionRollback(rollback.getAttribute('data-rollback-extension'),rollback.getAttribute('data-rollback-scope'),rollback.getAttribute('data-rollback-commit'));return}
   var remove=e.target.closest('[data-remove-extension]');
   if(remove)void extensionRemove(remove.getAttribute('data-remove-extension'),remove.getAttribute('data-remove-scope'));
 });
@@ -485,7 +501,7 @@ document.getElementById('extensionMcpImportBtn').addEventListener('click',functi
 document.getElementById('extensionMcpImportPlan').addEventListener('change',function(e){if(e.target.matches('[data-extension-mcp-name]'))extensionSetBusy(false)});
 document.getElementById('extensionCancelBtn').addEventListener('click',function(){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository review cancelled.')});
 document.getElementById('extensionRefreshBtn').addEventListener('click',function(){void extensionRefreshInstalled()});
-document.getElementById('installedExtensions').addEventListener('click',function(e){var button=e.target.closest('[data-remove-extension]');if(button)void extensionRemove(button.getAttribute('data-remove-extension'),button.getAttribute('data-remove-scope'))});
+// Remove/update/rollback actions are delegated in the single listener above.
 
 /* Integration hub with live state where the host runtime supports it. */
 function integrationSetTab(name){

@@ -15,7 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,6 +50,7 @@ function printHelp() {
     '  oasis extensions mcp-import URL [--servers name1,name2]  Import reviewed MCP configs disabled',
     '  oasis extensions install URL --scope both   Import prompts into Oasis + project',
     '  oasis extensions update URL --scope project  Update a verified install and keep rollback history',
+    '  oasis extensions rollback NAME --commit SHA --scope project  Restore a verified extension backup',
     '  oasis extensions remove NAME --scope project Remove an unmodified import',
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
@@ -589,9 +590,15 @@ async function manageExternalExtensions(root, args, autoApprove) {
   const action = String(values.shift() || 'list').toLowerCase();
   let scope = 'project';
   let selectedServerNames = null;
+  let rollbackCommitSha = null;
   const positional = [];
   for (let i = 0; i < values.length; i++) {
-    if (values[i] === '--servers') {
+    if (values[i] === '--commit') {
+      if (!values[i + 1]) throw new Error('--commit requires a full 40-character backup commit SHA.');
+      rollbackCommitSha = values[++i];
+    } else if (values[i].startsWith('--commit=')) {
+      rollbackCommitSha = values[i].slice('--commit='.length);
+    } else if (values[i] === '--servers') {
       if (!values[i + 1]) throw new Error('--servers requires a comma-separated list of MCP server names.');
       selectedServerNames = values[++i].split(',').map((name) => name.trim()).filter(Boolean);
     } else if (values[i].startsWith('--servers=')) {
@@ -612,6 +619,7 @@ async function manageExternalExtensions(root, args, autoApprove) {
       stdout.write(item.name + ' [' + item.scope + '] — ' + item.importedFiles + ' Markdown prompt(s)\n');
       stdout.write('  Source: ' + item.source + '\n  Commit: ' + item.commitSha + '\n  License: ' + item.license + '\n');
       for (const command of item.commands || []) stdout.write('  Command: /' + command.alias + ' — ' + command.description + '\n');
+      for (const backup of item.backups || []) stdout.write('  Rollback: ' + backup.commitSha + ' (verified backup)\n');
     }
     return;
   }
@@ -675,6 +683,30 @@ async function manageExternalExtensions(root, args, autoApprove) {
     for (const backup of result.backups) stdout.write('  Rollback available: ' + backup.scope + ' revision ' + backup.commitSha + '\n');
     for (const command of result.commands || []) stdout.write('  Command alias: /' + command.alias + '\n');
     stdout.write('No repository scripts were executed; previous verified revision kept for rollback.\n');
+    return;
+  }
+  if (action === 'rollback') {
+    const name = String(positional[0] || '').toLowerCase();
+    if (!name || !rollbackCommitSha) throw new Error('Usage: oasis extensions rollback NAME --commit FULL_SHA --scope self|project|both');
+    if (!/^[a-f0-9]{40}$/i.test(rollbackCommitSha)) throw new Error('--commit must be a full 40-character backup commit SHA.');
+    const scopes = scope === 'both' ? ['self', 'project'] : [scope];
+    const inventory = await listInstalledExtensions({ root });
+    const matching = inventory.extensions.filter((item) => item.name === name && scopes.includes(item.scope));
+    const missing = scopes.filter((itemScope) => {
+      const item = matching.find((entry) => entry.scope === itemScope);
+      return !item || !(item.backups || []).some((backup) => backup.commitSha.toLowerCase() === rollbackCommitSha.toLowerCase());
+    });
+    if (missing.length) throw new Error('No intact backup of ' + rollbackCommitSha + ' is available in scope(s): ' + missing.join(', ') + '. Use oasis extensions list to view rollback revisions.');
+    const approved = await approve(
+      'Restore extension "' + name + '" to verified commit ' + rollbackCommitSha + ' in ' + scope +
+      '? The currently active revision will be preserved as another rollback backup.',
+      false, autoApprove
+    );
+    if (!approved) { stdout.write('Rollback cancelled; no extension was changed.\n'); return; }
+    const result = await rollbackGitHubExtension({ root, scope, name, commitSha: rollbackCommitSha });
+    if (result.alreadyCurrent) { stdout.write(name + ' is already at commit ' + result.commitSha + '.\n'); return; }
+    stdout.write('Rolled back ' + name + ' to ' + result.commitSha + '.\n');
+    for (const backup of result.backups || []) stdout.write('  Previous revision retained: ' + backup.scope + ' ' + backup.commitSha + '\n');
     return;
   }
   if (action === 'mcp-import') {
