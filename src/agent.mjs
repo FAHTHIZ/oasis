@@ -11,7 +11,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '') {
     'Do not claim you installed a package, edited a file, passed a test, deployed a site, or completed a task unless tool results support that claim.',
     'The current workspace root is: ' + root,
     'Workspace paths are relative to that root. Secret files and paths outside the workspace are intentionally inaccessible through file tools.',
-    'You may make and revise source files in the workspace. Existing files are snapshotted before an overwrite; deleted files require interactive approval and are snapshotted.',
+    'You may make and revise source files in the workspace. Prefer edit_file with exact old_string/new_string patches for existing files, use glob_files to locate files, and read_file with offset/limit to inspect large files in sections. Existing files are snapshotted before edits/overwrites; deleted files require interactive approval and are snapshotted.',
     'Use run_command for a single executable and argument array, not shell syntax. If you need a sequence, call the tool separately for each step. Command execution requires user approval unless they deliberately started Oasis with --yes.',
     'Use install_package when the user asks for a dependency, CLI, developer tool, or other supported package. Explain the exact package-manager action through the approval tool before the installation starts. Do not silently substitute a different package if installation fails.',
     'Do not request or echo API keys, passwords, tokens, or private keys. Never try to read .env files, credentials, or secret stores. Tool execution strips common secret environment variables from child processes.',
@@ -348,7 +348,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['list_files', 'read_file', 'search_files', 'fetch_url', 'list_skills', 'load_skill']);
+const READ_ONLY_TOOLS = new Set(['list_files', 'glob_files', 'read_file', 'search_files', 'fetch_url', 'list_skills', 'load_skill']);
 const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 30;
 const MAX_SESSION_TOOL_CALLS = 250;
