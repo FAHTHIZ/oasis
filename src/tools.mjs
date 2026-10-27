@@ -244,40 +244,61 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   }
   const denied = commandSafety(command, args);
   if (denied) throw new Error(denied);
+  if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before approval or execution.' };
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(options.timeoutSeconds, 10) || 120));
   const approval = options.approval;
   if (!options.autoApprove) {
     const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.');
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
   }
+  if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
   const env = scrubEnvironment(options.env || process.env);
   return await new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let cancelled = false;
     let settled = false;
+    let killTimer = null;
     const child = spawn(command, args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const append = (target, chunk) => {
       if (target === 'stdout') stdout = (stdout + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
       else stderr = (stderr + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
     };
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (options.signal) options.signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      cancelled = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 1500);
+      killTimer.unref?.();
+    };
     child.stdout.on('data', (chunk) => append('stdout', chunk));
     child.stderr.on('data', (chunk) => append('stderr', chunk));
     const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, timeoutSeconds * 1000);
+    if (options.signal) {
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener('abort', onAbort, { once: true });
+    }
     child.on('error', (error) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut });
+      settled = true; cleanup();
+      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut });
+      settled = true; cleanup();
+      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut, cancelled });
     });
   });
 }
 
 async function runInstallPlan(plan, options) {
+  if (options.signal && options.signal.aborted) return { approved: false, cancelled: true, plan, message: 'Task was cancelled before installation started.' };
   if (!options.autoApprove) {
     const ok = options.approval && await options.approval(
       'Install package ' + plan.packageName + ' using ' + plan.command + ' ' + plan.args.map((arg) => JSON.stringify(arg)).join(' ') +
@@ -285,20 +306,39 @@ async function runInstallPlan(plan, options) {
     );
     if (!ok) return { approved: false, plan, message: 'Installation was not approved. Nothing was installed.' };
   }
+  if (options.signal && options.signal.aborted) return { approved: false, cancelled: true, plan, message: 'Task was cancelled before the package manager started.' };
   const env = scrubEnvironment(options.env || process.env);
   return await new Promise((resolve) => {
     let settled = false;
+    let cancelled = false;
+    let killTimer = null;
     const child = spawn(plan.command, plan.args, { cwd: options.root, env, shell: false, windowsHide: true, stdio: 'inherit' });
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (options.signal) options.signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      cancelled = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 1500);
+      killTimer.unref?.();
+    };
     const timer = setTimeout(() => { child.kill('SIGTERM'); }, 20 * 60 * 1000);
+    if (options.signal) {
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener('abort', onAbort, { once: true });
+    }
     child.on('error', (error) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ approved: true, plan, exitCode: null, error: error.message });
+      settled = true; cleanup();
+      resolve({ approved: true, cancelled, plan, exitCode: null, error: error.message });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ approved: true, plan, exitCode: code, signal });
+      settled = true; cleanup();
+      resolve({ approved: true, cancelled, plan, exitCode: code, signal });
     });
   });
 }
@@ -679,12 +719,13 @@ export async function executeTool(name, args = {}, context = {}) {
         approval: context.approval,
         autoApprove: Boolean(context.autoApprove),
         timeoutSeconds: Math.min(args.timeoutSeconds || context.maxCommandSeconds || 120, context.maxCommandSeconds || 600),
-        env: context.env || process.env
+        env: context.env || process.env,
+        signal: context.signal
       });
     case 'install_package': {
       const name = normalizePackageName(args.packageName);
       const plan = planPackageInstall({ packageName: name, ecosystem: args.ecosystem || 'auto', workspaceRoot: root, env: context.env || process.env });
-      return await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env });
+      return await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env, signal: context.signal });
     }
     case 'fetch_url':
       return await fetchPublicUrl(args.url);

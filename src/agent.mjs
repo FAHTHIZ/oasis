@@ -80,7 +80,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
         { role: 'user', content: 'Summarize this bounded transcript:\n\n--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + transcript + '\n--- END UNTRUSTED TRANSCRIPT ---' }
       ]
     };
-    const completion = await requestCompletion(summarySession, { noTools: true });
+    const completion = await requestCompletion(summarySession, { noTools: true, signal: options.signal });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
   } catch (error) {
@@ -529,7 +529,13 @@ async function requestCompletion(session, options = {}) {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120000);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 120000);
+  const abortFromCaller = () => controller.abort();
+  if (options.signal) {
+    if (options.signal.aborted) abortFromCaller();
+    else options.signal.addEventListener('abort', abortFromCaller, { once: true });
+  }
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -582,11 +588,17 @@ async function requestCompletion(session, options = {}) {
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     return { ...message, usage: normalizeUsage(data.usage) };
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('The model request timed out after 120 seconds.');
+    if (options.signal && options.signal.aborted) {
+      const cancelled = new Error('Agent task cancelled by the user.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
+    if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after 120 seconds.');
     if (error instanceof TypeError) throw new Error('Could not reach the model provider. Check the network and provider base URL.');
     throw error;
   } finally {
     clearTimeout(timer);
+    if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
   }
 }
 
@@ -764,6 +776,7 @@ async function runSpecialistReview(parentSession, args, context, options, budget
     approval: async () => false,
     autoApprove: false,
     env: context.env || process.env,
+    signal: context.signal,
     specialistBudget: budget,
     onToolStart: options.onToolStart,
     onToolResult: options.onToolResult
@@ -784,6 +797,11 @@ async function executeOneCall(session, call, context, options) {
   let result;
   if (options.onToolStart) options.onToolStart({ name, call });
   try {
+    if (options.signal && options.signal.aborted) {
+      const cancelled = new Error('Task cancelled before the tool started.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
     if (options.planOnly && !READ_ONLY_TOOLS.has(name)) {
       throw new Error('Plan mode blocks write, command, install, delete, and external tool calls.');
     }
@@ -811,9 +829,18 @@ async function executeOneCall(session, call, context, options) {
   };
 }
 
+function throwIfCancelled(signal) {
+  if (signal && signal.aborted) {
+    const error = new Error('Agent task cancelled by the user.');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
 export async function runAgentTurn(session, prompt, options = {}) {
   const request = String(prompt || '').trim();
   if (!request) throw new Error('Enter a task or question.');
+  throwIfCancelled(options.signal);
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
   session.messages.push({ role: 'user', content: request });
@@ -827,6 +854,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     autoApprove: Boolean(options.autoApprove),
     maxCommandSeconds: session.config.maxCommandSeconds,
     env: options.env || process.env,
+    signal: options.signal,
     specialistBudget: options.specialistBudget || { used: 0 }
   };
   let totalToolCalls = 0;
@@ -834,13 +862,16 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, nudgeUsed: false };
 
   for (let step = 0; step < maxSteps; step++) {
+    throwIfCancelled(options.signal);
     let streamedText = '';
-    const assistant = await requestCompletion(session, typeof options.onDelta === 'function' ? {
-      onDelta: (delta) => {
+    const assistant = await requestCompletion(session, {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
         streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
         options.onDelta(streamedText);
-      }
-    } : {});
+      } } : {})
+    });
+    throwIfCancelled(options.signal);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
     if (options.onUsage) options.onUsage({ ...usage, step: step + 1 });
