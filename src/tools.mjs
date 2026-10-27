@@ -32,6 +32,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
   { type: 'function', function: { name: 'search_files', description: 'Search workspace text files for a literal case-insensitive string. Returns matching lines and paths, excluding secret files and dependency/build directories.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Literal phrase or symbol to search for' }, limit: { type: 'integer', description: 'Maximum matching lines, 1 to 60; defaults to 25' } }, required: ['query'] } } },
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
+  { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'run_command', description: 'Run a single executable with an argv array in the workspace, with no shell expansion. Requires approval unless the user explicitly enabled --yes. Destructive executables and shell interpreters are blocked.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120' } }, required: ['command', 'args'] } } },
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
@@ -1441,9 +1442,34 @@ async function readGitDiff(root, args = {}) {
   return await runReadOnlyGit(root, commandArgs);
 }
 
+export function updateTodos(store, rawTodos) {
+  if (!Array.isArray(store)) throw new Error('A checklist store is required.');
+  if (!Array.isArray(rawTodos)) throw new Error('todos must be an array of { content, status } items.');
+  if (rawTodos.length > 50) throw new Error('Keep the checklist to 50 items or fewer.');
+  const statuses = new Set(['pending', 'in_progress', 'completed']);
+  const cleaned = rawTodos.map((item, index) => {
+    if (!item || typeof item.content !== 'string' || !item.content.trim()) {
+      throw new Error('Item ' + (index + 1) + ' needs non-empty content.');
+    }
+    if (!statuses.has(item.status)) {
+      throw new Error('Item ' + (index + 1) + ' has an invalid status; use pending, in_progress, or completed.');
+    }
+    return { content: item.content.trim().slice(0, 200), status: item.status };
+  });
+  if (cleaned.filter((item) => item.status === 'in_progress').length > 1) {
+    throw new Error('Only one item may be in_progress at a time.');
+  }
+  // Replace only after the entire payload has passed validation.
+  store.splice(0, store.length, ...cleaned);
+  return { todos: cleaned.map((item) => ({ ...item })), remaining: cleaned.filter((item) => item.status !== 'completed').length };
+}
+
 export async function executeTool(name, args = {}, context = {}) {
   const root = path.resolve(context.root || process.cwd());
   switch (name) {
+    case 'todo_write':
+      if (!Array.isArray(context.todos)) context.todos = [];
+      return updateTodos(context.todos, args.todos);
     case 'git_status':
       return await readGitStatus(root);
     case 'git_diff':
