@@ -6,7 +6,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
-- OpenAI-compatible multi-step tool-calling loop.
+- OpenAI-compatible and native Anthropic multi-step tool-calling loops.
 - Bounded project file listing/search/read/write/delete tools with workspace and secret-path protections.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
@@ -24,7 +24,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Milestone 2 — provider and tool ecosystem
 
-- Implement and test native provider adapters (including Anthropic's native Messages API).
+- Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Add optional MCP server support with explicit server trust and per-tool permissions.
 - Add streaming responses and robust context compaction/session resume.
 - Add skills discovery, installation from trusted sources, versioning, and supply-chain review.
@@ -46,4 +46,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. The current release foundation does not have native Anthropic API support, MCP, session persistence, streaming, multi-agent orchestration, or OS-level sandboxing. Those are substantial milestones, not just cosmetic additions.
+Oasis is not yet at Claude Code feature parity. The current release foundation does not have MCP, session persistence, streaming, multi-agent orchestration, or OS-level sandboxing. Those are substantial milestones, not just cosmetic additions.
