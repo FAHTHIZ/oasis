@@ -542,7 +542,7 @@ async function requestCompletion(session, options = {}) {
       throw new Error(formatApiError(response.status, errorBody, config.protocol));
     }
     const contentType = response.headers.get('content-type') || '';
-    const streamed = Boolean(typeof options.onDelta === 'function' && /text\\/event-stream/i.test(contentType));
+    const streamed = Boolean(typeof options.onDelta === 'function' && contentType.toLowerCase().includes('text/event-stream'));
     let data;
     if (streamed) data = await readProviderStream(response, config.protocol, options.onDelta);
     else {

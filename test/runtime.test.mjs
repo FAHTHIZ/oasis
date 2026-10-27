@@ -939,8 +939,8 @@ for (const fixture of [
     globalThis.fetch = async (_url, init = {}) => {
       requestBody = JSON.parse(String(init.body || '{}'));
       const stream = fixture.frames.map((frame) =>
-        (frame.event ? 'event: ' + frame.event + '\\n' : '') +
-        'data: ' + (typeof frame.data === 'string' ? frame.data : JSON.stringify(frame.data)) + '\\n\\n'
+        (frame.event ? 'event: ' + frame.event + String.fromCharCode(10) : '') +
+        'data: ' + (typeof frame.data === 'string' ? frame.data : JSON.stringify(frame.data)) + String.fromCharCode(10, 10)
       ).join('');
       return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' } });
     };
