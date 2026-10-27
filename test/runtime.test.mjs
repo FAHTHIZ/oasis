@@ -252,7 +252,7 @@ test('MCP stdio server exposes tools and requires per-call approval', async (t) 
     "process.stdin.on('data', (chunk) => {",
     "  buffer += chunk;",
     "  let index;",
-    "  while ((index = buffer.indexOf('\n')) >= 0) {",
+    "  while ((index = buffer.indexOf('\\n')) >= 0) {",
     "    const line = buffer.slice(0, index); buffer = buffer.slice(index + 1);",
     "    let message; try { message = JSON.parse(line); } catch { continue; }",
     "    if (message.id === undefined) continue;",
@@ -260,7 +260,7 @@ test('MCP stdio server exposes tools and requires per-call approval', async (t) 
     "    if (message.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1' } };",
     "    if (message.method === 'tools/list') result = { tools: [{ name: 'echo', description: 'Echo one message', inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } }] };",
     "    if (message.method === 'tools/call') result = { content: [{ type: 'text', text: 'pong ' + message.params.arguments.message }] };",
-    "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\n');",
+    "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\n');",
     "  }",
     "});"
   ].join('\n');
