@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#101b17"><meta name="description" content="Oasis OSS — a calm, local-first workspace for projects, tasks, and ideas.">
+<meta name="theme-color" content="#101b17"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Oasis"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="./assets/oasis-icon.svg"><meta name="description" content="Oasis OSS — a calm, local-first workspace for projects, tasks, and ideas.">
 <title>Oasis — Your work, in a clearer place</title>
 <style>
 :root{color-scheme:dark;--bg:#101b17;--panel:#17251f;--line:#2a3c32;--text:#f0f3eb;--muted:#9aa99d;--accent:#b9ed82;--ink:#1b2a1d;--danger:#ff9c8d;--shadow:0 18px 50px #06100c55}
@@ -87,5 +87,6 @@ document.getElementById('clearNotesBtn').addEventListener('click',function(){if(
 document.getElementById('exportBtn').addEventListener('click',exportBackup);document.getElementById('importBtn').addEventListener('click',function(){document.getElementById('importFile').click()});document.getElementById('importFile').addEventListener('change',function(){importBackup(this.files&&this.files[0])});
 document.getElementById('themeToggle').addEventListener('click',function(){document.body.classList.toggle('light');var light=document.body.classList.contains('light');try{localStorage.setItem('oasis.oss.theme',light?'light':'dark')}catch(e){}this.textContent=light?'☾':'☼';this.setAttribute('aria-label',light?'Switch to dark theme':'Switch to light theme')});
 document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date()).toUpperCase();try{if(localStorage.getItem('oasis.oss.theme')==='light'){document.body.classList.add('light');document.getElementById('themeToggle').textContent='☾'}}catch(e){}load();render();
+if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){console.warn('Offline cache was not enabled in this browser.')})})}
 })();
 </script></body></html>
