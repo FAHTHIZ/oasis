@@ -1,4 +1,5 @@
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions } from './tools.mjs';
+import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -24,12 +25,23 @@ function systemPrompt(root, projectContext) {
 
 export async function createSession({ root, config }) {
   const projectContext = await loadProjectInstructions(root);
+  const mcp = await connectMcpServers({ root });
+  const dynamic = mcpToolDefinitions(mcp.clients);
   return {
     root,
     config,
     messages: [{ role: 'system', content: systemPrompt(root, projectContext) }],
+    mcpClients: mcp.clients,
+    mcpFailures: mcp.failures,
+    mcpToolMap: dynamic.map,
+    toolDefinitions: TOOL_DEFINITIONS.concat(dynamic.definitions),
     toolCallsThisSession: 0
   };
+}
+
+export function closeSession(session) {
+  if (session && session.mcpClients) closeMcpClients(session.mcpClients);
+  if (session && session.mcpClients) session.mcpClients.clear();
 }
 
 function openAIEndpoint(baseURL) {
@@ -134,7 +146,7 @@ async function requestCompletion(session) {
       max_tokens: 4096,
       system: converted.system,
       messages: converted.messages,
-      tools: TOOL_DEFINITIONS.map((tool) => ({
+      tools: (session.toolDefinitions || TOOL_DEFINITIONS).map((tool) => ({
         name: tool.function.name,
         description: tool.function.description,
         input_schema: tool.function.parameters
@@ -146,7 +158,7 @@ async function requestCompletion(session) {
     bodyObject = {
       model: config.model,
       messages: session.messages,
-      tools: TOOL_DEFINITIONS,
+      tools: session.toolDefinitions || TOOL_DEFINITIONS,
       tool_choice: 'auto',
       parallel_tool_calls: false,
       temperature: 0.2
@@ -267,7 +279,11 @@ export async function runAgentTurn(session, prompt, options = {}) {
       if (options.onToolStart) options.onToolStart({ name, call });
       try {
         args = safeToolArguments(call.function && call.function.arguments);
-        result = await executeTool(name, args, context);
+        if (session.mcpToolMap && session.mcpToolMap.has(name)) {
+          result = await callMappedMcpTool(session, name, args, context);
+        } else {
+          result = await executeTool(name, args, context);
+        }
       } catch (error) {
         result = { error: error.message || String(error) };
       }
