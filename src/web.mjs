@@ -8,6 +8,8 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
+import { inspectGitHubExtension, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
