@@ -472,6 +472,58 @@ async function readProviderStream(response, protocol, onDelta) {
   return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) } }], usage };
 }
 
+const MAX_PROVIDER_RETRIES = 2;
+const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
+const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function parseRetryAfterMs(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  if (/^\d+(?:\.\d+)?$/.test(value)) {
+    return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(0, Number(value) * 1000));
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(0, timestamp - Date.now()));
+}
+
+function providerRetryDelayMs(retryNumber, retryAfter = null) {
+  const advertised = parseRetryAfterMs(retryAfter);
+  if (advertised !== null) return advertised;
+  return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, 250 * (2 ** Math.max(0, retryNumber - 1)));
+}
+
+function waitForProviderRetry(milliseconds, signal) {
+  if (signal.aborted) {
+    const error = new Error('The model request was cancelled before retry.');
+    error.name = 'AbortError';
+    return Promise.reject(error);
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const error = new Error('The model request was cancelled during provider retry.');
+      error.name = 'AbortError';
+      reject(error);
+    };
+    const timer = setTimeout(finish, Math.max(0, milliseconds));
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 async function requestCompletion(session, options = {}) {
   const config = session.config;
   const nativeAnthropic = config.protocol === 'anthropic';
@@ -542,16 +594,34 @@ async function requestCompletion(session, options = {}) {
     else options.signal.addEventListener('abort', abortFromCaller, { once: true });
   }
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify(bodyObject)
-    });
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(formatApiError(response.status, errorBody, config.protocol));
+    let response = null;
+    for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          signal: controller.signal,
+          body: JSON.stringify(bodyObject)
+        });
+      } catch (error) {
+        if (attempt < MAX_PROVIDER_RETRIES && error instanceof TypeError && !controller.signal.aborted) {
+          await waitForProviderRetry(providerRetryDelayMs(attempt + 1), controller.signal);
+          continue;
+        }
+        throw error;
+      }
+
+      if (response.ok) break;
+      const status = response.status;
+      let errorBody = '';
+      try { errorBody = await response.text(); } catch {}
+      if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status)) {
+        await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
+        continue;
+      }
+      throw new Error(formatApiError(status, errorBody, config.protocol));
     }
+    if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
     const contentType = response.headers.get('content-type') || '';
     const streamed = Boolean(typeof options.onDelta === 'function' && contentType.toLowerCase().includes('text/event-stream'));
     let data;

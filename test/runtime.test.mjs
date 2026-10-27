@@ -927,6 +927,95 @@ test('post-edit verification does not count an ordinary command with a test argu
   assert.equal(requests, 5, 'the gate should nudge once after a non-verification command and then report the gap');
 });
 
+
+test('provider retries a transient rate limit without duplicating a tool action', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    requests++;
+    if (requests === 1) {
+      res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '0' });
+      res.end(JSON.stringify({ error: { message: 'temporary rate limit' } }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will write the requested file.',
+        tool_calls: [{ id: 'retry-write-1', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'result.txt', content: 'written once\n' })
+        } }]
+      } }] }));
+    } else if (requests === 3) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will verify the file contents.',
+        tool_calls: [{ id: 'retry-read-1', type: 'function', function: {
+          name: 'read_file',
+          arguments: JSON.stringify({ path: 'result.txt' })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'The file was written and reviewed.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 6,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root: tmp, config });
+  const result = await runAgentTurn(session, 'Create result.txt with the word written once.', { autoApprove: true });
+
+  assert.equal(result.finished, true);
+  assert.equal(requests, 4, 'one retry happens before the first model response; no tool action is replayed');
+  assert.equal(result.toolCalls, 2);
+  assert.equal(await readFile(path.join(tmp, 'result.txt'), 'utf8'), 'written once\n');
+});
+
+test('provider does not retry authentication failures', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    requests++;
+    res.writeHead(401, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'invalid API key' } }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 3,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root: tmp, config });
+  await assert.rejects(runAgentTurn(session, 'Say hello.'), /HTTP 401/);
+  assert.equal(requests, 1);
+});
+
 test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
