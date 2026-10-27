@@ -14,6 +14,7 @@
     "src/",
     "scripts/",
     "skills/",
+    "plugins/",
     "README.md",
     "LICENSE",
     "SECURITY.md",
