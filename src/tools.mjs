@@ -741,6 +741,7 @@ async function openHandsJsonRequest(config, route, options = {}) {
     method: options.method || 'GET',
     headers,
     ...(body !== undefined ? { body } : {}),
+    redirect: 'error',
     signal: combineOpenHandsSignal(options.signal)
   });
   const raw = await response.text();
@@ -817,7 +818,7 @@ async function delegateOpenHands(args, context, root) {
     'OpenHands Agent Profile: ' + config.profileId,
     'Workspace on server: ' + config.workspace,
     'Task: ' + task,
-    'Safety: the conversation will use AlwaysConfirm and request a separate OpenHands confirmation before tool actions. Git worktree isolation is requested when the server supports it.',
+    'Safety: the conversation will use AlwaysConfirm and request a separate OpenHands confirmation before tool actions. Git worktree isolation is requested; non-Git workspaces may fall back to a shared directory, so review the server configuration and workspace first.',
     'Oasis will not send its model/API keys. The server profile supplies its own model credentials. Review the OpenHands instance and profile before continuing.'
   ].join('\n');
   // Delegation must always be explicitly approved and cannot be auto-approved
