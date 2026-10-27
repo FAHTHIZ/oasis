@@ -93,6 +93,8 @@ export async function managePlugins(root, args = []) {
       sources.push({ skill, source, destination: path.join(skillsRoot, skill, 'SKILL.md') });
     }
 
+    const pluginDirectory = path.join(pluginsRoot, name);
+    if (await pathExists(pluginDirectory)) throw new Error('A plugin directory already exists at ' + pluginDirectory + '. Inspect it before retrying; Oasis will not overwrite or delete it.');
     await mkdir(pluginsRoot, { recursive: true });
     await mkdir(skillsRoot, { recursive: true });
     const installedSkills = [];
@@ -124,7 +126,7 @@ export async function managePlugins(root, args = []) {
       for (const item of installedSkills) {
         if (item.owned) await rm(path.dirname(path.join(skillsRoot, item.name, 'SKILL.md')), { recursive: true, force: true }).catch(() => {});
       }
-      await rm(path.join(pluginsRoot, name), { recursive: true, force: true }).catch(() => {});
+      await rm(pluginDirectory, { recursive: true, force: true }).catch(() => {});
       throw error;
     }
     return;
