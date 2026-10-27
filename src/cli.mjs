@@ -29,7 +29,7 @@ function printHelp() {
     '  oasis                         Start an interactive agent session',
     '  oasis "fix the failing tests"  Give a task in plain English',
     '  oasis setup                   Configure a model provider',
-    '  oasis doctor                  Check the local environment',
+    '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
@@ -188,7 +188,7 @@ function commandAvailable(name) {
   return spawnSync(probe, [name], { stdio: 'ignore', timeout: 1500, windowsHide: true }).status === 0;
 }
 
-async function doctor() {
+async function doctor(args = []) {
   stdout.write('Oasis environment report\n');
   stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
   stdout.write('  Node.js: ' + process.version + (Number(process.versions.node.split('.')[0]) >= 20 ? ' (supported)' : ' (requires Node 20+)') + '\n');
@@ -201,7 +201,22 @@ async function doctor() {
     stdout.write('  Model: ' + summary.model + '\n');
     stdout.write('  Authentication: ' + summary.authentication + '\n');
     stdout.write('  Config: ' + summary.configPath + '\n');
-  } catch (error) { stdout.write('  Provider config: invalid (' + error.message + ')\n'); }
+    if (args.includes('--test-provider')) {
+      stdout.write('  Live model/tool-call verification: testing (the inert probe will not be executed)…\n');
+      try {
+        const result = await testProviderConnection(config, { timeoutMs: 30000 });
+        stdout.write('  Live model/tool-call verification: passed (' + result.provider + ' / ' + result.model + ')\n');
+      } catch (error) {
+        stdout.write('  Live model/tool-call verification: FAILED — ' + String(error && error.message || error) + '\n');
+        process.exitCode = 1;
+      }
+    } else {
+      stdout.write('  Live model/tool-call verification: not run (use oasis doctor --test-provider)\n');
+    }
+  } catch (error) {
+    stdout.write('  Provider config: invalid (' + error.message + ')\n');
+    if (args.includes('--test-provider')) process.exitCode = 1;
+  }
   stdout.write('  Workspace: ' + process.cwd() + '\n');
   stdout.write('  MCP config: ' + getMcpConfigPath() + '\n');
   stdout.write('  Note: terminal commands run locally and are not sandboxed by Oasis.\n');
@@ -845,7 +860,7 @@ async function main() {
     return;
   }
   if (command === 'setup') return await configureProvider();
-  if (command === 'doctor') return await doctor();
+  if (command === 'doctor') return await doctor(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
