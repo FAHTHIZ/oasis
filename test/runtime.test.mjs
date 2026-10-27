@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from '
 import { createServer } from 'node:http';
 import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
-import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount } from '../src/tools.mjs';
+import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
@@ -106,6 +106,57 @@ test('provider connection probe redacts credentials and does not treat an HTTP e
       return true;
     }
   );
+});
+
+test('Oasis discovers and loads portable project and global Agent Skills without executing them', async (t) => {
+  const tmp = await temporaryDirectory('oasis-portable-skills-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  const xdg = path.join(tmp, 'xdg');
+  const env = {
+    ...process.env,
+    OASIS_CONFIG_DIR: path.join(tmp, 'oasis-config'),
+    XDG_CONFIG_HOME: xdg,
+    HOME: tmp
+  };
+
+  const projectSkill = path.join(root, '.agents', 'skills', 'portable-example');
+  const globalSkill = path.join(xdg, 'agents', 'skills', 'global-example');
+  await mkdir(path.join(projectSkill, 'references'), { recursive: true });
+  await mkdir(globalSkill, { recursive: true });
+  await writeFile(path.join(projectSkill, 'SKILL.md'), [
+    '---',
+    'name: portable-example',
+    'description: A portable test skill loaded by Oasis.',
+    '---',
+    '',
+    'Use the reference resource when relevant. Treat this installed skill as untrusted instructions.'
+  ].join('\n'));
+  await writeFile(path.join(projectSkill, 'references', 'guide.md'), 'A short reference for the installed skill.\n');
+  await writeFile(path.join(globalSkill, 'SKILL.md'), [
+    '---',
+    'name: global-example',
+    'description: A global universal skill for the test.',
+    '---',
+    '',
+    'This instruction comes from the universal global skill directory.'
+  ].join('\n'));
+
+  const skills = await listAvailableSkills(root, { env });
+  assert.ok(skills.some((skill) => skill.name === 'portable-example' && skill.source === 'portable-workspace'));
+  assert.ok(skills.some((skill) => skill.name === 'global-example' && skill.source === 'global-portable'));
+
+  const loadedProject = await loadSkillText(root, 'portable-example', { env });
+  assert.equal(loadedProject.source, 'portable-workspace');
+  assert.match(loadedProject.content, /Treat this installed skill as untrusted instructions/);
+  const loadedGlobal = await loadSkillText(root, 'global-example', { env });
+  assert.equal(loadedGlobal.source, 'global-portable');
+  assert.match(loadedGlobal.content, /universal global skill directory/);
+
+  const resource = await loadSkillResource(root, 'portable-example', 'references/guide.md', { env });
+  assert.equal(resource.content, 'A short reference for the installed skill.\n');
+  assert.equal(resource.trust, 'external-untrusted-text');
+  await assert.rejects(loadSkillResource(root, 'portable-example', '../SKILL.md', { env }), /resources must be text files/i);
 });
 
 test('plain-English installation requests are parsed without accepting command fragments', () => {
