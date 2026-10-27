@@ -36,6 +36,18 @@ test('configuration is written outside the project and its API key is not includ
   if (process.platform !== 'win32') assert.equal((await stat(configPath)).mode & 0o777, 0o600);
 });
 
+test('configuration never reuses a stored API key at a changed provider URL', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configPath = path.join(tmp, 'config.json');
+  await saveConfig({ protocol: 'openai-compatible', baseURL: 'https://provider-one.example/v1', model: 'fixture', apiKey: 'provider-one-secret' }, { configPath, env: {} });
+  const changed = await loadConfig({ configPath, env: { OASIS_BASE_URL: 'https://provider-two.example/v1' } });
+  assert.equal(changed.apiKey, '');
+  assert.equal(changed.configured, false);
+  const same = await loadConfig({ configPath, env: {} });
+  assert.equal(same.apiKey, 'provider-one-secret');
+});
+
 test('plain-English installation requests are parsed without accepting command fragments', () => {
   assert.deepEqual(parseInstallIntent('install pnpm'), { packageName: 'pnpm', ecosystem: 'auto' });
   assert.deepEqual(parseInstallIntent('Please install ripgrep in yourself'), { packageName: 'ripgrep', ecosystem: 'auto' });
@@ -179,4 +191,48 @@ test('agent completes an OpenAI-compatible tool cycle against a local fixture se
   assert.equal(requests, 2);
   assert.ok(secondRequest.messages.some((message) => message.role === 'tool' && message.content.includes('README.md')));
   assert.ok(transcript.some((text) => text.includes('completed the inspection')));
+});
+
+
+test('native Anthropic Messages API can call an Oasis tool and consume its result', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), '# Anthropic fixture');
+  let requests = 0;
+  let authSeen = false;
+  let secondRequest = null;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const payload = JSON.parse(body);
+    requests++;
+    authSeen = authSeen || (req.headers['x-api-key'] === 'anthropic-fixture-key' && req.headers['anthropic-version'] === '2023-06-01');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      assert.ok(Array.isArray(payload.tools));
+      assert.ok(payload.tools.some((tool) => tool.name === 'list_files' && tool.input_schema));
+      res.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: 'fixture', stop_reason: 'tool_use', content: [
+        { type: 'text', text: 'I will inspect the workspace.' },
+        { type: 'tool_use', id: 'anthropic-tool-1', name: 'list_files', input: { path: '.' } }
+      ] }));
+    } else {
+      secondRequest = payload;
+      res.end(JSON.stringify({ id: 'msg_2', type: 'message', role: 'assistant', model: 'fixture', stop_reason: 'end_turn', content: [
+        { type: 'text', text: 'The workspace contains README.md.' }
+      ] }));
+    }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'anthropic', baseURL: 'http://127.0.0.1:' + server.address().port, model: 'fixture-model', apiKey: 'anthropic-fixture-key', maxSteps: 4, maxCommandSeconds: 10 };
+  const session = await createSession({ root, config });
+  const result = await runAgentTurn(session, 'List the files in this workspace.');
+  assert.equal(result.finished, true);
+  assert.equal(result.toolCalls, 1);
+  assert.equal(requests, 2);
+  assert.equal(authSeen, true);
+  assert.ok(secondRequest.messages.some((message) => message.role === 'user' && Array.isArray(message.content) && message.content.some((block) => block.type === 'tool_result' && block.tool_use_id === 'anthropic-tool-1')));
+  assert.equal(session.messages.at(-1).content, 'The workspace contains README.md.');
 });
