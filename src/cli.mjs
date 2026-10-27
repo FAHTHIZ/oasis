@@ -5,7 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_MODEL, validateBaseUrl } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
 import { createSession, runAgentTurn } from './agent.mjs';
 import { executeTool } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
@@ -104,26 +104,33 @@ async function askSecret(question) {
 
 async function configureProvider() {
   stdout.write('\nOasis setup — model provider\n');
-  stdout.write('Choose an OpenAI-compatible chat-completions endpoint. Local Ollama endpoints are supported when they expose /v1/chat/completions.\n');
+  stdout.write('Choose a native Anthropic API or an OpenAI-compatible chat-completions endpoint. Local Ollama-style endpoints can use OpenAI-compatible mode.\n');
   const rl = createInterface({ input: stdin, output: stdout });
-  let baseURL, model;
+  let protocol, baseURL, model;
   try {
-    baseURL = (await rl.question('Base URL [' + DEFAULT_BASE_URL + ']: ')).trim() || DEFAULT_BASE_URL;
-    model = (await rl.question('Model name [' + DEFAULT_MODEL + ']: ')).trim() || DEFAULT_MODEL;
+    const selected = (await rl.question('Protocol [openai-compatible / anthropic] (default openai-compatible): ')).trim().toLowerCase();
+    protocol = validateProtocol(selected || 'openai-compatible');
+    const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+    baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
+    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : DEFAULT_MODEL;
+    model = (await rl.question('Model name [' + defaultModel + ']: ')).trim() || defaultModel;
   } finally { rl.close(); }
+  protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
-  const existing = await loadConfig().catch(() => ({ apiKey: '' }));
+  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
   let apiKey = '';
-  if (!/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|::1)(?::|\/|$)/i.test(baseURL)) {
-    apiKey = await askSecret('API key (input hidden; press Enter to use OASIS_API_KEY/OPENAI_API_KEY if set): ');
+  if (!isLoopbackUrl(baseURL)) {
+    const label = protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key';
+    apiKey = await askSecret(label + ' (input hidden; Enter keeps the key only if the endpoint is unchanged, otherwise use the matching environment variable): ');
+    if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
+    if (!apiKey) apiKey = process.env.OASIS_API_KEY || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
   }
-  if (!apiKey) apiKey = process.env.OASIS_API_KEY || process.env.OPENAI_API_KEY || existing.apiKey || '';
-  const configPath = await saveConfig({ baseURL, model, apiKey });
+  const configPath = await saveConfig({ protocol, baseURL, model, apiKey });
   stdout.write('Saved provider settings to ' + configPath + '\n');
-  stdout.write('Authentication: ' + (apiKey ? 'configured' : 'no API key stored') + '\n');
+  stdout.write('Protocol: ' + protocol + '\n');
+  stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
   stdout.write('Run oasis doctor to inspect the environment, then oasis to start chatting.\n');
 }
-
 function commandAvailable(name) {
   const probe = process.platform === 'win32' ? 'where' : 'which';
   return spawnSync(probe, [name], { stdio: 'ignore', timeout: 1500, windowsHide: true }).status === 0;
@@ -138,7 +145,7 @@ async function doctor() {
   try {
     const config = await loadConfig();
     const summary = getProviderSummary(config);
-    stdout.write('  Model provider: ' + summary.provider + '\n');
+    stdout.write('  Model provider: ' + summary.provider + ' (' + summary.protocol + ')\n');
     stdout.write('  Model: ' + summary.model + '\n');
     stdout.write('  Authentication: ' + summary.authentication + '\n');
     stdout.write('  Config: ' + summary.configPath + '\n');
@@ -274,6 +281,7 @@ function printConfig(config) {
   const summary = getProviderSummary(config);
   stdout.write('Oasis provider configuration\n');
   stdout.write('  Base URL: ' + config.baseURL + '\n');
+  stdout.write('  Protocol: ' + (config.protocol || 'openai-compatible') + '\n');
   stdout.write('  Model: ' + config.model + '\n');
   stdout.write('  Authentication: ' + summary.authentication + '\n');
   stdout.write('  API key: ' + (config.apiKey ? 'configured (masked)' : 'not set') + '\n');
