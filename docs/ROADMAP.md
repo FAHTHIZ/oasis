@@ -26,6 +26,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Optional workspace-scoped session persistence, on-demand skill loading, and between-turn history compaction with a bounded deterministic fallback; within-turn microcompaction trims older bulky tool results when the estimated context grows too large.
 - The session task checklist is persisted with saved sessions. Tool-call execution preserves requested order across reads and writes, while consecutive read-only workspace calls may run together.
 - Token and tool-call budgets, parallel read-only calls, and sequential handling of side effects.
+- Saved-session startup locks reject duplicate concurrent browser requests with HTTP 409 before they can run the same history in parallel.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
 - Public documentation fetch with URL checks, redirect handling, and size limits.
