@@ -774,7 +774,7 @@ export function createOasisWebServer(options = {}) {
         saved: true,
         verified: true,
         provider: { protocol, provider: new URL(baseURL).host, model, authentication: apiKey ? 'API key configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured') },
-        note: 'The provider returned a real assistant response. Settings were saved locally; the API key is never returned by this endpoint.'
+        note: 'The provider returned a valid tool-call response. The inert probe was not executed; settings were saved locally and the API key is never returned.'
       });
       return;
     }
