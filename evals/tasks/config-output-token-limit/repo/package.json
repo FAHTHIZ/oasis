@@ -1,0 +1,5 @@
+{
+  "name": "oasis-eval-config-task",
+  "private": true,
+  "type": "module"
+}
