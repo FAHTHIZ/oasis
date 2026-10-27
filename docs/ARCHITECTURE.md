@@ -1,6 +1,6 @@
 # Oasis OSS architecture
 
-Oasis has a local-first browser workspace and a separate terminal agent runtime.
+Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasis web` serves the same browser UI from Node and connects it to the chosen workspace through an authenticated local HTTP API.
 
 ## Terminal runtime
 
@@ -22,6 +22,14 @@ Processes launch with an argument array and \`shell: false\`; common credential 
 
 This is not an OS sandbox. An approved test, build, or project script can execute code with the current user's privileges. A local model endpoint may avoid sending prompts to a hosted provider, but that does not itself sandbox command execution.
 
+## Browser agent runtime
+
+- `src/web.mjs` serves the static UI and a same-origin JSON API. The listener binds to `127.0.0.1:3917` by default; the CLI prints a fresh random bearer token for that process. API requests require that token, and browser API requests must use a literal-IP/localhost Host and a matching same-origin HTTP Origin.
+- Chat jobs call the same `createSession` and `runAgentTurn` runtime used by the CLI. Job events expose assistant output, tool activity, usage, completion, and pending approvals. The browser can approve or deny a consequential action once. Saved agent sessions use the existing private user-level session store.
+- The Terminal panel calls the existing `run_command` tool with an executable and a JSON argv array. It intentionally has no shell expansion and is **not a full PTY**; interactive shell programs, TUI applications, and programs that require stdin are not supported by this bridge.
+- Localhost is the safe default. Binding to `0.0.0.0` makes the HTTP server reachable from the network; the token is not encrypted in transit. Use only on trusted private Wi-Fi, do not port-forward it, and never expose the listener to the public Internet. TLS/reverse-proxy deployment is not implemented.
+- The service worker must not cache `/api/*` responses because Cache Storage does not isolate entries by bearer Authorization header. It caches only the static app shell.
+
 ## Model provider interface
 
 The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). GPT-6.1 Sol tool calling uses the Responses API. Set OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY, or use oasis setup. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS.
@@ -41,4 +49,4 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 ## Current architectural gaps
 
-OS-level container isolation, streamed model output, mid-turn context compaction, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet. Between-turn context compaction is best-effort and is not a substitute for a broad long-horizon benchmark. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
+OS-level container isolation, a full interactive PTY, TLS for the browser runtime, GitHub OAuth, a remote capability marketplace, streamed token output, mid-turn context compaction, multi-agent coordination, formal version migrations, and browser-to-CLI syncing for projects/tasks/notes are not implemented yet. Between-turn context compaction is best-effort and is not a substitute for a broad long-horizon benchmark. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
