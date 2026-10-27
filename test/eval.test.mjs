@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { saveConfig } from '../src/config.mjs';
 import { runEvalCommand, validateEvaluationSuite } from '../src/eval.mjs';
@@ -149,6 +149,38 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
   const original = await readFile(path.join(taskDir, 'repo', 'demo.txt'), 'utf8');
   assert.equal(original, 'old\n', 'the agent must only modify the disposable workspace');
   assert.equal(requests, 2);
+});
+
+
+test('eval suite rejects symlinked task files and patches that target secrets', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+
+  const linkedTask = await createFixtureTask(tasksDir, 'linked-task');
+  const externalPatch = path.join(tmp, 'external.patch');
+  await writeFile(externalPatch, 'this must not be read as a task patch\n');
+  await rm(path.join(linkedTask, 'reference.patch'));
+  await symlink(externalPatch, path.join(linkedTask, 'reference.patch'));
+  const linkedReport = await validateEvaluationSuite({ tasksDir, env: { ...process.env } });
+  assert.equal(linkedReport.ok, false);
+  assert.match(linkedReport.results.find((item) => item.id === 'linked-task').error, /reference.patch must be a regular file/);
+
+  const secretTaskDir = path.join(tasksDir, 'secret-patch-task');
+  await createFixtureTask(tasksDir, 'secret-patch-task');
+  await writeFile(path.join(secretTaskDir, 'reference.patch'), [
+    'diff --git a/.env b/.env',
+    'new file mode 100644',
+    '--- /dev/null',
+    '+++ b/.env',
+    '@@ -0,0 +1 @@',
+    '+PRIVATE_TOKEN=not-a-real-secret',
+    ''
+  ].join('\n'));
+  const secretReport = await validateEvaluationSuite({ tasksDir, env: { ...process.env } });
+  assert.equal(secretReport.ok, false);
+  assert.match(secretReport.results.find((item) => item.id === 'secret-patch-task').error, /unsafe or sensitive file path/);
 });
 
 test('eval command refuses model execution unless explicitly approved', async () => {
