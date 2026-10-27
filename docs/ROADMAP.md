@@ -37,7 +37,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Run CI on the default branch and fix all failures.
 - Exercise install/update on Linux, macOS, Windows, and Android/Termux.
-- **Progress:** a Linux Chromium smoke test now exercises the real browser app's authenticated connection and chat flow against a fixture provider in CI. Broader critical-path UI coverage, accessibility review, and cross-platform browser testing remain open.
+- **Progress:** a Linux Chromium smoke test exercises authenticated browser chat against a fixture provider, including a real write/read tool cycle and verification of the resulting workspace file. Broader critical-path UI coverage, approval/cancellation flows, accessibility review, and cross-platform browser testing remain open.
 - Improve error recovery for package-manager failures and models without tool-calling support.
 - Publish versioned releases only after successful builds and installation tests.
 

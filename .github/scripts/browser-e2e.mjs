@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startOasisWebServer } from '../../src/web.mjs';
@@ -17,16 +17,58 @@ let app;
 let browser;
 
 try {
+  let completionCalls = 0;
   providerServer = createServer(async (req, res) => {
-    for await (const _chunk of req) {}
+    let raw = '';
+    for await (const chunk of req) raw += chunk.toString('utf8');
+    const request = JSON.parse(raw || '{}');
+    completionCalls++;
+    console.log('Browser E2E fixture provider request ' + completionCalls + ' (' +
+      (Array.isArray(request.messages) ? request.messages.length : 0) + ' messages)');
+
+    // Keep the fixture deterministic: first create a file, then read it, then report.
+    let assistantMessage;
+    let finishReason = 'tool_calls';
+    if (completionCalls === 1) {
+      assistantMessage = {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_browser_e2e_write',
+          type: 'function',
+          function: {
+            name: 'write_file',
+            arguments: JSON.stringify({
+              path: 'browser-e2e-output.txt',
+              content: 'Created by the authenticated browser agent tool cycle.\n'
+            })
+          }
+        }]
+      };
+    } else if (completionCalls === 2) {
+      assistantMessage = {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_browser_e2e_read',
+          type: 'function',
+          function: {
+            name: 'read_file',
+            arguments: JSON.stringify({ path: 'browser-e2e-output.txt' })
+          }
+        }]
+      };
+    } else {
+      finishReason = 'stop';
+      assistantMessage = {
+        role: 'assistant',
+        content: 'Browser end-to-end fixture completed successfully. The agent wrote and read back a workspace file.'
+      };
+    }
+
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: 'Browser end-to-end fixture completed successfully.'
-        }
-      }],
+      choices: [{ message: assistantMessage, finish_reason: finishReason }],
       usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 }
     }));
   });
@@ -67,15 +109,30 @@ try {
 
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
-  await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
-    .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
-  null, { timeout: timeoutMs });
+  try {
+    await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
+      .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
+    null, { timeout: timeoutMs });
+  } catch (error) {
+    const messages = await page.locator('#agentMessages').innerText().catch(() => '[messages unavailable]');
+    throw new Error(String(error && error.message || error) +
+      '; fixture provider calls=' + completionCalls +
+      '; runtime state=' + await page.locator('#agentRuntimeState').innerText().catch(() => '[state unavailable]') +
+      '; chat messages=' + JSON.stringify(messages) +
+      '; page errors=' + JSON.stringify(pageErrors));
+  }
 
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
+  assert.equal(completionCalls, 3, 'The agent should write the file, read it back, and then produce a final answer.');
+  assert.equal(
+    await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
+    'Created by the authenticated browser agent tool cycle.\n',
+    'The browser request should result in a real workspace file write.'
+  );
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
-  console.log('PASS browser E2E: app loaded, token connection succeeded, prompt reached the runtime, model reply rendered.');
+  console.log('PASS browser E2E: app loaded, token connection succeeded, write/read tools ran, workspace change verified, final reply rendered.');
   await context.close();
 } finally {
   if (browser) await browser.close().catch(() => {});
