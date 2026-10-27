@@ -1,43 +1,49 @@
 # Oasis OSS roadmap
 
-This roadmap separates working behavior from ideas that need design and implementation. Items are not shipped simply because they appear here.
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here.
 
-## Shipped in the initial foundation
+## Shipped foundations
 
-- Responsive static dashboard
-- Project creation, filtering, progress, completion/reopen, and removal
-- Task creation, completion, priorities, search, and deletion
-- Local working notes and word count
-- Browser-local persistence
-- JSON backup/export and import/restore
-- Light/dark theme toggle
-- PWA manifest, branded SVG icon, and service-worker app-shell caching
-- Static integrity check and GitHub Actions workflows
-- Privacy, architecture, contribution, and license documentation
+- Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
+- Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
+- OpenAI-compatible multi-step tool-calling loop.
+- Bounded project file listing/search/read/write/delete tools with workspace and secret-path protections.
+- Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
+- Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
+- Public documentation fetch with URL checks, redirect handling, and size limits.
+- User-level provider configuration, environment setup diagnostics, built-in skills, project instructions, file snapshots, and snapshot restore.
+- CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
 
-## Next milestones
+## Milestone 1 — make the CLI release-quality
 
-### 1. Browser-quality pass
-- Add automated browser tests for navigation, project/task flows, note saving, and backup/import.
-- Test across mobile Chrome/Safari and desktop Chromium/Firefox.
-- Improve recovery messaging for browser storage quotas and malformed backups.
-- Review keyboard navigation, screen-reader semantics, and color contrast.
+- Run CI on the default branch and fix all failures.
+- Exercise install/update on Linux, macOS, Windows, and Android/Termux.
+- Add end-to-end UI/browser tests and accessibility review.
+- Improve error recovery for package-manager failures and models without tool-calling support.
+- Publish versioned releases only after successful builds and installation tests.
 
-### 2. Product definition
-- Confirm Oasis's long-term purpose and target audience before building deeper subsystems.
-- Define a stable workspace schema and a migration strategy.
-- Collect feedback on the smallest useful end-to-end workflow.
+## Milestone 2 — provider and tool ecosystem
 
-### 3. Optional integrations
-- Evaluate GitHub repository linking as an opt-in read-only integration first.
-- Define explicit consent, token handling, and permissions before any write-capable integration.
-- Consider sync only after a privacy model, conflict strategy, and export path are documented.
+- Implement and test native provider adapters (including Anthropic's native Messages API).
+- Add optional MCP server support with explicit server trust and per-tool permissions.
+- Add streaming responses and robust context compaction/session resume.
+- Add skills discovery, installation from trusted sources, versioning, and supply-chain review.
+- Design a provider/model capability probe and clearer setup diagnostics.
 
-### 4. Release readiness
-- Add real browser end-to-end tests and accessibility checks.
-- Verify Pages deployment and publish a first release only after CI passes.
-- Add versioning and migration tests for future schema changes.
+## Milestone 3 — agent strength
 
-## Deliberately not promised
+- Add planning and verification stages with explicit task checklists and regression-oriented tests.
+- Add narrow specialist agents for review/testing/research, with bounded concurrency and shared task state.
+- Add persistent sessions, structured event logs, undo/revert workflows, and safer patch-based editing.
+- Add language/toolchain diagnostics (LSP where available) and workspace-specific policy rules.
 
-Cloud synchronization, user accounts, an AI assistant, GitHub write access, mobile binaries, and hosted collaboration are not part of the current implementation. They require product decisions, architecture, security review, and working tests before being represented as available.
+## Milestone 4 — sandboxing and integrations
+
+- Add a real isolation layer for unattended code execution; permission prompts alone are not a sandbox.
+- Define secure MCP and GitHub integrations, explicit scopes, secret management, audit logs, and recovery.
+- Establish a well-tested install/bootstrap flow for supported platforms.
+- Connect browser workspace data to the CLI only after a local API and authentication boundary are designed.
+
+## Deliberate non-claims
+
+Oasis is not yet at Claude Code feature parity. The current release foundation does not have native Anthropic API support, MCP, session persistence, streaming, multi-agent orchestration, or OS-level sandboxing. Those are substantial milestones, not just cosmetic additions.
