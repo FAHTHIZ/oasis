@@ -15,7 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
-import { inspectGitHubExtension, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,6 +47,7 @@ function printHelp() {
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
     '  oasis extensions list         List imported GitHub agent/skill collections',
     '  oasis extensions inspect URL  Review importable prompts and pinned commit',
+    '  oasis extensions mcp-import URL [--servers name1,name2]  Import reviewed MCP configs disabled',
     '  oasis extensions install URL --scope both   Import prompts into Oasis + project',
     '  oasis extensions remove NAME --scope project Remove an unmodified import',
     '  oasis backups                 List snapshots made before file changes',
@@ -548,9 +549,15 @@ async function manageExternalExtensions(root, args, autoApprove) {
   const values = [...args];
   const action = String(values.shift() || 'list').toLowerCase();
   let scope = 'project';
+  let selectedServerNames = null;
   const positional = [];
   for (let i = 0; i < values.length; i++) {
-    if (values[i] === '--scope') {
+    if (values[i] === '--servers') {
+      if (!values[i + 1]) throw new Error('--servers requires a comma-separated list of MCP server names.');
+      selectedServerNames = values[++i].split(',').map((name) => name.trim()).filter(Boolean);
+    } else if (values[i].startsWith('--servers=')) {
+      selectedServerNames = values[i].slice('--servers='.length).split(',').map((name) => name.trim()).filter(Boolean);
+    } else if (values[i] === '--scope') {
       if (!values[i + 1]) throw new Error('--scope requires self, project, or both.');
       scope = values[++i];
     } else if (values[i].startsWith('--scope=')) {
@@ -588,6 +595,43 @@ async function manageExternalExtensions(root, args, autoApprove) {
     }
     stdout.write('\nSample of prompt paths:\n');
     for (const file of report.files.slice(0, 30)) stdout.write('  ' + file.path + '\n');
+    return;
+  }
+  if (action === 'mcp-import') {
+    const url = positional[0];
+    if (!url) throw new Error('Usage: oasis extensions mcp-import https://github.com/owner/repository [--servers name1,name2]');
+    const plan = await inspectGitHubMcpServers(url);
+    stdout.write('MCP import review for ' + plan.repository + '\nCommit: ' + plan.commitSha + '\nSource files: ' + (plan.sourceFiles.join(', ') || 'none') + '\n\n');
+    for (const server of plan.servers) {
+      stdout.write('  ' + server.name + ' — ' + server.command + ' ' + JSON.stringify(server.args) + '\n');
+      stdout.write('    State: disabled on import; environment values are not copied.' + (server.sourceEnvKeys.length ? ' Declared environment keys: ' + server.sourceEnvKeys.join(', ') : '') + '\n');
+    }
+    for (const skipped of plan.skipped) stdout.write('  Skipped ' + (skipped.name || skipped.sourcePath) + ': ' + skipped.reason + '\n');
+    if (!plan.servers.length) { stdout.write('No supported local stdio MCP server declarations were found. Nothing was changed.\n'); return; }
+    const selected = selectedServerNames
+      ? plan.servers.filter((server) => selectedServerNames.includes(server.name))
+      : plan.servers;
+    if (!selected.length || (selectedServerNames && selected.length !== new Set(selectedServerNames).size)) {
+      throw new Error('The --servers selection did not match available proposals. Choose names printed in the review above.');
+    }
+    if (selectedServerNames && selectedServerNames.some((name) => !selected.some((server) => server.name === name))) {
+      throw new Error('One or more --servers names were not in the reviewed proposal.');
+    }
+    const existing = await loadMcpServers();
+    const existingNames = new Set(existing.servers.map((server) => server.name));
+    const collisions = selected.filter((server) => existingNames.has(server.name)).map((server) => server.name);
+    if (collisions.length) throw new Error('MCP server names already configured: ' + collisions.join(', ') + '. Rename or remove them before importing.');
+    if (existing.servers.length + selected.length > 40) throw new Error('The configured MCP server limit would be exceeded.');
+    const approved = await approve(
+      'Save ' + selected.length + ' MCP server configuration(s) from ' + plan.repository + ' at commit ' + plan.commitSha +
+      '? They will be saved disabled; no process will start, and no environment values will be copied.',
+      false,
+      autoApprove
+    );
+    if (!approved) { stdout.write('MCP import cancelled; no configuration was changed.\n'); return; }
+    const proposed = selected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false }));
+    await saveMcpServers([...existing.servers, ...proposed]);
+    stdout.write('Imported ' + proposed.length + ' MCP configuration(s). All remain disabled; review environment variables, then enable trusted servers separately.\n');
     return;
   }
   if (action === 'install') {
