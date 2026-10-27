@@ -353,7 +353,7 @@ async function runInstallPlan(plan, options) {
 
 
 const OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128/v1';
-const OMNIROUTE_DASHBOARD_URL = 'http://127.0.0.1:20128/dashboard';
+const OMNIROUTE_DASHBOARD_URL = 'http://127.0.0.1:20128/';
 const VERCEL_SKILLS_PACKAGE = 'skills@1.7.4';
 
 function providerEnvironmentOverridesActive(env) {
