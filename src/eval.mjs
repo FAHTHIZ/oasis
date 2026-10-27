@@ -80,6 +80,17 @@ async function assertTaskShape(taskDir) {
   const verifierSh = path.join(taskDir, 'verify.sh');
   const info = await lstat(repoDir).catch(() => null);
   if (!info || !info.isDirectory() || info.isSymbolicLink()) throw new Error(id + ': missing repo/ directory');
+  let snapshotDir = repoDir;
+  const markerPath = path.join(repoDir, 'BASE_SNAPSHOT');
+  const markerInfo = await lstat(markerPath).catch(() => null);
+  if (markerInfo) {
+    if (!markerInfo.isFile() || markerInfo.isSymbolicLink()) throw new Error(id + ': repository snapshot pointer must be a regular file');
+    const snapshotId = (await readFile(markerPath, 'utf8')).trim();
+    if (!safeId(snapshotId) || snapshotId !== 'oasis-main') throw new Error(id + ': unknown shared repository snapshot');
+    snapshotDir = path.join(APP_ROOT, 'evals', 'snapshots', snapshotId);
+    const snapshotInfo = await lstat(snapshotDir).catch(() => null);
+    if (!snapshotInfo || !snapshotInfo.isDirectory() || snapshotInfo.isSymbolicLink()) throw new Error(id + ': shared repository snapshot is missing');
+  }
   const taskInfo = await lstat(taskPath).catch(() => null);
   if (!taskInfo || !taskInfo.isFile() || taskInfo.isSymbolicLink()) throw new Error(id + ': task.md must be a regular file');
   if (taskInfo.size > 30000) throw new Error(id + ': task.md is larger than 30 KB');
@@ -107,7 +118,7 @@ async function assertTaskShape(taskDir) {
       throw new Error(id + ': reference.patch contains an unsafe or sensitive file path');
     }
   }
-  return { id, taskDir, repoDir, taskPath, taskText, patchPath, verifierPath };
+  return { id, taskDir, repoDir: snapshotDir, taskPath, taskText, patchPath, verifierPath };
 }
 
 async function listTaskDirectories(tasksDir = DEFAULT_TASKS_DIR) {
