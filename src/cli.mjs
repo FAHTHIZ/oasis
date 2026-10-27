@@ -434,7 +434,11 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       },
       onText: (text) => stdout.write('\nOasis> ' + text + '\n')
     });
-    if (!result.finished) stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+    if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
+      stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
+    } else if (!result.finished) {
+      stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+    }
   } catch (error) {
     stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
   }
