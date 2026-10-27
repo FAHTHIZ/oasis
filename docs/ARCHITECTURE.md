@@ -10,6 +10,7 @@ Oasis has a local-first browser workspace and a separate terminal agent runtime.
 - src/tools.mjs exposes file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching.
 - \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
 - \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
+- src/eval.mjs runs reference tasks in disposable copies, captures token/time/cost estimates, and stores JSON results. evals/tasks/<id>/ keeps the task prompt, pre-change snapshot, patch, and verifier outside the agent's workspace.
 - skills/*/SKILL.md contains bundled workflow guidance. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. Workspace skills live under .oasis/skills/<name>/SKILL.md.
 - Project context can come from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and \`.oasis/skills\`.
 
@@ -33,9 +34,11 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 - \`scripts/check-site.mjs\`: validates interface anchors, inline JavaScript syntax, and PWA assets.
 - \`test/runtime.test.mjs\`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
+- test/eval.test.mjs covers task validation and a model run against a local OpenAI-compatible fixture server.
 - \`.github/workflows/quality.yml\`: runs the checks and package dry-run for pushes and pull requests.
+- The quality gate also runs oasis eval --validate to ensure each reference patch turns a failing no-op verifier into a passing verification.
 - \`.github/workflows/pages.yml\`: checks the repository and deploys the static site when GitHub Pages is configured.
 
 ## Current architectural gaps
 
-OS-level container isolation, robust context compaction, streamed model output, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
+OS-level container isolation, model-written context summaries, streamed model output, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
