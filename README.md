@@ -62,7 +62,7 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 
 ### Terminal agent
 - Interactive sessions and one-shot plain-English tasks.
-- Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops.
+- Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops, with incremental text streaming in the browser and a JSON-response fallback for gateways that do not stream.
 - Optional MCP stdio server integration with explicit configuration and approval for each external tool call.
 - Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
 - Command execution through an executable plus argument array, without shell expansion.

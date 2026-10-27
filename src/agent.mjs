@@ -311,6 +311,163 @@ function responseText(output) {
 }
 
 
+
+const MAX_PROVIDER_STREAM_BYTES = 8 * 1024 * 1024;
+
+async function consumeServerSentEvents(response, onEvent) {
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    throw new Error('The provider announced streaming but returned no readable event stream.');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let eventName = '';
+  let dataLines = [];
+  let receivedBytes = 0;
+  const dispatch = () => {
+    if (dataLines.length) onEvent({ event: eventName, data: dataLines.join('\n') });
+    eventName = '';
+    dataLines = [];
+  };
+  const processLine = (rawLine) => {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (!line) { dispatch(); return; }
+    if (line.startsWith(':')) return;
+    const colon = line.indexOf(':');
+    const field = colon < 0 ? line : line.slice(0, colon);
+    const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '');
+    if (field === 'event') eventName = value;
+    else if (field === 'data') dataLines.push(value);
+  };
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      receivedBytes += chunk.value.byteLength;
+      if (receivedBytes > MAX_PROVIDER_STREAM_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new Error('The model provider stream exceeded Oasis’s 8 MiB response limit.');
+      }
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let newline;
+      while ((newline = buffer.indexOf('\n')) >= 0) {
+        processLine(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer) processLine(buffer);
+    dispatch();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function parseProviderEvent(raw) {
+  try { return JSON.parse(raw); }
+  catch { throw new Error('The model provider sent an invalid server-sent event payload.'); }
+}
+
+async function readProviderStream(response, protocol, onDelta) {
+  if (protocol === 'anthropic') {
+    const blocks = new Map();
+    const usage = { input_tokens: 0, output_tokens: 0 };
+    let messageId;
+    let model;
+    let stopReason;
+    await consumeServerSentEvents(response, ({ data }) => {
+      if (data === '[DONE]') return;
+      const event = parseProviderEvent(data);
+      const type = event.type || '';
+      if (type === 'error' || type === 'message_error') {
+        throw new Error(String(event.error && event.error.message || event.message || 'The Anthropic stream failed.'));
+      }
+      if (type === 'message_start') {
+        const message = event.message || {};
+        messageId = message.id;
+        model = message.model;
+        if (message.usage) usage.input_tokens = Number(message.usage.input_tokens || 0);
+      } else if (type === 'content_block_start') {
+        const block = { ...(event.content_block || {}), partialJson: '' };
+        if (block.type === 'text') block.text = String(block.text || '');
+        blocks.set(Number(event.index || 0), block);
+      } else if (type === 'content_block_delta') {
+        const block = blocks.get(Number(event.index || 0));
+        const delta = event.delta || {};
+        if (!block) return;
+        if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+          block.text = String(block.text || '') + delta.text;
+          onDelta(delta.text);
+        } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+          block.partialJson += delta.partial_json;
+        }
+      } else if (type === 'message_delta') {
+        if (event.delta) stopReason = event.delta.stop_reason || stopReason;
+        if (event.usage) usage.output_tokens = Number(event.usage.output_tokens || usage.output_tokens);
+      }
+    });
+    const content = [...blocks.entries()].sort((a, b) => a[0] - b[0]).map(([, block]) => {
+      const normalized = { ...block };
+      delete normalized.partialJson;
+      if (block.type === 'tool_use') {
+        if (block.partialJson) {
+          try { normalized.input = JSON.parse(block.partialJson); }
+          catch { throw new Error('The Anthropic stream returned incomplete JSON for a tool call.'); }
+        } else if (!normalized.input || typeof normalized.input !== 'object') normalized.input = {};
+      }
+      return normalized;
+    });
+    return { id: messageId, type: 'message', role: 'assistant', model, content, stop_reason: stopReason, usage };
+  }
+
+  if (protocol === 'openai-responses') {
+    let finalResponse = null;
+    await consumeServerSentEvents(response, ({ data, event: eventName }) => {
+      if (data === '[DONE]') return;
+      const event = parseProviderEvent(data);
+      const type = event.type || eventName || '';
+      if (type === 'response.output_text.delta' && typeof event.delta === 'string') {
+        onDelta(event.delta);
+      } else if (type === 'response.completed' || type === 'response.incomplete') {
+        finalResponse = event.response || event;
+      } else if (type === 'response.failed' || type === 'error') {
+        const detail = event.response && event.response.error && event.response.error.message || event.error && event.error.message || event.message;
+        throw new Error(String(detail || 'The Responses API stream failed.'));
+      }
+    });
+    if (!finalResponse) throw new Error('The Responses API stream ended without a completed response event.');
+    return finalResponse;
+  }
+
+  let content = '';
+  const calls = new Map();
+  let usage = {};
+  await consumeServerSentEvents(response, ({ data }) => {
+    if (data === '[DONE]') return;
+    const event = parseProviderEvent(data);
+    if (event.error) throw new Error(String(event.error.message || 'The chat-completions stream failed.'));
+    if (event.usage) usage = event.usage;
+    for (const choice of Array.isArray(event.choices) ? event.choices : []) {
+      const delta = choice.delta || {};
+      if (typeof delta.content === 'string') {
+        content += delta.content;
+        onDelta(delta.content);
+      }
+      for (const part of Array.isArray(delta.tool_calls) ? delta.tool_calls : []) {
+        const index = Number(part.index || 0);
+        const tool = calls.get(index) || { id: 'stream-tool-' + index, type: 'function', function: { name: '', arguments: '' } };
+        if (part.id) tool.id = part.id;
+        if (part.type) tool.type = part.type;
+        if (part.function && typeof part.function.name === 'string') tool.function.name += part.function.name;
+        if (part.function && typeof part.function.arguments === 'string') tool.function.arguments += part.function.arguments;
+        calls.set(index, tool);
+      }
+    }
+  });
+  const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call);
+  return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) } }], usage };
+}
+
 async function requestCompletion(session, options = {}) {
   const config = session.config;
   const nativeAnthropic = config.protocol === 'anthropic';
@@ -332,6 +489,7 @@ async function requestCompletion(session, options = {}) {
     bodyObject = {
       model: config.model,
       max_tokens: 8192,
+      ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       system: converted.system,
       messages: converted.messages,
       ...(availableTools.length ? { tools: availableTools.map((tool) => ({
@@ -356,6 +514,7 @@ async function requestCompletion(session, options = {}) {
       })), tool_choice: 'auto' } : {}),
       parallel_tool_calls: false,
       max_output_tokens: 8192,
+      ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // The runtime owns state and replays response items locally, including reasoning items.
       store: false
     };
@@ -364,7 +523,8 @@ async function requestCompletion(session, options = {}) {
     bodyObject = {
       model: config.model,
       messages: session.messages,
-      ...(availableTools.length ? { tools: availableTools, tool_choice: 'auto', parallel_tool_calls: false } : {})
+      ...(availableTools.length ? { tools: availableTools, tool_choice: 'auto', parallel_tool_calls: false } : {}),
+      ...(typeof options.onDelta === 'function' ? { stream: true } : {})
     };
   }
 
@@ -377,11 +537,19 @@ async function requestCompletion(session, options = {}) {
       signal: controller.signal,
       body: JSON.stringify(bodyObject)
     });
-    const body = await response.text();
-    if (!response.ok) throw new Error(formatApiError(response.status, body, config.protocol));
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(formatApiError(response.status, errorBody, config.protocol));
+    }
+    const contentType = response.headers.get('content-type') || '';
+    const streamed = Boolean(typeof options.onDelta === 'function' && /text\\/event-stream/i.test(contentType));
     let data;
-    try { data = JSON.parse(body); } catch {
-      throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.');
+    if (streamed) data = await readProviderStream(response, config.protocol, options.onDelta);
+    else {
+      const body = await response.text();
+      try { data = JSON.parse(body); } catch {
+        throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.');
+      }
     }
     if (nativeAnthropic) {
       if (!Array.isArray(data.content)) throw new Error('The Anthropic provider returned no content blocks.');
@@ -391,6 +559,7 @@ async function requestCompletion(session, options = {}) {
         type: 'function',
         function: { name: block.name, arguments: JSON.stringify(block.input || {}) }
       }));
+      if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
       return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage) };
     }
     if (nativeResponses) {
@@ -404,10 +573,13 @@ async function requestCompletion(session, options = {}) {
         type: 'function',
         function: { name: item.name, arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {}) }
       }));
-      return { role: 'assistant', content: responseText(data.output), tool_calls: toolCalls, responseItems: data.output, usage: normalizeUsage(data.usage) };
+      const text = responseText(data.output);
+      if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
+      return { role: 'assistant', content: text, tool_calls: toolCalls, responseItems: data.output, usage: normalizeUsage(data.usage) };
     }
     const message = data.choices && data.choices[0] && data.choices[0].message;
     if (!message) throw new Error('The model provider returned no assistant message.');
+    if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     return { ...message, usage: normalizeUsage(data.usage) };
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('The model request timed out after 120 seconds.');
@@ -662,7 +834,13 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, nudgeUsed: false };
 
   for (let step = 0; step < maxSteps; step++) {
-    const assistant = await requestCompletion(session);
+    let streamedText = '';
+    const assistant = await requestCompletion(session, typeof options.onDelta === 'function' ? {
+      onDelta: (delta) => {
+        streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
+        options.onDelta(streamedText);
+      }
+    } : {});
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
     if (options.onUsage) options.onUsage({ ...usage, step: step + 1 });

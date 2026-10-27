@@ -897,3 +897,81 @@ test('specialist reviews run in an isolated read-only session and account for ne
   assert.ok(requests[2].body.messages.some((message) => message.role === 'user' && String(message.content).includes('Perform this bounded security-review review.')));
   assert.equal(await readFile(path.join(root, 'README.md'), 'utf8'), '# Fixture workspace\n\nThis project keeps review work read-only.\n');
 });
+
+
+for (const fixture of [
+  {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:1234/v1',
+    frames: [
+      { data: { choices: [{ index: 0, delta: { content: 'Hello ' } }] } },
+      { data: { choices: [{ index: 0, delta: { content: 'world' } }] } },
+      { data: '[DONE]' }
+    ]
+  },
+  {
+    protocol: 'anthropic',
+    baseURL: 'https://api.anthropic.com',
+    frames: [
+      { event: 'message_start', data: { type: 'message_start', message: { id: 'msg_fixture', model: 'fixture-model', usage: { input_tokens: 3, output_tokens: 0 } } } },
+      { event: 'content_block_start', data: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } } },
+      { event: 'content_block_delta', data: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello ' } } },
+      { event: 'content_block_delta', data: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'world' } } },
+      { event: 'message_delta', data: { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 2 } } },
+      { event: 'message_stop', data: { type: 'message_stop' } }
+    ]
+  },
+  {
+    protocol: 'openai-responses',
+    baseURL: 'http://127.0.0.1:1234/v1',
+    frames: [
+      { event: 'response.output_text.delta', data: { type: 'response.output_text.delta', delta: 'Hello ' } },
+      { event: 'response.output_text.delta', data: { type: 'response.output_text.delta', delta: 'world' } },
+      { event: 'response.completed', data: { type: 'response.completed', response: { id: 'resp_fixture', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello world' }] }], usage: { input_tokens: 4, output_tokens: 2 } } } }
+    ]
+  }
+]) {
+  test('streams assistant text through ' + fixture.protocol + ' provider sessions', async (t) => {
+    const tmp = await temporaryDirectory('oasis-stream-test-');
+    t.after(() => rm(tmp, { recursive: true, force: true }));
+    const originalFetch = globalThis.fetch;
+    let requestBody;
+    globalThis.fetch = async (_url, init = {}) => {
+      requestBody = JSON.parse(String(init.body || '{}'));
+      const stream = fixture.frames.map((frame) =>
+        (frame.event ? 'event: ' + frame.event + '\\n' : '') +
+        'data: ' + (typeof frame.data === 'string' ? frame.data : JSON.stringify(frame.data)) + '\\n\\n'
+      ).join('');
+      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' } });
+    };
+    t.after(() => { globalThis.fetch = originalFetch; });
+
+    const session = {
+      root: tmp,
+      config: {
+        protocol: fixture.protocol,
+        baseURL: fixture.baseURL,
+        model: 'fixture-model',
+        apiKey: '',
+        maxSteps: 4,
+        maxTokens: 100000,
+        maxCommandSeconds: 60
+      },
+      messages: [{ role: 'system', content: 'Return a concise greeting.' }],
+      toolDefinitions: [],
+      mcpClients: new Map(),
+      mcpToolMap: new Map(),
+      toolCallsThisSession: 0
+    };
+    const streamed = [];
+    let finalText = '';
+    const result = await runAgentTurn(session, 'Say hello.', {
+      onDelta: (text) => streamed.push(text),
+      onText: (text) => { finalText = text; }
+    });
+    assert.equal(requestBody.stream, true);
+    assert.deepEqual(streamed, ['Hello ', 'Hello world']);
+    assert.equal(result.text, 'Hello world');
+    assert.equal(finalText, 'Hello world');
+  });
+}

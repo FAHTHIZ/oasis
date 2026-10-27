@@ -187,6 +187,7 @@ export function createOasisWebServer(options = {}) {
           env,
           approval: (prompt) => approvalFor(job, prompt),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
+          onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
           onToolStart: ({ name }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100) }),
           onToolResult: ({ name, result: value }) => emit(job, 'tool_result', { name: String(name || 'tool').slice(0, 100), result: summarizeToolResult(value) }),
           onUsage: (usage) => emit(job, 'usage', usage)
