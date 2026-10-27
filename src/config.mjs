@@ -8,8 +8,8 @@ export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
 export function isNodeVersionSupported(version = process.versions.node) {
-  const major = Number.parseInt(String(version).split('.')[0], 10);
-  return Number.isInteger(major) && major >= 22;
+  const match = String(version).match(/^(\d+)(?:\.|$)/);
+  return Boolean(match && Number(match[1]) >= 22);
 }
 
 export function getConfigDirectory(env = process.env, home = os.homedir()) {
