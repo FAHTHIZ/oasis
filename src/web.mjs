@@ -10,7 +10,7 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -187,9 +187,14 @@ export function createOasisWebServer(options = {}) {
   }
 
   async function startAgentJob(input) {
-    const message = String(input.message || '').trim();
-    if (!message) throw Object.assign(new Error('Enter a task or question.'), { statusCode: 400 });
-    if (message.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
+    const incomingMessage = String(input.message || '').trim();
+    if (!incomingMessage) throw Object.assign(new Error('Enter a task or question.'), { statusCode: 400 });
+    if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
+    const importedCommand = incomingMessage.startsWith('/')
+      ? await resolveImportedSlashCommand(activeRoot, incomingMessage, { env })
+      : null;
+    const message = importedCommand ? importedCommand.prompt : incomingMessage;
+    if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
 
     let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId);
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });

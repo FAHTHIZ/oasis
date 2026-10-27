@@ -15,7 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -492,7 +492,22 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (text === '/clear') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
-    if (text.startsWith('/')) { stdout.write('Unknown command. Type /help.\n'); continue; }
+    if (text.startsWith('/')) {
+      try {
+        const imported = await resolveImportedSlashCommand(root, text, { env: process.env });
+        if (imported) {
+          stdout.write('Running imported command /' + imported.alias + ' from ' + imported.sourcePath + '.\n');
+          session = await runPrompt(imported.prompt, root, autoApprove, session, persistence);
+          persistence.resumeId = null;
+          continue;
+        }
+      } catch (error) {
+        stdout.write('Could not resolve imported command: ' + error.message + '\n');
+        continue;
+      }
+      stdout.write('Unknown command. Type /help or use oasis extensions list to view imported commands.\n');
+      continue;
+    }
     const direct = parseInstallIntent(text);
     if (direct) {
       try { await installRequest(direct, root, autoApprove); } catch (error) { stdout.write('Install request failed: ' + error.message + '\n'); }
@@ -595,6 +610,7 @@ async function manageExternalExtensions(root, args, autoApprove) {
     for (const item of data.extensions) {
       stdout.write(item.name + ' [' + item.scope + '] — ' + item.importedFiles + ' Markdown prompt(s)\n');
       stdout.write('  Source: ' + item.source + '\n  Commit: ' + item.commitSha + '\n  License: ' + item.license + '\n');
+      for (const command of item.commands || []) stdout.write('  Command: /' + command.alias + ' — ' + command.description + '\n');
     }
     return;
   }
@@ -609,6 +625,9 @@ async function manageExternalExtensions(root, args, autoApprove) {
     stdout.write('Importable Markdown prompts: ' + report.importCount + (report.limited ? ' (bounded selection)' : '') + '\n');
     stdout.write('Executable/source files detected (not imported): ' + report.executableFilesDetected + '\n');
     stdout.write('Policy: ' + report.executionPolicy + '\n');
+    stdout.write('\nImportable Markdown commands (registered as Oasis aliases after installation):\n');
+    for (const command of report.commands || []) stdout.write('  /' + command.alias + ' [' + command.sourceFormat + '] — ' + command.sourcePath + '\n');
+    if (!(report.commands || []).length) stdout.write('  None detected in supported Markdown command layouts.\n');
     stdout.write('\nNormalized adapter plan (detection does not activate features):\n');
     for (const adapter of report.compatibility.installPlan.adapters) {
       stdout.write('  ' + adapter.label + '\n');
