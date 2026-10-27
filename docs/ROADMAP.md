@@ -39,6 +39,15 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Milestone 2 — provider and tool ecosystem
 
+- **Current extension gap:** Oasis supports a safety-reviewed subset of native ecosystems, not drop-in compatibility with every plugin. Portable skills/resources, recognized Markdown command aliases, and disabled-first local stdio MCP proposals are supported; native hooks, scripts, dependency lifecycles, full command semantics, plugin UI, and all Codex/Gemini/Claude manifest features remain unsupported or inspect-only.
+- **Progress:** portable Agent Skills preserve bounded text references/assets and expose them through manifest-verified, traversal-safe read access; scripts remain inactive.
+- **Progress:** extension inspection now emits a versioned, normalized adapter/install plan for detected Claude Code, Codex, Gemini CLI, and portable Agent Skills layouts. Each capability is explicitly classified as supported, inspect-only, review-required, unsupported, or not detected. The CLI and browser show the plan before install approval.
+- **Progress:** recognized Markdown slash-command instructions from Claude Code plugin/command layouts can be imported as ordinary untrusted Oasis skill prompts. Oasis does not register native slash-command aliases, argument interpolation, or TOML command behavior; those remain inactive.
+- **Progress:** supported Markdown command files from Claude Code plugin/command paths and Gemini CLI command paths receive namespaced aliases such as `/acme-agent:review`. The CLI and browser resolve aliases into integrity-checked, untrusted prompt context; arguments are literal text, not shell expansion. Native slash-command argument conventions are only partially mapped; hooks and scripts stay inactive.
+- **Progress:** native MCP declarations from `.mcp.json`, `mcp.json`, `mcp-servers.json`, and `gemini-extension.json` are inspected into a bounded proposal. Only local stdio commands passing Oasis validation can be selected. The browser and CLI can import reviewed proposals, with the inspected commit rechecked after approval and duplicate names rejected; saved configurations are disabled, manifest environment values are not copied, and source repository/commit/manifest provenance is retained for auditability.
+- **Progress:** verified extension updates stage the new revision, refuse edited/missing/unexpected owned files, and preserve up to three prior verified revisions per scope. Rollback re-verifies the selected backup and swaps it in transactionally; the formerly active revision is retained as another backup.
+- **Next extension runtime work:** add richer native agent metadata adapters, permissioned lifecycle management, and encrypted secret/environment provisioning. Keep hooks and executable lifecycle actions inactive until sandboxing and audit logging are in place.
+
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
 - Add streaming responses and mid-turn compaction that can preserve active task/tool-call state safely.
@@ -58,7 +67,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
 - Establish a well-tested install/bootstrap flow for supported platforms.
 - Upgrade the argv-based command runner to a real interactive PTY and terminal emulator, with lifecycle controls and platform testing.
-- Add TLS or another encrypted transport for phone-to-computer use; the current HTTP bridge is for localhost or trusted private Wi-Fi only.
+- **Progress:** the web bridge supports HTTPS with a user-provided certificate/key pair, enforces TLS 1.2+, and refuses non-loopback plaintext listeners unless `--allow-insecure-lan` is explicitly used. Certificate provisioning, phone trust onboarding, and real-device security tests remain unfinished.
 - Share browser dashboard projects/tasks/notes with the selected repository workspace through a tested sync and conflict-resolution design.
 
 ## Deliberate non-claims

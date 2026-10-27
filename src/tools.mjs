@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
@@ -7,6 +9,8 @@ import { isIP } from 'node:net';
 import { snapshotFile } from './backups.mjs';
 import { planPackageInstall, normalizePackageName } from './installer.mjs';
 import { managePlugins } from './plugins.mjs';
+import { getConfigDirectory } from './config.mjs';
+import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
@@ -34,6 +38,9 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'edit_file', description: 'Make a precise edit to an existing text file by replacing an exact string. Prefer this over write_file for existing files. old_string must match exactly and be unique unless replace_all is true. The previous contents are snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path of an existing file' }, old_string: { type: 'string', description: 'Exact existing text to replace; must be non-empty' }, new_string: { type: 'string', description: 'Replacement text' }, replace_all: { type: 'boolean', description: 'Replace every occurrence instead of requiring a unique match' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' } }, required: ['name', 'path'] } } },
+  { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
@@ -240,40 +247,61 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   }
   const denied = commandSafety(command, args);
   if (denied) throw new Error(denied);
+  if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before approval or execution.' };
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(options.timeoutSeconds, 10) || 120));
   const approval = options.approval;
   if (!options.autoApprove) {
     const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.');
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
   }
+  if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
   const env = scrubEnvironment(options.env || process.env);
   return await new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let cancelled = false;
     let settled = false;
+    let killTimer = null;
     const child = spawn(command, args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const append = (target, chunk) => {
       if (target === 'stdout') stdout = (stdout + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
       else stderr = (stderr + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
     };
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (options.signal) options.signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      cancelled = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 1500);
+      killTimer.unref?.();
+    };
     child.stdout.on('data', (chunk) => append('stdout', chunk));
     child.stderr.on('data', (chunk) => append('stderr', chunk));
     const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, timeoutSeconds * 1000);
+    if (options.signal) {
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener('abort', onAbort, { once: true });
+    }
     child.on('error', (error) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut });
+      settled = true; cleanup();
+      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut });
+      settled = true; cleanup();
+      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut, cancelled });
     });
   });
 }
 
 async function runInstallPlan(plan, options) {
+  if (options.signal && options.signal.aborted) return { approved: false, cancelled: true, plan, message: 'Task was cancelled before installation started.' };
   if (!options.autoApprove) {
     const ok = options.approval && await options.approval(
       'Install package ' + plan.packageName + ' using ' + plan.command + ' ' + plan.args.map((arg) => JSON.stringify(arg)).join(' ') +
@@ -281,20 +309,39 @@ async function runInstallPlan(plan, options) {
     );
     if (!ok) return { approved: false, plan, message: 'Installation was not approved. Nothing was installed.' };
   }
+  if (options.signal && options.signal.aborted) return { approved: false, cancelled: true, plan, message: 'Task was cancelled before the package manager started.' };
   const env = scrubEnvironment(options.env || process.env);
   return await new Promise((resolve) => {
     let settled = false;
+    let cancelled = false;
+    let killTimer = null;
     const child = spawn(plan.command, plan.args, { cwd: options.root, env, shell: false, windowsHide: true, stdio: 'inherit' });
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (options.signal) options.signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      cancelled = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 1500);
+      killTimer.unref?.();
+    };
     const timer = setTimeout(() => { child.kill('SIGTERM'); }, 20 * 60 * 1000);
+    if (options.signal) {
+      if (options.signal.aborted) onAbort();
+      else options.signal.addEventListener('abort', onAbort, { once: true });
+    }
     child.on('error', (error) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ approved: true, plan, exitCode: null, error: error.message });
+      settled = true; cleanup();
+      resolve({ approved: true, cancelled, plan, exitCode: null, error: error.message });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
-      settled = true; clearTimeout(timer);
-      resolve({ approved: true, plan, exitCode: code, signal });
+      settled = true; cleanup();
+      resolve({ approved: true, cancelled, plan, exitCode: code, signal });
     });
   });
 }
@@ -377,7 +424,14 @@ function parseSkillMetadata(content, fallbackName) {
   return { name, description };
 }
 
-export async function listAvailableSkills(root) {
+function getUniversalGlobalSkillsDirectory(env = process.env) {
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
+  return path.join(configHome, 'agents', 'skills');
+}
+
+export async function listAvailableSkills(root, options = {}) {
+  const env = options.env || process.env;
   const byName = new Map();
   async function scan(directory, source, relativePrefix = '') {
     let entries;
@@ -387,34 +441,107 @@ export async function listAvailableSkills(root) {
       const filePath = path.join(directory, entry.name, 'SKILL.md');
       try {
         const info = await lstat(filePath);
-        if (!info.isFile() || info.isSymbolicLink() || info.size > 32 * 1024) continue;
+        const maxSkillBytes = ['portable-workspace', 'global-portable'].includes(source) ? 96 * 1024 : 32 * 1024;
+        if (!info.isFile() || info.isSymbolicLink() || info.size > maxSkillBytes) continue;
         const content = await readFile(filePath, 'utf8');
         if (content.includes('\0')) continue;
         const meta = parseSkillMetadata(content, entry.name);
+        const localSource = ['workspace', 'portable-workspace'].includes(source);
         const skill = {
           name: meta.name,
           description: meta.description,
           source,
-          relativePath: source === 'workspace' ? path.posix.join('.oasis', 'skills', entry.name, 'SKILL.md') : entry.name
+          directoryName: entry.name,
+          relativePath: localSource ? path.posix.join(relativePrefix, entry.name, 'SKILL.md') : entry.name,
+          relativeSkillDirectory: localSource ? path.posix.join(relativePrefix, entry.name) : undefined,
+          absolutePath: source === 'global-portable' ? filePath : undefined,
+          absoluteSkillDirectory: source === 'global-portable' ? path.join(directory, entry.name) : undefined
         };
         byName.set(meta.name.toLowerCase(), skill);
       } catch { /* Ignore incomplete or unsafe skill files. */ }
     }
   }
+  async function scanImportedExtensions(extensionRoot, source, workspaceRelative = '') {
+    let extensions;
+    try { extensions = await readdir(extensionRoot, { withFileTypes: true }); } catch { return; }
+    for (const extension of extensions.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).slice(0, 100)) {
+      if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(extension.name)) continue;
+      const extensionDirectory = path.join(extensionRoot, extension.name);
+      try {
+        const extensionInfo = await lstat(extensionDirectory);
+        if (!extensionInfo.isDirectory() || extensionInfo.isSymbolicLink()) continue;
+        const manifest = JSON.parse(await readFile(path.join(extensionDirectory, 'extension.json'), 'utf8'));
+        if (manifest.schemaVersion !== 1 || manifest.name !== extension.name || !Array.isArray(manifest.files)) continue;
+      } catch { continue; }
+      const skillsDirectory = path.join(extensionDirectory, 'skills');
+      let skillDirs;
+      try { skillDirs = await readdir(skillsDirectory, { withFileTypes: true }); } catch { continue; }
+      for (const skillDir of skillDirs.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).slice(0, 240)) {
+        if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skillDir.name)) continue;
+        const filePath = path.join(skillsDirectory, skillDir.name, 'SKILL.md');
+        try {
+          const info = await lstat(filePath);
+          if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) continue;
+          const content = await readFile(filePath, 'utf8');
+          if (content.includes('\0')) continue;
+          const meta = parseSkillMetadata(content, skillDir.name);
+          const relativePath = source === 'project-extension'
+            ? path.posix.join('.oasis', 'extensions', extension.name, 'skills', skillDir.name, 'SKILL.md')
+            : '';
+          byName.set(meta.name.toLowerCase(), {
+            name: meta.name,
+            description: meta.description,
+            source,
+            relativePath,
+            absolutePath: source === 'global-extension' ? filePath : undefined,
+            extensionName: extension.name,
+            absoluteExtensionDirectory: source === 'global-extension' ? extensionDirectory : undefined,
+            relativeExtensionDirectory: source === 'project-extension'
+              ? path.posix.join('.oasis', 'extensions', extension.name, 'skills', skillDir.name)
+              : undefined
+          });
+        } catch { /* Ignore untrusted or malformed prompt files. */ }
+      }
+    }
+  }
   await scan(BUNDLED_SKILLS_DIR, 'built-in');
-  await scan(path.join(root, '.oasis', 'skills'), 'workspace');
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 100);
+  await scanImportedExtensions(path.join(getConfigDirectory(env), 'extensions'), 'global-extension');
+  await scan(getUniversalGlobalSkillsDirectory(env), 'global-portable');
+  await scan(path.join(root, '.agents', 'skills'), 'portable-workspace', '.agents/skills');
+  await scan(path.join(root, '.oasis', 'skills'), 'workspace', '.oasis/skills');
+  await scanImportedExtensions(path.join(root, '.oasis', 'extensions'), 'project-extension', '.oasis/extensions');
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
 }
 
-export async function loadSkillText(root, rawName) {
+export async function loadSkillText(root, rawName, options = {}) {
   const name = String(rawName || '');
   if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
-  const skills = await listAvailableSkills(root);
+  const skills = await listAvailableSkills(root, options);
   const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
   if (!skill) throw new Error('No skill named "' + name + '" is available. Call list_skills to inspect valid names.');
   let content;
-  if (skill.source === 'workspace') {
+  if (skill.source === 'workspace' || skill.source === 'portable-workspace' || skill.source === 'project-extension') {
     content = (await readWorkspaceFile(root, skill.relativePath)).content;
+  } else if (skill.source === 'global-portable') {
+    const globalSkillsRoot = path.resolve(getUniversalGlobalSkillsDirectory(options.env || process.env));
+    const rootReal = await realpath(globalSkillsRoot);
+    const target = path.resolve(skill.absolutePath || '');
+    if (!inside(rootReal, target)) throw new Error('Portable global skill path is outside the universal skills directory.');
+    const info = await lstat(target);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Portable global skill is not a safe regular Markdown file.');
+    const targetReal = await realpath(target);
+    if (!inside(rootReal, targetReal)) throw new Error('Portable global skill resolves outside the universal skills directory.');
+    content = await readFile(targetReal, 'utf8');
+  } else if (skill.source === 'global-extension') {
+    const globalExtensionsRoot = path.resolve(getConfigDirectory(options.env || process.env), 'extensions');
+    const rootReal = await realpath(globalExtensionsRoot);
+    const target = path.resolve(skill.absolutePath || '');
+    if (!inside(rootReal, target)) throw new Error('Imported skill path is outside the managed global extension directory.');
+    const info = await lstat(target);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Imported skill is not a safe regular Markdown file.');
+    const targetReal = await realpath(target);
+    if (!inside(rootReal, targetReal)) throw new Error('Imported skill resolves outside the managed extension directory.');
+    content = await readFile(targetReal, 'utf8');
   } else {
     const target = path.resolve(BUNDLED_SKILLS_DIR, skill.relativePath, 'SKILL.md');
     if (!inside(BUNDLED_SKILLS_DIR, target)) throw new Error('Skill path is outside the bundled skill directory.');
@@ -426,10 +553,90 @@ export async function loadSkillText(root, rawName) {
   return { name: skill.name, source: skill.source, content: content.slice(0, 24000), truncated: content.length > 24000 };
 }
 
-export async function loadSkillDescriptions(root) {
-  const skills = await listAvailableSkills(root);
+
+export async function loadSkillResource(root, rawName, rawRelativePath, options = {}) {
+  const name = String(rawName || '');
+  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
+  const relativePath = String(rawRelativePath || '').replace(/\\/g, '/');
+  const parts = relativePath.split('/');
+  if (relativePath.startsWith('/') || parts.length < 2 || parts.some((part) => !part || part === '.' || part === '..') ||
+      !['references', 'assets'].includes(parts[0]) || !/\.(?:md|txt|json|ya?ml|toml|csv|xml)$/i.test(relativePath)) {
+    throw new Error('Skill resources must be text files inside references/ or assets/. Scripts and executable resources are not exposed.');
+  }
+  const workspaceRoot = path.resolve(root || process.cwd());
+  const skills = await listAvailableSkills(workspaceRoot, options);
+  const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  if (!skill) throw new Error('No installed external skill named "' + name + '" was found.');
+  if (['portable-workspace', 'global-portable'].includes(skill.source)) {
+    const safetyRoot = skill.source === 'global-portable'
+      ? path.resolve(getUniversalGlobalSkillsDirectory(options.env || process.env))
+      : workspaceRoot;
+    const skillDirectory = skill.source === 'global-portable'
+      ? path.resolve(skill.absoluteSkillDirectory || '')
+      : path.resolve(workspaceRoot, ...(String(skill.relativeSkillDirectory || '').split('/')));
+    if (!inside(safetyRoot, skillDirectory)) throw new Error('Portable skill resource directory is outside its permitted root.');
+    const safetyRootReal = await realpath(safetyRoot);
+    const skillInfo = await lstat(skillDirectory);
+    if (skillInfo.isSymbolicLink() || !skillInfo.isDirectory()) throw new Error('Portable skill directory is not a regular directory.');
+    const skillRootReal = await realpath(skillDirectory);
+    if (!inside(safetyRootReal, skillRootReal)) throw new Error('Portable skill directory resolves outside its permitted root.');
+    let target = skillDirectory;
+    for (const part of parts) {
+      target = path.join(target, part);
+      const info = await lstat(target);
+      if (info.isSymbolicLink()) throw new Error('Portable skill resources cannot resolve through symbolic links.');
+    }
+    const targetInfo = await lstat(target);
+    if (!targetInfo.isFile() || targetInfo.size > MAX_TEXT_FILE) throw new Error('The resource is not a regular text file within the allowed size.');
+    const targetReal = await realpath(target);
+    if (!inside(skillRootReal, targetReal)) throw new Error('Portable skill resource resolves outside its skill directory.');
+    const content = await readFile(targetReal, 'utf8');
+    if (content.includes('\0')) throw new Error('Skill resource is not valid text.');
+    return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
+  }
+  if (!['global-extension', 'project-extension'].includes(skill.source)) throw new Error('This skill does not expose managed portable resources.');
+  let extensionDirectory;
+  let safetyRoot;
+  if (skill.source === 'global-extension') {
+    extensionDirectory = path.resolve(skill.absoluteExtensionDirectory || '');
+    safetyRoot = path.resolve(getConfigDirectory(options.env || process.env), 'extensions');
+  } else {
+    extensionDirectory = path.resolve(workspaceRoot, ...(String(skill.relativeExtensionDirectory || '').split('/')));
+    safetyRoot = workspaceRoot;
+  }
+  if (!inside(safetyRoot, extensionDirectory)) throw new Error('Imported skill resource directory is outside its permitted extension root.');
+  const extensionDirectoryReal = await realpath(extensionDirectory);
+  const extensionInfo = await lstat(extensionDirectory);
+  if (extensionInfo.isSymbolicLink() || !extensionInfo.isDirectory()) throw new Error('Imported skill directory is not a regular directory.');
+  const extensionRoot = path.resolve(extensionDirectory, '..', '..');
+  const manifestPath = path.join(extensionRoot, 'extension.json');
+  const manifestInfo = await lstat(manifestPath);
+  if (manifestInfo.isSymbolicLink() || !manifestInfo.isFile()) throw new Error('The managed extension manifest is missing or unsafe.');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const relativeToExtension = path.posix.join('skills', path.basename(extensionDirectory), relativePath);
+  const record = Array.isArray(manifest.files) ? manifest.files.find((item) => item.path === relativeToExtension) : null;
+  if (!record || !/^[a-f0-9]{64}$/i.test(String(record.sha256 || ''))) throw new Error('That resource is not in the verified manifest for this skill.');
+  let target = extensionDirectory;
+  for (const part of parts) {
+    target = path.join(target, part);
+    const info = await lstat(target);
+    if (info.isSymbolicLink()) throw new Error('Skill resources cannot resolve through symbolic links.');
+  }
+  const targetInfo = await lstat(target);
+  if (!targetInfo.isFile() || targetInfo.size > MAX_TEXT_FILE) throw new Error('The resource is not a regular text file within the allowed size.');
+  const targetReal = await realpath(target);
+  if (!inside(extensionDirectoryReal, targetReal)) throw new Error('Skill resource resolved outside its extension package.');
+  const content = await readFile(targetReal, 'utf8');
+  if (content.includes('\0')) throw new Error('Skill resource is not valid text.');
+  const hash = createHash('sha256').update(content).digest('hex');
+  if (hash !== record.sha256) throw new Error('Skill resource integrity verification failed; inspect the extension before using it.');
+  return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
+}
+
+export async function loadSkillDescriptions(root, options = {}) {
+  const skills = await listAvailableSkills(root, options);
   if (!skills.length) return '';
-  return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 12000);
+  return skills.map((item) => '- ' + item.name + ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']: ' + item.description).join('\n').slice(0, 16000);
 }
 
 async function runReadOnlyGit(root, args) {
@@ -537,9 +744,28 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'search_files':
       return await searchWorkspaceFiles(root, args.query, args.limit);
     case 'list_skills':
-      return { skills: await listAvailableSkills(root) };
+      return { skills: await listAvailableSkills(root, { env: context.env || process.env }) };
     case 'load_skill':
-      return await loadSkillText(root, args.name);
+      return await loadSkillText(root, args.name, { env: context.env || process.env });
+    case 'read_skill_resource':
+      return await loadSkillResource(root, args.name, args.path, { env: context.env || process.env });
+    case 'install_extension': {
+      const url = String(args.url || '').trim();
+      const scope = String(args.scope || 'project');
+      if (!url || url.length > 800) throw new Error('Provide a GitHub repository URL no longer than 800 characters.');
+      if (!['self', 'project', 'both'].includes(scope)) throw new Error('Choose a valid extension installation scope.');
+      const inspected = await inspectGitHubExtension(url, { env: context.env || process.env });
+      if (!context.autoApprove && (!context.approval || !(await context.approval(
+        'Import ' + inspected.importCount + ' Markdown specialist prompt(s) from ' + inspected.repository.fullName +
+        ' at commit ' + inspected.repository.commitSha.slice(0, 12) + ' into scope "' + scope + '"? License: ' +
+        inspected.repository.license + '. ' + inspected.executableFilesDetected +
+        ' executable/source files were detected but will NOT be imported or run. No packages or MCP servers will be enabled.'
+      )))) {
+        return { installed: false, approved: false, repository: inspected.repository.fullName, message: 'Extension import was denied; no files were installed.' };
+      }
+      const result = await installGitHubExtension(url, { root, env: context.env || process.env, scope, expectedCommit: inspected.repository.commitSha });
+      return { ...result, message: 'Imported Markdown prompts only. Scripts were not executed, packages were not installed, and external services were not enabled.' };
+    }
     case 'install_plugin': {
       const name = String(args.name || '');
       if (!['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'].includes(name)) throw new Error('Choose a built-in bundle from oasis plugins list.');
@@ -606,12 +832,13 @@ export async function executeTool(name, args = {}, context = {}) {
         approval: context.approval,
         autoApprove: Boolean(context.autoApprove),
         timeoutSeconds: Math.min(args.timeoutSeconds || context.maxCommandSeconds || 120, context.maxCommandSeconds || 600),
-        env: context.env || process.env
+        env: context.env || process.env,
+        signal: context.signal
       });
     case 'install_package': {
       const name = normalizePackageName(args.packageName);
       const plan = planPackageInstall({ packageName: name, ecosystem: args.ecosystem || 'auto', workspaceRoot: root, env: context.env || process.env });
-      return await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env });
+      return await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env, signal: context.signal });
     }
     case 'fetch_url':
       return await fetchPublicUrl(args.url);
