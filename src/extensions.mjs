@@ -458,6 +458,7 @@ export async function installGitHubExtension(rawUrl, options = {}) {
     scope,
     destinations: stagedResults.map((item) => ({ scope: item.scope, path: item.path, importedFiles: item.importedFiles })),
     importedFiles: skills.length,
+    preservedResources: skills.reduce((total, skill) => total + (skill.resources || []).length, 0),
     scriptsExecuted: false,
     dependenciesInstalled: false,
     commitSha: snapshot.repository.commitSha,
