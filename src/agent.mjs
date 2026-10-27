@@ -497,7 +497,7 @@ async function requestCompletion(session, options = {}) {
         name: tool.function.name,
         description: tool.function.description,
         input_schema: tool.function.parameters
-      })), tool_choice: { type: 'auto' } } : {})
+      })), tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {})
     };
   } else if (nativeResponses) {
     endpoint = responsesEndpoint(config.baseURL);
@@ -512,7 +512,7 @@ async function requestCompletion(session, options = {}) {
         description: tool.function.description,
         parameters: tool.function.parameters,
         strict: false
-      })), tool_choice: 'auto' } : {}),
+      })), tool_choice: options.forceTool ? { type: 'function', name: options.forceTool } : 'auto' } : {}),
       parallel_tool_calls: false,
       max_output_tokens: 8192,
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
@@ -524,7 +524,7 @@ async function requestCompletion(session, options = {}) {
     bodyObject = {
       model: config.model,
       messages: session.messages,
-      ...(availableTools.length ? { tools: availableTools, tool_choice: 'auto', parallel_tool_calls: false } : {}),
+      ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {})
     };
   }
@@ -622,30 +622,51 @@ export async function testProviderConnection(rawConfig, options = {}) {
   const model = String(rawConfig.model || '').trim();
   const apiKey = String(rawConfig.apiKey || '');
   if (!model || model.length > 200) throw new Error('Enter a valid model name before testing the provider.');
+  const probeToolName = 'oasis_connection_probe';
   const config = { protocol, baseURL, model, apiKey };
   const session = {
     config,
-    toolDefinitions: [],
+    toolDefinitions: [{
+      type: 'function',
+      function: {
+        name: probeToolName,
+        description: 'A harmless connection-check tool. This tool is never executed; only return the ready boolean.',
+        parameters: {
+          type: 'object',
+          properties: { ready: { type: 'boolean' } },
+          required: ['ready'],
+          additionalProperties: false
+        }
+      }
+    }],
     messages: [
-      { role: 'system', content: 'You are performing a connectivity check. Do not use tools. Respond with one short plain-text confirmation.' },
-      { role: 'user', content: 'Reply with exactly: OASIS_CONNECTION_OK' }
+      { role: 'system', content: 'You are checking coding-agent compatibility. You must call the offered oasis_connection_probe function exactly once with ready set to true. Do not answer in normal text. The tool is inert and will not be executed.' },
+      { role: 'user', content: 'Call oasis_connection_probe with {"ready":true} now.' }
     ]
   };
   try {
     const response = await requestCompletion(session, {
-      noTools: true,
+      forceTool: probeToolName,
       signal: options.signal,
       timeoutMs: options.timeoutMs || 30000
     });
-    if (!String(response && response.content || '').trim()) {
-      throw new Error('The endpoint responded, but the selected model returned no assistant text. Check the model ID and API protocol.');
+    const toolCall = (Array.isArray(response && response.tool_calls) ? response.tool_calls : [])
+      .find((call) => call && call.function && call.function.name === probeToolName);
+    if (!toolCall) {
+      throw new Error('The model responded without calling the validation tool. Choose a model and provider endpoint that support tool calling.');
+    }
+    let args;
+    try { args = JSON.parse(String(toolCall.function.arguments || '{}')); }
+    catch { throw new Error('The model returned malformed arguments for the validation tool.'); }
+    if (!args || args.ready !== true) {
+      throw new Error('The model did not return the expected validation-tool arguments. Check model and provider compatibility.');
     }
     return {
       ok: true,
       protocol,
       provider: new URL(baseURL).host,
       model,
-      note: 'A real assistant response was received. No tools were offered or executed.'
+      note: 'A valid tool-call response was received. The inert validation tool was not executed.'
     };
   } catch (error) {
     let message = String(error && error.message || error);
