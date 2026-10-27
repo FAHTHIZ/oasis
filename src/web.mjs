@@ -463,9 +463,16 @@ export function createOasisWebServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
-      const protocol = validateProtocol(body.protocol);
-      const defaultBaseURL = protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1';
-      const baseURL = validateBaseUrl(String(body.baseURL || defaultBaseURL).trim());
+      let protocol;
+      let baseURL;
+      try {
+        protocol = validateProtocol(body.protocol);
+        const defaultBaseURL = protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1';
+        baseURL = validateBaseUrl(String(body.baseURL || defaultBaseURL).trim());
+      } catch (error) {
+        json(res, 400, { error: String(error && error.message || 'Invalid provider configuration.').slice(0, 1000) });
+        return;
+      }
       const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? 'gpt-6.1-sol' : '');
       const model = String(body.model || defaultModel).trim();
       const apiKey = String(body.apiKey || '').trim();
