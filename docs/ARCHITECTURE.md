@@ -1,34 +1,41 @@
 # Oasis OSS architecture
 
-## Current implementation
+Oasis has a local-first browser workspace and a separate terminal agent runtime.
 
-Oasis is a static, dependency-free web application. The index.html file contains the interface, styles, and client-side behavior. The app can be opened directly or served by any static web server. On HTTPS hosting, its web manifest and service worker add an installable app shell and offline cache for the static interface.
+## Terminal runtime
 
-### State
+- \`src/cli.mjs\` is the command-line entry point exposed by the \`oasis\` executable in \`package.json\`.
+- \`src/config.mjs\` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
+- \`src/agent.mjs\` implements a multi-step tool-calling loop against an OpenAI-compatible chat-completions API. It retains the current process's conversation and uses tool-call results as the next model input.
+- \`src/tools.mjs\` exposes file listing/search/read/write/delete, argv-only process execution, package installation, and bounded public-document fetching.
+- \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
+- \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
+- \`skills/*/SKILL.md\` contains bundled workflow guidance. Users can install a skill to \`.oasis/skills/<name>/SKILL.md\`; those files are loaded as project context in later sessions.
+- Project context can come from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and \`.oasis/skills\`.
 
-- projects: project identity, title, description, symbol, status, and creation date.
-- tasks: title, project association, priority, completion state, and creation date.
-- notes: a plain-text working note.
-- lastSaved: the last in-memory save timestamp.
+### Data and trust boundaries
 
-The whole state is serialized under the oasis.oss.workspace.v1 key in browser local storage. Theme preference uses oasis.oss.theme. Data is local to the browser profile; there is no sync or cloud recovery.
+Workspace file tools apply path traversal and symlink checks, block common credential-file patterns, and cap individual text-file sizes. A snapshot is created before overwriting an existing file. Deletion needs interactive approval. Shell interpreters and selected high-impact commands are denied by the general command tool; normal commands require approval unless automatic approval is deliberately enabled.
 
-### Backup/import
+Processes launch with an argument array and \`shell: false\`; common credential environment variables are filtered. The package installer is a separate, explicit side-effecting tool and its command plan is shown before approval. Public URL fetching checks host resolution for private addresses, rejects redirects, and limits content size.
 
-Export serializes the current workspace to a downloadable JSON document. Import checks the broad data shape, filters malformed project/task entries, and asks before replacing existing local state. Backups are user data and should not be committed to the repository.
+This is not an OS sandbox. An approved test, build, or project script can execute code with the current user's privileges. A local model endpoint may avoid sending prompts to a hosted provider, but that does not itself sandbox command execution.
 
-### Quality checks
+## Model provider interface
 
-scripts/check-site.mjs verifies key app anchors and parses the inline JavaScript. GitHub Actions runs it for pushes and pull requests and before Pages deployment. It is a smoke check, not a browser integration suite.
+The runtime expects an OpenAI-compatible \`/chat/completions\` endpoint with tool-calling support. Set \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`, or use \`oasis setup\`. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS. Native Anthropic Messages support is not implemented in this version.
 
-## Non-goals of this first implementation
+## Browser workspace
 
-The app does not currently connect to GitHub, remote APIs, AI providers, a hosted database, or other devices. There are no user accounts, encryption, multi-user collaboration, native app packaging, or cloud sync. The service worker caches the app shell only; it does not upload or back up user content. The UI and documentation intentionally do not imply these capabilities.
+The root \`index.html\` provides a dependency-free dashboard for projects, tasks, and notes. The browser stores workspace data in local storage and exports/imports JSON backups. The PWA manifest, SVG icon, and service worker support an installable app shell and static offline cache on compatible HTTPS hosts. Browser data is not encrypted and does not sync between devices.
 
-## Evolution principles
+## Quality gates
 
-1. Keep the workspace useful without an account or network connection.
-2. Preserve user control through visible backup and import flows.
-3. Add integrations as explicit optional adapters, not hidden assumptions.
-4. Do not introduce credential storage before a clear threat model and secure design.
-5. Keep shipped behavior, experimental behavior, and roadmap ideas clearly distinct.
+- \`scripts/check-site.mjs\`: validates interface anchors, inline JavaScript syntax, and PWA assets.
+- \`test/runtime.test.mjs\`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
+- \`.github/workflows/quality.yml\`: runs the checks and package dry-run for pushes and pull requests.
+- \`.github/workflows/pages.yml\`: checks the repository and deploys the static site when GitHub Pages is configured.
+
+## Current architectural gaps
+
+Native Anthropic API support, MCP server integration, container isolation, persistent sessions, streamed model output, parallel tool execution, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
