@@ -52,6 +52,7 @@ oasis skills list
 oasis skills install debugging
 oasis plugins list
 oasis plugins install code-quality
+# Other reviewed bundles include mobile-development, web-app-development, api-development, and security-review.
 oasis mcp list
 ~~~
 
@@ -67,7 +68,7 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Command execution through an executable plus argument array, without shell expansion.
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
-- Bundled skills for debugging, code review, testing, environment setup, and shipping features.
+- Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
 - A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
 - Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
