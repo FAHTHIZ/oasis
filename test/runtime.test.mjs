@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/config.mjs';
+import { loadConfig, saveConfig, validateBaseUrl, getConfigPath, isNodeVersionSupported } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { TOOL_DEFINITIONS, executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
@@ -22,6 +22,17 @@ test('configuration validates HTTPS provider URLs and permits loopback HTTP', ()
   assert.throws(() => validateBaseUrl('ftp://api.example.com/v1'), /HTTP and HTTPS/);
   assert.throws(() => validateBaseUrl('http://api.example.com/v1'), /must use HTTPS/);
   assert.throws(() => validateBaseUrl('https://user:pass@api.example.com/v1'), /must not include credentials/);
+});
+
+
+test('Node support diagnostics match the package engine requirement', () => {
+  for (const version of ['20.19.0', '21.9.0', '21', 'v22.1.0', '22beta', 'latest', '']) {
+    assert.equal(isNodeVersionSupported(version), false, 'should reject ' + JSON.stringify(version));
+  }
+  for (const version of ['22', '22.0.0', '22.20.0', '24.2.0', '26.0.1']) {
+    assert.equal(isNodeVersionSupported(version), true, 'should accept ' + JSON.stringify(version));
+  }
+  assert.equal(isNodeVersionSupported(), Number(process.versions.node.split('.')[0]) >= 22);
 });
 
 test('configuration is written outside the project and its API key is not included in summaries', async (t) => {
