@@ -7,6 +7,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - OpenAI-compatible and native Anthropic multi-step tool-calling loops.
+- MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
 - Bounded project file listing/search/read/write/delete tools with workspace and secret-path protections.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
@@ -25,7 +26,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 ## Milestone 2 — provider and tool ecosystem
 
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
-- Add optional MCP server support with explicit server trust and per-tool permissions.
+- Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
 - Add streaming responses and robust context compaction/session resume.
 - Add skills discovery, installation from trusted sources, versioning, and supply-chain review.
 - Design a provider/model capability probe and clearer setup diagnostics.
