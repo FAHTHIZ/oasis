@@ -8,6 +8,7 @@ import { request as httpsRequest } from 'node:https';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { createOasisWebServer, startOasisWebServer } from '../src/web.mjs';
+import { saveConfig } from '../src/config.mjs';
 
 async function tempDir() {
   return await mkdtemp(path.join(os.tmpdir(), 'oasis-web-test-'));
@@ -405,6 +406,125 @@ test('web terminal runner pauses for an explicit approval before starting a comm
   assert.ok(finalState.events.some((event) => event.type === 'terminal_output' && event.data.approved === false));
 });
 
+
+
+test('browser chat runs a model tool call through approval and completes the same job', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  let providerRequests = 0;
+  let receivedToolResult = false;
+  const providerServer = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk.toString();
+    const payload = JSON.parse(raw);
+    providerRequests++;
+    if (providerRequests > 1) {
+      const toolResult = (payload.messages || []).find((message) => message.role === 'tool');
+      receivedToolResult = Boolean(toolResult && String(toolResult.content || '').includes(process.versions.node));
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (providerRequests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will run the Node.js version check after approval.',
+        tool_calls: [{
+          id: 'web-chat-node-version',
+          type: 'function',
+          function: {
+            name: 'run_command',
+            arguments: JSON.stringify({
+              command: process.execPath,
+              args: ['--version'],
+              timeoutSeconds: 10
+            })
+          }
+        }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'The Node.js version command completed successfully.'
+      } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    providerServer.once('error', reject);
+    providerServer.listen(0, '127.0.0.1', resolve);
+  });
+  await saveConfig({
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + providerServer.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: ''
+  }, { env });
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env,
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await new Promise((resolve) => providerServer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const started = await fetch(base + '/api/chat', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message: 'Check the Node.js runtime version with the installed executable.' })
+  });
+  assert.equal(started.status, 202, await started.clone().text());
+  const { jobId, sessionId } = await started.json();
+  assert.ok(jobId);
+  assert.ok(sessionId);
+
+  let snapshot;
+  let approval;
+  const approvalDeadline = Date.now() + 5000;
+  while (Date.now() < approvalDeadline && !approval) {
+    const response = await fetch(base + '/api/jobs/' + jobId + '?after=0', {
+      headers: { authorization: 'Bearer ' + app.token }
+    });
+    assert.equal(response.status, 200);
+    snapshot = await response.json();
+    approval = (snapshot.events || []).find((event) => event.type === 'approval_required') || null;
+    if (!approval) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.ok(approval, 'the agent tool call must ask the browser user for approval');
+  assert.match(approval.data.prompt, /node|command/i);
+  assert.equal(snapshot.status, 'waiting_approval');
+
+  const approve = await fetch(base + '/api/jobs/' + jobId + '/approval', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ approvalId: approval.data.approvalId, approved: true })
+  });
+  assert.equal(approve.status, 200);
+  assert.equal((await approve.json()).approved, true);
+
+  const completionDeadline = Date.now() + 8000;
+  while (Date.now() < completionDeadline) {
+    const response = await fetch(base + '/api/jobs/' + jobId + '?after=0', {
+      headers: { authorization: 'Bearer ' + app.token }
+    });
+    assert.equal(response.status, 200);
+    snapshot = await response.json();
+    if (['completed', 'error', 'cancelled'].includes(snapshot.status)) break;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  }
+
+  assert.equal(snapshot.status, 'completed', snapshot.error || JSON.stringify(snapshot.result));
+  assert.equal(snapshot.result.finished, true);
+  assert.equal(snapshot.result.sessionId, sessionId);
+  assert.equal(snapshot.result.toolCalls, 1);
+  assert.ok(providerRequests >= 2);
+  assert.equal(receivedToolResult, true, 'the model should receive the output from the approved command');
+  assert.ok(snapshot.events.some((event) => event.type === 'assistant_delta'));
+  assert.ok(snapshot.events.some((event) => event.type === 'tool_start' && event.data.name === 'run_command'));
+  assert.ok(snapshot.events.some((event) => event.type === 'tool_result' && event.data.name === 'run_command'));
+  assert.ok(snapshot.events.some((event) => event.type === 'completed'));
+});
 
 test('extensions and MCP integration endpoints return safe inventories and require explicit API authentication', async (t) => {
   const root = await tempDir();
