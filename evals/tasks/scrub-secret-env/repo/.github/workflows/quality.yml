@@ -1,0 +1,32 @@
+name: Quality checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: oasis-quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integrity:
+    name: Node ${{ matrix.node-version }} runtime and package integrity
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24, 26]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Validate browser app and PWA assets
+        run: node scripts/check-site.mjs
+      - name: Run runtime and agent tests
+        run: npm test
+      - name: Verify installable CLI package contents
+        run: npm pack --dry-run
