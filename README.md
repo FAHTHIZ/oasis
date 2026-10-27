@@ -22,7 +22,7 @@ During setup, choose the native OpenAI Responses API (the default), native Anthr
 The integrated browser runtime is currently on the open development branch, not yet in the default `main` branch. To try these changes before they are merged:
 
 ~~~bash
-npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/eval-harness
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/workspace-extensions-integration-hub
 oasis setup
 cd /path/to/your/project
 oasis web
@@ -101,7 +101,7 @@ The initial Oasis plugin catalog is intentionally small and reviewed. Its bundle
 For testing the current PR branch directly, install with:
 
 ~~~bash
-npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/eval-harness
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/workspace-extensions-integration-hub
 oasis setup
 oasis doctor
 oasis plugins list
