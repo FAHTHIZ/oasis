@@ -229,6 +229,74 @@ test('agent tool registry exposes a useful coding workflow tool set', () => {
 });
 
 
+test('long sessions compact completed history before the next coding request', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), '# Compaction fixture');
+
+  let requests = 0;
+  let compactionPayload = null;
+  let taskPayload = null;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const payload = JSON.parse(body);
+    requests++;
+    if (requests === 1) compactionPayload = payload;
+    else taskPayload = payload;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'Earlier work: README.md was inspected; the follow-up test remains unrun.'
+      } }], usage: { prompt_tokens: 15, completion_tokens: 7, total_tokens: 22 } }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'Context compacted and the new request completed.'
+      } }], usage: { prompt_tokens: 11, completion_tokens: 6, total_tokens: 17 } }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 4,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  for (let i = 0; i < 34; i++) {
+    session.messages.push({ role: 'user', content: 'Older task request ' + i + ': inspect module-' + i + '.mjs' });
+    session.messages.push({ role: 'assistant', content: 'Older task outcome ' + i + ': inspected module-' + i + '.mjs' });
+  }
+  const compactions = [];
+  const result = await runAgentTurn(session, 'Continue by reviewing README.md.', {
+    onCompaction: (event) => compactions.push(event)
+  });
+
+  assert.equal(result.finished, true);
+  assert.equal(requests, 2);
+  assert.equal(compactionPayload.messages.length, 2);
+  assert.equal(compactionPayload.tools, undefined, 'the summary request must not expose agent tools');
+  assert.match(compactionPayload.messages[1].content, /Older task request 0/);
+  assert.ok(taskPayload.messages.some((message) =>
+    message.role === 'user' && String(message.content).includes('Context digest of earlier conversation')));
+  assert.ok(taskPayload.messages.some((message) => message.role === 'user' && message.content === 'Continue by reviewing README.md.'));
+  assert.ok(!taskPayload.messages.some((message) => message.role === 'user' && String(message.content).includes('Older task request 0')));
+  assert.equal(compactions.length, 1);
+  assert.equal(compactions[0].usedModelSummary, true);
+  assert.equal(session.messages.length < 40, true);
+});
+
 test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
