@@ -57,7 +57,8 @@ test('plain-English installation requests are parsed without accepting command f
   assert.deepEqual(parseInstallIntent('install pnpm'), { packageName: 'pnpm', ecosystem: 'auto' });
   assert.deepEqual(parseInstallIntent('Please install ripgrep in yourself'), { packageName: 'ripgrep', ecosystem: 'auto' });
   assert.deepEqual(parseInstallIntent('install yourself'), { action: 'self' });
-  assert.deepEqual(parseInstallIntent('install npm package @org/tool@1.2.0'), { packageName: '@org/tool@1.2.0', ecosystem: 'npm-global' });
+  assert.deepEqual(parseInstallIntent('install npm package @org/tool@1.2.0'), { packageName: '@org/tool@1.2.0', ecosystem: 'npm' });
+  assert.deepEqual(parseInstallIntent('install global npm package @org/tool@1.2.0'), { packageName: '@org/tool@1.2.0', ecosystem: 'npm-global' });
   assert.equal(parseInstallIntent('install pnpm and configure the project'), null);
   assert.equal(parseInstallIntent('please explain how package installation works'), null);
 });
