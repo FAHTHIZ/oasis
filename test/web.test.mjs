@@ -304,8 +304,9 @@ test('extensions and MCP integration endpoints return safe inventories and requi
   assert.equal((await fetch(base + '/api/mcp')).status, 401);
   const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
   const extensions = await fetch(base + '/api/extensions', { headers });
-  assert.equal(extensions.status, 200);
-  assert.deepEqual((await extensions.json()).extensions, []);
+  const extensionsText = await extensions.text();
+  assert.equal(extensions.status, 200, 'Extension inventory failed: ' + extensionsText);
+  assert.deepEqual(JSON.parse(extensionsText).extensions, []);
   const mcp = await fetch(base + '/api/mcp', { headers });
   assert.equal(mcp.status, 200);
   assert.deepEqual((await mcp.json()).servers, []);
