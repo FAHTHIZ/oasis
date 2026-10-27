@@ -32,7 +32,7 @@
       "version": "1.0.0",
       "description": "Plan implementation, test acceptance criteria, and prepare changes for review.",
       "skills": [
-        "shipping-features",
+        "ship-feature",
         "testing"
       ]
     }
