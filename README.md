@@ -87,6 +87,9 @@ These guards reduce risk but cannot guarantee that every third-party package or 
 | \`oasis setup\` | Configure a provider |
 | \`oasis doctor\` | Check Node, package managers, and provider config |
 | \`oasis init\` | Create an \`OASIS.md\` project context file |
+| \`oasis plan \"task\"\` | Inspect the workspace and create a read-only implementation plan |
+| \`/plan task\` | Plan within an interactive session without file writes or commands |
+| Git tools | Read-only status and diff inspection; whole-worktree diffs exclude common secret-bearing paths |
 | \`oasis install PACKAGE\` | Install a tool or package |
 | \`oasis skills list\` | List bundled and workspace skills |
 | \`oasis skills install NAME\` | Install a bundled skill into the workspace |
@@ -139,7 +142,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 - An MCP stdio client is implemented, but a plugin marketplace, broad provider adapters, and curated integrations are not yet implemented.
 - No OS-level sandbox or container isolation is provided.
-- Saved conversations are opt-in and workspace-scoped. Oasis now compacts older completed turns before a new request, using a tool-free model summary with a bounded local fallback if summarization fails. Compaction does not run in the middle of a tool loop, so an unusually long single task can still exceed provider context limits; streaming output is not implemented.
+- Saved conversations are opt-in and workspace-scoped. Oasis provides read-only plan mode (`oasis plan \"task\"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. Compaction does not run in the middle of a tool loop, so an unusually long single task can still exceed provider context limits; streaming output is not implemented.
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Read-only workspace tool calls can run in parallel, while commands, edits, installs, deletes, and external MCP calls run sequentially. Automatic context compaction now runs between turns, but parallel specialist-agent orchestration, streaming token output, mid-turn compaction, and advanced conflict handling are not implemented.
 - The CLI and browser dashboard are separate interfaces; they do not currently share live project/task state.
