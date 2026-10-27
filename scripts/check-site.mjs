@@ -12,6 +12,8 @@ const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
   'id="view-tasks"', 'id="view-notes"', 'id="projectDialog"', 'id="taskDialog"', 'id="manageProjectDialog"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
+  'id="view-agent"', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"',
+  'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
   'id="exportBtn"', 'id="importFile"', 'localStorage',
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
@@ -37,5 +39,6 @@ assert.ok(serviceWorker.includes("self.addEventListener('install'"));
 assert.ok(serviceWorker.includes("self.addEventListener('fetch'"));
 assert.ok(serviceWorker.includes('event.respondWith'));
 assert.ok(serviceWorker.includes("request.method !== 'GET'"), 'Service worker must not cache non-GET requests.');
+assert.ok(serviceWorker.includes("url.pathname.startsWith('/api/')"), 'Service worker must never cache authenticated runtime API responses.');
 
 console.log('Oasis integrity checks passed: app structure, inline JavaScript syntax, PWA manifest/icon, and offline service-worker safeguards.');
