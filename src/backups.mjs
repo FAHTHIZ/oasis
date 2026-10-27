@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, realpath, stat, lstat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { getConfigDirectory } from './config.mjs';
@@ -81,7 +81,12 @@ export async function restoreBackup(root, backupId) {
       cursor = parent;
     }
   }
-  try { await stat(target); await snapshotFile(root, target, 'before-restore'); } catch (error) {
+  try {
+    const targetInfo = await lstat(target);
+    if (targetInfo.isSymbolicLink()) throw new Error('Restore destination is a symbolic link; refusing to write through it.');
+    if (targetInfo.isDirectory()) throw new Error('Restore destination is a directory, not a regular file.');
+    await snapshotFile(root, target, 'before-restore');
+  } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
   await mkdir(path.dirname(target), { recursive: true });
