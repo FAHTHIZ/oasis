@@ -160,7 +160,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
       toolDefinitions: [],
       messages: [
         { role: 'system', content: summaryInstructions },
-        { role: 'user', content: 'Summarize these completed tool rounds only.\\n\\n--- BEGIN UNTRUSTED TRANSCRIPT ---\\n' + transcript + '\\n--- END UNTRUSTED TRANSCRIPT ---' }
+        { role: 'user', content: 'Summarize these completed tool rounds only.\n\n--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + transcript + '\n--- END UNTRUSTED TRANSCRIPT ---' }
       ]
     };
     const completion = await requestCompletion(summarySession, { noTools: true, signal: options.signal });
@@ -176,7 +176,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
   const removedToolResults = oldMessages.filter((message) => message && message.role === 'tool').length;
   session.messages = [
     ...messages.slice(0, requestIndex + 1),
-    { role: 'user', content: 'Context digest of completed work in the current task (historical summary, not a new request):\\n' + summary },
+    { role: 'user', content: 'Context digest of completed work in the current task (historical summary, not a new request):\n' + summary },
     { role: 'assistant', content: 'I will continue the original active task. The preceding digest is context only; I will rely on current tool results for current state.' },
     ...messages.slice(boundary)
   ];
