@@ -262,9 +262,13 @@ export function mcpToolDefinitions(clients) {
   const map = new Map();
   for (const [serverName, client] of clients) {
     for (const tool of client.tools) {
+      if (definitions.length >= 100) return { definitions, map };
       const safeName = ('mcp_' + serverName + '_' + tool.name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
       if (map.has(safeName)) continue;
       const input = tool.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : { type: 'object', properties: {} };
+      let schemaSize = 0;
+      try { schemaSize = JSON.stringify(input).length; } catch { continue; }
+      if (schemaSize > 24000) continue;
       definitions.push({
         type: 'function',
         function: {
