@@ -1,6 +1,6 @@
 diff --git a/src/lib.mjs b/src/lib.mjs
---- a/src/lib.mjs
+new file mode 100644
+--- /dev/null
 +++ b/src/lib.mjs
-@@ -1 +1 @@
--export function truncateOutput(value, limit = 24000) { return String(value); }
+@@ -0,0 +1,1 @@
 +export function truncateOutput(value, limit = 24000) { const text = String(value); const parsed = Number.parseInt(limit, 10); const max = Math.max(16, Math.min(1000000, Number.isFinite(parsed) ? parsed : 24000)); if (text.length <= max) return text; const marker = '...[truncated]'; return text.slice(0, max - marker.length) + marker; }

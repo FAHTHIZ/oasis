@@ -1,6 +1,6 @@
 diff --git a/src/lib.mjs b/src/lib.mjs
---- a/src/lib.mjs
+new file mode 100644
+--- /dev/null
 +++ b/src/lib.mjs
-@@ -1 +1 @@
--export function isSensitivePath(value) { return false; }
+@@ -0,0 +1,1 @@
 +export function isSensitivePath(value) { const parts = String(value || '').split(/[\\/]+/).filter(Boolean).map((part) => part.toLowerCase()); return parts.some((part) => ['.env', '.ssh', '.aws', 'credentials', 'id_rsa', 'id_ed25519'].includes(part) || part.startsWith('.env.')); }
