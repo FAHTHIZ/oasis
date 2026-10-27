@@ -500,7 +500,22 @@ async function readGitDiff(root, args = {}) {
     relativePath = resolved.relative === '.' ? '' : resolved.relative;
   }
   commandArgs.push('--');
-  if (relativePath) commandArgs.push(relativePath);
+  if (relativePath) {
+    commandArgs.push(relativePath);
+  } else {
+    // Never expose common secret-bearing paths in a whole-worktree diff.
+    commandArgs.push(
+      ':(exclude).env', ':(exclude)**/.env', ':(exclude).env.*', ':(exclude)**/.env.*',
+      ':(exclude).ssh/**', ':(exclude)**/.ssh/**', ':(exclude).aws/**', ':(exclude)**/.aws/**',
+      ':(exclude).gnupg/**', ':(exclude)**/.gnupg/**', ':(exclude).azure/**', ':(exclude)**/.azure/**',
+      ':(exclude).kube/**', ':(exclude)**/.kube/**', ':(exclude).docker/**', ':(exclude)**/.docker/**',
+      ':(exclude).npmrc', ':(exclude)**/.npmrc', ':(exclude).pypirc', ':(exclude)**/.pypirc',
+      ':(exclude).netrc', ':(exclude)**/.netrc', ':(exclude).git-credentials', ':(exclude)**/.git-credentials',
+      ':(exclude)credentials.json', ':(exclude)**/credentials.json', ':(exclude)secrets.json', ':(exclude)**/secrets.json',
+      ':(exclude)**/*.pem', ':(exclude)**/*.key', ':(exclude)**/*.p12', ':(exclude)**/*.pfx', ':(exclude)**/*.keystore',
+      ':(exclude)**/id_rsa', ':(exclude)**/id_ed25519', ':(exclude)**/id_ecdsa'
+    );
+  }
   return await runReadOnlyGit(root, commandArgs);
 }
 
