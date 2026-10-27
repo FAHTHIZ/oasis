@@ -6,11 +6,11 @@ Oasis has a local-first browser workspace and a separate terminal agent runtime.
 
 - \`src/cli.mjs\` is the command-line entry point exposed by the \`oasis\` executable in \`package.json\`.
 - \`src/config.mjs\` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
-- \`src/agent.mjs\` implements a multi-step tool-calling loop against an OpenAI-compatible chat-completions API. It retains the current process's conversation and uses tool-call results as the next model input.
-- \`src/tools.mjs\` exposes file listing/search/read/write/delete, argv-only process execution, package installation, and bounded public-document fetching.
+- src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage.
+- src/tools.mjs exposes file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching.
 - \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
 - \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
-- \`skills/*/SKILL.md\` contains bundled workflow guidance. Users can install a skill to \`.oasis/skills/<name>/SKILL.md\`; those files are loaded as project context in later sessions.
+- skills/*/SKILL.md contains bundled workflow guidance. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. Workspace skills live under .oasis/skills/<name>/SKILL.md.
 - Project context can come from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and \`.oasis/skills\`.
 
 ### Data and trust boundaries
@@ -23,7 +23,7 @@ This is not an OS sandbox. An approved test, build, or project script can execut
 
 ## Model provider interface
 
-The runtime expects an OpenAI-compatible \`/chat/completions\` endpoint with tool-calling support. Set \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`, or use \`oasis setup\`. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS. 
+The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). GPT-6.1 Sol tool calling uses the Responses API. Set OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY, or use oasis setup. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS.
 
 ## Browser workspace
 
@@ -38,4 +38,4 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 ## Current architectural gaps
 
-Container isolation, persistent sessions, streamed model output, parallel tool execution, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
+OS-level container isolation, robust context compaction, streamed model output, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
