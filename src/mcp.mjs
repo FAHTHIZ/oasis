@@ -28,6 +28,35 @@ export async function loadMcpServers(options = {}) {
   }
 }
 
+export function validateMcpServerOrigin(origin) {
+  if (!origin || typeof origin !== 'object' || Array.isArray(origin)) {
+    throw new Error('MCP import origin must be a structured provenance object.');
+  }
+  let repository;
+  try { repository = new URL(String(origin.repository || '')); }
+  catch { throw new Error('MCP import origin must identify a public GitHub repository URL.'); }
+  const parts = repository.pathname.split('/').filter(Boolean);
+  if (repository.protocol !== 'https:' || repository.hostname.toLowerCase() !== 'github.com' ||
+      repository.username || repository.password || repository.search || repository.hash || parts.length !== 2 ||
+      !/^[A-Za-z0-9_.-]{1,100}$/.test(parts[0]) || !/^[A-Za-z0-9_.-]{1,100}$/.test(parts[1])) {
+    throw new Error('MCP import origin must identify a public GitHub repository URL.');
+  }
+  const commitSha = String(origin.commitSha || '');
+  if (!/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('MCP import origin needs a full 40-character commit identifier.');
+  const filePath = String(origin.filePath || '');
+  const segments = filePath.split('/');
+  if (!filePath || filePath.length > 500 || filePath.startsWith('/') ||
+      filePath.includes('\\') || filePath.includes('\0') ||
+      segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    throw new Error('MCP import origin file path is invalid.');
+  }
+  return {
+    repository: 'https://github.com/' + parts[0] + '/' + parts[1],
+    commitSha: commitSha.toLowerCase(),
+    filePath
+  };
+}
+
 export function validateMcpServerConfig(server) {
   if (!server || typeof server !== 'object' || Array.isArray(server)) throw new Error('Each MCP server entry must be an object.');
   if (typeof server.name !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(server.name)) throw new Error('MCP server names must use lowercase letters, numbers, hyphens, and underscores.');
@@ -42,13 +71,15 @@ export function validateMcpServerConfig(server) {
   if (!Array.isArray(passEnv) || passEnv.length > 50 || passEnv.some((key) => typeof key !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(key))) throw new Error('MCP passEnv must contain environment variable names only.');
   const forbidden = passEnv.filter((key) => /^(?:PATH|HOME|SHELL|PWD|NODE_OPTIONS|LD_PRELOAD|DYLD_INSERT_LIBRARIES)$/i.test(key));
   if (forbidden.length) throw new Error('MCP servers cannot override foundational process variables through passEnv.');
-  return {
+  const normalized = {
     name: server.name,
     command: server.command,
     args: [...args],
     passEnv: [...new Set(passEnv)],
     enabled: server.enabled !== false
   };
+  if (server.origin !== undefined) normalized.origin = validateMcpServerOrigin(server.origin);
+  return normalized;
 }
 
 export async function saveMcpServers(servers, options = {}) {

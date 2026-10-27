@@ -11,18 +11,20 @@ Requirements: Node.js 22+ and npm. Git is required for installing directly from 
 ~~~bash
 npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#main
 oasis setup
-oasis doctor
+oasis doctor --test-provider  # Optional live tool-calling check
 oasis
 ~~~
 
-During setup, choose the native OpenAI Responses API (the default), native Anthropic Messages API, or OpenAI-compatible chat completions. The default OpenAI model is `gpt-6.1-sol`; choose a model name that supports tools for any other provider. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
+During setup, choose a provider preset or a custom endpoint: OpenAI, Anthropic, OpenRouter, Google Gemini, or local Ollama are supported starting points. OpenRouter uses `https://openrouter.ai/api/v1`; Gemini's OpenAI-compatible endpoint is `https://generativelanguage.googleapis.com/v1beta/openai/`; local Ollama uses `http://localhost:11434/v1`. For OpenRouter and Ollama, enter the exact model ID available to your account or local server. The browser provider form has the same presets.
+
+**Setup verifies before saving.** Oasis sends a small test prompt with one inert tool schema and saves provider credentials only after the model returns the expected tool-call response. The probe is inspected but never executed. A failed test does not overwrite the current config. Key input is hidden in the CLI and the browser setup form only accepts credentials from the same device over localhost. Secrets are stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
 
 ### Try the connected browser agent on the development branch
 
 The integrated browser runtime is currently on the open development branch, not yet in the default `main` branch. To try these changes before they are merged:
 
 ~~~bash
-npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/eval-harness
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/workspace-extensions-integration-hub
 oasis setup
 cd /path/to/your/project
 oasis web
@@ -30,14 +32,16 @@ oasis web
 
 Open the local URL printed by Oasis, paste the one-time connection token into **Agent → Connect runtime**, and describe the work in plain English. On the same device, the Agent page also has a **Model provider** form; provider keys are accepted only over localhost and are saved in the local config file. When using the phone-to-computer HTTP bridge, configure model credentials in the host terminal with `oasis setup` instead—the browser will disable provider-key entry from a remote device. Keep the terminal process running while you use the browser. The token is generated for that running server and is not your model API key. In **GitHub**, use **Check connection** and **Refresh repositories** to view repositories available to the host's GitHub CLI login, then choose one and approve the clone. Oasis clones into `.oasis/workspaces/` under the launch workspace and switches the agent and command runner into the clone. To enable this, install GitHub CLI (`gh`) on the host and run `gh auth login` once in its terminal. This is a host-CLI connection, not browser OAuth; the app never asks you to paste a GitHub token.
 
-For phone access from a computer, both devices must be on the same trusted private Wi-Fi. Start `oasis web --host 0.0.0.0`, open `http://<computer-LAN-IP>:3917` on the phone, and paste the token. **This HTTP bridge is not encrypted. Do not use it on public/untrusted Wi-Fi, do not port-forward it, and never expose it to the public Internet.** The safe default is localhost-only. Android/Termux installation and real-device behavior still need cross-platform testing.
+For phone access from a computer, both devices should be on the same trusted private Wi-Fi. Prefer HTTPS with a certificate whose subject alternative name includes the computer's LAN IP and whose issuing CA is trusted by the phone:
+`oasis web --host 0.0.0.0 --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem`.
+On POSIX systems, restrict the private key to its owner (for example, `chmod 600 /path/to/key.pem`). Open `https://<computer-LAN-IP>:3917` on the phone, then paste the token. Oasis refuses a non-loopback HTTP listener by default. The explicit `--allow-insecure-lan` switch exists for constrained testing only; it exposes the bearer token and workspace traffic to network observation. Never use it on public/untrusted Wi-Fi, do not port-forward the bridge, and never expose it to the public Internet. Certificates must match the IP/hostname and be trusted by the device; automatic certificate provisioning and mobile trust onboarding are not implemented yet. Android/Termux and real-device behavior still need cross-platform testing.
 
 Supported provider shapes:
 - Native OpenAI Responses API (`openai-responses`), recommended for current OpenAI reasoning models that require Responses for tool calling.
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
 - Native Anthropic Messages API endpoints. Select `anthropic` during `oasis setup`.
 - Local Ollama-style endpoints such as \`http://localhost:11434/v1\`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
-- Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. \`OPENAI_API_KEY\` is also accepted.
+- Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. Provider-specific keys are recognised for matching presets: \`OPENAI_API_KEY\`, \`ANTHROPIC_API_KEY\`, \`OPENROUTER_API_KEY\`, \`GEMINI_API_KEY\` (or \`GOOGLE_API_KEY\`), and \`OLLAMA_API_KEY\` for Ollama Cloud. Run \`oasis doctor --test-provider\` to send a live inert-tool probe without executing the tool; a successful check confirms the model can call tools.
 
 Oasis does not include an API subscription or a model. A provider must be reachable and the selected model must support tool calling.
 
@@ -50,19 +54,30 @@ oasis "Install pnpm"
 oasis "Install Playwright and set up browser tests"
 oasis skills list
 oasis skills install debugging
+oasis skills find frontend-design
+oasis skills inspect vercel-labs/agent-skills
+oasis skills add vercel-labs/agent-skills --skill web-design-guidelines
+oasis skills add vercel-labs/agent-skills --all --global
 oasis plugins list
 oasis plugins install code-quality
 # Other reviewed bundles include mobile-development, web-app-development, api-development, and security-review.
 oasis mcp list
+oasis extensions inspect https://github.com/owner/repository
+oasis extensions mcp-import https://github.com/owner/repository
+oasis extensions update https://github.com/owner/repository --scope project
+oasis extensions list
+oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
+oasis extensions list
+oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
 ~~~
 
-A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model.
+A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model. The Skills commands integrate the pinned Vercel Skills CLI on demand: `find` searches skills.sh, `inspect` lists a source's skills, and `add` installs only the chosen skill (or all skills when explicitly requested) into the universal `.agents/skills/` path or its global equivalent. Oasis loads those standard `SKILL.md` files in new sessions and treats them as external/untrusted instructions. The external CLI requires Node.js 22.20+; telemetry is disabled for Oasis-launched runs.
 
 ## What is implemented
 
 ### Terminal agent
 - Interactive sessions and one-shot plain-English tasks.
-- Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops.
+- Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops, with incremental text streaming in the browser, safe cancellation of active model requests/commands, and a JSON-response fallback for gateways that do not stream.
 - Optional MCP stdio server integration with explicit configuration and approval for each external tool call.
 - Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
 - Command execution through an executable plus argument array, without shell expansion.
@@ -70,6 +85,7 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
 - Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
 - A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
+- Bounded specialist reviews for code quality, security, architecture, and test strategy. Each reviewer is a separate read-only model session with no edit, command, package-install, or MCP tools; a per-task cap prevents unbounded delegation.
 - Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
 - Optional workspace-scoped saved sessions that can be resumed or deleted; skill descriptions load first and full skill guides load only on demand.
@@ -91,16 +107,16 @@ Oasis separates three things that are often all called “plugins”:
 
 - **Skills** are reusable workflow instructions that guide the agent through tasks such as debugging, testing, code review, and release preparation.
 - **Capability bundles** package related built-in skills so they can be installed and removed together. Browse with `oasis plugins list`; install with `oasis plugins install code-quality`; remove with `oasis plugins remove code-quality`. Bundles are copied into the current workspace under `.oasis/`.
-- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`. External integrations may execute code or access data, so inspect their source, requested environment variables, and permissions before enabling them.
+- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`. Recognized Markdown commands can be invoked in the CLI or browser chat by their imported namespaced alias, for example `/owner-repo:review fix the authentication test`. Oasis wraps the source in an untrusted-command boundary and verifies its stored SHA-256 before invocation. Text argument substitution supports `$ARGUMENTS`, `$ARGUMENTS[0]`, `$1`, and `${1}`; it does not implement every source ecosystem's command semantics, shell interpolation, hooks, or executable lifecycle behavior. The extension inspector can propose supported local stdio servers from `.mcp.json`, `mcp.json`, `mcp-servers.json`, or `gemini-extension.json`. Review them with `oasis extensions inspect URL`, then use `oasis extensions mcp-import URL` (or the browser review panel) to import selected entries **disabled**. The importer does not copy manifest environment values or start processes; configure required environment variables and review the executable before enabling a server. Imported configurations retain the source repository, commit SHA, and manifest path for auditability.
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
 
-The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The mobile-friendly Agent page and authenticated local runtime bridge are now on this development branch. Remote marketplaces, signed/versioned third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features this branch claims to have.
+The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The GitHub extension inspector now detects Agent Skills and common Claude Code, Codex, and Gemini CLI markers and reports commands, MCP declarations, hooks, and executable components that are not activated. For recognized portable Agent Skills, Oasis also preserves bounded text references/assets and exposes them through integrity-checked resource access. Scripts remain unimported and inactive. Full native plugin compatibility is not implemented yet; inspection is explicit about this gap. The mobile-friendly Agent page and authenticated local runtime bridge are now on this development branch. Remote marketplaces, signed/versioned third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features this branch claims to have.
 
 For testing the current PR branch directly, install with:
 
 ~~~bash
-npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/eval-harness
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/workspace-extensions-integration-hub
 oasis setup
 oasis doctor
 oasis plugins list
