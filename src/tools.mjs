@@ -47,6 +47,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to an existing supported provider preset and switch the current chat to it only after an inert tool-call probe succeeds. Presets: openai, anthropic, openrouter, gemini, ollama, omniroute. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable. For OmniRoute that is not running, use setup_omniroute.', parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'omniroute'] }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected external Agent Skill from a repository using the pinned Vercel Skills CLI. Copies only the universal Agent Skills package; does not activate hooks, run skill scripts, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
   { type: 'function', function: { name: 'configure_mcp_server', description: 'Configure and start a local stdio MCP server, then expose its tools in the current chat session. Requires manual approval even when --yes is active. The command, arguments, and environment-variable names are shown for review; never pass secret values in arguments.', parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 40, description: 'Unique lowercase server name using letters, digits, hyphens, or underscores.' }, command: { type: 'string', maxLength: 500, description: 'Single executable, such as npx or a locally installed executable; no shell syntax.' }, args: { type: 'array', maxItems: 80, items: { type: 'string', maxLength: 5000 }, description: 'Argument vector passed directly without shell expansion.' }, passEnv: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Explicit environment variable names to expose to this server; values must be configured locally, never supplied in chat.' } }, required: ['name', 'command'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'delegate_openhands', description: 'Explicitly delegate a bounded coding or review task to an already-running OpenHands Agent Server. Requires a preconfigured OpenHands Agent Profile ID and manual approval. Uses the server profile and its own credentials; never sends Oasis API keys. Starts with AlwaysConfirm and an isolated worktree where supported. Use only when the user asks to use/delegate to OpenHands.', parameters: { type: 'object', properties: { task: { type: 'string', minLength: 1, maxLength: 3000, description: 'Self-contained task or review brief to delegate.' }, maxWaitSeconds: { type: 'integer', minimum: 5, maximum: 300, description: 'Maximum time Oasis should wait for a result before returning the OpenHands conversation ID. Defaults to 60 seconds.' } }, required: ['task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
@@ -675,6 +676,271 @@ async function configureMcpServer(args, context, root) {
   };
 }
 
+
+
+function openHandsConfiguration(context, root) {
+  const env = context.env || process.env;
+  const rawBase = String(env.OPENHANDS_AGENT_SERVER_URL || 'http://127.0.0.1:8000').trim();
+  let url;
+  try { url = new URL(rawBase); } catch { throw new Error('OPENHANDS_AGENT_SERVER_URL must be a valid URL such as http://127.0.0.1:8000.'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error('OpenHands server URL must use HTTP(S) without embedded credentials, query parameters, or fragments.');
+  }
+  if (url.protocol === 'http:' && !isLoopbackUrl(url.origin)) {
+    throw new Error('OpenHands remote servers must use HTTPS. Plain HTTP is allowed only for a loopback server on this machine.');
+  }
+  url.pathname = url.pathname.replace(/\/+$/, '');
+  const baseURL = url.toString().replace(/\/+$/, '');
+  const profileId = String(env.OPENHANDS_AGENT_PROFILE_ID || '').trim();
+  if (!profileId || profileId.length > 200 || /[\r\n\0]/.test(profileId)) {
+    return {
+      configured: false,
+      baseURL,
+      message: 'OpenHands delegation needs OPENHANDS_AGENT_PROFILE_ID in the Oasis host environment. Create/review an Agent Profile in the OpenHands server, set this variable locally, then retry; do not put profile credentials or API keys in chat.'
+    };
+  }
+  const apiKey = String(env.OPENHANDS_SESSION_API_KEY || '');
+  if (apiKey.length > 4096 || /[\r\n\0]/.test(apiKey)) {
+    throw new Error('OPENHANDS_SESSION_API_KEY is invalid or too long.');
+  }
+  const isLoopback = isLoopbackUrl(url.origin);
+  const configuredWorkspace = String(env.OPENHANDS_WORKSPACE_PATH || '').trim();
+  const workspace = isLoopback
+    ? (configuredWorkspace || path.resolve(root))
+    : configuredWorkspace;
+  if (!workspace) {
+    return {
+      configured: false,
+      baseURL,
+      message: 'This OpenHands server is remote. Set OPENHANDS_WORKSPACE_PATH to the absolute path as seen by the server; Oasis will not send its local workspace path to a remote host by default.'
+    };
+  }
+  if (workspace.length > 2000 || /[\r\n\0]/.test(workspace)) {
+    throw new Error('OPENHANDS_WORKSPACE_PATH is invalid or too long.');
+  }
+  if (!isLoopback && !workspace.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(workspace)) {
+    throw new Error('OPENHANDS_WORKSPACE_PATH must be an absolute path as seen by the OpenHands server.');
+  }
+  return { configured: true, baseURL, profileId, apiKey, workspace, isLoopback };
+}
+
+function combineOpenHandsSignal(signal) {
+  const timeout = AbortSignal.timeout(12000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+async function openHandsJsonRequest(config, route, options = {}) {
+  const headers = { accept: 'application/json' };
+  if (config.apiKey) headers['X-Session-API-Key'] = config.apiKey;
+  let body;
+  if (options.body !== undefined) {
+    headers['content-type'] = 'application/json';
+    body = JSON.stringify(options.body);
+  }
+  const response = await fetch(config.baseURL + route, {
+    method: options.method || 'GET',
+    headers,
+    ...(body !== undefined ? { body } : {}),
+    redirect: 'error',
+    signal: combineOpenHandsSignal(options.signal)
+  });
+  const raw = await response.text();
+  let data = {};
+  if (raw) {
+    try { data = JSON.parse(raw); }
+    catch { data = { detail: raw.slice(0, 1000) }; }
+  }
+  if (!response.ok) {
+    let detail = data && (data.detail || data.message || data.error);
+    if (Array.isArray(detail)) detail = detail.map((item) => item.msg || item.type || '').filter(Boolean).join('; ');
+    if (typeof detail !== 'string') detail = '';
+    if (config.apiKey) detail = detail.split(config.apiKey).join('[redacted]');
+    throw new Error('OpenHands server returned HTTP ' + response.status + (detail ? ': ' + detail.slice(0, 1000) : '.') );
+  }
+  return data;
+}
+
+function waitOpenHandsPoll(milliseconds, signal) {
+  if (signal && signal.aborted) {
+    const error = new Error('OpenHands delegation was cancelled.');
+    error.name = 'AbortError';
+    return Promise.reject(error);
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const error = new Error('OpenHands delegation was cancelled.');
+      error.name = 'AbortError';
+      reject(error);
+    };
+    const timer = setTimeout(finish, milliseconds);
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function interruptOpenHands(config, conversationId) {
+  try {
+    await openHandsJsonRequest(config, '/api/conversations/' + encodeURIComponent(conversationId) + '/interrupt', {
+      method: 'POST'
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function delegateOpenHands(args, context, root) {
+  const env = context.env || process.env;
+  const task = String(args.task || '').trim();
+  if (!task || task.length > 3000 || task.includes('\0')) {
+    throw new Error('OpenHands delegation task must be 1–3000 characters and cannot contain NUL.');
+  }
+  const config = openHandsConfiguration(context, root);
+  if (!config.configured) return { delegated: false, ...config };
+
+  const maxWaitSeconds = Math.max(5, Math.min(300, Number.parseInt(args.maxWaitSeconds, 10) || 60));
+  const summary = [
+    'Delegate this task to the OpenHands Agent Server?',
+    'Server: ' + config.baseURL,
+    'OpenHands Agent Profile: ' + config.profileId,
+    'Workspace on server: ' + config.workspace,
+    'Task: ' + task,
+    'Safety: the conversation will use AlwaysConfirm and request a separate OpenHands confirmation before tool actions. Git worktree isolation is requested; non-Git workspaces may fall back to a shared directory, so review the server configuration and workspace first.',
+    'Oasis will not send its model/API keys. The server profile supplies its own model credentials. Review the OpenHands instance and profile before continuing.'
+  ].join('\n');
+  // Delegation must always be explicitly approved and cannot be auto-approved
+  // by the global --yes flag.
+  if (!context.approval || !(await context.approval(summary, true))) {
+    return { delegated: false, approved: false, message: 'OpenHands delegation was denied. No conversation was created.' };
+  }
+  if (context.signal && context.signal.aborted) {
+    return { delegated: false, cancelled: true, message: 'OpenHands delegation was cancelled before creation.' };
+  }
+
+  const createBody = {
+    agent_profile_id: config.profileId,
+    workspace: { kind: 'LocalWorkspace', working_dir: config.workspace },
+    initial_message: { role: 'user', content: [{ type: 'text', text: task }] },
+    confirmation_policy: { kind: 'AlwaysConfirm' },
+    worktree: true,
+    max_iterations: 60,
+    autotitle: true
+  };
+  let created;
+  try {
+    created = await openHandsJsonRequest(config, '/api/conversations', {
+      method: 'POST', body: createBody, signal: context.signal
+    });
+  } catch (error) {
+    if (context.signal && context.signal.aborted) {
+      const cancelled = new Error('OpenHands delegation was cancelled during conversation creation.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
+    return {
+      delegated: false,
+      provider: 'openhands',
+      server: config.baseURL,
+      message: 'Could not create an OpenHands conversation. Check that the server is running, the Agent Profile ID exists, and the profile has a valid provider configuration. Details: ' +
+        String(error && error.message || error).slice(0, 1000)
+    };
+  }
+
+  const conversationId = String(created.id || created.conversation_id || '');
+  if (!conversationId || conversationId.length > 128 || /[\r\n\0]/.test(conversationId)) {
+    throw new Error('OpenHands accepted the request but returned no valid conversation ID. Inspect its conversation list before retrying to avoid duplicating the task.');
+  }
+  const initialStatus = String(created.execution_status || '').toLowerCase();
+  let status = initialStatus;
+  const terminalStatuses = new Set(['finished', 'error', 'stuck', 'paused', 'waiting_for_confirmation']);
+  const deadline = Date.now() + maxWaitSeconds * 1000;
+  try {
+    while (!terminalStatuses.has(status) && Date.now() < deadline) {
+      await waitOpenHandsPoll(900, context.signal);
+      const info = await openHandsJsonRequest(config, '/api/conversations/' + encodeURIComponent(conversationId), {
+        signal: context.signal
+      });
+      status = String(info.execution_status || info.status || '').toLowerCase();
+    }
+  } catch (error) {
+    if (context.signal && context.signal.aborted) {
+      await interruptOpenHands(config, conversationId);
+      const cancelled = new Error('Oasis cancelled the delegated OpenHands conversation ' + conversationId + ' and sent a best-effort interrupt request.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
+    return {
+      delegated: true,
+      provider: 'openhands',
+      conversationId,
+      status: status || 'unknown',
+      server: config.baseURL,
+      pending: true,
+      message: 'OpenHands created the task, but polling failed. Do not resubmit blindly; inspect this conversation on the OpenHands server before retrying. Details: ' +
+        String(error && error.message || error).slice(0, 700)
+    };
+  }
+
+  if (status === 'waiting_for_confirmation') {
+    return {
+      delegated: true,
+      provider: 'openhands',
+      conversationId,
+      status,
+      server: config.baseURL,
+      pending: true,
+      approvalRequired: true,
+      message: 'OpenHands is waiting for a separate tool-action confirmation. Review the conversation in the OpenHands interface; Oasis does not approve OpenHands actions automatically.'
+    };
+  }
+  if (!terminalStatuses.has(status)) {
+    return {
+      delegated: true,
+      provider: 'openhands',
+      conversationId,
+      status: status || 'running',
+      server: config.baseURL,
+      pending: true,
+      message: 'OpenHands is still working after ' + maxWaitSeconds + ' seconds. The task was not re-submitted. Inspect the conversation on the OpenHands server and use its own interface to monitor or interrupt it.'
+    };
+  }
+  let finalResponse = '';
+  if (status === 'finished') {
+    try {
+      const result = await openHandsJsonRequest(config, '/api/conversations/' + encodeURIComponent(conversationId) + '/agent_final_response', {
+        signal: context.signal
+      });
+      finalResponse = String(result.response || '').slice(0, 12000);
+    } catch (error) {
+      finalResponse = 'OpenHands finished, but Oasis could not retrieve the final response: ' + String(error && error.message || error).slice(0, 700);
+    }
+  }
+  return {
+    delegated: true,
+    provider: 'openhands',
+    conversationId,
+    status,
+    server: config.baseURL,
+    ...(finalResponse ? { finalResponse } : {}),
+    message: status === 'finished'
+      ? 'OpenHands completed the delegated task. Review its changes in the configured worktree/repository before integrating them.'
+      : 'OpenHands ended the delegated conversation with status "' + status + '". Review the conversation and its workspace before acting on the result.'
+  };
+}
+
 function validExternalSkillSource(raw) {
   const source = String(raw || '').trim();
   if (!source || source.length > 600 || /[\r\n\0]/.test(source) || source.startsWith('-')) {
@@ -1204,6 +1470,8 @@ export async function executeTool(name, args = {}, context = {}) {
       return await installExternalSkill(args, context, root);
     case 'configure_mcp_server':
       return await configureMcpServer(args, context, root);
+    case 'delegate_openhands':
+      return await delegateOpenHands(args, context, root);
     case 'install_extension': {
       const url = String(args.url || '').trim();
       const scope = String(args.scope || 'project');

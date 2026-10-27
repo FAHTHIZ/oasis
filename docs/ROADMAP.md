@@ -11,7 +11,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Shipped foundations
 
-- Chat-native setup tools for OmniRoute and existing provider presets, selected external Vercel Agent Skills, and stdio MCP servers. OmniRoute is probed before provider switching; MCP server commands require dedicated manual approval, a successful handshake, and live tool-map refresh in the current session.
+- Chat-native setup tools for OmniRoute and existing provider presets, selected external Vercel Agent Skills, stdio MCP servers, and optional delegation to an already-running OpenHands Agent Server. OpenHands delegation uses a server-owned Agent Profile, explicit manual approval, AlwaysConfirm, bounded polling, and no forwarding of Oasis model credentials.
 
 - Read-only Git status/diff tools with common secret-path exclusions, plus plan mode that only exposes read-only tools and independently blocks non-read-only calls.
 
@@ -67,6 +67,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Add a real isolation layer for unattended code execution; permission prompts alone are not a sandbox.
 - Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
+- Expand the optional OpenHands bridge into a richer delegated-task lifecycle: direct event streaming, UI-linked confirmation status, and worktree change inspection/integration. Current bridge requires a separately configured Agent Server and profile; remote confirmations remain handled in OpenHands.
 - Establish a well-tested install/bootstrap flow for supported platforms.
 - Upgrade the argv-based command runner to a real interactive PTY and terminal emulator, with lifecycle controls and platform testing.
 - **Progress:** the web bridge supports HTTPS with a user-provided certificate/key pair, enforces TLS 1.2+, and refuses non-loopback plaintext listeners unless `--allow-insecure-lan` is explicitly used. Certificate provisioning, phone trust onboarding, and real-device security tests remain unfinished.
