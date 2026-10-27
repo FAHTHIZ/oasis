@@ -44,6 +44,63 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.deepEqual((await sessions.json()).sessions, []);
 });
 
+test('provider setup stores local configuration without returning API credentials', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const saved = await fetch(base + '/api/provider/config', {
+    method: 'POST', headers,
+    body: JSON.stringify({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1', model: 'local-test-model', apiKey: '' })
+  });
+  assert.equal(saved.status, 200);
+  const savedBody = await saved.json();
+  assert.equal(savedBody.saved, true);
+  assert.equal(savedBody.provider.model, 'local-test-model');
+  assert.equal('apiKey' in savedBody, false);
+
+  const status = await fetch(base + '/api/status', { headers: { authorization: 'Bearer ' + app.token } });
+  const statusBody = await status.json();
+  assert.equal(statusBody.providerConfigured, true);
+  assert.equal(statusBody.provider.model, 'local-test-model');
+  assert.equal('apiKey' in statusBody, false);
+});
+
+test('provider setup requires credentials for remote providers and rejects invalid protocols', async (t) => {
+  const root = await tempDir();
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0,
+    env: { OASIS_CONFIG_DIR: path.join(root, 'config') },
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const missingKey = await fetch(base + '/api/provider/config', {
+    method: 'POST', headers,
+    body: JSON.stringify({ protocol: 'openai-compatible', baseURL: 'https://api.example.test/v1', model: 'test-model', apiKey: '' })
+  });
+  assert.equal(missingKey.status, 400);
+  assert.match((await missingKey.json()).error, /API key/i);
+
+  const invalidProtocol = await fetch(base + '/api/provider/config', {
+    method: 'POST', headers,
+    body: JSON.stringify({ protocol: 'unknown-provider', baseURL: 'https://api.example.test/v1', model: 'test-model', apiKey: 'not-used' })
+  });
+  assert.equal(invalidProtocol.status, 500);
+  assert.match((await invalidProtocol.json()).error, /protocol/i);
+});
+
 test('GitHub workspace routes validate repository input before starting external commands', async (t) => {
   const root = await tempDir();
   const app = await startOasisWebServer({
