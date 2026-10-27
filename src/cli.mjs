@@ -6,7 +6,7 @@ import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/p
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
-import { createSession, runAgentTurn, closeSession } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool } from './tools.mjs';
@@ -27,6 +27,7 @@ function printHelp() {
     '  oasis setup                   Configure a model provider',
     '  oasis doctor                  Check the local environment',
     '  oasis init                    Create OASIS.md project instructions',
+    '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
     '  oasis sessions list           List locally saved sessions for this workspace',
     '  oasis --continue              Resume the most recent saved session and keep saving it',
@@ -398,7 +399,7 @@ function printConfig(config) {
   stdout.write('  Config file: ' + config.configPath + '\n');
 }
 
-async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}) {
+async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
   const config = await loadConfig();
   if (!config.configured) {
     stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
@@ -421,7 +422,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     session.mcpFailures = [];
   }
   try {
-    const result = await runAgentTurn(session, prompt, {
+    const runner = modeOptions.planOnly ? runAgentPlan : runAgentTurn;
+    const result = await runner(session, prompt, {
       autoApprove,
       approval: (message) => approve(message, false, autoApprove),
       onToolStart: ({ name }) => stdout.write('\n[tool] ' + name + '\n'),
@@ -457,7 +459,14 @@ async function interactive(root, autoApprove, persistence = {}) {
     const text = input.trim();
     if (!text) continue;
     if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
-    if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /exit. You can also say “install pnpm” or “install yourself”.\n'); continue; }
+    if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /plan TASK /exit. Use /plan TASK to inspect and plan without writing files or running commands. You can also say “install pnpm” or “install yourself”.\n'); continue; }
+    if (text === '/plan' || text.startsWith('/plan ')) {
+      const planPrompt = text.slice('/plan'.length).trim();
+      if (!planPrompt) { stdout.write('Usage: /plan Describe the task to plan.\n'); continue; }
+      session = await runPrompt(planPrompt, root, autoApprove, session, persistence, { planOnly: true });
+      persistence.resumeId = null;
+      continue;
+    }
     if (text === '/clear') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
@@ -517,6 +526,13 @@ async function main() {
   }
   if (command === 'setup') return await configureProvider();
   if (command === 'doctor') return await doctor();
+  if (command === 'plan') {
+    const planPrompt = rest.join(' ').trim();
+    if (!planPrompt) throw new Error('Usage: oasis plan "Describe the task to plan"');
+    const session = await runPrompt(planPrompt, workspace, autoApprove, null, persistence, { planOnly: true });
+    closeSession(session);
+    return;
+  }
   if (command === 'eval') {
     const result = await runEvalCommand(rest, { autoApprove, env: process.env });
     if (!result.ok) process.exitCode = 1;
