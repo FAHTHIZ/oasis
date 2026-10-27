@@ -14,7 +14,7 @@ const required = [
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
   'id="exportBtn"', 'id="importFile"', 'localStorage',
   'function exportBackup()', 'function importBackup(file)',
-  'prefers-reduced-motion', 'aria-live="polite"',
+  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
   'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
 ];
 for (const marker of required) {
