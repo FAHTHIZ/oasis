@@ -97,6 +97,21 @@ These guards reduce risk but cannot guarantee that every third-party package or 
 
 Options: \`--workspace PATH\` chooses the workspace and \`--yes\` explicitly enables automatic approval for supported actions.
 
+## Coding-agent evaluations (experimental)
+
+Oasis includes a reference-task harness for measuring completed work instead of relying only on a model's final response.
+
+~~~bash
+oasis eval --validate
+oasis eval --task config-output-token-limit --trials 3 --yes
+~~~
+
+Each task under `evals/tasks/<id>/` contains a pre-change repository snapshot, a plain-English request, a known-good reference patch, and a verifier kept outside the copied workspace. Validation checks that the verifier fails on the unchanged snapshot and passes after the reference patch is applied. The CI quality gate runs this validation on Node.js 22, 24, and 26.
+
+Model runs require explicit `--yes` because agent-generated changes and commands run automatically inside disposable copies. **These copies are not OS sandboxes**: approved code may still access the host's user-level privileges and network. Run only trusted evaluation tasks, and do not use the harness as a security boundary.
+
+Results are written as JSON under the user-level Oasis configuration directory in `eval-results/` (or `OASIS_EVAL_RESULTS_DIR`). To estimate costs, set `OASIS_EVAL_INPUT_USD_PER_MILLION_TOKENS` and `OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS` to the rates for the selected model. These are estimates and do not separate cached-token pricing. The current 21-task suite is an initial smoke benchmark: most are standalone helper tasks, not a representative benchmark of full-project changes. Replace or expand them with real, reviewed Oasis tasks before drawing conclusions about model quality or parity.
+
 ## Run the browser workspace
 
 No build step or package installation is needed for the static workspace. Open \`index.html\` in a modern browser, or run:
