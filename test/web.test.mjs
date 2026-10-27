@@ -5,6 +5,8 @@ import path from 'node:path';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { createOasisWebServer, startOasisWebServer } from '../src/web.mjs';
 
 async function tempDir() {
@@ -115,12 +117,20 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.deepEqual((await sessions.json()).sessions, []);
 });
 
-test('provider setup stores local configuration without returning API credentials', async (t) => {
+test('provider setup verifies a real model response before saving local configuration', async (t) => {
   const root = await tempDir();
+  const providerServer = createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'OASIS_CONNECTION_OK' } }] }));
+  });
+  await new Promise((resolve) => providerServer.listen(0, '127.0.0.1', resolve));
+  const providerPort = providerServer.address().port;
   const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
   const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
   t.after(async () => {
     await app.close();
+    await new Promise((resolve) => providerServer.close(resolve));
     await rm(root, { recursive: true, force: true });
   });
 
@@ -128,11 +138,12 @@ test('provider setup stores local configuration without returning API credential
   const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
   const saved = await fetch(base + '/api/provider/config', {
     method: 'POST', headers,
-    body: JSON.stringify({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1', model: 'local-test-model', apiKey: '' })
+    body: JSON.stringify({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + providerPort + '/v1', model: 'local-test-model', apiKey: '' })
   });
   assert.equal(saved.status, 200);
   const savedBody = await saved.json();
   assert.equal(savedBody.saved, true);
+  assert.equal(savedBody.verified, true);
   assert.equal(savedBody.provider.model, 'local-test-model');
   assert.equal('apiKey' in savedBody, false);
 
@@ -142,6 +153,45 @@ test('provider setup stores local configuration without returning API credential
   assert.equal(statusBody.providerSetupAvailable, true);
   assert.equal(statusBody.provider.model, 'local-test-model');
   assert.equal('apiKey' in statusBody, false);
+});
+
+test('provider setup does not persist credentials when the provider fails verification', async (t) => {
+  const root = await tempDir();
+  const providerServer = createServer((req, res) => {
+    req.resume();
+    res.writeHead(401, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'fixture unauthorized' } }));
+  });
+  await new Promise((resolve) => providerServer.listen(0, '127.0.0.1', resolve));
+  const providerPort = providerServer.address().port;
+  const configDir = path.join(root, 'config');
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0,
+    env: { OASIS_CONFIG_DIR: configDir },
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await new Promise((resolve) => providerServer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const response = await fetch('http://127.0.0.1:' + app.port + '/api/provider/config', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      protocol: 'openai-compatible',
+      baseURL: 'http://127.0.0.1:' + providerPort + '/v1',
+      model: 'local-test-model',
+      apiKey: 'not-saved-key'
+    })
+  });
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.saved, false);
+  assert.equal(body.verified, false);
+  assert.doesNotMatch(body.error, /not-saved-key/);
+  await assert.rejects(readFile(path.join(configDir, 'config.json')), { code: 'ENOENT' });
 });
 
 test('provider setup requires credentials for remote providers and rejects invalid protocols', async (t) => {
