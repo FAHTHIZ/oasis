@@ -250,12 +250,12 @@ test('read-only Git tools inspect diffs while protecting sensitive paths', async
 
   const status = await executeTool('git_status', {}, { root: tmp });
   assert.equal(status.exitCode, 0, JSON.stringify(status));
-  assert.match(status.output, /README\\.md/);
+  assert.match(status.output, /README\.md/);
 
   const diff = await executeTool('git_diff', { scope: 'all' }, { root: tmp });
   assert.equal(diff.exitCode, 0, JSON.stringify(diff));
   assert.match(diff.output, /-before line/);
-  assert.match(diff.output, /\\+after line/);
+  assert.match(diff.output, /\+after line/);
   assert.doesNotMatch(diff.output, /super-secret-fixture/);
 
   const scoped = await executeTool('git_diff', { scope: 'all', path: 'README.md' }, { root: tmp });
