@@ -1329,13 +1329,20 @@ export async function runAgentTurn(session, prompt, options = {}) {
       const name = call.function && call.function.name;
       return READ_ONLY_TOOLS.has(name) && !(session.mcpToolMap && session.mcpToolMap.has(name));
     };
+    const isSpecialistReview = (call) => call.function && call.function.name === 'run_specialist_review';
     let cursor = 0;
     while (cursor < eligible.length) {
       let end = cursor + 1;
       if (isReadOnly(eligible[cursor])) {
         while (end < eligible.length && isReadOnly(eligible[end])) end++;
+      } else if (isSpecialistReview(eligible[cursor])) {
+        // Specialist runs are separate, read-only sessions with a hard per-task limit.
+        // Parallelize only consecutive specialist calls; ordinary side-effect ordering is unchanged.
+        while (end < eligible.length && isSpecialistReview(eligible[end])) end++;
       }
       const group = eligible.slice(cursor, end);
+      // Promise.all preserves the model's original call order in the result array even if
+      // independent specialist requests complete in a different order.
       const results = await Promise.all(group.map((call) => executeOneCall(session, call, context, options)));
       for (const item of results) outputs.set(item.tool_call_id, item);
       cursor = end;
