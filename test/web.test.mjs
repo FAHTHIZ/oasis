@@ -117,7 +117,7 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.deepEqual((await sessions.json()).sessions, []);
 });
 
-test('provider setup verifies a real model response before saving local configuration', async (t) => {
+test('provider setup verifies a valid tool-call response before saving local configuration', async (t) => {
   const root = await tempDir();
   const providerServer = createServer((req, res) => {
     req.resume();
