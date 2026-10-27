@@ -609,7 +609,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
           content: [
             'Before finalizing, complete the post-edit verification gate. You changed: ' + [...verification.changedPaths].join(', ') + '.',
             'Outstanding items: ' + issues.join('; ') + '.',
-            'Use git_diff to review the complete change set. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
+            'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
           ].join('\\n')
         });
@@ -694,6 +694,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
         const scopedPath = normalizeReviewPath(args.path);
         if (!scopedPath || scopedPath === '.') verification.diffReviewedAll = true;
         else verification.diffReviewedPaths.add(scopedPath);
+      }
+      if (name === 'read_file' && result && typeof result.content === 'string' && result.path) {
+        verification.diffReviewedPaths.add(normalizeReviewPath(result.path));
       }
       if (name === 'run_command' && result) {
         const args = safeToolArguments(call.function && call.function.arguments);
