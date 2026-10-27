@@ -25,6 +25,9 @@ body.light{color-scheme:light;--bg:#f3f5ee;--panel:#fff;--line:#dfe6da;--text:#1
 
 .agent-terminal{margin-top:18px;overflow:hidden}.agent-terminal-form{display:grid;gap:12px}.agent-terminal-form label{display:grid;gap:7px;color:var(--muted);font-size:11px;font-weight:700}.agent-terminal-form input,.agent-terminal-form textarea{width:100%;border:1px solid var(--line);background:#0e1813;color:var(--text);border-radius:10px;padding:10px 12px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}.terminal-output{min-height:130px;max-height:350px;overflow:auto;margin:14px 0 0;padding:14px;border:1px solid var(--line);border-radius:12px;background:#0b130e;color:#c4d7c1;font:11px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}.agent-terminal #terminalStatus{font-size:10px;color:var(--muted)}body.light .agent-terminal-form input,body.light .agent-terminal-form textarea{background:#fff;color:var(--text)}body.light .terminal-output{background:#f4f7f1;color:#2a3a2c}
 
+
+.github-panel{margin-top:18px;overflow:hidden}.github-panel .panel-pad{display:grid;gap:13px}.github-connect-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.github-state{font-size:11px;color:var(--muted)}.github-state[data-connected="true"]{color:var(--accent)}.github-select-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}.github-select-row label{display:grid;gap:7px;color:var(--muted);font-size:11px;font-weight:700}.github-select-row select{width:100%;min-width:0;border:1px solid var(--line);background:#0e1813;color:var(--text);border-radius:11px;padding:11px 12px;font-size:12px}.github-help{font-size:11px;line-height:1.7;color:var(--muted);margin:0}.github-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}body.light .github-select-row select{background:#fff;color:var(--text)}@media(max-width:780px){.github-select-row{grid-template-columns:minmax(0,1fr)}.github-actions button{flex:1}}
+
 </style>
 </head><body>
 <div class="shell">
@@ -80,6 +83,19 @@ body.light{color-scheme:light;--bg:#f3f5ee;--panel:#fff;--line:#dfe6da;--text:#1
       <p class="agent-help">This is an approval-gated command runner, not a full interactive PTY yet. Use one executable and JSON arguments (for example, <code>npm</code> with <code>["test"]</code>); shell chaining and interactive programs are not available here.</p>
     </div>
   </div>
+
+
+<div class="panel github-panel">
+  <div class="agent-chat-header"><span><strong>GitHub</strong> · repositories and workspaces</span><span id="githubStatus" class="github-state" data-connected="false">Not checked</span></div>
+  <div class="panel-pad">
+    <div class="github-connect-top"><p class="github-help">Connect through GitHub CLI on the computer running Oasis. This avoids putting a GitHub token in the browser.</p><div class="github-actions"><button class="btn btn-secondary" id="githubCheckBtn" type="button">Check connection</button><button class="btn btn-secondary" id="githubRefreshBtn" type="button">Refresh repositories</button></div></div>
+    <div class="github-select-row"><label for="githubRepoSelect">Accessible repositories (most recently updated)
+      <select id="githubRepoSelect"><option value="">Check your GitHub connection first</option></select>
+    </label><button class="btn btn-primary" id="githubCloneBtn" type="button">Clone / use repository</button></div>
+    <div class="github-actions"><button class="btn btn-secondary" id="githubResetWorkspaceBtn" type="button">Return to launch workspace</button></div>
+    <p class="github-help" id="githubHelp">One-time setup: install GitHub CLI (<code>gh</code>) on the computer, run <code>gh auth login</code> in its terminal, then check the connection here. Choosing a repository downloads it into <code>.oasis/workspaces/</code> and switches the agent and command runner into that repo. Oasis does not execute cloned project scripts until you approve a command.</p>
+  </div>
+</div>
 
 </section>
 </div><footer class="footer-note"><span>Made for focus, not noise.</span><span>Oasis OSS · Your data stays in this browser.</span></footer></main></div>
