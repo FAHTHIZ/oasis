@@ -271,6 +271,7 @@ async function saveResults(results, metadata, options = {}) {
   const env = options.env || process.env;
   const outputDir = options.resultsDir || env.OASIS_EVAL_RESULTS_DIR || path.join(getConfigDirectory(env), 'eval-results');
   await mkdir(outputDir, { recursive: true, mode: 0o700 });
+  try { await chmod(outputDir, 0o700); } catch {}
   const pathName = path.join(outputDir, 'run-' + new Date().toISOString().replace(/[:.]/g, '-') + '-' + process.pid + '.json');
   const payload = { ...metadata, results };
   await writeFile(pathName, JSON.stringify(payload, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
@@ -379,17 +380,35 @@ export async function runEvalCommand(args = [], options = {}) {
   }
 
   const passedCount = trials.filter((item) => item.status === 'passed').length;
+  const durations = trials.map((item) => item.wallTimeMs).sort((a, b) => a - b);
+  const middle = Math.floor(durations.length / 2);
+  const medianTimeMs = durations.length
+    ? (durations.length % 2 ? durations[middle] : Math.round((durations[middle - 1] + durations[middle]) / 2))
+    : null;
+  const knownCosts = trials.length > 0 && trials.every((item) => item.costUSD !== null);
+  const totalCostUSD = knownCosts
+    ? Math.round(trials.reduce((sum, item) => sum + item.costUSD, 0) * 1000000) / 1000000
+    : null;
+  const costPerPassedTaskUSD = passedCount > 0 && totalCostUSD !== null
+    ? Math.round((totalCostUSD / passedCount) * 1000000) / 1000000
+    : null;
   const summary = {
     runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt, completedAt: new Date().toISOString(),
     taskCount: selectedDirs.length, trialsPerTask: config.trials,
     passRate: trials.length ? passedCount / trials.length : 0,
     passed: passedCount, failed: trials.length - passedCount,
+    medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
     provider: { model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL, maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null },
-    pricing: { inputUsdPerMillionTokens: inputRate, outputUsdPerMillionTokens: outputRate, note: 'Cost is a rough estimate from configured rates and does not distinguish cached tokens.' }
+    pricing: { inputUsdPerMillionTokens: inputRate, outputUsdPerMillionTokens: outputRate, note: 'Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking.' }
   };
   const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
   output.write('Eval result: ' + resultPath + '\n');
   output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
+  output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '
+  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+}
+ + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
   return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
 }
