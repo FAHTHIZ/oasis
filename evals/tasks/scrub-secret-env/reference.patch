@@ -1,6 +1,6 @@
 diff --git a/src/lib.mjs b/src/lib.mjs
---- a/src/lib.mjs
+new file mode 100644
+--- /dev/null
 +++ b/src/lib.mjs
-@@ -1 +1 @@
--export function scrubEnvironment(env = {}) { return { ...env }; }
+@@ -0,0 +1,1 @@
 +export function scrubEnvironment(env = {}) { const result = {}; const sensitive = /(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i; for (const [key, value] of Object.entries(env || {})) if (!sensitive.test(key)) result[key] = value; return result; }
