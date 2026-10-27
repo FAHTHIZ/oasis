@@ -54,6 +54,8 @@ oasis plugins list
 oasis plugins install code-quality
 # Other reviewed bundles include mobile-development, web-app-development, api-development, and security-review.
 oasis mcp list
+oasis extensions inspect https://github.com/owner/repository
+oasis extensions mcp-import https://github.com/owner/repository
 ~~~
 
 A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model.
@@ -92,7 +94,7 @@ Oasis separates three things that are often all called “plugins”:
 
 - **Skills** are reusable workflow instructions that guide the agent through tasks such as debugging, testing, code review, and release preparation.
 - **Capability bundles** package related built-in skills so they can be installed and removed together. Browse with `oasis plugins list`; install with `oasis plugins install code-quality`; remove with `oasis plugins remove code-quality`. Bundles are copied into the current workspace under `.oasis/`.
-- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`. External integrations may execute code or access data, so inspect their source, requested environment variables, and permissions before enabling them.
+- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`. The extension inspector can propose supported local stdio servers from `.mcp.json`, `mcp.json`, `mcp-servers.json`, or `gemini-extension.json`. Review them with `oasis extensions inspect URL`, then use `oasis extensions mcp-import URL` (or the browser review panel) to import selected entries **disabled**. The importer does not copy manifest environment values or start processes; configure required environment variables and review the executable before enabling a server.
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
 
