@@ -6,7 +6,7 @@ import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/p
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
 import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
@@ -164,8 +164,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
     omniroute: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', model: 'auto' }
   };
   try {
-    const allowedDefault = ['omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'custom'];
-    const defaultPreset = allowedDefault.includes(options.defaultPreset) ? options.defaultPreset : 'openai';
+    const defaultPreset = resolveSetupProviderPreset(options.defaultPreset);
     presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
