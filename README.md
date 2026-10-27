@@ -1,79 +1,134 @@
 # Oasis OSS
 
-**A calm, local-first workspace for projects, tasks, and working notes.**
+**An open-source, plain-English coding agent plus a local-first project workspace.**
 
-Oasis gives your work a home without asking you to create an account, configure a server, or connect a model. The first version is a dependency-free browser app designed to run as a static site.
+Oasis is being built to turn requests like “inspect this project, install the missing tool, implement the feature, and run the tests” into a verified, multi-step workflow. Its terminal runtime is the main agent interface; the browser app remains a lightweight workspace for projects, tasks, and notes.
 
-## What works today
+## Install the terminal agent
 
-- **Overview dashboard** with project progress, open/completed tasks, and quick add.
-- **Project management** with create, search, filter, progress, completion/reopen, and removal.
-- **Task management** with completion toggles, priorities, project association, search, and deletion.
-- **Working notes** with automatic local saving and a word count.
-- **Workspace backup and restore** using JSON export/import.
-- **Light and dark themes**, responsive phone navigation, keyboard focus styles, and reduced-motion support.
-- **Installable PWA shell** with an app icon and service-worker caching for the core interface.
-- **Static hosting** support and GitHub Actions quality checks.
+Requirements: Node.js 20+ and npm. Git is required for installing directly from this repository.
 
-## Run it
+~~~bash
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#main
+oasis setup
+oasis doctor
+oasis
+~~~
 
-No build step or package install is needed. Open **index.html** in a modern browser, or serve the repository with any static HTTP server.
+During setup, enter an OpenAI-compatible chat-completions base URL, a model name that supports tool calling, and an API key. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
 
-For a local server with Python:
+Supported provider shapes:
+- OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
+- Local Ollama-style endpoints such as \`http://localhost:11434/v1\`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
+- Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. \`OPENAI_API_KEY\` is also accepted.
+
+Oasis does not include an API subscription or a model. A provider must be reachable and the selected model must support tool calling.
+
+## Use it in plain English
+
+~~~bash
+oasis "Explain this repository and identify the next useful improvement"
+oasis "Find the bug in the task filter, fix it, and run the relevant tests"
+oasis "Install pnpm"
+oasis "Install Playwright and set up browser tests"
+oasis skills list
+oasis skills install debugging
+~~~
+
+A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model.
+
+## What is implemented
+
+### Terminal agent
+- Interactive sessions and one-shot plain-English tasks.
+- A multi-step OpenAI-compatible tool-calling loop.
+- Workspace file listing, literal search, and bounded text reads/writes.
+- Command execution through an executable plus argument array, without shell expansion.
+- Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
+- Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
+- Bundled skills for debugging, code review, testing, environment setup, and shipping features.
+- Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
+- Automatic snapshots before overwriting files, plus snapshot listing and restore commands.
+- Environment diagnosis, workspace initialization, provider configuration, and self-update.
+
+### Browser workspace
+- Responsive project dashboard with statistics.
+- Project creation, filtering, progress, completion/reopen, and removal.
+- Task creation, completion, priorities, project association, search, and deletion.
+- Notes that save locally, plus JSON export/import.
+- Light/dark themes and an installable PWA shell with a service worker for offline caching.
+
+## Safety model
+
+Oasis is a local developer tool, not a security sandbox.
+
+- File tools are confined to the selected workspace and reject paths that escape via traversal or symlinks.
+- Common secret files, private keys, and credential files are excluded from file tools.
+- Existing files are snapshotted before the agent overwrites them. File deletions require a separate interactive approval and are snapshotted first.
+- Shell interpreters and several high-impact destructive executables are blocked by the general command tool. Commands and package installs require approval by default.
+- \`--yes\` (or \`OASIS_AUTO_APPROVE=1\`) auto-approves supported command/install actions. Do not use it for an untrusted repository; explicitly destructive operations remain blocked, and file deletion still requires interactive approval.
+- Child processes do not inherit common API keys, tokens, passwords, and credential variables by default. Use \`OASIS_COMMAND_ENV_ALLOWLIST\` only when a command genuinely needs a specifically named variable.
+- Web fetching rejects localhost/private-network targets, does not follow redirects automatically, and caps response size.
+- Project instructions, skill files, repository contents, and web pages are untrusted input and cannot override Oasis's safety rules.
+
+These guards reduce risk but cannot guarantee that every third-party package or project script is safe. Code executed by the OS still runs with the user's operating-system permissions. Review the requested operation, keep backups, and use an isolated development environment for untrusted code.
+
+## Useful commands
+
+| Command | Purpose |
+|---|---|
+| \`oasis\` | Start an interactive coding session |
+| \`oasis "task"\` | Run a plain-English task |
+| \`oasis setup\` | Configure a provider |
+| \`oasis doctor\` | Check Node, package managers, and provider config |
+| \`oasis init\` | Create an \`OASIS.md\` project context file |
+| \`oasis install PACKAGE\` | Install a tool or package |
+| \`oasis skills list\` | List bundled and workspace skills |
+| \`oasis skills install NAME\` | Install a bundled skill into the workspace |
+| \`oasis backups\` | List recoverable file snapshots |
+| \`oasis restore BACKUP_ID\` | Restore a snapshot after confirmation |
+| \`oasis config\` | Show provider settings without revealing the key |
+| \`oasis update\` | Update the CLI from this public repository |
+
+Options: \`--workspace PATH\` chooses the workspace and \`--yes\` explicitly enables automatic approval for supported actions.
+
+## Run the browser workspace
+
+No build step or package installation is needed for the static workspace. Open \`index.html\` in a modern browser, or run:
 
 ~~~bash
 python -m http.server 8000
 ~~~
 
-Then open http://localhost:8000.
+Then open \`http://localhost:8000\`.
 
-## Data, privacy, and limits
+## Development and verification
 
-- Projects, tasks, theme preference, and notes are stored in this browser's local storage.
-- The app does **not** connect to GitHub, a cloud database, or an AI provider.
-- Data does not automatically sync across browsers or devices.
-- The service worker caches the app shell, not your data or a cloud service. The first visit requires a working network connection when hosted.
-- Browser storage is not encrypted. Do not store passwords, API keys, private keys, or sensitive personal information.
-- Use **Export backup** before clearing site data or moving to another device.
-- Import replaces the current workspace only after a confirmation prompt.
-- The starter data is illustrative and can be changed or removed.
-
-These limitations are intentional and visible. The interface does not pretend that a cloud service or account system exists.
-
-## Deploy to GitHub Pages
-
-A Pages deployment workflow is included at .github/workflows/pages.yml.
-
-1. In the repository, open **Settings → Pages**.
-2. Choose **GitHub Actions** as the build and deployment source.
-3. Push to the main branch (or manually run the Pages workflow from the Actions tab).
-4. Open the URL reported by the successful deployment workflow.
-
-The repository setting in Step 2 requires an owner/admin action and is not changed by a code commit. A successful CI test does not, by itself, mean the public site is deployed. Once hosted over HTTPS, a compatible browser can offer installation; offline launch depends on the service worker having installed successfully.
-
-## Repository map
-
-- **index.html** — responsive app and client-side interactions.
-- **scripts/check-site.mjs** — dependency-free integrity and JavaScript syntax checks.
-- **.github/workflows/quality.yml** — checks pushes and pull requests.
-- **.github/workflows/pages.yml** — validates and deploys the static site.
-- **docs/ARCHITECTURE.md** — current architecture and data boundaries.
-- **docs/ROADMAP.md** — staged next steps, separate from shipped functionality.
-
-## Development checks
-
-Requires Node.js 20 or newer:
+Node.js 20 or newer:
 
 ~~~bash
-node scripts/check-site.mjs
+npm run check
+npm pack --dry-run
 ~~~
 
-The check validates required UI anchors and parses the inline JavaScript for syntax errors. It is a useful smoke check, not a substitute for accessibility review, real-device testing, or end-to-end browser tests.
+The test suite checks URL validation, configuration file permissions, install intent parsing, package-name validation, workspace boundaries, secret-file protection, snapshots and restore, approval requirements, command environment filtering, private URL rejection, and a full simulated model/tool-call cycle against a local fixture server. The browser integrity script checks the static UI, JavaScript syntax, PWA manifest, icon, and service worker.
+
+A passing test suite is not a full security audit or a substitute for exercising the CLI on Linux, macOS, Windows, Android/Termux, or against real model providers.
+
+## Known limitations — not claimed as finished
+
+- Oasis uses OpenAI-compatible tool calling in this version; it does not yet implement the native Anthropic Messages API.
+- MCP server configuration, a plugin marketplace, and external integrations are not yet implemented.
+- No OS-level sandbox or container isolation is provided.
+- Agent sessions are kept in memory for the current process; durable cross-session conversation history is not implemented.
+- Tool calls are sequential. Parallel agent orchestration, automatic compaction strategies, streaming token output, and advanced conflict handling are not implemented.
+- The CLI and browser dashboard are separate interfaces; they do not currently share live project/task state.
+- GitHub Pages deployment must be enabled in the repository's Pages settings. A workflow file alone does not prove the site is live.
 
 ## Contributing
 
-See CONTRIBUTING.md. Security reports: see SECURITY.md.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [the runtime architecture](docs/ARCHITECTURE.md).
 
 ## License
 
-MIT. See LICENSE.
+MIT. See [LICENSE](LICENSE).
