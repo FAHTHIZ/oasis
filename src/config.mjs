@@ -1,0 +1,92 @@
+import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+
+export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+export const DEFAULT_MODEL = 'gpt-4.1';
+
+export function getConfigDirectory(env = process.env, home = os.homedir()) {
+  if (env.OASIS_CONFIG_DIR) return path.resolve(env.OASIS_CONFIG_DIR);
+  if (env.OASIS_HOME) return path.resolve(env.OASIS_HOME);
+  if (process.platform === 'win32' && env.APPDATA) return path.join(env.APPDATA, 'oasis');
+  return path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'oasis');
+}
+
+export function getConfigPath(env = process.env, home = os.homedir()) {
+  return path.join(getConfigDirectory(env, home), 'config.json');
+}
+
+export function isLoopbackUrl(raw) {
+  try {
+    const url = new URL(raw);
+    return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+export function validateBaseUrl(raw) {
+  let url;
+  try { url = new URL(raw); } catch { throw new Error('The provider URL must be a valid HTTP or HTTPS URL.'); }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS provider URLs are supported.');
+  if (url.protocol === 'http:' && !isLoopbackUrl(raw)) throw new Error('Non-local model providers must use HTTPS. HTTP is allowed only for localhost providers.');
+  if (url.username || url.password || url.search || url.hash) throw new Error('Provider URLs must not include credentials, query parameters, or fragments.');
+  return raw.replace(/\/+$/, '');
+}
+
+function clampInteger(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+export async function loadConfig(options = {}) {
+  const env = options.env || process.env;
+  const configPath = options.configPath || getConfigPath(env);
+  let saved = {};
+  try {
+    const parsed = JSON.parse(await readFile(configPath, 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error('Could not read Oasis configuration: ' + error.message);
+  }
+  const baseURL = validateBaseUrl(env.OASIS_BASE_URL || saved.baseURL || DEFAULT_BASE_URL);
+  const model = String(env.OASIS_MODEL || saved.model || DEFAULT_MODEL).trim();
+  if (!model) throw new Error('No model is configured. Run oasis setup.');
+  const apiKey = env.OASIS_API_KEY || env.OPENAI_API_KEY || saved.apiKey || '';
+  const localProvider = isLoopbackUrl(baseURL);
+  return {
+    ...saved, baseURL, model, apiKey, configPath,
+    configured: Boolean(apiKey) || localProvider,
+    maxSteps: clampInteger(saved.maxSteps, 12, 1, 30),
+    maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600)
+  };
+}
+
+export async function saveConfig(config, options = {}) {
+  const env = options.env || process.env;
+  const configPath = options.configPath || getConfigPath(env);
+  await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  const safe = {
+    baseURL: validateBaseUrl(config.baseURL || DEFAULT_BASE_URL),
+    model: String(config.model || DEFAULT_MODEL).trim(),
+    apiKey: String(config.apiKey || ''),
+    maxSteps: clampInteger(config.maxSteps, 12, 1, 30),
+    maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
+  };
+  if (!safe.model) throw new Error('The model name cannot be empty.');
+  await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+  try { await chmod(configPath, 0o600); } catch { /* POSIX mode bits are unavailable on some filesystems. */ }
+  return configPath;
+}
+
+export function getProviderSummary(config) {
+  let host = 'provider not configured';
+  try { host = new URL(config.baseURL).host; } catch {}
+  return {
+    provider: host,
+    model: config.model || DEFAULT_MODEL,
+    authentication: config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
+    configPath: config.configPath || getConfigPath()
+  };
+}
