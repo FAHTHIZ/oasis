@@ -41,6 +41,12 @@ export function validateProtocol(raw) {
   return protocol;
 }
 
+function stripTrailingSlashes(raw) {
+  let value = String(raw || '');
+  while (value.endsWith('/')) value = value.slice(0, -1);
+  return value;
+}
+
 export function validateBaseUrl(raw) {
   let url;
   try { url = new URL(raw); } catch { throw new Error('The provider URL must be a valid HTTP or HTTPS URL.'); }
@@ -70,7 +76,7 @@ export async function loadConfig(options = {}) {
   let savedBaseURL = '';
   try { savedBaseURL = validateBaseUrl(saved.baseURL || ''); } catch {}
   const savedProtocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL));
-  const requestedProtocol = env.OASIS_PROTOCOL || (env.OASIS_BASE_URL && env.OASIS_BASE_URL.replace(/\\/+$/, '') !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
+  const requestedProtocol = env.OASIS_PROTOCOL || (env.OASIS_BASE_URL && stripTrailingSlashes(env.OASIS_BASE_URL) !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
   const protocol = validateProtocol(requestedProtocol);
   const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
   const baseURL = validateBaseUrl(env.OASIS_BASE_URL || savedBaseURL || defaultBase);
