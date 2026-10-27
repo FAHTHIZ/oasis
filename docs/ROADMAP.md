@@ -6,7 +6,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
-- OpenAI-compatible and native Anthropic multi-step tool-calling loops.
+- Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
 - MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
 - Bounded project file listing/search/read/write/delete tools with workspace and secret-path protections.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
