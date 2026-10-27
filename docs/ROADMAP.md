@@ -15,6 +15,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and static PWA app-shell caching.
 - Authenticated local HTTP bridge (`oasis web`) with mobile-friendly agent chat, saved-session restoration, polled job events, browser approval/denial, and a workspace command runner that reuses the CLI's argv-only safety policy.
+- GitHub CLI-backed account status, up to 30 accessible repositories, approval-gated cloning, and active workspace switching without passing GitHub tokens to the browser.
 - Service-worker exclusion for `/api/*` so authenticated runtime responses are never cached.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
@@ -54,7 +55,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 ## Milestone 4 — sandboxing and integrations
 
 - Add a real isolation layer for unattended code execution; permission prompts alone are not a sandbox.
-- Define secure MCP and GitHub integrations, explicit scopes, secret management, audit logs, and recovery.
+- Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
 - Establish a well-tested install/bootstrap flow for supported platforms.
 - Build the integrated mobile-first chat + terminal UI and connect it to the agent runtime through an authenticated local/remote bridge; the current static PWA cannot execute runtime commands.
 - Connect browser workspace data to the CLI only after a local API and authentication boundary are designed.
