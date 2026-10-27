@@ -1,1 +1,2 @@
-Implement resolveRelative(root, value) so it resolves a path under root and throws if the resolved path escapes root, including via ../ or an absolute path outside the root. Do not rely on string-prefix checks.
+Create src/lib.mjs exporting resolveRelative(...) to solve this task: Resolve a relative path below the workspace root and throw if it escapes via ../ or an absolute path. Use path.relative rather than string-prefix checks.
+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.
