@@ -14,7 +14,7 @@ const required = [
   'id="view-tasks"', 'id="view-notes"', 'id="projectDialog"', 'id="taskDialog"', 'id="manageProjectDialog"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
   'id="view-agent"', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
-  'id="view-extensions"', 'id="extensionInspectForm"', 'id="extensionScope"', 'id="extensionCandidateList"', 'id="extensionCompatibility"', 'Detected format:', 'id="installedExtensions"', 'read_skill_resource',
+  'id="view-extensions"', 'id="extensionInspectForm"', 'id="extensionScope"', 'id="extensionCandidateList"', 'id="extensionCompatibility"', 'Detected format:', 'id="installedExtensions"',
   'id="view-integrations"', 'data-integration-tab="connectors"', 'Specialist reviews', 'id="mcpAddForm"', '/api/extensions/inspect', '/api/extensions/install', '/api/mcp',
   'id="agentModelButton"', 'id="agentModelName"', '#view-agent.active{display:flex',
   'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
