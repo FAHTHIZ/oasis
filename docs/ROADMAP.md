@@ -11,6 +11,8 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Shipped foundations
 
+- Chat-native provider setup: the agent can install/start a local OmniRoute gateway only after approval, test an inert tool call, and switch the saved provider after verification. Conversational installs of selected Vercel Agent Skills are also supported; imported instructions remain untrusted and scripts/hooks stay inactive.
+
 - Read-only Git status/diff tools with common secret-path exclusions, plus plan mode that only exposes read-only tools and independently blocks non-read-only calls.
 
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and static PWA app-shell caching.
@@ -50,9 +52,9 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
-- Add streaming responses and mid-turn compaction that can preserve active task/tool-call state safely.
+- Add mid-turn compaction that can preserve active task/tool-call state safely. Incremental model streaming is implemented in the CLI/browser runtime with a non-streaming JSON fallback for compatible gateways.
 - Extend the initial bundled capability catalog with remote marketplace discovery, version pinning, integrity checks, update/rollback, and supply-chain review.
-- Design a provider/model capability probe and clearer setup diagnostics.
+- Expand provider/model capability probing to cover route availability, quota/auth failures, and clearer recovery guidance. The inert tool-call probe is implemented for setup and `oasis doctor --test-provider`.
 
 ## Milestone 3 — agent strength
 
@@ -72,4 +74,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, and best-effort between-turn context compaction. It still lacks a full PTY, encrypted remote access, GitHub OAuth, a real remote plugin marketplace, streaming, mid-turn compaction, OS-level sandboxing, specialist-agent orchestration, cross-platform end-to-end UI tests, and a mature browser/GitHub execution environment.
+Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, mid-turn compaction, OS-level sandboxing, independent parallel subagent execution, cross-platform end-to-end UI tests, and a mature browser/GitHub execution environment.
