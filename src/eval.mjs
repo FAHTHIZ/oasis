@@ -349,7 +349,7 @@ export async function runEvalCommand(args = [], options = {}) {
           taskId: task.id, trial,
           status: passed ? 'passed' : 'failed',
           model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL,
-          maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens,
+          maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null,
           inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens,
           costUSD, wallTimeMs: elapsedMs, finished: Boolean(agentResult && agentResult.finished),
           toolCalls: agentResult ? agentResult.toolCalls : 0,
@@ -374,7 +374,7 @@ export async function runEvalCommand(args = [], options = {}) {
     taskCount: selectedDirs.length, trialsPerTask: config.trials,
     passRate: trials.length ? passedCount / trials.length : 0,
     passed: passedCount, failed: trials.length - passedCount,
-    provider: { model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL, maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens },
+    provider: { model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL, maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null },
     pricing: { inputUsdPerMillionTokens: inputRate, outputUsdPerMillionTokens: outputRate, note: 'Cost is a rough estimate from configured rates and does not distinguish cached tokens.' }
   };
   const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
