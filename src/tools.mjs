@@ -6,6 +6,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { snapshotFile } from './backups.mjs';
 import { planPackageInstall, normalizePackageName } from './installer.mjs';
+import { managePlugins } from './plugins.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
@@ -32,7 +33,8 @@ export const TOOL_DEFINITIONS = [
 
   { type: 'function', function: { name: 'edit_file', description: 'Make a precise edit to an existing text file by replacing an exact string. Prefer this over write_file for existing files. old_string must match exactly and be unique unless replace_all is true. The previous contents are snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path of an existing file' }, old_string: { type: 'string', description: 'Exact existing text to replace; must be non-empty' }, new_string: { type: 'string', description: 'Replacement text' }, replace_all: { type: 'boolean', description: 'Replace every occurrence instead of requiring a unique match' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } }
+  { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
 function inside(base, candidate) {
@@ -538,6 +540,15 @@ export async function executeTool(name, args = {}, context = {}) {
       return { skills: await listAvailableSkills(root) };
     case 'load_skill':
       return await loadSkillText(root, args.name);
+    case 'install_plugin': {
+      const name = String(args.name || '');
+      if (!['code-quality', 'project-onboarding', 'debugging', 'ship-feature'].includes(name)) throw new Error('Choose a built-in bundle from oasis plugins list.');
+      if (!context.autoApprove && (!context.approval || !(await context.approval('Install the reviewed Oasis plugin bundle "' + name + '" and copy its workflow skill files into this workspace?')))) {
+        return { approved: false, name, message: 'Plugin installation was not approved. No files were installed.' };
+      }
+      await managePlugins(root, ['install', name]);
+      return { installed: true, name, message: 'Installed the bundled workflow instructions. External integrations still require separate setup and approval.' };
+    }
     case 'edit_file': {
       if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new Error('old_string and new_string must be strings.');
       if (!args.old_string.length) throw new Error('old_string must not be empty. To create a new file, use write_file.');
