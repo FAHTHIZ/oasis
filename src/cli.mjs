@@ -377,8 +377,9 @@ async function runVercelSkillsCli(root, cliArgs, description, autoApprove) {
     DO_NOT_TRACK: '1'
   };
   const childCommand = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'npx';
+  const windowsCommandLine = ['npx.cmd', ...args].map(quoteWindowsCommandArgument).join(' ');
   const childArgs = process.platform === 'win32'
-    ? ['/d', '/v:off', '/s', '/c', ['npx.cmd', ...args].map(quoteWindowsCommandArgument).join(' ')]
+    ? ['/d', '/v:off', '/s', '/c', '"' + windowsCommandLine + '"']
     : args;
   const result = await new Promise((resolve) => {
     const child = spawn(childCommand, childArgs, {
