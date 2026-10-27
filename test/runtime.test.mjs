@@ -200,6 +200,67 @@ test('agent completes an OpenAI-compatible tool cycle against a local fixture se
 });
 
 
+test('native OpenAI Responses API can call an Oasis tool and replay the complete response items', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), '# Responses fixture');
+  let requests = 0;
+  let authSeen = false;
+  let firstPayload = null;
+  let secondPayload = null;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const payload = JSON.parse(body);
+    requests++;
+    authSeen = authSeen || req.url === '/v1/responses' && req.headers.authorization === 'Bearer responses-fixture-key';
+    if (requests === 1) firstPayload = payload;
+    else secondPayload = payload;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({
+        id: 'resp_fixture_1',
+        status: 'completed',
+        output: [
+          { id: 'msg_fixture_1', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'I will inspect the files.' }] },
+          { id: 'fc_fixture_1', type: 'function_call', call_id: 'call_fixture_list', name: 'list_files', arguments: '{"path":"."}', status: 'completed' }
+        ]
+      }));
+    } else {
+      res.end(JSON.stringify({
+        id: 'resp_fixture_2',
+        status: 'completed',
+        output: [{ id: 'msg_fixture_2', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'The workspace contains README.md.' }] }]
+      }));
+    }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = {
+    protocol: 'openai-responses',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: 'responses-fixture-key',
+    maxSteps: 4,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  const result = await runAgentTurn(session, 'List the files in this workspace.');
+  assert.equal(result.finished, true);
+  assert.equal(result.toolCalls, 1);
+  assert.equal(requests, 2);
+  assert.equal(authSeen, true);
+  assert.equal(firstPayload.model, 'fixture-model');
+  assert.equal(firstPayload.store, false);
+  assert.ok(Array.isArray(firstPayload.input));
+  assert.ok(firstPayload.tools.some((tool) => tool.type === 'function' && tool.name === 'list_files'));
+  assert.ok(secondPayload.input.some((item) => item.type === 'function_call' && item.call_id === 'call_fixture_list'));
+  assert.ok(secondPayload.input.some((item) => item.type === 'function_call_output' && item.call_id === 'call_fixture_list' && item.output.includes('README.md')));
+  assert.equal(session.messages.at(-1).content, 'The workspace contains README.md.');
+});
+
 test('native Anthropic Messages API can call an Oasis tool and consume its result', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
