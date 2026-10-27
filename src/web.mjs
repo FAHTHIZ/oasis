@@ -10,7 +10,7 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -600,6 +600,34 @@ export function createOasisWebServer(options = {}) {
           (/repository home URL|public GitHub repository URL|not a valid HTTP|private repositories|only HTTP and HTTPS/i.test(message) ? 400 :
           (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422));
         json(res, status, { error: message.slice(0, 2000) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/extensions/update') {
+      const body = await readJsonBody(req);
+      const url = String(body.url || '').trim();
+      const scope = String(body.scope || 'project');
+      const expectedCommit = String(body.expectedCommit || '');
+      if (!url || url.length > 800) { json(res, 400, { error: 'Provide a GitHub repository URL no longer than 800 characters.' }); return; }
+      if (!['self', 'project', 'both'].includes(scope)) { json(res, 400, { error: 'Scope must be self, project, or both.' }); return; }
+      if (!/^[a-f0-9]{40}$/i.test(expectedCommit)) { json(res, 400, { error: 'Inspect the repository first. A reviewed 40-character commit identifier is required.' }); return; }
+      try {
+        const result = await updateGitHubExtension(url, { root: activeRoot, env, scope, expectedCommit, fetchImpl: options.fetchImpl });
+        json(res, 200, {
+          updated: result.updated, alreadyCurrent: result.alreadyCurrent,
+          extensionName: result.extensionName, scope: result.scope, commitSha: result.commitSha,
+          oldCommits: result.oldCommits,
+          backups: (result.backups || []).map((item) => ({ scope: item.scope, commitSha: item.commitSha })),
+          importedFiles: result.importedFiles || 0, commands: result.commands || [],
+          note: result.alreadyCurrent ? 'The installed extension already matches the reviewed commit.' : 'The new extension revision was installed. The previous verified revision is kept in the local rollback history.'
+        });
+      } catch (error) {
+        const message = String(error && error.message || error);
+        const status = /not installed|already current/i.test(message) ? 409 :
+          (/repository home URL|public GitHub repository URL|not a valid HTTP|private repositories|only HTTP and HTTPS|scope must/i.test(message) ? 400 :
+          (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422));
+        json(res, status, { error: message.slice(0, 2500) });
       }
       return;
     }

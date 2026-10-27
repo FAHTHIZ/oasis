@@ -439,15 +439,45 @@ async function extensionRefreshInstalled(){
   var list=document.getElementById('installedExtensions');if(!list)return;
   if(!agentToken){list.innerHTML='<div class="integration-empty">Connect the Oasis runtime to load the managed extension inventory.</div>';return}
   try{var result=await agentApi('/api/extensions');var extensions=result.extensions||[];
-    list.innerHTML=extensions.length?extensions.map(function(item){var commands=(item.commands||[]).map(function(command){return '<span class="extension-chip">/'+extensionEscape(command.alias)+'</span>'}).join('');return '<article class="extension-card"><div class="extension-card-head"><div class="extension-card-icon">⬡</div><div class="extension-card-main"><div class="extension-card-title">'+extensionEscape(item.name)+'</div><div class="extension-card-desc">'+extensionEscape(item.description||item.source)+'</div><div class="extension-meta"><span class="extension-chip good">'+extensionEscape(item.scope==='self'?'Oasis · all projects':'Current project')+'</span><span class="extension-chip">'+extensionEscape(String(item.importedFiles))+' skills · '+extensionEscape(String(item.preservedResources||0))+' resources</span><span class="extension-chip">'+extensionEscape(item.license||'Unknown license')+'</span><span class="extension-chip">Commit '+extensionEscape((item.commitSha||'').slice(0,12))+'</span>'+commands+'</div></div><button class="btn btn-danger" data-remove-extension="'+extensionEscape(item.name)+'" data-remove-scope="'+extensionEscape(item.scope)+'" type="button">Remove</button></div><div class="extension-warning">Imported instructions remain untrusted. '+extensionEscape(item.execution||'No code executed.')+'</div></article>'}).join(''):'<div class="integration-empty">No external extensions installed yet. Paste a GitHub collection above to bring your first specialist into Oasis.</div>';
+    list.innerHTML=extensions.length?extensions.map(function(item){var commands=(item.commands||[]).map(function(command){return '<span class="extension-chip">/'+extensionEscape(command.alias)+'</span>'}).join('');return '<article class="extension-card"><div class="extension-card-head"><div class="extension-card-icon">⬡</div><div class="extension-card-main"><div class="extension-card-title">'+extensionEscape(item.name)+'</div><div class="extension-card-desc">'+extensionEscape(item.description||item.source)+'</div><div class="extension-meta"><span class="extension-chip good">'+extensionEscape(item.scope==='self'?'Oasis · all projects':'Current project')+'</span><span class="extension-chip">'+extensionEscape(String(item.importedFiles))+' skills · '+extensionEscape(String(item.preservedResources||0))+' resources</span><span class="extension-chip">'+extensionEscape(item.license||'Unknown license')+'</span><span class="extension-chip">Commit '+extensionEscape((item.commitSha||'').slice(0,12))+'</span>'+commands+'</div></div><button class="btn btn-secondary" data-update-extension="'+extensionEscape(item.name)+'" data-update-scope="'+extensionEscape(item.scope)+'" data-update-source="'+extensionEscape(item.source)+'" data-update-commit="'+extensionEscape(item.commitSha)+'" type="button">Update</button><button class="btn btn-danger" data-remove-extension="'+extensionEscape(item.name)+'" data-remove-scope="'+extensionEscape(item.scope)+'" type="button">Remove</button></div><div class="extension-warning">Imported instructions remain untrusted. '+extensionEscape(item.execution||'No code executed.')+'</div></article>'}).join(''):'<div class="integration-empty">No external extensions installed yet. Paste a GitHub collection above to bring your first specialist into Oasis.</div>';
   }catch(e){list.innerHTML='<div class="integration-empty">Could not load extensions: '+extensionEscape(e.message)+'</div>'}
 }
+async function extensionUpdate(name,scope,source,oldCommit){
+  if(!agentToken||extensionBusy)return;
+  extensionSetBusy(true);
+  try{
+    extensionStatus('Reviewing the latest pinned revision before updating '+name+'…');
+    var data=await agentApi('/api/extensions/inspect',{method:'POST',body:JSON.stringify({url:source})});
+    extensionRenderInspection(data,source);
+    if(data.treeTruncated||data.canInstall===false){extensionStatus('Update blocked: repository tree is incomplete or has no supported Markdown prompts.',true);return}
+    if((data.repository.commitSha||'').toLowerCase()===String(oldCommit||'').toLowerCase()){
+      extensionStatus(name+' is already at the latest inspected commit.');
+      return;
+    }
+    if(!window.confirm('Update '+name+' ('+scope+') from '+String(oldCommit||'').slice(0,12)+' to '+data.repository.commitSha.slice(0,12)+'?\\n\\nOasis verifies installed file hashes first and retains the previous revision for rollback. Edited files block the update. No scripts or MCP servers are enabled.'))return;
+    extensionStatus('Verifying the installed files, staging the new revision, and keeping the previous version…');
+    var result=await agentApi('/api/extensions/update',{method:'POST',body:JSON.stringify({url:source,scope:scope,expectedCommit:data.repository.commitSha})});
+    if(result.alreadyCurrent){extensionStatus('Already current; no files changed.');return}
+    await extensionRefreshInstalled();
+    var backupText=(result.backups||[]).map(function(backup){return backup.scope+': '+backup.commitSha.slice(0,12)}).join(', ');
+    extensionStatus('Updated '+name+' to '+result.commitSha.slice(0,12)+'. Rollback available for '+backupText+'.');
+    notify('Extension updated with verified rollback history.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+
 async function extensionRemove(name,scope){
   if(!agentToken)return;
   if(!window.confirm('Remove the Oasis-managed '+name+' extension from '+(scope==='self'?'Oasis itself':'the current project')+'? Oasis will refuse to remove edited prompt files or unexpected contents.'))return;
   try{var result=await agentApi('/api/extensions/remove',{method:'POST',body:JSON.stringify({name:name,scope:scope})});notify('Removed '+result.name+' from '+scope+'.');await extensionRefreshInstalled()}
   catch(e){notify('Extension removal was blocked: '+e.message)}
 }
+document.getElementById('installedExtensions').addEventListener('click',function(e){
+  var update=e.target.closest('[data-update-extension]');
+  if(update){void extensionUpdate(update.getAttribute('data-update-extension'),update.getAttribute('data-update-scope'),update.getAttribute('data-update-source'),update.getAttribute('data-update-commit'));return}
+  var remove=e.target.closest('[data-remove-extension]');
+  if(remove)void extensionRemove(remove.getAttribute('data-remove-extension'),remove.getAttribute('data-remove-scope'));
+});
 document.getElementById('extensionInspectForm').addEventListener('submit',function(e){e.preventDefault();void extensionInspect()});
 document.getElementById('extensionUrl').addEventListener('input',function(){if(extensionInspection&&this.value.trim()!==extensionInspection.url){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository URL changed. Inspect the new URL before installing.')}});
 document.getElementById('extensionInstallBtn').addEventListener('click',function(){void extensionInstall()});

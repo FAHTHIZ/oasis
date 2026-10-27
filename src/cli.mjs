@@ -15,7 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,6 +49,7 @@ function printHelp() {
     '  oasis extensions inspect URL  Review importable prompts and pinned commit',
     '  oasis extensions mcp-import URL [--servers name1,name2]  Import reviewed MCP configs disabled',
     '  oasis extensions install URL --scope both   Import prompts into Oasis + project',
+    '  oasis extensions update URL --scope project  Update a verified install and keep rollback history',
     '  oasis extensions remove NAME --scope project Remove an unmodified import',
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
@@ -644,6 +645,36 @@ async function manageExternalExtensions(root, args, autoApprove) {
     for (const item of mcpPlan.skipped) stdout.write('  Skipped ' + (item.name || item.sourcePath) + ': ' + item.reason + '\n');
     stdout.write('\nSample of prompt paths:\n');
     for (const file of report.files.slice(0, 30)) stdout.write('  ' + file.path + '\n');
+    return;
+  }
+  if (action === 'update') {
+    const url = positional[0];
+    if (!url) throw new Error('Usage: oasis extensions update https://github.com/owner/repository --scope self|project|both');
+    const report = await inspectGitHubExtension(url);
+    const inventory = await listInstalledExtensions({ root });
+    const selectedScopes = scope === 'both' ? ['self', 'project'] : [scope];
+    const matches = inventory.extensions.filter((item) => item.source === report.repository.url && selectedScopes.includes(item.scope));
+    const missing = selectedScopes.filter((itemScope) => !matches.some((item) => item.scope === itemScope));
+    if (missing.length) throw new Error('This repository is not installed in scope(s): ' + missing.join(', ') + '. Install it in those scopes before updating.');
+    stdout.write('Update review\n  Repository: ' + report.repository.fullName + '\n');
+    for (const item of matches) stdout.write('  ' + item.scope + ': ' + item.commitSha + '\n');
+    stdout.write('  New commit: ' + report.repository.commitSha + '\n');
+    stdout.write('  Importable prompts: ' + report.importCount + '\n  Callable Markdown commands: ' + (report.commands || []).length + '\n');
+    if (matches.every((item) => item.commitSha.toLowerCase() === report.repository.commitSha.toLowerCase())) {
+      stdout.write('Already current; no files changed.\n'); return;
+    }
+    const approved = await approve(
+      'Update ' + report.repository.fullName + ' in ' + scope + ' to reviewed commit ' + report.repository.commitSha +
+      '? Oasis verifies existing file hashes, keeps the previous revision for rollback, and does not execute scripts or enable MCP servers.',
+      false, autoApprove
+    );
+    if (!approved) { stdout.write('Update cancelled; the installed revision was not changed.\n'); return; }
+    const result = await updateGitHubExtension(url, { root, scope, expectedCommit: report.repository.commitSha });
+    if (result.alreadyCurrent) { stdout.write('Already current; no files changed.\n'); return; }
+    stdout.write('Updated ' + result.extensionName + ' to ' + result.commitSha + '.\n');
+    for (const backup of result.backups) stdout.write('  Rollback available: ' + backup.scope + ' revision ' + backup.commitSha + '\n');
+    for (const command of result.commands || []) stdout.write('  Command alias: /' + command.alias + '\n');
+    stdout.write('No repository scripts were executed; previous verified revision kept for rollback.\n');
     return;
   }
   if (action === 'mcp-import') {
