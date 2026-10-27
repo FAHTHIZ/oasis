@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { access, mkdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
@@ -299,17 +299,39 @@ export function createOasisWebServer(options = {}) {
           return;
         }
         await mkdir(path.dirname(resolved.absolute), { recursive: true });
-        const safe = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+        const stagingRelative = relative + '.clone-' + job.id;
+        const staging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true });
         const result = await executeTool('run_command', {
           command: 'gh',
-          args: ['repo', 'clone', repository, safe.absolute],
+          args: ['repo', 'clone', repository, staging.absolute],
           timeoutSeconds: 600
         }, { root, env, autoApprove: true, maxCommandSeconds: 600 });
         const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
+        const cleanStaging = async () => {
+          try {
+            const safeStaging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true });
+            await rm(safeStaging.absolute, { recursive: true, force: true });
+          } catch { /* Never follow or remove an unsafe/symlinked path during cleanup. */ }
+        };
         if (result.exitCode === 0 && !result.error) {
-          activeRoot = safe.absolute;
-          job.result = { approved: true, repository, exitCode: 0, workspaceName: path.basename(activeRoot), workspacePath: activeRoot };
+          try {
+            const safeTarget = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+            try {
+              await access(safeTarget.absolute);
+              throw Object.assign(new Error('The clone destination appeared while cloning. The new checkout was left in staging rather than replacing existing files.'), { statusCode: 409 });
+            } catch (error) {
+              if (error.statusCode) throw error;
+              if (error.code !== 'ENOENT') throw error;
+            }
+            await rename(staging.absolute, safeTarget.absolute);
+            activeRoot = safeTarget.absolute;
+            job.result = { approved: true, repository, exitCode: 0, workspaceName: path.basename(activeRoot), workspacePath: activeRoot };
+          } catch (error) {
+            await cleanStaging();
+            job.result = { approved: true, repository, exitCode: null, output, error: error.message, message: 'The repository was downloaded but could not be safely activated. The active workspace was not changed.' };
+          }
         } else {
+          await cleanStaging();
           job.result = { approved: true, repository, exitCode: result.exitCode, output, error: result.error || null, message: 'Clone failed; the active workspace was not changed.' };
         }
         emit(job, 'github_clone_result', { ...job.result, output: output || undefined });
