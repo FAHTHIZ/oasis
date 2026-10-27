@@ -10,7 +10,7 @@ const [html, manifestText, serviceWorker, icon] = await Promise.all([
 ]);
 const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
-  'id="view-tasks"', 'id="view-notes"', 'id="dashboardProjects"',
+  'id="view-tasks"', 'id="view-notes"', 'id="projectDialog"', 'id="taskDialog"', 'id="manageProjectDialog"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
   'id="exportBtn"', 'id="importFile"', 'localStorage',
   'function exportBackup()', 'function importBackup(file)',
@@ -25,6 +25,7 @@ assert.equal(scripts.length, 1, 'Expected exactly one inline application script.
 assert.ok(scripts[0][1].trim().length > 0, 'Inline app script must not be empty.');
 new Function(scripts[0][1]);
 assert.ok(!/<script[^>]+src=/i.test(html), 'The starter should not depend on external scripts.');
+assert.ok(!html.includes('window.prompt('), 'Core creation and management flows should use in-app dialogs, not browser prompts.');
 
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'Oasis OSS — Open Source Studio');
