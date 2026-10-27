@@ -2,13 +2,22 @@
 
 ## Current security boundary
 
-Oasis OSS is a static, client-side application. It has no account system, backend API, or server-side authorization. Workspace data is stored in browser local storage and is not encrypted by this application.
+Oasis OSS has two parts:
 
-Do not store passwords, tokens, private keys, payment information, or sensitive personal data in Oasis. A person with access to the browser profile or an exported backup may be able to read the workspace.
+- The browser workspace is a static client-side app. Projects, tasks, and notes are stored in browser local storage and are not encrypted by the application.
+- The terminal coding agent runs with the current OS user's permissions. It uses a remote or local model provider and launches local tools/commands as requested.
+
+Do not store passwords, API keys, private keys, payment information, or sensitive personal data in browser notes. Browser exports are plain JSON. The CLI's provider key is stored in the user's configuration directory with mode 0600 where supported; environment variables can be used instead.
+
+## Agent safeguards and their limits
+
+The CLI confines file tools to the selected workspace, blocks common secret-file paths, snapshots files before overwriting, requires interactive approval for file deletion, asks before command execution and package installation by default, blocks several destructive commands, strips common credential variables from child-process environments, and restricts URL fetching to public HTTP/HTTPS targets.
+
+These are defense-in-depth checks, not a sandbox. Commands and project scripts can still run with the user's privileges after approval. Package installation can execute third-party code. The \`--yes\` option automatically approves supported command/install operations and should not be used with untrusted repositories. No system can promise that an arbitrary model, repository, or package is safe.
 
 ## Reporting a vulnerability
 
-Please do not publish exploitable details in a public issue. Contact the repository owner privately through GitHub's available private reporting/contact options and include the affected version, steps to reproduce, expected behavior, and potential impact. Do not include real secrets or another person's private data in a report.
+Please do not publish exploitable details in a public issue. Contact the repository owner privately through GitHub's available private reporting/contact options and include the affected version, reproduction steps, expected behavior, and potential impact. Do not include real secrets or another person's private data in a report.
 
 ## Supported versions
 
