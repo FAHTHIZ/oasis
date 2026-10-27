@@ -11,6 +11,8 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Shipped foundations
 
+- Read-only Git status/diff tools with common secret-path exclusions, plus plan mode that only exposes read-only tools and independently blocks non-read-only calls.
+
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
@@ -42,7 +44,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Milestone 3 — agent strength
 
-- Add planning and verification stages with explicit task checklists and regression-oriented tests.
+- Upgrade plan mode into persistent task checklists with explicit acceptance criteria, execution gates, and regression-oriented verifier cycles.
 - Add narrow specialist agents for review/testing/research, with bounded concurrency and shared task state.
 - Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.
 - Add language/toolchain diagnostics (LSP where available) and workspace-specific policy rules.
