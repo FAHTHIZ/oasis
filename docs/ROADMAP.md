@@ -37,7 +37,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Run CI on the default branch and fix all failures.
 - Exercise install/update on Linux, macOS, Windows, and Android/Termux.
-- Add end-to-end UI/browser tests and accessibility review.
+- **Progress:** a Linux Chromium smoke test now exercises the real browser app's authenticated connection and chat flow against a fixture provider in CI. Broader critical-path UI coverage, accessibility review, and cross-platform browser testing remain open.
 - Improve error recovery for package-manager failures and models without tool-calling support.
 - Publish versioned releases only after successful builds and installation tests.
 
@@ -77,4 +77,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, OS-level sandboxing, independent parallel subagent execution, cross-platform end-to-end UI tests, and a mature browser/GitHub execution environment. Mid-turn compaction is implemented as a bounded heuristic and still needs long-task evaluation across provider protocols.
+Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, OS-level sandboxing, independent parallel subagent execution, broad cross-platform end-to-end UI tests (a Linux Chromium chat smoke test is in place), and a mature browser/GitHub execution environment. Mid-turn compaction is implemented as a bounded heuristic and still needs long-task evaluation across provider protocols.
