@@ -343,7 +343,8 @@ function extensionRenderInspection(data,url){
   document.getElementById('extensionCommitChip').textContent='Commit '+data.repository.commitSha.slice(0,12);
   document.getElementById('extensionBranchChip').textContent='Default branch: '+data.repository.defaultBranch;
   document.getElementById('extensionLimitChip').hidden=!data.limited&&!data.treeTruncated;
-  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub marked the returned tree as truncated;document.getElementById('extensionCandidateList').innerHTML=(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':''); inspect the candidate list carefully.':'');
+  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub marked the returned tree as truncated; inspect the candidate list carefully.':'');
+  document.getElementById('extensionCandidateList').innerHTML=(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':'');
   document.getElementById('extensionInstallBtn').textContent='Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');
   document.getElementById('extensionInstallBtn').disabled=false;
 }
