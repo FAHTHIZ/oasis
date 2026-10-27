@@ -11,7 +11,7 @@ Requirements: Node.js 22+ and npm. Git is required for installing directly from 
 ~~~bash
 npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#main
 oasis setup
-oasis doctor
+oasis doctor --test-provider  # Optional live tool-calling check
 oasis
 ~~~
 
@@ -41,7 +41,7 @@ Supported provider shapes:
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
 - Native Anthropic Messages API endpoints. Select `anthropic` during `oasis setup`.
 - Local Ollama-style endpoints such as \`http://localhost:11434/v1\`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
-- Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. \`OPENAI_API_KEY\` is also accepted.
+- Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. Provider-specific keys are recognised for matching presets: \`OPENAI_API_KEY\`, \`ANTHROPIC_API_KEY\`, \`OPENROUTER_API_KEY\`, \`GEMINI_API_KEY\` (or \`GOOGLE_API_KEY\`), and \`OLLAMA_API_KEY\` for Ollama Cloud. Run \`oasis doctor --test-provider\` to send a live inert-tool probe without executing the tool; a successful check confirms the model can call tools.
 
 Oasis does not include an API subscription or a model. A provider must be reachable and the selected model must support tool calling.
 
