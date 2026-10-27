@@ -163,7 +163,8 @@ function commandSafety(command, args) {
   if (!/^[a-zA-Z0-9_./:\\-]+$/.test(String(command))) return 'Command must be one executable path; shell syntax is not accepted.';
   if (SHELLS_AND_DANGEROUS.has(base)) return 'This executable is blocked by Oasis safety policy: ' + base + '. Use a narrow supported tool instead.';
   const joined = args.join(' ').toLowerCase();
-  if ((base === 'git' && ((args[0] === 'reset' && args.includes('--hard')) || (args[0] === 'clean' && args.some((a) => a.startsWith('-') && a.includes('f'))) || (args[0] === 'push' && args.some((a) => a.includes('force'))))) return 'This destructive Git command is blocked by default.';
+  const destructiveGit = base === 'git' && ((args[0] === 'reset' && args.includes('--hard')) || (args[0] === 'clean' && args.some((a) => a.startsWith('-') && a.includes('f'))) || (args[0] === 'push' && args.some((a) => a.includes('force'))));
+  if (destructiveGit) return 'This destructive Git command is blocked by default.';
   if ((base === 'npm' && args[0] === 'publish') || (base === 'gh' && args[0] === 'repo' && args[1] === 'delete')) return 'Publishing or deleting a remote repository is blocked by default.';
   if (joined.includes('rm -rf') || joined.includes('format c:')) return 'The command contains a destructive operation and is blocked.';
   if (base === 'apt' || base === 'apt-get' || base === 'dnf' || base === 'pacman' || base === 'brew' || base === 'winget') {
