@@ -23,7 +23,7 @@ This is not an OS sandbox. An approved test, build, or project script can execut
 
 ## Model provider interface
 
-The runtime expects an OpenAI-compatible \`/chat/completions\` endpoint with tool-calling support. Set \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`, or use \`oasis setup\`. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS. Native Anthropic Messages support is not implemented in this version.
+The runtime expects an OpenAI-compatible \`/chat/completions\` endpoint with tool-calling support. Set \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`, or use \`oasis setup\`. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS. 
 
 ## Browser workspace
 
@@ -38,4 +38,4 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 ## Current architectural gaps
 
-Native Anthropic API support, MCP server integration, container isolation, persistent sessions, streamed model output, parallel tool execution, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
+Container isolation, persistent sessions, streamed model output, parallel tool execution, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
