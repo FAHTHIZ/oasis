@@ -329,6 +329,11 @@ async function manageMcp(rest) {
       stdout.write('    executable: ' + server.command + '\n');
       stdout.write('    args: ' + server.args.length + ' argument(s) (values hidden in this summary)\n');
       stdout.write('    explicit environment passthrough: ' + (server.passEnv.join(', ') || 'none') + '\n');
+      if (server.origin) {
+        stdout.write('    imported from: ' + server.origin.repository + '\n');
+        stdout.write('    source revision: ' + server.origin.commitSha + '\n');
+        stdout.write('    source manifest: ' + server.origin.filePath + '\n');
+      }
     }
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
     return;
