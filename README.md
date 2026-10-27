@@ -54,6 +54,10 @@ oasis "Install pnpm"
 oasis "Install Playwright and set up browser tests"
 oasis skills list
 oasis skills install debugging
+oasis skills find frontend-design
+oasis skills inspect vercel-labs/agent-skills
+oasis skills add vercel-labs/agent-skills --skill web-design-guidelines
+oasis skills add vercel-labs/agent-skills --all --global
 oasis plugins list
 oasis plugins install code-quality
 # Other reviewed bundles include mobile-development, web-app-development, api-development, and security-review.
@@ -67,7 +71,7 @@ oasis extensions list
 oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
 ~~~
 
-A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model.
+A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model. The Skills commands integrate the pinned Vercel Skills CLI on demand: `find` searches skills.sh, `inspect` lists a source's skills, and `add` installs only the chosen skill (or all skills when explicitly requested) into the universal `.agents/skills/` path or its global equivalent. Oasis loads those standard `SKILL.md` files in new sessions and treats them as external/untrusted instructions. The external CLI requires Node.js 22.20+; telemetry is disabled for Oasis-launched runs.
 
 ## What is implemented
 
