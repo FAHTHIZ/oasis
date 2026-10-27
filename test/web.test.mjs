@@ -75,7 +75,7 @@ test('HTTPS browser bridge serves authenticated API traffic and rejects an HTTP 
   assert.equal(allowed.status, 200, allowed.body);
   assert.equal(JSON.parse(allowed.body).connected, true);
   const downgrade = await getStatus('http://127.0.0.1:' + app.port);
-  assert.equal(downgrade.status, 403);
+  assert.equal(downgrade.status, 421);
   assert.match(JSON.parse(downgrade.body).error, /same-origin/i);
 });
 
