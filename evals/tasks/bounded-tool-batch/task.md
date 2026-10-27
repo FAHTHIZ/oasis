@@ -1,1 +1,2 @@
-Implement boundedToolBatch(requested, maximum=16). Default invalid or missing sizes to maximum and clamp valid integers to the inclusive range 0 through maximum. Explicit zero must remain zero.
+Create src/lib.mjs exporting boundedToolBatch(...) to solve this task: Default invalid or absent batch size to maximum (16 by default). Clamp valid sizes to 0..maximum while preserving explicit zero.
+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.

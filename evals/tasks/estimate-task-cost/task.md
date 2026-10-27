@@ -1,1 +1,2 @@
-Implement estimateCost(inputTokens, outputTokens, inputRate, outputRate) using per-million-token prices. Return a dollar estimate rounded to six decimal places; return null for missing, negative, or non-finite values.
+Create src/lib.mjs exporting estimateCost(...) to solve this task: Estimate USD cost from input/output token counts and per-million-token rates, rounded to six decimals. Return null if any value is missing, negative, or non-finite.
+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.
