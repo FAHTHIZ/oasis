@@ -1,1 +1,2 @@
-Fix sliceLines(text, offset, limit) so offset is 1-based and defaults to the first line. Clamp invalid or too-small values safely, cap limit at 2000 lines, and support both LF and CRLF input.
+Create src/lib.mjs exporting sliceLines(...) to solve this task: Read a 1-based range of lines, defaulting to offset 1 and limit 2000. Clamp invalid/small values safely, cap at 2000 lines, and support LF and CRLF input.
+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.

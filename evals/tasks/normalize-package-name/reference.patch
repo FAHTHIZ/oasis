@@ -1,6 +1,6 @@
 diff --git a/src/lib.mjs b/src/lib.mjs
---- a/src/lib.mjs
+new file mode 100644
+--- /dev/null
 +++ b/src/lib.mjs
-@@ -1 +1 @@
--export function normalizePackageName(value) { return String(value || '').trim(); }
+@@ -0,0 +1,1 @@
 +export function normalizePackageName(value) { const name = String(value || '').trim(); if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9][a-z0-9._-]*)?$/i.test(name)) throw new Error('Enter a single package identifier.'); return name; }
