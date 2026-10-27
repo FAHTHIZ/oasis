@@ -11,6 +11,8 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Shipped foundations
 
+- Chat-native setup tools for OmniRoute and existing provider presets, selected external Vercel Agent Skills, and stdio MCP servers. OmniRoute is probed before provider switching; MCP server commands require dedicated manual approval, a successful handshake, and live tool-map refresh in the current session.
+
 - Read-only Git status/diff tools with common secret-path exclusions, plus plan mode that only exposes read-only tools and independently blocks non-read-only calls.
 
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and static PWA app-shell caching.
@@ -19,7 +21,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Service-worker exclusion for `/api/*` so authenticated runtime responses are never cached.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
-- MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
+- MCP stdio configuration through both CLI and chat, tool discovery/calling, explicit per-call approval, and live registration of a newly approved MCP server in the current session.
 - Bounded project file listing, glob search, ranged reads, exact-string patch editing, write/delete tools, and workspace/secret-path protections.
 - Optional workspace-scoped session persistence, on-demand skill loading, and between-turn history compaction with a bounded deterministic fallback.
 - Token and tool-call budgets, parallel read-only calls, and sequential handling of side effects.
@@ -50,9 +52,9 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
-- Add streaming responses and mid-turn compaction that can preserve active task/tool-call state safely.
+- Add mid-turn compaction that can preserve active task/tool-call state safely. Incremental model streaming is implemented in the CLI/browser runtime with a non-streaming JSON fallback for compatible gateways.
 - Extend the initial bundled capability catalog with remote marketplace discovery, version pinning, integrity checks, update/rollback, and supply-chain review.
-- Design a provider/model capability probe and clearer setup diagnostics.
+- Expand provider/model capability probing to cover route availability, quota/auth failures, and clearer recovery guidance. The inert tool-call probe is implemented for setup and `oasis doctor --test-provider`.
 
 ## Milestone 3 — agent strength
 
@@ -72,4 +74,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, and best-effort between-turn context compaction. It still lacks a full PTY, encrypted remote access, GitHub OAuth, a real remote plugin marketplace, streaming, mid-turn compaction, OS-level sandboxing, specialist-agent orchestration, cross-platform end-to-end UI tests, and a mature browser/GitHub execution environment.
+Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, mid-turn compaction, OS-level sandboxing, independent parallel subagent execution, cross-platform end-to-end UI tests, and a mature browser/GitHub execution environment.

@@ -9,8 +9,10 @@ import { isIP } from 'node:net';
 import { snapshotFile } from './backups.mjs';
 import { planPackageInstall, normalizePackageName } from './installer.mjs';
 import { managePlugins } from './plugins.mjs';
-import { getConfigDirectory } from './config.mjs';
+import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, isLoopbackUrl } from './config.mjs';
+import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
+import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
@@ -41,6 +43,10 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' } }, required: ['name', 'path'] } } },
   { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
+  { type: 'function', function: { name: 'setup_omniroute', description: 'Install OmniRoute globally with npm if it is missing, start its local gateway if needed, verify real model tool calling without executing the probe, and switch Oasis to the gateway only after verification succeeds. Use when the user asks to install, set up, or connect OmniRoute. Installation, background startup, and configuration each require approval. Never assume a hosted provider or free quota is guaranteed.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
+  { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to an existing supported provider preset and switch the current chat to it only after an inert tool-call probe succeeds. Presets: openai, anthropic, openrouter, gemini, ollama, omniroute. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable. For OmniRoute that is not running, use setup_omniroute.', parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'omniroute'] }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected external Agent Skill from a repository using the pinned Vercel Skills CLI. Copies only the universal Agent Skills package; does not activate hooks, run skill scripts, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'configure_mcp_server', description: 'Configure and start a local stdio MCP server, then expose its tools in the current chat session. Requires manual approval even when --yes is active. The command, arguments, and environment-variable names are shown for review; never pass secret values in arguments.', parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 40, description: 'Unique lowercase server name using letters, digits, hyphens, or underscores.' }, command: { type: 'string', maxLength: 500, description: 'Single executable, such as npx or a locally installed executable; no shell syntax.' }, args: { type: 'array', maxItems: 80, items: { type: 'string', maxLength: 5000 }, description: 'Argument vector passed directly without shell expansion.' }, passEnv: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Explicit environment variable names to expose to this server; values must be configured locally, never supplied in chat.' } }, required: ['name', 'command'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
@@ -344,6 +350,447 @@ async function runInstallPlan(plan, options) {
       resolve({ approved: true, cancelled, plan, exitCode: code, signal });
     });
   });
+}
+
+
+
+const OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128/v1';
+const OMNIROUTE_DASHBOARD_URL = 'http://127.0.0.1:20128/dashboard';
+const VERCEL_SKILLS_PACKAGE = 'skills@1.7.4';
+
+function providerEnvironmentOverridesActive(env) {
+  return Boolean(env && (env.OASIS_BASE_URL || env.OASIS_PROTOCOL || env.OASIS_MODEL));
+}
+
+function getProviderPreset(provider) {
+  const presets = {
+    openai: { protocol: 'openai-responses', baseURL: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
+    anthropic: { protocol: 'anthropic', baseURL: DEFAULT_ANTHROPIC_BASE_URL, model: 'claude-sonnet-5' },
+    openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
+    gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
+    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' },
+    omniroute: { protocol: 'openai-compatible', baseURL: OMNIROUTE_BASE_URL, model: 'auto' }
+  };
+  return presets[String(provider || '').toLowerCase()] || null;
+}
+
+function getMatchingProviderKey(provider, env) {
+  if (provider === 'openai') return env.OPENAI_API_KEY || '';
+  if (provider === 'anthropic') return env.ANTHROPIC_API_KEY || '';
+  if (provider === 'openrouter') return env.OPENROUTER_API_KEY || '';
+  if (provider === 'gemini') return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || '';
+  if (provider === 'ollama') return env.OLLAMA_API_KEY || '';
+  if (provider === 'omniroute') return env.OASIS_LOCAL_API_KEY || '';
+  return '';
+}
+
+function commandExists(command, env = process.env, timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    const checker = process.platform === 'win32' ? 'where.exe' : 'which';
+    let child;
+    let settled = false;
+    const finish = (exists) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(Boolean(exists));
+    };
+    const timer = setTimeout(() => { try { child?.kill(); } catch {} finish(false); }, timeoutMs);
+    timer.unref?.();
+    try {
+      child = spawn(checker, [command], { env: scrubEnvironment(env), shell: false, windowsHide: true, stdio: 'ignore' });
+      child.once('error', () => finish(false));
+      child.once('close', (code) => finish(code === 0));
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+async function checkOmniRouteEndpoint(apiKey = '', timeoutMs = 1200) {
+  try {
+    const headers = apiKey ? { authorization: 'Bearer ' + apiKey } : {};
+    const response = await fetch(OMNIROUTE_BASE_URL + '/models', {
+      headers,
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    return {
+      reachable: response.status === 200 || response.status === 401 || response.status === 403,
+      status: response.status
+    };
+  } catch {
+    return { reachable: false, status: null };
+  }
+}
+
+async function waitForOmniRoute(apiKey = '', timeoutMs = 20000, signal) {
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus = null;
+  while (Date.now() < deadline) {
+    if (signal && signal.aborted) return { reachable: false, cancelled: true, status: lastStatus };
+    const result = await checkOmniRouteEndpoint(apiKey, 1000);
+    lastStatus = result.status;
+    if (result.reachable) return result;
+    await new Promise((resolve) => setTimeout(resolve, 450));
+  }
+  return { reachable: false, status: lastStatus };
+}
+
+async function startOmniRouteBackground(root, env) {
+  return await new Promise((resolve, reject) => {
+    let child;
+    try {
+      if (process.platform === 'win32') {
+        // Fixed command only; no user input is interpolated into this command string.
+        child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'start "" /b omniroute'], {
+          cwd: root, env: scrubEnvironment(env), detached: true, windowsHide: true, shell: false, stdio: 'ignore'
+        });
+      } else {
+        child = spawn('omniroute', [], {
+          cwd: root, env: scrubEnvironment(env), detached: true, windowsHide: true, shell: false, stdio: 'ignore'
+        });
+      }
+    } catch (error) {
+      reject(new Error('Could not start OmniRoute: ' + String(error && error.message || error)));
+      return;
+    }
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { child.kill(); } catch {}
+      reject(new Error('Timed out while launching the OmniRoute process.'));
+    }, 5000);
+    timer.unref?.();
+    child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error('Could not start OmniRoute: ' + String(error && error.message || error)));
+    });
+    child.once('spawn', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+async function saveVerifiedProvider(provider, config, context) {
+  const env = context.env || process.env;
+  let probe;
+  try {
+    probe = await testProviderConnection(config, { timeoutMs: 30000, signal: context.signal });
+  } catch (error) {
+    const message = String(error && error.message || error).slice(0, 1000);
+    if (provider === 'omniroute') {
+      return {
+        connected: false,
+        needsLocalApiKey: /(?:401|403|unauthorized|authentication|api key|token)/i.test(message),
+        provider,
+        message: 'OmniRoute is reachable, but model/tool-call verification did not pass. No provider settings were changed. Open ' +
+          OMNIROUTE_DASHBOARD_URL + ' to confirm a provider route is available; some OmniRoute setups also require a local endpoint key. ' +
+          'Enter that key only in Oasis’s local provider form or the hidden terminal prompt, not in chat. Details: ' + message
+      };
+    }
+    return { connected: false, provider, message: 'Provider verification failed; the existing configuration was left unchanged. ' + message };
+  }
+  if (!context.autoApprove && (!context.approval || !(await context.approval(
+    'Save the verified model provider "' + provider + '" (' + config.model + ' at ' + config.baseURL + ') as the local Oasis provider? ' +
+    'This updates the user-level provider configuration. The API key is never shown in this prompt.'
+  )))) {
+    return { connected: false, approved: false, provider, message: 'Provider configuration was not changed because approval was denied.' };
+  }
+  const configPath = await saveConfig({
+    protocol: config.protocol, baseURL: config.baseURL, model: config.model, apiKey: config.apiKey || ''
+  }, { env });
+  const loaded = await loadConfig({ env });
+  if (context.config && typeof context.config === 'object') Object.assign(context.config, loaded);
+  return {
+    connected: true,
+    provider,
+    model: probe.model,
+    protocol: probe.protocol,
+    baseURL: config.baseURL,
+    configPath,
+    message: 'Provider tool-calling verification passed and the local Oasis configuration was updated. The inert probe tool was never executed.'
+  };
+}
+
+async function configureProviderFromChat(args, context) {
+  const env = context.env || process.env;
+  if (providerEnvironmentOverridesActive(env)) {
+    return {
+      connected: false,
+      provider: String(args.provider || ''),
+      message: 'OASIS_BASE_URL, OASIS_PROTOCOL, or OASIS_MODEL is set in the environment and takes precedence over the config file. Update those host environment variables before changing providers from chat.'
+    };
+  }
+  const provider = String(args.provider || '').trim().toLowerCase();
+  const preset = getProviderPreset(provider);
+  if (!preset) throw new Error('Choose one supported provider preset: openai, anthropic, openrouter, gemini, ollama, or omniroute.');
+  const model = String(args.model || preset.model || '').trim();
+  if (!model || model.length > 200) throw new Error('This provider needs an exact model ID. Supply the model name from the provider or local server.');
+  const baseURL = validateBaseUrl(preset.baseURL);
+  const current = await loadConfig({ env }).catch(() => context.config || null);
+  const sameTarget = Boolean(current && current.baseURL === baseURL && current.protocol === preset.protocol);
+  const apiKey = String((sameTarget && current.apiKey) || getMatchingProviderKey(provider, env) || '');
+  if (!isLoopbackUrl(baseURL) && !apiKey) {
+    return {
+      connected: false,
+      provider,
+      message: 'No matching saved credential or provider-specific environment key is available for ' + provider + '. Use /setup in the terminal or the local Model provider form to enter the credential privately; Oasis will verify tool calling before saving.'
+    };
+  }
+  return await saveVerifiedProvider(provider, {
+    protocol: preset.protocol, baseURL, model, apiKey
+  }, context);
+}
+
+async function setupOmniRoute(args, context, root) {
+  const env = context.env || process.env;
+  if (providerEnvironmentOverridesActive(env)) {
+    return {
+      connected: false,
+      provider: 'omniroute',
+      message: 'OASIS_BASE_URL, OASIS_PROTOCOL, or OASIS_MODEL is pinned in the environment. Unset or update those host variables first; Oasis will not claim a saved provider change while they override it.'
+    };
+  }
+  const baseURL = OMNIROUTE_BASE_URL;
+  const current = await loadConfig({ env }).catch(() => context.config || null);
+  const apiKey = String(args && args.localApiKey || env.OASIS_LOCAL_API_KEY ||
+    (current && current.baseURL === baseURL && current.protocol === 'openai-compatible' ? current.apiKey : '') || '');
+  let endpoint = await checkOmniRouteEndpoint(apiKey);
+  let installed = false;
+  let started = false;
+
+  if (!endpoint.reachable) {
+    if (!await commandExists('npm', env)) {
+      return { connected: false, provider: 'omniroute', message: 'npm was not found. Install Node.js with npm, then ask Oasis to set up OmniRoute again.' };
+    }
+    if (!await commandExists('omniroute', env)) {
+      const plan = planPackageInstall({ packageName: 'omniroute', ecosystem: 'npm-global', workspaceRoot: root, env });
+      const result = await runInstallPlan(plan, {
+        root, env, signal: context.signal, autoApprove: Boolean(context.autoApprove), approval: context.approval
+      });
+      if (!result || result.approved === false) return { connected: false, approved: false, provider: 'omniroute', message: result?.message || 'OmniRoute installation was not approved; nothing was installed.' };
+      if (result.exitCode !== 0) return { connected: false, provider: 'omniroute', installed: false, message: 'OmniRoute installation did not complete successfully. Exit code: ' + result.exitCode + (result.error ? ': ' + result.error : '') };
+      installed = true;
+    }
+    if (!context.autoApprove && (!context.approval || !(await context.approval(
+      'Start the local OmniRoute gateway as a detached background process on port 20128? It will expose the local API and dashboard on this machine. You can stop it using your operating-system process controls.'
+    )))) {
+      return { connected: false, approved: false, installed, provider: 'omniroute', message: 'OmniRoute was not started because approval was denied. No provider configuration was changed.' };
+    }
+    if (context.signal && context.signal.aborted) return { connected: false, cancelled: true, installed, provider: 'omniroute', message: 'Setup was cancelled before OmniRoute started.' };
+    try {
+      await startOmniRouteBackground(root, env);
+      started = true;
+    } catch (error) {
+      return { connected: false, installed, provider: 'omniroute', message: String(error && error.message || error) };
+    }
+    endpoint = await waitForOmniRoute(apiKey, 20000, context.signal);
+    if (!endpoint.reachable) {
+      return {
+        connected: false, installed, started, provider: 'omniroute',
+        message: 'The OmniRoute process was launched, but its /v1/models endpoint did not become ready. Inspect ' + OMNIROUTE_DASHBOARD_URL + ' or start "omniroute" in a terminal and retry. Your previous provider configuration remains unchanged.'
+      };
+    }
+  }
+
+  return await saveVerifiedProvider('omniroute', {
+    protocol: 'openai-compatible', baseURL, model: 'auto', apiKey
+  }, context).then((result) => ({ ...result, installed, started, dashboard: OMNIROUTE_DASHBOARD_URL }));
+}
+
+async function configureMcpServer(args, context, root) {
+  const env = context.env || process.env;
+  const name = String(args.name || '').trim();
+  const command = String(args.command || '').trim();
+  const candidate = validateMcpServerConfig({
+    name,
+    command,
+    args: args.args === undefined ? [] : args.args,
+    passEnv: args.passEnv === undefined ? [] : args.passEnv,
+    enabled: true
+  });
+  const existing = await loadMcpServers({ env });
+  if (existing.servers.some((server) => server.name === candidate.name)) {
+    return {
+      configured: false,
+      name: candidate.name,
+      message: 'An MCP server named "' + candidate.name + '" is already configured. Choose a new name or remove the existing server first; Oasis did not replace it.'
+    };
+  }
+  if (existing.servers.length >= 40) throw new Error('Oasis already has 40 configured MCP servers; remove one before adding another.');
+  if (!context.session || !(context.session.mcpClients instanceof Map)) {
+    throw new Error('An active Oasis session is required to add an MCP server from chat.');
+  }
+  const summary = [
+    'Configure and start this stdio MCP server now?',
+    'Name: ' + candidate.name,
+    'Executable: ' + candidate.command,
+    'Arguments: ' + JSON.stringify(candidate.args),
+    'Explicit environment passthrough: ' + (candidate.passEnv.join(', ') || 'none'),
+    'Oasis will launch this third-party process under your user account, save the configuration outside the repository, and expose its discovered tools in this chat.',
+    'The server may read or change data available to your OS account. Secret values are not stored in this configuration and must be set in your local environment.'
+  ].join('\n');
+  // MCP activation always needs a conscious approval, even when the general
+  // command runner was launched with --yes.
+  if (!context.approval || !(await context.approval(summary, true))) {
+    return { configured: false, approved: false, name: candidate.name, message: 'MCP setup was denied; no process was started and configuration was not changed.' };
+  }
+  if (context.signal && context.signal.aborted) {
+    return { configured: false, cancelled: true, name: candidate.name, message: 'MCP setup was cancelled before the server started.' };
+  }
+
+  const client = new McpServerClient(candidate, { root, env });
+  let configPath;
+  try {
+    // Start and validate the MCP handshake before making this configuration
+    // persistent. If the server cannot initialize, the old config is untouched.
+    await client.start();
+    configPath = await saveMcpServers([...existing.servers, candidate], { env });
+  } catch (error) {
+    client.close();
+    throw new Error('MCP server "' + candidate.name + '" was not added because startup or configuration failed: ' +
+      String(error && error.message || error).slice(0, 1400) + '. The previous MCP configuration was preserved.');
+  }
+
+  context.session.mcpClients.set(candidate.name, client);
+  const dynamic = mcpToolDefinitions(context.session.mcpClients);
+  context.session.mcpToolMap = dynamic.map;
+  context.session.toolDefinitions = TOOL_DEFINITIONS.concat(dynamic.definitions);
+  return {
+    configured: true,
+    activated: true,
+    name: candidate.name,
+    command: candidate.command,
+    toolCount: client.tools.length,
+    tools: client.tools.map((tool) => String(tool.name)).slice(0, 80),
+    configPath,
+    message: 'The MCP server started successfully and its tools are available in this chat session. It will also start in future sessions until you disable or remove it. Inspect every exposed tool before approving its use.'
+  };
+}
+
+function validExternalSkillSource(raw) {
+  const source = String(raw || '').trim();
+  if (!source || source.length > 600 || /[\r\n\0]/.test(source) || source.startsWith('-')) {
+    throw new Error('Provide a valid skill source (GitHub owner/repo, HTTPS source URL, SSH/Git URL, or local path).');
+  }
+  if (/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(source)) return source;
+  if (/^(?:\.{1,2}[\\/]|[\\/]|[a-z]:[\\/])/i.test(source)) return source;
+  if (/^(?:git@|ssh:\/\/|git:\/\/)/i.test(source)) return source;
+  if (/^https:\/\//i.test(source)) {
+    let url;
+    try { url = new URL(source); } catch { throw new Error('The skill source URL is invalid.'); }
+    if (url.username || url.password || url.hash) throw new Error('Skill source URLs must not contain credentials or fragments.');
+    return source;
+  }
+  throw new Error('Unsupported skill source. Use owner/repo, an HTTPS URL, an SSH/Git URL, or a local path.');
+}
+
+function quoteSkillsWindowsArgument(raw) {
+  const value = String(raw);
+  if (/[\r\n%!"&|<>^]/.test(value)) throw new Error('This value contains shell metacharacters that cannot safely be passed through the Windows command launcher.');
+  return '"' + value.replace(/"/g, '""') + '"';
+}
+
+function runExternalSkillsCommand(root, cliArgs, env, signal) {
+  const npxArgs = ['--yes', VERCEL_SKILLS_PACKAGE, ...cliArgs];
+  const cleanEnv = { ...scrubEnvironment(env), DISABLE_TELEMETRY: '1', DO_NOT_TRACK: '1' };
+  let command = 'npx';
+  let childArgs = npxArgs;
+  if (process.platform === 'win32') {
+    const commandLine = ['npx.cmd', ...npxArgs].map(quoteSkillsWindowsArgument).join(' ');
+    command = process.env.ComSpec || 'cmd.exe';
+    childArgs = ['/d', '/v:off', '/s', '/c', '"' + commandLine + '"'];
+  }
+  return new Promise((resolve) => {
+    let output = '';
+    let settled = false;
+    let timedOut = false;
+    let timer;
+    let child;
+    const append = (chunk) => {
+      output = (output + chunk.toString('utf8')).slice(-16000);
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const onAbort = () => {
+      try { child?.kill('SIGTERM'); } catch {}
+    };
+    try {
+      child = spawn(command, childArgs, { cwd: root, env: cleanEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout.on('data', append);
+      child.stderr.on('data', append);
+    } catch (error) {
+      finish({ exitCode: null, error: String(error && error.message || error), output });
+      return;
+    }
+    timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch {}
+    }, 8 * 60 * 1000);
+    timer.unref?.();
+    if (signal) {
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+    child.once('error', (error) => finish({ exitCode: null, error: String(error && error.message || error), output, timedOut }));
+    child.once('close', (code) => finish({ exitCode: code, output, timedOut, cancelled: Boolean(signal && signal.aborted) }));
+  });
+}
+
+async function installExternalSkill(args, context, root) {
+  const env = context.env || process.env;
+  const source = validExternalSkillSource(args.source);
+  const skill = String(args.skill || '').trim();
+  const all = args.all === true;
+  const scope = String(args.scope || 'project');
+  if (!['project', 'global'].includes(scope)) throw new Error('Choose project or global skill installation scope.');
+  if (Boolean(skill) === all) throw new Error('Choose exactly one of skill="EXACT_NAME" or all=true.');
+  if (skill && (skill.length > 128 || /[\r\n\0"]/.test(skill) || /^-/.test(skill))) throw new Error('Skill names must be 1–128 characters and cannot contain quotes, line breaks, NUL, or start with a flag.');
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (!(major > 22 || (major === 22 && minor >= 20))) {
+    return { installed: false, message: 'The Vercel Skills CLI requires Node.js 22.20 or newer. Upgrade Node.js before importing external skills.' };
+  }
+  if (!await commandExists('npx', env)) throw new Error('npx was not found; install Node.js with npm and rerun this request.');
+  const selection = all ? ['--skill', '*'] : ['--skill', skill];
+  const cliArgs = ['add', source, ...selection, '--agent', 'universal', '--copy', ...(scope === 'global' ? ['--global'] : []), '--yes'];
+  if (!context.autoApprove && (!context.approval || !(await context.approval(
+    'Install ' + (all ? 'all skills' : 'the skill "' + skill + '"') + ' from "' + source + '" into the ' + scope +
+    ' universal Agent Skills directory using ' + VERCEL_SKILLS_PACKAGE + '? The command downloads external instructions; it does not run their scripts, but imported instructions will be treated as untrusted context by Oasis.'
+  )))) {
+    return { installed: false, approved: false, message: 'External skill installation was denied; no skill source was installed.' };
+  }
+  const result = await runExternalSkillsCommand(root, cliArgs, env, context.signal);
+  if (result.cancelled) return { installed: false, cancelled: true, output: result.output, message: 'Skill installation was cancelled. Inspect the output for any partial installation before retrying.' };
+  if (result.error || result.exitCode !== 0 || result.timedOut) {
+    return { installed: false, output: result.output, error: result.error || null, exitCode: result.exitCode, timedOut: Boolean(result.timedOut), message: 'The Vercel Skills CLI did not report a successful install. Review the output; Oasis does not assume the skill was installed.' };
+  }
+  const skills = await listAvailableSkills(root, { env });
+  const installed = all ? skills.filter((item) => scope === 'global' ? item.source === 'global-portable' : item.source === 'portable-workspace')
+    : skills.filter((item) => item.name.toLowerCase() === skill.toLowerCase());
+  return {
+    installed: installed.length > 0,
+    source, scope, skill: all ? '*' : skill,
+    discovered: installed.map((item) => ({ name: item.name, description: item.description, source: item.source })),
+    output: result.output,
+    message: installed.length
+      ? 'The skill installation command succeeded. Oasis can discover the copied universal SKILL.md files; review their instructions as untrusted content before relying on them.'
+      : 'The installer exited successfully, but Oasis did not discover a matching SKILL.md in its standard universal skill directories. Inspect the output and directory layout before assuming the skill is active.'
+  };
 }
 
 function isPrivateIPv4(address) {
@@ -749,6 +1196,14 @@ export async function executeTool(name, args = {}, context = {}) {
       return await loadSkillText(root, args.name, { env: context.env || process.env });
     case 'read_skill_resource':
       return await loadSkillResource(root, args.name, args.path, { env: context.env || process.env });
+    case 'setup_omniroute':
+      return await setupOmniRoute(args, context, root);
+    case 'configure_provider':
+      return await configureProviderFromChat(args, context);
+    case 'install_external_skill':
+      return await installExternalSkill(args, context, root);
+    case 'configure_mcp_server':
+      return await configureMcpServer(args, context, root);
     case 'install_extension': {
       const url = String(args.url || '').trim();
       const scope = String(args.scope || 'project');
