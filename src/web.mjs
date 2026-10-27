@@ -172,9 +172,9 @@ export function createOasisWebServer(options = {}) {
   }
 
   function pruneJobs(additionalReservations = 0) {
-    if (jobs.size + reservedJobSlots + additionalReservations < MAX_JOBS) return;
+    if (jobs.size + reservedJobSlots + additionalReservations <= MAX_JOBS) return;
     for (const [id, job] of jobs) {
-      if (jobs.size + reservedJobSlots + additionalReservations < MAX_JOBS) break;
+      if (jobs.size + reservedJobSlots + additionalReservations <= MAX_JOBS) break;
       if (job.status === 'running' || job.status === 'waiting_approval') continue;
       jobs.delete(id);
     }
