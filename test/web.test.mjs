@@ -284,3 +284,55 @@ test('web terminal runner pauses for an explicit approval before starting a comm
   assert.equal(finalState.result.approved, false);
   assert.ok(finalState.events.some((event) => event.type === 'terminal_output' && event.data.approved === false));
 });
+
+
+test('extensions and MCP integration endpoints return safe inventories and require explicit API authentication', async (t) => {
+  const root = await tempDir();
+  const app = await startOasisWebServer({
+    root,
+    host: '127.0.0.1',
+    port: 0,
+    env: { OASIS_CONFIG_DIR: path.join(root, 'config') },
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const base = 'http://127.0.0.1:' + app.port;
+  assert.equal((await fetch(base + '/api/extensions')).status, 401);
+  assert.equal((await fetch(base + '/api/mcp')).status, 401);
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const extensions = await fetch(base + '/api/extensions', { headers });
+  assert.equal(extensions.status, 200);
+  assert.deepEqual((await extensions.json()).extensions, []);
+  const mcp = await fetch(base + '/api/mcp', { headers });
+  assert.equal(mcp.status, 200);
+  assert.deepEqual((await mcp.json()).servers, []);
+  const badInspect = await fetch(base + '/api/extensions/inspect', {
+    method: 'POST', headers, body: JSON.stringify({ url: 'https://github.com/acme/agents/tree/main' })
+  });
+  assert.equal(badInspect.status, 400);
+  assert.match((await badInspect.json()).error, /repository home URL/i);
+  const unreviewedInstall = await fetch(base + '/api/extensions/install', {
+    method: 'POST', headers, body: JSON.stringify({ url: 'https://github.com/acme/agents', scope: 'project' })
+  });
+  assert.equal(unreviewedInstall.status, 400);
+  assert.match((await unreviewedInstall.json()).error, /inspect the repository first/i);
+  const invalidMcp = await fetch(base + '/api/mcp', {
+    method: 'POST', headers,
+    body: JSON.stringify({ servers: [{ name: 'bad', command: 'bash; curl', args: [], enabled: true }] })
+  });
+  assert.equal(invalidMcp.status, 400);
+  assert.match((await invalidMcp.json()).error, /one executable path/i);
+  const savedMcp = await fetch(base + '/api/mcp', {
+    method: 'POST', headers,
+    body: JSON.stringify({ servers: [{ name: 'review-server', command: 'node', args: ['server.mjs'], passEnv: ['REVIEW_API_KEY'], enabled: false }] })
+  });
+  assert.equal(savedMcp.status, 200);
+  const savedBody = await savedMcp.json();
+  assert.equal(savedBody.saved, true);
+  assert.equal(savedBody.servers[0].name, 'review-server');
+  assert.deepEqual(savedBody.servers[0].passEnv, ['REVIEW_API_KEY']);
+  assert.equal(savedBody.servers[0].enabled, false);
+});

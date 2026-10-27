@@ -429,6 +429,101 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/mcp') {
+      const config = await loadMcpServers({ env });
+      json(res, 200, { servers: config.servers.map((server) => ({
+        name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled
+      })) });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/mcp') {
+      const body = await readJsonBody(req);
+      if (!Array.isArray(body.servers)) {
+        json(res, 400, { error: 'servers must be an array of MCP server configurations.' });
+        return;
+      }
+      let configPath;
+      try { configPath = await saveMcpServers(body.servers, { env }); }
+      catch (error) {
+        json(res, 400, { error: String(error && error.message || error).slice(0, 2000) });
+        return;
+      }
+      const config = await loadMcpServers({ env });
+      json(res, 200, { saved: true, configPath, servers: config.servers.map((server) => ({
+        name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled
+      })), note: 'Saved for future agent sessions. Enabled MCP server processes start when a new coding session is created.' });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/extensions') {
+      json(res, 200, await listInstalledExtensions({ root: activeRoot, env }));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/extensions/inspect') {
+      const body = await readJsonBody(req);
+      const url = String(body.url || '').trim();
+      if (!url || url.length > 800) {
+        json(res, 400, { error: 'Provide a GitHub repository URL no longer than 800 characters.' });
+        return;
+      }
+      try {
+        const inspected = await inspectGitHubExtension(url, { env });
+        json(res, 200, inspected);
+      } catch (error) {
+        const message = String(error && error.message || error);
+        const status = /repository home URL|public GitHub repository URL|not a valid HTTP|no importable Markdown|private repositories|only HTTP and HTTPS/i.test(message) ? 400 : (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422);
+        json(res, status, { error: message.slice(0, 2500) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/extensions/install') {
+      const body = await readJsonBody(req);
+      const url = String(body.url || '').trim();
+      const scope = String(body.scope || 'project');
+      const expectedCommit = String(body.expectedCommit || '');
+      if (!url || url.length > 800) {
+        json(res, 400, { error: 'Provide a GitHub repository URL no longer than 800 characters.' });
+        return;
+      }
+      if (!['self', 'project', 'both'].includes(scope)) {
+        json(res, 400, { error: 'Scope must be self, project, or both.' });
+        return;
+      }
+      if (!/^[a-f0-9]{40}$/i.test(expectedCommit)) {
+        json(res, 400, { error: 'Inspect the repository first. A reviewed 40-character commit identifier is required before installation.' });
+        return;
+      }
+      try {
+        const result = await installGitHubExtension(url, { root: activeRoot, env, scope, expectedCommit });
+        json(res, 200, result);
+      } catch (error) {
+        const message = String(error && error.message || error);
+        const status = /changed after inspection|already exists|destination|outside its permitted scope/i.test(message) ? 409 : (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422);
+        json(res, status, { error: message.slice(0, 2500) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/extensions/remove') {
+      const body = await readJsonBody(req);
+      const scope = String(body.scope || '');
+      const name = String(body.name || '');
+      if (!['self', 'project'].includes(scope) || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) {
+        json(res, 400, { error: 'Choose a valid installed extension name and scope.' });
+        return;
+      }
+      try {
+        json(res, 200, await removeGitHubExtension({ root: activeRoot, env, scope, name }));
+      } catch (error) {
+        const message = String(error && error.message || error);
+        json(res, /not installed/i.test(message) ? 404 : 409, { error: message.slice(0, 2500) });
+      }
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/status') {
       let provider = null;
       let providerConfigured = false;

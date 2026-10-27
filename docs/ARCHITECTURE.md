@@ -37,6 +37,19 @@ This is not an OS sandbox. An approved test, build, or project script can execut
 - A successful clone switches the process's active workspace for new agent sessions and terminal commands. A request cannot switch workspaces while any tracked job or agent turn is running. Existing clone destinations are reused only after their origin matches the selected GitHub repository.
 - This is a GitHub CLI integration, not embedded OAuth. The user must install `gh` and run `gh auth login` on the host first. Repository creation, branch/push/PR orchestration, GitHub Apps, detailed scope management, and organization-wide repository discovery are not implemented.
 
+## External GitHub agent/skill imports
+
+- `src/extensions.mjs` inspects public GitHub repository metadata, resolves a default-branch commit SHA, and selects bounded Markdown agent/skill prompt files. The review endpoint returns repository, license, commit, importable-file count, and a count of executable/source files detected.
+- Import requires a second request carrying the commit SHA shown by inspection; a changed default-branch commit is rejected rather than importing a revision the user did not review.
+- Oasis only writes normalized Markdown prompts plus an extension manifest. It does not import or execute repository scripts, copy executables, install dependencies, enable hooks, or configure MCP servers. Each prompt carries source/commit attribution and an untrusted-instructions notice.
+- Global extensions live under the user-level Oasis config `extensions/`; project extensions live under `.oasis/extensions/`. The `self`, `project`, and `both` scopes support reuse between projects. A staging directory and atomic rename are used for installs, and an incomplete multi-scope install is rolled back.
+- Every imported prompt has a SHA-256 record. Removal verifies that the extension has no unexpected files and that prompt contents still match their installation hashes; modified content is preserved rather than deleted. Installed extensions are exposed to normal skill discovery so imported guidance can be loaded on demand.
+- Browser routes for inspect/install/remove and inventory are protected by the same bearer-token API authentication. Importing an instruction file does not constitute sandboxing; agent prompts remain untrusted context and never override the base system policy.
+
+## Integration hub
+
+The browser provides tabs for Connectors, MCP servers, API & models, and Tools. GitHub status is sourced from the host GitHub CLI, provider status from the local runtime, and MCP configuration from the user configuration file. Unsupported connector cards and custom tool/webhook authoring are explicitly labelled as planned rather than reporting fictitious connections. Saving an enabled MCP server updates future session configuration; it does not launch the process during save, but creating a new agent session starts configured enabled servers.
+
 ## Model provider interface
 
 The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). GPT-6.1 Sol tool calling uses the Responses API. Set OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY, or use oasis setup. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS.

@@ -7,6 +7,8 @@ import { isIP } from 'node:net';
 import { snapshotFile } from './backups.mjs';
 import { planPackageInstall, normalizePackageName } from './installer.mjs';
 import { managePlugins } from './plugins.mjs';
+import { getConfigDirectory } from './config.mjs';
+import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
@@ -34,6 +36,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'edit_file', description: 'Make a precise edit to an existing text file by replacing an exact string. Prefer this over write_file for existing files. old_string must match exactly and be unique unless replace_all is true. The previous contents are snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path of an existing file' }, old_string: { type: 'string', description: 'Exact existing text to replace; must be non-empty' }, new_string: { type: 'string', description: 'Replacement text' }, replace_all: { type: 'boolean', description: 'Replace every occurrence instead of requiring a unique match' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
@@ -377,7 +380,8 @@ function parseSkillMetadata(content, fallbackName) {
   return { name, description };
 }
 
-export async function listAvailableSkills(root) {
+export async function listAvailableSkills(root, options = {}) {
+  const env = options.env || process.env;
   const byName = new Map();
   async function scan(directory, source, relativePrefix = '') {
     let entries;
@@ -401,20 +405,71 @@ export async function listAvailableSkills(root) {
       } catch { /* Ignore incomplete or unsafe skill files. */ }
     }
   }
+  async function scanImportedExtensions(extensionRoot, source, workspaceRelative = '') {
+    let extensions;
+    try { extensions = await readdir(extensionRoot, { withFileTypes: true }); } catch { return; }
+    for (const extension of extensions.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).slice(0, 100)) {
+      if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(extension.name)) continue;
+      const extensionDirectory = path.join(extensionRoot, extension.name);
+      try {
+        const extensionInfo = await lstat(extensionDirectory);
+        if (!extensionInfo.isDirectory() || extensionInfo.isSymbolicLink()) continue;
+        const manifest = JSON.parse(await readFile(path.join(extensionDirectory, 'extension.json'), 'utf8'));
+        if (manifest.schemaVersion !== 1 || manifest.name !== extension.name || !Array.isArray(manifest.files)) continue;
+      } catch { continue; }
+      const skillsDirectory = path.join(extensionDirectory, 'skills');
+      let skillDirs;
+      try { skillDirs = await readdir(skillsDirectory, { withFileTypes: true }); } catch { continue; }
+      for (const skillDir of skillDirs.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).slice(0, 240)) {
+        if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skillDir.name)) continue;
+        const filePath = path.join(skillsDirectory, skillDir.name, 'SKILL.md');
+        try {
+          const info = await lstat(filePath);
+          if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) continue;
+          const content = await readFile(filePath, 'utf8');
+          if (content.includes('\0')) continue;
+          const meta = parseSkillMetadata(content, skillDir.name);
+          const relativePath = source === 'project-extension'
+            ? path.posix.join('.oasis', 'extensions', extension.name, 'skills', skillDir.name, 'SKILL.md')
+            : '';
+          byName.set(meta.name.toLowerCase(), {
+            name: meta.name,
+            description: meta.description,
+            source,
+            relativePath,
+            absolutePath: source === 'global-extension' ? filePath : undefined,
+            extensionName: extension.name
+          });
+        } catch { /* Ignore untrusted or malformed prompt files. */ }
+      }
+    }
+  }
   await scan(BUNDLED_SKILLS_DIR, 'built-in');
+  await scanImportedExtensions(path.join(getConfigDirectory(env), 'extensions'), 'global-extension');
   await scan(path.join(root, '.oasis', 'skills'), 'workspace');
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 100);
+  await scanImportedExtensions(path.join(root, '.oasis', 'extensions'), 'project-extension', '.oasis/extensions');
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
 }
 
-export async function loadSkillText(root, rawName) {
+export async function loadSkillText(root, rawName, options = {}) {
   const name = String(rawName || '');
   if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
-  const skills = await listAvailableSkills(root);
+  const skills = await listAvailableSkills(root, options);
   const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
   if (!skill) throw new Error('No skill named "' + name + '" is available. Call list_skills to inspect valid names.');
   let content;
-  if (skill.source === 'workspace') {
+  if (skill.source === 'workspace' || skill.source === 'project-extension') {
     content = (await readWorkspaceFile(root, skill.relativePath)).content;
+  } else if (skill.source === 'global-extension') {
+    const globalExtensionsRoot = path.resolve(getConfigDirectory(options.env || process.env), 'extensions');
+    const rootReal = await realpath(globalExtensionsRoot);
+    const target = path.resolve(skill.absolutePath || '');
+    if (!inside(rootReal, target)) throw new Error('Imported skill path is outside the managed global extension directory.');
+    const info = await lstat(target);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Imported skill is not a safe regular Markdown file.');
+    const targetReal = await realpath(target);
+    if (!inside(rootReal, targetReal)) throw new Error('Imported skill resolves outside the managed extension directory.');
+    content = await readFile(targetReal, 'utf8');
   } else {
     const target = path.resolve(BUNDLED_SKILLS_DIR, skill.relativePath, 'SKILL.md');
     if (!inside(BUNDLED_SKILLS_DIR, target)) throw new Error('Skill path is outside the bundled skill directory.');
@@ -426,10 +481,10 @@ export async function loadSkillText(root, rawName) {
   return { name: skill.name, source: skill.source, content: content.slice(0, 24000), truncated: content.length > 24000 };
 }
 
-export async function loadSkillDescriptions(root) {
-  const skills = await listAvailableSkills(root);
+export async function loadSkillDescriptions(root, options = {}) {
+  const skills = await listAvailableSkills(root, options);
   if (!skills.length) return '';
-  return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 12000);
+  return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 16000);
 }
 
 async function runReadOnlyGit(root, args) {
@@ -537,9 +592,26 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'search_files':
       return await searchWorkspaceFiles(root, args.query, args.limit);
     case 'list_skills':
-      return { skills: await listAvailableSkills(root) };
+      return { skills: await listAvailableSkills(root, { env: context.env || process.env }) };
     case 'load_skill':
-      return await loadSkillText(root, args.name);
+      return await loadSkillText(root, args.name, { env: context.env || process.env });
+    case 'install_extension': {
+      const url = String(args.url || '').trim();
+      const scope = String(args.scope || 'project');
+      if (!url || url.length > 800) throw new Error('Provide a GitHub repository URL no longer than 800 characters.');
+      if (!['self', 'project', 'both'].includes(scope)) throw new Error('Choose a valid extension installation scope.');
+      const inspected = await inspectGitHubExtension(url, { env: context.env || process.env });
+      if (!context.autoApprove && (!context.approval || !(await context.approval(
+        'Import ' + inspected.importCount + ' Markdown specialist prompt(s) from ' + inspected.repository.fullName +
+        ' at commit ' + inspected.repository.commitSha.slice(0, 12) + ' into scope "' + scope + '"? License: ' +
+        inspected.repository.license + '. ' + inspected.executableFilesDetected +
+        ' executable/source files were detected but will NOT be imported or run. No packages or MCP servers will be enabled.'
+      )))) {
+        return { installed: false, approved: false, repository: inspected.repository.fullName, message: 'Extension import was denied; no files were installed.' };
+      }
+      const result = await installGitHubExtension(url, { root, env: context.env || process.env, scope, expectedCommit: inspected.repository.commitSha });
+      return { ...result, message: 'Imported Markdown prompts only. Scripts were not executed, packages were not installed, and external services were not enabled.' };
+    }
     case 'install_plugin': {
       const name = String(args.name || '');
       if (!['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'].includes(name)) throw new Error('Choose a built-in bundle from oasis plugins list.');

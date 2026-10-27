@@ -15,6 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
+import { inspectGitHubExtension, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -44,6 +45,10 @@ function printHelp() {
     '  oasis plugins list             Browse built-in capability bundles',
     '  oasis plugins install NAME    Install a reviewed capability bundle',
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
+    '  oasis extensions list         List imported GitHub agent/skill collections',
+    '  oasis extensions inspect URL  Review importable prompts and pinned commit',
+    '  oasis extensions install URL --scope both   Import prompts into Oasis + project',
+    '  oasis extensions remove NAME --scope project Remove an unmodified import',
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
     '  oasis eval --validate         Validate evaluation tasks and reference patches',
@@ -538,6 +543,79 @@ async function startWebWorkspace(root, args) {
   process.once('SIGTERM', shutdown);
 }
 
+
+async function manageExternalExtensions(root, args, autoApprove) {
+  const values = [...args];
+  const action = String(values.shift() || 'list').toLowerCase();
+  let scope = 'project';
+  const positional = [];
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] === '--scope') {
+      if (!values[i + 1]) throw new Error('--scope requires self, project, or both.');
+      scope = values[++i];
+    } else if (values[i].startsWith('--scope=')) {
+      scope = values[i].slice('--scope='.length);
+    } else positional.push(values[i]);
+  }
+  if (!['self', 'project', 'both'].includes(scope)) throw new Error('Scope must be self, project, or both.');
+  if (action === 'list') {
+    const data = await listInstalledExtensions({ root });
+    stdout.write('Oasis external agent/skill extensions\n\n');
+    if (!data.extensions.length) { stdout.write('No external extensions are installed yet.\n'); return; }
+    for (const item of data.extensions) {
+      stdout.write(item.name + ' [' + item.scope + '] — ' + item.importedFiles + ' Markdown prompt(s)\n');
+      stdout.write('  Source: ' + item.source + '\n  Commit: ' + item.commitSha + '\n  License: ' + item.license + '\n');
+    }
+    return;
+  }
+  if (action === 'inspect') {
+    const url = positional[0];
+    if (!url) throw new Error('Usage: oasis extensions inspect https://github.com/owner/repository');
+    const report = await inspectGitHubExtension(url);
+    stdout.write('Repository: ' + report.repository.fullName + '\n');
+    stdout.write('Default branch: ' + report.repository.defaultBranch + '\n');
+    stdout.write('Pinned commit: ' + report.repository.commitSha + '\n');
+    stdout.write('License: ' + report.repository.license + '\n');
+    stdout.write('Importable Markdown prompts: ' + report.importCount + (report.limited ? ' (bounded selection)' : '') + '\n');
+    stdout.write('Executable/source files detected (not imported): ' + report.executableFilesDetected + '\n');
+    stdout.write('Policy: ' + report.executionPolicy + '\n');
+    stdout.write('\nSample of prompt paths:\n');
+    for (const file of report.files.slice(0, 30)) stdout.write('  ' + file.path + '\n');
+    return;
+  }
+  if (action === 'install') {
+    const url = positional[0];
+    if (!url) throw new Error('Usage: oasis extensions install https://github.com/owner/repository --scope self|project|both');
+    const report = await inspectGitHubExtension(url);
+    stdout.write('Import plan\n  Repository: ' + report.repository.fullName + '\n  Commit: ' + report.repository.commitSha + '\n  Scope: ' + scope + '\n  Markdown prompts: ' + report.importCount + '\n  Detected executable/source files (ignored): ' + report.executableFilesDetected + '\n  License: ' + report.repository.license + '\n');
+    const approved = await approve(
+      'Import ' + report.importCount + ' Markdown prompt file(s) from ' + report.repository.fullName +
+      ' at commit ' + report.repository.commitSha + ' into ' + scope +
+      '? Oasis will not execute repository scripts, install packages, or enable MCP servers.',
+      false,
+      autoApprove
+    );
+    if (!approved) { stdout.write('Import cancelled; no extension files were installed.\n'); return; }
+    const result = await installGitHubExtension(url, { root, scope, expectedCommit: report.repository.commitSha });
+    stdout.write('\nImported ' + result.importedFiles + ' prompt file(s) from ' + result.repository.fullName + '.\n');
+    for (const destination of result.destinations) stdout.write('  ' + destination.scope + ': ' + destination.path + '\n');
+    stdout.write('Verification: pinned commit ' + result.commitSha + '; scripts executed: no; dependencies installed: no.\n');
+    return;
+  }
+  if (action === 'remove' || action === 'uninstall') {
+    const name = positional[0];
+    if (!name) throw new Error('Usage: oasis extensions remove NAME --scope self|project');
+    if (!['self', 'project'].includes(scope)) throw new Error('Remove accepts scope self or project, not both.');
+    if (!(await approve('Remove the Oasis-managed "' + name + '" extension from scope "' + scope + '"? Any edited or unexpected files cause removal to be refused.', false, autoApprove))) {
+      stdout.write('Removal cancelled.\n'); return;
+    }
+    const result = await removeGitHubExtension({ root, scope, name });
+    stdout.write('Removed ' + result.name + ' from ' + result.scope + '.\n');
+    return;
+  }
+  throw new Error('Unknown extensions action "' + action + '". Use list, inspect, install, or remove.');
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
@@ -598,6 +676,7 @@ async function main() {
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest);
+  if (command === 'extensions' || command === 'extension') return await manageExternalExtensions(workspace, rest, autoApprove);
   if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
   if (command === 'sessions') return await manageSessions(workspace, rest);
   if (command === 'skills') {
