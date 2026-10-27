@@ -32,45 +32,153 @@ export async function createSession({ root, config }) {
   };
 }
 
-function endpointFor(baseURL) {
+function openAIEndpoint(baseURL) {
   const base = String(baseURL || '').replace(/\/+$/, '');
   return base.endsWith('/chat/completions') ? base : base + '/chat/completions';
 }
 
-function formatApiError(status, body) {
+function anthropicEndpoint(baseURL) {
+  const base = String(baseURL || '').replace(/\/+$/, '');
+  if (base.endsWith('/v1/messages')) return base;
+  if (base.endsWith('/v1')) return base + '/messages';
+  return base + '/v1/messages';
+}
+
+function parseToolInput(raw) {
+  try {
+    const value = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+
+function toAnthropicRequest(messages) {
+  const system = messages.find((message) => message.role === 'system');
+  const converted = [];
+  for (const message of messages) {
+    if (message.role === 'system') continue;
+    if (message.role === 'user') {
+      converted.push({ role: 'user', content: message.content || '' });
+      continue;
+    }
+    if (message.role === 'assistant') {
+      if (Array.isArray(message.tool_calls) && message.tool_calls.length) {
+        const content = [];
+        if (typeof message.content === 'string' && message.content.trim()) content.push({ type: 'text', text: message.content });
+        for (const call of message.tool_calls) {
+          content.push({
+            type: 'tool_use',
+            id: call.id,
+            name: call.function && call.function.name,
+            input: parseToolInput(call.function && call.function.arguments)
+          });
+        }
+        converted.push({ role: 'assistant', content });
+      } else {
+        converted.push({ role: 'assistant', content: typeof message.content === 'string' && message.content ? message.content : ' ' });
+      }
+      continue;
+    }
+    if (message.role === 'tool') {
+      const block = { type: 'tool_result', tool_use_id: message.tool_call_id, content: String(message.content || '') };
+      const last = converted[converted.length - 1];
+      if (last && last.role === 'user' && Array.isArray(last.content) && last.content.every((item) => item.type === 'tool_result')) {
+        last.content.push(block);
+      } else {
+        converted.push({ role: 'user', content: [block] });
+      }
+    }
+  }
+  // Anthropic expects alternating user/assistant messages. Merge adjacent user messages safely.
+  const merged = [];
+  for (const message of converted) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === message.role && message.role === 'user') {
+      const asBlocks = (content) => Array.isArray(content) ? content : [{ type: 'text', text: String(content || '') }];
+      last.content = asBlocks(last.content).concat(asBlocks(message.content));
+    } else {
+      merged.push(message);
+    }
+  }
+  return { system: system ? String(system.content || '') : '', messages: merged };
+}
+
+function formatApiError(status, body, protocol) {
   let detail = '';
   try {
     const parsed = JSON.parse(body);
-    detail = parsed.error && (parsed.error.message || parsed.error.code) ? String(parsed.error.message || parsed.error.code) : '';
+    detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type) ? String(parsed.error.message || parsed.error.code || parsed.error.type) : '';
   } catch { detail = String(body || '').slice(0, 500); }
+  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : 'OpenAI-compatible chat completions';
   return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') +
-    '. Check the provider URL, model name, credentials, and whether it supports OpenAI-compatible tool calling.';
+    '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
 }
 
 async function requestCompletion(session) {
   const config = session.config;
+  const nativeAnthropic = config.protocol === 'anthropic';
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
-  if (config.apiKey) headers.authorization = 'Bearer ' + config.apiKey;
+  if (nativeAnthropic) {
+    if (config.apiKey) headers['x-api-key'] = config.apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+  } else if (config.apiKey) {
+    headers.authorization = 'Bearer ' + config.apiKey;
+  }
+
+  let endpoint;
+  let bodyObject;
+  if (nativeAnthropic) {
+    endpoint = anthropicEndpoint(config.baseURL);
+    const converted = toAnthropicRequest(session.messages);
+    bodyObject = {
+      model: config.model,
+      max_tokens: 4096,
+      system: converted.system,
+      messages: converted.messages,
+      tools: TOOL_DEFINITIONS.map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        input_schema: tool.function.parameters
+      })),
+      tool_choice: { type: 'auto' },
+      temperature: 0.2
+    };
+  } else {
+    endpoint = openAIEndpoint(config.baseURL);
+    bodyObject = {
+      model: config.model,
+      messages: session.messages,
+      tools: TOOL_DEFINITIONS,
+      tool_choice: 'auto',
+      parallel_tool_calls: false,
+      temperature: 0.2
+    };
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120000);
   try {
-    const response = await fetch(endpointFor(config.baseURL), {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers,
       signal: controller.signal,
-      body: JSON.stringify({
-        model: config.model,
-        messages: session.messages,
-        tools: TOOL_DEFINITIONS,
-        tool_choice: 'auto',
-        parallel_tool_calls: false,
-        temperature: 0.2
-      })
+      body: JSON.stringify(bodyObject)
     });
     const body = await response.text();
-    if (!response.ok) throw new Error(formatApiError(response.status, body));
+    if (!response.ok) throw new Error(formatApiError(response.status, body, config.protocol));
     let data;
-    try { data = JSON.parse(body); } catch { throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint is an OpenAI-compatible chat completions endpoint.'); }
+    try { data = JSON.parse(body); } catch {
+      throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.');
+    }
+    if (nativeAnthropic) {
+      if (!Array.isArray(data.content)) throw new Error('The Anthropic provider returned no content blocks.');
+      const text = data.content.filter((block) => block.type === 'text').map((block) => block.text || '').join('\n').trim();
+      const toolCalls = data.content.filter((block) => block.type === 'tool_use').map((block) => ({
+        id: block.id,
+        type: 'function',
+        function: { name: block.name, arguments: JSON.stringify(block.input || {}) }
+      }));
+      return { role: 'assistant', content: text, tool_calls: toolCalls };
+    }
     const message = data.choices && data.choices[0] && data.choices[0].message;
     if (!message) throw new Error('The model provider returned no assistant message.');
     return message;
