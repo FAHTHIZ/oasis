@@ -73,3 +73,8 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 ## Current architectural gaps
 
 OS-level container isolation, a full interactive PTY, TLS for the browser runtime, GitHub OAuth, a remote capability marketplace, streamed token output, mid-turn context compaction, multi-agent coordination, formal version migrations, and browser-to-CLI syncing for projects/tasks/notes are not implemented yet. Between-turn context compaction is best-effort and is not a substitute for a broad long-horizon benchmark. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.
+
+
+## Cross-ecosystem extension compatibility
+
+Oasis's extension inspector detects portable Agent Skills layouts and Claude Code, Codex, and Gemini CLI markers from a public GitHub tree. The report separates Markdown prompts the current runtime can load from commands, MCP declarations, hooks, executable files, and plugin-specific behavior that is only detected. Finding a manifest does not mean the full extension is operational. Imported prompt content remains untrusted, commit-pinned and integrity-tracked. Future adapters must convert each ecosystem into an explicit install plan, validate paths and dependency boundaries, and gate tool servers and lifecycle code through review, permissions, audit logs and rollback.

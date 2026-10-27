@@ -174,7 +174,7 @@ body.light .extension-card,body.light .integration-card{background:#fff}
 </section>
  
 <section class="view" id="view-extensions">
-  <div class="intro-row"><div><div class="eyebrow">EXTEND THE AGENT</div><h1 class="page-title">Bring new specialists into Oasis.</h1><p class="page-subtitle">Import agent personas and skills from public GitHub repositories. Keep reusable capabilities in Oasis, in this project, or in both places.</p></div></div>
+  <div class="intro-row"><div><div class="eyebrow">EXTEND THE AGENT</div><h1 class="page-title">Bring new specialists into Oasis.</h1><p class="page-subtitle">Inspect existing Claude Code, Codex, Gemini CLI, and Agent Skills repositories. Oasis shows what can be imported today and what still needs a native adapter.</p></div></div>
   <div class="extension-hero"><div><div class="section-kicker">IMPORT FROM GITHUB</div><h2>One link. A new capability.</h2><p>Paste a repository such as msitarzewski/agency-agents. Oasis inspects the pinned commit, finds Markdown agent or skill prompts, and shows what it plans to import before making changes.</p></div><div class="workspace-banner-icon" aria-hidden="true">⬡</div></div>
   <div class="panel panel-pad">
     <form id="extensionInspectForm">
@@ -192,6 +192,7 @@ body.light .extension-card,body.light .integration-card{background:#fff}
         <div class="extension-metric"><strong id="extensionExecutableCount">0</strong><span>Executable/source files detected · not imported</span></div>
         <div class="extension-metric"><strong id="extensionLicense">Unknown</strong><span>Detected license</span></div>
       </div>
+      <div class="extension-warning" id="extensionCompatibility" aria-live="polite"></div>
       <div class="extension-candidates" id="extensionCandidateList" aria-label="Files selected for import"></div><div class="extension-meta"><span class="extension-chip" id="extensionCommitChip"></span><span class="extension-chip" id="extensionBranchChip"></span><span class="extension-chip" id="extensionLimitChip" hidden>Import limit reached</span></div>
       <div class="integration-controls"><button class="btn btn-primary" id="extensionInstallBtn" type="button" disabled>Install reviewed prompts</button><button class="btn btn-secondary" id="extensionCancelBtn" type="button" disabled>Cancel review</button></div>
       <p class="extension-warning" id="extensionSafetySummary"></p>
@@ -350,7 +351,7 @@ var extensionInspection=null;
 var extensionBusy=false;
 function extensionEscape(value){return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
 function extensionStatus(message,isError){var node=document.getElementById('extensionInstallStatus');node.textContent=message||'';node.style.color=isError?'var(--danger)':'var(--muted)'}
-function extensionSetBusy(busy){extensionBusy=!!busy;['extensionInspectBtn','extensionInstallBtn','extensionCancelBtn','extensionRefreshBtn'].forEach(function(id){var el=document.getElementById(id);if(!el)return;el.disabled=extensionBusy||(id==='extensionInstallBtn'&&(!extensionInspection||!!extensionInspection.data.treeTruncated))||(id==='extensionCancelBtn'&&!extensionInspection)});}
+function extensionSetBusy(busy){extensionBusy=!!busy;['extensionInspectBtn','extensionInstallBtn','extensionCancelBtn','extensionRefreshBtn'].forEach(function(id){var el=document.getElementById(id);if(!el)return;el.disabled=extensionBusy||(id==='extensionInstallBtn'&&(!extensionInspection||extensionInspection.data.canInstall===false||!!extensionInspection.data.treeTruncated))||(id==='extensionCancelBtn'&&!extensionInspection)});}
 function extensionRenderInspection(data,url){
   extensionInspection={data:data,url:url};
   document.getElementById('extensionSummary').hidden=false;
@@ -362,10 +363,15 @@ function extensionRenderInspection(data,url){
   document.getElementById('extensionCommitChip').textContent='Commit '+data.repository.commitSha.slice(0,12);
   document.getElementById('extensionBranchChip').textContent='Default branch: '+data.repository.defaultBranch;
   document.getElementById('extensionLimitChip').hidden=!data.limited&&!data.treeTruncated;
-  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub truncated its repository tree. A partial collection cannot be installed.':'');
-  document.getElementById('extensionCandidateList').innerHTML=(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':'');
-  document.getElementById('extensionInstallBtn').textContent='Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');document.getElementById('extensionInstallBtn').disabled=!!data.treeTruncated; if(data.treeTruncated) extensionStatus('Cannot install an incomplete listing. Use a smaller repository or a reviewed subset.',true);
-  document.getElementById('extensionInstallBtn').disabled=false;
+  var compatibility=data.compatibility||{};
+  var formatChips=(compatibility.formats||[]).map(function(item){return '<span class="extension-chip '+(item.detected?'good':'')+'">'+extensionEscape(item.label)+(item.detected?' · detected':'')+'</span>'}).join('');
+  var componentRows=(compatibility.components||[]).map(function(item){var state=item.count?('Detected · '+item.count):'Not detected';return '<div class="extension-candidate"><span>'+extensionEscape(item.label)+'</span><span>'+extensionEscape(state)+' — '+extensionEscape(item.detail)+'</span></div>'}).join('');
+  document.getElementById('extensionCompatibility').innerHTML='<strong>Detected format: '+extensionEscape(compatibility.primaryFormat||'Unknown')+'</strong><div class="extension-meta">'+formatChips+'</div><p>'+extensionEscape(compatibility.warning||'Format detection is informational; only explicitly listed importable components are installed.')+'</p><div class="extension-candidates">'+componentRows+'</div>';
+  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub truncated its repository tree. A partial collection cannot be installed.':'')+(data.installationBlockedReason?' '+data.installationBlockedReason:'');
+  document.getElementById('extensionCandidateList').innerHTML=(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':'')||'<div class="section-sub">No importable Markdown prompts were found. Detected native components are shown above but are not installed by this version.</div>';
+  document.getElementById('extensionInstallBtn').textContent=data.canInstall===false?'No compatible prompts to install':'Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');
+  document.getElementById('extensionInstallBtn').disabled=data.canInstall===false||!!data.treeTruncated;
+  if(data.treeTruncated) extensionStatus('Cannot install an incomplete listing. Use a smaller repository or a reviewed subset.',true);
 }
 async function extensionInspect(){
   if(!agentToken){notify('Connect the Oasis runtime before inspecting repositories.');return}
@@ -379,7 +385,8 @@ async function extensionInspect(){
 async function extensionInstall(){
   if(!agentToken||!extensionInspection||extensionBusy)return;
   if(extensionInspection.data.treeTruncated){extensionStatus('Installation blocked because GitHub returned an incomplete repository tree.',true);return}
-  var data=extensionInspection.data,url=extensionInspection.url,scope=document.getElementById('extensionScope').value;
+   if(extensionInspection.data.canInstall===false){extensionStatus(extensionInspection.data.installationBlockedReason||'This repository has no compatible Markdown prompts to install yet.',true);return}
+   var data=extensionInspection.data,url=extensionInspection.url,scope=document.getElementById('extensionScope').value;
   var label=scope==='both'?'Oasis itself and the current project':(scope==='self'?'Oasis itself across projects':'the current project');
   if(!window.confirm('Install '+data.importCount+' Markdown prompt files from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+' into '+label+'?\n\nNo repository code, scripts, dependencies, or MCP servers will be installed or executed.'))return;
   extensionSetBusy(true);extensionStatus('Rechecking the repository revision and writing a staged import…');

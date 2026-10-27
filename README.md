@@ -96,7 +96,7 @@ Oasis separates three things that are often all called “plugins”:
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
 
-The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The mobile-friendly Agent page and authenticated local runtime bridge are now on this development branch. Remote marketplaces, signed/versioned third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features this branch claims to have.
+The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The GitHub extension inspector now detects Agent Skills and common Claude Code, Codex, and Gemini CLI markers and reports commands, MCP declarations, hooks, and executable components that are not activated. Full native plugin compatibility is not implemented yet; inspection is explicit about this gap. The mobile-friendly Agent page and authenticated local runtime bridge are now on this development branch. Remote marketplaces, signed/versioned third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features this branch claims to have.
 
 For testing the current PR branch directly, install with:
 

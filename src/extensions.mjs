@@ -128,6 +128,7 @@ async function snapshotRepository(rawUrl, options = {}) {
   const license = repository.license && (repository.license.spdx_id && repository.license.spdx_id !== 'NOASSERTION' ? repository.license.spdx_id : repository.license.name) || 'Unknown / not detected';
   return {
     parsed,
+    treeEntries: tree.tree,
     repository: {
       fullName: String(repository.full_name || parsed.owner + '/' + parsed.repo),
       name: String(repository.name || parsed.repo),
@@ -147,13 +148,69 @@ async function snapshotRepository(rawUrl, options = {}) {
   };
 }
 
+
+export function analyzeExtensionCompatibility(treeEntries) {
+  const entries = Array.isArray(treeEntries) ? treeEntries.filter((item) => item && item.type === 'blob' && item.mode !== '120000') : [];
+  const paths = entries.map((item) => String(item.path || '').replace(/\\/g, '/'));
+  const has = (value) => paths.some((item) => item.toLowerCase() === value.toLowerCase());
+  const matching = (pattern) => paths.filter((item) => pattern.test(item));
+  const skillPaths = matching(/(?:^|\/)(?:skills|\.agents\/skills|\.claude\/skills|\.codex\/skills)\/[^/]+\/SKILL\.md$/i);
+  const portableSkillPaths = matching(/(?:^|\/)SKILL\.md$/i).filter((item) => /(?:^|\/)(?:skills|\.agents\/skills|\.claude\/skills|\.codex\/skills)\//i.test(item));
+  const agentPaths = matching(/(?:^|\/)(?:agents|\.claude\/agents|\.codex\/agents)\/[^/]+\.(?:md|ya?ml|toml)$/i);
+  const commandPaths = matching(/(?:^|\/)(?:commands|\.claude\/commands|\.gemini\/commands)\/.+\.(?:md|toml)$/i);
+  const hookPaths = matching(/(?:^|\/)hooks(?:\/|\.json$)/i)
+    .concat(paths.filter((item) => /(?:^|\/)\.(?:claude|gemini)\/settings\.json$/i.test(item)));
+  const mcpPaths = matching(/(?:^|\/)(?:\.mcp\.json|mcp\.json|mcp-servers\.json)$/i);
+  const promptFiles = selectAgentPromptFiles(entries);
+  const executableFiles = entries.filter((item) => /\.(?:mjs|cjs|js|jsx|ts|tsx|py|sh|ps1|bat|cmd|exe|dll|so|dylib)$/i.test(String(item.path || ''))).length;
+  const claudeManifest = has('.claude-plugin/plugin.json');
+  const codexManifest = has('.codex-plugin/plugin.json');
+  const geminiManifest = has('gemini-extension.json');
+  const claudeLayout = claudeManifest || paths.some((item) => /^\.claude\//i.test(item));
+  const codexLayout = codexManifest || paths.some((item) => /^\.codex\//i.test(item));
+  const geminiLayout = geminiManifest || paths.some((item) => /^\.gemini\//i.test(item));
+  const codexSkillsLayout = paths.some((item) => /^\.agents\/skills\//i.test(item));
+  const formats = [
+    { id: 'agent-skills', label: 'Agent Skills', detected: portableSkillPaths.length > 0, evidence: portableSkillPaths.length ? portableSkillPaths.length + ' SKILL.md file(s)' : 'No standard skills detected' },
+    { id: 'claude-code', label: 'Claude Code', detected: claudeLayout, evidence: claudeManifest ? '.claude-plugin/plugin.json' : (claudeLayout ? '.claude layout detected' : 'No Claude Code layout detected') },
+    { id: 'codex', label: 'Codex', detected: codexLayout || codexSkillsLayout, evidence: codexManifest ? '.codex-plugin/plugin.json' : (codexLayout ? '.codex layout detected' : (codexSkillsLayout ? '.agents/skills layout detected' : 'No Codex layout detected')) },
+    { id: 'gemini-cli', label: 'Gemini CLI', detected: geminiLayout, evidence: geminiManifest ? 'gemini-extension.json' : (geminiLayout ? '.gemini layout detected' : 'No Gemini CLI layout detected') }
+  ];
+  const detected = formats.filter((item) => item.detected);
+  const primaryFormat = detected.length ? detected.map((item) => item.label).join(' + ') : (promptFiles.length ? 'Generic Markdown agent/skill collection' : 'Unrecognized extension repository');
+  const components = [
+    { id: 'skills', label: 'Agent Skills', count: skillPaths.length, status: skillPaths.length ? 'prompt-import' : 'not-found', detail: 'Skill instructions can be imported; bundled scripts, references and assets are not activated as a full skill package yet.' },
+    { id: 'agents', label: 'Specialist agents', count: agentPaths.length, status: agentPaths.length ? 'prompt-import' : 'not-found', detail: 'Markdown agent prompts may be imported as skills; native delegation metadata and runtime settings are not preserved.' },
+    { id: 'commands', label: 'Custom commands', count: commandPaths.length, status: commandPaths.length ? 'detected-only' : 'not-found', detail: 'Command definitions are identified, but command aliases and ecosystem-specific argument semantics are not installed as native Oasis commands.' },
+    { id: 'mcp', label: 'MCP declarations', count: mcpPaths.length, status: mcpPaths.length ? 'detected-only' : 'not-found', detail: 'MCP configuration is not enabled automatically. Review transport, command, arguments, environment and permissions in Oasis Integrations.' },
+    { id: 'hooks', label: 'Lifecycle hooks', count: hookPaths.length, status: hookPaths.length ? 'detected-only' : 'not-found', detail: 'Hooks and their scripts are not copied, registered, or executed by this importer.' },
+    { id: 'executables', label: 'Executable/source files', count: executableFiles, status: executableFiles ? 'not-imported' : 'not-found', detail: 'Code and installation scripts are never executed or installed by repository inspection.' }
+  ];
+  return {
+    primaryFormat,
+    formats,
+    components,
+    importablePromptFiles: promptFiles.length,
+    supportedNow: ['Markdown skill/agent instructions as untrusted prompt context'],
+    notActivated: ['MCP server declarations', 'lifecycle hooks', 'executable code and dependencies', 'plugin-specific APIs and custom UI'],
+    canInstallPrompts: promptFiles.length > 0,
+    warning: 'Detection is not runtime compatibility. Oasis currently imports Markdown instructions only; detected commands, hooks, MCP entries, scripts and native plugin behavior remain inactive.'
+  };
+}
+
 export async function inspectGitHubExtension(rawUrl, options = {}) {
   const snapshot = await snapshotRepository(rawUrl, options);
   if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow. Use a reviewed local export instead.');
   if (snapshot.treeTruncated) throw new Error('GitHub truncated this repository tree. Oasis will not import a partial agent collection; use a smaller repository or a reviewed subset.');
-  if (!snapshot.candidates.length) throw new Error('No importable Markdown agent or skill prompts were found in this repository.');
+  const compatibility = analyzeExtensionCompatibility(snapshot.treeEntries);
+  if (!snapshot.candidates.length && !compatibility.formats.some((item) => item.detected) && !compatibility.components.some((item) => item.count > 0)) {
+    throw new Error('No recognized plugin format, Agent Skills, or importable Markdown prompts were found in this repository.');
+  }
   return {
     repository: snapshot.repository,
+    compatibility,
+    canInstall: snapshot.candidates.length > 0 && !snapshot.treeTruncated,
+    installationBlockedReason: snapshot.candidates.length ? '' : 'This repository contains detectable ecosystem configuration but no Markdown prompts that the current importer can install.',
     candidateCount: snapshot.candidateCount,
     importCount: snapshot.candidates.length,
     limited: snapshot.limited,

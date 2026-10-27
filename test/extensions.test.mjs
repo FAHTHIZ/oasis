@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import {
+  analyzeExtensionCompatibility,
   inspectGitHubExtension,
   installGitHubExtension,
   listInstalledExtensions,
@@ -162,4 +163,57 @@ test('private repositories and stale inspected commits are rejected', async () =
   await assert.rejects(() => inspectGitHubExtension('https://github.com/acme/agents', { fetchImpl: privateFixture.fetchImpl }), /private repositories/i);
   const changedFixture = createFetch({ commit: 'd'.repeat(40) });
   await assert.rejects(() => installGitHubExtension('https://github.com/acme/agents', { expectedCommit: COMMIT, fetchImpl: changedFixture.fetchImpl }), /changed after inspection/i);
+});
+
+
+test('compatibility inventory recognizes Claude Code, Codex, Gemini CLI and portable skills without enabling hooks', () => {
+  const result = analyzeExtensionCompatibility([
+    { path: '.claude-plugin/plugin.json', type: 'blob', mode: '100644', size: 100, sha: '1' },
+    { path: 'commands/review.md', type: 'blob', mode: '100644', size: 100, sha: '2' },
+    { path: 'agents/security-reviewer.md', type: 'blob', mode: '100644', size: 100, sha: '3' },
+    { path: 'skills/api-review/SKILL.md', type: 'blob', mode: '100644', size: 100, sha: '4' },
+    { path: '.mcp.json', type: 'blob', mode: '100644', size: 100, sha: '5' },
+    { path: 'hooks/hooks.json', type: 'blob', mode: '100644', size: 100, sha: '6' },
+    { path: 'hooks/validate.sh', type: 'blob', mode: '100755', size: 100, sha: '7' }
+  ]);
+  assert.match(result.primaryFormat, /Claude Code/);
+  assert.equal(result.formats.find((item) => item.id === 'claude-code').detected, true);
+  assert.equal(result.formats.find((item) => item.id === 'agent-skills').detected, true);
+  assert.equal(result.components.find((item) => item.id === 'skills').count, 1);
+  assert.equal(result.components.find((item) => item.id === 'commands').count, 1);
+  assert.equal(result.components.find((item) => item.id === 'mcp').count, 1);
+  assert.equal(result.components.find((item) => item.id === 'hooks').count, 1);
+  assert.equal(result.components.find((item) => item.id === 'executables').count, 1);
+  assert.ok(result.notActivated.some((item) => /hooks/i.test(item)));
+  assert.match(result.warning, /not runtime compatibility/i);
+  const codex = analyzeExtensionCompatibility([
+    { path: '.codex-plugin/plugin.json', type: 'blob', mode: '100644', size: 100, sha: 'a' },
+    { path: '.agents/skills/repo-guide/SKILL.md', type: 'blob', mode: '100644', size: 100, sha: 'b' }
+  ]);
+  assert.equal(codex.formats.find((item) => item.id === 'codex').detected, true);
+  const gemini = analyzeExtensionCompatibility([
+    { path: 'gemini-extension.json', type: 'blob', mode: '100644', size: 100, sha: 'c' },
+    { path: '.gemini/commands/release.toml', type: 'blob', mode: '100644', size: 100, sha: 'd' }
+  ]);
+  assert.equal(gemini.formats.find((item) => item.id === 'gemini-cli').detected, true);
+  assert.equal(gemini.components.find((item) => item.id === 'commands').count, 1);
+});
+
+test('inspection allows recognized non-Markdown plugins to display a compatibility report without claiming they can install', async () => {
+  const { fetchImpl: original } = createFetch();
+  const customFetch = async (url, options) => {
+    if (String(url).includes('/git/trees/')) {
+      return new Response(JSON.stringify({ truncated: false, tree: [
+        { path: '.claude-plugin/plugin.json', type: 'blob', mode: '100644', size: 100, sha: 'a' },
+        { path: '.mcp.json', type: 'blob', mode: '100644', size: 100, sha: 'b' },
+        { path: 'mcp/server.mjs', type: 'blob', mode: '100644', size: 100, sha: 'c' }
+      ] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return original(url, options);
+  };
+  const inspected = await inspectGitHubExtension('https://github.com/acme/agents', { fetchImpl: customFetch });
+  assert.equal(inspected.canInstall, false);
+  assert.equal(inspected.importCount, 0);
+  assert.equal(inspected.compatibility.formats.find((item) => item.id === 'claude-code').detected, true);
+  assert.match(inspected.installationBlockedReason, /no Markdown prompts/i);
 });
