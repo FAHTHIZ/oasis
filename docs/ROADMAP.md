@@ -23,7 +23,8 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
 - MCP stdio configuration through both CLI and chat, tool discovery/calling, explicit per-call approval, and live registration of a newly approved MCP server in the current session.
 - Bounded project file listing, glob search, ranged reads, exact-string patch editing, write/delete tools, and workspace/secret-path protections.
-- Optional workspace-scoped session persistence, on-demand skill loading, and between-turn history compaction with a bounded deterministic fallback.
+- Optional workspace-scoped session persistence, on-demand skill loading, and between-turn history compaction with a bounded deterministic fallback; within-turn microcompaction trims older bulky tool results when the estimated context grows too large.
+- The session task checklist is persisted with saved sessions. Tool-call execution preserves requested order across reads and writes, while consecutive read-only workspace calls may run together.
 - Token and tool-call budgets, parallel read-only calls, and sequential handling of side effects.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
