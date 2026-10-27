@@ -12,17 +12,23 @@
   },
   "files": [
     "src/",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js",
+    "assets/",
     "scripts/",
     "skills/",
+    "plugins/",
     "README.md",
     "LICENSE",
     "SECURITY.md",
     "CONTRIBUTING.md",
-    "docs/"
+    "docs/",
+    "evals/"
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node scripts/check-site.mjs && node --test"
+    "check": "node scripts/check-site.mjs && node --test && node src/cli.mjs eval --validate"
   },
   "repository": {
     "type": "git",

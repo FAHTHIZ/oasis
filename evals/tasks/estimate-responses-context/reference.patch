@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function estimateTokens(message) { const value = Array.isArray(message?.responseItems) ? JSON.stringify(message.responseItems) : typeof message?.content === 'string' ? message.content : Array.isArray(message?.content) ? JSON.stringify(message.content) : ''; return Math.ceil(value.length / 4); }

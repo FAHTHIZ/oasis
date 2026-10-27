@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function isLoopbackUrl(raw) { try { const url = new URL(raw); return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname.toLowerCase()); } catch { return false; } }

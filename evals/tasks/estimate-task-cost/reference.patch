@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function estimateCost(inputTokens, outputTokens, inputRate, outputRate) { const values = [inputTokens, outputTokens, inputRate, outputRate]; if (!values.every((value) => Number.isFinite(value) && value >= 0)) return null; return Math.round(((inputTokens * inputRate + outputTokens * outputRate) / 1000000) * 1000000) / 1000000; }

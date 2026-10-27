@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function clampInteger(value, fallback, min, max) { const parsed = Number.parseInt(value, 10); if (!Number.isFinite(parsed)) return fallback; return Math.min(max, Math.max(min, parsed)); }
