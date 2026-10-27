@@ -61,6 +61,8 @@ oasis extensions mcp-import https://github.com/owner/repository
 oasis extensions update https://github.com/owner/repository --scope project
 oasis extensions list
 oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
+oasis extensions list
+oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
 ~~~
 
 A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model.
