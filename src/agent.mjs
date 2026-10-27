@@ -140,7 +140,6 @@ async function requestCompletion(session) {
         input_schema: tool.function.parameters
       })),
       tool_choice: { type: 'auto' },
-      temperature: 0.2
     };
   } else {
     endpoint = openAIEndpoint(config.baseURL);
