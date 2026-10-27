@@ -131,19 +131,35 @@ async function askSecret(question) {
 }
 
 async function configureProvider() {
-  stdout.write('\nOasis setup — model provider\n');
-  stdout.write('Choose the native OpenAI Responses API (recommended for current OpenAI reasoning models), the native Anthropic Messages API, or an OpenAI-compatible endpoint. Local Ollama-style endpoints use OpenAI-compatible mode.\n');
+  stdout.write('\nOasis setup — choose and verify your model provider\n');
+  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OpenAI, Anthropic, OpenRouter, Gemini, and local Ollama.\n');
   const rl = createInterface({ input: stdin, output: stdout });
   let protocol, baseURL, model;
+  const presets = {
+    openai: { protocol: 'openai-responses', baseURL: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
+    anthropic: { protocol: 'anthropic', baseURL: DEFAULT_ANTHROPIC_BASE_URL, model: 'claude-sonnet-5' },
+    openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
+    gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
+    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' }
+  };
   try {
-    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase();
-    protocol = validateProtocol(selected || 'openai-responses');
-    const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
-    baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
-    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
-    const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (required for a compatible endpoint): ';
-    model = (await rl.question(modelPrompt)).trim() || defaultModel;
-    if (!model) throw new Error('Enter the exact model name supported by this compatible endpoint.');
+    const presetName = (await rl.question('Provider preset [openai / anthropic / openrouter / gemini / ollama / custom] (default openai): ')).trim().toLowerCase() || 'openai';
+    if (presetName === 'custom') {
+      protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
+      const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+      baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
+      const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
+      const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (exact model ID required): ';
+      model = (await rl.question(modelPrompt)).trim() || defaultModel;
+    } else {
+      const selected = presets[presetName];
+      if (!selected) throw new Error('Unknown provider preset. Choose openai, anthropic, openrouter, gemini, ollama, or custom.');
+      protocol = selected.protocol;
+      baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
+      const modelPrompt = selected.model ? 'Model name [' + selected.model + ']: ' : 'Model name (exact model ID required): ';
+      model = (await rl.question(modelPrompt)).trim() || selected.model;
+    }
+    if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
   } finally { rl.close(); }
   protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
@@ -153,7 +169,11 @@ async function configureProvider() {
     const label = protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key';
     apiKey = await askSecret(label + ' (input hidden; Enter keeps the key only if the endpoint is unchanged, otherwise use the matching environment variable): ');
     if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
-    if (!apiKey) apiKey = process.env.OASIS_API_KEY || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
+    const host = new URL(baseURL).hostname.toLowerCase();
+    const providerEnvKey = host === 'openrouter.ai' ? process.env.OPENROUTER_API_KEY :
+      (host === 'generativelanguage.googleapis.com' ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) :
+      (host === 'ollama.com' ? process.env.OLLAMA_API_KEY : ''));
+    if (!apiKey) apiKey = process.env.OASIS_API_KEY || providerEnvKey || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
   }
   stdout.write('\nTesting the provider with a real assistant request (no tools will be run)...\n');
   await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
@@ -161,7 +181,7 @@ async function configureProvider() {
   stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
   stdout.write('Protocol: ' + protocol + '\n');
   stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
-  stdout.write('Run oasis doctor to inspect the environment, then oasis to start chatting.\n');
+  stdout.write('The provider is verified. Oasis can now inspect workspaces and use approved tools.\n');
 }
 function commandAvailable(name) {
   const probe = process.platform === 'win32' ? 'where' : 'which';
