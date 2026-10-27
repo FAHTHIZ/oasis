@@ -62,7 +62,7 @@ try {
       finishReason = 'stop';
       assistantMessage = {
         role: 'assistant',
-        content: 'Browser end-to-end fixture completed successfully after writing and reading back a workspace file.'
+        content: 'Browser end-to-end fixture completed successfully. The agent wrote and read back a workspace file.'
       };
     }
 
