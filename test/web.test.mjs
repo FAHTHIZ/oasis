@@ -94,6 +94,56 @@ test('web runtime validates message sizes and approval decisions before queueing
   assert.match((await unconfigured.json()).error, /oasis setup/i);
 });
 
+test('web terminal runner executes an approved command and captures its output', async (t) => {
+  const root = await tempDir();
+  const app = await startOasisWebServer({
+    root,
+    host: '127.0.0.1',
+    port: 0,
+    env: { OASIS_CONFIG_DIR: path.join(root, 'config') },
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const start = await fetch(base + '/api/terminal/command', {
+    method: 'POST', headers, body: JSON.stringify({ command: process.execPath, args: ['--version'] })
+  });
+  assert.equal(start.status, 202);
+  const { jobId } = await start.json();
+  let approval = null;
+  let snapshot;
+  for (let i = 0; i < 60 && !approval; i++) {
+    const response = await fetch(base + '/api/jobs/' + jobId, { headers: { authorization: 'Bearer ' + app.token } });
+    snapshot = await response.json();
+    approval = snapshot.events.find((event) => event.type === 'approval_required') || null;
+    if (!approval) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.ok(approval, 'the command must wait for an approval decision');
+
+  const allowed = await fetch(base + '/api/jobs/' + jobId + '/approval', {
+    method: 'POST', headers,
+    body: JSON.stringify({ approvalId: approval.data.approvalId, approved: true })
+  });
+  assert.equal(allowed.status, 200);
+  assert.equal((await allowed.json()).approved, true);
+
+  for (let i = 0; i < 80; i++) {
+    const response = await fetch(base + '/api/jobs/' + jobId, { headers: { authorization: 'Bearer ' + app.token } });
+    snapshot = await response.json();
+    if (snapshot.status === 'completed') break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(snapshot.status, 'completed');
+  assert.equal(snapshot.result.approved, true);
+  assert.equal(snapshot.result.exitCode, 0);
+  assert.ok(snapshot.events.some((event) => event.type === 'terminal_output' && event.data.output.includes(process.versions.node)));
+});
+
 test('web terminal runner pauses for an explicit approval before starting a command', async (t) => {
   const root = await tempDir();
   const app = await startOasisWebServer({
