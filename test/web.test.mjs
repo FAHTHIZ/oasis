@@ -97,7 +97,7 @@ test('provider setup requires credentials for remote providers and rejects inval
     method: 'POST', headers,
     body: JSON.stringify({ protocol: 'unknown-provider', baseURL: 'https://api.example.test/v1', model: 'test-model', apiKey: 'not-used' })
   });
-  assert.equal(invalidProtocol.status, 500);
+  assert.equal(invalidProtocol.status, 400);
   assert.match((await invalidProtocol.json()).error, /protocol/i);
 });
 
