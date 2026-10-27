@@ -115,10 +115,27 @@ Oasis separates three things that are often all called “plugins”:
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
 
-The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The GitHub extension inspector now detects Agent Skills and common Claude Code, Codex, and Gemini CLI markers and reports commands, MCP declarations, hooks, and executable components that are not activated. For recognized portable Agent Skills, Oasis also preserves bounded text references/assets and exposes them through integrity-checked resource access. Scripts remain unimported and inactive. Full native plugin compatibility is not implemented yet; inspection is explicit about this gap. The mobile-friendly Agent page and authenticated local runtime bridge are now on this development branch. Remote marketplaces, signed/versioned third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features this branch claims to have.
+The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The GitHub extension inspector detects Agent Skills and common Claude Code, Codex, and Gemini CLI markers and reports commands, MCP declarations, hooks, and executable components that are not activated. For recognized portable Agent Skills, Oasis also preserves bounded text references/assets and exposes them through integrity-checked resource access. Scripts remain unimported and inactive. Full native plugin compatibility is not implemented yet; inspection is explicit about this gap. The mobile-friendly Agent page and authenticated local runtime bridge are included in main. Remote marketplaces, signed/versioned third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features Oasis claims to have.
 
 The `main` installation contains both the terminal agent and the connected browser workspace. Opening `index.html` directly still provides only the static projects/tasks/notes dashboard; local agent execution requires the `oasis web` runtime to be running.
-This installs the terminal agent. The existing static PWA is a separate project dashboard; it is **not yet** the integrated mobile chat and terminal UI, and it cannot execute commands on the phone merely by being installed.
+
+## Optional OpenHands delegation
+
+Oasis can delegate a bounded task to an already-running OpenHands Agent Server. This is an optional bridge, not an OpenHands installation wizard or a replacement for Oasis's own runtime. Set the connection details in the environment used to start Oasis:
+
+~~~bash
+export OPENHANDS_AGENT_SERVER_URL=http://127.0.0.1:8000
+export OPENHANDS_AGENT_PROFILE_ID=your-reviewed-agent-profile
+# If the server requires session authentication, set OPENHANDS_SESSION_API_KEY
+# in your local environment/secret manager; never paste it into an Oasis prompt.
+# For a remote HTTPS server, also set the absolute workspace path as seen by that server:
+# export OPENHANDS_WORKSPACE_PATH=/workspace/project
+oasis "Delegate a code review to OpenHands"
+~~~
+
+OPENHANDS_AGENT_PROFILE_ID must identify an Agent Profile already configured on the server, including its model provider and credentials. Oasis never sends its own provider key to OpenHands. A local server can use the current workspace path by default; a remote server must use HTTPS and an explicit OPENHANDS_WORKSPACE_PATH, because the path on your computer may not exist on the server.
+
+Delegation always asks for explicit approval, even with --yes. The conversation requests OpenHands' AlwaysConfirm policy and a Git worktree where supported. If OpenHands pauses for its own tool confirmation, you must review and approve it in OpenHands' interface; Oasis will not accept those actions on your behalf. Non-Git workspaces can fall back to a shared directory. If a delegated task is still running when Oasis stops waiting, Oasis returns its conversation ID instead of silently resubmitting it. Review delegated changes in the OpenHands workspace before integrating them.
 
 ## Safety model
 
