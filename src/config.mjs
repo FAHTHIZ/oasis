@@ -7,6 +7,16 @@ export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
+const SETUP_PROVIDER_PRESETS = new Set([
+  'omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'custom'
+]);
+
+// A fresh setup should work for users who do not already have a paid-provider key.
+export function resolveSetupProviderPreset(raw) {
+  const candidate = String(raw || '').trim().toLowerCase();
+  return SETUP_PROVIDER_PRESETS.has(candidate) ? candidate : 'omniroute';
+}
+
 export function isNodeVersionSupported(version = process.versions.node) {
   const match = String(version).match(/^(\d+)(?:\.|$)/);
   return Boolean(match && Number(match[1]) >= 22);
