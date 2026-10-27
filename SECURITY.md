@@ -11,9 +11,9 @@ Do not store passwords, API keys, private keys, payment information, or sensitiv
 
 ## Agent safeguards and their limits
 
-The CLI confines file tools to the selected workspace, blocks common secret-file paths, snapshots files before overwriting, requires interactive approval for file deletion, asks before command execution and package installation by default, blocks several destructive commands, strips common credential variables from child-process environments, and restricts URL fetching to public HTTP/HTTPS targets.
+The CLI confines file tools to the selected workspace, blocks common secret-file paths, snapshots files before overwriting, requires interactive approval for file deletion, asks before command execution and package installation by default, blocks several destructive commands, strips common credential variables from child-process environments, restricts URL fetching to public HTTP/HTTPS targets, and supports user-configured MCP stdio servers with per-tool approval. MCP servers are arbitrary executables and can execute with the current user's permissions.
 
-These are defense-in-depth checks, not a sandbox. Commands and project scripts can still run with the user's privileges after approval. Package installation can execute third-party code. The \`--yes\` option automatically approves supported command/install operations and should not be used with untrusted repositories. No system can promise that an arbitrary model, repository, or package is safe.
+These are defense-in-depth checks, not a sandbox. Commands and project scripts can still run with the user's privileges after approval. Package installation can execute third-party code. The \`--yes\` option automatically approves supported command/install operations and should not be used with untrusted repositories. No system can promise that an arbitrary model, repository, MCP server, or package is safe.
 
 ## Reporting a vulnerability
 
