@@ -339,6 +339,63 @@ test('extensions and MCP integration endpoints return safe inventories and requi
 });
 
 
+test('GitHub MCP declarations can be imported only as disabled configurations without copying env secrets', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const commit = 'c'.repeat(40);
+  const manifest = JSON.stringify({
+    mcpServers: {
+      'review-server': { command: 'node', args: ['server.mjs'], env: { API_TOKEN: 'do-not-leak-this-secret' } }
+    }
+  });
+  const fetchImpl = async (rawUrl) => {
+    const url = String(rawUrl);
+    const response = (value) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/vnd.github+json' } });
+    if (url === 'https://api.github.com/repos/acme/mcp-extension') return response({
+      full_name: 'acme/mcp-extension', name: 'mcp-extension', description: 'MCP test fixture',
+      default_branch: 'main', private: false, license: { spdx_id: 'MIT' }
+    });
+    if (url === 'https://api.github.com/repos/acme/mcp-extension/commits/main') return response({ sha: commit });
+    if (url === 'https://api.github.com/repos/acme/mcp-extension/git/trees/' + commit + '?recursive=1') return response({
+      truncated: false, tree: [{ path: '.mcp.json', type: 'blob', mode: '100644', size: Buffer.byteLength(manifest), sha: '9'.repeat(40) }]
+    });
+    if (url === 'https://raw.githubusercontent.com/acme/mcp-extension/' + commit + '/.mcp.json') {
+      return new Response(manifest, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+    }
+    throw new Error('Unexpected fixture URL: ' + url);
+  };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789', fetchImpl });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const inspectedResponse = await fetch(base + '/api/extensions/inspect', {
+    method: 'POST', headers, body: JSON.stringify({ url: 'https://github.com/acme/mcp-extension' })
+  });
+  assert.equal(inspectedResponse.status, 200);
+  const inspected = await inspectedResponse.json();
+  assert.equal(inspected.mcpImportPlan.servers[0].name, 'review_server');
+  assert.doesNotMatch(JSON.stringify(inspected), /do-not-leak-this-secret/);
+  const importResponse = await fetch(base + '/api/extensions/mcp-import', {
+    method: 'POST', headers,
+    body: JSON.stringify({ url: 'https://github.com/acme/mcp-extension', expectedCommit: commit, serverNames: ['review_server'] })
+  });
+  assert.equal(importResponse.status, 200, await importResponse.clone().text());
+  const imported = await importResponse.json();
+  assert.equal(imported.imported[0].enabled, false);
+  assert.doesNotMatch(JSON.stringify(imported), /do-not-leak-this-secret/);
+  const config = await fetch(base + '/api/mcp', { headers });
+  assert.equal(config.status, 200);
+  const servers = (await config.json()).servers;
+  assert.equal(servers.length, 1);
+  assert.equal(servers[0].enabled, false);
+  assert.deepEqual(servers[0].passEnv, []);
+  const duplicate = await fetch(base + '/api/extensions/mcp-import', {
+    method: 'POST', headers,
+    body: JSON.stringify({ url: 'https://github.com/acme/mcp-extension', expectedCommit: commit, serverNames: ['review_server'] })
+  });
+  assert.equal(duplicate.status, 409);
+});
+
 test('authenticated browser jobs can be cancelled while awaiting command approval', async (t) => {
   const root = await tempDir();
   const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };

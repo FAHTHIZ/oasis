@@ -406,6 +406,25 @@ async function extensionInstall(){
   catch(e){extensionStatus(e.message,true)}
   finally{extensionSetBusy(false)}
 }
+async function extensionImportMcpServers(){
+  if(!agentToken||!extensionInspection||extensionBusy)return;
+  var data=extensionInspection.data,url=extensionInspection.url;
+  var selected=Array.from(document.querySelectorAll('[data-extension-mcp-name]:checked')).map(function(node){return node.getAttribute('data-extension-mcp-name')});
+  if(!selected.length){extensionStatus('Select at least one supported MCP server proposal first.',true);return}
+  if(data.treeTruncated){extensionStatus('Import is blocked because the inspected repository tree was incomplete.',true);return}
+  if(!window.confirm('Import '+selected.length+' MCP server configuration(s) from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+'?\n\nThey will be saved DISABLED. No process will start. Manifest environment values are not copied; review and configure each server before enabling it.'))return;
+  extensionSetBusy(true);extensionStatus('Rechecking the pinned repository and saving selected MCP configurations disabled…');
+  try{
+    var result=await agentApi('/api/extensions/mcp-import',{method:'POST',body:JSON.stringify({url:url,expectedCommit:data.repository.commitSha,serverNames:selected})});
+    data.mcpImportPlan.servers=(data.mcpImportPlan.servers||[]).filter(function(server){return !selected.includes(server.name)});
+    extensionRenderInspection(data,url);
+    await mcpRefresh();
+    extensionStatus('Imported '+result.imported.length+' MCP configuration(s) as disabled. No process was started. Review environment settings, then enable trusted servers in Integrations.');
+    notify('MCP configurations imported disabled; none were started.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+
 async function extensionRefreshInstalled(){
   var list=document.getElementById('installedExtensions');if(!list)return;
   if(!agentToken){list.innerHTML='<div class="integration-empty">Connect the Oasis runtime to load the managed extension inventory.</div>';return}
@@ -422,6 +441,8 @@ async function extensionRemove(name,scope){
 document.getElementById('extensionInspectForm').addEventListener('submit',function(e){e.preventDefault();void extensionInspect()});
 document.getElementById('extensionUrl').addEventListener('input',function(){if(extensionInspection&&this.value.trim()!==extensionInspection.url){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository URL changed. Inspect the new URL before installing.')}});
 document.getElementById('extensionInstallBtn').addEventListener('click',function(){void extensionInstall()});
+document.getElementById('extensionMcpImportBtn').addEventListener('click',function(){void extensionImportMcpServers()});
+document.getElementById('extensionMcpImportPlan').addEventListener('change',function(e){if(e.target.matches('[data-extension-mcp-name]'))extensionSetBusy(false)});
 document.getElementById('extensionCancelBtn').addEventListener('click',function(){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository review cancelled.')});
 document.getElementById('extensionRefreshBtn').addEventListener('click',function(){void extensionRefreshInstalled()});
 document.getElementById('installedExtensions').addEventListener('click',function(e){var button=e.target.closest('[data-remove-extension]');if(button)void extensionRemove(button.getAttribute('data-remove-extension'),button.getAttribute('data-remove-scope'))});
