@@ -12,6 +12,10 @@
   },
   "files": [
     "src/",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js",
+    "assets/",
     "scripts/",
     "skills/",
     "plugins/",
