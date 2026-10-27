@@ -762,6 +762,7 @@ async function interactive(root, autoApprove, persistence = {}) {
 
 
 async function startWebWorkspace(root, args) {
+  await ensureModelProviderSetup(root);
   let host = '127.0.0.1';
   let port = 3917;
   let tlsCertFile = null;
@@ -1066,6 +1067,7 @@ async function main() {
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
     if (!planPrompt) throw new Error('Usage: oasis plan "Describe the task to plan"');
+    await ensureModelProviderSetup(workspace);
     const session = await runPrompt(planPrompt, workspace, autoApprove, null, persistence, { planOnly: true });
     closeSession(session);
     return;
@@ -1092,8 +1094,15 @@ async function main() {
     return await installRequest(request, workspace, autoApprove);
   }
   const fullPrompt = args.join(' ');
-  const direct = parseInstallIntent(fullPrompt);
-  if (direct) return await installRequest(direct, workspace, autoApprove);
+  const omniIntent = isOmniRouteSetupIntent(fullPrompt);
+  let providerReadyForCommand = false;
+  try { providerReadyForCommand = Boolean((await loadConfig()).configured); } catch {}
+  if (omniIntent && !providerReadyForCommand) return await configureOmniRoute(workspace);
+  if (!omniIntent) {
+    const direct = parseInstallIntent(fullPrompt);
+    if (direct) return await installRequest(direct, workspace, autoApprove);
+  }
+  if (!providerReadyForCommand) await ensureModelProviderSetup(workspace);
   const session = await runPrompt(fullPrompt, workspace, autoApprove, null, persistence);
   closeSession(session);
 }
