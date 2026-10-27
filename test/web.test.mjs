@@ -35,6 +35,7 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.equal(statusBody.connected, true);
   assert.equal(statusBody.providerConfigured, false);
   assert.equal(statusBody.approvalMode, 'per-action');
+  assert.equal(statusBody.providerSetupAvailable, true);
   assert.equal(statusBody.workspacePath, root);
   assert.equal(statusBody.workspaceName, path.basename(root));
   assert.equal('apiKey' in statusBody, false);
@@ -68,6 +69,7 @@ test('provider setup stores local configuration without returning API credential
   const status = await fetch(base + '/api/status', { headers: { authorization: 'Bearer ' + app.token } });
   const statusBody = await status.json();
   assert.equal(statusBody.providerConfigured, true);
+  assert.equal(statusBody.providerSetupAvailable, true);
   assert.equal(statusBody.provider.model, 'local-test-model');
   assert.equal('apiKey' in statusBody, false);
 });
