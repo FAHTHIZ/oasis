@@ -139,9 +139,9 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 - An MCP stdio client is implemented, but a plugin marketplace, broad provider adapters, and curated integrations are not yet implemented.
 - No OS-level sandbox or container isolation is provided.
-- Saved conversations are opt-in and workspace-scoped. Automatic context compaction and streaming output are not implemented, and very long conversations can still exceed provider context limits.
+- Saved conversations are opt-in and workspace-scoped. Oasis now compacts older completed turns before a new request, using a tool-free model summary with a bounded local fallback if summarization fails. Compaction does not run in the middle of a tool loop, so an unusually long single task can still exceed provider context limits; streaming output is not implemented.
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
-- Read-only workspace tool calls can run in parallel, while commands, edits, installs, deletes, and external MCP calls run sequentially. Parallel specialist-agent orchestration, robust context compaction, streaming token output, and advanced conflict handling are not implemented.
+- Read-only workspace tool calls can run in parallel, while commands, edits, installs, deletes, and external MCP calls run sequentially. Automatic context compaction now runs between turns, but parallel specialist-agent orchestration, streaming token output, mid-turn compaction, and advanced conflict handling are not implemented.
 - The CLI and browser dashboard are separate interfaces; they do not currently share live project/task state.
 - GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
 
