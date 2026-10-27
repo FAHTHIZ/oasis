@@ -1,0 +1,13 @@
+# Local/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local tests and backup files
+coverage/
+playwright-report/
+test-results/
+*.local
