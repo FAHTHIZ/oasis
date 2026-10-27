@@ -785,6 +785,19 @@ function isVerificationCommand(command, args) {
   });
 }
 
+function isCompleteFileRead(args, result) {
+  if (!result || typeof result.content !== 'string' || !result.path || result.truncated === true) return false;
+  const requestedRange = args && (args.offset !== undefined || args.limit !== undefined);
+  if (!requestedRange) {
+    // Unranged read_file returns the full bounded text file and has no line-range
+    // metadata. Oversized files fail before returning a partial response.
+    return result.startLine === undefined && result.totalLines === undefined;
+  }
+  return Number(result.startLine) === 1 &&
+    Number(result.endLine) === Number(result.totalLines) &&
+    Number(result.totalLines) >= 1;
+}
+
 function verificationIssues(state) {
   if (!state.changedPaths.size) return [];
   const changed = [...state.changedPaths];
@@ -1060,14 +1073,15 @@ export async function runAgentTurn(session, prompt, options = {}) {
         if (Number.isFinite(specialistTokens) && specialistTokens > 0) tokensUsed += specialistTokens;
         if (Number.isFinite(specialistCalls) && specialistCalls > 0) session.toolCallsThisSession += specialistCalls;
       }
-      if (name === 'git_diff' && result && result.exitCode === 0) {
+      if (name === 'git_diff' && result && result.exitCode === 0 && result.truncated !== true) {
         const args = safeToolArguments(call.function && call.function.arguments);
         const scopedPath = normalizeReviewPath(args.path);
         if (!scopedPath || scopedPath === '.') verification.diffReviewedAll = true;
         else verification.diffReviewedPaths.add(scopedPath);
       }
-      if (name === 'read_file' && result && typeof result.content === 'string' && result.path) {
-        verification.diffReviewedPaths.add(normalizeReviewPath(result.path));
+      if (name === 'read_file' && result && result.path) {
+        const args = safeToolArguments(call.function && call.function.arguments);
+        if (isCompleteFileRead(args, result)) verification.diffReviewedPaths.add(normalizeReviewPath(result.path));
       }
       if (name === 'run_command' && result) {
         const args = safeToolArguments(call.function && call.function.arguments);
