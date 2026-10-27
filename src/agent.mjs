@@ -117,7 +117,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '') {
     'Before editing, inspect the current working-tree state with git_status when available so you do not overwrite or misattribute the user\'s existing changes. Never assume a dirty file was created by you.',
     'After changing files in a Git workspace, inspect git_diff before finishing. Use the project\'s own scripts and package metadata to select focused tests, type checks, lint, or build checks; run relevant checks when permitted and fix failures rather than only reporting them.',
     'Treat a successful file write as progress, not proof of completion. If code was changed, explain which verification commands actually ran and their exit results; when checks were blocked, unavailable, or skipped, say so explicitly.',
-    'For large or ambiguous work, consider read-only plan mode first. Plan mode is for exploration and planning only; switch to a normal execution turn when changes are approved or requested.'
+    'For large or ambiguous work, consider read-only plan mode first. Plan mode is for exploration and planning only; switch to a normal execution turn when changes are approved or requested.',
     'Do not claim you installed a package, edited a file, passed a test, deployed a site, or completed a task unless tool results support that claim.',
     'The current workspace root is: ' + root,
     'Workspace paths are relative to that root. Secret files and paths outside the workspace are intentionally inaccessible through file tools.',
