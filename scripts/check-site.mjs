@@ -1,14 +1,21 @@
 import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
-const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+const [html, manifestText, serviceWorker, icon] = await Promise.all([
+  read('../index.html'),
+  read('../manifest.webmanifest'),
+  read('../sw.js'),
+  read('../assets/oasis-icon.svg')
+]);
 const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
   'id="view-tasks"', 'id="view-notes"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
   'id="exportBtn"', 'id="importFile"', 'localStorage',
   'function exportBackup()', 'function importBackup(file)',
-  'prefers-reduced-motion', 'aria-live="polite"'
+  'prefers-reduced-motion', 'aria-live="polite"',
+  'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
 ];
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
@@ -18,4 +25,16 @@ assert.equal(scripts.length, 1, 'Expected exactly one inline application script.
 assert.ok(scripts[0][1].trim().length > 0, 'Inline app script must not be empty.');
 new Function(scripts[0][1]);
 assert.ok(!/<script[^>]+src=/i.test(html), 'The starter should not depend on external scripts.');
-console.log('Oasis integrity checks passed: views, persistence, backup/import, accessibility markers, and JavaScript syntax.');
+
+const manifest = JSON.parse(manifestText);
+assert.equal(manifest.name, 'Oasis OSS — Open Source Studio');
+assert.equal(manifest.start_url, './');
+assert.equal(manifest.display, 'standalone');
+assert.ok(Array.isArray(manifest.icons) && manifest.icons.some((item) => item.src === './assets/oasis-icon.svg'));
+assert.ok(icon.includes('<svg') && icon.includes('</svg>'), 'PWA icon must be a valid SVG document.');
+assert.ok(serviceWorker.includes("self.addEventListener('install'"));
+assert.ok(serviceWorker.includes("self.addEventListener('fetch'"));
+assert.ok(serviceWorker.includes('event.respondWith'));
+assert.ok(serviceWorker.includes("request.method !== 'GET'"), 'Service worker must not cache non-GET requests.');
+
+console.log('Oasis integrity checks passed: app structure, inline JavaScript syntax, PWA manifest/icon, and offline service-worker safeguards.');
