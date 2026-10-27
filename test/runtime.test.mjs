@@ -9,6 +9,7 @@ import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../s
 import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
+import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 
 async function temporaryDirectory(prefix = 'oasis-test-') {
   return await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -238,4 +239,41 @@ test('native Anthropic Messages API can call an Oasis tool and consume its resul
   assert.equal(authSeen, true);
   assert.ok(secondRequest.messages.some((message) => message.role === 'user' && Array.isArray(message.content) && message.content.some((block) => block.type === 'tool_result' && block.tool_use_id === 'anthropic-tool-1')));
   assert.equal(session.messages.at(-1).content, 'The workspace contains README.md.');
+});
+
+
+test('MCP stdio server exposes tools and requires per-call approval', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configPath = path.join(tmp, 'mcp-servers.json');
+  const script = [
+    "let buffer = '';",
+    "process.stdin.setEncoding('utf8');",
+    "process.stdin.on('data', (chunk) => {",
+    "  buffer += chunk;",
+    "  let index;",
+    "  while ((index = buffer.indexOf('\\\\n')) >= 0) {",
+    "    const line = buffer.slice(0, index); buffer = buffer.slice(index + 1);",
+    "    let message; try { message = JSON.parse(line); } catch { continue; }",
+    "    if (message.id === undefined) continue;",
+    "    let result = {};",
+    "    if (message.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1' } };",
+    "    if (message.method === 'tools/list') result = { tools: [{ name: 'echo', description: 'Echo one message', inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } }] };",
+    "    if (message.method === 'tools/call') result = { content: [{ type: 'text', text: 'pong ' + message.params.arguments.message }] };",
+    "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\\\n');",
+    "  }",
+    "});"
+  ].join('\\n');
+  validateMcpServerConfig({ name: 'fixture', command: process.execPath, args: ['-e', script], passEnv: [] });
+  await saveMcpServers([{ name: 'fixture', command: process.execPath, args: ['-e', script], passEnv: [], enabled: true }], { configPath });
+  const connected = await connectMcpServers({ configPath, root: tmp, env: { ...process.env, OASIS_API_KEY: 'must-not-be-passed-to-mcp' } });
+  t.after(() => closeMcpClients(connected.clients));
+  assert.equal(connected.failures.length, 0);
+  const generated = mcpToolDefinitions(connected.clients);
+  assert.ok(generated.definitions.some((definition) => definition.function.name === 'mcp_fixture_echo'));
+  const session = { mcpClients: connected.clients, mcpToolMap: generated.map };
+  const denied = await callMappedMcpTool(session, 'mcp_fixture_echo', { message: 'world' }, { approval: async () => false });
+  assert.equal(denied.approved, false);
+  const allowed = await callMappedMcpTool(session, 'mcp_fixture_echo', { message: 'world' }, { approval: async () => true });
+  assert.equal(allowed.content, 'pong world');
 });
