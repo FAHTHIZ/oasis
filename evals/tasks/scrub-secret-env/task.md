@@ -1,0 +1,1 @@
+Implement scrubEnvironment(env) so child processes do not inherit variables whose names imply API keys, tokens, secrets, passwords, credentials, private keys, or authorization. Preserve ordinary variables and do not mutate the input object.

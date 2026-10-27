@@ -1,0 +1,1 @@
+Implement globMatches(pattern, candidate) with anchored matching for path patterns. Support * for any number of non-slash characters and ? for exactly one non-slash character. Escape literal regex metacharacters so filenames cannot change the pattern's meaning.

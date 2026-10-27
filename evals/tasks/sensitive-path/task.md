@@ -1,0 +1,1 @@
+Implement isSensitivePath(value) to detect secret locations by path component, case-insensitively. Cover .env and .env.* files, .ssh, .aws, credentials, id_rsa, and id_ed25519. Normal source paths should remain allowed.

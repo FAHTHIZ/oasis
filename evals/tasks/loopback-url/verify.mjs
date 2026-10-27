@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const workspace = process.argv[2];
+const m = await import(pathToFileURL(path.join(workspace, 'src', 'lib.mjs')).href);
+assert.equal(m.isLoopbackUrl('http://localhost:11434'), true);
+assert.equal(m.isLoopbackUrl('http://127.0.0.1:8000'), true);
+assert.equal(m.isLoopbackUrl('http://[::1]:8000'), true);
+assert.equal(m.isLoopbackUrl('https://localhost.example'), false);
+assert.equal(m.isLoopbackUrl('http://evil-127.0.0.1.test'), false);
+assert.equal(m.isLoopbackUrl('not a url'), false);

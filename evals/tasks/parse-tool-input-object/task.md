@@ -1,0 +1,1 @@
+Harden parseToolInput(raw): parse JSON strings, but only return a non-null, non-array object. For invalid JSON, arrays, primitives, and null, return an empty object so malformed tool calls cannot change the expected argument shape.

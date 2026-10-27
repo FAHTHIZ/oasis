@@ -1,0 +1,1 @@
+Implement resolveRelative(root, value) so it resolves a path under root and throws if the resolved path escapes root, including via ../ or an absolute path outside the root. Do not rely on string-prefix checks.

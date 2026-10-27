@@ -1,0 +1,1 @@
+Fix estimateTokens(message) so OpenAI Responses API history is included in the context estimate. When responseItems is present, estimate from its serialized representation; otherwise estimate from string or array content. Use four characters per token, rounded up.

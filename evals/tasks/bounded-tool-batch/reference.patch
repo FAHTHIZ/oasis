@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+--- a/src/lib.mjs
++++ b/src/lib.mjs
+@@ -1 +1 @@
+-export function boundedToolBatch(requested, maximum = 16) { return Number.parseInt(requested, 10) || maximum; }
++export function boundedToolBatch(requested, maximum = 16) { const parsed = Number.parseInt(requested, 10); if (!Number.isFinite(parsed)) return maximum; return Math.min(maximum, Math.max(0, parsed)); }

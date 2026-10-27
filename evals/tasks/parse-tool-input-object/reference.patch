@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+--- a/src/lib.mjs
++++ b/src/lib.mjs
+@@ -1 +1 @@
+-export function parseToolInput(raw) { try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return {}; } }
++export function parseToolInput(raw) { try { const value = typeof raw === 'string' ? JSON.parse(raw) : raw; return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; } catch { return {}; } }

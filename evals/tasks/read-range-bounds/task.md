@@ -1,0 +1,1 @@
+Implement normalizeReadRange(offset, limit) for line-based reads. Offset must default to 1 and have a minimum of 1. Limit must default to 2000 and be clamped to 1 through 2000. Handle numeric strings and invalid values deterministically.

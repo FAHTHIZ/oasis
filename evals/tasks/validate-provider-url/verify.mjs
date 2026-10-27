@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const workspace = process.argv[2];
+const m = await import(pathToFileURL(path.join(workspace, 'src', 'lib.mjs')).href);
+assert.equal(m.validateBaseUrl('https://provider.example/v1/'), 'https://provider.example/v1');
+assert.equal(m.validateBaseUrl('http://localhost:11434/v1'), 'http://localhost:11434/v1');
+assert.throws(() => m.validateBaseUrl('http://provider.example/v1'), /HTTPS/);
+assert.throws(() => m.validateBaseUrl('https://user:pass@provider.example'), /Credentials/);
+assert.throws(() => m.validateBaseUrl('https://provider.example/v1?key=x'), /Credentials/);
+assert.throws(() => m.validateBaseUrl('ftp://provider.example'), /HTTP and HTTPS/);

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const workspace = process.argv[2];
+const m = await import(pathToFileURL(path.join(workspace, 'src', 'lib.mjs')).href);
+assert.equal(m.truncateOutput('short', 20), 'short');
+const result = m.truncateOutput('x'.repeat(200), 40);
+assert.equal(result.length, 40);
+assert.ok(result.endsWith('...[truncated]'));
+assert.ok(m.truncateOutput('x'.repeat(100), 1).length <= 16);

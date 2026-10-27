@@ -1,0 +1,1 @@
+Implement validateTodos(todos): require an array of at most 50 items, each with non-empty content and a status of pending, in_progress, or completed. Trim and cap content at 200 characters. Allow no more than one in_progress item, and throw on invalid input.

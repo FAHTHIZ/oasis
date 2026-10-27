@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+--- a/src/lib.mjs
++++ b/src/lib.mjs
+@@ -1 +1 @@
+-import path from 'node:path';\nexport function resolveRelative(root, value) { return path.resolve(root, value); }
++import path from 'node:path';\nexport function resolveRelative(root, value) { const base = path.resolve(root); const target = path.resolve(base, value); const relative = path.relative(base, target); if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('Path escapes the workspace root'); return target; }

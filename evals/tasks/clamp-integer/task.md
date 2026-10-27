@@ -1,0 +1,1 @@
+Fix clampInteger(value, fallback, min, max). Invalid inputs must return the fallback. Valid integer-like inputs must be clamped inclusively to min and max; zero must not accidentally trigger the fallback unless it is outside the allowed range.
