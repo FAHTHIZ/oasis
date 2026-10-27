@@ -98,10 +98,32 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
         }],
         usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 }
       }));
-    } else {
+    } else if (requests === 2) {
       res.end(JSON.stringify({
         choices: [{ message: { role: 'assistant', content: 'Updated and verified.' } }],
         usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 }
+      }));
+    } else if (requests === 3) {
+      const request = JSON.parse(raw);
+      assert.ok(request.messages.some((message) => message.role === 'user' && String(message.content).includes('post-edit verification gate')));
+      res.end(JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: 'I will reread the changed text file because this fixture is not a Git repository.',
+            tool_calls: [{
+              id: 'eval-review-1',
+              type: 'function',
+              function: { name: 'read_file', arguments: JSON.stringify({ path: 'demo.txt' }) }
+            }]
+          }
+        }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      }));
+    } else {
+      res.end(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'I reread demo.txt and verified the updated contents.' } }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
       }));
     }
   });
@@ -148,7 +170,7 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
   assert.equal(stored.results[0].verification.exitCode, 0);
   const original = await readFile(path.join(taskDir, 'repo', 'demo.txt'), 'utf8');
   assert.equal(original, 'old\n', 'the agent must only modify the disposable workspace');
-  assert.equal(requests, 2);
+  assert.equal(requests, 4);
 });
 
 
