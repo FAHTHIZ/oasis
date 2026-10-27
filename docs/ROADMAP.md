@@ -2,6 +2,13 @@
 
 This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here.
 
+## Milestone 0 — evaluation harness (experimental)
+
+- A CLI evaluation runner executes reviewed reference tasks in disposable copies and records pass/fail, tokens, elapsed time, and optional estimated cost.
+- The CI quality gate validates task fixtures by requiring the unchanged workspace to fail and the reference patch to pass.
+- The starter suite contains 21 small tasks. Most are standalone utility exercises, so it is a smoke benchmark and not yet a reliable score for full-project coding quality.
+- The runner is not an OS sandbox. Temporary directories and --yes do not provide isolation from host privileges or network access.
+
 ## Shipped foundations
 
 - Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
