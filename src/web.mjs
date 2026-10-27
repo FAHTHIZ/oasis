@@ -7,6 +7,7 @@ import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, getProviderSummary } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
+import { executeTool } from './tools.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
@@ -194,6 +195,48 @@ export function createOasisWebServer(options = {}) {
     return { jobId: job.id, sessionId: activeId };
   }
 
+
+  async function startTerminalJob(input) {
+    const command = String(input.command || '').trim();
+    if (!command || command.length > 200 || command.includes('\\0')) {
+      throw Object.assign(new Error('Enter one executable name or path (200 characters maximum).'), { statusCode: 400 });
+    }
+    const args = input.args === undefined ? [] : input.args;
+    if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\\0'))) {
+      throw Object.assign(new Error('Arguments must be an array of up to 80 strings; each argument is limited to 5,000 characters.'), { statusCode: 400 });
+    }
+    const timeoutSeconds = input.timeoutSeconds === undefined ? 120 : Number(input.timeoutSeconds);
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
+      throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
+    }
+    pruneJobs();
+    const job = newJob();
+    job.type = 'terminal';
+    jobs.set(job.id, job);
+    emit(job, 'terminal_started', { command, args });
+    void (async () => {
+      try {
+        const result = await executeTool('run_command', { command, args, timeoutSeconds }, {
+          root,
+          env,
+          autoApprove: false,
+          maxCommandSeconds: timeoutSeconds,
+          approval: (prompt) => approvalFor(job, prompt)
+        });
+        job.result = { ...result, jobType: 'terminal' };
+        const output = [result.stdout || '', result.stderr ? '\\n' + result.stderr : '', result.error ? '\\n' + result.error : ''].join('').slice(-12000);
+        emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), message: result.message || '' });
+        job.status = 'completed';
+        emit(job, 'completed', job.result);
+      } catch (error) {
+        job.error = String(error && error.message || error || 'Command failed').slice(0, 4000);
+        job.status = 'error';
+        emit(job, 'failed', { jobType: 'terminal', message: job.error });
+      }
+    })();
+    return { jobId: job.id, jobType: 'terminal' };
+  }
+
   async function handle(req, res) {
     const parsedUrl = new URL(req.url || '/', 'http://localhost');
     const pathname = parsedUrl.pathname;
@@ -261,6 +304,13 @@ export function createOasisWebServer(options = {}) {
       const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim())
         .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
       json(res, 200, { id, updatedAt: saved.updatedAt, messages });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/terminal/command') {
+      const body = await readJsonBody(req);
+      const result = await startTerminalJob(body);
+      json(res, 202, result);
       return;
     }
 
