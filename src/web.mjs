@@ -8,7 +8,7 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -531,10 +531,9 @@ export function createOasisWebServer(options = {}) {
       }
       try {
         const plan = await inspectGitHubMcpServers(url, { expectedCommit, fetchImpl: options.fetchImpl });
-        const selected = plan.servers.filter((server) => serverNames.includes(server.name));
-        if (selected.length !== serverNames.length) {
-          json(res, 409, { error: 'The selected MCP proposals no longer match the inspected repository. Inspect it again before importing.' }); return;
-        }
+        let selected;
+        try { selected = selectReviewedMcpServers(plan.servers, serverNames); }
+        catch (error) { json(res, 409, { error: String(error && error.message || error).slice(0, 1000) }); return; }
         const current = await loadMcpServers({ env });
         const existingNames = new Set(current.servers.map((server) => server.name));
         const collisions = selected.filter((server) => existingNames.has(server.name)).map((server) => server.name);

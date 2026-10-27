@@ -15,7 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
-import { inspectGitHubExtension, inspectGitHubMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -593,6 +593,13 @@ async function manageExternalExtensions(root, args, autoApprove) {
         stdout.write('    ' + item.id + ': ' + item.status + ' (' + item.count + ') — ' + item.detail + '\n');
       }
     }
+    const mcpPlan = report.mcpImportPlan || { servers: [], skipped: [], sourceFiles: [] };
+    stdout.write('\nMCP server proposals (not imported or started): ' + mcpPlan.servers.length + '\n');
+    for (const server of mcpPlan.servers) {
+      stdout.write('  ' + server.name + ' — ' + server.command + ' ' + JSON.stringify(server.args) + ' [disabled if imported]\n');
+      if (server.sourceEnvKeys.length) stdout.write('    Environment variable names declared (values omitted): ' + server.sourceEnvKeys.join(', ') + '\n');
+    }
+    for (const item of mcpPlan.skipped) stdout.write('  Skipped ' + (item.name || item.sourcePath) + ': ' + item.reason + '\n');
     stdout.write('\nSample of prompt paths:\n');
     for (const file of report.files.slice(0, 30)) stdout.write('  ' + file.path + '\n');
     return;
@@ -608,15 +615,8 @@ async function manageExternalExtensions(root, args, autoApprove) {
     }
     for (const skipped of plan.skipped) stdout.write('  Skipped ' + (skipped.name || skipped.sourcePath) + ': ' + skipped.reason + '\n');
     if (!plan.servers.length) { stdout.write('No supported local stdio MCP server declarations were found. Nothing was changed.\n'); return; }
-    const selected = selectedServerNames
-      ? plan.servers.filter((server) => selectedServerNames.includes(server.name))
-      : plan.servers;
-    if (!selected.length || (selectedServerNames && selected.length !== new Set(selectedServerNames).size)) {
-      throw new Error('The --servers selection did not match available proposals. Choose names printed in the review above.');
-    }
-    if (selectedServerNames && selectedServerNames.some((name) => !selected.some((server) => server.name === name))) {
-      throw new Error('One or more --servers names were not in the reviewed proposal.');
-    }
+    const selected = selectReviewedMcpServers(plan.servers, selectedServerNames);
+    if (!selected.length) { stdout.write('No supported MCP servers were selected. Nothing was changed.\n'); return; }
     const existing = await loadMcpServers();
     const existingNames = new Set(existing.servers.map((server) => server.name));
     const collisions = selected.filter((server) => existingNames.has(server.name)).map((server) => server.name);
@@ -629,8 +629,17 @@ async function manageExternalExtensions(root, args, autoApprove) {
       autoApprove
     );
     if (!approved) { stdout.write('MCP import cancelled; no configuration was changed.\n'); return; }
-    const proposed = selected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false }));
-    await saveMcpServers([...existing.servers, ...proposed]);
+    // Re-fetch after approval. If the repository default branch changed while the
+    // prompt was open, stop instead of importing commands that were not reviewed.
+    const latestPlan = await inspectGitHubMcpServers(url, { expectedCommit: plan.commitSha });
+    const latestSelected = selectReviewedMcpServers(latestPlan.servers, selected.map((server) => server.name));
+    const latestConfig = await loadMcpServers();
+    const latestNames = new Set(latestConfig.servers.map((server) => server.name));
+    const lateCollisions = latestSelected.filter((server) => latestNames.has(server.name)).map((server) => server.name);
+    if (lateCollisions.length) throw new Error('MCP server names were configured while approval was pending: ' + lateCollisions.join(', ') + '. Nothing was imported.');
+    if (latestConfig.servers.length + latestSelected.length > 40) throw new Error('The configured MCP server limit would be exceeded. Nothing was imported.');
+    const proposed = latestSelected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false }));
+    await saveMcpServers([...latestConfig.servers, ...proposed]);
     stdout.write('Imported ' + proposed.length + ' MCP configuration(s). All remain disabled; review environment variables, then enable trusted servers separately.\n');
     return;
   }

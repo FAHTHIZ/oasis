@@ -11,7 +11,8 @@ import {
   parseGitHubRepositoryUrl,
   removeGitHubExtension,
   selectAgentPromptFiles,
-  selectPortableSkillResources
+  selectPortableSkillResources,
+  selectReviewedMcpServers
 } from '../src/extensions.mjs';
 import { executeTool, listAvailableSkills, loadSkillResource, loadSkillText } from '../src/tools.mjs';
 
@@ -242,6 +243,17 @@ test('inspection allows recognized non-Markdown plugins to display a compatibili
   assert.match(inspected.installationBlockedReason, /no Markdown prompts/i);
 });
 
+
+test('reviewed MCP proposal selection rejects duplicates and names that are no longer in the plan', () => {
+  const available = [
+    { name: 'filesystem', command: 'node', args: [] },
+    { name: 'review_server', command: 'python', args: ['server.py'] }
+  ];
+  assert.deepEqual(selectReviewedMcpServers(available, ['review_server', 'filesystem']).map((server) => server.name), ['review_server', 'filesystem']);
+  assert.deepEqual(selectReviewedMcpServers(available).map((server) => server.name), ['filesystem', 'review_server']);
+  assert.throws(() => selectReviewedMcpServers(available, ['filesystem', 'filesystem']), /unique/i);
+  assert.throws(() => selectReviewedMcpServers(available, ['not-installed']), /not in the reviewed proposal/i);
+});
 
 test('extension inspection proposes safe MCP stdio configs without copying credentials and imports none by default', async () => {
   const manifest = JSON.stringify({

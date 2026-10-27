@@ -234,6 +234,29 @@ async function readMcpServerProposals(snapshot, fetchImpl = fetch) {
   };
 }
 
+
+export function selectReviewedMcpServers(availableServers, selectedNames = null) {
+  if (!Array.isArray(availableServers)) throw new Error('The MCP proposal list is invalid.');
+  const byName = new Map();
+  for (const server of availableServers) {
+    if (!server || typeof server.name !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(server.name) || byName.has(server.name)) {
+      throw new Error('The MCP proposal list contains invalid or duplicate server names.');
+    }
+    byName.set(server.name, server);
+  }
+  if (selectedNames === null || selectedNames === undefined) return [...availableServers];
+  if (!Array.isArray(selectedNames) || selectedNames.length < 1 || selectedNames.length > MAX_MCP_PROPOSALS ||
+      selectedNames.some((name) => typeof name !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(name)) ||
+      new Set(selectedNames).size !== selectedNames.length) {
+    throw new Error('Select between one and 40 unique, valid MCP proposal names.');
+  }
+  const selected = selectedNames.map((name) => byName.get(name));
+  if (selected.some((server) => !server)) {
+    throw new Error('One or more selected MCP servers are not in the reviewed proposal. Inspect the repository again.');
+  }
+  return selected;
+}
+
 export async function inspectGitHubMcpServers(rawUrl, options = {}) {
   const snapshot = await snapshotRepository(rawUrl, { expectedCommit: options.expectedCommit, fetchImpl: options.fetchImpl });
   if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow.');
