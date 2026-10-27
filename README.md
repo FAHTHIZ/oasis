@@ -15,10 +15,11 @@ oasis doctor
 oasis
 ~~~
 
-During setup, enter an OpenAI-compatible chat-completions base URL, a model name that supports tool calling, and an API key. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
+During setup, choose native Anthropic Messages API or OpenAI-compatible chat-completions, enter a model name that supports tool calling, and enter the corresponding API key. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
 
 Supported provider shapes:
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
+- Native Anthropic Messages API endpoints. Select `anthropic` during `oasis setup`.
 - Local Ollama-style endpoints such as \`http://localhost:11434/v1\`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
 - Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. \`OPENAI_API_KEY\` is also accepted.
 
@@ -33,6 +34,7 @@ oasis "Install pnpm"
 oasis "Install Playwright and set up browser tests"
 oasis skills list
 oasis skills install debugging
+oasis mcp list
 ~~~
 
 A simple request such as \`oasis install pnpm\` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model.
@@ -41,7 +43,8 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 
 ### Terminal agent
 - Interactive sessions and one-shot plain-English tasks.
-- A multi-step OpenAI-compatible tool-calling loop.
+- Multi-step native Anthropic and OpenAI-compatible tool-calling loops.
+- Optional MCP stdio server integration with explicit configuration and approval for each external tool call.
 - Workspace file listing, literal search, and bounded text reads/writes.
 - Command execution through an executable plus argument array, without shell expansion.
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
@@ -117,9 +120,10 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 ## Known limitations — not claimed as finished
 
-- MCP server configuration, a plugin marketplace, and external integrations are not yet implemented.
+- An MCP stdio client is implemented, but a plugin marketplace, broad provider adapters, and curated integrations are not yet implemented.
 - No OS-level sandbox or container isolation is provided.
 - Agent sessions are kept in memory for the current process; durable cross-session conversation history is not implemented.
+- MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Tool calls are sequential. Parallel agent orchestration, automatic compaction strategies, streaming token output, and advanced conflict handling are not implemented.
 - The CLI and browser dashboard are separate interfaces; they do not currently share live project/task state.
 - GitHub Pages deployment must be enabled in the repository's Pages settings. A workflow file alone does not prove the site is live.
