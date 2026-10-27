@@ -173,7 +173,7 @@ test('Oasis discovers and loads portable project and global Agent Skills without
 
 test('chat exposes safe provider bootstrap and external skill installation tools', () => {
   const definitions = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool.function]));
-  for (const name of ['setup_omniroute', 'configure_provider', 'install_external_skill', 'configure_mcp_server']) {
+  for (const name of ['setup_omniroute', 'configure_provider', 'install_external_skill', 'configure_mcp_server', 'delegate_openhands']) {
     assert.ok(definitions.has(name), 'expected chat tool ' + name);
   }
   assert.deepEqual(definitions.get('setup_omniroute').parameters.properties, {});
@@ -182,6 +182,8 @@ test('chat exposes safe provider bootstrap and external skill installation tools
   assert.deepEqual(definitions.get('install_external_skill').parameters.required, ['source', 'scope']);
   assert.deepEqual(definitions.get('configure_mcp_server').parameters.required, ['name', 'command']);
   assert.ok(!Object.hasOwn(definitions.get('configure_mcp_server').parameters.properties, 'apiKey'));
+  assert.deepEqual(definitions.get('delegate_openhands').parameters.required, ['task']);
+  assert.ok(!Object.hasOwn(definitions.get('delegate_openhands').parameters.properties, 'apiKey'));
 });
 
 test('configure_provider verifies an inert tool call before saving and updates the active session', async (t) => {
@@ -288,6 +290,164 @@ test('chat configures and activates an approved MCP server in the current sessio
   assert.equal(saved.servers.length, 1);
   assert.equal(saved.servers[0].name, 'chatfixture');
   assert.equal(saved.servers[0].enabled, true);
+});
+
+
+test('OpenHands delegation requires an explicit profile and never accepts model keys via tool arguments', async (t) => {
+  const tmp = await temporaryDirectory('oasis-openhands-unconfigured-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const result = await executeTool('delegate_openhands', { task: 'Review this repository.' }, {
+    root: tmp,
+    env: { OPENHANDS_AGENT_SERVER_URL: 'http://127.0.0.1:8000' },
+    autoApprove: true,
+    approval: async () => { throw new Error('should not request approval before profile configuration'); }
+  });
+  assert.equal(result.delegated, false);
+  assert.equal(result.configured, false);
+  assert.match(result.message, /OPENHANDS_AGENT_PROFILE_ID/);
+});
+
+test('OpenHands delegation requires manual approval and uses server-owned credentials and confirmation policy', async (t) => {
+  const tmp = await temporaryDirectory('oasis-openhands-bridge-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const workspace = path.join(tmp, 'workspace');
+  await mkdir(workspace);
+  let createPayload = null;
+  let postCount = 0;
+  let getCount = 0;
+  let receivedAuth = '';
+  const server = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk.toString();
+    receivedAuth = req.headers['x-session-api-key'] || '';
+    const send = (status, value) => {
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(value));
+    };
+    if (req.method === 'POST' && req.url === '/api/conversations') {
+      postCount++;
+      createPayload = JSON.parse(raw);
+      send(201, { id: 'fixture-openhands-1', execution_status: 'running' });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/conversations/fixture-openhands-1') {
+      getCount++;
+      send(200, { id: 'fixture-openhands-1', execution_status: 'finished' });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/conversations/fixture-openhands-1/agent_final_response') {
+      send(200, { response: 'OpenHands completed the isolated review.' });
+      return;
+    }
+    send(404, { detail: 'not found' });
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const env = {
+    OPENHANDS_AGENT_SERVER_URL: 'http://127.0.0.1:' + server.address().port,
+    OPENHANDS_AGENT_PROFILE_ID: 'fixture-profile',
+    OPENHANDS_SESSION_API_KEY: 'fixture-server-secret',
+    OPENHANDS_WORKSPACE_PATH: workspace
+  };
+  const approvals = [];
+  const result = await executeTool('delegate_openhands', {
+    task: 'Review the current project architecture.',
+    maxWaitSeconds: 5
+  }, {
+    root: workspace,
+    env,
+    autoApprove: true,
+    approval: async (prompt, forceInteractive) => {
+      approvals.push({ prompt, forceInteractive });
+      return true;
+    }
+  });
+
+  assert.equal(result.delegated, true, result.message);
+  assert.equal(result.status, 'finished');
+  assert.equal(result.conversationId, 'fixture-openhands-1');
+  assert.equal(result.finalResponse, 'OpenHands completed the isolated review.');
+  assert.equal(postCount, 1);
+  assert.equal(getCount, 1);
+  assert.equal(receivedAuth, 'fixture-server-secret');
+  assert.equal(approvals.length, 1);
+  assert.equal(approvals[0].forceInteractive, true);
+  assert.match(approvals[0].prompt, /Review the current project architecture/);
+  assert.equal(createPayload.agent_profile_id, 'fixture-profile');
+  assert.deepEqual(createPayload.workspace, { kind: 'LocalWorkspace', working_dir: workspace });
+  assert.deepEqual(createPayload.initial_message.content, [{ type: 'text', text: 'Review the current project architecture.' }]);
+  assert.deepEqual(createPayload.confirmation_policy, { kind: 'AlwaysConfirm' });
+  assert.equal(createPayload.worktree, true);
+  assert.equal(JSON.stringify(result).includes('fixture-server-secret'), false);
+});
+
+
+test('OpenHands delegation returns a pending confirmation instead of approving remote actions', async (t) => {
+  const tmp = await temporaryDirectory('oasis-openhands-confirm-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  let getCount = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    res.writeHead(req.method === 'POST' && req.url === '/api/conversations' ? 201 : 200, { 'content-type': 'application/json' });
+    if (req.method === 'POST' && req.url === '/api/conversations') {
+      res.end(JSON.stringify({ id: 'fixture-openhands-confirm', execution_status: 'waiting_for_confirmation' }));
+      return;
+    }
+    if (req.method === 'GET') getCount++;
+    res.end(JSON.stringify({ id: 'fixture-openhands-confirm', execution_status: 'running' }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const result = await executeTool('delegate_openhands', { task: 'Review an implementation proposal.' }, {
+    root: tmp,
+    env: {
+      OPENHANDS_AGENT_SERVER_URL: 'http://127.0.0.1:' + server.address().port,
+      OPENHANDS_AGENT_PROFILE_ID: 'fixture-profile'
+    },
+    autoApprove: true,
+    approval: async () => true
+  });
+  assert.equal(result.delegated, true);
+  assert.equal(result.status, 'waiting_for_confirmation');
+  assert.equal(result.approvalRequired, true);
+  assert.equal(getCount, 0, 'no polling or automated confirmation occurs after a confirmation wait is returned');
+  assert.match(result.message, /does not approve OpenHands actions automatically/i);
+});
+
+test('OpenHands delegation refuses remote plaintext endpoints and does not auto-approve', async (t) => {
+  const tmp = await temporaryDirectory('oasis-openhands-policy-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await assert.rejects(executeTool('delegate_openhands', { task: 'Review only.' }, {
+    root: tmp,
+    env: {
+      OPENHANDS_AGENT_SERVER_URL: 'http://openhands.example:8000',
+      OPENHANDS_AGENT_PROFILE_ID: 'fixture-profile'
+    },
+    autoApprove: true,
+    approval: async () => true
+  }), /remote servers must use HTTPS/i);
+
+  let approved = false;
+  const denied = await executeTool('delegate_openhands', { task: 'Review only.' }, {
+    root: tmp,
+    env: {
+      OPENHANDS_AGENT_SERVER_URL: 'http://127.0.0.1:8000',
+      OPENHANDS_AGENT_PROFILE_ID: 'fixture-profile'
+    },
+    autoApprove: true,
+    approval: async (_prompt, forceInteractive) => { approved = forceInteractive; return false; }
+  });
+  assert.equal(approved, true);
+  assert.equal(denied.delegated, false);
+  assert.equal(denied.approved, false);
 });
 
 test('setup_omniroute refuses to override host environment provider pins', async (t) => {
