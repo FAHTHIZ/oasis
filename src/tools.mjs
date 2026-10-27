@@ -317,12 +317,11 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
       if (Buffer.byteLength(args.content, 'utf8') > MAX_TEXT_FILE) throw new Error('New file content exceeds the 256 KiB limit.');
-      const target = await resolveWorkspacePath(root, args.path);
+      const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       let backedUpExistingFile = false;
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
-        if (old.isSymbolicLink()) await resolveWorkspacePath(root, args.path);
         await snapshotFile(root, target.absolute, 'before-agent-write');
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
