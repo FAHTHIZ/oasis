@@ -75,12 +75,15 @@ export async function loadConfig(options = {}) {
 
   let savedBaseURL = '';
   try { savedBaseURL = validateBaseUrl(saved.baseURL || ''); } catch {}
-  const savedProtocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL));
+  let savedProtocol;
+  try { savedProtocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL)); }
+  catch { savedProtocol = inferProtocol(savedBaseURL, DEFAULT_PROTOCOL); }
   const requestedProtocol = env.OASIS_PROTOCOL || (env.OASIS_BASE_URL && stripTrailingSlashes(env.OASIS_BASE_URL) !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
   const protocol = validateProtocol(requestedProtocol);
   const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
-  const baseURL = validateBaseUrl(env.OASIS_BASE_URL || savedBaseURL || defaultBase);
-  const model = String(env.OASIS_MODEL || saved.model || DEFAULT_MODEL).trim();
+  const baseURL = validateBaseUrl(env.OASIS_BASE_URL || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase);
+  const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : DEFAULT_MODEL;
+  const model = String(env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
   if (!model) throw new Error('No model is configured. Run oasis setup.');
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
