@@ -4,6 +4,7 @@ import { stdin, stdout } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
 import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
@@ -14,6 +15,7 @@ import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
+import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL_URL = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
@@ -27,6 +29,7 @@ function printHelp() {
     '  oasis "fix the failing tests"  Give a task in plain English',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor                  Check the local environment',
+    '  oasis web [--host HOST] [--port PORT]  Start the authenticated browser agent workspace',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
@@ -491,6 +494,50 @@ async function interactive(root, autoApprove, persistence = {}) {
   stdout.write('\nOasis session closed.\n');
 }
 
+
+async function startWebWorkspace(root, args) {
+  let host = '127.0.0.1';
+  let port = 3917;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--host') {
+      if (!args[i + 1]) throw new Error('--host requires a host address.');
+      host = args[++i];
+    } else if (arg.startsWith('--host=')) host = arg.slice(7);
+    else if (arg === '--port') {
+      if (!args[i + 1]) throw new Error('--port requires a number.');
+      port = Number(args[++i]);
+    } else if (arg.startsWith('--port=')) port = Number(arg.slice(7));
+    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST and --port PORT.');
+  }
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be an integer between 0 and 65535 (0 chooses an available port).');
+  const normalizedHost = host.toLowerCase();
+  if (normalizedHost !== 'localhost' && isIP(host) === 0) throw new Error('--host must be localhost or a literal IP address. Use --host 0.0.0.0 only when you intentionally want other devices on your private network to connect.');
+  const app = await startOasisWebServer({ root, host, port });
+  const urlHost = host.includes(':') ? '[' + host + ']' : host;
+  const localUrl = 'http://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
+  stdout.write('\nOasis browser workspace is running.\n');
+  stdout.write('Workspace: ' + root + '\n');
+  stdout.write('Open on this device: ' + localUrl + '\n');
+  stdout.write('Connection token (paste into Agent → Connect; keep private):\n' + app.token + '\n');
+  stdout.write('Every agent chat action requires an in-browser approval before running a command, installing a package, deleting a file, or installing a bundle.\n');
+  if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
+    stdout.write('NETWORK WARNING: this HTTP service is reachable from other devices on the bound network. Keep it on a trusted private Wi-Fi network, never port-forward it to the Internet, and stop it when finished. HTTP does not encrypt the token in transit.\n');
+    stdout.write('On your phone, open http://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+  } else {
+    stdout.write('This listener is local-only. To use another device on a trusted private Wi-Fi, restart with --host 0.0.0.0 and read the network warning carefully.\n');
+  }
+  stdout.write('Press Ctrl+C to stop Oasis web.\n');
+  let closing = false;
+  const shutdown = () => {
+    if (closing) return;
+    closing = true;
+    void app.close().catch((error) => stderr.write('Oasis web shutdown error: ' + error.message + '\n'));
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
@@ -534,6 +581,7 @@ async function main() {
   }
   if (command === 'setup') return await configureProvider();
   if (command === 'doctor') return await doctor();
+  if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
     if (!planPrompt) throw new Error('Usage: oasis plan "Describe the task to plan"');
