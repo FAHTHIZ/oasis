@@ -263,12 +263,12 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     child.on('error', (error) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      resolve({ command, exitCode: null, stdout, stderr, error: error.message, timedOut });
+      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      resolve({ command, exitCode: code, signal, stdout, stderr, timedOut });
+      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut });
     });
   });
 }
