@@ -35,6 +35,8 @@ oasis "Install pnpm"
 oasis "Install Playwright and set up browser tests"
 oasis skills list
 oasis skills install debugging
+oasis plugins list
+oasis plugins install code-quality
 oasis mcp list
 ~~~
 
@@ -51,6 +53,7 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
 - Bundled skills for debugging, code review, testing, environment setup, and shipping features.
+- A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
 - Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
 - Optional workspace-scoped saved sessions that can be resumed or deleted; skill descriptions load first and full skill guides load only on demand.
@@ -62,6 +65,30 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Task creation, completion, priorities, project association, search, and deletion.
 - Notes that save locally, plus JSON export/import.
 - Light/dark themes and an installable PWA shell with a service worker for offline caching.
+
+## Plugins, integrations, and installation
+
+Oasis separates three things that are often all called “plugins”:
+
+- **Skills** are reusable workflow instructions that guide the agent through tasks such as debugging, testing, code review, and release preparation.
+- **Capability bundles** package related built-in skills so they can be installed and removed together. Browse with `oasis plugins list`; install with `oasis plugins install code-quality`; remove with `oasis plugins remove code-quality`. Bundles are copied into the current workspace under `.oasis/`.
+- **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`. External integrations may execute code or access data, so inspect their source, requested environment variables, and permissions before enabling them.
+
+Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
+
+The initial Oasis plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. Remote marketplaces, signed/versioned third-party bundles, permission-scoped connectors, and the integrated mobile chat-to-runtime workspace are still future work—not features this release claims to have.
+
+For testing the current PR branch directly, install with:
+
+~~~bash
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/eval-harness
+oasis setup
+oasis doctor
+oasis plugins list
+oasis
+~~~
+
+This installs the terminal agent. The existing static PWA is a separate project dashboard; it is **not yet** the integrated mobile chat and terminal UI, and it cannot execute commands on the phone merely by being installed.
 
 ## Safety model
 
