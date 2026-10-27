@@ -398,6 +398,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     const assistant = await requestCompletion(session);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
+    if (options.onUsage) options.onUsage({ ...usage, step: step + 1 });
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
     if (Array.isArray(assistant.tool_calls) && assistant.tool_calls.length) {
@@ -503,6 +504,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   try {
     final = await requestCompletion(session, { noTools: true });
     tokensUsed += Number(final.usage && final.usage.totalTokens || 0);
+    if (options.onUsage && final.usage) options.onUsage({ ...final.usage, step: maxSteps + 1 });
   } catch (error) {
     const text = 'Oasis reached its tool-step limit and could not get a final provider summary: ' + error.message;
     pruneHistory(session);
