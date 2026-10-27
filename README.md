@@ -6,7 +6,7 @@ Oasis is being built to turn requests like “inspect this project, install the 
 
 ## Install the terminal agent
 
-Requirements: Node.js 20+ and npm. Git is required for installing directly from this repository.
+Requirements: Node.js 22+ and npm. Git is required for installing directly from this repository.
 
 ~~~bash
 npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#main
@@ -15,7 +15,7 @@ oasis doctor
 oasis
 ~~~
 
-During setup, choose native Anthropic Messages API or OpenAI-compatible chat-completions, enter a model name that supports tool calling, and enter the corresponding API key. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
+During setup, choose the native OpenAI Responses API (the default), native Anthropic Messages API, or OpenAI-compatible chat completions. The default OpenAI model is `gpt-6.1-sol`; choose a model name that supports tools for any other provider. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
 
 Supported provider shapes:
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
@@ -114,7 +114,7 @@ npm run check
 npm pack --dry-run
 ~~~
 
-The test suite checks URL validation, configuration file permissions, install intent parsing, package-name validation, workspace boundaries, secret-file protection, snapshots and restore, approval requirements, command environment filtering, private URL rejection, and a full simulated model/tool-call cycle against a local fixture server. The browser integrity script checks the static UI, JavaScript syntax, PWA manifest, icon, and service worker.
+The test suite checks provider configuration, install intent parsing, package-name validation, workspace boundaries, secret-file protection, snapshots and restore, approval requirements, command environment filtering, private URL rejection, MCP calls, session persistence, and simulated model/tool-call cycles for OpenAI Responses, OpenAI-compatible chat completions, and Anthropic. The browser integrity script checks the static UI, JavaScript syntax, PWA manifest, icon, and service worker.
 
 A passing test suite is not a full security audit or a substitute for exercising the CLI on Linux, macOS, Windows, Android/Termux, or against real model providers.
 
