@@ -178,9 +178,13 @@ async function configureProvider(root = process.cwd(), options = {}) {
       const selected = presets[presetName];
       if (!selected) throw new Error('Unknown provider preset. Choose omniroute, openai, anthropic, openrouter, gemini, ollama, or custom.');
       protocol = selected.protocol;
-      baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
-      const modelPrompt = selected.model ? 'Model name [' + selected.model + ']: ' : 'Model name (exact model ID required): ';
-      model = (await rl.question(modelPrompt)).trim() || selected.model;
+      baseURL = selected.baseURL;
+      model = selected.model;
+      if (presetName !== 'omniroute') {
+        baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
+        const modelPrompt = selected.model ? 'Model name [' + selected.model + ']: ' : 'Model name (exact model ID required): ';
+        model = (await rl.question(modelPrompt)).trim() || selected.model;
+      }
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
   } finally { rl.close(); }
