@@ -31,7 +31,8 @@ function createFetch(options = {}) {
     { path: 'engineering/code-reviewer.md', type: 'blob', mode: '100644', size: Buffer.byteLength(prompts['engineering/code-reviewer.md']), sha: '2'.repeat(40) },
     { path: 'README.md', type: 'blob', mode: '100644', size: 120, sha: '3'.repeat(40) },
     { path: 'scripts/install.sh', type: 'blob', mode: '100755', size: 80, sha: '4'.repeat(40) },
-    { path: 'package.json', type: 'blob', mode: '100644', size: 50, sha: '5'.repeat(40) }
+    { path: 'package.json', type: 'blob', mode: '100644', size: 50, sha: '5'.repeat(40) },
+    ...(options.extraFiles || [])
   ];
   const calls = [];
   const fetchImpl = async (rawUrl) => {
@@ -47,6 +48,9 @@ function createFetch(options = {}) {
     const rawPrefix = 'https://raw.githubusercontent.com/acme/agents/' + (options.commit || COMMIT) + '/';
     if (url.startsWith(rawPrefix)) {
       const pathname = decodeURIComponent(url.slice(rawPrefix.length));
+      if (options.rawFiles && Object.prototype.hasOwnProperty.call(options.rawFiles, pathname)) {
+        return new Response(options.rawFiles[pathname], { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
       if (Object.prototype.hasOwnProperty.call(prompts, pathname)) return new Response(prompts[pathname], { status: 200, headers: { 'content-type': 'text/markdown; charset=utf-8' } });
       return new Response('not found', { status: 404, headers: { 'content-type': 'text/plain' } });
     }
@@ -238,6 +242,34 @@ test('inspection allows recognized non-Markdown plugins to display a compatibili
   assert.match(inspected.installationBlockedReason, /no Markdown prompts/i);
 });
 
+
+test('extension inspection proposes safe MCP stdio configs without copying credentials and imports none by default', async () => {
+  const manifest = JSON.stringify({
+    mcpServers: {
+      'good-server': { command: 'node', args: ['server.mjs'], env: { API_TOKEN: 'do-not-copy-this-secret' } },
+      'remote-server': { type: 'http', url: 'https://example.invalid/mcp' },
+      'unsafe-command': { command: 'bash -c', args: ['echo unsafe'] },
+      'argument-secret': { command: 'node', args: ['--token', 'secret-value'] }
+    }
+  });
+  const { fetchImpl } = createFetch({
+    extraFiles: [{ path: '.mcp.json', type: 'blob', mode: '100644', size: Buffer.byteLength(manifest), sha: '9'.repeat(40) }],
+    rawFiles: { '.mcp.json': manifest }
+  });
+  const inspected = await inspectGitHubExtension('https://github.com/acme/agents', { fetchImpl });
+  assert.equal(inspected.mcpImportPlan.sourceFiles.includes('.mcp.json'), true);
+  assert.equal(inspected.mcpImportPlan.servers.length, 1);
+  const proposal = inspected.mcpImportPlan.servers[0];
+  assert.equal(proposal.name, 'good_server');
+  assert.equal(proposal.command, 'node');
+  assert.deepEqual(proposal.args, ['server.mjs']);
+  assert.deepEqual(proposal.passEnv, []);
+  assert.equal(proposal.enabled, false);
+  assert.deepEqual(proposal.sourceEnvKeys, ['API_TOKEN']);
+  assert.ok(inspected.mcpImportPlan.skipped.length >= 3);
+  assert.doesNotMatch(JSON.stringify(inspected.mcpImportPlan), /do-not-copy-this-secret|secret-value/);
+  assert.match(inspected.mcpImportPlan.policy, /saved disabled/i);
+});
 
 test('portable Agent Skills keep text references with integrity-checked read access and exclude scripts', async (t) => {
   const tmp = await tempDir();
