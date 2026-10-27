@@ -484,7 +484,7 @@ export async function loadSkillText(root, rawName, options = {}) {
 export async function loadSkillDescriptions(root, options = {}) {
   const skills = await listAvailableSkills(root, options);
   if (!skills.length) return '';
-  return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 16000);
+  return skills.map((item) => '- ' + item.name + ' [' + (['global-extension', 'project-extension'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']: ' + item.description).join('\n').slice(0, 16000);
 }
 
 async function runReadOnlyGit(root, args) {

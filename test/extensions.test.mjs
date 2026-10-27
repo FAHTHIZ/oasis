@@ -41,7 +41,7 @@ function createFetch(options = {}) {
       default_branch: 'main', private: Boolean(options.private), license: { spdx_id: 'MIT', name: 'MIT License' }
     });
     if (url === 'https://api.github.com/repos/acme/agents/commits/main') return json({ sha: options.commit || COMMIT });
-    if (url === 'https://api.github.com/repos/acme/agents/git/trees/' + (options.commit || COMMIT) + '?recursive=1') return json({ tree: files, truncated: false });
+    if (url === 'https://api.github.com/repos/acme/agents/git/trees/' + (options.commit || COMMIT) + '?recursive=1') return json({ tree: files, truncated: Boolean(options.truncated) });
     const rawPrefix = 'https://raw.githubusercontent.com/acme/agents/' + (options.commit || COMMIT) + '/';
     if (url.startsWith(rawPrefix)) {
       const pathname = decodeURIComponent(url.slice(rawPrefix.length));
@@ -142,6 +142,19 @@ test('extension removal refuses a changed prompt and removes an intact extension
   assert.equal(removed.scope, 'project');
   assert.equal(result.importedFiles, 2);
   assert.equal((await listInstalledExtensions({ root, env })).extensions.length, 0);
+});
+
+test('truncated GitHub trees cannot be inspected or installed as partial collections', async (t) => {
+  const tmp = await tempDir();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const { fetchImpl } = createFetch({ truncated: true });
+  await assert.rejects(() => inspectGitHubExtension('https://github.com/acme/agents', { fetchImpl }), /truncated.*partial agent collection/i);
+  await assert.rejects(() => installGitHubExtension('https://github.com/acme/agents', {
+    root: path.join(tmp, 'project'),
+    env: { OASIS_CONFIG_DIR: path.join(tmp, 'config') },
+    scope: 'both',
+    fetchImpl
+  }), /truncated.*partial agent collection/i);
 });
 
 test('private repositories and stale inspected commits are rejected', async () => {

@@ -193,7 +193,7 @@ body.light .extension-card,body.light .integration-card{background:#fff}
         <div class="extension-metric"><strong id="extensionLicense">Unknown</strong><span>Detected license</span></div>
       </div>
       <div class="extension-candidates" id="extensionCandidateList" aria-label="Files selected for import"></div><div class="extension-meta"><span class="extension-chip" id="extensionCommitChip"></span><span class="extension-chip" id="extensionBranchChip"></span><span class="extension-chip" id="extensionLimitChip" hidden>Import limit reached</span></div>
-      <div class="integration-controls"><button class="btn btn-primary" id="extensionInstallBtn" type="button">Install reviewed prompts</button><button class="btn btn-secondary" id="extensionCancelBtn" type="button">Cancel review</button></div>
+      <div class="integration-controls"><button class="btn btn-primary" id="extensionInstallBtn" type="button" disabled>Install reviewed prompts</button><button class="btn btn-secondary" id="extensionCancelBtn" type="button" disabled>Cancel review</button></div>
       <p class="extension-warning" id="extensionSafetySummary"></p>
     </div>
     <p id="extensionInstallStatus" class="section-sub" role="status" aria-live="polite" style="margin-top:12px"></p>
@@ -347,7 +347,7 @@ var extensionInspection=null;
 var extensionBusy=false;
 function extensionEscape(value){return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
 function extensionStatus(message,isError){var node=document.getElementById('extensionInstallStatus');node.textContent=message||'';node.style.color=isError?'var(--danger)':'var(--muted)'}
-function extensionSetBusy(busy){extensionBusy=!!busy;['extensionInspectBtn','extensionInstallBtn','extensionCancelBtn','extensionRefreshBtn'].forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=extensionBusy});}
+function extensionSetBusy(busy){extensionBusy=!!busy;['extensionInspectBtn','extensionInstallBtn','extensionCancelBtn','extensionRefreshBtn'].forEach(function(id){var el=document.getElementById(id);if(!el)return;el.disabled=extensionBusy||(id==='extensionInstallBtn'&&(!extensionInspection||!!extensionInspection.data.treeTruncated))||(id==='extensionCancelBtn'&&!extensionInspection)});}
 function extensionRenderInspection(data,url){
   extensionInspection={data:data,url:url};
   document.getElementById('extensionSummary').hidden=false;
@@ -359,9 +359,9 @@ function extensionRenderInspection(data,url){
   document.getElementById('extensionCommitChip').textContent='Commit '+data.repository.commitSha.slice(0,12);
   document.getElementById('extensionBranchChip').textContent='Default branch: '+data.repository.defaultBranch;
   document.getElementById('extensionLimitChip').hidden=!data.limited&&!data.treeTruncated;
-  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub marked the returned tree as truncated; inspect the candidate list carefully.':'');
+  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub truncated its repository tree. A partial collection cannot be installed.':'');
   document.getElementById('extensionCandidateList').innerHTML=(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':'');
-  document.getElementById('extensionInstallBtn').textContent='Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');
+  document.getElementById('extensionInstallBtn').textContent='Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');document.getElementById('extensionInstallBtn').disabled=!!data.treeTruncated; if(data.treeTruncated) extensionStatus('Cannot install an incomplete listing. Use a smaller repository or a reviewed subset.',true);
   document.getElementById('extensionInstallBtn').disabled=false;
 }
 async function extensionInspect(){
@@ -375,6 +375,7 @@ async function extensionInspect(){
 }
 async function extensionInstall(){
   if(!agentToken||!extensionInspection||extensionBusy)return;
+  if(extensionInspection.data.treeTruncated){extensionStatus('Installation blocked because GitHub returned an incomplete repository tree.',true);return}
   var data=extensionInspection.data,url=extensionInspection.url,scope=document.getElementById('extensionScope').value;
   var label=scope==='both'?'Oasis itself and the current project':(scope==='self'?'Oasis itself across projects':'the current project');
   if(!window.confirm('Install '+data.importCount+' Markdown prompt files from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+' into '+label+'?\n\nNo repository code, scripts, dependencies, or MCP servers will be installed or executed.'))return;
@@ -410,7 +411,7 @@ function integrationSetTab(name){
 }
 document.querySelectorAll('[data-integration-tab]').forEach(function(tab){tab.addEventListener('click',function(){integrationSetTab(tab.getAttribute('data-integration-tab'))})});
 async function integrationRefresh(){
-  if(!agentToken){document.getElementById('integrationRuntimeTitle').textContent='Runtime not connected';document.getElementById('integrationRuntimeHelp').textContent='Connect the local Oasis runtime to inspect provider, GitHub, and MCP status.';document.getElementById('connectorGithubStatus').textContent='Connect runtime first';document.getElementById('integrationProviderStatus').textContent='Connect runtime first';document.getElementById('integrationRuntimeStatus').textContent='Not connected';return}
+  if(!agentToken){document.getElementById('integrationRuntimeTitle').textContent='Runtime not connected';document.getElementById('integrationRuntimeHelp').textContent='Connect the local Oasis runtime to inspect provider, GitHub, and MCP status.';var ids=['connectorGithubStatus','integrationProviderStatus','integrationRuntimeStatus'];ids.forEach(function(id){var node=document.getElementById(id);node.classList.remove('connected');node.textContent='Connect runtime first'});return}
   try{
     var state=await agentApi('/api/status');
     document.getElementById('integrationRuntimeTitle').textContent='Runtime connected · '+state.workspaceName;
@@ -418,7 +419,7 @@ async function integrationRefresh(){
     var p=document.getElementById('integrationProviderStatus');p.textContent=state.providerConfigured?'Configured · '+state.provider.model:'Not configured';p.classList.toggle('connected',!!state.providerConfigured);
     document.getElementById('integrationProviderDescription').textContent=state.provider?'Active provider: '+state.provider.provider+' · '+state.provider.protocol+' · '+state.provider.model:'Choose a supported model endpoint in Provider settings.';
     document.getElementById('integrationRuntimeStatus').textContent='Connected · local authenticated API';document.getElementById('integrationRuntimeStatus').classList.add('connected');
-  }catch(e){document.getElementById('integrationRuntimeTitle').textContent='Runtime unavailable';document.getElementById('integrationRuntimeHelp').textContent=e.message}
+  }catch(e){document.getElementById('integrationRuntimeTitle').textContent='Runtime unavailable';document.getElementById('integrationRuntimeHelp').textContent=e.message;['integrationProviderStatus','integrationRuntimeStatus'].forEach(function(id){document.getElementById(id).classList.remove('connected')})}
   try{var gh=await agentApi('/api/github/status');var el=document.getElementById('connectorGithubStatus');el.textContent=gh.authenticated?'Connected · '+(gh.account||'host GitHub CLI'):(gh.cliAvailable?'GitHub CLI not signed in':'GitHub CLI not installed');el.classList.toggle('connected',!!gh.authenticated)}catch(e){document.getElementById('connectorGithubStatus').textContent='Status unavailable'}
   try{await mcpRefresh()}catch(e){}
 }

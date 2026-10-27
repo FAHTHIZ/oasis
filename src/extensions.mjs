@@ -150,6 +150,7 @@ async function snapshotRepository(rawUrl, options = {}) {
 export async function inspectGitHubExtension(rawUrl, options = {}) {
   const snapshot = await snapshotRepository(rawUrl, options);
   if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow. Use a reviewed local export instead.');
+  if (snapshot.treeTruncated) throw new Error('GitHub truncated this repository tree. Oasis will not import a partial agent collection; use a smaller repository or a reviewed subset.');
   if (!snapshot.candidates.length) throw new Error('No importable Markdown agent or skill prompts were found in this repository.');
   return {
     repository: snapshot.repository,
@@ -269,6 +270,7 @@ export async function installGitHubExtension(rawUrl, options = {}) {
   const env = options.env || process.env;
   const snapshot = await snapshotRepository(rawUrl, { expectedCommit: options.expectedCommit, fetchImpl: options.fetchImpl });
   if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow.');
+  if (snapshot.treeTruncated) throw new Error('GitHub truncated this repository tree. Oasis will not import a partial agent collection; use a smaller repository or a reviewed subset.');
   if (!snapshot.candidates.length) throw new Error('No importable Markdown agent or skill prompts were found.');
   const extensionSlug = safeSlug(snapshot.repository.name, 'extension');
   const fetchImpl = options.fetchImpl || fetch;
