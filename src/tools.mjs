@@ -55,9 +55,12 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
   let cursor = target;
   while (true) {
     try {
-      await lstat(cursor);
+      const linkInfo = await lstat(cursor);
+      if (cursor === target && options.rejectSymlinks && linkInfo.isSymbolicLink()) throw new Error('Oasis will not write to or delete a symbolic link.');
       const resolved = await realpath(cursor);
       if (!inside(rootReal, resolved)) throw new Error('That path resolves outside the workspace through a symbolic link.');
+      const resolvedRelative = path.relative(rootReal, resolved);
+      if (!options.allowSensitive && sensitivePath(resolvedRelative)) throw new Error('That symbolic link resolves to a sensitive file. Oasis will not access it.');
       if (cursor === target) return { absolute: target, real: resolved, relative: relative || '.', root: rootReal };
       break;
     } catch (error) {
@@ -328,7 +331,7 @@ export async function executeTool(name, args = {}, context = {}) {
       return { path: target.relative.split(path.sep).join('/'), writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile };
     }
     case 'delete_file': {
-      const target = await resolveWorkspacePath(root, args.path);
+      const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       const info = await lstat(target.absolute);
       if (!info.isFile() || info.isSymbolicLink()) throw new Error('Only regular files can be deleted with this tool.');
       if (!context.approval || !(await context.approval('Delete the workspace file ' + target.relative + '? Its current contents will be backed up first.'))) {
