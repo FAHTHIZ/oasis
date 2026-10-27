@@ -2,7 +2,7 @@
 
 **An open-source, plain-English coding agent plus a local-first project workspace.**
 
-Oasis is being built to turn requests like “inspect this project, install the missing tool, implement the feature, and run the tests” into a verified, multi-step workflow. Use the CLI directly or start `oasis web` to connect a mobile-friendly browser chat and approval-gated command runner to the local agent runtime. The separate static dashboard still keeps projects, tasks, and notes in browser storage.
+Oasis turns requests like “inspect this project, install the missing tool, implement the feature, and run the tests” into a verified, multi-step workflow. Use the CLI directly or start `oasis web` to connect mobile-friendly browser chat, the authenticated agent runtime, and approval-gated command execution. The separate static dashboard keeps projects, tasks, and notes in browser storage.
 
 ## Install the terminal agent
 
@@ -10,10 +10,10 @@ Requirements: Node.js 22+ and npm. Git is required for installing directly from 
 
 ~~~bash
 npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#main
-oasis setup
-oasis doctor --test-provider  # Optional live tool-calling check
 oasis
 ~~~
+
+When you launch `oasis` for the first time without a configured model, Oasis offers guided setup with OmniRoute as the default starting point. You can accept, choose another provider, or skip and later run `/setup` or type “install OmniRoute” in the terminal prompt. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation, gateway startup, and provider changes are confirmed and verified; free/keyless model routes depend on upstream availability and limits. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
 
 During setup, choose a provider preset or a custom endpoint: **OmniRoute**, OpenAI, Anthropic, OpenRouter, Google Gemini, or local Ollama. OmniRoute uses the local OpenAI-compatible endpoint `http://127.0.0.1:20128/v1` with model `auto`; `oasis setup` can install and start the gateway after approval, then verifies tool calling before changing the provider configuration. Some OmniRoute configurations require a local endpoint key from the gateway dashboard. OpenRouter uses `https://openrouter.ai/api/v1`; Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai/`; local Ollama uses `http://localhost:11434/v1`. For OpenRouter and Ollama, enter the exact model ID available to your account or local server. The browser provider form includes an OmniRoute preset for an already-running gateway.
 

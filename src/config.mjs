@@ -7,6 +7,11 @@ export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
+export function isNodeVersionSupported(version = process.versions.node) {
+  const match = String(version).match(/^(\d+)(?:\.|$)/);
+  return Boolean(match && Number(match[1]) >= 22);
+}
+
 export function getConfigDirectory(env = process.env, home = os.homedir()) {
   if (env.OASIS_CONFIG_DIR) return path.resolve(env.OASIS_CONFIG_DIR);
   if (env.OASIS_HOME) return path.resolve(env.OASIS_HOME);
