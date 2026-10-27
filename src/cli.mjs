@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
 import { createSession, runAgentTurn, closeSession } from './agent.mjs';
-import { loadMcpServers, saveMcpServers, getMcpConfigPath } from './mcp.mjs';
+import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { executeTool } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -289,7 +289,7 @@ async function manageMcp(rest) {
   if (action === 'add') {
     const name = rest[1];
     const separator = rest.indexOf('--');
-    if (!name || separator < 3 || separator === rest.length - 1) {
+    if (!name || separator < 2 || separator === rest.length - 1) {
       throw new Error('Usage: oasis mcp add NAME [--env VAR1,VAR2] -- EXECUTABLE [ARG ...]');
     }
     let passEnv = [];
@@ -303,19 +303,13 @@ async function manageMcp(rest) {
     }
     const command = rest[separator + 1];
     const args = rest.slice(separator + 2);
-    const entry = { name, command, args, passEnv, enabled: true };
-    const proposed = await saveMcpServers(config.servers.filter((server) => server.name !== name).concat(entry), { configPath: config.configPath });
+    const entry = validateMcpServerConfig({ name, command, args, passEnv, enabled: true });
     const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + args.length + ' (not expanded by a shell)\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.';
-    // Validate before confirmation and preserve the existing file when the user cancels.
-    stdout.write('Validated configuration path: ' + proposed + '\n');
-    const latest = await loadMcpServers({ configPath: config.configPath });
-    const newServers = latest.servers;
-    await saveMcpServers(config.servers, { configPath: config.configPath });
     if (!(await approve(summary, true, false))) {
       stdout.write('MCP configuration cancelled. The previous configuration was kept.\n');
       return;
     }
-    const output = await saveMcpServers(newServers, { configPath: config.configPath });
+    const output = await saveMcpServers(config.servers.filter((server) => server.name !== name).concat(entry), { configPath: config.configPath });
     stdout.write('Configured MCP server "' + name + '" in ' + output + '. It will start next time you run Oasis.\n');
     return;
   }
