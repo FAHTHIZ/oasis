@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
 import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
+import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -26,6 +27,9 @@ function printHelp() {
     '  oasis doctor                  Check the local environment',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis install pnpm            Install a tool using a detected manager',
+    '  oasis sessions list           List locally saved sessions for this workspace',
+    '  oasis --continue              Resume the most recent saved session and keep saving it',
+    '  oasis --resume SESSION_ID     Resume one saved session',
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp remove NAME         Remove a configured server',
@@ -268,6 +272,30 @@ async function installSkill(root, name) {
   stdout.write('Installed skill "' + name + '" into ' + destination + '. It will be loaded as project context in the next agent session.\n');
 }
 
+async function manageSessions(root, rest) {
+  const action = rest[0] || 'list';
+  const sessions = await listSessions(root);
+  if (action === 'list') {
+    stdout.write('Saved sessions for ' + path.resolve(root) + ':\n');
+    if (!sessions.length) { stdout.write('  No saved sessions. Use oasis --continue to save/resume a session.\n'); return; }
+    for (const item of sessions) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages  ' + (item.model || 'unknown model') + '\n');
+    return;
+  }
+  if (action === 'clear' || action === 'delete' || action === 'remove') {
+    const id = rest[1];
+    if (!id) throw new Error('Usage: oasis sessions clear SESSION_ID');
+    if (!sessions.some((item) => item.id === id)) throw new Error('No saved session with ID ' + id + ' exists for this workspace.');
+    if (!(await approve('Delete the locally saved conversation ' + id + '? This removes the saved history file.', true, false))) {
+      stdout.write('Session deletion cancelled.\n');
+      return;
+    }
+    await deleteSession(root, id);
+    stdout.write('Deleted saved session ' + id + '.\n');
+    return;
+  }
+  throw new Error('Unknown sessions action. Use oasis sessions list or oasis sessions clear SESSION_ID.');
+}
+
 async function manageMcp(rest) {
   const action = rest[0] || 'list';
   const config = await loadMcpServers();
@@ -365,14 +393,23 @@ function printConfig(config) {
   stdout.write('  Config file: ' + config.configPath + '\n');
 }
 
-async function runPrompt(prompt, root, autoApprove, session = null) {
+async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}) {
   const config = await loadConfig();
   if (!config.configured) {
-    stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY in your environment. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
+    stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
     return session;
   }
-  session = session || await createSession({ root, config });
-  if (session.root !== root) session = await createSession({ root, config });
+  if (!session) {
+    let restored = null;
+    if (persistence.resumeId) {
+      restored = await loadSession(root, persistence.resumeId);
+      stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
+    }
+    session = await createSession({ root, config, restore: restored });
+  } else if (path.resolve(session.root) !== path.resolve(root)) {
+    closeSession(session);
+    session = await createSession({ root, config });
+  }
   session.config = config;
   if (session.mcpFailures && session.mcpFailures.length) {
     for (const failure of session.mcpFailures) stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + '\n');
@@ -394,10 +431,18 @@ async function runPrompt(prompt, root, autoApprove, session = null) {
   } catch (error) {
     stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
   }
+  if (persistence.enabled) {
+    try {
+      const saved = await saveSession(session);
+      stdout.write('[session] Saved locally as ' + saved.id + '. Use oasis --resume ' + saved.id + ' to resume it later.\n');
+    } catch (error) {
+      stdout.write('[session] Could not save history: ' + error.message + '\n');
+    }
+  }
   return session;
 }
 
-async function interactive(root, autoApprove) {
+async function interactive(root, autoApprove, persistence = {}) {
   stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\n');
   stdout.write('Type your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   let session = null;
@@ -408,16 +453,17 @@ async function interactive(root, autoApprove) {
     if (!text) continue;
     if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
     if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /exit. You can also say “install pnpm” or “install yourself”.\n'); continue; }
-    if (text === '/clear') { closeSession(session); session = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
+    if (text === '/clear') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
-    if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
+    if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text.startsWith('/')) { stdout.write('Unknown command. Type /help.\n'); continue; }
     const direct = parseInstallIntent(text);
     if (direct) {
       try { await installRequest(direct, root, autoApprove); } catch (error) { stdout.write('Install request failed: ' + error.message + '\n'); }
       continue;
     }
-    session = await runPrompt(text, root, autoApprove, session);
+    session = await runPrompt(text, root, autoApprove, session, persistence);
+    persistence.resumeId = null;
   }
   closeSession(session);
   stdout.write('\nOasis session closed.\n');
@@ -426,11 +472,19 @@ async function interactive(root, autoApprove) {
 async function main() {
   const rawArgs = process.argv.slice(2);
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
+  let persistSession = process.env.OASIS_PERSIST_SESSIONS === '1';
+  let continueSession = false;
+  let resumeId = null;
   let workspace = process.cwd();
   const args = [];
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; continue; }
+    if (arg === '--continue') { persistSession = true; continueSession = true; continue; }
+    if (arg === '--resume') {
+      if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
+      resumeId = rawArgs[++i]; persistSession = true; continue;
+    }
     if (arg === '--workspace' || arg === '-C') {
       if (!rawArgs[i + 1]) throw new Error('--workspace requires a path.');
       workspace = path.resolve(rawArgs[++i]);
@@ -442,8 +496,14 @@ async function main() {
   await access(workspace);
   const command = args[0];
   const rest = args.slice(1);
+  const persistence = { enabled: persistSession || Boolean(resumeId), resumeId };
+  if (continueSession && !resumeId) {
+    const saved = await listSessions(workspace);
+    persistence.resumeId = saved[0] && saved[0].id || null;
+    if (!persistence.resumeId) stdout.write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
+  }
 
-  if (!command || command === '--interactive') return await interactive(workspace, autoApprove);
+  if (!command || command === '--interactive') return await interactive(workspace, autoApprove, persistence);
   if (command === '--help' || command === '-h' || command === 'help') return printHelp();
   if (command === '--version' || command === '-v') {
     const pkg = JSON.parse(await readFile(path.join(APP_ROOT, 'package.json'), 'utf8'));
@@ -456,6 +516,7 @@ async function main() {
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest);
+  if (command === 'sessions') return await manageSessions(workspace, rest);
   if (command === 'skills') {
     if (rest[0] === 'install') return await installSkill(workspace, rest[1]);
     return await listSkills(workspace);
@@ -471,7 +532,7 @@ async function main() {
   const fullPrompt = args.join(' ');
   const direct = parseInstallIntent(fullPrompt);
   if (direct) return await installRequest(direct, workspace, autoApprove);
-  const session = await runPrompt(fullPrompt, workspace, autoApprove);
+  const session = await runPrompt(fullPrompt, workspace, autoApprove, null, persistence);
   closeSession(session);
 }
 
