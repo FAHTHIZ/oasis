@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { request as httpsRequest } from 'node:https';
 import { createOasisWebServer, startOasisWebServer } from '../src/web.mjs';
 
 async function tempDir() {
@@ -25,6 +27,56 @@ test('network listeners require TLS unless unencrypted LAN access is explicitly 
   });
   assert.equal(explicitlyInsecure.secure, false);
   await explicitlyInsecure.close();
+});
+
+test('HTTPS browser bridge serves authenticated API traffic and rejects an HTTP Origin downgrade', async (t) => {
+  const root = await tempDir();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const certPath = path.join(root, 'localhost-cert.pem');
+  const keyPath = path.join(root, 'localhost-key.pem');
+  try {
+    execFileSync('openssl', [
+      'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+      '-keyout', keyPath, '-out', certPath, '-days', '1',
+      '-subj', '/CN=127.0.0.1',
+      '-addext', 'subjectAltName=IP:127.0.0.1,DNS:localhost'
+    ], { stdio: 'ignore' });
+    await chmod(keyPath, 0o600);
+  } catch {
+    t.skip('OpenSSL is required to generate an ephemeral TLS fixture for this test.');
+    return;
+  }
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0,
+    tlsCertFile: certPath, tlsKeyFile: keyPath,
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => app.close());
+  assert.equal(app.secure, true);
+  const origin = 'https://127.0.0.1:' + app.port;
+  function getStatus(requestOrigin) {
+    return new Promise((resolve, reject) => {
+      const req = httpsRequest(origin + '/api/status', {
+        rejectUnauthorized: false,
+        headers: {
+          authorization: 'Bearer ' + app.token,
+          origin: requestOrigin
+        }
+      }, (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+  const allowed = await getStatus(origin);
+  assert.equal(allowed.status, 200, allowed.body);
+  assert.equal(JSON.parse(allowed.body).connected, true);
+  const downgrade = await getStatus('http://127.0.0.1:' + app.port);
+  assert.equal(downgrade.status, 403);
+  assert.match(JSON.parse(downgrade.body).error, /same-origin/i);
 });
 
 test('browser runtime serves the app but requires a bearer token for every agent API', async (t) => {
