@@ -6,7 +6,7 @@ import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
-import { createSession, runAgentTurn, closeSession } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession, testProviderConnection } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
@@ -763,11 +763,18 @@ export function createOasisWebServer(options = {}) {
         json(res, 400, { error: 'Enter an API key for a remote provider. Local loopback providers may omit the key.' });
         return;
       }
+      try {
+        await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
+      } catch (error) {
+        json(res, 422, { saved: false, verified: false, error: String(error && error.message || 'Provider verification failed.').slice(0, 1600) });
+        return;
+      }
       await saveConfig({ protocol, baseURL, model, apiKey }, { env });
       json(res, 200, {
         saved: true,
+        verified: true,
         provider: { protocol, provider: new URL(baseURL).host, model, authentication: apiKey ? 'API key configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured') },
-        note: 'The API key is stored in the local Oasis configuration file and is never returned by this endpoint.'
+        note: 'The provider returned a real assistant response. Settings were saved locally; the API key is never returned by this endpoint.'
       });
       return;
     }
