@@ -332,7 +332,7 @@ async function manageMcp(rest) {
     const command = rest[separator + 1];
     const args = rest.slice(separator + 2);
     const entry = validateMcpServerConfig({ name, command, args, passEnv, enabled: true });
-    const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + args.length + ' (not expanded by a shell)\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.';
+    const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + JSON.stringify(args) + '\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.';
     if (!(await approve(summary, true, false))) {
       stdout.write('MCP configuration cancelled. The previous configuration was kept.\n');
       return;
