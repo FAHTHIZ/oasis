@@ -54,7 +54,8 @@ async function readInstalled(root) {
   return installed;
 }
 
-export async function managePlugins(root, args = []) {
+export async function managePlugins(root, args = [], options = {}) {
+  const log = (message) => { if (!options.quiet) log(message); };
   const action = String(args[0] || 'list').toLowerCase();
   const catalog = await readCatalog();
   const { pluginsRoot, skillsRoot } = workspacePaths(root);
