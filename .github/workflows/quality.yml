@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   integrity:
-    name: Static app integrity
+    name: Runtime tests and package integrity
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -20,5 +20,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate app structure and JavaScript syntax
+      - name: Validate browser app and PWA assets
         run: node scripts/check-site.mjs
+      - name: Run runtime and agent tests
+        run: npm test
+      - name: Verify installable CLI package contents
+        run: npm pack --dry-run
