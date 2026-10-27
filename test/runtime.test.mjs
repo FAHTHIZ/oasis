@@ -801,6 +801,65 @@ test('post-edit verification gate reports when the model ignores required review
   assert.equal(requests, 3, 'the gate should nudge once, then report any remaining gaps');
 });
 
+
+test('post-edit verification does not accept a partial ranged read as a complete review', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await mkdir(path.join(tmp, 'src'));
+  await writeFile(path.join(tmp, 'src', 'example.mjs'), 'export const value = 1;\n// second line\n// third line\n// fourth line\n');
+
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'Updated the example module.',
+        tool_calls: [{ id: 'partial-review-write', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'src/example.mjs', content: 'export const value = 2;\n// second line\n// third line\n// fourth line\n' })
+        } }]
+      } }] }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will read a range of the changed file.',
+        tool_calls: [{ id: 'partial-review-read', type: 'function', function: {
+          name: 'read_file',
+          arguments: JSON.stringify({ path: 'src/example.mjs', offset: 2, limit: 1 })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: requests === 3 ? 'Done.' : 'The remaining checks can be skipped.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 6,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root: tmp, config });
+  const result = await runAgentTurn(session, 'Update the example module value.', {});
+
+  assert.equal(result.finished, false);
+  assert.equal(result.verificationIncomplete, true);
+  assert.match(result.verificationIssues.join('; '), /changed-file diff has not been reviewed/);
+  assert.match(result.verificationIssues.join('; '), /no relevant test/);
+  assert.equal(requests, 4, 'Oasis should nudge once and then preserve the incomplete verification result');
+});
+
 test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
