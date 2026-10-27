@@ -8,7 +8,7 @@ import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/c
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
-import { createSession, runAgentTurn } from '../src/agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 
@@ -228,6 +228,66 @@ test('agent tool registry exposes a useful coding workflow tool set', () => {
   assert.ok(toolCount() >= 7);
 });
 
+
+test('plan mode can inspect files but blocks non-read-only tool calls', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), 'Original content\\n');
+
+  let requests = 0;
+  const payloads = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    payloads.push(JSON.parse(body));
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will inspect the repository layout.',
+        tool_calls: [{ id: 'plan-read-1', type: 'function', function: { name: 'list_files', arguments: '{"path":"."}' } }]
+      } }] }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will try an unavailable write tool.',
+        tool_calls: [{ id: 'plan-write-1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'README.md', content: 'Changed by plan mode\\n' }) } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Plan: inspect project conventions, implement the requested change, then run targeted tests.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 5,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  const originalSystem = session.messages[0].content;
+  const result = await runAgentPlan(session, 'Plan a safe README improvement.');
+
+  assert.equal(result.finished, true);
+  assert.equal(requests, 3);
+  assert.ok(payloads[0].tools.some((tool) => tool.function.name === 'list_files'));
+  assert.ok(payloads.every((payload) => !payload.tools?.some((tool) => ['write_file', 'edit_file', 'run_command', 'install_package', 'delete_file'].includes(tool.function.name))));
+  const blocked = session.messages.find((message) => message.role === 'tool' && message.tool_call_id === 'plan-write-1');
+  assert.ok(blocked);
+  assert.match(blocked.content, /Plan mode blocks/);
+  assert.equal(await readFile(path.join(root, 'README.md'), 'utf8'), 'Original content\\n');
+  assert.equal(session.messages[0].content, originalSystem, 'planning instructions must not leak into later normal turns');
+});
 
 test('long sessions compact completed history before the next coding request', async (t) => {
   const tmp = await temporaryDirectory();
