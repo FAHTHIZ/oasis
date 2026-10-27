@@ -1,5 +1,6 @@
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
+import { microcompact, contextWindowSize } from './context.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -43,7 +44,8 @@ export async function createSession({ root, config, restore = null }) {
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
     toolDefinitions: TOOL_DEFINITIONS.concat(dynamic.definitions),
-    toolCallsThisSession: 0
+    toolCallsThisSession: 0,
+    todos: []
   };
 }
 
@@ -199,6 +201,18 @@ function responseText(output) {
 }
 
 
+// Prompt caching is supported by Anthropic's Messages API. Keep it limited to the official
+// endpoint so arbitrary OpenAI-compatible gateways never receive Anthropic-specific fields.
+export function anthropicCacheControl(baseURL) {
+  try {
+    return new URL(String(baseURL)).hostname === 'api.anthropic.com'
+      ? { cache_control: { type: 'ephemeral' } }
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 async function requestCompletion(session, options = {}) {
   const config = session.config;
   const nativeAnthropic = config.protocol === 'anthropic';
@@ -219,7 +233,8 @@ async function requestCompletion(session, options = {}) {
     const converted = toAnthropicRequest(session.messages);
     bodyObject = {
       model: config.model,
-      max_tokens: 8192,
+      max_tokens: Math.max(1024, Number.parseInt(config.maxOutputTokens, 10) || 8192),
+      ...anthropicCacheControl(config.baseURL),
       system: converted.system,
       messages: converted.messages,
       ...(availableTools.length ? { tools: availableTools.map((tool) => ({
@@ -242,8 +257,7 @@ async function requestCompletion(session, options = {}) {
         parameters: tool.function.parameters,
         strict: false
       })), tool_choice: 'auto' } : {}),
-      parallel_tool_calls: false,
-      max_output_tokens: 8192,
+      max_output_tokens: Math.max(1024, Number.parseInt(config.maxOutputTokens, 10) || 8192),
       // The runtime owns state and replays response items locally, including reasoning items.
       store: false
     };
@@ -252,7 +266,7 @@ async function requestCompletion(session, options = {}) {
     bodyObject = {
       model: config.model,
       messages: session.messages,
-      ...(availableTools.length ? { tools: availableTools, tool_choice: 'auto', parallel_tool_calls: false } : {})
+      ...(availableTools.length ? { tools: availableTools, tool_choice: 'auto' } : {})
     };
   }
 
@@ -389,12 +403,26 @@ export async function runAgentTurn(session, prompt, options = {}) {
     approval: options.approval,
     autoApprove: Boolean(options.autoApprove),
     maxCommandSeconds: session.config.maxCommandSeconds,
-    env: options.env || process.env
+    env: options.env || process.env,
+    todos: session.todos
   };
   let totalToolCalls = 0;
   let tokensUsed = 0;
 
   for (let step = 0; step < maxSteps; step++) {
+    const compacted = microcompact(session.messages, {
+      windowTokens: contextWindowSize(session.config, options.env || process.env)
+    });
+    if (compacted.pruned > 0) {
+      session.messages = compacted.messages;
+      if (options.onContextPruned) {
+        options.onContextPruned({
+          pruned: compacted.pruned,
+          before: compacted.before,
+          after: compacted.after
+        });
+      }
+    }
     const assistant = await requestCompletion(session);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
@@ -447,20 +475,23 @@ export async function runAgentTurn(session, prompt, options = {}) {
     const denied = calls.slice(executeCount);
     const outputs = new Map();
 
-    // Read-only workspace tools can run concurrently. Commands, writes, installs, deletes,
-    // and every external MCP call stay sequential so approvals and side effects remain ordered.
-    const reads = eligible.filter((call) => {
+    // Consecutive read-only workspace calls may run together. Every other call runs alone,
+    // preserving the model's requested order (e.g. edit_file before a later read_file).
+    // todo_write is intentionally not read-only: it mutates session checklist state.
+    const isReadOnly = (call) => {
       const name = call.function && call.function.name;
       return READ_ONLY_TOOLS.has(name) && !(session.mcpToolMap && session.mcpToolMap.has(name));
-    });
-    const sideEffects = eligible.filter((call) => !reads.includes(call));
-
-    const readResults = await Promise.all(reads.map((call) => executeOneCall(session, call, context, options)));
-    for (const item of readResults) outputs.set(item.tool_call_id, item);
-
-    for (const call of sideEffects) {
-      const item = await executeOneCall(session, call, context, options);
-      outputs.set(item.tool_call_id, item);
+    };
+    let cursor = 0;
+    while (cursor < eligible.length) {
+      let end = cursor + 1;
+      if (isReadOnly(eligible[cursor])) {
+        while (end < eligible.length && isReadOnly(eligible[end])) end++;
+      }
+      const group = eligible.slice(cursor, end);
+      const results = await Promise.all(group.map((call) => executeOneCall(session, call, context, options)));
+      for (const item of results) outputs.set(item.tool_call_id, item);
+      cursor = end;
     }
 
     for (const call of denied) {
