@@ -277,3 +277,30 @@ test('MCP stdio server exposes tools and requires per-call approval', async (t) 
   const allowed = await callMappedMcpTool(session, 'mcp_fixture_echo', { message: 'world' }, { approval: async () => true });
   assert.equal(allowed.content, 'pong world');
 });
+
+
+test('restore refuses a symlink target, even when the link resolves outside the workspace', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  const outside = path.join(tmp, 'outside.txt');
+  const config = path.join(tmp, 'oasis-config');
+  await mkdir(root);
+  await writeFile(path.join(root, 'safe.txt'), 'original');
+  await writeFile(outside, 'outside secret');
+  const previous = process.env.OASIS_CONFIG_DIR;
+  process.env.OASIS_CONFIG_DIR = config;
+  t.after(() => { if (previous === undefined) delete process.env.OASIS_CONFIG_DIR; else process.env.OASIS_CONFIG_DIR = previous; });
+  const { executeTool } = await import('../src/tools.mjs');
+  await executeTool('write_file', { path: 'safe.txt', content: 'snapshot source' }, { root });
+  const backup = (await listBackups(root))[0];
+  await rm(path.join(root, 'safe.txt'));
+  try {
+    await symlink(outside, path.join(root, 'safe.txt'));
+    await assert.rejects(restoreBackup(root, backup.id), /symbolic link/);
+    assert.equal(await readFile(outside, 'utf8'), 'outside secret');
+  } catch (error) {
+    if (error.code !== 'EPERM' && error.code !== 'EACCES' && error.code !== 'ENOTSUP') throw error;
+    t.diagnostic('Symlink restore protection skipped because this platform does not permit file symlinks.');
+  }
+});
