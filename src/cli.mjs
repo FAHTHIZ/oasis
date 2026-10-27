@@ -638,7 +638,7 @@ async function manageExternalExtensions(root, args, autoApprove) {
     const lateCollisions = latestSelected.filter((server) => latestNames.has(server.name)).map((server) => server.name);
     if (lateCollisions.length) throw new Error('MCP server names were configured while approval was pending: ' + lateCollisions.join(', ') + '. Nothing was imported.');
     if (latestConfig.servers.length + latestSelected.length > 40) throw new Error('The configured MCP server limit would be exceeded. Nothing was imported.');
-    const proposed = latestSelected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false }));
+    const proposed = latestSelected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false, origin: server.origin }));
     await saveMcpServers([...latestConfig.servers, ...proposed]);
     stdout.write('Imported ' + proposed.length + ' MCP configuration(s). All remain disabled; review environment variables, then enable trusted servers separately.\n');
     return;

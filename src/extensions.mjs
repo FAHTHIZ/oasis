@@ -220,7 +220,9 @@ async function readMcpServerProposals(snapshot, fetchImpl = fetch) {
       }
       names.add(name);
       servers.push({
-        ...validated, sourcePath, sourceName: displayName,
+        ...validated,
+        origin: { repository: snapshot.repository.url, commitSha: snapshot.repository.commitSha, filePath: sourcePath },
+        sourcePath, sourceName: displayName,
         sourceEnvKeys: value.env && typeof value.env === 'object' && !Array.isArray(value.env)
           ? Object.keys(value.env).filter((key) => /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key)).slice(0, 40)
           : []

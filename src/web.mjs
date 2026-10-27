@@ -470,7 +470,7 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'GET' && pathname === '/api/mcp') {
       const config = await loadMcpServers({ env });
       json(res, 200, { servers: config.servers.map((server) => ({
-        name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled
+        name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled, origin: server.origin
       })) });
       return;
     }
@@ -489,7 +489,7 @@ export function createOasisWebServer(options = {}) {
       }
       const config = await loadMcpServers({ env });
       json(res, 200, { saved: true, configPath, servers: config.servers.map((server) => ({
-        name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled
+        name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled, origin: server.origin
       })), note: 'Saved for future agent sessions. Enabled MCP server processes start when a new coding session is created.' });
       return;
     }
@@ -541,11 +541,11 @@ export function createOasisWebServer(options = {}) {
           json(res, 409, { error: 'MCP server name already configured: ' + collisions.join(', ') + '. Rename or remove the existing entry before importing.' }); return;
         }
         if (current.servers.length + selected.length > 40) { json(res, 409, { error: 'The configured MCP server limit would be exceeded.' }); return; }
-        const proposed = selected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false }));
+        const proposed = selected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false, origin: server.origin }));
         await saveMcpServers([...current.servers, ...proposed], { env });
         json(res, 200, {
           saved: true,
-          imported: proposed.map((server) => ({ name: server.name, command: server.command, args: server.args, enabled: false })),
+          imported: proposed.map((server) => ({ name: server.name, command: server.command, args: server.args, enabled: false, origin: server.origin })),
           source: plan.repository,
           commitSha: plan.commitSha,
           note: 'Imported MCP server declarations are disabled. No process was started. Configure required environment variables, review the command, and enable the server separately in Integrations.'

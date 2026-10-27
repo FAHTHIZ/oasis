@@ -389,12 +389,25 @@ test('GitHub MCP declarations can be imported only as disabled configurations wi
   assert.equal(servers.length, 1);
   assert.equal(servers[0].enabled, false);
   assert.deepEqual(servers[0].passEnv, []);
+  assert.deepEqual(servers[0].origin, {
+    repository: 'https://github.com/acme/mcp-extension',
+    commitSha: commit,
+    filePath: '.mcp.json'
+  });
   const allowlistUpdate = await fetch(base + '/api/mcp', {
     method: 'POST', headers,
     body: JSON.stringify({ servers: servers.map((server) => ({ ...server, passEnv: ['API_TOKEN'] })) })
   });
   assert.equal(allowlistUpdate.status, 200);
-  assert.deepEqual((await allowlistUpdate.json()).servers[0].passEnv, ['API_TOKEN']);
+  const allowlistResult = await allowlistUpdate.json();
+  assert.deepEqual(allowlistResult.servers[0].passEnv, ['API_TOKEN']);
+  assert.deepEqual(allowlistResult.servers[0].origin, servers[0].origin);
+  const invalidOrigin = await fetch(base + '/api/mcp', {
+    method: 'POST', headers,
+    body: JSON.stringify({ servers: [{ ...servers[0], origin: { repository: 'https://evil.example/attacker/repo', commitSha: commit, filePath: '.mcp.json' } }] })
+  });
+  assert.equal(invalidOrigin.status, 400);
+  assert.match((await invalidOrigin.json()).error, /public GitHub repository/i);
   const duplicate = await fetch(base + '/api/extensions/mcp-import', {
     method: 'POST', headers,
     body: JSON.stringify({ url: 'https://github.com/acme/mcp-extension', expectedCommit: commit, serverNames: ['review_server'] })
