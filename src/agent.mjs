@@ -497,15 +497,28 @@ const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 30;
 const MAX_SESSION_TOOL_CALLS = 250;
 
-const SOURCE_PATH_PATTERN = /\\.(?:[cm]?js|jsx|ts|tsx|py|go|rs|java|cs|c|cc|cpp|h|hpp|rb|php|swift|kt|kts|vue|svelte|html|css|json|toml|yaml|yml)$/i;
-const VERIFICATION_COMMAND_PATTERN = /(?:^|[\\s:])(?:test|check|lint|build|typecheck|type-check|verify|pytest|vitest|jest|mocha|eslint|prettier|tsc)(?:$|[\\s:])/i;
+const SOURCE_EXTENSIONS = new Set([
+  '.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.py', '.go', '.rs', '.java',
+  '.cs', '.c', '.cc', '.cpp', '.h', '.hpp', '.rb', '.php', '.swift', '.kt',
+  '.kts', '.vue', '.svelte', '.html', '.css', '.json', '.toml', '.yaml', '.yml'
+]);
+const VERIFICATION_TOKENS = new Set([
+  'test', 'tests', 'check', 'lint', 'build', 'typecheck', 'type-check',
+  'verify', 'pytest', 'vitest', 'jest', 'mocha', 'eslint', 'prettier', 'tsc'
+]);
 
 function normalizeReviewPath(value) {
-  return String(value || '').replace(/\\\\/g, '/').replace(/^\\.\\//, '').replace(/\\/+/g, '/');
+  let normalized = String(value || '').split(path.sep).join('/');
+  while (normalized.startsWith('./')) normalized = normalized.slice(2);
+  while (normalized.includes('//')) normalized = normalized.replace('//', '/');
+  return normalized;
 }
 
 function isVerificationCommand(command, args) {
-  return VERIFICATION_COMMAND_PATTERN.test([command, ...(Array.isArray(args) ? args : [])].join(' ').toLowerCase());
+  return [command, ...(Array.isArray(args) ? args : [])].some((item) => {
+    const token = String(item || '').toLowerCase();
+    return VERIFICATION_TOKENS.has(token) || token.startsWith('test:') || token.startsWith('check:') || token.startsWith('lint:');
+  });
 }
 
 function verificationIssues(state) {
@@ -515,7 +528,7 @@ function verificationIssues(state) {
   if (!state.diffReviewedAll && !changed.every((item) => state.diffReviewedPaths.has(item))) {
     issues.push('the changed-file diff has not been reviewed');
   }
-  if (changed.some((item) => SOURCE_PATH_PATTERN.test(item)) && state.lastVerificationExitCode !== 0) {
+  if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
   }
   return issues;
