@@ -134,20 +134,21 @@ async function askSecret(question) {
   });
 }
 
-async function configureProvider() {
+async function configureProvider(root = process.cwd()) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
-  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OpenAI, Anthropic, OpenRouter, Gemini, and local Ollama.\n');
+  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, and local Ollama.\n');
   const rl = createInterface({ input: stdin, output: stdout });
-  let protocol, baseURL, model;
+  let protocol, baseURL, model, presetName;
   const presets = {
     openai: { protocol: 'openai-responses', baseURL: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
     anthropic: { protocol: 'anthropic', baseURL: DEFAULT_ANTHROPIC_BASE_URL, model: 'claude-sonnet-5' },
     openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
     gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
-    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' }
+    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' },
+    omniroute: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', model: 'auto' }
   };
   try {
-    const presetName = (await rl.question('Provider preset [openai / anthropic / openrouter / gemini / ollama / custom] (default openai): ')).trim().toLowerCase() || 'openai';
+    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / custom] (default openai): ')).trim().toLowerCase() || 'openai';
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
@@ -157,7 +158,7 @@ async function configureProvider() {
       model = (await rl.question(modelPrompt)).trim() || defaultModel;
     } else {
       const selected = presets[presetName];
-      if (!selected) throw new Error('Unknown provider preset. Choose openai, anthropic, openrouter, gemini, ollama, or custom.');
+      if (!selected) throw new Error('Unknown provider preset. Choose omniroute, openai, anthropic, openrouter, gemini, ollama, or custom.');
       protocol = selected.protocol;
       baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
       const modelPrompt = selected.model ? 'Model name [' + selected.model + ']: ' : 'Model name (exact model ID required): ';
@@ -165,19 +166,39 @@ async function configureProvider() {
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
   } finally { rl.close(); }
+  if (presetName === 'omniroute') {
+    const runSetup = (localApiKey = '') => executeTool('setup_omniroute', localApiKey ? { localApiKey } : {}, {
+      root, env: process.env, autoApprove: false,
+      approval: (message) => approve(message, true, false)
+    });
+    let result = await runSetup();
+    if (!result.connected && result.needsLocalApiKey) {
+      const localApiKey = await askSecret('OmniRoute local endpoint key (input hidden; leave blank if your gateway does not require one): ');
+      if (localApiKey) result = await runSetup(localApiKey);
+    }
+    stdout.write((result.message || 'OmniRoute setup did not complete.') + '\n');
+    if (result.connected) stdout.write('OmniRoute tool calling was verified; Oasis is now connected to model "auto".\n');
+    else stdout.write('The previous provider configuration was left unchanged. Resolve the message above and retry oasis setup.\n');
+    return result;
+  }
   protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
   const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
   let apiKey = '';
-  if (!isLoopbackUrl(baseURL)) {
-    const label = protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key';
-    apiKey = await askSecret(label + ' (input hidden; Enter keeps the key only if the endpoint is unchanged, otherwise use the matching environment variable): ');
+  const localEndpoint = isLoopbackUrl(baseURL);
+  if (!localEndpoint || presetName === 'custom') {
+    const label = localEndpoint ? 'Optional local endpoint key' : (protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key');
+    apiKey = await askSecret(label + ' (input hidden; Enter keeps a key only if the endpoint is unchanged, otherwise use a matching environment variable): ');
     if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
-    const host = new URL(baseURL).hostname.toLowerCase();
-    const providerEnvKey = host === 'openrouter.ai' ? process.env.OPENROUTER_API_KEY :
-      (host === 'generativelanguage.googleapis.com' ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) :
-      (host === 'ollama.com' ? process.env.OLLAMA_API_KEY : ''));
-    if (!apiKey) apiKey = process.env.OASIS_API_KEY || providerEnvKey || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
+    if (localEndpoint) {
+      if (!apiKey) apiKey = process.env.OASIS_LOCAL_API_KEY || '';
+    } else {
+      const host = new URL(baseURL).hostname.toLowerCase();
+      const providerEnvKey = host === 'openrouter.ai' ? process.env.OPENROUTER_API_KEY :
+        (host === 'generativelanguage.googleapis.com' ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) :
+        (host === 'ollama.com' ? process.env.OLLAMA_API_KEY : ''));
+      if (!apiKey) apiKey = process.env.OASIS_API_KEY || providerEnvKey || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
+    }
   }
   stdout.write('\nTesting tool calling with an inert validation probe (the probe will not be executed)...\n');
   await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
@@ -654,7 +675,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     }
     if (text === '/clear') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
-    if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
+    if (text === '/setup') { try { await configureProvider(root); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text.startsWith('/')) {
       try {
         const imported = await resolveImportedSlashCommand(root, text, { env: process.env });
@@ -983,7 +1004,7 @@ async function main() {
     stdout.write('Oasis OSS ' + pkg.version + '\n');
     return;
   }
-  if (command === 'setup') return await configureProvider();
+  if (command === 'setup') return await configureProvider(workspace);
   if (command === 'doctor') return await doctor(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {
