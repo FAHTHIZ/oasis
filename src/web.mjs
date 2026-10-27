@@ -55,7 +55,7 @@ function hostIsLocalLiteral(req) {
 
 function isLoopbackClient(req) {
   const address = String(req.socket && req.socket.remoteAddress || '').toLowerCase().replace(/^::ffff:/, '');
-  return address === '::1' || /^127(?:\\.\\d{1,3}){3}$/.test(address);
+  return address === '::1' || /^127(?:\.\d{1,3}){3}$/.test(address);
 }
 
 function hasValidToken(req, token) {
@@ -435,7 +435,7 @@ export function createOasisWebServer(options = {}) {
       let setupHint = '';
       try {
         const config = await getConfig();
-        provider = getProviderSummary(config);
+        provider = { ...getProviderSummary(config), baseURL: config.baseURL };
         providerConfigured = Boolean(config.configured);
         if (!providerConfigured) setupHint = 'No model API key is configured for the selected provider. Run oasis setup in the terminal, or configure OASIS_API_KEY in the runtime environment.';
       } catch (error) {
@@ -445,7 +445,8 @@ export function createOasisWebServer(options = {}) {
       json(res, 200, {
         connected: true,
         providerConfigured,
-        provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, authentication: provider.authentication } : null,
+        provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, baseURL: provider.baseURL, authentication: provider.authentication } : null,
+        providerSetupAvailable: isLoopbackClient(req),
         workspaceName: path.basename(activeRoot),
         workspacePath: activeRoot,
         workspaceAccess: 'local-filesystem',
@@ -480,7 +481,7 @@ export function createOasisWebServer(options = {}) {
         json(res, 400, { error: 'Enter a model name no longer than 200 characters.' });
         return;
       }
-      if (apiKey.length > 4096 || /[\\r\\n\\0]/.test(apiKey)) {
+      if (apiKey.length > 4096 || /[\r\n\0]/.test(apiKey)) {
         json(res, 400, { error: 'The API key is invalid or too long.' });
         return;
       }
