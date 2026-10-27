@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Oasis is a static, dependency-free web application. The index.html file contains the interface, styles, and client-side behavior. The app can be opened directly or served by any static web server.
+Oasis is a static, dependency-free web application. The index.html file contains the interface, styles, and client-side behavior. The app can be opened directly or served by any static web server. On HTTPS hosting, its web manifest and service worker add an installable app shell and offline cache for the static interface.
 
 ### State
 
@@ -23,7 +23,7 @@ scripts/check-site.mjs verifies key app anchors and parses the inline JavaScript
 
 ## Non-goals of this first implementation
 
-The app does not currently connect to GitHub, remote APIs, AI providers, a hosted database, or other devices. There are no user accounts, encryption, multi-user collaboration, native app packaging, or cloud sync. The UI and documentation intentionally do not imply these capabilities.
+The app does not currently connect to GitHub, remote APIs, AI providers, a hosted database, or other devices. There are no user accounts, encryption, multi-user collaboration, native app packaging, or cloud sync. The service worker caches the app shell only; it does not upload or back up user content. The UI and documentation intentionally do not imply these capabilities.
 
 ## Evolution principles
 
