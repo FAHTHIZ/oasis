@@ -6,7 +6,7 @@
   "license": "MIT",
   "engines": {"node": ">=20"},
   "bin": {"oasis": "./src/cli.mjs"},
-  "files": ["src/", "skills/", "README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "docs/"],
+  "files": ["src/", "scripts/", "skills/", "README.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "docs/"],
   "scripts": {"test": "node --test", "check": "node scripts/check-site.mjs && node --test"},
   "repository": {"type": "git", "url": "https://github.com/gtxnrg-ship-it/Oasis.git"},
   "keywords": ["coding-agent", "developer-tools", "agentic", "local-first", "terminal"]
