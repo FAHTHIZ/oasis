@@ -117,7 +117,6 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 ## Known limitations — not claimed as finished
 
-- Oasis uses OpenAI-compatible tool calling in this version; it does not yet implement the native Anthropic Messages API.
 - MCP server configuration, a plugin marketplace, and external integrations are not yet implemented.
 - No OS-level sandbox or container isolation is provided.
 - Agent sessions are kept in memory for the current process; durable cross-session conversation history is not implemented.
