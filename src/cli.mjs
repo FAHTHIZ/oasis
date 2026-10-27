@@ -7,7 +7,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
-import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool } from './tools.mjs';
@@ -155,8 +155,10 @@ async function configureProvider() {
     if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
     if (!apiKey) apiKey = process.env.OASIS_API_KEY || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
   }
+  stdout.write('\nTesting the provider with a real assistant request (no tools will be run)...\n');
+  await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
   const configPath = await saveConfig({ protocol, baseURL, model, apiKey });
-  stdout.write('Saved provider settings to ' + configPath + '\n');
+  stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
   stdout.write('Protocol: ' + protocol + '\n');
   stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
   stdout.write('Run oasis doctor to inspect the environment, then oasis to start chatting.\n');
