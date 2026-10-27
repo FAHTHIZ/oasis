@@ -6,6 +6,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { snapshotFile } from './backups.mjs';
 import { planPackageInstall, normalizePackageName } from './installer.mjs';
+import { managePlugins } from './plugins.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
@@ -18,6 +19,8 @@ const SHELLS_AND_DANGEROUS = new Set([
 ]);
 
 export const TOOL_DEFINITIONS = [
+  { type: 'function', function: { name: 'git_status', description: 'Read the current Git branch and working-tree status without modifying the repository. This is a read-only local Git operation.', parameters: { type: 'object', properties: {} }, required: [] } },
+  { type: 'function', function: { name: 'git_diff', description: 'Read a bounded Git diff without invoking external diff drivers or text-conversion filters. Scope may be unstaged, staged, or all changes relative to HEAD. Optionally restrict to one workspace-relative, non-sensitive path.', parameters: { type: 'object', properties: { scope: { type: 'string', enum: ['unstaged', 'staged', 'all'], description: 'Which changes to inspect; defaults to all changes relative to HEAD' }, path: { type: 'string', description: 'Optional workspace-relative path' } }, required: [] } } },
   { type: 'function', function: { name: 'list_files', description: 'List workspace files and folders. Paths are relative to the workspace root. Skips dependencies, build output, Git internals, and secret files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory relative to the workspace root; default .' }, includeHidden: { type: 'boolean', description: 'Include ordinary hidden files, still excluding secret files' } }, required: [] } } },
   { type: 'function', function: { name: 'read_file', description: 'Read a text file inside the workspace. Use offset and limit to inspect line ranges in larger files. Secret files such as .env and private keys are blocked.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, offset: { type: 'integer', description: 'Optional 1-based first line to return' }, limit: { type: 'integer', description: 'Optional maximum lines to return, 1 to 2000' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
@@ -30,7 +33,8 @@ export const TOOL_DEFINITIONS = [
 
   { type: 'function', function: { name: 'edit_file', description: 'Make a precise edit to an existing text file by replacing an exact string. Prefer this over write_file for existing files. old_string must match exactly and be unique unless replace_all is true. The previous contents are snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path of an existing file' }, old_string: { type: 'string', description: 'Exact existing text to replace; must be non-empty' }, new_string: { type: 'string', description: 'Replacement text' }, replace_all: { type: 'boolean', description: 'Replace every occurrence instead of requiring a unique match' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } }
+  { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
 function inside(base, candidate) {
@@ -259,12 +263,12 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     child.on('error', (error) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      resolve({ command, exitCode: null, stdout, stderr, error: error.message, timedOut });
+      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true; clearTimeout(timer);
-      resolve({ command, exitCode: code, signal, stdout, stderr, timedOut });
+      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut });
     });
   });
 }
@@ -428,9 +432,102 @@ export async function loadSkillDescriptions(root) {
   return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 12000);
 }
 
+async function runReadOnlyGit(root, args) {
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let truncated = false;
+    let settled = false;
+    let timedOut = false;
+    const env = {
+      ...scrubEnvironment(),
+      GIT_OPTIONAL_LOCKS: '0',
+      GIT_PAGER: 'cat',
+      PAGER: 'cat',
+      GIT_CONFIG_NOSYSTEM: '1'
+    };
+    const safeArgs = ['--no-pager', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', ...args];
+    let child;
+    const append = (target, chunk) => {
+      const current = target === 'stdout' ? stdout : stderr;
+      const next = current + chunk.toString('utf8');
+      if (next.length > MAX_TOOL_OUTPUT) truncated = true;
+      const clipped = next.slice(-MAX_TOOL_OUTPUT);
+      if (target === 'stdout') stdout = clipped;
+      else stderr = clipped;
+    };
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        command: 'git ' + args.join(' '),
+        ...result,
+        stdout,
+        stderr,
+        output: (stdout + (stderr ? '\\n' + stderr : '')).slice(-MAX_TOOL_OUTPUT),
+        truncated
+      });
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill('SIGTERM'); } catch {}
+      const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 500);
+      killTimer.unref?.();
+    }, 15000);
+    try {
+      child = spawn('git', safeArgs, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout.on('data', (chunk) => append('stdout', chunk));
+      child.stderr.on('data', (chunk) => append('stderr', chunk));
+      child.on('error', (error) => finish({ exitCode: 127, error: error.message, timedOut }));
+      child.on('close', (code, signal) => finish({ exitCode: timedOut ? 124 : (code ?? 1), signal, timedOut }));
+    } catch (error) {
+      finish({ exitCode: 127, error: error.message, timedOut });
+    }
+  });
+}
+
+async function readGitStatus(root) {
+  return await runReadOnlyGit(root, ['status', '--short', '--branch', '--untracked-files=normal', '--no-ahead-behind']);
+}
+
+async function readGitDiff(root, args = {}) {
+  const scope = ['unstaged', 'staged', 'all'].includes(args.scope) ? args.scope : 'all';
+  const commandArgs = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=3'];
+  if (scope === 'staged') commandArgs.push('--cached');
+  else if (scope === 'all') commandArgs.push('HEAD');
+  let relativePath = '';
+  if (args.path !== undefined && args.path !== null && String(args.path).trim()) {
+    const resolved = await resolveWorkspacePath(root, String(args.path), { rejectSymlinks: true });
+    relativePath = resolved.relative === '.' ? '' : resolved.relative;
+  }
+  commandArgs.push('--');
+  if (relativePath) {
+    commandArgs.push(relativePath);
+  } else {
+    // Never expose common secret-bearing paths in a whole-worktree diff.
+    commandArgs.push(
+      ':(exclude).env', ':(exclude)**/.env', ':(exclude).env.*', ':(exclude)**/.env.*',
+      ':(exclude).ssh/**', ':(exclude)**/.ssh/**', ':(exclude).aws/**', ':(exclude)**/.aws/**',
+      ':(exclude).gnupg/**', ':(exclude)**/.gnupg/**', ':(exclude).azure/**', ':(exclude)**/.azure/**',
+      ':(exclude).kube/**', ':(exclude)**/.kube/**', ':(exclude).docker/**', ':(exclude)**/.docker/**',
+      ':(exclude).npmrc', ':(exclude)**/.npmrc', ':(exclude).pypirc', ':(exclude)**/.pypirc',
+      ':(exclude).netrc', ':(exclude)**/.netrc', ':(exclude).git-credentials', ':(exclude)**/.git-credentials',
+      ':(exclude)credentials.json', ':(exclude)**/credentials.json', ':(exclude)secrets.json', ':(exclude)**/secrets.json',
+      ':(exclude)**/*.pem', ':(exclude)**/*.key', ':(exclude)**/*.p12', ':(exclude)**/*.pfx', ':(exclude)**/*.keystore',
+      ':(exclude)**/id_rsa', ':(exclude)**/id_ed25519', ':(exclude)**/id_ecdsa'
+    );
+  }
+  return await runReadOnlyGit(root, commandArgs);
+}
+
 export async function executeTool(name, args = {}, context = {}) {
   const root = path.resolve(context.root || process.cwd());
   switch (name) {
+    case 'git_status':
+      return await readGitStatus(root);
+    case 'git_diff':
+      return await readGitDiff(root, args);
     case 'list_files':
       return await listWorkspaceFiles(root, { path: args.path || '.', includeHidden: Boolean(args.includeHidden) });
     case 'read_file':
@@ -443,6 +540,15 @@ export async function executeTool(name, args = {}, context = {}) {
       return { skills: await listAvailableSkills(root) };
     case 'load_skill':
       return await loadSkillText(root, args.name);
+    case 'install_plugin': {
+      const name = String(args.name || '');
+      if (!['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'].includes(name)) throw new Error('Choose a built-in bundle from oasis plugins list.');
+      if (!context.autoApprove && (!context.approval || !(await context.approval('Install the reviewed Oasis plugin bundle "' + name + '" and copy its workflow skill files into this workspace?')))) {
+        return { approved: false, name, message: 'Plugin installation was not approved. No files were installed.' };
+      }
+      await managePlugins(root, ['install', name], { quiet: true });
+      return { installed: true, name, message: 'Installed the bundled workflow instructions. External integrations still require separate setup and approval.' };
+    }
     case 'edit_file': {
       if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new Error('old_string and new_string must be strings.');
       if (!args.old_string.length) throw new Error('old_string must not be empty. To create a new file, use write_file.');

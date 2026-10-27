@@ -1,4 +1,4 @@
-const CACHE_NAME = 'oasis-shell-v1';
+const CACHE_NAME = 'oasis-shell-v2';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './assets/oasis-icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -19,7 +19,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  // Never cache authenticated agent/session/job responses; cache keys do not isolate Authorization headers.
+  if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(

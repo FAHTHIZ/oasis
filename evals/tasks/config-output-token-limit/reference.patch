@@ -1,0 +1,15 @@
+diff --git a/src/config.mjs b/src/config.mjs
+--- a/src/config.mjs
++++ b/src/config.mjs
+@@ -99,3 +99,4 @@
+     maxSteps: clampInteger(saved.maxSteps, 12, 1, 30),
+-    maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600)
++    maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600),
++    maxOutputTokens: clampInteger(saved.maxOutputTokens, 8192, 1024, 131072)
+   };
+@@ -114,3 +115,4 @@
+     maxSteps: clampInteger(config.maxSteps, 12, 1, 30),
+-    maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
++    maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600),
++    maxOutputTokens: clampInteger(config.maxOutputTokens, 8192, 1024, 131072)
+   };

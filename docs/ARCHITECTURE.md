@@ -1,16 +1,17 @@
 # Oasis OSS architecture
 
-Oasis has a local-first browser workspace and a separate terminal agent runtime.
+Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasis web` serves the same browser UI from Node and connects it to the chosen workspace through an authenticated local HTTP API.
 
 ## Terminal runtime
 
 - \`src/cli.mjs\` is the command-line entry point exposed by the \`oasis\` executable in \`package.json\`.
 - \`src/config.mjs\` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
-- src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage.
-- src/tools.mjs exposes file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching.
+- src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage. Long histories are compacted between turns using a tool-free model summary, with a deterministic bounded fallback if summarization fails.
+- src/tools.mjs exposes read-only Git status/diff inspection, file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching. Whole-worktree diffs exclude common secret-bearing paths; explicitly scoped paths pass through workspace/sensitive-path checks.
 - \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
 - \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
-- skills/*/SKILL.md contains bundled workflow guidance. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. Workspace skills live under .oasis/skills/<name>/SKILL.md.
+- src/eval.mjs runs reference tasks in disposable copies, captures token/time/cost estimates, and stores JSON results. evals/tasks/<id>/ keeps the task prompt, pre-change snapshot, patch, and verifier outside the agent's workspace.
+- skills/*/SKILL.md contains bundled workflow guidance. `plugins/catalog.json` defines reviewed skill bundles; `src/plugins.mjs` installs/removes these bundles under `.oasis/plugins/` and `.oasis/skills/`. Bundles currently contain instruction files only; MCP server configuration is separate and explicit. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. Workspace skills live under .oasis/skills/<name>/SKILL.md.
 - Project context can come from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and \`.oasis/skills\`.
 
 ### Data and trust boundaries
@@ -20,6 +21,21 @@ Workspace file tools apply path traversal and symlink checks, block common crede
 Processes launch with an argument array and \`shell: false\`; common credential environment variables are filtered. The package installer is a separate, explicit side-effecting tool and its command plan is shown before approval. Public URL fetching checks host resolution for private addresses, rejects redirects, and limits content size.
 
 This is not an OS sandbox. An approved test, build, or project script can execute code with the current user's privileges. A local model endpoint may avoid sending prompts to a hosted provider, but that does not itself sandbox command execution.
+
+## Browser agent runtime
+
+- `src/web.mjs` serves the static UI and a same-origin JSON API. The listener binds to `127.0.0.1:3917` by default; the CLI prints a fresh random bearer token for that process. API requests require that token, and browser API requests must use a literal-IP/localhost Host and a matching same-origin HTTP Origin.
+- Chat jobs call the same `createSession` and `runAgentTurn` runtime used by the CLI. Job events expose assistant output, tool activity, usage, completion, and pending approvals. The browser can approve or deny a consequential action once. Saved agent sessions use the existing private user-level session store.
+- The Terminal panel calls the existing `run_command` tool with an executable and a JSON argv array. It intentionally has no shell expansion and is **not a full PTY**; interactive shell programs, TUI applications, and programs that require stdin are not supported by this bridge.
+- Localhost is the safe default. Binding to `0.0.0.0` makes the HTTP server reachable from the network; the token is not encrypted in transit. Use only on trusted private Wi-Fi, do not port-forward it, and never expose the listener to the public Internet. TLS/reverse-proxy deployment is not implemented.
+- The service worker must not cache `/api/*` responses because Cache Storage does not isolate entries by bearer Authorization header. It caches only the static app shell.
+
+## GitHub connection and workspace switching
+
+- The browser UI reuses the host's GitHub CLI login instead of collecting a personal token in the page. The runtime exposes fixed read-only commands for `gh auth status` and `gh api user/repos`; it does not accept arbitrary GitHub CLI arguments from the browser.
+- The repository picker lists at most 30 repositories from the authenticated user's accessible `user/repos` endpoint. Cloning validates `owner/name`, resolves a destination beneath the launch workspace's `.oasis/workspaces/` directory with workspace path checks, requires an explicit approval, then uses `gh repo clone` with shell expansion disabled. It never runs the repository's install scripts as part of cloning.
+- A successful clone switches the process's active workspace for new agent sessions and terminal commands. A request cannot switch workspaces while any tracked job or agent turn is running. Existing clone destinations are reused only after their origin matches the selected GitHub repository.
+- This is a GitHub CLI integration, not embedded OAuth. The user must install `gh` and run `gh auth login` on the host first. Repository creation, branch/push/PR orchestration, GitHub Apps, detailed scope management, and organization-wide repository discovery are not implemented.
 
 ## Model provider interface
 
@@ -33,9 +49,11 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 
 - \`scripts/check-site.mjs\`: validates interface anchors, inline JavaScript syntax, and PWA assets.
 - \`test/runtime.test.mjs\`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
+- test/eval.test.mjs covers task validation and a model run against a local OpenAI-compatible fixture server.
 - \`.github/workflows/quality.yml\`: runs the checks and package dry-run for pushes and pull requests.
+- The agent also has a read-only plan mode (`oasis plan` or `/plan`) with a separate tool allowlist and an executor-side check against write/command/install/delete/MCP calls. The quality gate runs `oasis eval --validate` to ensure each reference patch turns a failing no-op verifier into a passing verification.
 - \`.github/workflows/pages.yml\`: checks the repository and deploys the static site when GitHub Pages is configured.
 
 ## Current architectural gaps
 
-OS-level container isolation, robust context compaction, streamed model output, multi-agent coordination, formal version migrations, cross-device sync, and live sharing between the browser dashboard and CLI are not part of this implementation yet.
+OS-level container isolation, a full interactive PTY, TLS for the browser runtime, GitHub OAuth, a remote capability marketplace, streamed token output, mid-turn context compaction, multi-agent coordination, formal version migrations, and browser-to-CLI syncing for projects/tasks/notes are not implemented yet. Between-turn context compaction is best-effort and is not a substitute for a broad long-horizon benchmark. The evaluation suite is an experimental smoke benchmark rather than a broad full-project benchmark.

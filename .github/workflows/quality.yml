@@ -24,9 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Validate browser app and PWA assets
-        run: node scripts/check-site.mjs
-      - name: Run runtime and agent tests
-        run: npm test
+      - name: Run full quality gate and validate eval fixtures
+        run: npm run check
       - name: Verify installable CLI package contents
         run: npm pack --dry-run

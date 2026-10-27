@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function sliceLines(text, offset = 1, limit = 2000) { const lines = String(text).split(/\r?\n/); const parsedOffset = Number.parseInt(offset, 10); const parsedLimit = Number.parseInt(limit, 10); const start = Math.max(0, (Number.isFinite(parsedOffset) ? parsedOffset : 1) - 1); const count = Math.max(1, Math.min(2000, Number.isFinite(parsedLimit) ? parsedLimit : 2000)); return lines.slice(start, start + count).join('\n'); }

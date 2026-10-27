@@ -8,7 +8,7 @@ import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/c
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
-import { createSession, runAgentTurn } from '../src/agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 
@@ -224,10 +224,323 @@ test('public URL fetch blocks loopback and private network addresses', async () 
   await assert.rejects(executeTool('fetch_url', { url: 'http://localhost/' }, { root: process.cwd() }), /Local and metadata/);
 });
 
+test('read-only Git tools inspect diffs while protecting sensitive paths', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await writeFile(path.join(tmp, 'README.md'), 'before line\\n');
+  await writeFile(path.join(tmp, '.env'), 'API_TOKEN=super-secret-fixture\\n');
+
+  const initialized = await runWorkspaceCommand(tmp, 'git', ['init'], { autoApprove: true });
+  if (initialized.exitCode !== 0) {
+    t.skip('Git is unavailable in this environment: ' + (initialized.stderr || initialized.error || initialized.exitCode));
+    return;
+  }
+  for (const args of [
+    ['config', 'user.name', 'Oasis Test'],
+    ['config', 'user.email', 'oasis-test@example.invalid'],
+    ['add', '--', 'README.md', '.env'],
+    ['commit', '-m', 'baseline']
+  ]) {
+    const result = await runWorkspaceCommand(tmp, 'git', args, { autoApprove: true });
+    assert.equal(result.exitCode, 0, JSON.stringify(result));
+  }
+
+  await writeFile(path.join(tmp, 'README.md'), 'after line\\n');
+  await writeFile(path.join(tmp, '.env'), 'API_TOKEN=changed-super-secret-fixture\\n');
+
+  const status = await executeTool('git_status', {}, { root: tmp });
+  assert.equal(status.exitCode, 0, JSON.stringify(status));
+  assert.match(status.output, /README\.md/);
+
+  const diff = await executeTool('git_diff', { scope: 'all' }, { root: tmp });
+  assert.equal(diff.exitCode, 0, JSON.stringify(diff));
+  assert.match(diff.output, /-before line/);
+  assert.match(diff.output, /\+after line/);
+  assert.doesNotMatch(diff.output, /super-secret-fixture/);
+
+  const scoped = await executeTool('git_diff', { scope: 'all', path: 'README.md' }, { root: tmp });
+  assert.equal(scoped.exitCode, 0, JSON.stringify(scoped));
+  assert.match(scoped.output, /after line/);
+  await assert.rejects(executeTool('git_diff', { path: '.env' }, { root: tmp }), /sensitive/);
+  await assert.rejects(executeTool('git_diff', { path: '../outside.txt' }, { root: tmp }), /outside the workspace/);
+});
+
 test('agent tool registry exposes a useful coding workflow tool set', () => {
   assert.ok(toolCount() >= 7);
 });
 
+
+test('plan mode can inspect files but blocks non-read-only tool calls', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), 'Original content\\n');
+
+  let requests = 0;
+  const payloads = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    payloads.push(JSON.parse(body));
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will inspect the repository layout.',
+        tool_calls: [{ id: 'plan-read-1', type: 'function', function: { name: 'list_files', arguments: '{"path":"."}' } }]
+      } }] }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will try an unavailable write tool.',
+        tool_calls: [{ id: 'plan-write-1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'README.md', content: 'Changed by plan mode\\n' }) } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Plan: inspect project conventions, implement the requested change, then run targeted tests.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 5,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  const originalSystem = session.messages[0].content;
+  const result = await runAgentPlan(session, 'Plan a safe README improvement.');
+
+  assert.equal(result.finished, true);
+  assert.equal(requests, 3);
+  assert.ok(payloads[0].tools.some((tool) => tool.function.name === 'list_files'));
+  assert.ok(payloads.every((payload) => !payload.tools?.some((tool) => ['write_file', 'edit_file', 'run_command', 'install_package', 'delete_file'].includes(tool.function.name))));
+  const blocked = session.messages.find((message) => message.role === 'tool' && message.tool_call_id === 'plan-write-1');
+  assert.ok(blocked);
+  assert.match(blocked.content, /Plan mode blocks/);
+  assert.equal(await readFile(path.join(root, 'README.md'), 'utf8'), 'Original content\\n');
+  assert.equal(session.messages[0].content, originalSystem, 'planning instructions must not leak into later normal turns');
+});
+
+test('long sessions compact completed history before the next coding request', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), '# Compaction fixture');
+
+  let requests = 0;
+  let compactionPayload = null;
+  let taskPayload = null;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const payload = JSON.parse(body);
+    requests++;
+    if (requests === 1) compactionPayload = payload;
+    else taskPayload = payload;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'Earlier work: README.md was inspected; the follow-up test remains unrun.'
+      } }], usage: { prompt_tokens: 15, completion_tokens: 7, total_tokens: 22 } }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'Context compacted and the new request completed.'
+      } }], usage: { prompt_tokens: 11, completion_tokens: 6, total_tokens: 17 } }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 4,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  for (let i = 0; i < 34; i++) {
+    session.messages.push({ role: 'user', content: 'Older task request ' + i + ': inspect module-' + i + '.mjs' });
+    session.messages.push({ role: 'assistant', content: 'Older task outcome ' + i + ': inspected module-' + i + '.mjs' });
+  }
+  const compactions = [];
+  const result = await runAgentTurn(session, 'Continue by reviewing README.md.', {
+    onCompaction: (event) => compactions.push(event)
+  });
+
+  assert.equal(result.finished, true);
+  assert.equal(requests, 2);
+  assert.equal(compactionPayload.messages.length, 2);
+  assert.equal(compactionPayload.tools, undefined, 'the summary request must not expose agent tools');
+  assert.match(compactionPayload.messages[1].content, /Older task request 0/);
+  assert.ok(taskPayload.messages.some((message) =>
+    message.role === 'user' && String(message.content).includes('Context digest of earlier conversation')));
+  assert.ok(taskPayload.messages.some((message) => message.role === 'user' && message.content === 'Continue by reviewing README.md.'));
+  assert.ok(!taskPayload.messages.some((message) => message.role === 'user' && String(message.content).includes('Older task request 0')));
+  assert.equal(compactions.length, 1);
+  assert.equal(compactions[0].usedModelSummary, true);
+  assert.equal(session.messages.length < 40, true);
+});
+
+test('post-edit verification gate asks for diff review and a passing check before completion', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await mkdir(path.join(tmp, 'src'));
+  await writeFile(path.join(tmp, 'package.json'), JSON.stringify({
+    name: 'verification-fixture',
+    private: true,
+    scripts: { test: 'node --check src/example.mjs' }
+  }));
+  await writeFile(path.join(tmp, 'src', 'example.mjs'), 'export const value = 1;\n');
+
+  const initialized = await runWorkspaceCommand(tmp, 'git', ['init'], { autoApprove: true });
+  if (initialized.exitCode !== 0) {
+    t.skip('Git is unavailable in this environment: ' + (initialized.stderr || initialized.error || initialized.exitCode));
+    return;
+  }
+  for (const args of [
+    ['config', 'user.name', 'Oasis Test'],
+    ['config', 'user.email', 'oasis-test@example.invalid'],
+    ['add', '--', '.'],
+    ['commit', '-m', 'baseline']
+  ]) {
+    const result = await runWorkspaceCommand(tmp, 'git', args, { autoApprove: true });
+    assert.equal(result.exitCode, 0, JSON.stringify(result));
+  }
+
+  let requests = 0;
+  const payloads = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    payloads.push(JSON.parse(body));
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I updated the example.',
+        tool_calls: [{ id: 'verify-write-1', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'src/example.mjs', content: 'export const value = 2;\n' })
+        } }]
+      } }] }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'That should be complete.' } }] }));
+    } else if (requests === 3) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will inspect the complete diff.',
+        tool_calls: [{ id: 'verify-diff-1', type: 'function', function: {
+          name: 'git_diff',
+          arguments: JSON.stringify({ scope: 'all' })
+        } }]
+      } }] }));
+    } else if (requests === 4) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will check the changed module.',
+        tool_calls: [{ id: 'verify-command-1', type: 'function', function: {
+          name: 'run_command',
+          arguments: JSON.stringify({ command: 'npm', args: ['test'], timeoutSeconds: 30 })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Diff reviewed and the module check passed.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 8,
+    maxCommandSeconds: 30
+  };
+  const session = await createSession({ root: tmp, config });
+  const transcript = [];
+  const result = await runAgentTurn(session, 'Change the example module value from one to two.', {
+    autoApprove: true,
+    onText: (text) => transcript.push(text)
+  });
+
+  assert.equal(result.finished, true);
+  assert.equal(result.verificationIncomplete, false);
+  assert.equal(requests, 5);
+  assert.equal(result.toolCalls, 3);
+  assert.ok(payloads[2].messages.some((message) =>
+    message.role === 'user' && String(message.content).includes('post-edit verification gate')));
+  assert.equal(transcript.includes('That should be complete.'), false, 'premature final text should be held while verification is required');
+  assert.ok(transcript.includes('Diff reviewed and the module check passed.'));
+  assert.equal(await readFile(path.join(tmp, 'src', 'example.mjs'), 'utf8'), 'export const value = 2;\n');
+});
+
+test('post-edit verification gate reports when the model ignores required review', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await mkdir(path.join(tmp, 'src'));
+  await writeFile(path.join(tmp, 'src', 'example.js'), 'module.exports = 1;\n');
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I wrote the file.',
+        tool_calls: [{ id: 'incomplete-write-1', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'src/example.js', content: 'module.exports = 2;\n' })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Done.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 4,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root: tmp, config });
+  const result = await runAgentTurn(session, 'Change the example module value.');
+  assert.equal(result.finished, false);
+  assert.equal(result.verificationIncomplete, true);
+  assert.match(result.verificationIssues.join('; '), /diff has not been reviewed/);
+  assert.match(result.verificationIssues.join('; '), /no relevant test/);
+  assert.equal(requests, 3, 'the gate should nudge once, then report any remaining gaps');
+});
 
 test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
   const tmp = await temporaryDirectory();

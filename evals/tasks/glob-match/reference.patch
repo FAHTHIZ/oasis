@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function globMatches(pattern, candidate) { const escape = (text) => String(text).replaceAll('\\', '\\\\').replaceAll('.', '\\.').replaceAll('+', '\\+').replaceAll('^', '\\^').replaceAll('$', '\\$').replaceAll('{', '\\{').replaceAll('}', '\\}').replaceAll('(', '\\(').replaceAll(')', '\\)').replaceAll('|', '\\|').replaceAll('[', '\\[').replaceAll(']', '\\]'); const source = String(pattern).split(/([*?])/).map((part) => part === '*' ? '[^/]*' : part === '?' ? '[^/]' : escape(part)).join(''); return new RegExp('^' + source + '$').test(String(candidate)); }

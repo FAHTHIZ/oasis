@@ -4,14 +4,18 @@ import { stdin, stdout } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
-import { createSession, runAgentTurn, closeSession } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
+import { runEvalCommand } from './eval.mjs';
+import { managePlugins } from './plugins.mjs';
+import { startOasisWebServer } from './web.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL_URL = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
@@ -25,7 +29,9 @@ function printHelp() {
     '  oasis "fix the failing tests"  Give a task in plain English',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor                  Check the local environment',
+    '  oasis web [--host HOST] [--port PORT]  Start the authenticated browser agent workspace',
     '  oasis init                    Create OASIS.md project instructions',
+    '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
     '  oasis sessions list           List locally saved sessions for this workspace',
     '  oasis --continue              Resume the most recent saved session and keep saving it',
@@ -35,8 +41,13 @@ function printHelp() {
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis skills list             List available agent skills',
     '  oasis skills install debugging Install a bundled skill in this workspace',
+    '  oasis plugins list             Browse built-in capability bundles',
+    '  oasis plugins install NAME    Install a reviewed capability bundle',
+    '  oasis plugins remove NAME     Remove a bundle and its owned skills',
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
+    '  oasis eval --validate         Validate evaluation tasks and reference patches',
+    '  oasis eval [--task ID] [--trials N] --yes   Run agent evaluations (not OS-sandboxed)',
     '  oasis update                  Update the installed Oasis CLI from GitHub',
     '  oasis config                  Show provider settings (key is masked)',
     '',
@@ -395,7 +406,7 @@ function printConfig(config) {
   stdout.write('  Config file: ' + config.configPath + '\n');
 }
 
-async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}) {
+async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
   const config = await loadConfig();
   if (!config.configured) {
     stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
@@ -418,7 +429,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     session.mcpFailures = [];
   }
   try {
-    const result = await runAgentTurn(session, prompt, {
+    const runner = modeOptions.planOnly ? runAgentPlan : runAgentTurn;
+    const result = await runner(session, prompt, {
       autoApprove,
       approval: (message) => approve(message, false, autoApprove),
       onToolStart: ({ name }) => stdout.write('\n[tool] ' + name + '\n'),
@@ -429,7 +441,11 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       },
       onText: (text) => stdout.write('\nOasis> ' + text + '\n')
     });
-    if (!result.finished) stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+    if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
+      stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
+    } else if (!result.finished) {
+      stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+    }
   } catch (error) {
     stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
   }
@@ -454,7 +470,14 @@ async function interactive(root, autoApprove, persistence = {}) {
     const text = input.trim();
     if (!text) continue;
     if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
-    if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /exit. You can also say “install pnpm” or “install yourself”.\n'); continue; }
+    if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /plan TASK /exit. Use /plan TASK to inspect and plan without writing files or running commands. You can also say “install pnpm” or “install yourself”.\n'); continue; }
+    if (text === '/plan' || text.startsWith('/plan ')) {
+      const planPrompt = text.slice('/plan'.length).trim();
+      if (!planPrompt) { stdout.write('Usage: /plan Describe the task to plan.\n'); continue; }
+      session = await runPrompt(planPrompt, root, autoApprove, session, persistence, { planOnly: true });
+      persistence.resumeId = null;
+      continue;
+    }
     if (text === '/clear') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
@@ -469,6 +492,50 @@ async function interactive(root, autoApprove, persistence = {}) {
   }
   closeSession(session);
   stdout.write('\nOasis session closed.\n');
+}
+
+
+async function startWebWorkspace(root, args) {
+  let host = '127.0.0.1';
+  let port = 3917;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--host') {
+      if (!args[i + 1]) throw new Error('--host requires a host address.');
+      host = args[++i];
+    } else if (arg.startsWith('--host=')) host = arg.slice(7);
+    else if (arg === '--port') {
+      if (!args[i + 1]) throw new Error('--port requires a number.');
+      port = Number(args[++i]);
+    } else if (arg.startsWith('--port=')) port = Number(arg.slice(7));
+    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST and --port PORT.');
+  }
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be an integer between 0 and 65535 (0 chooses an available port).');
+  const normalizedHost = host.toLowerCase();
+  if (normalizedHost !== 'localhost' && isIP(host) === 0) throw new Error('--host must be localhost or a literal IP address. Use --host 0.0.0.0 only when you intentionally want other devices on your private network to connect.');
+  const app = await startOasisWebServer({ root, host, port });
+  const urlHost = host.includes(':') ? '[' + host + ']' : host;
+  const localUrl = 'http://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
+  stdout.write('\nOasis browser workspace is running.\n');
+  stdout.write('Workspace: ' + root + '\n');
+  stdout.write('Open on this device: ' + localUrl + '\n');
+  stdout.write('Connection token (paste into Agent → Connect; keep private):\n' + app.token + '\n');
+  stdout.write('Every agent chat action requires an in-browser approval before running a command, installing a package, deleting a file, or installing a bundle.\n');
+  if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
+    stdout.write('NETWORK WARNING: this HTTP service is reachable from other devices on the bound network. Keep it on a trusted private Wi-Fi network, never port-forward it to the Internet, and stop it when finished. HTTP does not encrypt the token in transit.\n');
+    stdout.write('On your phone, open http://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+  } else {
+    stdout.write('This listener is local-only. To use another device on a trusted private Wi-Fi, restart with --host 0.0.0.0 and read the network warning carefully.\n');
+  }
+  stdout.write('Press Ctrl+C to stop Oasis web.\n');
+  let closing = false;
+  const shutdown = () => {
+    if (closing) return;
+    closing = true;
+    void app.close().catch((error) => stderr.write('Oasis web shutdown error: ' + error.message + '\n'));
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }
 
 async function main() {
@@ -514,10 +581,24 @@ async function main() {
   }
   if (command === 'setup') return await configureProvider();
   if (command === 'doctor') return await doctor();
+  if (command === 'web') return await startWebWorkspace(workspace, rest);
+  if (command === 'plan') {
+    const planPrompt = rest.join(' ').trim();
+    if (!planPrompt) throw new Error('Usage: oasis plan "Describe the task to plan"');
+    const session = await runPrompt(planPrompt, workspace, autoApprove, null, persistence, { planOnly: true });
+    closeSession(session);
+    return;
+  }
+  if (command === 'eval') {
+    const result = await runEvalCommand(rest, { autoApprove, env: process.env });
+    if (!result.ok) process.exitCode = 1;
+    return result;
+  }
   if (command === 'init') return await initWorkspace(workspace);
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest);
+  if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
   if (command === 'sessions') return await manageSessions(workspace, rest);
   if (command === 'skills') {
     if (rest[0] === 'install') return await installSkill(workspace, rest[1]);

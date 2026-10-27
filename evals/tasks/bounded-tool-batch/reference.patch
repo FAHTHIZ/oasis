@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function boundedToolBatch(requested, maximum = 16) { const parsed = Number.parseInt(requested, 10); if (!Number.isFinite(parsed)) return maximum; return Math.min(maximum, Math.max(0, parsed)); }

@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,1 @@
++export function normalizeUsage(usage = {}) { const baseInput = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0; const cachedWrite = Number(usage.cache_creation_input_tokens || 0) || 0; const cachedRead = Number(usage.cache_read_input_tokens || 0) || 0; const inputTokens = usage.input_tokens !== undefined ? baseInput + cachedWrite + cachedRead : baseInput; const outputTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0; return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens }; }

@@ -1,0 +1,2 @@
+Create src/lib.mjs exporting normalizeUsage(...) to solve this task: Normalize provider token usage, including cache_creation_input_tokens and cache_read_input_tokens when input_tokens is present, while preserving prompt_tokens/completion_tokens compatibility.
+The evaluation verifier runs the existing repository checks and then tests the new helper. Preserve the existing repository's safety guards.
