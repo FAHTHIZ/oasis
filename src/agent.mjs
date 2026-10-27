@@ -55,6 +55,11 @@ function openAIEndpoint(baseURL) {
   return base.endsWith('/chat/completions') ? base : base + '/chat/completions';
 }
 
+function responsesEndpoint(baseURL) {
+  const base = String(baseURL || '').replace(/\/+$/, '');
+  return base.endsWith('/responses') ? base : base + '/responses';
+}
+
 function anthropicEndpoint(baseURL) {
   const base = String(baseURL || '').replace(/\/+$/, '');
   if (base.endsWith('/v1/messages')) return base;
@@ -67,6 +72,52 @@ function parseToolInput(raw) {
     const value = typeof raw === 'string' ? JSON.parse(raw) : raw;
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch { return {}; }
+}
+
+function toResponsesRequest(messages) {
+  const system = messages.find((message) => message.role === 'system');
+  const input = [];
+  for (const message of messages) {
+    if (message.role === 'system') continue;
+    if (message.role === 'user') {
+      input.push({ role: 'user', content: String(message.content || '') });
+      continue;
+    }
+    if (message.role === 'assistant') {
+      // Responses API output items include reasoning and tool-call metadata. Replay the
+      // whole output array when present so stateless tool continuation remains valid.
+      if (Array.isArray(message.responseItems) && message.responseItems.length) {
+        input.push(...message.responseItems);
+        continue;
+      }
+      if (Array.isArray(message.tool_calls) && message.tool_calls.length) {
+        if (typeof message.content === 'string' && message.content.trim()) {
+          input.push({ role: 'assistant', content: message.content });
+        }
+        for (const call of message.tool_calls) {
+          input.push({
+            type: 'function_call',
+            call_id: call.id,
+            name: call.function && call.function.name,
+            arguments: typeof (call.function && call.function.arguments) === 'string'
+              ? call.function.arguments
+              : JSON.stringify((call.function && call.function.arguments) || {})
+          });
+        }
+      } else {
+        input.push({ role: 'assistant', content: String(message.content || ' ') });
+      }
+      continue;
+    }
+    if (message.role === 'tool') {
+      input.push({
+        type: 'function_call_output',
+        call_id: message.tool_call_id,
+        output: String(message.content || '')
+      });
+    }
+  }
+  return { instructions: system ? String(system.content || '') : '', input };
 }
 
 function toAnthropicRequest(messages) {
@@ -106,7 +157,6 @@ function toAnthropicRequest(messages) {
       }
     }
   }
-  // Anthropic expects alternating user/assistant messages. Merge adjacent user messages safely.
   const merged = [];
   for (const message of converted) {
     const last = merged[merged.length - 1];
@@ -124,16 +174,32 @@ function formatApiError(status, body, protocol) {
   let detail = '';
   try {
     const parsed = JSON.parse(body);
-    detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type) ? String(parsed.error.message || parsed.error.code || parsed.error.type) : '';
+    detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type)
+      ? String(parsed.error.message || parsed.error.code || parsed.error.type) : '';
   } catch { detail = String(body || '').slice(0, 500); }
-  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : 'OpenAI-compatible chat completions';
+  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' :
+    protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
   return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') +
     '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
+}
+
+function responseText(output) {
+  if (!Array.isArray(output)) return '';
+  const parts = [];
+  for (const item of output) {
+    if (!item || item.type !== 'message' || !Array.isArray(item.content)) continue;
+    for (const block of item.content) {
+      if (block && block.type === 'output_text' && typeof block.text === 'string') parts.push(block.text);
+      else if (block && block.type === 'refusal' && typeof block.refusal === 'string') parts.push(block.refusal);
+    }
+  }
+  return parts.join('\n').trim();
 }
 
 async function requestCompletion(session) {
   const config = session.config;
   const nativeAnthropic = config.protocol === 'anthropic';
+  const nativeResponses = config.protocol === 'openai-responses';
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
   if (nativeAnthropic) {
     if (config.apiKey) headers['x-api-key'] = config.apiKey;
@@ -149,7 +215,7 @@ async function requestCompletion(session) {
     const converted = toAnthropicRequest(session.messages);
     bodyObject = {
       model: config.model,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: converted.system,
       messages: converted.messages,
       tools: (session.toolDefinitions || TOOL_DEFINITIONS).map((tool) => ({
@@ -157,7 +223,27 @@ async function requestCompletion(session) {
         description: tool.function.description,
         input_schema: tool.function.parameters
       })),
-      tool_choice: { type: 'auto' },
+      tool_choice: { type: 'auto' }
+    };
+  } else if (nativeResponses) {
+    endpoint = responsesEndpoint(config.baseURL);
+    const converted = toResponsesRequest(session.messages);
+    bodyObject = {
+      model: config.model,
+      instructions: converted.instructions,
+      input: converted.input,
+      tools: (session.toolDefinitions || TOOL_DEFINITIONS).map((tool) => ({
+        type: 'function',
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+        strict: false
+      })),
+      tool_choice: 'auto',
+      parallel_tool_calls: false,
+      max_output_tokens: 8192,
+      // The runtime owns state and replays response items locally, including reasoning items.
+      store: false
     };
   } else {
     endpoint = openAIEndpoint(config.baseURL);
@@ -166,8 +252,7 @@ async function requestCompletion(session) {
       messages: session.messages,
       tools: session.toolDefinitions || TOOL_DEFINITIONS,
       tool_choice: 'auto',
-      parallel_tool_calls: false,
-      temperature: 0.2
+      parallel_tool_calls: false
     };
   }
 
@@ -195,6 +280,19 @@ async function requestCompletion(session) {
         function: { name: block.name, arguments: JSON.stringify(block.input || {}) }
       }));
       return { role: 'assistant', content: text, tool_calls: toolCalls };
+    }
+    if (nativeResponses) {
+      if (!Array.isArray(data.output)) throw new Error('The Responses API returned no output items.');
+      if (data.status && data.status !== 'completed') {
+        const reason = data.incomplete_details && data.incomplete_details.reason;
+        throw new Error('The Responses API ended with status "' + data.status + '"' + (reason ? ' (' + reason + ')' : '') + '. Increase the output limit or adjust the request.');
+      }
+      const toolCalls = data.output.filter((item) => item && item.type === 'function_call').map((item) => ({
+        id: item.call_id || item.id,
+        type: 'function',
+        function: { name: item.name, arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {}) }
+      }));
+      return { role: 'assistant', content: responseText(data.output), tool_calls: toolCalls, responseItems: data.output };
     }
     const message = data.choices && data.choices[0] && data.choices[0].message;
     if (!message) throw new Error('The model provider returned no assistant message.');
@@ -252,6 +350,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   for (let step = 0; step < maxSteps; step++) {
     const assistant = await requestCompletion(session);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
+    if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
     if (Array.isArray(assistant.tool_calls) && assistant.tool_calls.length) {
       assistantMessage.tool_calls = assistant.tool_calls.map((call) => ({
         id: call.id,
