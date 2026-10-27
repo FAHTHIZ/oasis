@@ -70,6 +70,7 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
 - Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
 - A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
+- Bounded specialist reviews for code quality, security, architecture, and test strategy. Each reviewer is a separate read-only model session with no edit, command, package-install, or MCP tools; a per-task cap prevents unbounded delegation.
 - Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
 - Optional workspace-scoped saved sessions that can be resumed or deleted; skill descriptions load first and full skill guides load only on demand.

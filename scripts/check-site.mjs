@@ -15,7 +15,7 @@ const required = [
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
   'id="view-agent"', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"',
   'id="view-extensions"', 'id="extensionInspectForm"', 'id="extensionScope"', 'id="extensionCandidateList"', 'id="installedExtensions"',
-  'id="view-integrations"', 'data-integration-tab="connectors"', 'id="mcpAddForm"', '/api/extensions/inspect', '/api/extensions/install', '/api/mcp',
+  'id="view-integrations"', 'data-integration-tab="connectors"', 'Specialist reviews', 'id="mcpAddForm"', '/api/extensions/inspect', '/api/extensions/install', '/api/mcp',
   'id="agentModelButton"', 'id="agentModelName"', '#view-agent.active{display:flex',
   'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
   'id="githubRepoSelect"', 'id="githubCloneBtn"', 'id="githubCheckBtn"', '/api/github/clone',
