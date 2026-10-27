@@ -36,6 +36,10 @@ test('plugin catalog lists reviewed built-in bundles without a model provider', 
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /code-quality/);
   assert.match(result.stdout, /project-onboarding/);
+  assert.match(result.stdout, /mobile-development/);
+  assert.match(result.stdout, /web-app-development/);
+  assert.match(result.stdout, /api-development/);
+  assert.match(result.stdout, /security-review/);
   assert.match(result.stdout, /oasis plugins install NAME/);
 });
 
