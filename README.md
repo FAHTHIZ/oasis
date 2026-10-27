@@ -28,7 +28,7 @@ cd /path/to/your/project
 oasis web
 ~~~
 
-Open the local URL printed by Oasis, paste the one-time connection token into **Agent → Connect runtime**, and describe the work in plain English. Keep the terminal process running while you use the browser. The token is generated for that running server and is not your model API key.
+Open the local URL printed by Oasis, paste the one-time connection token into **Agent → Connect runtime**, and describe the work in plain English. Keep the terminal process running while you use the browser. The token is generated for that running server and is not your model API key. In **GitHub**, use **Check connection** and **Refresh repositories** to view repositories available to the host's GitHub CLI login, then choose one and approve the clone. Oasis clones into `.oasis/workspaces/` under the launch workspace and switches the agent and command runner into the clone. To enable this, install GitHub CLI (`gh`) on the host and run `gh auth login` once in its terminal. This is a host-CLI connection, not browser OAuth; the app never asks you to paste a GitHub token.
 
 For phone access from a computer, both devices must be on the same trusted private Wi-Fi. Start `oasis web --host 0.0.0.0`, open `http://<computer-LAN-IP>:3917` on the phone, and paste the token. **This HTTP bridge is not encrypted. Do not use it on public/untrusted Wi-Fi, do not port-forward it, and never expose it to the public Internet.** The safe default is localhost-only. Android/Termux installation and real-device behavior still need cross-platform testing.
 
@@ -82,6 +82,7 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Light/dark themes and an installable PWA shell with a service worker for offline static assets.
 - A connected Agent page when served by `oasis web`: authenticated chat, resumable saved chat history, visible tool activity, and browser-based approval for commands, installs, deletion, and capability-bundle installation.
 - An integrated argv-based command runner that captures command output and requires per-command approval.
+- GitHub CLI integration to check the host's existing authentication, list up to 30 repositories accessible to that account, clone a selected repo after approval, and switch the active agent workspace.
 
 ## Plugins, integrations, and installation
 
@@ -190,6 +191,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Read-only workspace tool calls can run in parallel, while commands, edits, installs, deletes, and external MCP calls run sequentially. Automatic context compaction now runs between turns, but parallel specialist-agent orchestration, streaming token output, mid-turn compaction, and advanced conflict handling are not implemented.
 - The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
+- GitHub connection currently reuses GitHub CLI authentication (`gh auth login`) on the host; embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, creating repositories, branch/push/PR workflows, and fine-grained GitHub App scopes are not implemented yet.
 - The Terminal panel is an argv-based command runner, not a full interactive PTY: shell chaining, shell interpreters, TUI programs, and interactive prompts are not supported by the web bridge yet.
 - Browser projects/tasks/notes still use browser local storage and do not sync with the CLI workspace. Agent sessions are stored separately in the user-level Oasis session directory.
 - GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
