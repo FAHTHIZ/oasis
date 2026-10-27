@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -8,6 +9,7 @@ import { planPackageInstall, normalizePackageName } from './installer.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
+const BUNDLED_SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills');
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target']);
 const SHELLS_AND_DANGEROUS = new Set([
   'sh', 'bash', 'zsh', 'fish', 'dash', 'ash', 'cmd', 'powershell', 'pwsh',
@@ -23,7 +25,11 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'run_command', description: 'Run a single executable with an argv array in the workspace, with no shell expansion. Requires approval unless the user explicitly enabled --yes. Destructive executables and shell interpreters are blocked.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120' } }, required: ['command', 'args'] } } },
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
-  { type: 'function', function: { name: 'fetch_url', description: 'Fetch public HTTP or HTTPS documentation as text. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public documentation URL using HTTP or HTTPS' } }, required: ['url'] } } }
+  { type: 'function', function: { name: 'fetch_url', description: 'Fetch public HTTP or HTTPS documentation as text. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public documentation URL using HTTP or HTTPS' } }, required: ['url'] } } },
+
+  { type: 'function', function: { name: 'edit_file', description: 'Make a focused exact-text edit to an existing workspace file. The old text must match; ambiguous matches fail unless replaceAll is explicitly enabled. The current file is snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, oldText: { type: 'string', description: 'Exact text to find; include sufficient surrounding context for a unique match' }, newText: { type: 'string', description: 'Replacement text' }, replaceAll: { type: 'boolean', description: 'Replace every exact match instead of requiring exactly one match' } }, required: ['path', 'oldText', 'newText'] } } },
+  { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } }
 ];
 
 function inside(base, candidate) {
@@ -305,6 +311,75 @@ async function fetchPublicUrl(raw) {
   } finally { clearTimeout(timer); }
 }
 
+
+function parseSkillMetadata(content, fallbackName) {
+  const front = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  const metadata = front ? front[1] : '';
+  const read = (key) => {
+    const match = metadata.match(new RegExp('^' + key + ':\\s*(.+)$', 'mi'));
+    return match ? match[1].trim().replace(/^["']|["']$/g, '') : '';
+  };
+  const rawName = read('name') || fallbackName;
+  const name = /^[a-z][a-z0-9-]{0,63}$/i.test(rawName) ? rawName : fallbackName;
+  const description = (read('description') || 'Workflow instructions for ' + name + '.').slice(0, 320);
+  return { name, description };
+}
+
+export async function listAvailableSkills(root) {
+  const byName = new Map();
+  async function scan(directory, source, relativePrefix = '') {
+    let entries;
+    try { entries = await readdir(directory, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.filter((item) => item.isDirectory() && !item.isSymbolicLink()).slice(0, 80)) {
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(entry.name)) continue;
+      const filePath = path.join(directory, entry.name, 'SKILL.md');
+      try {
+        const info = await lstat(filePath);
+        if (!info.isFile() || info.isSymbolicLink() || info.size > 32 * 1024) continue;
+        const content = await readFile(filePath, 'utf8');
+        if (content.includes('\0')) continue;
+        const meta = parseSkillMetadata(content, entry.name);
+        const skill = {
+          name: meta.name,
+          description: meta.description,
+          source,
+          relativePath: source === 'workspace' ? path.posix.join('.oasis', 'skills', entry.name, 'SKILL.md') : entry.name
+        };
+        byName.set(meta.name.toLowerCase(), skill);
+      } catch { /* Ignore incomplete or unsafe skill files. */ }
+    }
+  }
+  await scan(BUNDLED_SKILLS_DIR, 'built-in');
+  await scan(path.join(root, '.oasis', 'skills'), 'workspace');
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 100);
+}
+
+export async function loadSkillText(root, rawName) {
+  const name = String(rawName || '');
+  if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');
+  const skills = await listAvailableSkills(root);
+  const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  if (!skill) throw new Error('No skill named "' + name + '" is available. Call list_skills to inspect valid names.');
+  let content;
+  if (skill.source === 'workspace') {
+    content = (await readWorkspaceFile(root, skill.relativePath)).content;
+  } else {
+    const target = path.resolve(BUNDLED_SKILLS_DIR, skill.relativePath, 'SKILL.md');
+    if (!inside(BUNDLED_SKILLS_DIR, target)) throw new Error('Skill path is outside the bundled skill directory.');
+    const info = await lstat(target);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 32 * 1024) throw new Error('Bundled skill file is not a safe regular text file.');
+    content = await readFile(target, 'utf8');
+  }
+  if (content.includes('\0')) throw new Error('Skill content is not valid text.');
+  return { name: skill.name, source: skill.source, content: content.slice(0, 24000), truncated: content.length > 24000 };
+}
+
+export async function loadSkillDescriptions(root) {
+  const skills = await listAvailableSkills(root);
+  if (!skills.length) return '';
+  return skills.map((item) => '- ' + item.name + ' [' + item.source + ']: ' + item.description).join('\n').slice(0, 12000);
+}
+
 export async function executeTool(name, args = {}, context = {}) {
   const root = path.resolve(context.root || process.cwd());
   switch (name) {
@@ -314,6 +389,31 @@ export async function executeTool(name, args = {}, context = {}) {
       return await readWorkspaceFile(root, args.path);
     case 'search_files':
       return await searchWorkspaceFiles(root, args.query, args.limit);
+    case 'list_skills':
+      return { skills: await listAvailableSkills(root) };
+    case 'load_skill':
+      return await loadSkillText(root, args.name);
+    case 'edit_file': {
+      if (typeof args.oldText !== 'string' || typeof args.newText !== 'string') throw new Error('oldText and newText must both be strings.');
+      if (!args.oldText.length) throw new Error('oldText cannot be empty.');
+      if (Buffer.byteLength(args.oldText, 'utf8') > MAX_TEXT_FILE || Buffer.byteLength(args.newText, 'utf8') > MAX_TEXT_FILE) throw new Error('The edit exceeds the 256 KiB text limit.');
+      const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
+      const info = await lstat(target.absolute);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('edit_file can only change a regular existing file.');
+      if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB edit limit.');
+      const current = await readFile(target.absolute, 'utf8');
+      if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
+      let matches = 0, offset = 0;
+      while ((offset = current.indexOf(args.oldText, offset)) >= 0) { matches++; offset += args.oldText.length; }
+      if (!matches) throw new Error('The exact oldText was not found. Read the current file and retry with exact context.');
+      if (matches > 1 && args.replaceAll !== true) throw new Error('oldText matches ' + matches + ' places. Include more context or explicitly set replaceAll=true.');
+      const next = args.replaceAll === true ? current.split(args.oldText).join(args.newText) : current.replace(args.oldText, args.newText);
+      if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('Edited file would exceed the 256 KiB text limit.');
+      if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
+      await snapshotFile(root, target.absolute, 'before-agent-edit');
+      await writeFile(target.absolute, next, { encoding: 'utf8' });
+      return { path: target.relative.split(path.sep).join('/'), changed: true, replacements: args.replaceAll === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true };
+    }
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
       if (Buffer.byteLength(args.content, 'utf8') > MAX_TEXT_FILE) throw new Error('New file content exceeds the 256 KiB limit.');
@@ -368,17 +468,8 @@ export async function loadProjectInstructions(root) {
       if (result.content.trim()) parts.push('--- Project context: ' + name + ' ---\n' + result.content.slice(0, 9000));
     } catch {}
   }
-  const skillsRoot = path.join(root, '.oasis', 'skills');
-  try {
-    const entries = await readdir(skillsRoot, { withFileTypes: true });
-    for (const entry of entries.filter((item) => item.isDirectory()).slice(0, 12)) {
-      try {
-        const file = path.join('.oasis', 'skills', entry.name, 'SKILL.md');
-        const skill = await readWorkspaceFile(root, file);
-        if (skill.content.trim()) parts.push('--- Installed skill: ' + entry.name + ' ---\n' + skill.content.slice(0, 5000));
-      } catch {}
-    }
-  } catch {}
+  // Skill instructions are deliberately not loaded here. The model receives only a
+  // compact name/description catalogue and calls load_skill when one is relevant.
   return parts.join('\n\n').slice(0, 26000);
 }
 
