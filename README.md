@@ -2,7 +2,7 @@
 
 **An open-source, plain-English coding agent plus a local-first project workspace.**
 
-Oasis is being built to turn requests like “inspect this project, install the missing tool, implement the feature, and run the tests” into a verified, multi-step workflow. Its terminal runtime is the main agent interface; the browser app remains a lightweight workspace for projects, tasks, and notes.
+Oasis is being built to turn requests like “inspect this project, install the missing tool, implement the feature, and run the tests” into a verified, multi-step workflow. Use the CLI directly or start `oasis web` to connect a mobile-friendly browser chat and approval-gated command runner to the local agent runtime. The separate static dashboard still keeps projects, tasks, and notes in browser storage.
 
 ## Install the terminal agent
 
@@ -16,6 +16,21 @@ oasis
 ~~~
 
 During setup, choose the native OpenAI Responses API (the default), native Anthropic Messages API, or OpenAI-compatible chat completions. The default OpenAI model is `gpt-6.1-sol`; choose a model name that supports tools for any other provider. Key input is hidden. The key is stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
+
+### Try the connected browser agent on the development branch
+
+The integrated browser runtime is currently on the open development branch, not yet in the default `main` branch. To try these changes before they are merged:
+
+~~~bash
+npm install -g git+https://github.com/gtxnrg-ship-it/Oasis.git#feat/eval-harness
+oasis setup
+cd /path/to/your/project
+oasis web
+~~~
+
+Open the local URL printed by Oasis, paste the one-time connection token into **Agent → Connect runtime**, and describe the work in plain English. Keep the terminal process running while you use the browser. The token is generated for that running server and is not your model API key.
+
+For phone access from a computer, both devices must be on the same trusted private Wi-Fi. Start `oasis web --host 0.0.0.0`, open `http://<computer-LAN-IP>:3917` on the phone, and paste the token. **This HTTP bridge is not encrypted. Do not use it on public/untrusted Wi-Fi, do not port-forward it, and never expose it to the public Internet.** The safe default is localhost-only. Android/Termux installation and real-device behavior still need cross-platform testing.
 
 Supported provider shapes:
 - Native OpenAI Responses API (`openai-responses`), recommended for current OpenAI reasoning models that require Responses for tool calling.
@@ -64,7 +79,9 @@ A simple request such as \`oasis install pnpm\` uses the package installer direc
 - Project creation, filtering, progress, completion/reopen, and removal.
 - Task creation, completion, priorities, project association, search, and deletion.
 - Notes that save locally, plus JSON export/import.
-- Light/dark themes and an installable PWA shell with a service worker for offline caching.
+- Light/dark themes and an installable PWA shell with a service worker for offline static assets.
+- A connected Agent page when served by `oasis web`: authenticated chat, resumable saved chat history, visible tool activity, and browser-based approval for commands, installs, deletion, and capability-bundle installation.
+- An integrated argv-based command runner that captures command output and requires per-command approval.
 
 ## Plugins, integrations, and installation
 
@@ -167,12 +184,14 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 ## Known limitations — not claimed as finished
 
-- An MCP stdio client is implemented, but a plugin marketplace, broad provider adapters, and curated integrations are not yet implemented.
+- The built-in capability catalog contains reviewed workflow-skill bundles only; a remote plugin marketplace, signed package manifests, version pinning, updates/rollback, and automated installation of third-party integrations are not yet implemented.
 - No OS-level sandbox or container isolation is provided.
 - Saved conversations are opt-in and workspace-scoped. Oasis provides read-only plan mode (`oasis plan \"task\"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. Compaction does not run in the middle of a tool loop, so an unusually long single task can still exceed provider context limits; streaming output is not implemented.
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Read-only workspace tool calls can run in parallel, while commands, edits, installs, deletes, and external MCP calls run sequentially. Automatic context compaction now runs between turns, but parallel specialist-agent orchestration, streaming token output, mid-turn compaction, and advanced conflict handling are not implemented.
-- The CLI and browser dashboard are separate interfaces; they do not currently share live project/task state.
+- The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
+- The Terminal panel is an argv-based command runner, not a full interactive PTY: shell chaining, shell interpreters, TUI programs, and interactive prompts are not supported by the web bridge yet.
+- Browser projects/tasks/notes still use browser local storage and do not sync with the CLI workspace. Agent sessions are stored separately in the user-level Oasis session directory.
 - GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
 
 ## Contributing
