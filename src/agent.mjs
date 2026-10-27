@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
+import { validateProtocol, validateBaseUrl } from './config.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -529,8 +530,9 @@ async function requestCompletion(session, options = {}) {
   }
 
   const controller = new AbortController();
+  const timeoutMs = Math.min(120000, Math.max(1000, Number(options.timeoutMs) || 120000));
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 120000);
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const abortFromCaller = () => controller.abort();
   if (options.signal) {
     if (options.signal.aborted) abortFromCaller();
@@ -593,12 +595,62 @@ async function requestCompletion(session, options = {}) {
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after 120 seconds.');
+    if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after ' + Math.round(timeoutMs / 1000) + ' seconds.');
     if (error instanceof TypeError) throw new Error('Could not reach the model provider. Check the network and provider base URL.');
     throw error;
   } finally {
     clearTimeout(timer);
     if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
+  }
+}
+
+/**
+ * Verify that the selected provider can return an assistant response before Oasis
+ * persists the configuration or begins tool-driven work. The probe exposes no tools,
+ * requests no code execution, and never returns the provider's raw response body.
+ */
+export async function testProviderConnection(rawConfig, options = {}) {
+  if (!rawConfig || typeof rawConfig !== 'object') throw new Error('Provider configuration is required.');
+  let protocol;
+  let baseURL;
+  try {
+    protocol = validateProtocol(rawConfig.protocol);
+    baseURL = validateBaseUrl(rawConfig.baseURL);
+  } catch (error) {
+    throw new Error('Invalid provider configuration: ' + String(error && error.message || error).slice(0, 400));
+  }
+  const model = String(rawConfig.model || '').trim();
+  const apiKey = String(rawConfig.apiKey || '');
+  if (!model || model.length > 200) throw new Error('Enter a valid model name before testing the provider.');
+  const config = { protocol, baseURL, model, apiKey };
+  const session = {
+    config,
+    toolDefinitions: [],
+    messages: [
+      { role: 'system', content: 'You are performing a connectivity check. Do not use tools. Respond with one short plain-text confirmation.' },
+      { role: 'user', content: 'Reply with exactly: OASIS_CONNECTION_OK' }
+    ]
+  };
+  try {
+    const response = await requestCompletion(session, {
+      noTools: true,
+      signal: options.signal,
+      timeoutMs: options.timeoutMs || 30000
+    });
+    if (!String(response && response.content || '').trim()) {
+      throw new Error('The endpoint responded, but the selected model returned no assistant text. Check the model ID and API protocol.');
+    }
+    return {
+      ok: true,
+      protocol,
+      provider: new URL(baseURL).host,
+      model,
+      note: 'A real assistant response was received. No tools were offered or executed.'
+    };
+  } catch (error) {
+    let message = String(error && error.message || error);
+    if (apiKey) message = message.split(apiKey).join('[redacted]');
+    throw new Error('Provider connection test failed; configuration was not verified. ' + message.slice(0, 1200));
   }
 }
 
