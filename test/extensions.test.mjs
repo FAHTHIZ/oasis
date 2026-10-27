@@ -13,7 +13,8 @@ import {
   selectAgentPromptFiles,
   selectPortableSkillResources,
   selectReviewedMcpServers,
-  resolveImportedSlashCommand
+  resolveImportedSlashCommand,
+  updateGitHubExtension
 } from '../src/extensions.mjs';
 import { executeTool, listAvailableSkills, loadSkillResource, loadSkillText } from '../src/tools.mjs';
 
@@ -282,6 +283,53 @@ test('extension inspection proposes safe MCP stdio configs without copying crede
   assert.ok(inspected.mcpImportPlan.skipped.length >= 3);
   assert.doesNotMatch(JSON.stringify(inspected.mcpImportPlan), /do-not-copy-this-secret|secret-value/);
   assert.match(inspected.mcpImportPlan.policy, /saved disabled/i);
+});
+
+test('extension updates verify old hashes, stage the new commit, and retain a rollback backup', async (t) => {
+  const tmp = await tempDir();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'project');
+  const env = { OASIS_CONFIG_DIR: path.join(tmp, 'config') };
+  const initial = createFetch();
+  await installGitHubExtension('https://github.com/acme/agents', {
+    root, env, scope: 'project', expectedCommit: COMMIT, fetchImpl: initial.fetchImpl
+  });
+  const newerCommit = 'd'.repeat(40);
+  const updated = await updateGitHubExtension('https://github.com/acme/agents', {
+    root, env, scope: 'project', expectedCommit: newerCommit,
+    fetchImpl: createFetch({ commit: newerCommit }).fetchImpl
+  });
+  assert.equal(updated.updated, true);
+  assert.equal(updated.commitSha, newerCommit);
+  assert.equal(updated.backups.length, 1);
+  assert.equal(updated.backups[0].commitSha, COMMIT);
+  const inventory = await listInstalledExtensions({ root, env });
+  assert.equal(inventory.extensions.find((item) => item.scope === 'project').commitSha, newerCommit);
+  const backupManifest = JSON.parse(await readFile(path.join(updated.backups[0].path, 'extension.json'), 'utf8'));
+  assert.equal(backupManifest.commitSha, COMMIT);
+  const noOp = await updateGitHubExtension('https://github.com/acme/agents', {
+    root, env, scope: 'project', expectedCommit: newerCommit,
+    fetchImpl: createFetch({ commit: newerCommit }).fetchImpl
+  });
+  assert.equal(noOp.alreadyCurrent, true);
+});
+
+test('extension updates refuse modified imported files instead of discarding user edits', async (t) => {
+  const tmp = await tempDir();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'project');
+  const env = { OASIS_CONFIG_DIR: path.join(tmp, 'config') };
+  await installGitHubExtension('https://github.com/acme/agents', {
+    root, env, scope: 'project', expectedCommit: COMMIT, fetchImpl: createFetch().fetchImpl
+  });
+  const skillPath = path.join(root, '.oasis', 'extensions', 'agents', 'skills', 'api-engineer', 'SKILL.md');
+  await writeFile(skillPath, '# My local edits\n');
+  const next = 'e'.repeat(40);
+  await assert.rejects(() => updateGitHubExtension('https://github.com/acme/agents', {
+    root, env, scope: 'project', expectedCommit: next, fetchImpl: createFetch({ commit: next }).fetchImpl
+  }), /modified after installation/i);
+  const after = await listInstalledExtensions({ root, env });
+  assert.equal(after.extensions[0].commitSha, COMMIT);
 });
 
 test('Claude Code Markdown commands install as namespaced slash aliases with bounded substitution and integrity checks', async (t) => {

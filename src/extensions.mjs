@@ -891,6 +891,205 @@ export async function resolveImportedSlashCommand(root, rawInput, options = {}) 
   return { alias: command.alias, sourcePath: command.sourcePath, source: extension.source, prompt };
 }
 
+
+async function verifyManagedExtensionForUpdate(target, safetyRoot, extensionName, expectedSource) {
+  const safetyRootReal = await realpath(safetyRoot);
+  const targetReal = await realpath(target);
+  const targetInfo = await lstat(target);
+  if (!inside(safetyRootReal, targetReal) || targetInfo.isSymbolicLink() || !targetInfo.isDirectory()) {
+    throw new Error('The existing extension resolves outside its allowed scope or is not a regular directory. No update was made.');
+  }
+  const manifestPath = path.join(targetReal, 'extension.json');
+  const manifestInfo = await lstat(manifestPath);
+  if (manifestInfo.isSymbolicLink() || !manifestInfo.isFile() || manifestInfo.size > 256 * 1024) {
+    throw new Error('The existing extension manifest is not a safe regular file. No update was made.');
+  }
+  let manifest;
+  try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); }
+  catch { throw new Error('The existing extension manifest is unreadable. No update was made.'); }
+  if (!manifest || manifest.schemaVersion !== 1 || manifest.name !== extensionName ||
+      manifest.source !== expectedSource || !/^[a-f0-9]{40}$/i.test(String(manifest.commitSha || '')) ||
+      !Array.isArray(manifest.files) || manifest.files.length > 300) {
+    throw new Error('The existing extension is not a compatible Oasis-managed install of this exact repository. No update was made.');
+  }
+  const expected = ['extension.json'];
+  const seen = new Set();
+  for (const file of manifest.files) {
+    const relative = String(file && file.path || '').replace(/\\/g, '/');
+    const parts = relative.split('/');
+    if (!relative || relative.length > 800 || relative.startsWith('/') ||
+        parts.some((part) => !part || part === '.' || part === '..') ||
+        relative === 'extension.json' || seen.has(relative) ||
+        !/^[a-f0-9]{64}$/.test(String(file.sha256 || ''))) {
+      throw new Error('The existing extension manifest contains an unsafe or duplicate file record. No update was made.');
+    }
+    seen.add(relative);
+    expected.push(relative);
+    const absolute = path.join(targetReal, ...relative.split('/'));
+    if (!inside(targetReal, absolute)) throw new Error('The existing extension manifest contains a path outside its install. No update was made.');
+    const info = await lstat(absolute);
+    if (info.isSymbolicLink() || !info.isFile()) throw new Error('An imported file is not a regular file. No update was made.');
+    const content = await readFile(absolute);
+    if (createHash('sha256').update(content).digest('hex') !== file.sha256) {
+      throw new Error('The extension was modified after installation. Oasis will not update it automatically; back up your edits first.');
+    }
+  }
+  const actual = (await walkOwnedFiles(targetReal)).sort();
+  expected.sort();
+  if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
+    throw new Error('The extension has unexpected or missing files. Oasis will not update it automatically; back up your edits first.');
+  }
+  return { manifest, targetReal };
+}
+
+function extensionScopeTargets(scope, root, env) {
+  const targets = [];
+  if (scope === 'self' || scope === 'both') {
+    const configRoot = getConfigDirectory(env);
+    targets.push({ scope: 'self', parent: path.join(configRoot, 'extensions'), safetyRoot: configRoot });
+  }
+  if (scope === 'project' || scope === 'both') {
+    targets.push({ scope: 'project', parent: path.join(root, '.oasis', 'extensions'), safetyRoot: root });
+  }
+  return targets;
+}
+
+async function pruneExtensionBackups(historyParent, keep = 3) {
+  let entries = [];
+  try { entries = await readdir(historyParent, { withFileTypes: true }); }
+  catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  const records = [];
+  for (const entry of entries) {
+    if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
+    const absolute = path.join(historyParent, entry.name);
+    try {
+      const info = await lstat(absolute);
+      if (info.isSymbolicLink() || !info.isDirectory()) continue;
+      records.push({ path: absolute, mtime: info.mtimeMs });
+    } catch { /* Ignore a concurrently removed backup. */ }
+  }
+  records.sort((a, b) => b.mtime - a.mtime);
+  for (const item of records.slice(keep)) await rm(item.path, { recursive: true, force: false });
+}
+
+export async function updateGitHubExtension(rawUrl, options = {}) {
+  const scope = String(options.scope || 'project');
+  if (!['self', 'project', 'both'].includes(scope)) throw new Error('Extension update scope must be self, project, or both.');
+  const root = path.resolve(options.root || process.cwd());
+  const env = options.env || process.env;
+  const snapshot = await snapshotRepository(rawUrl, { expectedCommit: options.expectedCommit, fetchImpl: options.fetchImpl });
+  if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow.');
+  if (snapshot.treeTruncated) throw new Error('GitHub truncated this repository tree. Oasis will not update from an incomplete tree.');
+  if (!snapshot.candidates.length) throw new Error('No importable Markdown agent or skill prompts were found in the new revision.');
+  const extensionName = safeSlug(snapshot.repository.name, 'extension');
+  const targets = extensionScopeTargets(scope, root, env);
+  const existing = [];
+  for (const target of targets) {
+    const absolute = path.join(target.parent, extensionName);
+    let verified;
+    try { verified = await verifyManagedExtensionForUpdate(absolute, target.safetyRoot, extensionName, snapshot.repository.url); }
+    catch (error) {
+      if (error.code === 'ENOENT') throw new Error('The extension "' + extensionName + '" is not installed in scope "' + target.scope + '". Use install before update.');
+      throw error;
+    }
+    existing.push({ ...target, absolute, manifest: verified.manifest });
+  }
+  if (existing.every((item) => item.manifest.commitSha.toLowerCase() === snapshot.repository.commitSha.toLowerCase())) {
+    return {
+      updated: false,
+      alreadyCurrent: true,
+      extensionName,
+      scope,
+      commitSha: snapshot.repository.commitSha,
+      oldCommits: existing.map((item) => ({ scope: item.scope, commitSha: item.manifest.commitSha })),
+      backups: []
+    };
+  }
+
+  const stageSuffix = randomBytes(8).toString('hex');
+  const projectStageRoot = scope === 'self' ? null : path.join(root, '.oasis-extension-stage-' + stageSuffix);
+  const configRoot = getConfigDirectory(env);
+  const configStageRoot = scope === 'project' ? null : path.join(configRoot, '.oasis-extension-stage-' + stageSuffix);
+  const stageEnv = configStageRoot ? { ...env, OASIS_CONFIG_DIR: configStageRoot } : env;
+  if (projectStageRoot) await mkdir(projectStageRoot, { recursive: false, mode: 0o700 });
+  if (configStageRoot) {
+    await mkdir(configRoot, { recursive: true, mode: 0o700 });
+    const info = await lstat(configRoot);
+    if (info.isSymbolicLink() || !info.isDirectory()) {
+      if (projectStageRoot) await rm(projectStageRoot, { recursive: true, force: true }).catch(() => {});
+      throw new Error('The Oasis configuration root must be a regular directory before extension update.');
+    }
+    try { await mkdir(configStageRoot, { recursive: false, mode: 0o700 }); }
+    catch (error) {
+      if (projectStageRoot) await rm(projectStageRoot, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  const moved = [];
+  const stagedByScope = {};
+  try {
+    await installGitHubExtension(rawUrl, {
+      root: projectStageRoot || root,
+      env: stageEnv,
+      scope,
+      expectedCommit: snapshot.repository.commitSha,
+      fetchImpl: options.fetchImpl
+    });
+    if (scope !== 'self') stagedByScope.project = path.join(projectStageRoot, '.oasis', 'extensions', extensionName);
+    if (scope !== 'project') stagedByScope.self = path.join(configStageRoot, 'extensions', extensionName);
+
+    for (const target of existing) {
+      await mkdir(target.parent, { recursive: true, mode: 0o700 });
+      const safetyRootReal = await realpath(target.safetyRoot);
+      const parentReal = await realpath(target.parent);
+      if (!inside(safetyRootReal, parentReal)) throw new Error('An extension destination escaped its permitted scope. Update was aborted.');
+      const historyRoot = path.join(target.parent, '.oasis-backups', extensionName);
+      await mkdir(historyRoot, { recursive: true, mode: 0o700 });
+      const historyRootReal = await realpath(historyRoot);
+      if (!inside(parentReal, historyRootReal)) throw new Error('The extension backup directory resolves outside its permitted parent.');
+      const backupName = target.manifest.commitSha.toLowerCase() + '-' + Date.now().toString(36) + '-' + randomBytes(3).toString('hex');
+      const backupPath = path.join(historyRootReal, backupName);
+      const swap = { target: target.absolute, backupPath, placed: false, previousMoved: false, scope: target.scope, previousCommit: target.manifest.commitSha };
+      moved.push(swap);
+      await rename(target.absolute, backupPath);
+      swap.previousMoved = true;
+      await rename(stagedByScope[target.scope], target.absolute);
+      swap.placed = true;
+    }
+  } catch (error) {
+    for (const swap of [...moved].reverse()) {
+      if (swap.placed) await rm(swap.target, { recursive: true, force: true }).catch(() => {});
+      if (swap.previousMoved) {
+        try {
+          if (!(await pathExists(swap.target))) await rename(swap.backupPath, swap.target);
+        } catch { /* A failed restore is surfaced through the original error; backup remains available. */ }
+      }
+    }
+    throw error;
+  } finally {
+    if (projectStageRoot) await rm(projectStageRoot, { recursive: true, force: true }).catch(() => {});
+    if (configStageRoot) await rm(configStageRoot, { recursive: true, force: true }).catch(() => {});
+  }
+
+  const backups = [];
+  for (const swap of moved) {
+    backups.push({ scope: swap.scope, commitSha: swap.previousCommit, path: swap.backupPath });
+    await pruneExtensionBackups(path.dirname(swap.backupPath), 3).catch(() => {});
+  }
+  return {
+    updated: true,
+    extensionName,
+    scope,
+    repository: snapshot.repository,
+    commitSha: snapshot.repository.commitSha,
+    oldCommits: moved.map((swap) => ({ scope: swap.scope, commitSha: swap.previousCommit })),
+    backups,
+    importedFiles: snapshot.candidates.length,
+    commands: snapshot.candidates.map((file) => nativeCommandDescriptor(file.path, snapshot.pathSet, safeSlug(snapshot.repository.fullName.replace('/', '-'), extensionName))).filter(Boolean)
+  };
+}
+
 export async function removeGitHubExtension(options = {}) {
   const scope = String(options.scope || '');
   const name = safeSlug(options.name, '');
