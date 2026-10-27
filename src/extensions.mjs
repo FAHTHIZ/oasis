@@ -81,7 +81,7 @@ async function getJson(fetchImpl, url) {
   catch { throw new Error('GitHub returned an invalid JSON response. Please retry.'); }
 }
 
-function isPromptCandidate(entry) {
+function isPromptCandidate(entry, options = {}) {
   if (!entry || entry.type !== 'blob' || entry.mode === '120000' || !Number.isFinite(Number(entry.size))) return false;
   const file = String(entry.path || '');
   if (!/\.md$/i.test(file) || Number(entry.size) < 1 || Number(entry.size) > MAX_FILE_BYTES) return false;
@@ -94,11 +94,16 @@ function isPromptCandidate(entry) {
   const portableSkillPath = normalized.match(/^(?:(?:\.agents|\.claude|\.codex)\/)?skills\/[^/]+\/(.+)$/i);
   if (portableSkillPath) return portableSkillPath[1].toLowerCase() === 'skill.md';
   if (/(^|\/)(?:references|assets|examples|templates)\//i.test(lower)) return false;
-  const clearlyAgentic = /(^|\/)(agents?|subagents?|skills?|personas?)(\/|$)/i.test(lower) ||
+  const nativeCommandMarkdown = /^(?:\.claude\/commands|\.gemini\/commands)\/.+\.md$/i.test(normalized) ||
+    (options.claudePlugin && /^commands\/.+\.md$/i.test(normalized)) ||
+    (options.geminiPlugin && /^commands\/.+\.md$/i.test(normalized));
+  const clearlyAgentic = /(^|\/)(?:agents?|subagents?|skills?|personas?)(\/|$)/i.test(lower) ||
     /(?:^|[-_.])(agent|persona|specialist|architect|engineer|developer|designer|strategist|researcher|analyst|reviewer|tester|writer|manager|expert)(?:[-_.]|$)/i.test(basename);
-  if (parts.length === 1 && !clearlyAgentic) return false;
-  if (/^(docs?|website|site|blog|examples?)\//i.test(normalized) && !clearlyAgentic) return false;
-  if (/^\.github\//i.test(normalized) && !clearlyAgentic) return false;
+  if (parts.length === 1 && !clearlyAgentic && !nativeCommandMarkdown) return false;
+  if (/^(docs?|website|site|blog|examples?)\//i.test(normalized) && !clearlyAgentic && !nativeCommandMarkdown) return false;
+  if (/^\.github\//i.test(normalized) && !clearlyAgentic && !nativeCommandMarkdown) return false;
+  if (/\/commands\//i.test('/' + normalized) && !nativeCommandMarkdown) return false;
+  if (nativeCommandMarkdown) return true;
   return true;
 }
 
@@ -127,7 +132,12 @@ export function selectPortableSkillResources(treeEntries, skillFilePath) {
 
 export function selectAgentPromptFiles(treeEntries) {
   if (!Array.isArray(treeEntries)) return [];
-  return treeEntries.filter(isPromptCandidate)
+  const paths = treeEntries.filter((entry) => entry && entry.type === 'blob').map((entry) => String(entry.path || '').replace(/\\/g, '/'));
+  const options = {
+    claudePlugin: paths.some((item) => item.toLowerCase() === '.claude-plugin/plugin.json'),
+    geminiPlugin: paths.some((item) => item.toLowerCase() === 'gemini-extension.json')
+  };
+  return treeEntries.filter((entry) => isPromptCandidate(entry, options))
     .sort((a, b) => String(a.path).localeCompare(String(b.path)))
     .slice(0, MAX_PROMPT_FILES)
     .map((entry) => ({ path: String(entry.path), sha: String(entry.sha || ''), size: Number(entry.size) }));
@@ -148,8 +158,8 @@ async function snapshotRepository(rawUrl, options = {}) {
   }
   const tree = await getJson(fetchImpl, GITHUB_API + '/repos/' + encodedOwner + '/' + encodedRepo + '/git/trees/' + commitSha + '?recursive=1');
   if (!Array.isArray(tree.tree)) throw new Error('GitHub did not return a repository tree that Oasis can inspect.');
-  const allCandidates = tree.tree.filter(isPromptCandidate);
   const candidates = selectAgentPromptFiles(tree.tree);
+  const allCandidates = candidates;
   const executableFiles = tree.tree.filter((entry) => entry && entry.type === 'blob' && /\.(?:mjs|cjs|js|jsx|ts|tsx|py|sh|ps1|bat|cmd|exe|dll)$/i.test(String(entry.path || ''))).length;
   const license = repository.license && (repository.license.spdx_id && repository.license.spdx_id !== 'NOASSERTION' ? repository.license.spdx_id : repository.license.name) || 'Unknown / not detected';
   return {
@@ -184,6 +194,11 @@ export function analyzeExtensionCompatibility(treeEntries) {
   const portableSkillPaths = matching(/(?:^|\/)SKILL\.md$/i).filter((item) => /(?:^|\/)(?:skills|\.agents\/skills|\.claude\/skills|\.codex\/skills)\//i.test(item));
   const agentPaths = matching(/(?:^|\/)(?:agents|\.claude\/agents|\.codex\/agents)\/[^/]+\.(?:md|ya?ml|toml)$/i);
   const commandPaths = matching(/(?:^|\/)(?:commands|\.claude\/commands|\.gemini\/commands)\/.+\.(?:md|toml)$/i);
+  const commandPromptPaths = commandPaths.filter((item) => /\.md$/i.test(item) && (
+    /^(?:\.claude\/commands|\.gemini\/commands)\//i.test(item) ||
+    (has('.claude-plugin/plugin.json') && /^commands\//i.test(item)) ||
+    (has('gemini-extension.json') && /^commands\//i.test(item))
+  ));
   const hookPaths = matching(/(?:^|\/)hooks(?:\/|\.json$)/i)
     .concat(paths.filter((item) => /(?:^|\/)\.(?:claude|gemini)\/settings\.json$/i.test(item)));
   const mcpPaths = matching(/(?:^|\/)(?:\.mcp\.json|mcp\.json|mcp-servers\.json)$/i);
@@ -207,7 +222,7 @@ export function analyzeExtensionCompatibility(treeEntries) {
   const components = [
     { id: 'skills', label: 'Agent Skills', count: skillPaths.length, status: skillPaths.length ? 'prompt-import' : 'not-found', detail: 'Skill instructions can be imported; bundled scripts, references and assets are not activated as a full skill package yet.' },
     { id: 'agents', label: 'Specialist agents', count: agentPaths.length, status: agentPaths.length ? 'prompt-import' : 'not-found', detail: 'Markdown agent prompts may be imported as skills; native delegation metadata and runtime settings are not preserved.' },
-    { id: 'commands', label: 'Custom commands', count: commandPaths.length, status: commandPaths.length ? 'detected-only' : 'not-found', detail: 'Command definitions are identified, but command aliases and ecosystem-specific argument semantics are not installed as native Oasis commands.' },
+    { id: 'commands', label: 'Custom commands', count: commandPaths.length, status: commandPromptPaths.length ? 'prompt-import' : (commandPaths.length ? 'detected-only' : 'not-found'), detail: commandPromptPaths.length ? 'Markdown command instructions can be imported as ordinary untrusted skill prompts; native slash-command aliases and argument semantics are not registered.' : 'Command definitions are identified, but native command aliases and ecosystem-specific argument semantics are not installed.' },
     { id: 'mcp', label: 'MCP declarations', count: mcpPaths.length, status: mcpPaths.length ? 'detected-only' : 'not-found', detail: 'MCP configuration is not enabled automatically. Review transport, command, arguments, environment and permissions in Oasis Integrations.' },
     { id: 'hooks', label: 'Lifecycle hooks', count: hookPaths.length, status: hookPaths.length ? 'detected-only' : 'not-found', detail: 'Hooks and their scripts are not copied, registered, or executed by this importer.' },
     { id: 'executables', label: 'Executable/source files', count: executableFiles, status: executableFiles ? 'not-imported' : 'not-found', detail: 'Code and installation scripts are never executed or installed by repository inspection.' }
@@ -243,7 +258,7 @@ export function analyzeExtensionCompatibility(treeEntries) {
       capabilities: [
         capability('skills', 'prompt-import', 'inspect-only', 'Markdown skill instructions can be imported as untrusted Oasis skill context.', 'Skill package requires a native adapter or has no supported skill files.'),
         capability('agents', 'prompt-import', 'inspect-only', 'Markdown agent instructions can be imported as untrusted prompt context; native delegation metadata is not preserved.', 'Native agent definitions are detected but not installed as native agents.'),
-        capability('commands', 'prompt-import', 'inspect-only', '', 'Command definitions are detected only; aliases and argument semantics are not active.'),
+        capability('commands', 'prompt-import', 'inspect-only', 'Markdown command instructions can be imported as untrusted prompt skills; slash-command aliases and argument semantics remain inactive.', 'Command definitions are detected only; aliases and argument semantics are not active.'),
         capability('mcp', 'prompt-import', 'review-required', '', 'MCP declarations require a separate human-reviewed configuration; they are not enabled by import.'),
         capability('hooks', 'prompt-import', 'unsupported', '', 'Lifecycle hooks and their executable code are not installed or run.')
       ]
@@ -255,7 +270,7 @@ export function analyzeExtensionCompatibility(treeEntries) {
       capabilities: [
         capability('skills', 'prompt-import', 'inspect-only', 'Portable Agent Skills instructions and bounded text resources can be imported.', 'Codex-specific skill behavior requires additional adapter support.'),
         capability('agents', 'prompt-import', 'inspect-only', 'Markdown agent instructions can be imported as untrusted prompt context.', 'Codex agent configuration is detected but not executed as a native agent.'),
-        capability('commands', 'prompt-import', 'inspect-only', '', 'Codex command/workflow semantics are not implemented by this adapter.'),
+        capability('commands', 'prompt-import', 'inspect-only', 'Markdown command instructions can be imported as untrusted prompts when included in a recognized package.', 'Codex command/workflow semantics are not implemented by this adapter.'),
         capability('mcp', 'prompt-import', 'review-required', '', 'MCP declarations require separate human review and explicit configuration.'),
         capability('hooks', 'prompt-import', 'unsupported', '', 'Executable lifecycle behavior is not imported or run.')
       ]
@@ -267,7 +282,7 @@ export function analyzeExtensionCompatibility(treeEntries) {
       capabilities: [
         capability('skills', 'prompt-import', 'inspect-only', 'Portable Agent Skills instructions can be imported when present.', 'Gemini-specific extension behavior requires its own adapter.'),
         capability('agents', 'prompt-import', 'inspect-only', 'Markdown agent instructions can be imported as untrusted prompt context.', 'Gemini agent definitions are detected but not activated.'),
-        capability('commands', 'prompt-import', 'inspect-only', '', 'Gemini command files are detected only; TOML command semantics are not installed.'),
+        capability('commands', 'prompt-import', 'inspect-only', 'Markdown command instructions can be imported as untrusted prompt skills; TOML command semantics remain inactive.', 'Gemini command files are detected only; TOML command semantics are not installed.'),
         capability('mcp', 'prompt-import', 'review-required', '', 'MCP declarations require separate human review and explicit configuration.'),
         capability('hooks', 'prompt-import', 'unsupported', '', 'Hooks and executable lifecycle behavior are not imported or run.')
       ]
