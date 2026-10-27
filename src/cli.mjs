@@ -216,6 +216,35 @@ async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
   stdout.write('The provider is verified. Oasis can now inspect workspaces and use approved tools.\n');
 }
+async function ensureModelProviderSetup(root, options = {}) {
+  let configured = false;
+  try { configured = Boolean((await loadConfig()).configured); } catch {}
+  if (configured) return true;
+  if (!stdin.isTTY || !stdout.isTTY) return false;
+
+  if (options.announce !== false) {
+    stdout.write('\nNo model connection is configured yet.\n');
+    stdout.write('Oasis can set one up now. OmniRoute is the recommended starting point if you do not already have a provider key; free routes depend on upstream availability and limits.\n');
+  }
+  let answer;
+  try { answer = (await askLine('Start guided setup now? [Y/n] ')).trim().toLowerCase(); }
+  catch { return false; }
+  if (['n', 'no', 'skip', 'later'].includes(answer)) {
+    stdout.write('Setup skipped. Run oasis setup later; install/startup is also available through the interactive terminal prompt.\n');
+    return false;
+  }
+  try {
+    await configureProvider(root, { defaultPreset: 'omniroute' });
+  } catch (error) {
+    stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Retry with oasis setup.\n');
+  }
+  try { return Boolean((await loadConfig()).configured); } catch { return false; }
+}
+
+function isOmniRouteSetupIntent(text) {
+  return /\b(?:install|setup|set\s*up|connect|use|switch|route)\b[\s\S]{0,120}\bomniroute\b/i.test(String(text || ''));
+}
+
 function commandAvailable(name) {
   const probe = process.platform === 'win32' ? 'where' : 'which';
   return spawnSync(probe, [name], { stdio: 'ignore', timeout: 1500, windowsHide: true }).status === 0;
