@@ -627,7 +627,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     const runner = modeOptions.planOnly ? runAgentPlan : runAgentTurn;
     const result = await runner(session, prompt, {
       autoApprove,
-      approval: (message) => approve(message, false, autoApprove),
+      approval: (message, forceInteractive = false) => approve(message, forceInteractive, autoApprove),
       onToolStart: ({ name }) => stdout.write('\n[tool] ' + name + '\n'),
       onToolResult: ({ name, result }) => {
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
