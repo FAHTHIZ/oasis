@@ -12,6 +12,7 @@ import { managePlugins } from './plugins.mjs';
 import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
+import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
@@ -45,6 +46,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'setup_omniroute', description: 'Install OmniRoute globally with npm if it is missing, start its local gateway if needed, verify real model tool calling without executing the probe, and switch Oasis to the gateway only after verification succeeds. Use when the user asks to install, set up, or connect OmniRoute. Installation, background startup, and configuration each require approval. Never assume a hosted provider or free quota is guaranteed.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
   { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to an existing supported provider preset and switch the current chat to it only after an inert tool-call probe succeeds. Presets: openai, anthropic, openrouter, gemini, ollama, omniroute. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable. For OmniRoute that is not running, use setup_omniroute.', parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'omniroute'] }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected external Agent Skill from a repository using the pinned Vercel Skills CLI. Copies only the universal Agent Skills package; does not activate hooks, run skill scripts, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'configure_mcp_server', description: 'Configure and start a local stdio MCP server, then expose its tools in the current chat session. Requires manual approval even when --yes is active. The command, arguments, and environment-variable names are shown for review; never pass secret values in arguments.', parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 40, description: 'Unique lowercase server name using letters, digits, hyphens, or underscores.' }, command: { type: 'string', maxLength: 500, description: 'Single executable, such as npx or a locally installed executable; no shell syntax.' }, args: { type: 'array', maxItems: 80, items: { type: 'string', maxLength: 5000 }, description: 'Argument vector passed directly without shell expansion.' }, passEnv: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Explicit environment variable names to expose to this server; values must be configured locally, never supplied in chat.' } }, required: ['name', 'command'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
@@ -353,7 +355,7 @@ async function runInstallPlan(plan, options) {
 
 
 const OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128/v1';
-const OMNIROUTE_DASHBOARD_URL = 'http://127.0.0.1:20128/';
+const OMNIROUTE_DASHBOARD_URL = 'http://127.0.0.1:20128/dashboard';
 const VERCEL_SKILLS_PACKAGE = 'skills@1.7.4';
 
 function providerEnvironmentOverridesActive(env) {
@@ -601,6 +603,76 @@ async function setupOmniRoute(args, context, root) {
   return await saveVerifiedProvider('omniroute', {
     protocol: 'openai-compatible', baseURL, model: 'auto', apiKey
   }, context).then((result) => ({ ...result, installed, started, dashboard: OMNIROUTE_DASHBOARD_URL }));
+}
+
+async function configureMcpServer(args, context, root) {
+  const env = context.env || process.env;
+  const name = String(args.name || '').trim();
+  const command = String(args.command || '').trim();
+  const candidate = validateMcpServerConfig({
+    name,
+    command,
+    args: args.args === undefined ? [] : args.args,
+    passEnv: args.passEnv === undefined ? [] : args.passEnv,
+    enabled: true
+  });
+  const existing = await loadMcpServers({ env });
+  if (existing.servers.some((server) => server.name === candidate.name)) {
+    return {
+      configured: false,
+      name: candidate.name,
+      message: 'An MCP server named "' + candidate.name + '" is already configured. Choose a new name or remove the existing server first; Oasis did not replace it.'
+    };
+  }
+  if (existing.servers.length >= 40) throw new Error('Oasis already has 40 configured MCP servers; remove one before adding another.');
+  if (!context.session || !(context.session.mcpClients instanceof Map)) {
+    throw new Error('An active Oasis session is required to add an MCP server from chat.');
+  }
+  const summary = [
+    'Configure and start this stdio MCP server now?',
+    'Name: ' + candidate.name,
+    'Executable: ' + candidate.command,
+    'Arguments: ' + JSON.stringify(candidate.args),
+    'Explicit environment passthrough: ' + (candidate.passEnv.join(', ') || 'none'),
+    'Oasis will launch this third-party process under your user account, save the configuration outside the repository, and expose its discovered tools in this chat.',
+    'The server may read or change data available to your OS account. Secret values are not stored in this configuration and must be set in your local environment.'
+  ].join('\n');
+  // MCP activation always needs a conscious approval, even when the general
+  // command runner was launched with --yes.
+  if (!context.approval || !(await context.approval(summary, true))) {
+    return { configured: false, approved: false, name: candidate.name, message: 'MCP setup was denied; no process was started and configuration was not changed.' };
+  }
+  if (context.signal && context.signal.aborted) {
+    return { configured: false, cancelled: true, name: candidate.name, message: 'MCP setup was cancelled before the server started.' };
+  }
+
+  const client = new McpServerClient(candidate, { root, env });
+  let configPath;
+  try {
+    // Start and validate the MCP handshake before making this configuration
+    // persistent. If the server cannot initialize, the old config is untouched.
+    await client.start();
+    configPath = await saveMcpServers([...existing.servers, candidate], { env });
+  } catch (error) {
+    client.close();
+    throw new Error('MCP server "' + candidate.name + '" was not added because startup or configuration failed: ' +
+      String(error && error.message || error).slice(0, 1400) + '. The previous MCP configuration was preserved.');
+  }
+
+  context.session.mcpClients.set(candidate.name, client);
+  const dynamic = mcpToolDefinitions(context.session.mcpClients);
+  context.session.mcpToolMap = dynamic.map;
+  context.session.toolDefinitions = TOOL_DEFINITIONS.concat(dynamic.definitions);
+  return {
+    configured: true,
+    activated: true,
+    name: candidate.name,
+    command: candidate.command,
+    toolCount: client.tools.length,
+    tools: client.tools.map((tool) => String(tool.name)).slice(0, 80),
+    configPath,
+    message: 'The MCP server started successfully and its tools are available in this chat session. It will also start in future sessions until you disable or remove it. Inspect every exposed tool before approving its use.'
+  };
 }
 
 function validExternalSkillSource(raw) {
@@ -1130,6 +1202,8 @@ export async function executeTool(name, args = {}, context = {}) {
       return await configureProviderFromChat(args, context);
     case 'install_external_skill':
       return await installExternalSkill(args, context, root);
+    case 'configure_mcp_server':
+      return await configureMcpServer(args, context, root);
     case 'install_extension': {
       const url = String(args.url || '').trim();
       const scope = String(args.scope || 'project');
