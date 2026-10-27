@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { loadConfig, saveConfig, validateBaseUrl, getConfigPath, isNodeVersionSupported, resolveSetupProviderPreset } from '../src/config.mjs';
+import { loadConfig, saveConfig, validateBaseUrl, getConfigPath, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { TOOL_DEFINITIONS, executeTool, updateTodos, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
 import { microcompact, estimateTokens, contextWindowSize } from '../src/context.mjs';
@@ -33,6 +33,19 @@ test('fresh provider setup defaults to OmniRoute but honors explicit valid prese
   assert.equal(resolveSetupProviderPreset('openai'), 'openai');
   assert.equal(resolveSetupProviderPreset(' Anthropic '), 'anthropic');
   assert.equal(resolveSetupProviderPreset('OLLAMA'), 'ollama');
+  assert.equal(resolveSetupProviderPreset('invalid', 'openrouter'), 'openrouter');
+});
+
+test('setup prompt preserves a configured provider but defaults fresh config to OmniRoute', () => {
+  assert.equal(inferSetupProviderPreset(null), 'omniroute');
+  assert.equal(inferSetupProviderPreset({ configured: false, protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1' }), 'omniroute');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1' }), 'openai');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'anthropic', baseURL: 'https://api.anthropic.com' }), 'anthropic');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1' }), 'openrouter');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' }), 'gemini');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1' }), 'omniroute');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1' }), 'ollama');
+  assert.equal(inferSetupProviderPreset({ configured: true, protocol: 'openai-compatible', baseURL: 'https://models.example.net/v1' }), 'custom');
 });
 
 test('Node support diagnostics match the package engine requirement', () => {
