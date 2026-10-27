@@ -7,7 +7,7 @@ Oasis has a local-first browser workspace and a separate terminal agent runtime.
 - \`src/cli.mjs\` is the command-line entry point exposed by the \`oasis\` executable in \`package.json\`.
 - \`src/config.mjs\` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
 - src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage. Long histories are compacted between turns using a tool-free model summary, with a deterministic bounded fallback if summarization fails.
-- src/tools.mjs exposes file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching.
+- src/tools.mjs exposes read-only Git status/diff inspection, file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching. Whole-worktree diffs exclude common secret-bearing paths; explicitly scoped paths pass through workspace/sensitive-path checks.
 - \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
 - \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
 - src/eval.mjs runs reference tasks in disposable copies, captures token/time/cost estimates, and stores JSON results. evals/tasks/<id>/ keeps the task prompt, pre-change snapshot, patch, and verifier outside the agent's workspace.
@@ -36,7 +36,7 @@ The root \`index.html\` provides a dependency-free dashboard for projects, tasks
 - \`test/runtime.test.mjs\`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
 - test/eval.test.mjs covers task validation and a model run against a local OpenAI-compatible fixture server.
 - \`.github/workflows/quality.yml\`: runs the checks and package dry-run for pushes and pull requests.
-- The quality gate also runs oasis eval --validate to ensure each reference patch turns a failing no-op verifier into a passing verification.
+- The agent also has a read-only plan mode (`oasis plan` or `/plan`) with a separate tool allowlist and an executor-side check against write/command/install/delete/MCP calls. The quality gate runs `oasis eval --validate` to ensure each reference patch turns a failing no-op verifier into a passing verification.
 - \`.github/workflows/pages.yml\`: checks the repository and deploys the static site when GitHub Pages is configured.
 
 ## Current architectural gaps
