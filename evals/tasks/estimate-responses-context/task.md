@@ -1,1 +1,2 @@
-Fix estimateTokens(message) so OpenAI Responses API history is included in the context estimate. When responseItems is present, estimate from its serialized representation; otherwise estimate from string or array content. Use four characters per token, rounded up.
+Create src/lib.mjs exporting estimateTokens(...) to solve this task: Estimate context size from serialized Responses API responseItems when present; otherwise use string or array message content. Use four characters per token rounded up.
+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.
