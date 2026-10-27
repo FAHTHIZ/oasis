@@ -18,7 +18,8 @@
     "LICENSE",
     "SECURITY.md",
     "CONTRIBUTING.md",
-    "docs/"
+    "docs/",
+    "evals/"
   ],
   "scripts": {
     "test": "node --test",
