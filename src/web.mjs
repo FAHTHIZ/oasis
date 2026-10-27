@@ -1,13 +1,13 @@
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, getProviderSummary } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
-import { executeTool } from './tools.mjs';
+import { executeTool, resolveWorkspacePath } from './tools.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
@@ -91,6 +91,7 @@ function newJob() {
 
 export function createOasisWebServer(options = {}) {
   const root = path.resolve(options.root || process.cwd());
+  let activeRoot = root;
   const env = options.env || process.env;
   const token = options.token || randomBytes(32).toString('base64url');
   const activeSessions = new Map();
@@ -153,13 +154,14 @@ export function createOasisWebServer(options = {}) {
       throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
     }
     let session = sessionId ? activeSessions.get(sessionId) : null;
+    if (session && path.resolve(session.root) !== activeRoot) session = null;
     if (sessionId && !session) {
-      const restore = await loadSession(root, sessionId, { env });
-      session = await createSession({ root, config, restore });
+      const restore = await loadSession(activeRoot, sessionId, { env });
+      session = await createSession({ root: activeRoot, config, restore });
       activeSessions.set(sessionId, session);
     }
     if (!session) {
-      session = await createSession({ root, config });
+      session = await createSession({ root: activeRoot, config });
       const temporaryId = randomUUID();
       session.sessionId = temporaryId;
       activeSessions.set(temporaryId, session);
@@ -202,6 +204,126 @@ export function createOasisWebServer(options = {}) {
   }
 
 
+
+  async function runReadOnlyGh(args, timeoutSeconds = 30) {
+    return await executeTool('run_command', { command: 'gh', args, timeoutSeconds }, {
+      root: activeRoot,
+      env,
+      autoApprove: true,
+      maxCommandSeconds: timeoutSeconds
+    });
+  }
+
+  async function getGithubStatus() {
+    const result = await runReadOnlyGh(['auth', 'status', '--hostname', 'github.com'], 20);
+    if (result.error) {
+      return { cliAvailable: false, authenticated: false, account: null, hint: 'GitHub CLI (gh) is not available in this runtime. Install GitHub CLI on the computer running oasis web, then reconnect.' };
+    }
+    const output = String(result.stdout || '') + '\\n' + String(result.stderr || '');
+    const accountMatch = output.match(/Logged in to github\\.com account ([^\\s(]+)/i);
+    const authenticated = result.exitCode === 0;
+    return {
+      cliAvailable: true,
+      authenticated,
+      account: authenticated && accountMatch ? accountMatch[1].slice(0, 100) : null,
+      hint: authenticated ? 'GitHub CLI authentication is available.' : 'Run gh auth login in the terminal on the computer running Oasis, then refresh this status.'
+    };
+  }
+
+  async function getGithubRepos() {
+    const status = await getGithubStatus();
+    if (!status.cliAvailable) throw Object.assign(new Error(status.hint), { statusCode: 412 });
+    if (!status.authenticated) throw Object.assign(new Error(status.hint), { statusCode: 412 });
+    const args = [
+      'api', 'user/repos?per_page=30&sort=updated',
+      '--jq', '[.[] | {nameWithOwner: .full_name, name: .name, url: .html_url, isPrivate: .private}]'
+    ];
+    const result = await runReadOnlyGh(args, 30);
+    if (result.error || result.exitCode !== 0) {
+      throw Object.assign(new Error('Could not list GitHub repositories. ' + String(result.stderr || result.error || result.stdout || 'GitHub CLI request failed').slice(0, 1800)), { statusCode: 502 });
+    }
+    let repositories;
+    try { repositories = JSON.parse(result.stdout || '[]'); }
+    catch { throw Object.assign(new Error('GitHub CLI returned invalid repository JSON. Update GitHub CLI and try again.'), { statusCode: 502 }); }
+    if (!Array.isArray(repositories)) throw Object.assign(new Error('GitHub CLI returned an unexpected repository list.'), { statusCode: 502 });
+    return { repositories: repositories.filter((repo) => repo && typeof repo.nameWithOwner === 'string').slice(0, 30), source: 'GitHub CLI', limit: 30 };
+  }
+
+  async function startGithubCloneJob(input) {
+    const repository = String(input.repository || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) {
+      throw Object.assign(new Error('Choose a repository in owner/name format from the GitHub list.'), { statusCode: 400 });
+    }
+    const status = await getGithubStatus();
+    if (!status.cliAvailable || !status.authenticated) throw Object.assign(new Error(status.hint), { statusCode: 412 });
+    if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
+      throw Object.assign(new Error('Wait until the current agent or terminal task finishes before switching workspaces.'), { statusCode: 409 });
+    }
+
+    const [owner, name] = repository.split('/');
+    const relative = '.oasis/workspaces/' + owner + '--' + name;
+    const resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+    try {
+      await access(resolved.absolute);
+      const check = await executeTool('run_command', {
+        command: 'git',
+        args: ['-C', resolved.absolute, 'remote', 'get-url', 'origin'],
+        timeoutSeconds: 10
+      }, { root, env, autoApprove: true, maxCommandSeconds: 10 });
+      const remote = String(check.stdout || '').trim().replace(/\\.git$/i, '').replace(/\\/$/, '');
+      const expected = 'https://github.com/' + repository;
+      const ssh = 'git@github.com:' + repository;
+      if (check.exitCode !== 0 || (remote.toLowerCase() !== expected.toLowerCase() && remote.toLowerCase() !== ssh.toLowerCase())) {
+        throw Object.assign(new Error('The destination workspace already exists but its GitHub origin does not match ' + repository + '. No files were changed.'), { statusCode: 409 });
+      }
+      activeRoot = resolved.absolute;
+      return { reused: true, workspaceName: path.basename(activeRoot), workspacePath: activeRoot };
+    } catch (error) {
+      if (error.statusCode) throw error;
+      if (error.code !== 'ENOENT') throw error;
+    }
+
+    pruneJobs();
+    const job = newJob();
+    job.type = 'github-clone';
+    jobs.set(job.id, job);
+    emit(job, 'github_clone_started', { repository });
+    void (async () => {
+      try {
+        const approved = await approvalFor(job,
+          'Clone GitHub repository ' + repository + ' into the Oasis-managed workspace ' + relative + '? This downloads repository files but does not run its scripts. Inspect repository contents before running project commands.');
+        if (!approved) {
+          job.result = { approved: false, repository, message: 'Clone was denied. No repository was downloaded.' };
+          job.status = 'completed';
+          emit(job, 'completed', job.result);
+          return;
+        }
+        await mkdir(path.dirname(resolved.absolute), { recursive: true });
+        const safe = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+        const result = await executeTool('run_command', {
+          command: 'gh',
+          args: ['repo', 'clone', repository, safe.absolute],
+          timeoutSeconds: 600
+        }, { root, env, autoApprove: true, maxCommandSeconds: 600 });
+        const output = [result.stdout || '', result.stderr ? '\\n' + result.stderr : '', result.error ? '\\n' + result.error : ''].join('').slice(-12000);
+        if (result.exitCode === 0 && !result.error) {
+          activeRoot = safe.absolute;
+          job.result = { approved: true, repository, exitCode: 0, workspaceName: path.basename(activeRoot), workspacePath: activeRoot };
+        } else {
+          job.result = { approved: true, repository, exitCode: result.exitCode, output, error: result.error || null, message: 'Clone failed; the active workspace was not changed.' };
+        }
+        emit(job, 'github_clone_result', { ...job.result, output: output || undefined });
+        job.status = 'completed';
+        emit(job, 'completed', job.result);
+      } catch (error) {
+        job.error = String(error && error.message || error || 'GitHub clone failed').slice(0, 4000);
+        job.status = 'error';
+        emit(job, 'failed', { jobType: 'github-clone', message: job.error });
+      }
+    })();
+    return { jobId: job.id, jobType: 'github-clone' };
+  }
+
   async function startTerminalJob(input) {
     const command = String(input.command || '').trim();
     if (!command || command.length > 200 || command.includes('\\0')) {
@@ -223,7 +345,7 @@ export function createOasisWebServer(options = {}) {
     void (async () => {
       try {
         const result = await executeTool('run_command', { command, args, timeoutSeconds }, {
-          root,
+          root: activeRoot,
           env,
           autoApprove: false,
           maxCommandSeconds: timeoutSeconds,
@@ -297,7 +419,8 @@ export function createOasisWebServer(options = {}) {
         connected: true,
         providerConfigured,
         provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, authentication: provider.authentication } : null,
-        workspaceName: path.basename(root),
+        workspaceName: path.basename(activeRoot),
+        workspacePath: activeRoot,
         workspaceAccess: 'local-filesystem',
         approvalMode: 'per-action',
         setupHint
@@ -306,14 +429,14 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'GET' && pathname === '/api/sessions') {
-      json(res, 200, { sessions: await listSessions(root, { env }) });
+      json(res, 200, { sessions: await listSessions(activeRoot, { env }) });
       return;
     }
 
     const sessionMatch = pathname.match(/^\/api\/sessions\/([a-f0-9-]{20,80})$/i);
     if (req.method === 'GET' && sessionMatch) {
       const id = sessionMatch[1];
-      const saved = await loadSession(root, id, { env });
+      const saved = await loadSession(activeRoot, id, { env });
       const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim())
         .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
       json(res, 200, { id, updatedAt: saved.updatedAt, messages });
