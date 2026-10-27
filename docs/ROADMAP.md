@@ -40,8 +40,9 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 ## Milestone 2 — provider and tool ecosystem
 
 - **Current extension gap:** the GitHub importer remains a Markdown-prompt importer. Its compatibility inventory detects common Agent Skills layouts and Claude Code, Codex, and Gemini CLI markers, then reports commands, MCP declarations, hooks, and executable files separately. Detection is not a runtime adapter and does not activate those features.
-- **Progress:** portable Agent Skills now preserve bounded text references/assets and expose them through manifest-verified, traversal-safe read access; scripts remain inactive.
-- **Next extension runtime work:** define a stable adapter contract and handle plugin manifests and MCP declarations through reviewable install plans. Keep hooks and executable lifecycle actions disabled until sandboxing, permission grants, cancellation, audit logs, and rollback are in place.
+- **Progress:** portable Agent Skills preserve bounded text references/assets and expose them through manifest-verified, traversal-safe read access; scripts remain inactive.
+- **Progress:** extension inspection now emits a versioned, normalized adapter/install plan for detected Claude Code, Codex, Gemini CLI, and portable Agent Skills layouts. Each capability is explicitly classified as supported, inspect-only, review-required, unsupported, or not detected. The CLI prints the plan before install approval.
+- **Next extension runtime work:** implement one native adapter at a time against this contract, starting with the most portable skills/commands subset; handle MCP declarations through a reviewable install plan. Keep hooks and executable lifecycle actions disabled until sandboxing, permission grants, cancellation, audit logs, and rollback are in place.
 
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.

@@ -212,10 +212,81 @@ export function analyzeExtensionCompatibility(treeEntries) {
     { id: 'hooks', label: 'Lifecycle hooks', count: hookPaths.length, status: hookPaths.length ? 'detected-only' : 'not-found', detail: 'Hooks and their scripts are not copied, registered, or executed by this importer.' },
     { id: 'executables', label: 'Executable/source files', count: executableFiles, status: executableFiles ? 'not-imported' : 'not-found', detail: 'Code and installation scripts are never executed or installed by repository inspection.' }
   ];
+  const detectedIds = new Set(formats.filter((item) => item.detected).map((item) => item.id));
+  const componentById = new Map(components.map((item) => [item.id, item]));
+  const capability = (id, supportedStatus, unsupportedStatus, supportedDetail, unsupportedDetail) => {
+    const item = componentById.get(id);
+    if (!item || !item.count) return { id, status: 'not-detected', count: 0, detail: 'No matching files were found.' };
+    const supported = item.status === supportedStatus;
+    return {
+      id,
+      status: supported ? 'supported' : unsupportedStatus,
+      count: item.count,
+      detail: supported ? supportedDetail : unsupportedDetail
+    };
+  };
+  // Every ecosystem is normalized to the same capability vocabulary. Detection never
+  // activates code: "inspect-only" means the adapter has not implemented execution.
+  const adapterPlan = [
+    {
+      id: 'portable-agent-skills',
+      label: 'Portable Agent Skills',
+      detected: detectedIds.has('agent-skills'),
+      capabilities: [
+        capability('skills', 'prompt-import', 'inspect-only', 'Skill instructions and bounded text references/assets can be imported with integrity checks.', 'Skill instructions are detected, but this layout is not fully supported by the current importer.')
+      ]
+    },
+    {
+      id: 'claude-code',
+      label: 'Claude Code',
+      detected: detectedIds.has('claude-code'),
+      capabilities: [
+        capability('skills', 'prompt-import', 'inspect-only', 'Markdown skill instructions can be imported as untrusted Oasis skill context.', 'Skill package requires a native adapter or has no supported skill files.'),
+        capability('agents', 'prompt-import', 'inspect-only', 'Markdown agent instructions can be imported as untrusted prompt context; native delegation metadata is not preserved.', 'Native agent definitions are detected but not installed as native agents.'),
+        capability('commands', 'prompt-import', 'inspect-only', '', 'Command definitions are detected only; aliases and argument semantics are not active.'),
+        capability('mcp', 'prompt-import', 'review-required', '', 'MCP declarations require a separate human-reviewed configuration; they are not enabled by import.'),
+        capability('hooks', 'prompt-import', 'unsupported', '', 'Lifecycle hooks and their executable code are not installed or run.')
+      ]
+    },
+    {
+      id: 'codex',
+      label: 'Codex',
+      detected: detectedIds.has('codex'),
+      capabilities: [
+        capability('skills', 'prompt-import', 'inspect-only', 'Portable Agent Skills instructions and bounded text resources can be imported.', 'Codex-specific skill behavior requires additional adapter support.'),
+        capability('agents', 'prompt-import', 'inspect-only', 'Markdown agent instructions can be imported as untrusted prompt context.', 'Codex agent configuration is detected but not executed as a native agent.'),
+        capability('commands', 'prompt-import', 'inspect-only', '', 'Codex command/workflow semantics are not implemented by this adapter.'),
+        capability('mcp', 'prompt-import', 'review-required', '', 'MCP declarations require separate human review and explicit configuration.'),
+        capability('hooks', 'prompt-import', 'unsupported', '', 'Executable lifecycle behavior is not imported or run.')
+      ]
+    },
+    {
+      id: 'gemini-cli',
+      label: 'Gemini CLI',
+      detected: detectedIds.has('gemini-cli'),
+      capabilities: [
+        capability('skills', 'prompt-import', 'inspect-only', 'Portable Agent Skills instructions can be imported when present.', 'Gemini-specific extension behavior requires its own adapter.'),
+        capability('agents', 'prompt-import', 'inspect-only', 'Markdown agent instructions can be imported as untrusted prompt context.', 'Gemini agent definitions are detected but not activated.'),
+        capability('commands', 'prompt-import', 'inspect-only', '', 'Gemini command files are detected only; TOML command semantics are not installed.'),
+        capability('mcp', 'prompt-import', 'review-required', '', 'MCP declarations require separate human review and explicit configuration.'),
+        capability('hooks', 'prompt-import', 'unsupported', '', 'Hooks and executable lifecycle behavior are not imported or run.')
+      ]
+    }
+  ].filter((adapter) => adapter.detected);
+  const installPlan = {
+    schemaVersion: 1,
+    mode: 'review-before-install',
+    supported: ['markdown-prompts', 'portable-agent-skill-text-resources'],
+    reviewRequired: ['mcp-declarations'],
+    inactive: ['native-command-semantics', 'lifecycle-hooks', 'scripts-and-dependencies', 'plugin-ui-and-provider-specific-runtime'],
+    adapters: adapterPlan,
+    note: 'This plan describes current Oasis behavior. Detection is not activation; all imported instructions remain untrusted.'
+  };
   return {
     primaryFormat,
     formats,
     components,
+    installPlan,
     importablePromptFiles: promptFiles.length,
     supportedNow: ['Markdown skill/agent instructions as untrusted prompt context'],
     notActivated: ['MCP server declarations', 'lifecycle hooks', 'executable code and dependencies', 'plugin-specific APIs and custom UI'],

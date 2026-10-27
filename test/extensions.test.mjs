@@ -187,6 +187,14 @@ test('compatibility inventory recognizes Claude Code, Codex, Gemini CLI and port
   assert.equal(result.components.find((item) => item.id === 'executables').count, 1);
   assert.ok(result.notActivated.some((item) => /hooks/i.test(item)));
   assert.match(result.warning, /not runtime compatibility/i);
+  assert.equal(result.installPlan.schemaVersion, 1);
+  assert.equal(result.installPlan.mode, 'review-before-install');
+  const claudeAdapter = result.installPlan.adapters.find((item) => item.id === 'claude-code');
+  assert.ok(claudeAdapter);
+  assert.equal(claudeAdapter.capabilities.find((item) => item.id === 'skills').status, 'supported');
+  assert.equal(claudeAdapter.capabilities.find((item) => item.id === 'commands').status, 'inspect-only');
+  assert.equal(claudeAdapter.capabilities.find((item) => item.id === 'mcp').status, 'review-required');
+  assert.equal(claudeAdapter.capabilities.find((item) => item.id === 'hooks').status, 'unsupported');
   const codex = analyzeExtensionCompatibility([
     { path: '.codex-plugin/plugin.json', type: 'blob', mode: '100644', size: 100, sha: 'a' },
     { path: '.agents/skills/repo-guide/SKILL.md', type: 'blob', mode: '100644', size: 100, sha: 'b' }

@@ -579,6 +579,13 @@ async function manageExternalExtensions(root, args, autoApprove) {
     stdout.write('Importable Markdown prompts: ' + report.importCount + (report.limited ? ' (bounded selection)' : '') + '\n');
     stdout.write('Executable/source files detected (not imported): ' + report.executableFilesDetected + '\n');
     stdout.write('Policy: ' + report.executionPolicy + '\n');
+    stdout.write('\nNormalized adapter plan (detection does not activate features):\n');
+    for (const adapter of report.compatibility.installPlan.adapters) {
+      stdout.write('  ' + adapter.label + '\n');
+      for (const item of adapter.capabilities) {
+        stdout.write('    ' + item.id + ': ' + item.status + ' (' + item.count + ') — ' + item.detail + '\n');
+      }
+    }
     stdout.write('\nSample of prompt paths:\n');
     for (const file of report.files.slice(0, 30)) stdout.write('  ' + file.path + '\n');
     return;
