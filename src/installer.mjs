@@ -16,7 +16,7 @@ const SYSTEM_ALIASES = new Map([
 export function normalizePackageName(raw) {
   const name = String(raw || '').trim().replace(/^["']|["']$/g, '');
   if (!name || name.length > 180) throw new Error('Provide one package name between 1 and 180 characters.');
-  if (name.includes(String.fromCharCode(96)) || /^[\-./]|[\s;&|$<>\\]/.test(name) || /(^|\/)\.\.?($|\/)/.test(name)) {
+  if (/^(?:https?:|git\+|file:|ssh:)/i.test(name) || name.includes(':') || name.includes(String.fromCharCode(96)) || /^[\-./]|[\s;&|$<>\\]/.test(name) || /(^|\/)\.\.?($|\/)/.test(name)) {
     throw new Error('Package names must be a single package identifier, not a command or a path.');
   }
   return name;
