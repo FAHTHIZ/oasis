@@ -6,7 +6,7 @@ import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/p
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported } from './config.mjs';
 import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
@@ -134,7 +134,23 @@ async function askSecret(question) {
   });
 }
 
-async function configureProvider(root = process.cwd()) {
+async function configureOmniRoute(root = process.cwd()) {
+  const runSetup = (localApiKey = '') => executeTool('setup_omniroute', localApiKey ? { localApiKey } : {}, {
+    root, env: process.env, autoApprove: false,
+    approval: (message) => approve(message, true, false)
+  });
+  let result = await runSetup();
+  if (!result.connected && result.needsLocalApiKey) {
+    const localApiKey = await askSecret('OmniRoute local endpoint key (input hidden; leave blank if your gateway does not require one): ');
+    if (localApiKey) result = await runSetup(localApiKey);
+  }
+  stdout.write((result.message || 'OmniRoute setup did not complete.') + '\n');
+  if (result.connected) stdout.write('OmniRoute tool calling was verified; Oasis is now connected to model "auto".\n');
+  else stdout.write('The previous provider configuration was left unchanged. Resolve the message above and retry oasis setup.\n');
+  return result;
+}
+
+async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
   stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, and local Ollama.\n');
   const rl = createInterface({ input: stdin, output: stdout });
@@ -148,7 +164,9 @@ async function configureProvider(root = process.cwd()) {
     omniroute: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', model: 'auto' }
   };
   try {
-    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / custom] (default openai): ')).trim().toLowerCase() || 'openai';
+    const allowedDefault = ['omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'custom'];
+    const defaultPreset = allowedDefault.includes(options.defaultPreset) ? options.defaultPreset : 'openai';
+    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
@@ -166,21 +184,7 @@ async function configureProvider(root = process.cwd()) {
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
   } finally { rl.close(); }
-  if (presetName === 'omniroute') {
-    const runSetup = (localApiKey = '') => executeTool('setup_omniroute', localApiKey ? { localApiKey } : {}, {
-      root, env: process.env, autoApprove: false,
-      approval: (message) => approve(message, true, false)
-    });
-    let result = await runSetup();
-    if (!result.connected && result.needsLocalApiKey) {
-      const localApiKey = await askSecret('OmniRoute local endpoint key (input hidden; leave blank if your gateway does not require one): ');
-      if (localApiKey) result = await runSetup(localApiKey);
-    }
-    stdout.write((result.message || 'OmniRoute setup did not complete.') + '\n');
-    if (result.connected) stdout.write('OmniRoute tool calling was verified; Oasis is now connected to model "auto".\n');
-    else stdout.write('The previous provider configuration was left unchanged. Resolve the message above and retry oasis setup.\n');
-    return result;
-  }
+  if (presetName === 'omniroute') return await configureOmniRoute(root);
   protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
   const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
@@ -216,7 +220,7 @@ function commandAvailable(name) {
 async function doctor(args = []) {
   stdout.write('Oasis environment report\n');
   stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
-  stdout.write('  Node.js: ' + process.version + (Number(process.versions.node.split('.')[0]) >= 20 ? ' (supported)' : ' (requires Node 20+)') + '\n');
+  stdout.write('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
   const probes = ['git', 'npm', 'python3', 'python', 'pipx', 'pkg', 'apt-get', 'dnf', 'pacman', 'brew', 'winget', 'ollama'];
   for (const item of probes) stdout.write('  ' + item + ': ' + (commandAvailable(item) ? 'available' : 'not found') + '\n');
   try {
