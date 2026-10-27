@@ -11,7 +11,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Shipped foundations
 
-- Chat-native provider setup: the agent can install/start a local OmniRoute gateway only after approval, test an inert tool call, and switch the saved provider after verification. Conversational installs of selected Vercel Agent Skills are also supported; imported instructions remain untrusted and scripts/hooks stay inactive.
+- Chat-native setup tools for OmniRoute and existing provider presets, selected external Vercel Agent Skills, and stdio MCP servers. OmniRoute is probed before provider switching; MCP server commands require dedicated manual approval, a successful handshake, and live tool-map refresh in the current session.
 
 - Read-only Git status/diff tools with common secret-path exclusions, plus plan mode that only exposes read-only tools and independently blocks non-read-only calls.
 
@@ -21,7 +21,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Service-worker exclusion for `/api/*` so authenticated runtime responses are never cached.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
-- MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
+- MCP stdio configuration through both CLI and chat, tool discovery/calling, explicit per-call approval, and live registration of a newly approved MCP server in the current session.
 - Bounded project file listing, glob search, ranged reads, exact-string patch editing, write/delete tools, and workspace/secret-path protections.
 - Optional workspace-scoped session persistence, on-demand skill loading, and between-turn history compaction with a bounded deterministic fallback.
 - Token and tool-call budgets, parallel read-only calls, and sequential handling of side effects.
