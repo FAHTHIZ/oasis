@@ -4,8 +4,8 @@ import os from 'node:os';
 
 export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
-export const DEFAULT_MODEL = 'gpt-4.1';
-export const DEFAULT_PROTOCOL = 'openai-compatible';
+export const DEFAULT_MODEL = 'gpt-6.1-sol';
+export const DEFAULT_PROTOCOL = 'openai-responses';
 
 export function getConfigDirectory(env = process.env, home = os.homedir()) {
   if (env.OASIS_CONFIG_DIR) return path.resolve(env.OASIS_CONFIG_DIR);
@@ -29,14 +29,15 @@ export function inferProtocol(baseURL, fallback = DEFAULT_PROTOCOL) {
   try {
     const host = new URL(baseURL).hostname.toLowerCase();
     if (host === 'api.anthropic.com' || host.endsWith('.anthropic.com')) return 'anthropic';
-  } catch {}
-  return fallback;
+    if (host === 'api.openai.com') return 'openai-responses';
+    return fallback === 'openai-responses' ? 'openai-compatible' : fallback;
+  } catch { return fallback; }
 }
 
 export function validateProtocol(raw) {
   const protocol = String(raw || DEFAULT_PROTOCOL).trim().toLowerCase();
-  if (!['openai-compatible', 'anthropic'].includes(protocol)) {
-    throw new Error('Provider protocol must be openai-compatible or anthropic.');
+  if (!['openai-responses', 'openai-compatible', 'anthropic'].includes(protocol)) {
+    throw new Error('Provider protocol must be openai-responses, openai-compatible, or anthropic.');
   }
   return protocol;
 }
@@ -82,7 +83,7 @@ export async function loadConfig(options = {}) {
   const protocol = validateProtocol(requestedProtocol);
   const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
   const baseURL = validateBaseUrl(env.OASIS_BASE_URL || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase);
-  const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : DEFAULT_MODEL;
+  const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : (savedProtocol === protocol ? saved.model : ''));
   const model = String(env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
   if (!model) throw new Error('No model is configured. Run oasis setup.');
 
@@ -108,7 +109,7 @@ export async function saveConfig(config, options = {}) {
   const safe = {
     protocol,
     baseURL: validateBaseUrl(config.baseURL || (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL)),
-    model: String(config.model || DEFAULT_MODEL).trim(),
+    model: String(config.model || (protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '')).trim(),
     apiKey: String(config.apiKey || ''),
     maxSteps: clampInteger(config.maxSteps, 12, 1, 30),
     maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
