@@ -20,7 +20,7 @@ export async function loadMcpServers(options = {}) {
     }
     return {
       configPath,
-      servers: parsed.servers.map(validateServerConfig)
+      servers: parsed.servers.map(validateMcpServerConfig)
     };
   } catch (error) {
     if (error.code === 'ENOENT') return { configPath, servers: [] };
@@ -28,7 +28,7 @@ export async function loadMcpServers(options = {}) {
   }
 }
 
-function validateServerConfig(server) {
+export function validateMcpServerConfig(server) {
   if (!server || typeof server !== 'object' || Array.isArray(server)) throw new Error('Each MCP server entry must be an object.');
   if (typeof server.name !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(server.name)) throw new Error('MCP server names must use lowercase letters, numbers, hyphens, and underscores.');
   if (typeof server.command !== 'string' || !server.command.trim() || server.command.length > 500) throw new Error('Each MCP server needs one executable command.');
@@ -50,7 +50,7 @@ function validateServerConfig(server) {
 
 export async function saveMcpServers(servers, options = {}) {
   if (!Array.isArray(servers) || servers.length > 40) throw new Error('MCP configuration supports up to 40 servers.');
-  const validated = servers.map(validateServerConfig);
+  const validated = servers.map(validateMcpServerConfig);
   const names = new Set();
   for (const server of validated) {
     if (names.has(server.name)) throw new Error('MCP server names must be unique.');
