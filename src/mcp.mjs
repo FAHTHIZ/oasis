@@ -35,6 +35,9 @@ export function validateMcpServerConfig(server) {
   if (!/^[a-zA-Z0-9_./:\\-]+$/.test(server.command)) throw new Error('MCP server command must be one executable path, not shell syntax.');
   const args = server.args === undefined ? [] : server.args;
   if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\0'))) throw new Error('MCP server arguments must be an array of short strings.');
+  if (args.some((arg, index) => /(?:api[_-]?key|access[_-]?token|token|secret|password|authorization)=.{4,}/i.test(arg) || /:\/\/[^/]+:[^@]+@/.test(arg) || (/^(?:--)?(?:api[_-]?key|access[_-]?token|token|secret|password|authorization)$/i.test(arg) && typeof args[index + 1] === 'string'))) {
+    throw new Error('MCP arguments look like they contain credentials. Pass secret values through explicitly named environment variables using --env instead.');
+  }
   const passEnv = server.passEnv === undefined ? [] : server.passEnv;
   if (!Array.isArray(passEnv) || passEnv.length > 50 || passEnv.some((key) => typeof key !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(key))) throw new Error('MCP passEnv must contain environment variable names only.');
   const forbidden = passEnv.filter((key) => /^(?:PATH|HOME|SHELL|PWD|NODE_OPTIONS|LD_PRELOAD|DYLD_INSERT_LIBRARIES)$/i.test(key));
