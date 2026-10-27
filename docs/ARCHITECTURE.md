@@ -30,6 +30,13 @@ This is not an OS sandbox. An approved test, build, or project script can execut
 - Localhost is the safe default. Binding to `0.0.0.0` makes the HTTP server reachable from the network; the token is not encrypted in transit. Use only on trusted private Wi-Fi, do not port-forward it, and never expose the listener to the public Internet. TLS/reverse-proxy deployment is not implemented.
 - The service worker must not cache `/api/*` responses because Cache Storage does not isolate entries by bearer Authorization header. It caches only the static app shell.
 
+## GitHub connection and workspace switching
+
+- The browser UI reuses the host's GitHub CLI login instead of collecting a personal token in the page. The runtime exposes fixed read-only commands for `gh auth status` and `gh api user/repos`; it does not accept arbitrary GitHub CLI arguments from the browser.
+- The repository picker lists at most 30 repositories from the authenticated user's accessible `user/repos` endpoint. Cloning validates `owner/name`, resolves a destination beneath the launch workspace's `.oasis/workspaces/` directory with workspace path checks, requires an explicit approval, then uses `gh repo clone` with shell expansion disabled. It never runs the repository's install scripts as part of cloning.
+- A successful clone switches the process's active workspace for new agent sessions and terminal commands. A request cannot switch workspaces while any tracked job or agent turn is running. Existing clone destinations are reused only after their origin matches the selected GitHub repository.
+- This is a GitHub CLI integration, not embedded OAuth. The user must install `gh` and run `gh auth login` on the host first. Repository creation, branch/push/PR orchestration, GitHub Apps, detailed scope management, and organization-wide repository discovery are not implemented.
+
 ## Model provider interface
 
 The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). GPT-6.1 Sol tool calling uses the Responses API. Set OASIS_BASE_URL, OASIS_MODEL, and OASIS_API_KEY, or use oasis setup. Loopback endpoints can use HTTP and do not require an API key. Non-local endpoints must use HTTPS.
