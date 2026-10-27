@@ -1,4 +1,6 @@
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
+import { readFileSync, statSync } from 'node:fs';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -36,6 +38,37 @@ function json(res, status, value) {
   res.end(body);
 }
 
+
+function isLoopbackBindHost(rawHost) {
+  const host = String(rawHost || '127.0.0.1').replace(/^\[|\]$/g, '').toLowerCase();
+  if (host === 'localhost' || host === '::1') return true;
+  return isIP(host) === 4 && host.split('.')[0] === '127';
+}
+
+function loadTlsOptions(options) {
+  const hasCert = Boolean(options.tlsCertFile);
+  const hasKey = Boolean(options.tlsKeyFile);
+  if (hasCert !== hasKey) throw new Error('HTTPS requires both --tls-cert CERT_FILE and --tls-key KEY_FILE.');
+  if (!hasCert) return null;
+  const certPath = path.resolve(String(options.tlsCertFile));
+  const keyPath = path.resolve(String(options.tlsKeyFile));
+  try {
+    const certStat = statSync(certPath);
+    const keyStat = statSync(keyPath);
+    if (!certStat.isFile() || !keyStat.isFile() || certStat.size < 1 || keyStat.size < 1 ||
+        certStat.size > 1024 * 1024 || keyStat.size > 1024 * 1024) {
+      throw new Error('TLS files must be regular files no larger than 1 MiB.');
+    }
+    if (process.platform !== 'win32' && (keyStat.mode & 0o077) !== 0) {
+      throw new Error('TLS private-key permissions are too open. Restrict the key file to its owner (for example: chmod 600 KEY_FILE).');
+    }
+    return { cert: readFileSync(certPath), key: readFileSync(keyPath), minVersion: 'TLSv1.2' };
+  } catch (error) {
+    if (error && error.message && /TLS/.test(error.message)) throw error;
+    throw new Error('Could not read the configured TLS certificate or private-key file.');
+  }
+}
+
 function hostIsLocalLiteral(req) {
   try {
     const hostHeader = String(req.headers.host || '');
@@ -47,7 +80,8 @@ function hostIsLocalLiteral(req) {
     const origin = req.headers.origin;
     if (origin) {
       const parsedOrigin = new URL(String(origin));
-      if (parsedOrigin.protocol !== 'http:' || parsedOrigin.host.toLowerCase() !== hostHeader.toLowerCase()) return false;
+      const expectedProtocol = req.socket && req.socket.encrypted ? 'https:' : 'http:';
+      if (parsedOrigin.protocol !== expectedProtocol || parsedOrigin.host.toLowerCase() !== hostHeader.toLowerCase()) return false;
     }
     return true;
   } catch {
@@ -98,6 +132,11 @@ function newJob() {
 
 export function createOasisWebServer(options = {}) {
   const root = path.resolve(options.root || process.cwd());
+  const bindHost = options.host || '127.0.0.1';
+  const tlsOptions = loadTlsOptions(options);
+  if (!isLoopbackBindHost(bindHost) && !tlsOptions && options.allowInsecureLan !== true) {
+    throw new Error('Binding Oasis to a non-loopback address requires HTTPS. Provide --tls-cert and --tls-key, or explicitly opt into unencrypted LAN access with --allow-insecure-lan.');
+  }
   let activeRoot = root;
   const env = options.env || process.env;
   const token = options.token || randomBytes(32).toString('base64url');
@@ -782,17 +821,19 @@ export function createOasisWebServer(options = {}) {
     json(res, 404, { error: 'Not found.' });
   }
 
-  const server = createServer((req, res) => {
+  const requestHandler = (req, res) => {
     void handle(req, res).catch((error) => {
       if (res.headersSent) { res.destroy(); return; }
       json(res, Number.isInteger(error.statusCode) ? error.statusCode : 500, { error: String(error && error.message || error || 'Oasis server error').slice(0, 3000) });
     });
-  });
+  };
+  const server = tlsOptions ? createHttpsServer(tlsOptions, requestHandler) : createHttpServer(requestHandler);
 
   return {
     server,
     token,
     root,
+    secure: Boolean(tlsOptions),
     async close() {
       for (const job of jobs.values()) {
         job.cancelRequested = true;
@@ -807,8 +848,8 @@ export function createOasisWebServer(options = {}) {
 }
 
 export async function startOasisWebServer(options = {}) {
-  const app = createOasisWebServer(options);
   const host = options.host || '127.0.0.1';
+  const app = createOasisWebServer({ ...options, host });
   const port = Number.isInteger(options.port) ? options.port : 3917;
   await new Promise((resolve, reject) => {
     const onError = (error) => { app.server.off('listening', onListening); reject(error); };
