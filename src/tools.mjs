@@ -591,7 +591,7 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
     const targetReal = await realpath(target);
     if (!inside(skillRootReal, targetReal)) throw new Error('Portable skill resource resolves outside its skill directory.');
     const content = await readFile(targetReal, 'utf8');
-    if (content.includes('\\0')) throw new Error('Skill resource is not valid text.');
+    if (content.includes('\0')) throw new Error('Skill resource is not valid text.');
     return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
   }
   if (!['global-extension', 'project-extension'].includes(skill.source)) throw new Error('This skill does not expose managed portable resources.');
