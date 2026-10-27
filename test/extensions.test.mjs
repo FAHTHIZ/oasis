@@ -12,7 +12,8 @@ import {
   removeGitHubExtension,
   selectAgentPromptFiles,
   selectPortableSkillResources,
-  selectReviewedMcpServers
+  selectReviewedMcpServers,
+  resolveImportedSlashCommand
 } from '../src/extensions.mjs';
 import { executeTool, listAvailableSkills, loadSkillResource, loadSkillText } from '../src/tools.mjs';
 
@@ -281,6 +282,38 @@ test('extension inspection proposes safe MCP stdio configs without copying crede
   assert.ok(inspected.mcpImportPlan.skipped.length >= 3);
   assert.doesNotMatch(JSON.stringify(inspected.mcpImportPlan), /do-not-copy-this-secret|secret-value/);
   assert.match(inspected.mcpImportPlan.policy, /saved disabled/i);
+});
+
+test('Claude Code Markdown commands install as namespaced slash aliases with bounded substitution and integrity checks', async (t) => {
+  const tmp = await tempDir();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'project');
+  const env = { OASIS_CONFIG_DIR: path.join(tmp, 'config') };
+  const commandText = '# Review\n\nInspect $ARGUMENTS and prioritize item $1.\n';
+  const pluginManifest = JSON.stringify({ name: 'agents', description: 'Test plugin' });
+  const { fetchImpl } = createFetch({
+    extraFiles: [
+      { path: '.claude-plugin/plugin.json', type: 'blob', mode: '100644', size: Buffer.byteLength(pluginManifest), sha: '6'.repeat(40) },
+      { path: 'commands/review.md', type: 'blob', mode: '100644', size: Buffer.byteLength(commandText), sha: '7'.repeat(40) }
+    ],
+    rawFiles: { '.claude-plugin/plugin.json': pluginManifest, 'commands/review.md': commandText }
+  });
+  const inspected = await inspectGitHubExtension('https://github.com/acme/agents', { fetchImpl });
+  assert.deepEqual(inspected.commands, [{ alias: 'acme-agents:review', sourceFormat: 'claude-code-plugin', sourcePath: 'commands/review.md' }]);
+  const installed = await installGitHubExtension('https://github.com/acme/agents', {
+    root, env, scope: 'project', expectedCommit: COMMIT, fetchImpl
+  });
+  assert.equal(installed.importedCommands.length, 1);
+  assert.equal(installed.importedCommands[0].alias, 'acme-agents:review');
+  const inventory = await listInstalledExtensions({ root, env });
+  assert.equal(inventory.extensions[0].commands[0].alias, 'acme-agents:review');
+  const resolved = await resolveImportedSlashCommand(root, '/acme-agents:review compare auth and error handling', { env });
+  assert.ok(resolved);
+  assert.match(resolved.prompt, /Inspect compare auth and error handling and prioritize item compare\./);
+  assert.match(resolved.prompt, /BEGIN UNTRUSTED IMPORTED COMMAND/);
+  const skillPath = path.join(root, '.oasis', 'extensions', 'agents', 'skills', inventory.extensions[0].commands[0].skillName, 'SKILL.md');
+  await writeFile(skillPath, '# modified command\n');
+  await assert.rejects(() => resolveImportedSlashCommand(root, '/acme-agents:review fix issue', { env }), /integrity verification failed/i);
 });
 
 test('portable Agent Skills keep text references with integrity-checked read access and exclude scripts', async (t) => {
