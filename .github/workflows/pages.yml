@@ -20,8 +20,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate app
+      - name: Validate browser app and PWA assets
         run: node scripts/check-site.mjs
+      - name: Run CLI runtime tests
+        run: npm test
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static website
