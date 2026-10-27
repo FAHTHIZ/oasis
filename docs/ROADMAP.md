@@ -13,7 +13,9 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Read-only Git status/diff tools with common secret-path exclusions, plus plan mode that only exposes read-only tools and independently blocks non-read-only calls.
 
-- Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and PWA app-shell caching.
+- Responsive browser dashboard for projects, tasks, notes, local persistence, backup/import, themes, and static PWA app-shell caching.
+- Authenticated local HTTP bridge (`oasis web`) with mobile-friendly agent chat, saved-session restoration, polled job events, browser approval/denial, and a workspace command runner that reuses the CLI's argv-only safety policy.
+- Service-worker exclusion for `/api/*` so authenticated runtime responses are never cached.
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
 - MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
@@ -59,4 +61,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, and best-effort between-turn context compaction. It still lacks streaming, mid-turn compaction, OS-level sandboxing, specialist-agent orchestration, and a mature end-to-end browser/GitHub execution environment.
+Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, and best-effort between-turn context compaction. It still lacks a full PTY, encrypted remote access, GitHub OAuth, a real remote plugin marketplace, streaming, mid-turn compaction, OS-level sandboxing, specialist-agent orchestration, cross-platform end-to-end UI tests, and a mature browser/GitHub execution environment.
