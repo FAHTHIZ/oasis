@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const workspace = process.argv[2];
+const m = await import(pathToFileURL(path.join(workspace, 'src', 'lib.mjs')).href);
+assert.equal(m.boundedToolBatch(0), 0);
+assert.equal(m.boundedToolBatch(-4), 0);
+assert.equal(m.boundedToolBatch(99), 16);
+assert.equal(m.boundedToolBatch(4), 4);
+assert.equal(m.boundedToolBatch('invalid'), 16);
+assert.equal(m.boundedToolBatch(undefined), 16);

@@ -1,0 +1,1 @@
+Implement parseBooleanFlag(value) so common text settings such as false, 0, no, and off are parsed as false instead of being treated as truthy strings. Accept true, 1, yes, and on (case-insensitive, trimmed), booleans, and nonzero numbers. Unknown values should be false.

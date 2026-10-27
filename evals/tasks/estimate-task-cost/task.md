@@ -1,0 +1,1 @@
+Implement estimateCost(inputTokens, outputTokens, inputRate, outputRate) using per-million-token prices. Return a dollar estimate rounded to six decimal places; return null for missing, negative, or non-finite values.

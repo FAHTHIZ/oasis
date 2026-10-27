@@ -1,0 +1,6 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+--- a/src/lib.mjs
++++ b/src/lib.mjs
+@@ -1 +1 @@
+-export function normalizeReadRange(offset, limit) { return { offset: Number(offset) || 0, limit: Number(limit) || 0 }; }
++export function normalizeReadRange(offset, limit) { const parsedOffset = Number.parseInt(offset, 10); const parsedLimit = Number.parseInt(limit, 10); return { offset: Number.isFinite(parsedOffset) ? Math.max(1, parsedOffset) : 1, limit: Number.isFinite(parsedLimit) ? Math.max(1, Math.min(2000, parsedLimit)) : 2000 }; }

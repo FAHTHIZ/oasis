@@ -1,0 +1,1 @@
+Harden validateBaseUrl(raw): accept HTTP or HTTPS only; allow plain HTTP only for a loopback endpoint; reject embedded credentials, query strings, and fragments; strip trailing slashes. Add or use an exact isLoopbackUrl helper.

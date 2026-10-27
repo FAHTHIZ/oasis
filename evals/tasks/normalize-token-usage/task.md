@@ -1,0 +1,1 @@
+Update normalizeUsage(usage) to account for cached input tokens reported as cache_creation_input_tokens and cache_read_input_tokens when input_tokens is present. Preserve prompt_tokens/completion_tokens compatibility and return inputTokens, outputTokens, and totalTokens.

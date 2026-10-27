@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const workspace = process.argv[2];
+const m = await import(pathToFileURL(path.join(workspace, 'src', 'lib.mjs')).href);
+assert.equal(m.clampInteger('8', 7, 1, 10), 8);
+assert.equal(m.clampInteger('0', 7, 1, 10), 1);
+assert.equal(m.clampInteger('-4', 7, 1, 10), 1);
+assert.equal(m.clampInteger('99', 7, 1, 10), 10);
+assert.equal(m.clampInteger('bad', 7, 1, 10), 7);

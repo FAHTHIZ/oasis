@@ -1,0 +1,1 @@
+Validate a single package identifier in normalizePackageName(value). Allow ordinary npm package names and scoped names, optionally followed by a version. Reject empty values, shell fragments, filesystem paths, and URLs; throw a clear error on invalid input.

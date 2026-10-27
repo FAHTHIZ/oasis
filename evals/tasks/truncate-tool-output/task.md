@@ -1,0 +1,1 @@
+Implement truncateOutput(value, limit=24000) so long tool output is bounded and explicitly marked as truncated. The returned string must never exceed the requested minimum-clamped limit (at least 16 characters), and short content must remain unchanged.

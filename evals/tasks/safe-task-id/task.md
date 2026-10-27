@@ -1,0 +1,1 @@
+Implement isSafeTaskId(value) for evaluation task folder names. Accept only a lowercase letter or digit first, followed by at most 63 lowercase letters, digits, or hyphens. Reject path separators, dots, whitespace, and empty values.
