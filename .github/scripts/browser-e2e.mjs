@@ -44,7 +44,7 @@ try {
             name: 'write_file',
             arguments: JSON.stringify({
               path: 'browser-e2e-output.txt',
-              content: 'Created by the authenticated browser agent tool cycle.\\n'
+              content: 'Created by the authenticated browser agent tool cycle.\n'
             })
           }
         }]
@@ -123,7 +123,7 @@ try {
   assert.equal(completionCalls, 3, 'The agent should write the file, read it back, and then produce a final answer.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
-    'Created by the authenticated browser agent tool cycle.\\n',
+    'Created by the authenticated browser agent tool cycle.\n',
     'The browser request should result in a real workspace file write.'
   );
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
