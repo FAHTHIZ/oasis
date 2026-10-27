@@ -27,7 +27,7 @@ export function parseInstallIntent(text) {
   if (!/^(?:please\s+)?(?:can you\s+)?install\b/i.test(original)) return null;
   if (/\b(?:and then|then configure|and configure|and set up|and setup|and build|and test)\b/i.test(original)) return null;
   let rest = original.replace(/^(?:please\s+)?(?:can you\s+)?install\s+/i, '').trim();
-  if (/^(?:yourself|the oasis cli|oasis|oasis-oss|oasis oss)[.!?]*$/i.test(rest)) return { action: 'self' };
+  if (/^(?:yourself|the oasis cli|oasis|oasis-oss|oasis oss|oasis itself)[.!?]*$/i.test(rest)) return { action: 'self' };
   let ecosystem = 'auto';
   const prefix = rest.match(/^(npm package|node package|python package|pip package|system tool|system package|global npm package)\s+/i);
   if (prefix) {
@@ -37,6 +37,7 @@ export function parseInstallIntent(text) {
     rest = rest.slice(prefix[0].length);
   }
   rest = rest.replace(/\s+(?:in|into)\s+(?:yourself|your environment|your setup|the current environment)$/i, '');
+  rest = rest.replace(/\s+(?:yourself|itself)$/i, '');
   rest = rest.replace(/\s+(?:for me|for this project|on this machine|on my machine|on my system)$/i, '');
   rest = rest.replace(/\s+(?:please|thanks)[.!?]*$/i, '');
   rest = rest.replace(/[.!?]+$/, '').trim();
@@ -82,8 +83,8 @@ function validateSystemPackage(name) {
 export function planPackageInstall({ packageName, ecosystem = 'auto', workspaceRoot = process.cwd(), env = process.env } = {}) {
   const original = normalizePackageName(packageName);
   const alias = SYSTEM_ALIASES.get(original.toLowerCase());
-  const name = ecosystem === 'system' && alias ? alias : original;
   const chosen = resolveEcosystem(original, ecosystem, workspaceRoot);
+  const name = (ecosystem === 'system' || chosen === 'system') && alias ? alias : original;
 
   if (chosen === 'npm' || chosen === 'npm-global') {
     validateNpmSpec(name);
