@@ -19,7 +19,8 @@ const SHELLS_AND_DANGEROUS = new Set([
 
 export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'list_files', description: 'List workspace files and folders. Paths are relative to the workspace root. Skips dependencies, build output, Git internals, and secret files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory relative to the workspace root; default .' }, includeHidden: { type: 'boolean', description: 'Include ordinary hidden files, still excluding secret files' } }, required: [] } } },
-  { type: 'function', function: { name: 'read_file', description: 'Read a text file inside the workspace. Secret files such as .env and private keys are blocked. Large files are capped.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'read_file', description: 'Read a text file inside the workspace. Use offset and limit to inspect line ranges in larger files. Secret files such as .env and private keys are blocked.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, offset: { type: 'integer', description: 'Optional 1-based first line to return' }, limit: { type: 'integer', description: 'Optional maximum lines to return, 1 to 2000' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
   { type: 'function', function: { name: 'search_files', description: 'Search workspace text files for a literal case-insensitive string. Returns matching lines and paths, excluding secret files and dependency/build directories.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Literal phrase or symbol to search for' }, limit: { type: 'integer', description: 'Maximum matching lines, 1 to 60; defaults to 25' } }, required: ['query'] } } },
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
@@ -27,7 +28,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
   { type: 'function', function: { name: 'fetch_url', description: 'Fetch public HTTP or HTTPS documentation as text. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public documentation URL using HTTP or HTTPS' } }, required: ['url'] } } },
 
-  { type: 'function', function: { name: 'edit_file', description: 'Make a focused exact-text edit to an existing workspace file. The old text must match; ambiguous matches fail unless replaceAll is explicitly enabled. The current file is snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, oldText: { type: 'string', description: 'Exact text to find; include sufficient surrounding context for a unique match' }, newText: { type: 'string', description: 'Replacement text' }, replaceAll: { type: 'boolean', description: 'Replace every exact match instead of requiring exactly one match' } }, required: ['path', 'oldText', 'newText'] } } },
+  { type: 'function', function: { name: 'edit_file', description: 'Make a precise edit to an existing text file by replacing an exact string. Prefer this over write_file for existing files. old_string must match exactly and be unique unless replace_all is true. The previous contents are snapshotted first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path of an existing file' }, old_string: { type: 'string', description: 'Exact existing text to replace; must be non-empty' }, new_string: { type: 'string', description: 'Replacement text' }, replace_all: { type: 'boolean', description: 'Replace every occurrence instead of requiring a unique match' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'load_skill', description: 'Load the full instructions for one named built-in or workspace skill. Use this before work that matches the skill description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name returned by list_skills' } }, required: ['name'] } } }
 ];
@@ -121,16 +122,63 @@ export async function listWorkspaceFiles(root, options = {}) {
   return { path: target.relative, files: rel, truncated: files.length >= 500 };
 }
 
-export async function readWorkspaceFile(root, rawPath) {
+const MAX_RANGED_FILE = 4 * 1024 * 1024;
+
+export async function readWorkspaceFile(root, rawPath, options = {}) {
   const target = await resolveWorkspacePath(root, rawPath);
   const info = await stat(target.absolute);
   if (!info.isFile()) throw new Error('That path is not a file.');
-  if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit. Use a narrower search or a dedicated binary tool.');
+  const ranged = options.offset !== undefined || options.limit !== undefined;
+  if (!ranged && info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit. Pass offset and limit to read part of it, or use a narrower search.');
+  if (ranged && info.size > MAX_RANGED_FILE) throw new Error('File is larger than the 4 MiB limit even for ranged reads.');
   const content = await readFile(target.absolute, 'utf8');
   if (content.includes('\0')) throw new Error('This looks like a binary file and is not supported by read_file.');
-  return { path: target.relative.split(path.sep).join('/'), content };
+  const relativePath = target.relative.split(path.sep).join('/');
+  if (!ranged) return { path: relativePath, content };
+  const lines = content.split('\n');
+  const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
+  const count = Math.max(1, Math.min(2000, Number.parseInt(options.limit, 10) || 2000));
+  const slice = lines.slice(startLine - 1, startLine - 1 + count);
+  let text = slice.join('\n');
+  let truncated = false;
+  if (text.length > MAX_TEXT_FILE) { text = text.slice(0, MAX_TEXT_FILE); truncated = true; }
+  return { path: relativePath, content: text, startLine, endLine: startLine + slice.length - 1, totalLines: lines.length, truncated: truncated || startLine - 1 + count < lines.length };
+}
+function globToRegExp(pattern) {
+  let source = '';
+  const text = String(pattern).replace(/\\/g, '/').replace(/^\.\//, '');
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '*') {
+      if (text[i + 1] === '*') {
+        i++;
+        if (text[i + 1] === '/') { i++; source += '(?:.*/)?'; }
+        else source += '.*';
+      } else source += '[^/]*';
+    } else if (char === '?') source += '[^/]';
+    else if ('.+^$(){}|[]\\'.includes(char)) source += '\\' + char;
+    else source += char;
+  }
+  return new RegExp('^' + source + '$');
 }
 
+export async function globWorkspaceFiles(root, pattern, limit = 200) {
+  const text = String(pattern || '').trim();
+  if (!text) throw new Error('Glob pattern cannot be empty.');
+  if (text.length > 300) throw new Error('Glob pattern is too long.');
+  if (text.includes('\0') || path.isAbsolute(text) || text.split(/[\\/]+/).includes('..')) throw new Error('Glob patterns must be relative to the workspace and cannot contain "..".');
+  const maxResults = Math.max(1, Math.min(500, Number.parseInt(limit, 10) || 200));
+  const matcher = globToRegExp(text);
+  const files = await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 5000, maxDepth: 12 });
+  const matches = [];
+  for (const file of files) {
+    const relative = file.relative.split(path.sep).join('/');
+    if (!matcher.test(relative)) continue;
+    matches.push(relative);
+    if (matches.length >= maxResults) return { pattern: text, matches, truncated: true };
+  }
+  return { pattern: text, matches, truncated: files.length >= 5000 };
+}
 export async function searchWorkspaceFiles(root, query, limit = 25) {
   const needle = String(query || '');
   if (!needle.trim()) throw new Error('Search query cannot be empty.');
@@ -386,7 +434,9 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'list_files':
       return await listWorkspaceFiles(root, { path: args.path || '.', includeHidden: Boolean(args.includeHidden) });
     case 'read_file':
-      return await readWorkspaceFile(root, args.path);
+      return await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit });
+    case 'glob_files':
+      return await globWorkspaceFiles(root, args.pattern, args.limit);
     case 'search_files':
       return await searchWorkspaceFiles(root, args.query, args.limit);
     case 'list_skills':
@@ -394,25 +444,30 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'load_skill':
       return await loadSkillText(root, args.name);
     case 'edit_file': {
-      if (typeof args.oldText !== 'string' || typeof args.newText !== 'string') throw new Error('oldText and newText must both be strings.');
-      if (!args.oldText.length) throw new Error('oldText cannot be empty.');
-      if (Buffer.byteLength(args.oldText, 'utf8') > MAX_TEXT_FILE || Buffer.byteLength(args.newText, 'utf8') > MAX_TEXT_FILE) throw new Error('The edit exceeds the 256 KiB text limit.');
+      if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new Error('old_string and new_string must be strings.');
+      if (!args.old_string.length) throw new Error('old_string must not be empty. To create a new file, use write_file.');
+      if (args.old_string === args.new_string) throw new Error('old_string and new_string are identical; nothing to change.');
+      if (Buffer.byteLength(args.old_string, 'utf8') > MAX_TEXT_FILE || Buffer.byteLength(args.new_string, 'utf8') > MAX_TEXT_FILE) throw new Error('The edit exceeds the 256 KiB text limit.');
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
-      const info = await lstat(target.absolute);
-      if (!info.isFile() || info.isSymbolicLink()) throw new Error('edit_file can only change a regular existing file.');
-      if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB edit limit.');
+      let info;
+      try { info = await lstat(target.absolute); } catch (error) {
+        if (error.code === 'ENOENT') throw new Error('That file does not exist. Use write_file to create it.');
+        throw error;
+      }
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('That path is not a regular file.');
+      if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit for edits.');
       const current = await readFile(target.absolute, 'utf8');
       if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
       let matches = 0, offset = 0;
-      while ((offset = current.indexOf(args.oldText, offset)) >= 0) { matches++; offset += args.oldText.length; }
-      if (!matches) throw new Error('The exact oldText was not found. Read the current file and retry with exact context.');
-      if (matches > 1 && args.replaceAll !== true) throw new Error('oldText matches ' + matches + ' places. Include more context or explicitly set replaceAll=true.');
-      const next = args.replaceAll === true ? current.split(args.oldText).join(args.newText) : current.replace(args.oldText, args.newText);
-      if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('Edited file would exceed the 256 KiB text limit.');
+      while ((offset = current.indexOf(args.old_string, offset)) >= 0) { matches++; offset += args.old_string.length; }
+      if (!matches) throw new Error('old_string was not found. It must match the file exactly, including whitespace and indentation. Re-read the file and try again.');
+      if (matches > 1 && args.replace_all !== true) throw new Error('old_string appears ' + matches + ' times. Add more surrounding context to make it unique, or set replace_all=true.');
+      const next = args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
+      if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('The edited file would exceed the 256 KiB limit.');
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
       await snapshotFile(root, target.absolute, 'before-agent-edit');
       await writeFile(target.absolute, next, { encoding: 'utf8' });
-      return { path: target.relative.split(path.sep).join('/'), changed: true, replacements: args.replaceAll === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true };
+      return { path: target.relative.split(path.sep).join('/'), changed: true, replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true };
     }
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
