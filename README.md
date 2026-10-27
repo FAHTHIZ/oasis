@@ -17,7 +17,7 @@ oasis
 
 During setup, choose a provider preset or a custom endpoint: OpenAI, Anthropic, OpenRouter, Google Gemini, or local Ollama are supported starting points. OpenRouter uses `https://openrouter.ai/api/v1`; Gemini's OpenAI-compatible endpoint is `https://generativelanguage.googleapis.com/v1beta/openai/`; local Ollama uses `http://localhost:11434/v1`. For OpenRouter and Ollama, enter the exact model ID available to your account or local server. The browser provider form has the same presets.
 
-**Setup verifies before saving.** Oasis sends a small test prompt with no tools offered; it saves provider credentials only after the endpoint returns an assistant response. A failed test does not overwrite the current config. Key input is hidden in the CLI and the browser setup form only accepts credentials from the same device over localhost. Secrets are stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
+**Setup verifies before saving.** Oasis sends a small test prompt with one inert tool schema and saves provider credentials only after the model returns the expected tool-call response. The probe is inspected but never executed. A failed test does not overwrite the current config. Key input is hidden in the CLI and the browser setup form only accepts credentials from the same device over localhost. Secrets are stored in the user-level Oasis configuration file with restrictive POSIX permissions where supported—not in this repository.
 
 ### Try the connected browser agent on the development branch
 
