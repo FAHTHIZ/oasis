@@ -35,11 +35,45 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.equal(statusBody.connected, true);
   assert.equal(statusBody.providerConfigured, false);
   assert.equal(statusBody.approvalMode, 'per-action');
+  assert.equal(statusBody.workspacePath, root);
+  assert.equal(statusBody.workspaceName, path.basename(root));
   assert.equal('apiKey' in statusBody, false);
 
   const sessions = await fetch(base + '/api/sessions', { headers: auth });
   assert.equal(sessions.status, 200);
   assert.deepEqual((await sessions.json()).sessions, []);
+});
+
+test('GitHub workspace routes validate repository input before starting external commands', async (t) => {
+  const root = await tempDir();
+  const app = await startOasisWebServer({
+    root,
+    host: '127.0.0.1',
+    port: 0,
+    env: { OASIS_CONFIG_DIR: path.join(root, 'config') },
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const malformed = await fetch(base + '/api/github/clone', {
+    method: 'POST', headers,
+    body: JSON.stringify({ repository: '../../outside' })
+  });
+  assert.equal(malformed.status, 400);
+  assert.match((await malformed.json()).error, /owner\/name/i);
+
+  const reset = await fetch(base + '/api/workspace/reset', {
+    method: 'POST', headers, body: JSON.stringify({})
+  });
+  assert.equal(reset.status, 200);
+  const data = await reset.json();
+  assert.equal(data.reset, true);
+  assert.equal(data.workspacePath, root);
 });
 
 test('web runtime rejects cross-origin API access even with the runtime token', async (t) => {
