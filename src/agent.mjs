@@ -199,14 +199,6 @@ function responseText(output) {
 }
 
 
-function normalizeUsage(usage = {}) {
-  const inputTokens = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0;
-  const cacheCreate = Number(usage.cache_creation_input_tokens || 0) || 0;
-  const cacheRead = Number(usage.cache_read_input_tokens || 0) || 0;
-  const outputTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0;
-  return { inputTokens: inputTokens + cacheCreate + cacheRead, outputTokens, totalTokens: inputTokens + cacheCreate + cacheRead + outputTokens };
-}
-
 async function requestCompletion(session, options = {}) {
   const config = session.config;
   const nativeAnthropic = config.protocol === 'anthropic';
