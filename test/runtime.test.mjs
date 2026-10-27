@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
+import { createSession, runAgentTurn } from '../src/agent.mjs';
 
 async function temporaryDirectory(prefix = 'oasis-test-') {
   return await mkdtemp(path.join(os.tmpdir(), prefix));
@@ -134,4 +136,47 @@ test('public URL fetch blocks loopback and private network addresses', async () 
 
 test('agent tool registry exposes a useful coding workflow tool set', () => {
   assert.ok(toolCount() >= 7);
+});
+
+
+test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'README.md'), '# Fixture project');
+  let requests = 0;
+  let secondRequest = null;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    requests++;
+    const payload = JSON.parse(body);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will inspect the workspace first.',
+        tool_calls: [{ id: 'fixture-call-1', type: 'function', function: { name: 'list_files', arguments: '{"path":"."}' } }]
+      } }] }));
+    } else {
+      secondRequest = payload;
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'I found README.md and completed the inspection.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const port = server.address().port;
+  const config = { baseURL: 'http://127.0.0.1:' + port + '/v1', model: 'fixture-model', apiKey: '', maxSteps: 4, maxCommandSeconds: 10 };
+  const session = await createSession({ root, config });
+  const transcript = [];
+  const result = await runAgentTurn(session, 'List the files in this workspace.', { onText: (text) => transcript.push(text) });
+  assert.equal(result.finished, true);
+  assert.equal(result.toolCalls, 1);
+  assert.equal(requests, 2);
+  assert.ok(secondRequest.messages.some((message) => message.role === 'tool' && message.content.includes('README.md')));
+  assert.ok(transcript.some((text) => text.includes('completed the inspection')));
 });
