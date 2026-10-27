@@ -818,6 +818,86 @@ test('long sessions compact completed history before the next coding request', a
   assert.equal(session.messages.length < 40, true);
 });
 
+test('mid-turn compaction summarizes completed tool rounds without dropping the active request or latest tool-call pairing', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const root = path.join(tmp, 'workspace');
+  await mkdir(root);
+  await writeFile(path.join(root, 'large.txt'), ('A large but harmless context fixture.\\n').repeat(10000));
+
+  const taskPayloads = [];
+  let summaryPayload = null;
+  const toolCall = (id) => ({
+    id,
+    type: 'function',
+    function: { name: 'read_file', arguments: JSON.stringify({ path: 'large.txt' }) }
+  });
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const payload = JSON.parse(body);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (payload.tools === undefined) {
+      summaryPayload = payload;
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'The completed earlier rounds read large.txt repeatedly. No tests were run.'
+      } }], usage: { prompt_tokens: 20, completion_tokens: 12, total_tokens: 32 } }));
+      return;
+    }
+    taskPayloads.push(payload);
+    const message = taskPayloads.length === 1
+      ? { role: 'assistant', content: null, tool_calls: [toolCall('old-read-1'), toolCall('old-read-2'), toolCall('old-read-3')] }
+      : taskPayloads.length === 2
+        ? { role: 'assistant', content: null, tool_calls: [toolCall('recent-read')] }
+        : { role: 'assistant', content: 'The active task is complete; no tests were run.' };
+    res.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 30, completion_tokens: 10, total_tokens: 40 } }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    contextWindow: 2_000_000,
+    maxSteps: 5,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root, config });
+  const compactions = [];
+  const result = await runAgentTurn(session, 'Inspect large.txt repeatedly and report what you learned.', {
+    onCompaction: (event) => compactions.push(event)
+  });
+
+  assert.equal(result.finished, true);
+  assert.equal(taskPayloads.length, 3);
+  assert.ok(summaryPayload, 'mid-turn summarization should make a tool-free model request');
+  assert.equal(summaryPayload.messages.length, 2);
+  assert.equal(summaryPayload.tools, undefined);
+  assert.match(summaryPayload.messages[1].content, /large\\.txt/);
+  const finalPayload = taskPayloads[2];
+  assert.ok(finalPayload.messages.some((message) =>
+    message.role === 'user' && message.content === 'Inspect large.txt repeatedly and report what you learned.'));
+  assert.ok(finalPayload.messages.some((message) =>
+    message.role === 'user' && String(message.content).includes('Context digest of completed work in the current task')));
+  assert.ok(finalPayload.messages.some((message) =>
+    message.role === 'assistant' && Array.isArray(message.tool_calls) &&
+    message.tool_calls.some((call) => call.id === 'recent-read')));
+  assert.ok(finalPayload.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'recent-read'));
+  assert.ok(!finalPayload.messages.some((message) => message.role === 'tool' &&
+    ['old-read-1', 'old-read-2', 'old-read-3'].includes(message.tool_call_id)));
+  assert.equal(compactions.length, 1);
+  assert.equal(compactions[0].midTurn, true);
+  assert.equal(compactions[0].removedToolResults, 3);
+  assert.equal(compactions[0].usedModelSummary, true);
+  assert.ok(compactions[0].afterChars < compactions[0].beforeChars);
+});
+
 test('post-edit verification gate asks for diff review and a passing check before completion', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
