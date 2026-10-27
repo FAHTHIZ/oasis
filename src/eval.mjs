@@ -155,6 +155,12 @@ async function runVerifier(task, workspace, env, timeoutMs = 60000) {
 }
 
 async function applyReferencePatch(task, workspace, env) {
+  // The disposable copy intentionally excludes the source repository's .git directory.
+  // Initialize a throwaway repo so git apply has consistent work-tree semantics.
+  const initialized = await runProcess('git', ['init', '--quiet'], {
+    cwd: workspace, env: scrubEnvironment(env), timeoutMs: 20000
+  });
+  if (initialized.exitCode !== 0) return { ...initialized, stage: 'git-init' };
   const check = await runProcess('git', ['apply', '--check', '--whitespace=error', task.patchPath], {
     cwd: workspace, env: scrubEnvironment(env), timeoutMs: 20000
   });
