@@ -6,7 +6,8 @@ import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/p
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
-import { createSession, runAgentTurn } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession } from './agent.mjs';
+import { loadMcpServers, saveMcpServers, getMcpConfigPath } from './mcp.mjs';
 import { executeTool } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -25,6 +26,9 @@ function printHelp() {
     '  oasis doctor                  Check the local environment',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis install pnpm            Install a tool using a detected manager',
+    '  oasis mcp list                List configured Model Context Protocol servers',
+    '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
+    '  oasis mcp remove NAME         Remove a configured server',
     '  oasis skills list             List available agent skills',
     '  oasis skills install debugging Install a bundled skill in this workspace',
     '  oasis backups                 List snapshots made before file changes',
@@ -41,6 +45,7 @@ function printHelp() {
     '',
     'Setup: npm install -g ' + INSTALL_URL,
     'Then:  oasis setup',
+    'MCP:   oasis mcp add docs -- npx -y @modelcontextprotocol/server-filesystem /path/to/share',
     'Safety: command execution is not a sandbox. Review approvals; --yes increases risk.',
     ''
   ].join('\n'));
@@ -151,6 +156,7 @@ async function doctor() {
     stdout.write('  Config: ' + summary.configPath + '\n');
   } catch (error) { stdout.write('  Provider config: invalid (' + error.message + ')\n'); }
   stdout.write('  Workspace: ' + process.cwd() + '\n');
+  stdout.write('  MCP config: ' + getMcpConfigPath() + '\n');
   stdout.write('  Note: terminal commands run locally and are not sandboxed by Oasis.\n');
 }
 
@@ -262,6 +268,83 @@ async function installSkill(root, name) {
   stdout.write('Installed skill "' + name + '" into ' + destination + '. It will be loaded as project context in the next agent session.\n');
 }
 
+async function manageMcp(rest) {
+  const action = rest[0] || 'list';
+  const config = await loadMcpServers();
+  if (action === 'list') {
+    stdout.write('MCP server configuration: ' + config.configPath + '\n');
+    if (!config.servers.length) {
+      stdout.write('No MCP servers configured. See README.md for setup syntax.\n');
+      return;
+    }
+    for (const server of config.servers) {
+      stdout.write('  ' + server.name + ' — ' + (server.enabled ? 'enabled' : 'disabled') + '\n');
+      stdout.write('    executable: ' + server.command + '\n');
+      stdout.write('    args: ' + server.args.length + ' argument(s) (values hidden in this summary)\n');
+      stdout.write('    explicit environment passthrough: ' + (server.passEnv.join(', ') || 'none') + '\n');
+    }
+    stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
+    return;
+  }
+  if (action === 'add') {
+    const name = rest[1];
+    const separator = rest.indexOf('--');
+    if (!name || separator < 3 || separator === rest.length - 1) {
+      throw new Error('Usage: oasis mcp add NAME [--env VAR1,VAR2] -- EXECUTABLE [ARG ...]');
+    }
+    let passEnv = [];
+    for (let i = 2; i < separator; i++) {
+      if (rest[i] === '--env') {
+        if (!rest[i + 1]) throw new Error('--env needs a comma-separated list of environment variable names.');
+        passEnv = rest[++i].split(',').map((item) => item.trim()).filter(Boolean);
+      } else {
+        throw new Error('Unknown MCP option: ' + rest[i] + '. Supported option: --env VAR1,VAR2');
+      }
+    }
+    const command = rest[separator + 1];
+    const args = rest.slice(separator + 2);
+    const entry = { name, command, args, passEnv, enabled: true };
+    const proposed = await saveMcpServers(config.servers.filter((server) => server.name !== name).concat(entry), { configPath: config.configPath });
+    const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + args.length + ' (not expanded by a shell)\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.';
+    // Validate before confirmation and preserve the existing file when the user cancels.
+    stdout.write('Validated configuration path: ' + proposed + '\n');
+    const latest = await loadMcpServers({ configPath: config.configPath });
+    const newServers = latest.servers;
+    await saveMcpServers(config.servers, { configPath: config.configPath });
+    if (!(await approve(summary, true, false))) {
+      stdout.write('MCP configuration cancelled. The previous configuration was kept.\n');
+      return;
+    }
+    const output = await saveMcpServers(newServers, { configPath: config.configPath });
+    stdout.write('Configured MCP server "' + name + '" in ' + output + '. It will start next time you run Oasis.\n');
+    return;
+  }
+  if (action === 'remove') {
+    const name = rest[1];
+    if (!name) throw new Error('Usage: oasis mcp remove NAME');
+    const existing = config.servers.find((server) => server.name === name);
+    if (!existing) throw new Error('No configured MCP server named "' + name + '".');
+    if (!(await approve('Remove MCP server "' + name + '" from the user-level configuration?', true, false))) {
+      stdout.write('MCP removal cancelled.\n');
+      return;
+    }
+    const output = await saveMcpServers(config.servers.filter((server) => server.name !== name), { configPath: config.configPath });
+    stdout.write('Removed MCP server "' + name + '" from ' + output + '.\n');
+    return;
+  }
+  if (action === 'enable' || action === 'disable') {
+    const name = rest[1];
+    const existing = config.servers.find((server) => server.name === name);
+    if (!existing) throw new Error('No configured MCP server named "' + name + '".');
+    if (!(await approve((action === 'enable' ? 'Enable' : 'Disable') + ' MCP server "' + name + '"?', true, false))) return;
+    existing.enabled = action === 'enable';
+    const output = await saveMcpServers(config.servers, { configPath: config.configPath });
+    stdout.write('MCP server "' + name + '" is now ' + (existing.enabled ? 'enabled' : 'disabled') + '. Saved ' + output + '\n');
+    return;
+  }
+  throw new Error('Unknown MCP action. Use oasis mcp list, add, remove, enable, or disable.');
+}
+
 async function showBackups(root) {
   const backups = await listBackups(root);
   if (!backups.length) { stdout.write('No Oasis snapshots are stored for this workspace yet.\n'); return; }
@@ -297,6 +380,10 @@ async function runPrompt(prompt, root, autoApprove, session = null) {
   session = session || await createSession({ root, config });
   if (session.root !== root) session = await createSession({ root, config });
   session.config = config;
+  if (session.mcpFailures && session.mcpFailures.length) {
+    for (const failure of session.mcpFailures) stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + '\n');
+    session.mcpFailures = [];
+  }
   try {
     const result = await runAgentTurn(session, prompt, {
       autoApprove,
@@ -327,9 +414,9 @@ async function interactive(root, autoApprove) {
     if (!text) continue;
     if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
     if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /exit. You can also say “install pnpm” or “install yourself”.\n'); continue; }
-    if (text === '/clear') { session = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
+    if (text === '/clear') { closeSession(session); session = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
-    if (text === '/setup') { try { await configureProvider(); session = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
+    if (text === '/setup') { try { await configureProvider(); closeSession(session); session = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text.startsWith('/')) { stdout.write('Unknown command. Type /help.\n'); continue; }
     const direct = parseInstallIntent(text);
     if (direct) {
@@ -338,6 +425,7 @@ async function interactive(root, autoApprove) {
     }
     session = await runPrompt(text, root, autoApprove, session);
   }
+  closeSession(session);
   stdout.write('\nOasis session closed.\n');
 }
 
@@ -373,6 +461,7 @@ async function main() {
   if (command === 'init') return await initWorkspace(workspace);
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
+  if (command === 'mcp') return await manageMcp(rest);
   if (command === 'skills') {
     if (rest[0] === 'install') return await installSkill(workspace, rest[1]);
     return await listSkills(workspace);
@@ -388,7 +477,8 @@ async function main() {
   const fullPrompt = args.join(' ');
   const direct = parseInstallIntent(fullPrompt);
   if (direct) return await installRequest(direct, workspace, autoApprove);
-  await runPrompt(fullPrompt, workspace, autoApprove);
+  const session = await runPrompt(fullPrompt, workspace, autoApprove);
+  closeSession(session);
 }
 
 main().catch((error) => {
