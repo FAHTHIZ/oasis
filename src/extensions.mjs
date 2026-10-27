@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { access, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { validateMcpServerConfig } from './mcp.mjs';
 
 const GITHUB_API = 'https://api.github.com';
 const MAX_TREE_BYTES = 8 * 1024 * 1024;
@@ -141,6 +142,103 @@ export function selectAgentPromptFiles(treeEntries) {
     .sort((a, b) => String(a.path).localeCompare(String(b.path)))
     .slice(0, MAX_PROMPT_FILES)
     .map((entry) => ({ path: String(entry.path), sha: String(entry.sha || ''), size: Number(entry.size) }));
+}
+
+const MCP_MANIFEST_PATH = /^(?:\.mcp\.json|mcp\.json|mcp-servers\.json|gemini-extension\.json)$/i;
+const MAX_MCP_PROPOSALS = 40;
+
+function mcpDefinitionsFromDocument(document) {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) return [];
+  const raw = document.mcpServers || document.servers;
+  if (Array.isArray(raw)) return raw.map((value) => [String(value && value.name || ''), value]);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  return Object.entries(raw);
+}
+
+async function readMcpServerProposals(snapshot, fetchImpl = fetch) {
+  const candidates = snapshot.treeEntries
+    .filter((entry) => entry && entry.type === 'blob' && entry.mode !== '120000' &&
+      MCP_MANIFEST_PATH.test(String(entry.path || '').replace(/\\/g, '/')) &&
+      Number(entry.size) > 0 && Number(entry.size) <= MAX_FILE_BYTES)
+    .sort((a, b) => String(a.path).localeCompare(String(b.path)));
+  const servers = [];
+  const skipped = [];
+  const names = new Set();
+  const sourceFiles = [];
+  for (const entry of candidates.slice(0, 8)) {
+    const sourcePath = String(entry.path).replace(/\\/g, '/');
+    const encodedPath = sourcePath.split('/').map(encodeURIComponent).join('/');
+    const rawUrl = 'https://raw.githubusercontent.com/' + encodeURIComponent(snapshot.parsed.owner) + '/' +
+      encodeURIComponent(snapshot.parsed.repo) + '/' + snapshot.repository.commitSha + '/' + encodedPath;
+    let document;
+    try {
+      const result = await getResponseText(fetchImpl, rawUrl, { maxBytes: MAX_FILE_BYTES });
+      document = JSON.parse(result.body);
+    } catch {
+      skipped.push({ sourcePath, reason: 'Manifest is not readable valid JSON.' });
+      continue;
+    }
+    sourceFiles.push(sourcePath);
+    const definitions = mcpDefinitionsFromDocument(document);
+    for (const [rawName, value] of definitions.slice(0, MAX_MCP_PROPOSALS)) {
+      if (servers.length + skipped.length >= MAX_MCP_PROPOSALS) {
+        skipped.push({ sourcePath, reason: 'The MCP proposal limit was reached.' });
+        break;
+      }
+      const displayName = String(rawName || '').slice(0, 100);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        skipped.push({ name: displayName, sourcePath, reason: 'Server declaration is not an object.' });
+        continue;
+      }
+      const transport = String(value.type || value.transport || 'stdio').toLowerCase();
+      if (value.url || value.httpUrl || value.endpoint || !['stdio', 'local', ''].includes(transport)) {
+        skipped.push({ name: displayName, sourcePath, reason: 'Remote HTTP/SSE transports are not supported by the local stdio importer.' });
+        continue;
+      }
+      if (typeof value.command !== 'string' || !value.command.trim()) {
+        skipped.push({ name: displayName, sourcePath, reason: 'Server does not declare a local executable command.' });
+        continue;
+      }
+      const name = safeSlug(displayName, 'mcp-server').replace(/-/g, '_').replace(/^[^a-z]+/, '').slice(0, 40) || 'mcp_server';
+      if (names.has(name)) {
+        skipped.push({ name: displayName, sourcePath, reason: 'A server with the same normalized name is already proposed.' });
+        continue;
+      }
+      const args = value.args === undefined ? [] : value.args;
+      if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) {
+        skipped.push({ name: displayName, sourcePath, reason: 'Server arguments must be an array of strings.' });
+        continue;
+      }
+      let validated;
+      try {
+        // Never import environment values, URLs, headers, working directories, or
+        // provider-specific configuration. Every proposal is explicitly disabled.
+        validated = validateMcpServerConfig({ name, command: value.command, args, passEnv: [], enabled: false });
+      } catch (error) {
+        skipped.push({ name: displayName, sourcePath, reason: String(error && error.message || 'Server declaration failed Oasis validation.').slice(0, 240) });
+        continue;
+      }
+      names.add(name);
+      servers.push({
+        ...validated, sourcePath, sourceName: displayName,
+        sourceEnvKeys: value.env && typeof value.env === 'object' && !Array.isArray(value.env)
+          ? Object.keys(value.env).filter((key) => /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key)).slice(0, 40)
+          : []
+      });
+    }
+  }
+  return {
+    schemaVersion: 1, repository: snapshot.repository.fullName, commitSha: snapshot.repository.commitSha,
+    sourceFiles, servers, skipped: skipped.slice(0, MAX_MCP_PROPOSALS),
+    policy: 'Local stdio proposals only. Credentials and env values are never copied. Imported server definitions are saved disabled and do not start processes until explicitly enabled.'
+  };
+}
+
+export async function inspectGitHubMcpServers(rawUrl, options = {}) {
+  const snapshot = await snapshotRepository(rawUrl, { expectedCommit: options.expectedCommit, fetchImpl: options.fetchImpl });
+  if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow.');
+  if (snapshot.treeTruncated) throw new Error('GitHub truncated this repository tree. Oasis will not import MCP declarations from an incomplete tree.');
+  return await readMcpServerProposals(snapshot, options.fetchImpl || fetch);
 }
 
 async function snapshotRepository(rawUrl, options = {}) {
@@ -320,12 +418,14 @@ export async function inspectGitHubExtension(rawUrl, options = {}) {
   if (snapshot.repository.isPrivate) throw new Error('Private repositories are not supported by the public-import flow. Use a reviewed local export instead.');
   if (snapshot.treeTruncated) throw new Error('GitHub truncated this repository tree. Oasis will not import a partial agent collection; use a smaller repository or a reviewed subset.');
   const compatibility = analyzeExtensionCompatibility(snapshot.treeEntries);
+  const mcpImportPlan = await readMcpServerProposals(snapshot, options.fetchImpl || fetch);
   if (!snapshot.candidates.length && !compatibility.formats.some((item) => item.detected) && !compatibility.components.some((item) => item.count > 0)) {
     throw new Error('No recognized plugin format, Agent Skills, or importable Markdown prompts were found in this repository.');
   }
   return {
     repository: snapshot.repository,
     compatibility,
+    mcpImportPlan,
     canInstall: snapshot.candidates.length > 0 && !snapshot.treeTruncated,
     installationBlockedReason: snapshot.candidates.length ? '' : 'This repository contains detectable ecosystem configuration but no Markdown prompts that the current importer can install.',
     candidateCount: snapshot.candidateCount,

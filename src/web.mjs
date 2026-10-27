@@ -8,7 +8,7 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
-import { inspectGitHubExtension, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
+import { inspectGitHubExtension, inspectGitHubMcpServers, installGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -507,12 +507,56 @@ export function createOasisWebServer(options = {}) {
         return;
       }
       try {
-        const inspected = await inspectGitHubExtension(url, { env });
+        const inspected = await inspectGitHubExtension(url, { env, fetchImpl: options.fetchImpl });
         json(res, 200, inspected);
       } catch (error) {
         const message = String(error && error.message || error);
         const status = /repository home URL|public GitHub repository URL|not a valid HTTP|no importable Markdown|private repositories|only HTTP and HTTPS/i.test(message) ? 400 : (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422);
         json(res, status, { error: message.slice(0, 2500) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/extensions/mcp-import') {
+      const body = await readJsonBody(req);
+      const url = String(body.url || '').trim();
+      const expectedCommit = String(body.expectedCommit || '');
+      const serverNames = body.serverNames;
+      if (!url || url.length > 800) { json(res, 400, { error: 'Provide a GitHub repository URL no longer than 800 characters.' }); return; }
+      if (!/^[a-f0-9]{40}$/i.test(expectedCommit)) { json(res, 400, { error: 'Inspect the repository first. A reviewed 40-character commit identifier is required.' }); return; }
+      if (!Array.isArray(serverNames) || serverNames.length < 1 || serverNames.length > 40 ||
+          serverNames.some((name) => typeof name !== 'string' || !/^[a-z][a-z0-9_-]{0,39}$/.test(name)) ||
+          new Set(serverNames).size !== serverNames.length) {
+        json(res, 400, { error: 'Select between one and 40 valid, uniquely named MCP server proposals.' }); return;
+      }
+      try {
+        const plan = await inspectGitHubMcpServers(url, { expectedCommit, fetchImpl: options.fetchImpl });
+        const selected = plan.servers.filter((server) => serverNames.includes(server.name));
+        if (selected.length !== serverNames.length) {
+          json(res, 409, { error: 'The selected MCP proposals no longer match the inspected repository. Inspect it again before importing.' }); return;
+        }
+        const current = await loadMcpServers({ env });
+        const existingNames = new Set(current.servers.map((server) => server.name));
+        const collisions = selected.filter((server) => existingNames.has(server.name)).map((server) => server.name);
+        if (collisions.length) {
+          json(res, 409, { error: 'MCP server name already configured: ' + collisions.join(', ') + '. Rename or remove the existing entry before importing.' }); return;
+        }
+        if (current.servers.length + selected.length > 40) { json(res, 409, { error: 'The configured MCP server limit would be exceeded.' }); return; }
+        const proposed = selected.map((server) => ({ name: server.name, command: server.command, args: server.args, passEnv: [], enabled: false }));
+        await saveMcpServers([...current.servers, ...proposed], { env });
+        json(res, 200, {
+          saved: true,
+          imported: proposed.map((server) => ({ name: server.name, command: server.command, args: server.args, enabled: false })),
+          source: plan.repository,
+          commitSha: plan.commitSha,
+          note: 'Imported MCP server declarations are disabled. No process was started. Configure required environment variables, review the command, and enable the server separately in Integrations.'
+        });
+      } catch (error) {
+        const message = String(error && error.message || error);
+        const status = /changed after inspection|already configured|limit would be exceeded/i.test(message) ? 409 :
+          (/repository home URL|public GitHub repository URL|not a valid HTTP|private repositories|only HTTP and HTTPS/i.test(message) ? 400 :
+          (/rate-limited|returned HTTP|timed out|could not resolve/i.test(message) ? 502 : 422));
+        json(res, status, { error: message.slice(0, 2000) });
       }
       return;
     }
