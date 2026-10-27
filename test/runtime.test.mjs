@@ -385,6 +385,43 @@ test('OpenHands delegation requires manual approval and uses server-owned creden
   assert.equal(JSON.stringify(result).includes('fixture-server-secret'), false);
 });
 
+
+test('OpenHands delegation returns a pending confirmation instead of approving remote actions', async (t) => {
+  const tmp = await temporaryDirectory('oasis-openhands-confirm-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  let getCount = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    res.writeHead(req.method === 'POST' && req.url === '/api/conversations' ? 201 : 200, { 'content-type': 'application/json' });
+    if (req.method === 'POST' && req.url === '/api/conversations') {
+      res.end(JSON.stringify({ id: 'fixture-openhands-confirm', execution_status: 'waiting_for_confirmation' }));
+      return;
+    }
+    if (req.method === 'GET') getCount++;
+    res.end(JSON.stringify({ id: 'fixture-openhands-confirm', execution_status: 'running' }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const result = await executeTool('delegate_openhands', { task: 'Review an implementation proposal.' }, {
+    root: tmp,
+    env: {
+      OPENHANDS_AGENT_SERVER_URL: 'http://127.0.0.1:' + server.address().port,
+      OPENHANDS_AGENT_PROFILE_ID: 'fixture-profile'
+    },
+    autoApprove: true,
+    approval: async () => true
+  });
+  assert.equal(result.delegated, true);
+  assert.equal(result.status, 'waiting_for_confirmation');
+  assert.equal(result.approvalRequired, true);
+  assert.equal(getCount, 0, 'no polling or automated confirmation occurs after a confirmation wait is returned');
+  assert.match(result.message, /does not approve OpenHands actions automatically/i);
+});
+
 test('OpenHands delegation refuses remote plaintext endpoints and does not auto-approve', async (t) => {
   const tmp = await temporaryDirectory('oasis-openhands-policy-');
   t.after(() => rm(tmp, { recursive: true, force: true }));
