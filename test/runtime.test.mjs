@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from '
 import { createServer } from 'node:http';
 import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
-import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
@@ -157,6 +157,83 @@ test('Oasis discovers and loads portable project and global Agent Skills without
   assert.equal(resource.content, 'A short reference for the installed skill.\n');
   assert.equal(resource.trust, 'external-untrusted-text');
   await assert.rejects(loadSkillResource(root, 'portable-example', '../SKILL.md', { env }), /resources must be text files/i);
+});
+
+
+test('chat exposes safe provider bootstrap and external skill installation tools', () => {
+  const definitions = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool.function]));
+  for (const name of ['setup_omniroute', 'configure_provider', 'install_external_skill']) {
+    assert.ok(definitions.has(name), 'expected chat tool ' + name);
+  }
+  assert.deepEqual(definitions.get('setup_omniroute').parameters.properties, {});
+  assert.ok(!Object.hasOwn(definitions.get('setup_omniroute').parameters.properties, 'localApiKey'));
+  assert.deepEqual(definitions.get('configure_provider').parameters.required, ['provider']);
+  assert.deepEqual(definitions.get('install_external_skill').parameters.required, ['source', 'scope']);
+});
+
+test('configure_provider verifies an inert tool call before saving and updates the active session', async (t) => {
+  const tmp = await temporaryDirectory('oasis-chat-provider-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const originalFetch = globalThis.fetch;
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(tmp, 'config'), OPENROUTER_API_KEY: 'fixture-openrouter-key' };
+  for (const key of ['OASIS_BASE_URL', 'OASIS_PROTOCOL', 'OASIS_MODEL', 'OASIS_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY']) delete env[key];
+  let seenRequest;
+  globalThis.fetch = async (url, init = {}) => {
+    seenRequest = { url: String(url), headers: new Headers(init.headers), body: JSON.parse(init.body) };
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
+        id: 'probe-call',
+        type: 'function',
+        function: { name: 'oasis_connection_probe', arguments: '{"ready":true}' }
+      }] } }]
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const activeConfig = {
+    protocol: 'openai-compatible',
+    baseURL: 'https://old-provider.example/v1',
+    model: 'old-model',
+    apiKey: 'old-private-key',
+    configured: true
+  };
+  const result = await executeTool('configure_provider', { provider: 'openrouter', model: 'fixture-model' }, {
+    root: tmp, env, config: activeConfig, autoApprove: true
+  });
+
+  assert.equal(result.connected, true, result.message);
+  assert.equal(result.model, 'fixture-model');
+  assert.equal(seenRequest.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(seenRequest.headers.get('authorization'), 'Bearer fixture-openrouter-key');
+  assert.deepEqual(seenRequest.body.tool_choice, { type: 'function', function: { name: 'oasis_connection_probe' } });
+  const saved = JSON.parse(await readFile(path.join(tmp, 'config', 'config.json'), 'utf8'));
+  assert.equal(saved.model, 'fixture-model');
+  assert.equal(saved.apiKey, 'fixture-openrouter-key');
+  assert.equal(activeConfig.model, 'fixture-model');
+  assert.equal(activeConfig.baseURL, 'https://openrouter.ai/api/v1');
+  assert.equal(JSON.stringify(result).includes('fixture-openrouter-key'), false);
+});
+
+test('setup_omniroute refuses to override host environment provider pins', async (t) => {
+  const tmp = await temporaryDirectory('oasis-chat-omniroute-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const result = await executeTool('setup_omniroute', {}, {
+    root: tmp,
+    env: { OASIS_BASE_URL: 'https://pinned.example/v1' },
+    config: { baseURL: 'https://pinned.example/v1', model: 'pinned', apiKey: '' },
+    autoApprove: true
+  });
+  assert.equal(result.connected, false);
+  assert.match(result.message, /pinned in the environment/i);
+});
+
+test('install_external_skill validates its source and selection before starting a process', async () => {
+  await assert.rejects(executeTool('install_external_skill', {
+    source: '--help', skill: 'sample-skill', scope: 'project'
+  }, { autoApprove: true }), /valid skill source/i);
+  await assert.rejects(executeTool('install_external_skill', {
+    source: 'vercel-labs/agent-skills', scope: 'project'
+  }, { autoApprove: true }), /exactly one/i);
 });
 
 test('plain-English installation requests are parsed without accepting command fragments', () => {
