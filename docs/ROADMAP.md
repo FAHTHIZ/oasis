@@ -8,7 +8,9 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Installable Node.js CLI package layout and plain-English interactive/one-shot entry points.
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic multi-step tool-calling loops.
 - MCP stdio configuration, tool discovery/calling, explicit server setup, and per-tool approval.
-- Bounded project file listing/search/read/write/delete tools with workspace and secret-path protections.
+- Bounded project file listing, glob search, ranged reads, exact-string patch editing, write/delete tools, and workspace/secret-path protections.
+- Optional workspace-scoped session persistence and on-demand skill loading.
+- Token and tool-call budgets, parallel read-only calls, and sequential handling of side effects.
 - Command execution with argv arguments, approval defaults, child environment secret filtering, and selected destructive-command blocks.
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
 - Public documentation fetch with URL checks, redirect handling, and size limits.
@@ -27,7 +29,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Add and test additional native provider adapters beyond OpenAI-compatible endpoints and Anthropic's Messages API.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
-- Add streaming responses and robust context compaction/session resume.
+- Add streaming responses and robust context compaction for long-running tasks.
 - Add skills discovery, installation from trusted sources, versioning, and supply-chain review.
 - Design a provider/model capability probe and clearer setup diagnostics.
 
@@ -35,7 +37,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - Add planning and verification stages with explicit task checklists and regression-oriented tests.
 - Add narrow specialist agents for review/testing/research, with bounded concurrency and shared task state.
-- Add persistent sessions, structured event logs, undo/revert workflows, and safer patch-based editing.
+- Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.
 - Add language/toolchain diagnostics (LSP where available) and workspace-specific policy rules.
 
 ## Milestone 4 — sandboxing and integrations
@@ -47,4 +49,4 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. The current release foundation does not have MCP, session persistence, streaming, multi-agent orchestration, or OS-level sandboxing. Those are substantial milestones, not just cosmetic additions.
+Oasis is not yet at Claude Code feature parity. It now includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, and bounded tool-loop safeguards. It still lacks streaming, robust context compaction, OS-level sandboxing, specialist-agent orchestration, and a mature end-to-end browser/GitHub execution environment.
