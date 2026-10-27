@@ -322,7 +322,10 @@ test('extension updates refuse modified imported files instead of discarding use
   await installGitHubExtension('https://github.com/acme/agents', {
     root, env, scope: 'project', expectedCommit: COMMIT, fetchImpl: createFetch().fetchImpl
   });
-  const skillPath = path.join(root, '.oasis', 'extensions', 'agents', 'skills', 'api-engineer', 'SKILL.md');
+  const manifest = JSON.parse(await readFile(path.join(root, '.oasis', 'extensions', 'agents', 'extension.json'), 'utf8'));
+  const skillRecord = manifest.files.find((file) => file.path.startsWith('skills/') && file.path.endsWith('/SKILL.md'));
+  assert.ok(skillRecord, 'the installed manifest should list the imported prompt');
+  const skillPath = path.join(root, '.oasis', 'extensions', 'agents', ...skillRecord.path.split('/'));
   await writeFile(skillPath, '# My local edits\n');
   const next = 'e'.repeat(40);
   await assert.rejects(() => updateGitHubExtension('https://github.com/acme/agents', {
