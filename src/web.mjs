@@ -133,7 +133,10 @@ export function createOasisWebServer(options = {}) {
   }
 
   async function getConfig() {
-    return await loadConfig({ env });
+    try { return await loadConfig({ env }); }
+    catch (error) {
+      throw Object.assign(new Error((error && error.message || 'No model provider is configured.') + ' Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
+    }
   }
 
   async function startAgentJob(input) {
