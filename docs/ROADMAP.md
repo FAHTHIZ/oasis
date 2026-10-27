@@ -65,7 +65,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
 - Establish a well-tested install/bootstrap flow for supported platforms.
 - Upgrade the argv-based command runner to a real interactive PTY and terminal emulator, with lifecycle controls and platform testing.
-- Add TLS or another encrypted transport for phone-to-computer use; the current HTTP bridge is for localhost or trusted private Wi-Fi only.
+- **Progress:** the web bridge supports HTTPS with a user-provided certificate/key pair, enforces TLS 1.2+, and refuses non-loopback plaintext listeners unless `--allow-insecure-lan` is explicitly used. Certificate provisioning, phone trust onboarding, and real-device security tests remain unfinished.
 - Share browser dashboard projects/tasks/notes with the selected repository workspace through a tested sync and conflict-resolution design.
 
 ## Deliberate non-claims

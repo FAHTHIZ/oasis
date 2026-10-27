@@ -27,10 +27,10 @@ This is not an OS sandbox. An approved test, build, or project script can execut
 
 ## Browser agent runtime
 
-- `src/web.mjs` serves the static UI and a same-origin JSON API. The listener binds to `127.0.0.1:3917` by default; the CLI prints a fresh random bearer token for that process. API requests require that token, and browser API requests must use a literal-IP/localhost Host and a matching same-origin HTTP Origin.
+- `src/web.mjs` serves the static UI and a same-origin JSON API over HTTP on loopback by default, or HTTPS when a certificate/key pair is supplied. The CLI prints a fresh random bearer token for that process. API requests require that token, and browser API requests must use a literal-IP/localhost Host and a matching same-origin Origin with the same HTTP/HTTPS scheme.
 - Chat jobs call the same `createSession` and `runAgentTurn` runtime used by the CLI. Job events expose assistant output, tool activity, usage, completion, and pending approvals. The browser can approve or deny a consequential action once. Saved agent sessions use the existing private user-level session store.
 - The Terminal panel calls the existing `run_command` tool with an executable and a JSON argv array. It intentionally has no shell expansion and is **not a full PTY**; interactive shell programs, TUI applications, and programs that require stdin are not supported by this bridge.
-- Localhost is the safe default. Binding to `0.0.0.0` makes the HTTP server reachable from the network; the token is not encrypted in transit. Use only on trusted private Wi-Fi, do not port-forward it, and never expose the listener to the public Internet. TLS/reverse-proxy deployment is not implemented.
+- Non-loopback listeners require TLS certificate/key files by default. Oasis enforces TLS 1.2 or newer and, on POSIX hosts, rejects TLS private-key files whose permissions grant group/other access. Unencrypted HTTP on a non-loopback address requires the explicit `--allow-insecure-lan` opt-in and prints a warning. Certificate provisioning, trust installation on phones, reverse-proxy guidance, and real-device TLS tests remain follow-up work.
 - The service worker must not cache `/api/*` responses because Cache Storage does not isolate entries by bearer Authorization header. It caches only the static app shell.
 
 ## GitHub connection and workspace switching
