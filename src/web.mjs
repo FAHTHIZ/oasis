@@ -428,6 +428,33 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/github/status') {
+      json(res, 200, await getGithubStatus());
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/github/repos') {
+      json(res, 200, await getGithubRepos());
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/github/clone') {
+      const body = await readJsonBody(req);
+      const result = await startGithubCloneJob(body);
+      json(res, 202, result);
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/workspace/reset') {
+      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
+        json(res, 409, { error: 'Wait until the current agent or terminal task finishes before switching workspaces.' });
+        return;
+      }
+      activeRoot = root;
+      json(res, 200, { workspaceName: path.basename(activeRoot), workspacePath: activeRoot, reset: true });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/sessions') {
       json(res, 200, { sessions: await listSessions(activeRoot, { env }) });
       return;
