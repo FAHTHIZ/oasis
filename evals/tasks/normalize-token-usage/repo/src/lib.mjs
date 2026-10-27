@@ -1,1 +1,0 @@
-export function normalizeUsage(usage = {}) { const inputTokens = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0; const outputTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0; return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens }; }

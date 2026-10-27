@@ -1,0 +1,19 @@
+# Node and package-manager output
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Local/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local tests and backup files
+coverage/
+playwright-report/
+test-results/
+*.local

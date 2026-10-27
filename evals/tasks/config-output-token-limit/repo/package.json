@@ -1,5 +1,38 @@
 {
-  "name": "oasis-eval-config-task",
-  "private": true,
-  "type": "module"
+  "name": "oasis-oss",
+  "version": "0.2.0",
+  "description": "A plain-English, local-first coding agent and developer workspace.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "oasis": "./src/cli.mjs"
+  },
+  "files": [
+    "src/",
+    "scripts/",
+    "skills/",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "docs/"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node scripts/check-site.mjs && node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gtxnrg-ship-it/Oasis.git"
+  },
+  "keywords": [
+    "coding-agent",
+    "developer-tools",
+    "agentic",
+    "local-first",
+    "terminal"
+  ]
 }
