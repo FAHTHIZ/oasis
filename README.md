@@ -12,6 +12,7 @@ Oasis gives your work a home without asking you to create an account, configure 
 - **Working notes** with automatic local saving and a word count.
 - **Workspace backup and restore** using JSON export/import.
 - **Light and dark themes**, responsive phone navigation, keyboard focus styles, and reduced-motion support.
+- **Installable PWA shell** with an app icon and service-worker caching for the core interface.
 - **Static hosting** support and GitHub Actions quality checks.
 
 ## Run it
@@ -31,6 +32,7 @@ Then open http://localhost:8000.
 - Projects, tasks, theme preference, and notes are stored in this browser's local storage.
 - The app does **not** connect to GitHub, a cloud database, or an AI provider.
 - Data does not automatically sync across browsers or devices.
+- The service worker caches the app shell, not your data or a cloud service. The first visit requires a working network connection when hosted.
 - Browser storage is not encrypted. Do not store passwords, API keys, private keys, or sensitive personal information.
 - Use **Export backup** before clearing site data or moving to another device.
 - Import replaces the current workspace only after a confirmation prompt.
@@ -47,7 +49,7 @@ A Pages deployment workflow is included at .github/workflows/pages.yml.
 3. Push to the main branch (or manually run the Pages workflow from the Actions tab).
 4. Open the URL reported by the successful deployment workflow.
 
-The repository setting in Step 2 requires an owner/admin action and is not changed by a code commit. A successful CI test does not, by itself, mean the public site is deployed.
+The repository setting in Step 2 requires an owner/admin action and is not changed by a code commit. A successful CI test does not, by itself, mean the public site is deployed. Once hosted over HTTPS, a compatible browser can offer installation; offline launch depends on the service worker having installed successfully.
 
 ## Repository map
 
