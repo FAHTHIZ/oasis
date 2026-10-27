@@ -143,6 +143,7 @@ export function createOasisWebServer(options = {}) {
   const activeSessions = new Map();
   const jobs = new Map();
   const busySessions = new Set();
+  let reservedJobSlots = 0;
 
   function emit(job, type, data = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
@@ -170,13 +171,27 @@ export function createOasisWebServer(options = {}) {
     });
   }
 
-  function pruneJobs() {
-    if (jobs.size < MAX_JOBS) return;
+  function pruneJobs(additionalReservations = 0) {
+    if (jobs.size + reservedJobSlots + additionalReservations < MAX_JOBS) return;
     for (const [id, job] of jobs) {
-      if (jobs.size < MAX_JOBS) break;
+      if (jobs.size + reservedJobSlots + additionalReservations < MAX_JOBS) break;
       if (job.status === 'running' || job.status === 'waiting_approval') continue;
       jobs.delete(id);
     }
+  }
+
+  function reserveJobSlot() {
+    pruneJobs(1);
+    if (jobs.size + reservedJobSlots >= MAX_JOBS) {
+      throw Object.assign(new Error('The Oasis browser runtime is at its 20-job limit. Wait for an active job to finish, cancel a pending job, or retry after completed job history is pruned.'), { statusCode: 429 });
+    }
+    reservedJobSlots++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      reservedJobSlots = Math.max(0, reservedJobSlots - 1);
+    };
   }
 
   async function getConfig() {
@@ -200,6 +215,8 @@ export function createOasisWebServer(options = {}) {
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
     if (sessionId && busySessions.has(sessionId)) throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
 
+    const releaseJobReservation = reserveJobSlot();
+    try {
     const config = await getConfig();
     if (!config.configured) {
       throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
@@ -219,10 +236,10 @@ export function createOasisWebServer(options = {}) {
       sessionId = temporaryId;
     }
     const activeId = sessionId || session.sessionId;
-    busySessions.add(activeId);
-    pruneJobs();
     const job = newJob();
     jobs.set(job.id, job);
+    releaseJobReservation();
+    busySessions.add(activeId);
     emit(job, 'started', { sessionId: activeId });
     void (async () => {
       try {
@@ -276,6 +293,10 @@ export function createOasisWebServer(options = {}) {
       }
     })();
     return { jobId: job.id, sessionId: activeId };
+    } catch (error) {
+      releaseJobReservation();
+      throw error;
+    }
   }
 
 
@@ -358,10 +379,11 @@ export function createOasisWebServer(options = {}) {
       if (error.code !== 'ENOENT') throw error;
     }
 
-    pruneJobs();
+    const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = 'github-clone';
     jobs.set(job.id, job);
+    releaseJobReservation();
     emit(job, 'github_clone_started', { repository });
     void (async () => {
       try {
@@ -434,10 +456,11 @@ export function createOasisWebServer(options = {}) {
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
       throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
     }
-    pruneJobs();
+    const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = 'terminal';
     jobs.set(job.id, job);
+    releaseJobReservation();
     emit(job, 'terminal_started', { command, args });
     void (async () => {
       try {
