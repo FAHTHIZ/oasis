@@ -8,7 +8,7 @@ import { loadConfig, saveConfig, validateBaseUrl, getConfigPath } from '../src/c
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { executeTool, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount } from '../src/tools.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
-import { createSession, runAgentTurn, runAgentPlan } from '../src/agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 
@@ -51,6 +51,56 @@ test('configuration never reuses a stored API key at a changed provider URL', as
   const local = await loadConfig({ configPath, env: { OASIS_BASE_URL: 'http://localhost:11434/v1', OPENAI_API_KEY: 'remote-provider-secret' } });
   assert.equal(local.apiKey, '');
   assert.equal(local.configured, true);
+});
+
+test('provider connection probe confirms a real assistant response without offering tools or leaking the API key', async (t) => {
+  const originalFetch = globalThis.fetch;
+  let seenRequest;
+  globalThis.fetch = async (url, init = {}) => {
+    seenRequest = { url: String(url), headers: new Headers(init.headers), body: JSON.parse(init.body) };
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: 'OASIS_CONNECTION_OK' } }]
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const result = await testProviderConnection({
+    protocol: 'openai-compatible',
+    baseURL: 'https://provider.example/v1',
+    model: 'fixture-model',
+    apiKey: 'connection-probe-secret'
+  }, { timeoutMs: 1000 });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.model, 'fixture-model');
+  assert.equal(result.protocol, 'openai-compatible');
+  assert.equal(result.provider, 'provider.example');
+  assert.equal(seenRequest.headers.get('authorization'), 'Bearer connection-probe-secret');
+  assert.equal(seenRequest.body.tools, undefined);
+  assert.equal(seenRequest.body.tool_choice, undefined);
+  assert.equal(JSON.stringify(result).includes('connection-probe-secret'), false);
+});
+
+test('provider connection probe redacts credentials and does not treat an HTTP error as success', async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    error: { message: 'invalid API key' }
+  }), { status: 401, headers: { 'content-type': 'application/json' } });
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  await assert.rejects(
+    testProviderConnection({
+      protocol: 'openai-compatible',
+      baseURL: 'https://provider.example/v1',
+      model: 'fixture-model',
+      apiKey: 'do-not-leak-this-key'
+    }, { timeoutMs: 1000 }),
+    (error) => {
+      assert.match(error.message, /connection test failed/i);
+      assert.doesNotMatch(error.message, /do-not-leak-this-key/);
+      return true;
+    }
+  );
 });
 
 test('plain-English installation requests are parsed without accepting command fragments', () => {
