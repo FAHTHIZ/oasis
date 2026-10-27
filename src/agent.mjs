@@ -411,6 +411,40 @@ async function requestCompletion(session, options = {}) {
   }
 }
 
+/**
+ * Run a plan-only turn with the local read-only tools. The temporary session cannot
+ * access MCP servers and the executor independently rejects non-read-only calls,
+ * even if a provider emits a tool call that was not offered.
+ */
+export async function runAgentPlan(session, prompt, options = {}) {
+  const originalSystem = session.messages && session.messages[0]
+    ? session.messages[0]
+    : { role: 'system', content: '' };
+  const planSession = {
+    ...session,
+    messages: [...(session.messages || [])],
+    toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool && tool.function && READ_ONLY_TOOLS.has(tool.function.name)),
+    mcpToolMap: new Map()
+  };
+  planSession.messages[0] = {
+    ...originalSystem,
+    content: String(originalSystem.content || '') + [
+      '',
+      'PLAN MODE IS ACTIVE.',
+      'Explore using read-only workspace tools and produce an actionable plan/checklist. Do not modify files, run commands, install packages, delete anything, or call external integrations.',
+      'Clearly separate observed repository facts from assumptions. Include proposed files, implementation steps, verification commands, risks, and acceptance criteria.',
+      'The tool executor independently blocks every non-read-only operation in this mode.'
+    ].join('\n')
+  };
+  try {
+    return await runAgentTurn(planSession, prompt, { ...options, planOnly: true });
+  } finally {
+    planSession.messages[0] = originalSystem;
+    session.messages = planSession.messages;
+    session.toolCallsThisSession = planSession.toolCallsThisSession;
+  }
+}
+
 function pruneHistory(session) {
   const messages = session.messages;
   if (messages.length <= 75) return;
@@ -463,6 +497,9 @@ async function executeOneCall(session, call, context, options) {
   let result;
   if (options.onToolStart) options.onToolStart({ name, call });
   try {
+    if (options.planOnly && !READ_ONLY_TOOLS.has(name)) {
+      throw new Error('Plan mode blocks write, command, install, delete, and external tool calls.');
+    }
     const args = safeToolArguments(call.function && call.function.arguments);
     if (session.mcpToolMap && session.mcpToolMap.has(name)) {
       result = await callMappedMcpTool(session, name, args, context);
