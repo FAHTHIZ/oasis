@@ -30,7 +30,7 @@ function printHelp() {
     '  oasis "fix the failing tests"  Give a task in plain English',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor                  Check the local environment',
-    '  oasis web [--host HOST] [--port PORT]  Start the authenticated browser agent workspace',
+    '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
@@ -509,6 +509,9 @@ async function interactive(root, autoApprove, persistence = {}) {
 async function startWebWorkspace(root, args) {
   let host = '127.0.0.1';
   let port = 3917;
+  let tlsCertFile = null;
+  let tlsKeyFile = null;
+  let allowInsecureLan = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--host') {
@@ -519,24 +522,39 @@ async function startWebWorkspace(root, args) {
       if (!args[i + 1]) throw new Error('--port requires a number.');
       port = Number(args[++i]);
     } else if (arg.startsWith('--port=')) port = Number(arg.slice(7));
-    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST and --port PORT.');
+    else if (arg === '--tls-cert') {
+      if (!args[i + 1]) throw new Error('--tls-cert requires a certificate file path.');
+      tlsCertFile = args[++i];
+    } else if (arg.startsWith('--tls-cert=')) tlsCertFile = arg.slice(11);
+    else if (arg === '--tls-key') {
+      if (!args[i + 1]) throw new Error('--tls-key requires a private-key file path.');
+      tlsKeyFile = args[++i];
+    } else if (arg.startsWith('--tls-key=')) tlsKeyFile = arg.slice(10);
+    else if (arg === '--allow-insecure-lan') allowInsecureLan = true;
+    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST, --port PORT, --tls-cert FILE, --tls-key FILE, --allow-insecure-lan.');
   }
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be an integer between 0 and 65535 (0 chooses an available port).');
   const normalizedHost = host.toLowerCase();
   if (normalizedHost !== 'localhost' && isIP(host) === 0) throw new Error('--host must be localhost or a literal IP address. Use --host 0.0.0.0 only when you intentionally want other devices on your private network to connect.');
-  const app = await startOasisWebServer({ root, host, port });
+  const app = await startOasisWebServer({ root, host, port, tlsCertFile, tlsKeyFile, allowInsecureLan });
+  const scheme = app.secure ? 'https' : 'http';
   const urlHost = host.includes(':') ? '[' + host + ']' : host;
-  const localUrl = 'http://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
+  const localUrl = scheme + '://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
   stdout.write('\nOasis browser workspace is running.\n');
   stdout.write('Workspace: ' + root + '\n');
   stdout.write('Open on this device: ' + localUrl + '\n');
   stdout.write('Connection token (paste into Agent → Connect; keep private):\n' + app.token + '\n');
   stdout.write('Every agent chat action requires an in-browser approval before running a command, installing a package, deleting a file, or installing a bundle.\n');
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
-    stdout.write('NETWORK WARNING: this HTTP service is reachable from other devices on the bound network. Keep it on a trusted private Wi-Fi network, never port-forward it to the Internet, and stop it when finished. HTTP does not encrypt the token in transit.\n');
-    stdout.write('On your phone, open http://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+    if (app.secure) {
+      stdout.write('HTTPS is active. The certificate must be trusted by each client device and include the exact LAN IP in its subject alternative names.\n');
+      stdout.write('On your phone, open https://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+    } else {
+      stdout.write('UNENCRYPTED LAN WARNING: explicit --allow-insecure-lan is active. The token and workspace traffic can be observed on the network. Never use public Wi-Fi or expose this port to the Internet.\n');
+      stdout.write('On your phone, open http://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+    }
   } else {
-    stdout.write('This listener is local-only. To use another device on a trusted private Wi-Fi, restart with --host 0.0.0.0 and read the network warning carefully.\n');
+    stdout.write('This listener is local-only. Network access requires a trusted TLS certificate, or the explicit and unsafe --allow-insecure-lan flag.\n');
   }
   stdout.write('Press Ctrl+C to stop Oasis web.\n');
   let closing = false;

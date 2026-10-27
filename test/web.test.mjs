@@ -3,11 +3,29 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { startOasisWebServer } from '../src/web.mjs';
+import { createOasisWebServer, startOasisWebServer } from '../src/web.mjs';
 
 async function tempDir() {
   return await mkdtemp(path.join(os.tmpdir(), 'oasis-web-test-'));
 }
+
+test('network listeners require TLS unless unencrypted LAN access is explicitly acknowledged', async (t) => {
+  const root = await tempDir();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  assert.throws(
+    () => createOasisWebServer({ root, host: '0.0.0.0', token: 'test-runtime-token-0123456789' }),
+    /requires HTTPS.*allow-insecure-lan/i
+  );
+  assert.throws(
+    () => createOasisWebServer({ root, host: '127.0.0.1', tlsCertFile: 'cert.pem', token: 'test-runtime-token-0123456789' }),
+    /requires both.*tls-key/i
+  );
+  const explicitlyInsecure = createOasisWebServer({
+    root, host: '0.0.0.0', allowInsecureLan: true, token: 'test-runtime-token-0123456789'
+  });
+  assert.equal(explicitlyInsecure.secure, false);
+  await explicitlyInsecure.close();
+});
 
 test('browser runtime serves the app but requires a bearer token for every agent API', async (t) => {
   const root = await tempDir();
