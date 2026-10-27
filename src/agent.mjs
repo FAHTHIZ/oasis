@@ -766,9 +766,14 @@ const SOURCE_EXTENSIONS = new Set([
   '.cs', '.c', '.cc', '.cpp', '.h', '.hpp', '.rb', '.php', '.swift', '.kt',
   '.kts', '.vue', '.svelte', '.html', '.css', '.json', '.toml', '.yaml', '.yml'
 ]);
-const VERIFICATION_TOKENS = new Set([
-  'test', 'tests', 'check', 'lint', 'build', 'typecheck', 'type-check',
-  'verify', 'pytest', 'vitest', 'jest', 'mocha', 'eslint', 'prettier', 'tsc'
+const VERIFICATION_TASKS = new Set([
+  'test', 'tests', 'check', 'lint', 'build', 'typecheck', 'type-check', 'verify',
+  'clippy', 'vet', 'compile', 'compileall'
+]);
+const VERIFICATION_RUNNERS = new Set([
+  'pytest', 'vitest', 'jest', 'mocha', 'tap', 'ava', 'eslint', 'prettier', 'tsc',
+  'pyright', 'mypy', 'ruff', 'flake8', 'tox', 'nox', 'phpunit', 'phpstan',
+  'stylelint', 'shellcheck', 'golangci-lint', 'checkstyle', 'swiftlint'
 ]);
 
 function normalizeReviewPath(value) {
@@ -778,11 +783,87 @@ function normalizeReviewPath(value) {
   return normalized;
 }
 
+function isVerificationTaskToken(value) {
+  const token = String(value || '').toLowerCase();
+  return VERIFICATION_TASKS.has(token) || token.startsWith('test:') ||
+    token.startsWith('check:') || token.startsWith('lint:');
+}
+
+function executableName(value) {
+  return path.basename(String(value || '')).toLowerCase().replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
+}
+
+function hasHelpOrVersionArgument(args) {
+  return args.some((item) => ['--help', '-h', '--version', '-v'].includes(item));
+}
+
+function isDirectVerificationRunner(executable, args) {
+  if (!VERIFICATION_RUNNERS.has(executable) || hasHelpOrVersionArgument(args)) return false;
+  if (executable === 'vitest') return args.includes('run') || args.includes('--run');
+  if (executable === 'prettier') return args.includes('--check') || args.includes('--list-different');
+  if (executable === 'eslint' || executable === 'stylelint' || executable === 'shellcheck') {
+    return args.some((item) => item && !item.startsWith('-'));
+  }
+  if (executable === 'tsc') return !args.includes('--init');
+  return true;
+}
+
 function isVerificationCommand(command, args) {
-  return [command, ...(Array.isArray(args) ? args : [])].some((item) => {
-    const token = String(item || '').toLowerCase();
-    return VERIFICATION_TOKENS.has(token) || token.startsWith('test:') || token.startsWith('check:') || token.startsWith('lint:');
-  });
+  const executable = executableName(command);
+  const argv = (Array.isArray(args) ? args : []).map((item) => String(item || '').toLowerCase());
+  if (!executable || hasHelpOrVersionArgument(argv)) return false;
+
+  // Package-manager script names are command positions, never arbitrary values
+  // anywhere in argv. Thus echo test cannot satisfy the verification gate.
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(executable)) {
+    const first = argv[0] || '';
+    if (isVerificationTaskToken(first)) return true;
+    if (first === 'run' && isVerificationTaskToken(argv[1] || '')) return true;
+    if (first === 'exec' || first === 'x' || first === 'dlx') {
+      const start = argv.indexOf('--') >= 0 ? argv.indexOf('--') + 1 : 1;
+      for (let i = start; i < argv.length; i++) {
+        const candidate = executableName(argv[i]);
+        if (VERIFICATION_RUNNERS.has(candidate)) {
+          return isDirectVerificationRunner(candidate, argv.slice(i + 1));
+        }
+      }
+    }
+    // bun test is a built-in test runner; bun run is handled above.
+    return executable === 'bun' && first === 'test';
+  }
+
+  if (['make', 'gmake', 'just', 'cargo', 'go', 'gradle', 'mvn', 'mvnw', 'dotnet'].includes(executable)) {
+    const first = argv.find((item) => item && !item.startsWith('-')) || '';
+    if (executable === 'cargo') return ['test', 'check', 'clippy', 'build'].includes(first);
+    if (executable === 'go') return ['test', 'vet', 'build'].includes(first);
+    if (executable === 'dotnet') return ['test', 'build'].includes(first) ||
+      (first === 'format' && argv.includes('--verify-no-changes'));
+    if (executable === 'mvn' || executable === 'mvnw') {
+      return ['test', 'verify', 'package', 'compile', 'checkstyle:check'].includes(first);
+    }
+    if (executable === 'make' || executable === 'gmake' || executable === 'just' || executable === 'gradle') {
+      return isVerificationTaskToken(first);
+    }
+  }
+
+  if (executable === 'node' || executable === 'nodejs') {
+    return argv.includes('--test') || (argv.includes('--check') && argv.some((item) => /\.(?:c|m)?(?:js|jsx|ts|tsx)$/i.test(item)));
+  }
+  if (['python', 'python3', 'py'].includes(executable)) {
+    const moduleIndex = argv.indexOf('-m');
+    if (moduleIndex < 0 || !argv[moduleIndex + 1]) return false;
+    return ['pytest', 'unittest', 'compileall', 'mypy', 'ruff', 'pyright'].includes(argv[moduleIndex + 1]);
+  }
+  if (['npx', 'pnpx', 'bunx'].includes(executable)) {
+    for (let i = 0; i < argv.length; i++) {
+      const candidate = executableName(argv[i]);
+      if (VERIFICATION_RUNNERS.has(candidate)) {
+        return isDirectVerificationRunner(candidate, argv.slice(i + 1));
+      }
+    }
+    return false;
+  }
+  return isDirectVerificationRunner(executable, argv);
 }
 
 function isCompleteFileRead(args, result) {

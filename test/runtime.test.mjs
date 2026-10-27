@@ -860,6 +860,73 @@ test('post-edit verification does not accept a partial ranged read as a complete
   assert.equal(requests, 4, 'Oasis should nudge once and then preserve the incomplete verification result');
 });
 
+
+test('post-edit verification does not count an ordinary command with a test argument as a test run', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  await mkdir(path.join(tmp, 'src'));
+  await writeFile(path.join(tmp, 'src', 'example.mjs'), 'export const value = 1;\n');
+
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I updated the module.',
+        tool_calls: [{ id: 'verify-command-write', type: 'function', function: {
+          name: 'write_file',
+          arguments: JSON.stringify({ path: 'src/example.mjs', content: 'export const value = 2;\n' })
+        } }]
+      } }] }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will reread the complete changed file.',
+        tool_calls: [{ id: 'verify-command-read', type: 'function', function: {
+          name: 'read_file',
+          arguments: JSON.stringify({ path: 'src/example.mjs' })
+        } }]
+      } }] }));
+    } else if (requests === 3) {
+      res.end(JSON.stringify({ choices: [{ message: {
+        role: 'assistant',
+        content: 'I will print the word test.',
+        tool_calls: [{ id: 'verify-command-echo', type: 'function', function: {
+          name: 'run_command',
+          arguments: JSON.stringify({ command: 'echo', args: ['test'], timeoutSeconds: 10 })
+        } }]
+      } }] }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'That is complete.' } }] }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const config = {
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 6,
+    maxCommandSeconds: 10
+  };
+  const session = await createSession({ root: tmp, config });
+  const result = await runAgentTurn(session, 'Update the example module value.', { autoApprove: true });
+
+  assert.equal(result.finished, false);
+  assert.equal(result.verificationIncomplete, true);
+  assert.match(result.verificationIssues.join('; '), /no relevant test/);
+  assert.equal(requests, 5, 'the gate should nudge once after a non-verification command and then report the gap');
+});
+
 test('agent completes an OpenAI-compatible tool cycle against a local fixture server', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
