@@ -175,7 +175,7 @@ async function configureProvider() {
       (host === 'ollama.com' ? process.env.OLLAMA_API_KEY : ''));
     if (!apiKey) apiKey = process.env.OASIS_API_KEY || providerEnvKey || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
   }
-  stdout.write('\nTesting the provider with a real assistant request (no tools will be run)...\n');
+  stdout.write('\nTesting tool calling with an inert validation probe (the probe will not be executed)...\n');
   await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
   const configPath = await saveConfig({ protocol, baseURL, model, apiKey });
   stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
