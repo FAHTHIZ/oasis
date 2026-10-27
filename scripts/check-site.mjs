@@ -2,11 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
-const [html, manifestText, serviceWorker, icon] = await Promise.all([
+const [html, manifestText, serviceWorker, icon, packageText] = await Promise.all([
   read('../index.html'),
   read('../manifest.webmanifest'),
   read('../sw.js'),
-  read('../assets/oasis-icon.svg')
+  read('../assets/oasis-icon.svg'),
+  read('../package.json')
 ]);
 const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
@@ -30,6 +31,10 @@ new Function(scripts[0][1]);
 assert.ok(!/<script[^>]+src=/i.test(html), 'The starter should not depend on external scripts.');
 assert.ok(!html.includes('window.prompt('), 'Core creation and management flows should use in-app dialogs, not browser prompts.');
 
+const packageManifest = JSON.parse(packageText);
+for (const requiredAsset of ['index.html', 'manifest.webmanifest', 'sw.js', 'assets/']) {
+  assert.ok(packageManifest.files.includes(requiredAsset), 'Installable CLI package must include ' + requiredAsset + ' for oasis web.');
+}
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'Oasis OSS — Open Source Studio');
 assert.equal(manifest.start_url, './');
