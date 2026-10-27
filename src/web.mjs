@@ -143,6 +143,7 @@ export function createOasisWebServer(options = {}) {
   const activeSessions = new Map();
   const jobs = new Map();
   const busySessions = new Set();
+  const startingSessions = new Set();
   let reservedJobSlots = 0;
 
   function emit(job, type, data = {}) {
@@ -205,102 +206,110 @@ export function createOasisWebServer(options = {}) {
     const incomingMessage = String(input.message || '').trim();
     if (!incomingMessage) throw Object.assign(new Error('Enter a task or question.'), { statusCode: 400 });
     if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
-    const importedCommand = incomingMessage.startsWith('/')
-      ? await resolveImportedSlashCommand(activeRoot, incomingMessage, { env })
-      : null;
-    const message = importedCommand ? importedCommand.prompt : incomingMessage;
-    if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
 
-    let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId);
+    let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId).toLowerCase();
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
-    if (sessionId && busySessions.has(sessionId)) throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
+    if (sessionId && (busySessions.has(sessionId) || startingSessions.has(sessionId))) {
+      throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
+    }
+    if (sessionId) startingSessions.add(sessionId);
 
-    const releaseJobReservation = reserveJobSlot();
+    let releaseJobReservation = null;
     try {
-    const config = await getConfig();
-    if (!config.configured) {
-      throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
-    }
-    let session = sessionId ? activeSessions.get(sessionId) : null;
-    if (session && path.resolve(session.root) !== activeRoot) session = null;
-    if (sessionId && !session) {
-      const restore = await loadSession(activeRoot, sessionId, { env });
-      session = await createSession({ root: activeRoot, config, restore });
-      activeSessions.set(sessionId, session);
-    }
-    if (!session) {
-      session = await createSession({ root: activeRoot, config });
-      const temporaryId = randomUUID();
-      session.sessionId = temporaryId;
-      activeSessions.set(temporaryId, session);
-      sessionId = temporaryId;
-    }
-    const activeId = sessionId || session.sessionId;
-    const job = newJob();
-    jobs.set(job.id, job);
-    releaseJobReservation();
-    busySessions.add(activeId);
-    emit(job, 'started', { sessionId: activeId });
-    void (async () => {
-      try {
-        const result = await runAgentTurn(session, message, {
-          autoApprove: false,
-          env,
-          signal: job.controller.signal,
-          approval: (prompt) => approvalFor(job, prompt),
-          onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
-          onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
-          onToolStart: ({ name }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100) }),
-          onToolResult: ({ name, result: value }) => emit(job, 'tool_result', { name: String(name || 'tool').slice(0, 100), result: summarizeToolResult(value) }),
-          onUsage: (usage) => emit(job, 'usage', usage),
-          onContextPruned: (info) => emit(job, 'context_pruned', info)
-        });
-        const saved = await saveSession(session, { env });
-        if (saved.id !== activeId) {
-          activeSessions.delete(activeId);
-          activeSessions.set(saved.id, session);
-        }
-        job.result = { ...result, sessionId: saved.id };
-        if (job.cancelRequested || result.cancelled) {
-          job.result.cancelled = true;
-          job.status = 'cancelled';
-          emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: saved.id });
-        } else {
-          job.status = 'completed';
-          emit(job, 'completed', job.result);
-        }
-      } catch (error) {
-        if (job.cancelRequested || error.name === 'AbortError') {
-          try {
-            const saved = await saveSession(session, { env });
-            if (saved.id !== activeId) {
-              activeSessions.delete(activeId);
-              activeSessions.set(saved.id, session);
-            }
-            job.result = { cancelled: true, sessionId: saved.id };
-          } catch {
-            job.result = { cancelled: true, sessionId: activeId, sessionSaved: false };
-          }
-          job.status = 'cancelled';
-          job.error = null;
-          emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId });
-        } else {
-          job.error = String(error && error.message || error || 'Agent request failed').slice(0, 4000);
-          job.status = 'error';
-          emit(job, 'failed', { message: job.error });
-        }
-      } finally {
-        busySessions.delete(activeId);
+      // Reserve before the first await so simultaneous requests cannot overbook capacity
+      // or start a workspace change while this session is still being restored.
+      releaseJobReservation = reserveJobSlot();
+      const importedCommand = incomingMessage.startsWith('/')
+        ? await resolveImportedSlashCommand(activeRoot, incomingMessage, { env })
+        : null;
+      const message = importedCommand ? importedCommand.prompt : incomingMessage;
+      if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
+
+      const config = await getConfig();
+      if (!config.configured) {
+        throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
       }
-    })();
-    return { jobId: job.id, sessionId: activeId };
-    } catch (error) {
+      let session = sessionId ? activeSessions.get(sessionId) : null;
+      if (session && path.resolve(session.root) !== activeRoot) session = null;
+      if (sessionId && !session) {
+        const restore = await loadSession(activeRoot, sessionId, { env });
+        session = await createSession({ root: activeRoot, config, restore });
+        activeSessions.set(sessionId, session);
+      }
+      if (!session) {
+        session = await createSession({ root: activeRoot, config });
+        const temporaryId = randomUUID();
+        session.sessionId = temporaryId;
+        activeSessions.set(temporaryId, session);
+        sessionId = temporaryId;
+      }
+      const activeId = sessionId || session.sessionId;
+      const job = newJob();
+      jobs.set(job.id, job);
       releaseJobReservation();
+      releaseJobReservation = null;
+      if (sessionId) startingSessions.delete(sessionId);
+      busySessions.add(activeId);
+      emit(job, 'started', { sessionId: activeId });
+      void (async () => {
+        try {
+          const result = await runAgentTurn(session, message, {
+            autoApprove: false,
+            env,
+            signal: job.controller.signal,
+            approval: (prompt) => approvalFor(job, prompt),
+            onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
+            onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
+            onToolStart: ({ name }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100) }),
+            onToolResult: ({ name, result: value }) => emit(job, 'tool_result', { name: String(name || 'tool').slice(0, 100), result: summarizeToolResult(value) }),
+            onUsage: (usage) => emit(job, 'usage', usage),
+            onContextPruned: (info) => emit(job, 'context_pruned', info)
+          });
+          const saved = await saveSession(session, { env });
+          if (saved.id !== activeId) {
+            activeSessions.delete(activeId);
+            activeSessions.set(saved.id, session);
+          }
+          job.result = { ...result, sessionId: saved.id };
+          if (job.cancelRequested || result.cancelled) {
+            job.result.cancelled = true;
+            job.status = 'cancelled';
+            emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: saved.id });
+          } else {
+            job.status = 'completed';
+            emit(job, 'completed', job.result);
+          }
+        } catch (error) {
+          if (job.cancelRequested || error.name === 'AbortError') {
+            try {
+              const saved = await saveSession(session, { env });
+              if (saved.id !== activeId) {
+                activeSessions.delete(activeId);
+                activeSessions.set(saved.id, session);
+              }
+              job.result = { cancelled: true, sessionId: saved.id };
+            } catch {
+              job.result = { cancelled: true, sessionId: activeId, sessionSaved: false };
+            }
+            job.status = 'cancelled';
+            job.error = null;
+            emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId });
+          } else {
+            job.error = String(error && error.message || error || 'Agent request failed').slice(0, 4000);
+            job.status = 'error';
+            emit(job, 'failed', { message: job.error });
+          }
+        } finally {
+          busySessions.delete(activeId);
+        }
+      })();
+      return { jobId: job.id, sessionId: activeId };
+    } catch (error) {
+      if (sessionId) startingSessions.delete(sessionId);
+      if (releaseJobReservation) releaseJobReservation();
       throw error;
     }
   }
-
-
 
   async function runReadOnlyGh(args, timeoutSeconds = 30) {
     return await executeTool('run_command', { command: 'gh', args, timeoutSeconds }, {
