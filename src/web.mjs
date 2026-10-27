@@ -143,6 +143,7 @@ export function createOasisWebServer(options = {}) {
   const activeSessions = new Map();
   const jobs = new Map();
   const busySessions = new Set();
+  const startingSessions = new Set();
   let reservedJobSlots = 0;
 
   function emit(job, type, data = {}) {
@@ -205,19 +206,24 @@ export function createOasisWebServer(options = {}) {
     const incomingMessage = String(input.message || '').trim();
     if (!incomingMessage) throw Object.assign(new Error('Enter a task or question.'), { statusCode: 400 });
     if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
-    const importedCommand = incomingMessage.startsWith('/')
-      ? await resolveImportedSlashCommand(activeRoot, incomingMessage, { env })
-      : null;
-    const message = importedCommand ? importedCommand.prompt : incomingMessage;
-    if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
-
-    let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId);
+    let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId).toLowerCase();
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
-    if (sessionId && busySessions.has(sessionId)) throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
+    if (sessionId && (busySessions.has(sessionId) || startingSessions.has(sessionId))) {
+      throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
+    }
+    if (sessionId) startingSessions.add(sessionId);
 
-    const releaseJobReservation = reserveJobSlot();
+    let releaseJobReservation = null;
     try {
-    const config = await getConfig();
+      // Acquire both locks before any asynchronous initialization can interleave with another request.
+      releaseJobReservation = reserveJobSlot();
+      const importedCommand = incomingMessage.startsWith('/')
+        ? await resolveImportedSlashCommand(activeRoot, incomingMessage, { env })
+        : null;
+      const message = importedCommand ? importedCommand.prompt : incomingMessage;
+      if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
+
+      const config = await getConfig();
     if (!config.configured) {
       throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
     }
@@ -239,6 +245,8 @@ export function createOasisWebServer(options = {}) {
     const job = newJob();
     jobs.set(job.id, job);
     releaseJobReservation();
+    releaseJobReservation = null;
+    if (sessionId) startingSessions.delete(sessionId);
     busySessions.add(activeId);
     emit(job, 'started', { sessionId: activeId });
     void (async () => {
@@ -295,7 +303,8 @@ export function createOasisWebServer(options = {}) {
     })();
     return { jobId: job.id, sessionId: activeId };
     } catch (error) {
-      releaseJobReservation();
+      if (sessionId) startingSessions.delete(sessionId);
+      if (releaseJobReservation) releaseJobReservation();
       throw error;
     }
   }

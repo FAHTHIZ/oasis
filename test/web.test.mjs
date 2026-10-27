@@ -526,6 +526,201 @@ test('browser chat runs a model tool call through approval and completes the sam
   assert.ok(snapshot.events.some((event) => event.type === 'completed'));
 });
 
+
+test('browser runtime rejects a 21st active job instead of exceeding its bounded job history', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const pendingResponses = [];
+  let releaseResponses = false;
+  const fixtureResponse = JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Fixture task completed.' } }] });
+  const providerServer = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    if (releaseResponses) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(fixtureResponse);
+    } else {
+      pendingResponses.push(res);
+    }
+  });
+  await new Promise((resolve, reject) => {
+    providerServer.once('error', reject);
+    providerServer.listen(0, '127.0.0.1', resolve);
+  });
+  await saveConfig({
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + providerServer.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: ''
+  }, { env });
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env,
+    token: 'test-runtime-token-0123456789'
+  });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const jobIds = [];
+  const releaseProvider = () => {
+    releaseResponses = true;
+    for (const res of pendingResponses.splice(0)) {
+      if (res.writableEnded) continue;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(fixtureResponse);
+    }
+  };
+  const finishActiveJobs = async () => {
+    const deadline = Date.now() + 5000;
+    while (jobIds.length && Date.now() < deadline) {
+      const snapshots = await Promise.all(jobIds.map(async (id) => {
+        try {
+          const response = await fetch(base + '/api/jobs/' + id + '?after=0', {
+            headers: { authorization: 'Bearer ' + app.token }
+          });
+          return response.ok ? await response.json() : null;
+        } catch { return null; }
+      }));
+      if (snapshots.every((snapshot) => snapshot && ['completed', 'error', 'cancelled'].includes(snapshot.status))) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  };
+  t.after(async () => {
+    releaseProvider();
+    await finishActiveJobs();
+    await app.close();
+    await new Promise((resolve) => providerServer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+
+  for (let index = 0; index < 20; index++) {
+    const response = await fetch(base + '/api/chat', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ message: 'Keep active capacity fixture ' + index + ' running.' })
+    });
+    assert.equal(response.status, 202, 'job ' + (index + 1) + ' should be admitted');
+    const body = await response.json();
+    assert.ok(body.jobId);
+    jobIds.push(body.jobId);
+  }
+
+  const overflow = await fetch(base + '/api/chat', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message: 'This 21st active job must be rejected.' })
+  });
+  assert.equal(overflow.status, 429, await overflow.clone().text());
+  assert.match((await overflow.json()).error, /20-job limit/i);
+
+  const deadline = Date.now() + 5000;
+  while (pendingResponses.length < 20 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(pendingResponses.length, 20, 'all admitted jobs should reach the intentionally held provider response');
+  releaseProvider();
+  await finishActiveJobs();
+});
+
+test('browser runtime rejects a second concurrent request for the same saved session', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const pendingResponses = [];
+  let holdResponses = false;
+  const fixtureResponse = JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Fixture task completed.' } }] });
+  const providerServer = createServer(async (req, res) => {
+    for await (const _chunk of req) {}
+    if (holdResponses) pendingResponses.push(res);
+    else {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(fixtureResponse);
+    }
+  });
+  await new Promise((resolve, reject) => {
+    providerServer.once('error', reject);
+    providerServer.listen(0, '127.0.0.1', resolve);
+  });
+  await saveConfig({
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + providerServer.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: ''
+  }, { env });
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env,
+    token: 'test-runtime-token-0123456789'
+  });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const jobIds = [];
+  const releaseProvider = () => {
+    holdResponses = false;
+    for (const res of pendingResponses.splice(0)) {
+      if (res.writableEnded) continue;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(fixtureResponse);
+    }
+  };
+  const getSnapshot = async (jobId) => {
+    const response = await fetch(base + '/api/jobs/' + jobId + '?after=0', {
+      headers: { authorization: 'Bearer ' + app.token }
+    });
+    assert.equal(response.status, 200);
+    return await response.json();
+  };
+  const waitForTerminalStatus = async (jobId) => {
+    const deadline = Date.now() + 5000;
+    let snapshot;
+    while (Date.now() < deadline) {
+      snapshot = await getSnapshot(jobId);
+      if (['completed', 'error', 'cancelled'].includes(snapshot.status)) return snapshot;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error('Job did not finish: ' + JSON.stringify(snapshot));
+  };
+  t.after(async () => {
+    releaseProvider();
+    await Promise.all(jobIds.map((jobId) => waitForTerminalStatus(jobId).catch(() => null)));
+    await app.close();
+    await new Promise((resolve) => providerServer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const initial = await fetch(base + '/api/chat', {
+    method: 'POST', headers,
+    body: JSON.stringify({ message: 'Create a saved session for the concurrency check.' })
+  });
+  assert.equal(initial.status, 202, await initial.clone().text());
+  const initialJob = await initial.json();
+  jobIds.push(initialJob.jobId);
+  const initialSnapshot = await waitForTerminalStatus(initialJob.jobId);
+  assert.equal(initialSnapshot.status, 'completed', initialSnapshot.error || JSON.stringify(initialSnapshot.result));
+  const savedSessionId = initialSnapshot.result.sessionId;
+  assert.ok(savedSessionId);
+
+  holdResponses = true;
+  const requests = await Promise.all([
+    fetch(base + '/api/chat', {
+      method: 'POST', headers,
+      body: JSON.stringify({ sessionId: savedSessionId, message: 'First message on the saved session.' })
+    }),
+    fetch(base + '/api/chat', {
+      method: 'POST', headers,
+      body: JSON.stringify({ sessionId: savedSessionId, message: 'Second message racing the first.' })
+    })
+  ]);
+  const statuses = requests.map((response) => response.status).sort((a, b) => a - b);
+  assert.deepEqual(statuses, [202, 409], 'exactly one request should own the saved session while it initializes');
+  const acceptedIndex = requests.findIndex((response) => response.status === 202);
+  const accepted = await requests[acceptedIndex].json();
+  jobIds.push(accepted.jobId);
+  assert.equal(accepted.sessionId, savedSessionId);
+
+  const deadline = Date.now() + 5000;
+  while (pendingResponses.length < 1 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(pendingResponses.length, 1, 'only the accepted request should reach the held provider response');
+  releaseProvider();
+  const finalSnapshot = await waitForTerminalStatus(accepted.jobId);
+  assert.equal(finalSnapshot.status, 'completed', finalSnapshot.error || JSON.stringify(finalSnapshot.result));
+});
+
 test('extensions and MCP integration endpoints return safe inventories and require explicit API authentication', async (t) => {
   const root = await tempDir();
   const app = await startOasisWebServer({
