@@ -69,7 +69,10 @@ export function sanitizeSharedTaskStore(value) {
     const timestamp = (candidate) => typeof candidate === 'string' && Number.isFinite(Date.parse(candidate)) ? candidate : new Date(0).toISOString();
     const blockedBy = Array.isArray(item.blockedBy) ? [...new Set(item.blockedBy.filter((dep) => typeof dep === 'string' && TASK_ID.test(dep)))].slice(0, MAX_DEPENDENCIES) : [];
     // A restored session has no live agent processes, so never restore a live lease.
-    tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: '', claimExpiresAt: null });
+    const worktreeChanged = item.worktreeChanged === true;
+    const worktreeBranch = typeof item.worktreeBranch === 'string' && /^oasis\/[a-z0-9-]{1,100}$/i.test(item.worktreeBranch) ? item.worktreeBranch.slice(0, 120) : '';
+    const worktreeCommit = typeof item.worktreeCommit === 'string' && /^[0-9a-f]{40}$/i.test(item.worktreeCommit) ? item.worktreeCommit.toLowerCase() : '';
+    tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: '', claimExpiresAt: null, worktreeChanged, worktreeBranch, worktreeCommit });
     ids.add(id);
   }
 

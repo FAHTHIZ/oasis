@@ -3,7 +3,7 @@ import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './outpu
 import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
-import { createWorktree, finishWorktree, removeWorktree } from './worktrees.mjs';
+import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
@@ -1694,6 +1694,9 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     catch (error) { worktreeResult = { changed: true, branch: worktree.branch, path: worktree.relative, error: 'Could not commit the worktree changes: ' + error.message }; }
     record.worktree = worktreeResult;
   }
+  if (record.sharedTaskId && (worktreeResult || record.worktree)) {
+    recordSharedTaskWorktree(parent, record, worktreeResult || record.worktree);
+  }
   record.finishedAt = Date.now();
   record.status = 'completed';
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
@@ -1708,6 +1711,27 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0)
   };
+}
+
+function recordSharedTaskWorktree(parent, record, worktreeResult) {
+  if (!record.sharedTaskId || !parent.sharedTasks || !Array.isArray(parent.sharedTasks.tasks)) return;
+  const task = parent.sharedTasks.tasks.find((item) => item.id === record.sharedTaskId);
+  if (!task) return;
+  const changed = Boolean(worktreeResult && worktreeResult.changed);
+  const branch = String(worktreeResult && worktreeResult.branch || '');
+  const fullCommit = String(worktreeResult && worktreeResult.commitSha || '').toLowerCase();
+  task.worktreeChanged = changed;
+  task.worktreeBranch = changed && /^oasis\/[a-z0-9-]{1,100}$/i.test(branch) ? branch.slice(0, 120) : '';
+  task.worktreeCommit = changed && /^[0-9a-f]{40}$/.test(fullCommit) ? fullCommit : '';
+  task.updatedAt = new Date().toISOString();
+  recordAgentEvent(parent, 'task.worktree_recorded', {
+    agentId: record.id,
+    teamId: record.teamId || undefined,
+    description: task.id,
+    detail: changed
+      ? 'Worker branch ' + (task.worktreeBranch || '(unknown branch)') + ' commit ' + (task.worktreeCommit || '(commit SHA unavailable)') + ' pending integration'
+      : 'Worker produced no worktree changes'
+  });
 }
 
 function startBackgroundRun(parent, record, prompt, options) {
@@ -1825,6 +1849,9 @@ async function advanceAutoDispatch(session, record = null) {
         detail: result.launched.map((item) => item.task_id).join(', ')
       });
       notifyParent(session, 'Automatic task dispatch launched ' + result.launched_count + ' additional worker(s): ' + result.launched.map((item) => item.task_id).join(', ') + '.');
+    } else if (result.integration_blocked && result.integration_blocked.length && runningBackgroundCount(session) === 0) {
+      const waiting = result.integration_blocked.map((item) => item.task_id + ' waits for ' + item.prerequisite_task_id + (item.branch ? ' (' + item.branch + ')' : '')).join(', ');
+      pauseAutoDispatch(session, 'downstream work is waiting for unintegrated prerequisite changes: ' + waiting + '. Review the worker branch with worktree preflight/inspect, merge it explicitly, then restart auto-dispatch if appropriate.');
     } else if (runningBackgroundCount(session) === 0) {
       workflow.enabled = false;
       recordAgentEvent(session, 'task.auto_dispatch_idle', {
@@ -1902,12 +1929,37 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
     .filter((agent) => agent.status === 'running' && agent.sharedTaskId)
     .map((agent) => agent.sharedTaskId));
   const board = runSharedTaskTool(session, 'task_list', { include_completed: false });
-  // A live claim owned by the coordinator is not free for dispatch; expired claims can be reclaimed.
-  const ready = board.tasks.filter((task) =>
+  const candidates = board.tasks.filter((task) =>
     task.ready &&
     !runningTaskIds.has(task.id) &&
     (!task.claimed_by || task.claim_expired)
   );
+  const integrationBlocked = [];
+  const ready = [];
+  const internalTasks = new Map((session.sharedTasks && session.sharedTasks.tasks || []).map((task) => [task.id, task]));
+  const integrationCache = new Map();
+  for (const task of candidates) {
+    let blocked = false;
+    if (registry.autoDispatch && registry.autoDispatch.enabled) {
+      for (const prerequisiteId of task.blocked_by || []) {
+        const prerequisite = internalTasks.get(prerequisiteId);
+        if (!prerequisite || prerequisite.worktreeChanged !== true) continue;
+        const commit = String(prerequisite.worktreeCommit || '');
+        let integrated = false;
+        if (/^[0-9a-f]{40}$/i.test(commit)) {
+          if (!integrationCache.has(commit)) {
+            integrationCache.set(commit, await isCommitIntegrated(session.root, commit, { env: options.env || process.env }));
+          }
+          integrated = integrationCache.get(commit);
+        }
+        if (integrated) continue;
+        integrationBlocked.push({ task_id: task.id, prerequisite_task_id: prerequisiteId, branch: prerequisite.worktreeBranch || null, commit: commit || null });
+        blocked = true;
+        break;
+      }
+    }
+    if (!blocked) ready.push(task);
+  }
   const availableSlots = Math.max(0, Math.min(
     requested,
     MAX_PARALLEL_SUBAGENTS,
@@ -1950,23 +2002,30 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
   const response = {
     launched,
     failed,
-    ready_count: ready.length,
+    ready_count: ready.length + integrationBlocked.length,
     launched_count: launched.length,
     available_slots: availableSlots,
-    deferred_count: Math.max(0, ready.length - launched.length),
+    deferred_count: Math.max(0, ready.length - launched.length) + integrationBlocked.length,
+    integration_blocked: integrationBlocked,
     message: launched.length
-      ? 'Started ' + launched.length + ' background worker(s) in isolated worktrees. Monitor them with agent_status or agent_events; dispatch the next wave after prerequisites complete. No branch was merged.'
+      ? 'Started ' + launched.length + ' background worker(s) in isolated worktrees. Monitor them with agent_status or agent_events; no branch was merged.'
       : failed.length
         ? 'No worker started successfully. Review the per-task errors and clear the blocker before retrying.'
-        : ready.length && availableSlots === 0
-          ? 'Ready tasks exist, but the active background-worker limit is full. Wait for a worker to finish or stop one, then dispatch again.'
-          : 'No unclaimed ready tasks can be dispatched in this wave. Check task_list for dependencies, live leases, and task owners.'
+        : integrationBlocked.length
+          ? 'Dependent tasks are ready but are waiting for prerequisite worktree commits to be integrated into the main checkout.'
+          : ready.length && availableSlots === 0
+            ? 'Ready tasks exist, but the active background-worker limit is full. Wait for a worker to finish or stop one, then dispatch again.'
+            : 'No unclaimed ready tasks can be dispatched in this wave. Check task_list for dependencies, live leases, and task owners.'
   };
 
   if (ownsAutoDispatchLock) {
     const workflow = registry.autoDispatch;
     workflow.dispatching = false;
-    if (!launched.length) {
+    if (!launched.length && integrationBlocked.length) {
+      const waiting = integrationBlocked.map((item) => item.task_id + ' waits for ' + item.prerequisite_task_id + (item.branch ? ' (' + item.branch + ')' : '')).join(', ');
+      pauseAutoDispatch(session, 'downstream work is waiting for unintegrated prerequisite changes: ' + waiting + '. Review the worker branch with worktree preflight/inspect, merge it explicitly, then restart auto-dispatch if appropriate.');
+      response.message += ' Automatic chaining paused for prerequisite integration review; no worker branch was merged.';
+    } else if (!launched.length) {
       workflow.enabled = false;
       workflow.pending = false;
       recordAgentEvent(session, 'task.auto_dispatch_idle', {

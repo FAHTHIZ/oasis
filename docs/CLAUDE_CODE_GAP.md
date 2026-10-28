@@ -35,7 +35,7 @@ OASIS now has several core coordination mechanisms: an exclusive lease-based tas
 
 This still is not full Claude Code agent-team or dynamic-workflow parity:
 - `dispatch_ready_tasks` now launches a bounded wave of dependency-ready tasks as background general-purpose agents in separate Git worktrees. It skips active leases and tasks already assigned to running workers; each task ID appears in agent status/events. Repeated model-directed calls can launch later waves as prerequisites complete.
-- The dispatcher remains **explicitly opt-in and session-scoped**. `dispatch_ready_tasks` can set `auto_dispatch: true` to refill freed slots and launch newly unblocked tasks as workers finish; it pauses on worker failure/cancellation or a worker that exits without completing its task, and releases that worker's lease. It does not survive process/session restarts, run as a persistent service, write a repeatable workflow script, or merge branches automatically.
+- The dispatcher remains **explicitly opt-in and session-scoped**. `dispatch_ready_tasks` can set `auto_dispatch: true` to refill freed slots and launch newly unblocked tasks as workers finish. It records each task worker's branch/commit and will not dispatch downstream work against changed prerequisite code until that commit is an ancestor of the main checkout; it pauses and asks for review/integration instead. Failed, cancelled, or incomplete workers also pause the chain and release the incomplete task's lease when safe. It does not survive process/session restarts, run as a persistent service, write a repeatable workflow script, or merge branches automatically.
 - Teams are scoped to one OASIS session. They do not coordinate across independent sessions or machines.
 - There is no dedicated visual agent/team monitor or automatic resolution of overlapping file edits. Worktree merge preflight reports overlap/conflicts; integration remains reviewable and approval-gated.
 - Background workers cannot prompt for per-tool approval. Their edits and commands remain subject to the inherited permission mode and explicit allow rules.
@@ -56,7 +56,7 @@ The gap is not closed yet. The first native integration smoke test targets Linux
 
 ### 2. Automated team dispatch and visibility
 
-Lease-based claiming/renewal, peer messaging, named teams, lifecycle events, and approval-gated worktree merge are implemented. `dispatch_ready_tasks` now launches a bounded wave from the dependency-ready board, associates each worker with its task, runs it in a separate worktree, and frees the lease if the worker fails or is cancelled. Repeated model-directed dispatch calls can start subsequent dependency waves. Remaining work is a persistent workflow/scheduler, visual monitoring, cross-session coordination, and richer conflict-aware review; this is not a claim that agents self-coordinate autonomously.
+Lease-based claiming/renewal, peer messaging, named teams, lifecycle events, and approval-gated worktree merge are implemented. `dispatch_ready_tasks` launches bounded waves in separate worktrees; opt-in automatic chaining fills freed slots but records prerequisite branch/commit provenance and defers dependent tasks until upstream commits are integrated into the main checkout. Failure/cancellation or incomplete work pauses chaining, and no branch is merged automatically. Remaining work is persistence across process restarts, visual monitoring, cross-session coordination, and richer conflict-aware review; this is not a claim that agents self-coordinate autonomously.
 
 ### 3. IDE integration
 
