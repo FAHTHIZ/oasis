@@ -16,6 +16,7 @@ const NESTED_MEMORY_TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'mu
 import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
+import { debugLog, debugEnabled } from './debug-log.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
@@ -443,6 +444,10 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
   session.modelEnv = env;
+  if (env.OASIS_DEBUG && env.OASIS_DEBUG !== '0' && !debugEnabled()) {
+    const { enableDebug } = await import('./debug-log.mjs');
+    session.debugFile = enableDebug({ categories: env.OASIS_DEBUG, file: env.OASIS_DEBUG_FILE || null, env, sessionId: session.sessionId || null });
+  }
   session.availableModels = loadedSettings.availableModels || null;
   if (session.availableModels && session.config && session.config.model && !modelAllowed(session.config.model, session.availableModels, { env, protocol: session.config.protocol })) {
     // Like Claude Code, a disallowed startup model falls back instead of failing.
@@ -1194,6 +1199,23 @@ async function requestCompletionTraced(session, options = {}) {
 }
 
 async function requestCompletionTracedOnce(session, options = {}) {
+  if (debugEnabled('api')) {
+    const started = Date.now();
+    debugLog('api', 'request ' + ((session.config && session.config.protocol) || '') + ' model=' + ((session.config && session.config.model) || '') + ' messages=' + session.messages.length + ' tools=' + ((session.toolDefinitions || []).length));
+    try {
+      const reply = await requestCompletionTracedInner(session, options);
+      const usage = reply.usage || {};
+      debugLog('api', 'response in ' + (Date.now() - started) + 'ms input=' + (usage.inputTokens || 0) + ' output=' + (usage.outputTokens || 0) + ' cacheRead=' + (usage.cacheReadTokens || 0) + ' toolCalls=' + (reply.tool_calls || []).length);
+      return reply;
+    } catch (error) {
+      debugLog('api', 'error after ' + (Date.now() - started) + 'ms' + (error && error.status ? ' status=' + error.status : '') + ': ' + String(error && error.message || error).slice(0, 800));
+      throw error;
+    }
+  }
+  return requestCompletionTracedInner(session, options);
+}
+
+async function requestCompletionTracedInner(session, options = {}) {
   const tel = getTelemetry(options.env || session.providerEnv || process.env);
   if (!tel) return requestCompletionRaw(session, options);
   const model = session.config && session.config.model || '';
@@ -2406,6 +2428,7 @@ async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
   const mode = permissionMode(session, options);
   const verdict = policy ? policy.evaluate(name, args) : { decision: 'default' };
+  if (debugEnabled('permissions')) debugLog('permissions', name + ' -> ' + verdict.decision + (verdict.rule ? ' (rule ' + verdict.rule + ')' : '') + ' mode=' + (session.permissionMode || 'default'));
   if (verdict.decision === 'deny') return { deniedReason: 'Denied by permission rule ' + verdict.rule + '.' };
   let decision = verdict.decision;
   let hookContext = [];
@@ -2675,6 +2698,7 @@ async function executeOneCallRaw(session, call, context, options) {
       const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: callContext.env || process.env }).catch(() => []);
       if (nested.length) result.directoryInstructions = 'Project instructions for this folder (follow them for files here):\n' + nested.map((item) => '--- ' + item.path + ' ---\n' + item.text).join('\n\n');
     }
+    if (debugEnabled('tools')) debugLog('tools', name + ' ' + (result && result.error ? 'error: ' + String(result.error).slice(0, 300) : 'ok'), args);
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
     if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;
     if (result && typeof result === 'object' && typeof result.error === 'string' && result.error) {
