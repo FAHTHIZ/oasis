@@ -17,7 +17,8 @@ import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
 import { oauthHeader, refreshStoredToken } from './mcp-oauth.mjs';
 
-const PROTOCOL_VERSION = '2025-03-26';
+import { clientCapabilities, routeServerMessage, MCP_CLIENT_PROTOCOL_VERSION } from './mcp-client-features.mjs';
+const PROTOCOL_VERSION = MCP_CLIENT_PROTOCOL_VERSION;
 const MAX_RESPONSE = 4 * 1024 * 1024;
 const MAX_CONTENT = 24000;
 
@@ -131,7 +132,7 @@ async function readBoundedResponseText(response) {
   return Buffer.concat(chunks, total).toString('utf8');
 }
 
-async function readSseResponse(response, id) {
+async function readSseResponse(response, id, onMessage = null) {
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE) {
     await response.body?.cancel().catch(() => {});
@@ -157,6 +158,7 @@ async function readSseResponse(response, id) {
         if (!data) continue;
         let message;
         try { message = JSON.parse(data); } catch { continue; }
+        if (message && typeof message.method === 'string') { if (onMessage) Promise.resolve(onMessage(message)).catch(() => {}); continue; }
         if (message && String(message.id) === String(id) && (message.result !== undefined || message.error)) return message;
       }
     }
@@ -177,6 +179,7 @@ export class McpHttpClient {
     this.sessionId = null;
     this.nextId = 1;
     this.closed = false;
+    this.host = options.host || null;
   }
 
   async _post(message, timeoutMs = 30000, retried = false) {
@@ -211,9 +214,10 @@ export class McpHttpClient {
       }
       if (response.status === 401 || response.status === 403) throw new Error('MCP server ' + this.config.name + ' rejected the credentials (HTTP ' + response.status + '). Check the headers in .mcp.json.');
       if (!response.ok && response.status !== 202) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + '.');
-      if (message.id === undefined || response.status === 202 || response.status === 204) return null;
+      if (message.id === undefined || message.method === undefined || response.status === 202 || response.status === 204) return null;
       const type = response.headers.get('content-type') || '';
-      const reply = type.includes('text/event-stream') ? await readSseResponse(response, message.id) : JSON.parse(await readBoundedResponseText(response));
+      const onServerMessage = (incoming) => routeServerMessage(this, incoming, (reply) => this._post(reply, 30000));
+      const reply = type.includes('text/event-stream') ? await readSseResponse(response, message.id, onServerMessage) : JSON.parse(await readBoundedResponseText(response));
       const matched = Array.isArray(reply) ? reply.find((item) => String(item.id) === String(message.id)) : reply;
       if (!matched) throw new Error('MCP server sent no matching response.');
       if (matched.error) throw new Error(matched.error.message || 'MCP request failed.');
@@ -230,14 +234,19 @@ export class McpHttpClient {
   }
 
   async start() {
-    const init = await this._request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'oasis-oss', version: '0.2.0' } }, 15000);
+    const init = await this._request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: clientCapabilities(), clientInfo: { name: 'oasis-oss', version: '0.2.0' } }, 15000);
     this.protocolVersion = init && init.protocolVersion || PROTOCOL_VERSION;
     await this._post({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }, 10000).catch(() => {});
+    await this.refreshTools();
+    await loadMcpExtras(this, init);
+    return this.tools;
+  }
+
+  async refreshTools() {
     const listed = await this._request('tools/list', {}, 15000);
     this.tools = (Array.isArray(listed.tools) ? listed.tools : [])
       .filter((tool) => tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) && tool.name !== '__proto__')
       .slice(0, 80);
-    await loadMcpExtras(this, init);
     return this.tools;
   }
 

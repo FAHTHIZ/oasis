@@ -4,8 +4,9 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient } from './mcp-project.mjs';
 import { loadMcpExtras, RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
+import { clientCapabilities, routeServerMessage, MCP_CLIENT_PROTOCOL_VERSION } from './mcp-client-features.mjs';
 
-const PROTOCOL_VERSION = '2024-11-05';
+const PROTOCOL_VERSION = MCP_CLIENT_PROTOCOL_VERSION;
 const MAX_LINE = 1024 * 1024;
 const MAX_CONTENT = 24000;
 
@@ -130,6 +131,23 @@ function compactText(result) {
   return JSON.stringify(result).slice(0, MAX_CONTENT);
 }
 
+export function filterTools(tools) {
+  return (Array.isArray(tools) ? tools : []).filter((tool) =>
+    tool && typeof tool.name === 'string' &&
+    /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) &&
+    tool.name !== '__proto__'
+  ).slice(0, 80);
+}
+
+/** Rebuilds a session's MCP tool definitions after a server's tool list changed. */
+export function refreshSessionMcpTools(session) {
+  const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
+  const dynamic = mcpToolDefinitions(session.mcpClients);
+  session.mcpToolMap = dynamic.map;
+  session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
+  if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
+}
+
 export class McpServerClient {
   constructor(config, options = {}) {
     this.config = validateMcpServerConfig(config);
@@ -144,6 +162,7 @@ export class McpServerClient {
     this.stderrTail = '';
     this.tools = [];
     this.startPromise = null;
+    this.host = options.host || null;
   }
 
   async start() {
@@ -175,18 +194,18 @@ export class McpServerClient {
 
     const init = await this._request('initialize', {
       protocolVersion: PROTOCOL_VERSION,
-      capabilities: {},
+      capabilities: clientCapabilities(),
       clientInfo: { name: 'oasis-oss', version: '0.2.0' }
     }, 15000);
     this._notify('notifications/initialized', {});
-    const listed = await this._request('tools/list', {}, 15000);
-    const tools = Array.isArray(listed.tools) ? listed.tools : [];
-    this.tools = tools.filter((tool) =>
-      tool && typeof tool.name === 'string' &&
-      /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) &&
-      tool.name !== '__proto__'
-    ).slice(0, 80);
+    await this.refreshTools();
     await loadMcpExtras(this, init);
+    return this.tools;
+  }
+
+  async refreshTools() {
+    const listed = await this._request('tools/list', {}, 15000);
+    this.tools = filterTools(listed.tools);
     return this.tools;
   }
 
@@ -209,6 +228,11 @@ export class McpServerClient {
       let message;
       try { message = JSON.parse(line); } catch {
         this.stderrTail = (this.stderrTail + '\n[ignored non-JSON stdout from MCP server]').slice(-6000);
+        continue;
+      }
+      // Requests and notifications from the server (elicitation, roots, list_changed, ping).
+      if (message && typeof message.method === 'string') {
+        routeServerMessage(this, message, (response) => this._write(response)).catch(() => {});
         continue;
       }
       if (message.id !== undefined && this.pending.has(String(message.id))) {
@@ -241,8 +265,12 @@ export class McpServerClient {
   }
 
   _notify(method, params = {}) {
+    this._write({ jsonrpc: '2.0', method, params });
+  }
+
+  _write(message) {
     if (!this.child || this.closed || !this.child.stdin.writable) return;
-    this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+    this.child.stdin.write(JSON.stringify(message) + '\n');
   }
 
   async callTool(name, args, options = {}) {
@@ -366,7 +394,7 @@ export function attachToolServer(session, server) {
 // Starts (or restarts) one server inside a running session and refreshes the
 // session's tool list, e.g. right after oasis mcp login.
 export async function reconnectMcpServer(session, config, options = {}) {
-  const client = config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
+  const client = config.type === 'http' ? new McpHttpClient(config, { host: session.mcpHost, ...options }) : new McpServerClient(config, { host: session.mcpHost, ...options });
   client.source = config.source || 'project';
   await client.start();
   const previous = session.mcpClients.get(config.name);
