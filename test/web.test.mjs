@@ -959,6 +959,8 @@ test('browser chat supports built-in slash commands, @file mentions, tool detail
   const state = snapshot.events.find((e) => e.type === 'session_state');
   assert.ok(state && state.data.contextWindow > 0 && state.data.totalTokens >= 15, JSON.stringify(state));
 
+  const listing = await (await fetch(base + '/api/sessions', { headers })).json();
+  assert.match(listing.sessions[0].title, /^Check node and read @NOTES\.md/);
   const plan = await start('/mode plan', snapshot.result.sessionId);
   snapshot = await waitFor(plan.jobId, done);
   assert.equal(snapshot.events.find((e) => e.type === 'session_state').data.mode, 'plan');
