@@ -1,5 +1,9 @@
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import path from 'node:path';
+import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
@@ -215,7 +219,33 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
   return { compacted: true, tokensUsed };
 }
 
-function systemPrompt(root, projectContext, skillDescriptions = '') {
+// A short snapshot of the environment, like Claude Code's <env> block: platform,
+// date, and (for Git repositories) the branch, status summary, and recent commits.
+async function describeEnvironment(root, env = process.env) {
+  const lines = ['Platform: ' + process.platform + ' ' + os.release() + ' (' + process.arch + '), Node ' + process.version, "Today's date: " + new Date().toISOString().slice(0, 10)];
+  const git = async (args) => {
+    try {
+      const { stdout } = await execFileAsync('git', args, { cwd: root, timeout: 3000, maxBuffer: 256 * 1024, env: { PATH: env.PATH || process.env.PATH, HOME: env.HOME || process.env.HOME, GIT_OPTIONAL_LOCKS: '0' } });
+      return stdout.trim();
+    } catch { return null; }
+  };
+  const inside = await git(['rev-parse', '--is-inside-work-tree']);
+  if (inside !== 'true') { lines.push('Git repository: no'); return lines.join('\n'); }
+  const [branch, status, log] = await Promise.all([
+    git(['branch', '--show-current']),
+    git(['status', '--porcelain']),
+    git(['log', '--oneline', '-n', '5', '--no-decorate'])
+  ]);
+  lines.push('Git repository: yes' + (branch ? ', branch ' + branch : ', detached HEAD'));
+  if (status !== null) {
+    const changed = status ? status.split('\n').length : 0;
+    lines.push('Working tree: ' + (changed ? changed + ' changed or untracked path' + (changed === 1 ? '' : 's') + ' (use git_status for details)' : 'clean'));
+  }
+  if (log) lines.push('Recent commits:\n' + log.split('\n').map((line) => '  ' + line.slice(0, 120)).join('\n'));
+  return lines.join('\n');
+}
+
+function systemPrompt(root, projectContext, skillDescriptions = '', environment = '') {
   return [
     'You are Oasis OSS, a practical coding agent running locally in the user’s workspace.',
     'Your job is to turn ordinary-English requests into completed, verified work, using tools instead of merely describing steps.',
@@ -228,8 +258,14 @@ function systemPrompt(root, projectContext, skillDescriptions = '') {
     'For large or ambiguous work, consider read-only plan mode first. Plan mode is for exploration and planning only; switch to a normal execution turn when changes are approved or requested.',
     'Do not claim you installed a package, edited a file, passed a test, deployed a site, or completed a task unless tool results support that claim.',
     'The current workspace root is: ' + root,
+    ...(environment ? ['Environment:\n' + environment] : []),
     'Workspace paths are relative to that root. Secret files and paths outside the workspace are intentionally inaccessible through file tools.',
     'You may make and revise source files in the workspace. Prefer edit_file with exact old_string/new_string patches for existing files, use glob_files to locate files, and read_file with offset/limit to inspect large files in sections. Existing files are snapshotted before edits/overwrites; deleted files require interactive approval and are snapshotted.',
+    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
+    'Use the task tool to delegate self-contained work to a subagent: broad codebase exploration (subagent_type "explore"), independent research, or a separate implementation slice. Launch several task calls in one response to run them in parallel when the pieces are independent. Subagents start with no memory of this conversation, so give each a complete, specific prompt and say exactly what to report back. Parallel subagents share the workspace, so do not give two of them edits to the same files.',
+    'For dev servers, watchers, and other long-running processes, use run_command with run_in_background: true, then check command_output and stop them with kill_command when finished. Never start a server in the foreground and wait for it to exit.',
+    'Code quality: follow the existing style, structure, libraries, and naming of the codebase. Check that a library is already used before relying on it. Prefer editing existing files to creating new ones, never create documentation files unless asked, and keep comments for non-obvious reasoning. Never commit, push, or publish unless the user asks.',
+    'Communication: be concise and direct. Lead with the result. Use short Markdown when it helps, reference code as path:line, and avoid repeating what tool output already showed. Do not pad answers with preamble or closing summaries of unchanged facts.',
     'Use run_command for a single executable and argument array, not shell syntax. If you need a sequence, call the tool separately for each step. Command execution requires user approval unless they deliberately started Oasis with --yes.',
     'Use install_package when the user asks for a dependency, CLI, developer tool, or other supported package. Explain the exact package-manager action through the approval tool before the installation starts. Do not silently substitute a different package if installation fails.',
     'When the user asks to install an Oasis capability bundle or plugin by name, use install_plugin rather than copying files manually. This installs only a reviewed bundled workflow guide and requires approval; external integrations, credentials, and package installs must be configured separately.',
@@ -262,7 +298,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   const sandbox = resolveSandbox(loadedSettings, root);
   const mcp = await connectMcpServers({ root });
   const dynamic = mcpToolDefinitions(mcp.clients);
-  let systemText = systemPrompt(root, projectContext, skillDescriptions);
+  let systemText = systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
     root,
