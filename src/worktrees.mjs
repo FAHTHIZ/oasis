@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
-import { appendFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { appendFile, lstat, mkdir, readFile, rm } from 'node:fs/promises';
 
 const execFileAsync = promisify(execFile);
 export const WORKTREE_DIR = path.join('.oasis', 'worktrees');
@@ -114,7 +114,7 @@ export async function readWorktreeWorkingDiff(worktreeRoot, baseCommit, options 
   for (const candidate of listed.split('\0').filter(Boolean).slice(0, 100)) {
     const absolute = path.resolve(root, candidate);
     if (path.isAbsolute(candidate) || absolute === root || !absolute.startsWith(root + path.sep)) continue;
-    const info = await (await import('node:fs/promises')).lstat(absolute).catch(() => null);
+    const info = await lstat(absolute).catch(() => null);
     if (!info || !info.isFile() || info.isSymbolicLink()) continue;
     const label = candidate.split(path.sep).join('/');
     untrackedFiles.push(label);
@@ -123,7 +123,7 @@ export async function readWorktreeWorkingDiff(worktreeRoot, baseCommit, options 
       omitted++;
       continue;
     }
-    const bytes = await (await import('node:fs/promises')).readFile(absolute).catch(() => null);
+    const bytes = await readFile(absolute).catch(() => null);
     if (!bytes) continue;
     if (bytes.includes(0)) {
       diff += '\n\n# Binary untracked file omitted from text preview: ' + label;
