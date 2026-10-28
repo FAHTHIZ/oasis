@@ -53,7 +53,7 @@ Recommended order is based on capability impact, not ease of implementation:
 3. **IDE integrations** — start with a VS Code extension that can review diffs, expose task/session state and hand off to the same runtime.
 4. **Remote and cross-surface workflows** — cloud/remote sessions, mobile steering, Chrome, desktop and chat integrations; this requires an explicit server trust/auth model rather than merely exposing `oasis web`.
 5. **Platform and extension parity** — a native Gemini adapter, PowerShell/Windows sandboxing, broader plugin compatibility and a remote marketplace.
-6. **Terminal polish** — full-screen transcript, vim mode, themes and an editable keybinding file.
+6. **Terminal polish** — full-screen transcript (vim mode, themes and an editable keybinding file have shipped).
 
 See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CURRENT_STATUS.md](CURRENT_STATUS.md) for the current verification baseline.
 

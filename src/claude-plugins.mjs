@@ -822,6 +822,35 @@ export async function summarizePlugin(plugin, options = {}) {
   };
 }
 
+/** Theme files: JSON objects with optional name/base/overrides, base a built-in preset, valid colors. */
+async function validatePluginThemes(plugin) {
+  const { BASE_THEMES, KNOWN_TOKENS, parseColor } = await import('./themes.mjs');
+  const manifest = plugin.manifest || {};
+  const declared = manifest.experimental && manifest.experimental.themes !== undefined ? manifest.experimental.themes : manifest.themes;
+  const problems = [];
+  const files = [];
+  for (const rel of declared === undefined ? ['themes'] : asList(declared)) {
+    if (rel.includes('..')) { problems.push('themes path contains "..": ' + rel); continue; }
+    const target = path.resolve(plugin.root, rel);
+    let info = null;
+    try { info = await stat(target); } catch {}
+    if (!info) { if (declared !== undefined) problems.push('themes path not found: ' + rel); continue; }
+    if (info.isFile()) files.push(target);
+    else if (info.isDirectory()) for (const name of (await readdir(target)).sort()) if (name.endsWith('.json')) files.push(path.join(target, name));
+  }
+  for (const file of files) {
+    const label = path.relative(plugin.root, file);
+    const theme = await readJson(file, null);
+    if (!theme || typeof theme !== 'object' || Array.isArray(theme)) { problems.push('Theme ' + label + ' is not a JSON object.'); continue; }
+    if (theme.base !== undefined && !BASE_THEMES.includes(theme.base)) problems.push('Theme ' + label + ' has unknown base "' + theme.base + '" (use ' + BASE_THEMES.join(', ') + ').');
+    for (const [token, value] of Object.entries(theme.overrides && typeof theme.overrides === 'object' ? theme.overrides : {})) {
+      if (!KNOWN_TOKENS.has(token)) problems.push('Theme ' + label + ': unknown token "' + token + '" (ignored at runtime).');
+      else if (value !== null && !parseColor(value)) problems.push('Theme ' + label + ': invalid color for ' + token + ': ' + JSON.stringify(value));
+    }
+  }
+  return problems;
+}
+
 /** Validate a plugin or marketplace directory the way `claude plugin validate` does. */
 export async function validatePath(target) {
   const dir = path.resolve(target || '.');
@@ -871,6 +900,8 @@ export async function validatePath(target) {
       await pluginMonitors([plugin], { errors: monitorErrors });
       problems.push(...monitorErrors);
       if (manifest.monitors !== undefined && !(manifest.experimental && manifest.experimental.monitors !== undefined)) report.push('Warning: put "monitors" under "experimental" (top-level still loads).');
+      problems.push(...(await validatePluginThemes(plugin)));
+      if (manifest.themes !== undefined && !(manifest.experimental && manifest.experimental.themes !== undefined)) report.push('Warning: put "themes" under "experimental" (top-level still loads).');
       const hooksFile = path.join(dir, 'hooks', 'hooks.json');
       if (await exists(hooksFile)) {
         const hooks = await readJson(hooksFile, null);

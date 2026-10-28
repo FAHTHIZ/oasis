@@ -105,7 +105,7 @@ This ranking considers how much each gap constrains real work and what it unlock
 3. **IDE integration.** A VS Code extension would put reviewable diffs, task/session status and the same agent runtime inside the main coding surface.
 4. **Remote and cross-surface workflows.** Cloud/remote sessions, mobile steering, desktop, Chrome and chat integrations require a stronger authentication, execution-isolation and lifecycle design than the current local browser bridge.
 5. **Platform and extension parity.** A native Gemini adapter, PowerShell/Windows sandboxing, broad extension runtime compatibility and a remote plugin marketplace.
-6. **Terminal polish.** Full-screen transcript, vim mode, themes and editable keybinding files.
+6. **Terminal polish.** Full-screen transcript (vim mode, themes and editable keybinding files have shipped).
 
 ## Safety and release-readiness boundaries
 

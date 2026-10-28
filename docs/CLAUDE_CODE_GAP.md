@@ -64,6 +64,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Channels + MCP server instructions | `--channels`, `notifications/claude/channel`, permission relay, `channelsEnabled`, server `instructions` in context | **Closed.** Same capability keys, notification methods, `<channel>` format, meta-key rules, five-letter relay ids, first-verdict-wins relay with sanitized/redacted previews, dev-channel confirmation, `channelsEnabled: false`, idle wake. Server `instructions` are added to the system prompt. |
 | npm plugin sources | Marketplace entries with `source: { source: "npm", package, version, registry }` | **Closed.** `npm pack` (scripts never run) + `tar`, version ranges, custom https registry (http only for localhost), resolved version and integrity recorded in `installed_plugins.json`. |
 | Sensitive plugin options in secure storage | `userConfig` options with `sensitive: true` kept in the system keychain | **Closed.** macOS Keychain (`security`) and Linux Secret Service (`secret-tool`, value via stdin); the plugin secrets file then holds only a backend marker. 0600 file fallback elsewhere; `OASIS_SECURE_STORAGE` override. |
+| Themes | `/theme`, dark/light/daltonized/ansi presets, `auto`, custom `~/.claude/themes/*.json`, plugin `themes/` | **Closed.** Same presets, file format (`name`/`base`/`overrides`), color syntax and `custom:<slug>` preference; plugin themes as `plugin:<plugin>:<slug>`, checked by `plugin validate`. Live reload on file change is not done; `/theme` re-reads. |
 
 ## Ranked next improvements
 
@@ -89,11 +90,11 @@ Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require proces
 
 ### 5. Remaining platform and ecosystem gaps
 
-A native Gemini adapter; PowerShell and Windows sandboxing; plugin themes; Windows Credential Manager for sensitive plugin options.
+A native Gemini adapter; PowerShell and Windows sandboxing; Windows Credential Manager for sensitive plugin options.
 
 ### 6. Terminal experience polish
 
-Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Remaining: full-screen transcript, themes and bindable dialog contexts. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Remaining: full-screen transcript, theme hot-reload and bindable dialog contexts. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
 
 ## What OASIS already does well
 

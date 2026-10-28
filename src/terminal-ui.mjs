@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scrubEnvironment } from './tools.mjs';
 import { ANSI, colorEnabled, renderDiff } from './markdown.mjs';
+import { currentTheme, themeFg } from './themes.mjs';
 import { stringWidth, stripAnsi } from './line-editor.mjs';
 
 const LOGO = [
@@ -19,14 +20,26 @@ const LOGO = [
 // Desert-oasis palette: deep water teal → lagoon → sky → sand → sunset.
 const STOPS = [[20, 184, 166], [45, 212, 191], [56, 189, 248], [251, 191, 36], [249, 115, 22]];
 
-function gradientAt(t) {
-  const x = Math.max(0, Math.min(1, t)) * (STOPS.length - 1);
-  const i = Math.min(STOPS.length - 2, Math.floor(x));
-  const f = x - i;
-  return STOPS[i].map((v, k) => Math.round(v + (STOPS[i + 1][k] - v) * f));
+// The brand gradient; other themes blend their "claude" and "claudeShimmer" tokens.
+function stops() {
+  const theme = currentTheme();
+  if (theme.id === 'dark') return STOPS;
+  const a = theme.colors.claude && theme.colors.claude.rgb;
+  const b = theme.colors.claudeShimmer && theme.colors.claudeShimmer.rgb;
+  return a && b ? [a, b] : a ? [a, a] : null;
 }
 
-const rgb = ([r, g, b]) => '\x1b[38;2;' + r + ';' + g + ';' + b + 'm';
+function gradientAt(t) {
+  const list = stops();
+  if (!list) return null;
+  const x = Math.max(0, Math.min(1, t)) * (list.length - 1);
+  const i = Math.min(list.length - 2, Math.floor(x));
+  const f = x - i;
+  return list[i].map((v, k) => Math.round(v + (list[i + 1][k] - v) * f));
+}
+
+// 16-color themes have no RGB accent: fall back to the theme's ANSI accent.
+const rgb = (tone) => (tone ? '\x1b[38;2;' + tone[0] + ';' + tone[1] + ';' + tone[2] + 'm' : themeFg('claude') || '\x1b[36m');
 
 export function animationEnabled(stream = process.stdout, env = process.env) {
   if (!colorEnabled(stream, env)) return false;
@@ -47,7 +60,7 @@ export function logoFrame(reveal = 1, shine = -1, color = true) {
       const distance = shine >= 0 ? Math.abs(col - shine) : 99;
       const base = gradientAt(col / width);
       const glow = distance < 4 ? 1 - distance / 4 : 0;
-      const tone = base.map((v) => Math.round(v + (255 - v) * glow * 0.85));
+      const tone = base && base.map((v) => Math.round(v + (255 - v) * glow * 0.85));
       out += rgb(tone) + ch;
     }
     return out + (color ? ANSI.reset : '');
@@ -101,7 +114,7 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
 export function promptFor(text, color = true) {
   const bash = String(text || '').startsWith('!');
   if (!color) return '> ';
-  return bash ? '\x1b[38;2;251;191;36m❯\x1b[39m ' : rgb(gradientAt(0.2)) + '❯' + ANSI.fg + ' ';
+  return bash ? (themeFg('bashBorder') || '\x1b[33m') + '❯\x1b[39m ' : rgb(gradientAt(0.2)) + '❯' + ANSI.fg + ' ';
 }
 
 const MODE_LABELS = {
@@ -119,8 +132,8 @@ export function footerFor({ text = '', mode = 'default', queued = 0, color = tru
   if (!parts.length) return '';
   const line = '  ' + parts.join(' · ');
   if (!color) return line;
-  const tone = mode === 'plan' ? '\x1b[36m' : mode === 'bypassPermissions' ? '\x1b[31m' : mode === 'auto' || mode === 'acceptEdits' ? '\x1b[35m' : '\x1b[33m';
-  return String(text).startsWith('!') ? '\x1b[33m' + line + '\x1b[39m' : tone + line + '\x1b[39m';
+  const tone = (mode === 'plan' ? themeFg('planMode') : mode === 'bypassPermissions' ? themeFg('error') : mode === 'auto' || mode === 'acceptEdits' ? themeFg('autoAccept') : themeFg('warning')) || '\x1b[33m';
+  return String(text).startsWith('!') ? (themeFg('bashBorder') || '\x1b[33m') + line + '\x1b[39m' : tone + line + '\x1b[39m';
 }
 
 export const MODE_CYCLE = ['default', 'acceptEdits', 'plan', 'auto'];
@@ -191,7 +204,7 @@ export function describeTool({ name, args = {}, subagent }, { color = true } = {
   if (detail.length > 140) detail = detail.slice(0, 137) + '...';
   const indent = subagent ? '  ' : '';
   if (!color) return indent + (subagent ? '[' + subagent + '] ' : '[tool] ') + name + (detail ? ' ' + detail : '');
-  const dot = '\x1b[38;2;45;212;191m⏺\x1b[39m ';
+  const dot = (themeFg('claude') || '\x1b[36m') + '⏺\x1b[39m ';
   return indent + dot + (subagent ? ANSI.dim + subagent + ' › ' + ANSI.noBold : '') + ANSI.bold + toolLabel(name) + ANSI.noBold + (detail ? '(' + detail + ')' : '');
 }
 

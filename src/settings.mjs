@@ -173,6 +173,7 @@ export async function loadSettings(root, options = {}) {
     agent: null,
     pluginBinDirs: [],
     editorMode: null,
+    theme: null,
     statusLine: null,
     lspServers: {},
     trusted: false,
@@ -187,6 +188,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
+    if (typeof settings.theme === 'string' && settings.theme.trim()) result.theme = settings.theme.trim().slice(0, 120);
     if (typeof settings.agent === 'string' && settings.agent.trim()) { result.agent = settings.agent.trim().toLowerCase(); result.agentSource = scope; }
     // Disabling channels only tightens, so any scope may do it (Claude Code's channelsEnabled policy).
     if (settings.channelsEnabled === false) result.channelsEnabled = false;
@@ -250,6 +252,7 @@ export async function loadSettings(root, options = {}) {
       // Plugin LSP servers come after user/project ones, so explicit settings win for an extension.
       for (const [name, spec] of Object.entries(await pluginLspServers(plugins, { env, root }))) if (!result.lspServers[name]) result.lspServers[name] = spec;
       result.pluginBinDirs = await pluginBinDirs(plugins);
+      result.pluginThemeSources = plugins.map((plugin) => ({ name: plugin.name, root: plugin.root, manifest: { themes: plugin.manifest && plugin.manifest.themes, experimental: plugin.manifest && plugin.manifest.experimental ? { themes: plugin.manifest.experimental.themes } : undefined } }));
       result.pluginMonitorErrors = [];
       result.pluginMonitors = await pluginMonitors(plugins, { env, root, errors: result.pluginMonitorErrors });
       const defaults = await pluginDefaultSettings(plugins);

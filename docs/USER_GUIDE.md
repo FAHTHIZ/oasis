@@ -389,6 +389,14 @@ Run `oasis` in a project to open the interactive prompt. Press `?` on an empty l
 
 `/vim` turns on vim editing for the prompt (`/vim off` turns it off). The choice is saved as `"editorMode": "vim"` in your user settings, and Claude Code's `editorMode` in `~/.claude.json` is honored too. The input starts in INSERT mode. Esc switches to NORMAL, and the current mode shows under the prompt. Enter sends from either mode.
 
+`/theme` lists and switches color themes, Claude Code style: `dark` (default), `light`, `dark-daltonized`, `light-daltonized` (color-blind friendly), `dark-ansi`, `light-ansi` (16-color terminals) and `auto`, which picks light or dark from `COLORFGBG` (override with `OASIS_TERMINAL_BACKGROUND=light|dark`). The choice is saved as `"theme"` in your user settings; `OASIS_THEME` overrides it and Claude Code's `~/.claude.json` `theme` is honored. Custom themes are the same JSON files Claude Code reads from `~/.claude/themes/` (or `<OASIS config>/themes/`), selected as `custom:<slug>`:
+
+```json
+{ "name": "Dracula", "base": "dark", "overrides": { "claude": "#bd93f9", "error": "#ff5555", "success": "#50fa7b" } }
+```
+
+Colors accept `#rrggbb`, `#rgb`, `rgb(r,g,b)`, `ansi256(n)` and `ansi:<name>` (for example `ansi:cyanBright`); unknown tokens and bad values are ignored. Oasis paints `claude`/`claudeShimmer` (logo, prompt and tool accents), `success`, `error`, `warning`, `planMode`, `autoAccept`, `bashBorder`, `inactive`, `diffAdded`/`diffRemoved` (diff backgrounds) and the code tokens `code`, `link`, `keyword`, `number`. Plugins ship themes in `themes/` (or `experimental.themes`), selected as `plugin:<plugin>:<slug>`, and `oasis plugin validate` checks their bases, tokens and colors.
+
 | NORMAL keys | |
 | --- | --- |
 | `h l j k`, `w b e W B E`, `0 ^ $`, `gg G` | Move. `j`/`k` on the first or last line walk the input history |
