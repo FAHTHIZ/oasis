@@ -68,9 +68,8 @@ export function sanitizeSharedTaskStore(value) {
     const createdBy = typeof item.createdBy === 'string' ? item.createdBy.slice(0, 100) : 'main';
     const timestamp = (candidate) => typeof candidate === 'string' && Number.isFinite(Date.parse(candidate)) ? candidate : new Date(0).toISOString();
     const blockedBy = Array.isArray(item.blockedBy) ? [...new Set(item.blockedBy.filter((dep) => typeof dep === 'string' && TASK_ID.test(dep)))].slice(0, MAX_DEPENDENCIES) : [];
-    const claimedBy = typeof item.claimedBy === 'string' && item.claimedBy.trim() ? item.claimedBy.trim().slice(0, 100) : ''; 
-    const claimExpiry = typeof item.claimExpiresAt === 'string' && Number.isFinite(Date.parse(item.claimExpiresAt)) ? new Date(item.claimExpiresAt).toISOString() : null;
-    tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: claimedBy && claimExpiry ? claimedBy : '', claimExpiresAt: claimedBy && claimExpiry ? claimExpiry : null });
+    // A restored session has no live agent processes, so never restore a live lease.
+    tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: '', claimExpiresAt: null });
     ids.add(id);
   }
 
@@ -88,7 +87,8 @@ export function sanitizeSharedTaskStore(value) {
   }
   const byId = new Map(tasks.map((task) => [task.id, task]));
   for (const task of tasks) {
-    if (task.blockedBy.some((dep) => byId.get(dep)?.status !== 'completed') && task.status !== 'pending') {
+    // In-progress work cannot survive process restart: no subagent process survives with it.
+    if (task.status === 'in_progress' || task.blockedBy.some((dep) => byId.get(dep)?.status !== 'completed')) {
       task.status = 'pending';
       task.claimedBy = '';
       task.claimExpiresAt = null;
