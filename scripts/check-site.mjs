@@ -39,7 +39,8 @@ for (const requiredAsset of ['index.html', 'manifest.webmanifest', 'sw.js', 'ass
   assert.ok(packageManifest.files.includes(requiredAsset), 'Installable CLI package must include ' + requiredAsset + ' for oasis web.');
 }
 const manifest = JSON.parse(manifestText);
-assert.equal(manifest.name, 'Oasis OSS — Open Source Studio');
+assert.equal(manifest.name, 'OASIS — Coding Agent Workspace');
+assert.equal(manifest.short_name, 'OASIS');
 assert.equal(manifest.start_url, './');
 assert.equal(manifest.display, 'standalone');
 assert.ok(Array.isArray(manifest.icons) && manifest.icons.some((item) => item.src === './assets/oasis-icon.svg'));
@@ -50,4 +51,4 @@ assert.ok(serviceWorker.includes('event.respondWith'));
 assert.ok(serviceWorker.includes("request.method !== 'GET'"), 'Service worker must not cache non-GET requests.');
 assert.ok(serviceWorker.includes("url.pathname.startsWith('/api/')"), 'Service worker must never cache authenticated runtime API responses.');
 
-console.log('Oasis integrity checks passed: app structure, inline JavaScript syntax, PWA manifest/icon, and offline service-worker safeguards.');
+console.log('OASIS integrity checks passed: app structure, inline JavaScript syntax, PWA manifest/icon, and offline service-worker safeguards.');
