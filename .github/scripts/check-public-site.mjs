@@ -3,11 +3,11 @@ import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const [html, robots, sitemap, icon, packageText] = await Promise.all([
-  read('../site/index.html'),
-  read('../site/robots.txt'),
-  read('../site/sitemap.xml'),
-  read('../site/assets/oasis-icon.svg'),
-  read('../package.json')
+  read('../../site/index.html'),
+  read('../../site/robots.txt'),
+  read('../../site/sitemap.xml'),
+  read('../../site/assets/oasis-icon.svg'),
+  read('../../package.json')
 ]);
 
 const expectedUrl = 'https://fahthiz.github.io/oasis/';
