@@ -52,7 +52,7 @@ test('cloud task history is private, durable, and redacts common credentials', a
   assert.equal(restored.status, 'interrupted');
   assert.match(restored.error, /runtime restarted/i);
   assert.match(restored.events.at(-1).type, /interrupted/i);
-  assert.match(restored.events[0].data.output, /Bearer \[REDACTED\]/);
+  assert.match(restored.events[0].data.output, /Authorization: \[REDACTED\]/);
   assert.equal(restored.events[0].data.apiKey, '[REDACTED]');
   assert.doesNotMatch(JSON.stringify(restored), /should-not-be-stored|abcdefghijklmnopqrstuvwxyz0123456789/);
 });
