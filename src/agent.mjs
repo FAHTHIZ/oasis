@@ -337,7 +337,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     hookMessages: []
   };
   try { session.agents = await loadAgentDefinitions(root, { env }); } catch { session.agents = { ...BUILTIN_AGENTS }; }
-  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), EXIT_PLAN_TOOL_DEFINITION]);
+  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION]);
   const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
   if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
   if (sandbox.enabled) {
@@ -1112,13 +1112,61 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question']);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
   description: 'Only in plan mode: present your finished implementation plan to the user and ask to start implementing it. Use it once research is done and the plan is concrete (files, steps, verification). Do not use it for pure research questions.',
   parameters: { type: 'object', properties: { plan: { type: 'string', description: 'The plan in concise Markdown' } }, required: ['plan'] }
 } };
+const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
+  name: 'ask_user_question',
+  description: 'Ask the user a multiple-choice question when a decision really changes the work (which approach, library, scope, or behavior) and you cannot settle it from the code or the request. Offer 2-4 concrete options; the user can also type their own answer. Do not use it for permission (tools ask for that automatically) or for things you can find out yourself.',
+  parameters: { type: 'object', properties: {
+    question: { type: 'string', description: 'One clear question ending with a question mark' },
+    header: { type: 'string', description: 'Very short label, up to 12 characters' },
+    options: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'object', properties: {
+      label: { type: 'string', description: '1-5 word choice' },
+      description: { type: 'string', description: 'What this choice means or its trade-off' }
+    }, required: ['label'] } },
+    multiSelect: { type: 'boolean', description: 'Allow choosing several options' }
+  }, required: ['question', 'options'] }
+} };
+
+export function normalizeQuestion(args = {}) {
+  const question = String(args.question || '').trim().slice(0, 600);
+  if (!question) throw new Error('ask_user_question needs a question.');
+  const options = (Array.isArray(args.options) ? args.options : []).slice(0, 4).map((item) => typeof item === 'string'
+    ? { label: item.trim().slice(0, 80), description: '' }
+    : { label: String(item && item.label || '').trim().slice(0, 80), description: String(item && item.description || '').trim().slice(0, 300) }).filter((item) => item.label);
+  if (options.length < 2) throw new Error('ask_user_question needs 2-4 options.');
+  return { question, header: String(args.header || '').trim().slice(0, 12), options, multiSelect: Boolean(args.multiSelect) };
+}
+
+// Multiple-choice question from the agent: answer with numbers or type freely.
+export function resolveQuestionAnswer(question, raw) {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  const picks = text.split(/[\s,]+/);
+  if (picks.every((item) => /^\d+$/.test(item) && Number(item) >= 1 && Number(item) <= question.options.length)) {
+    const chosen = [...new Set(picks.map(Number))].map((index) => question.options[index - 1].label);
+    return (question.multiSelect ? chosen : chosen.slice(0, 1)).join(', ');
+  }
+  return text;
+}
+
+async function askUserQuestion(session, args, options) {
+  const question = normalizeQuestion(args);
+  if (typeof options.askUser !== 'function') {
+    return { answered: false, message: 'No user is available to answer (non-interactive run). Choose the most reasonable option, state the assumption in your reply, and continue.' };
+  }
+  const answer = await options.askUser(question);
+  if (answer === null || answer === undefined || String(answer).trim() === '') {
+    return { answered: false, message: 'The user did not answer. Pick the safest reasonable option, say which one you picked, and continue.' };
+  }
+  return { answered: true, question: question.question, answer: String(answer).slice(0, 2000) };
+}
+
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;
@@ -1345,7 +1393,7 @@ async function runSubagent(parent, args, context, options) {
   const allowed = agent.tools ? new Set(agent.tools) : null;
   const definitions = (parent.toolDefinitions || TOOL_DEFINITIONS).filter((definition) => {
     const name = definition && definition.function && definition.function.name;
-    if (!name || name === 'task' || name === 'run_specialist_review') return false;
+    if (!name || name === 'task' || name === 'run_specialist_review' || name === 'ask_user_question') return false;
     return !allowed || allowed.has(name);
   });
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
@@ -1509,6 +1557,11 @@ async function executeOneCall(session, call, context, options) {
     const readOnlyTask = name === 'task' && isReadOnlyAgent(session, args.subagent_type);
     if ((options.planOnly || permissionMode(session, options) === 'plan') && !READ_ONLY_TOOLS.has(name) && !readOnlyTask) {
       throw new Error('Plan mode blocks write, command, install, delete, and external tool calls.');
+    }
+    if (name === 'ask_user_question') {
+      result = await askUserQuestion(session, args, options);
+      if (options.onToolResult) options.onToolResult({ name, result, call });
+      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
     if (name === 'exit_plan_mode') {
       result = await exitPlanMode(session, args, context, options);
@@ -1786,7 +1839,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
     // workspace calls can run concurrently, but a later read must not overtake an earlier edit.
     const isReadOnly = (call) => {
       const name = call.function && call.function.name;
-      return READ_ONLY_TOOLS.has(name) && !(session.mcpToolMap && session.mcpToolMap.has(name));
+      // Questions wait for the user, so they run one at a time.
+      return READ_ONLY_TOOLS.has(name) && name !== 'ask_user_question' && !(session.mcpToolMap && session.mcpToolMap.has(name));
     };
     const isSpecialistReview = (call) => call.function && call.function.name === 'run_specialist_review';
     const isTask = (call) => call.function && call.function.name === 'task';

@@ -238,3 +238,24 @@ test('declining exit_plan_mode keeps plan mode on', async (t) => {
   assert.equal(session.permissions.mode, 'plan');
   assert.match(requests[1].messages.find((m) => m.role === 'tool').content, /did not approve/);
 });
+
+test('ask_user_question: answer parsing, no-user fallback, and subagents cannot ask', async (t) => {
+  const { resolveQuestionAnswer, normalizeQuestion, createSession: create, runAgentTurn: run, closeSession: close } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const q = normalizeQuestion({ question: 'Pick?', options: ['A', { label: 'B', description: 'bee' }, 'C'], multiSelect: true });
+  assert.equal(resolveQuestionAnswer(q, '1 3'), 'A, C');
+  assert.equal(resolveQuestionAnswer({ ...q, multiSelect: false }, '2,3'), 'B');
+  assert.equal(resolveQuestionAnswer(q, 'something else'), 'something else');
+  assert.equal(resolveQuestionAnswer(q, '9'), '9');
+  assert.throws(() => normalizeQuestion({ question: 'x', options: ['only one'] }), /2-4 options/);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-ask-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [toolCall('q', 'ask_user_question', { question: 'Which?', options: ['X', 'Y'] }), { content: 'ok' }]);
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg') };
+  const session = await create({ root, config, env });
+  t.after(() => close(session));
+  await run(session, 'go', { autoApprove: true, env, approval: async () => true });
+  assert.match(JSON.parse(requests[1].messages.at(-1).content).message, /No user is available/);
+  const taskDef = session.toolDefinitions.find((d) => d.function.name === 'ask_user_question');
+  assert.ok(taskDef);
+});

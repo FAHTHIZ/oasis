@@ -318,6 +318,10 @@ You are a test specialist. Run the relevant tests, fix failures, and report resu
 
 Subagents share the parent's permission rules, hooks (`SubagentStop`), sandbox, and approvals. They cannot start further subagents.
 
+### Asking you questions
+
+When a choice really changes the work (which library, which approach, how much scope), Oasis can stop and ask a multiple-choice question with the `ask_user_question` tool. This is like Claude Code's AskUserQuestion. In the terminal, answer with a number (or several numbers when multiple answers are allowed), type your own answer, or press Enter to skip. In the browser, the question appears as a card with buttons. Headless `-p` runs and subagents never block: the model is told no user is available, so it picks a reasonable option and states the assumption.
+
 ### Worktree isolation
 
 For parallel edits, a `task` call can set `"isolation": "worktree"` (or an agent file can set `isolation: worktree` in its front matter). The subagent then works on its own branch, `oasis/<name>`, in `.oasis/worktrees/<name>`. Your checkout is never touched, and agents running at the same time cannot overwrite each other. When the subagent finishes, Oasis commits its changes on that branch and reports the branch, the changed files and the merge command. A worktree with no changes is removed. `/worktrees` lists the branches still waiting for review. The worktrees are added to `.git/info/exclude`, so they stay out of `git status` and search. The commit uses `--no-verify`, so repository hooks are not run for agent commits.

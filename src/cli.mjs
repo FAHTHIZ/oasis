@@ -7,7 +7,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
-import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
@@ -119,6 +119,14 @@ async function askLine(question) {
   const controller = new AbortController();
   rl.on('SIGINT', () => { controller.abort(); if (process.listenerCount('SIGINT')) process.emit('SIGINT'); });
   try { return await rl.question(question, { signal: controller.signal }); } finally { rl.close(); }
+}
+
+async function askQuestionInTerminal(question) {
+  const lines = ['', '[question] ' + (question.header ? question.header + ': ' : '') + question.question];
+  question.options.forEach((option, index) => lines.push('  ' + (index + 1) + '. ' + option.label + (option.description ? ' - ' + option.description : '')));
+  lines.push('  (' + (question.multiSelect ? 'numbers separated by spaces' : 'a number') + ', or type your own answer; Enter to skip)');
+  stdout.write(lines.join('\n') + '\n');
+  try { return resolveQuestionAnswer(question, await askLine('Answer> ')); } catch { return ''; }
 }
 
 async function askSecret(question) {
@@ -888,6 +896,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
+      ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' ? { onDelta: streamDelta } : {}),
