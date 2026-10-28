@@ -1,35 +1,142 @@
 {
   "name": "oasis-vscode",
   "displayName": "OASIS",
-  "description": "Run the OASIS coding agent in VS Code: selection context, native diff review for edits, and editor diagnostics.",
-  "version": "0.1.0",
+  "description": "Run the OASIS coding agent in VS Code: a chat panel, selection context, native diff review for edits, and editor diagnostics.",
+  "version": "0.2.0",
   "publisher": "fahthiz",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/FAHTHIZ/oasis.git" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["AI", "Programming Languages", "Other"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FAHTHIZ/oasis.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
   "main": "./src/extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
-      { "command": "oasis.openTerminal", "title": "OASIS: Run in Terminal", "icon": "$(sparkle)" },
-      { "command": "oasis.continueSession", "title": "OASIS: Continue Last Session" },
-      { "command": "oasis.insertReference", "title": "OASIS: Insert File Reference (@file#lines)" },
-      { "command": "oasis.rejectAllDiffs", "title": "OASIS: Close Proposed Diffs" }
+      {
+        "command": "oasis.focusChat",
+        "title": "OASIS: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "oasis.openChat",
+        "title": "OASIS: Open Chat in Editor Tab"
+      },
+      {
+        "command": "oasis.newChat",
+        "title": "OASIS: New Chat",
+        "icon": "$(add)"
+      },
+      {
+        "command": "oasis.addSelectionToChat",
+        "title": "OASIS: Add Selection to Chat"
+      },
+      {
+        "command": "oasis.openTerminal",
+        "title": "OASIS: Run in Terminal",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "oasis.continueSession",
+        "title": "OASIS: Continue Last Session"
+      },
+      {
+        "command": "oasis.insertReference",
+        "title": "OASIS: Insert File Reference (@file#lines)"
+      },
+      {
+        "command": "oasis.rejectAllDiffs",
+        "title": "OASIS: Close Proposed Diffs"
+      }
     ],
     "keybindings": [
-      { "command": "oasis.openTerminal", "key": "ctrl+escape", "mac": "cmd+escape" },
-      { "command": "oasis.insertReference", "key": "ctrl+alt+k", "mac": "cmd+alt+k", "when": "editorTextFocus" }
+      {
+        "command": "oasis.focusChat",
+        "key": "ctrl+shift+escape",
+        "mac": "cmd+shift+escape"
+      },
+      {
+        "command": "oasis.addSelectionToChat",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "oasis.openTerminal",
+        "key": "ctrl+escape",
+        "mac": "cmd+escape"
+      },
+      {
+        "command": "oasis.insertReference",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
+      }
     ],
     "menus": {
-      "editor/title": [ { "command": "oasis.openTerminal", "group": "navigation" } ]
+      "editor/title": [
+        {
+          "command": "oasis.openTerminal",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "oasis.newChat",
+          "when": "view == oasis.chat",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "oasis.addSelectionToChat",
+          "when": "editorHasSelection",
+          "group": "oasis"
+        }
+      ]
     },
     "configuration": {
       "title": "OASIS",
       "properties": {
-        "oasis.command": { "type": "string", "default": "oasis", "description": "Command used to start OASIS in the terminal." },
-        "oasis.openInEditor": { "type": "boolean", "default": false, "description": "Open the OASIS terminal in an editor tab beside your code." }
+        "oasis.command": {
+          "type": "string",
+          "default": "oasis",
+          "description": "Command used to start OASIS in the terminal."
+        },
+        "oasis.openInEditor": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the OASIS terminal in an editor tab beside your code."
+        }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "oasis",
+          "title": "OASIS",
+          "icon": "media/oasis.svg"
+        }
+      ]
+    },
+    "views": {
+      "oasis": [
+        {
+          "type": "webview",
+          "id": "oasis.chat",
+          "name": "Chat"
+        }
+      ]
     }
   }
 }

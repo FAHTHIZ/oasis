@@ -202,7 +202,7 @@ const xml = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').
 /** Build a .vsix for the bundled extension without external tooling. */
 export async function packageExtension(outFile) {
   const manifest = JSON.parse(await readFile(path.join(EXTENSION_DIR, 'package.json'), 'utf8'));
-  const files = ['package.json', 'README.md', 'src/extension.js', 'src/server.js'];
+  const files = ['package.json', 'README.md', 'src/extension.js', 'src/server.js', 'src/chat-process.js', 'src/chat-view.js', 'media/oasis.svg'];
   const entries = [];
   for (const file of files) entries.push({ name: 'extension/' + file, data: await readFile(path.join(EXTENSION_DIR, file)) });
   try { entries.push({ name: 'extension/LICENSE.txt', data: await readFile(path.join(APP_ROOT, 'LICENSE')) }); } catch {}
@@ -213,7 +213,7 @@ export async function packageExtension(outFile) {
     + '<Properties><Property Id="Microsoft.VisualStudio.Code.Engine" Value="' + xml(manifest.engines.vscode) + '"/><Property Id="Microsoft.VisualStudio.Code.ExtensionKind" Value="workspace"/></Properties></Metadata>'
     + '<Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/>'
     + '<Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/><Asset Type="Microsoft.VisualStudio.Services.Content.Details" Path="extension/README.md" Addressable="true"/></Assets></PackageManifest>\n';
-  const contentTypes = '<?xml version="1.0" encoding="utf-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json"/><Default Extension=".js" ContentType="application/javascript"/><Default Extension=".md" ContentType="text/markdown"/><Default Extension=".txt" ContentType="text/plain"/><Default Extension=".vsixmanifest" ContentType="text/xml"/></Types>\n';
+  const contentTypes = '<?xml version="1.0" encoding="utf-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension=".json" ContentType="application/json"/><Default Extension=".js" ContentType="application/javascript"/><Default Extension=".md" ContentType="text/markdown"/><Default Extension=".svg" ContentType="image/svg+xml"/><Default Extension=".txt" ContentType="text/plain"/><Default Extension=".vsixmanifest" ContentType="text/xml"/></Types>\n';
   const archive = zip([{ name: '[Content_Types].xml', data: Buffer.from(contentTypes) }, { name: 'extension.vsixmanifest', data: Buffer.from(vsixManifest) }, ...entries]);
   await mkdir(path.dirname(path.resolve(outFile)), { recursive: true });
   await writeFile(outFile, archive);

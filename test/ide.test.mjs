@@ -115,13 +115,15 @@ test('the VS Code extension activates, starts the bridge, and serves the diff/se
   const disposable = { dispose() {} };
   const uri = (fsPath, scheme = 'file', query = '') => ({ fsPath, path: fsPath, scheme, query });
   const document = { uri: uri(path.join(base, 'a.js')), languageId: 'javascript', getText: () => 'let x;', lineCount: 3 };
+  const views = [];
   const vscode = {
     env: { appName: 'Visual Studio Code', clipboard: { writeText: async () => {} } },
     workspace: { workspaceFolders: [{ uri: uri(base) }], registerTextDocumentContentProvider: () => disposable, onDidChangeWorkspaceFolders: () => disposable, getConfiguration: () => ({ get: () => undefined }), fs: { stat: async () => ({}) }, openTextDocument: async () => document },
     window: {
       activeTextEditor: { document, selection: { isEmpty: false, start: { line: 0, character: 0 }, end: { line: 0, character: 6 } } },
       onDidChangeTextEditorSelection: () => disposable, tabGroups: { all: [], close: async () => {} },
-      showInformationMessage: async () => 'Accept', showWarningMessage: async () => {}, showTextDocument: async () => {}, terminals: [], createTerminal: () => ({ show() {}, sendText() {} })
+      showInformationMessage: async () => 'Accept', showWarningMessage: async () => {}, showTextDocument: async () => {}, terminals: [], createTerminal: () => ({ show() {}, sendText() {} }),
+      registerWebviewViewProvider: (id) => { views.push(id); return disposable; }
     },
     commands: { registerCommand: (name, fn) => { commands.set(name, fn); return disposable; }, executeCommand: async (...args) => { executed.push(args[0]); } },
     languages: { getDiagnostics: () => [] },
@@ -135,7 +137,8 @@ test('the VS Code extension activates, starts the bridge, and serves the diff/se
   t.after(async () => { Module._load = originalLoad; await extension.deactivate(); if (previous === undefined) delete process.env.OASIS_CONFIG_DIR; else process.env.OASIS_CONFIG_DIR = previous; await rm(base, { recursive: true, force: true }); });
   await extension.activate(context);
   assert.ok(env.get('OASIS_IDE_PORT'), 'terminals receive OASIS_IDE_PORT');
-  assert.deepEqual([...commands.keys()].sort(), ['oasis.continueSession', 'oasis.insertReference', 'oasis.openTerminal', 'oasis.rejectAllDiffs']);
+  assert.deepEqual([...commands.keys()].sort(), ['oasis.addSelectionToChat', 'oasis.continueSession', 'oasis.focusChat', 'oasis.insertReference', 'oasis.newChat', 'oasis.openChat', 'oasis.openTerminal', 'oasis.rejectAllDiffs']);
+  assert.deepEqual(views, ['oasis.chat']);
   const client = await discoverIde(base, { ...process.env, OASIS_IDE_PORT: env.get('OASIS_IDE_PORT') });
   assert.equal(client.ideName, 'Visual Studio Code');
   const selection = await client.call('getSelection');

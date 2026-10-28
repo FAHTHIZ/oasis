@@ -42,6 +42,64 @@ export function parseStreamInputLine(line) {
 
 export const OUTPUT_FORMATS = ['text', 'json', 'stream-json', 'none'];
 
+/**
+ * Bidirectional stream-json channel (Claude Code SDK control protocol).
+ * Reads stdin lines eagerly so control messages arrive while a turn runs:
+ *   {"type":"user","message":{...}}                                  -> next prompt
+ *   {"type":"control_response","response":{"request_id":ID,...}}     -> answers a control_request
+ *   {"type":"control_request","request_id":ID,"request":{"subtype":"interrupt"}} -> stops the turn
+ * request(payload) emits {"type":"control_request",...} through `write` and waits for the answer.
+ */
+export function createStreamJsonChannel(lines, write) {
+  const queue = [];
+  const waiters = [];
+  const pending = new Map();
+  let ended = false;
+  let nextId = 1;
+  let interruptHandler = null;
+  const push = (value) => { const waiter = waiters.shift(); if (waiter) waiter({ value, done: false }); else queue.push(value); };
+  const handleLine = (line) => {
+    const text = String(line || '').trim();
+    if (!text) return;
+    let event = null;
+    try { event = JSON.parse(text); } catch { return; }
+    if (event && event.type === 'control_response') {
+      const response = event.response || {};
+      const id = String(response.request_id ?? event.request_id ?? '');
+      const resolve = pending.get(id);
+      if (resolve) { pending.delete(id); resolve(response); }
+      return;
+    }
+    if (event && event.type === 'control_request') {
+      const subtype = event.request && event.request.subtype;
+      if (subtype === 'interrupt' && interruptHandler) interruptHandler();
+      write({ type: 'control_response', response: { subtype: subtype === 'interrupt' ? 'success' : 'error', request_id: event.request_id, ...(subtype === 'interrupt' ? {} : { error: 'Unsupported control request: ' + subtype }) } });
+      return;
+    }
+    const prompt = parseStreamInputLine(text);
+    if (prompt !== null && prompt.trim()) push(prompt);
+  };
+  const finish = () => {
+    ended = true;
+    while (waiters.length) waiters.shift()({ value: undefined, done: true });
+    for (const resolve of pending.values()) resolve({ subtype: 'error', error: 'input closed' });
+    pending.clear();
+  };
+  (async () => { try { for await (const line of lines) handleLine(line); } catch {} finish(); })();
+  return {
+    [Symbol.asyncIterator]() {
+      return { next: () => queue.length ? Promise.resolve({ value: queue.shift(), done: false }) : ended ? Promise.resolve({ value: undefined, done: true }) : new Promise((resolve) => waiters.push(resolve)) };
+    },
+    request(request) {
+      if (ended) return Promise.resolve({ subtype: 'error', error: 'input closed' });
+      const id = 'oasis-' + (nextId++);
+      return new Promise((resolve) => { pending.set(id, resolve); write({ type: 'control_request', request_id: id, request }); });
+    },
+    onInterrupt(handler) { interruptHandler = handler; },
+    get closed() { return ended; }
+  };
+}
+
 function truncateValue(value, limit = 4000) {
   let text;
   try { text = typeof value === 'string' ? value : JSON.stringify(value); } catch { text = String(value); }
@@ -94,6 +152,14 @@ export async function runHeadless(options) {
     if (restored && persistence.fork) restored = { ...restored, id: null };
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions });
     if (onSession) await onSession(session);
+    // Launched by the IDE (chat panel or an integrated terminal): connect to its bridge.
+    if (env.OASIS_IDE_PORT && !session.ide) {
+      try {
+        const { discoverIde, attachIde } = await import('./ide.mjs');
+        const client = await discoverIde(root, env);
+        if (client) attachIde(session, client);
+      } catch {}
+    }
     emit({ type: 'system', subtype: 'init', session_id: session.sessionId || null, cwd: root, model: config.model, permission_mode: session.permissions.mode, tools: session.toolDefinitions.map((tool) => tool.function.name) });
     const expanded = await expandFileMentions(root, rawPrompt, { images: visionEnabled(config, env) }).catch(() => ({ text: rawPrompt, files: [] }));
     const runner = planOnly ? runAgentPlan : runAgentTurn;
@@ -106,7 +172,26 @@ export async function runHeadless(options) {
       ...(signal ? { signal } : {}),
       approval: async (message, forceInteractive = false, meta = {}) => {
         if (autoApprove && !forceInteractive) return true;
-        if (permissionPromptTool) {
+        if (permissionPromptTool === 'stdio' && session && session.ide && meta && meta.tool) {
+          // Edits open in the IDE's native diff view; Accept/Reject there answers the approval.
+          const { reviewEditInIde } = await import('./ide.mjs');
+          const reviewed = await reviewEditInIde(session, meta);
+          if (reviewed !== null) {
+            emit({ type: 'system', subtype: 'permission', tool: meta.tool, allowed: reviewed, via: 'ide_diff' });
+            if (!reviewed) denied.push({ tool_name: meta.tool, detail: 'Rejected in the IDE diff view.' });
+            return reviewed;
+          }
+        }
+        if (permissionPromptTool === 'stdio' && inputStream && typeof inputStream.request === 'function') {
+          const reply = await inputStream.request({ subtype: 'can_use_tool', tool_name: meta && meta.tool || null, input: meta && meta.input || {}, message: String(message), ...(meta && meta.suggestion ? { permission_suggestions: [meta.suggestion] } : {}) });
+          const answer = reply && reply.response && typeof reply.response === 'object' ? reply.response : reply || {};
+          const allowed = answer.behavior === 'allow';
+          emit({ type: 'system', subtype: 'permission', tool: meta && meta.tool || null, allowed, via: 'stdio' });
+          if (allowed) return answer.always && meta && meta.suggestion ? 'always' : true;
+          denied.push({ tool_name: meta && meta.tool || null, detail: String(answer.message || message).replace(/\s+/g, ' ').trim().slice(0, 300) });
+          return false;
+        }
+        if (permissionPromptTool && permissionPromptTool !== 'stdio') {
           const tool = resolvePermissionTool(session, permissionPromptTool);
           if (tool) {
             try {
@@ -147,8 +232,30 @@ export async function runHeadless(options) {
       }
     };
     let partialSoFar = '';
+    let currentTurn = null;
+    if (inputStream && typeof inputStream.onInterrupt === 'function') inputStream.onInterrupt(() => { if (currentTurn) currentTurn.abort(); });
     const runOne = async (text) => {
       partialSoFar = '';
+      if (inputStream && typeof inputStream.onInterrupt === 'function') {
+        currentTurn = new AbortController();
+        if (signal) signal.addEventListener('abort', () => currentTurn && currentTurn.abort(), { once: true });
+        const turnSignal = currentTurn.signal;
+        if (replayUser) emit({ type: 'user', message: { role: 'user', content: text } });
+        let prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
+        if (session.ide) {
+          try {
+            const { ideSelectionContext } = await import('./ide.mjs');
+            const selection = await ideSelectionContext(session);
+            if (selection) { emit({ type: 'system', subtype: 'ide_selection', label: selection.label }); prepared = { ...prepared, text: selection.text + '\n\n' + prepared.text }; }
+          } catch {}
+        }
+        try {
+          return await runner(session, prepared.text + schemaInstruction, { ...turnOptions, signal: turnSignal, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
+        } catch (caught) {
+          if (turnSignal.aborted) { emit({ type: 'system', subtype: 'interrupted' }); return { text: '[interrupted]', finished: true, toolCalls: 0, interrupted: true }; }
+          throw caught;
+        } finally { currentTurn = null; }
+      }
       if (replayUser) emit({ type: 'user', message: { role: 'user', content: text } });
       const prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
       return runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });

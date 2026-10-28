@@ -132,7 +132,7 @@ function printHelp() {
     '  --input-format stream-json    Read user messages as JSON lines on stdin (with -p)',
     '  --include-partial-messages    Stream text deltas as stream_event lines (with stream-json)',
     '  --replay-user-messages        Echo user messages back in stream-json output',
-    '  --permission-prompt-tool NAME Ask this MCP tool to approve actions in -p mode',
+    '  --permission-prompt-tool NAME Ask this MCP tool to approve actions in -p mode (stdio: control_request over stream-json)',
     '  --from-pr N                   Start with a GitHub pull request\'s description and diff as context',
     '  --init | --init-only          Create project instructions first (and exit with --init-only); runs Setup hooks',
     '  --maintenance                 Run Setup hooks with trigger "maintenance" before starting',
@@ -1202,13 +1202,10 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   return session;
 }
 
-async function* streamInputLines() {
-  const { parseStreamInputLine } = await import('./headless.mjs');
+async function streamInputChannel() {
+  const { createStreamJsonChannel } = await import('./headless.mjs');
   const lines = createInterface({ input: stdin, crlfDelay: Infinity, terminal: false });
-  for await (const line of lines) {
-    const prompt = parseStreamInputLine(line);
-    if (prompt !== null && prompt.trim()) yield prompt;
-  }
+  return createStreamJsonChannel(lines, (event) => stdout.write(JSON.stringify(event) + '\n'));
 }
 
 async function readPipedStdin() {
@@ -1257,7 +1254,7 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     sessionOptions: sessionCreateOptions(),
     persistence: { ...persistence, fork: Boolean(SESSION_OPTIONS.forkSession) },
     env: process.env,
-    ...(streamInput ? { inputStream: streamInputLines() } : {}),
+    ...(streamInput ? { inputStream: await streamInputChannel() } : {}),
     includePartial: Boolean(headless.includePartial),
     replayUser: Boolean(headless.replayUser),
     permissionPromptTool: headless.permissionPromptTool || null
