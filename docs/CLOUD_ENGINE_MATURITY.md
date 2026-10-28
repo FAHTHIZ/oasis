@@ -41,9 +41,11 @@ Do not rewrite these from scratch just to resemble another product. Harden and c
 
 **Required behavior:** durable task records; safe, bounded event history; status recovery after restart; task list/detail APIs; idempotent event cursors; clear distinction between a completed task and a task interrupted by server shutdown. Persist under the user's private Oasis config directory with restrictive file permissions, not inside a project checkout. Do not persist pending approvals as if they were still valid.
 
-**Initial implementation:** the cloud-task-store.mjs layer, browser runtime integration, authenticated /api/jobs history endpoint, browser Cloud runs panel, and restart/redaction/API tests establish the first part of this foundation. It is durable local persistence, not hosted compute.
+**Initial implementation:** the cloud-task-store.mjs layer, browser runtime integration, authenticated /api/jobs history endpoint, browser Cloud runs panel, and restart/redaction/API tests establish the first control-plane foundation. It is durable local persistence, not hosted compute.
 
-A conservative single-writer guard now prevents an agent task, terminal command, or GitHub workspace switch from racing against another mutation in the active workspace. This intentionally trades same-workspace parallelism for correctness until jobs have dedicated worktrees or containers. The next concurrency milestone should replace this guard with real task-level isolation, not simply remove it.
+The browser chat now also offers an opt-in **isolated Git worktree** for a new coding task. It requires a clean, committed Git checkout; creates a dedicated `oasis/...` branch; runs the agent inside that separate checkout; commits task changes on that branch for review; and leaves the main checkout untouched. An authenticated, bounded `GET /api/jobs/:id/diff` endpoint and browser diff viewer expose the resulting patch without executing repository-provided diff drivers. The branch is not merged automatically. Tasks in separate worktrees can execute independently; non-isolated tasks retain a single-writer lock per workspace.
+
+This is still a local-host implementation. It does not provision remote VMs or containers, and isolated sessions are intentionally one-shot in the browser UI for now. The next step is to generalize the worktree path into a task execution backend with persisted resumability, robust review/merge workflow, and container/hosted-worker options.
 
 ### P1 — true task isolation and concurrency
 
