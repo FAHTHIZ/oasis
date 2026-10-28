@@ -81,6 +81,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Permission dialog | Arrow-select approval dialog; Confirmation/Select keybinding contexts | **Closed.** Arrows/j/k, digits, y/n/a hotkeys, Esc; rebindable; channel relay still races the dialog. |
 | /skill-doctor, Skill() rules | Skill context cost and usage; `Skill(name)` permission rules | **Closed.** Denied skills are dropped from the prompt listing. `/new`, `/reset`, `/proactive` aliases added. |
 | Chrome integration | `--chrome`, `/chrome`: navigate, click, type, screenshots, console, network, tabs | **Closed for local Chrome.** Dependency-free CDP client; own profile or attach to your signed-in Chrome via `OASIS_CHROME_PORT`; site and page-JS approvals. No extension-based tab sharing. |
+| /code-review levels | Effort levels, multi-agent review, `--fix`, `--comment`, `--max-findings`, `/ultrareview` | **Closed locally.** Parallel reviewer and verifier subagents run on your machine rather than a cloud sandbox. |
 
 ## Ranked next improvements
 
