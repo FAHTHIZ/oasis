@@ -21,6 +21,7 @@ import { startOasisWebServer } from './web.mjs';
 import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, userSettingsPath } from './settings.mjs';
 import { detectSandbox } from './sandbox.mjs';
 import { resolveCustomCommand, expandFileMentions } from './commands.mjs';
+import { visionEnabled } from './images.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
@@ -764,11 +765,12 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (modeOptions.model) config.model = modeOptions.model;
   try {
-    const expanded = await expandFileMentions(root, prompt);
+    const expanded = await expandFileMentions(root, prompt, { images: visionEnabled(config) });
     if (expanded.files.length) {
       stdout.write('[context] Included ' + expanded.files.map((file) => '@' + file).join(', ') + '\n');
       prompt = expanded.text;
     }
+    if (expanded.images && expanded.images.length) modeOptions = { ...modeOptions, images: expanded.images };
   } catch {}
   if (!config.configured) {
     stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
@@ -805,6 +807,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     const result = await runner(session, prompt, {
       signal: controller.signal,
       autoApprove,
+      ...(modeOptions.images ? { images: modeOptions.images } : {}),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),

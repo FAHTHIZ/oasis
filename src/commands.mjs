@@ -19,6 +19,7 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './subagents.mjs';
 import { sensitivePath } from './tools.mjs';
+import { imageMediaType, MAX_IMAGE_BYTES } from './images.mjs';
 
 const MAX_COMMAND_FILE = 64 * 1024;
 const MAX_MENTION_BYTES = 100 * 1024;
@@ -105,12 +106,14 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
 
 // Replace or annotate "@path" mentions with file contents from the workspace.
 // Only existing, non-sensitive regular files inside the workspace are included.
-export async function expandFileMentions(root, text) {
+// Image mentions (@shot.png) are returned in `images` for multimodal models.
+export async function expandFileMentions(root, text, options = {}) {
   const source = String(text || '');
   const workspace = await realpath(path.resolve(root)).catch(() => path.resolve(root));
   const seen = new Set();
   const files = [];
   const attachments = [];
+  const images = [];
   const pattern = /(^|[\s(["'`])@((?:\.{0,2}\/)?[\w.\-/]+[\w\-/])/g;
   let match;
   while ((match = pattern.exec(source)) && files.length < MAX_MENTIONS) {
@@ -133,6 +136,16 @@ export async function expandFileMentions(root, text) {
       continue;
     }
     if (!info.isFile()) continue;
+    const mediaType = imageMediaType(relative);
+    if (mediaType) {
+      if (options.images === false || info.size > MAX_IMAGE_BYTES || images.length >= 4) continue;
+      const data = await readFile(real).catch(() => null);
+      if (!data) continue;
+      images.push({ mediaType, data: data.toString('base64'), path: relative });
+      attachments.push('<image path="' + relative + '">attached</image>');
+      files.push(relative);
+      continue;
+    }
     let content = await readFile(real, 'utf8').catch(() => null);
     if (content === null || content.includes('\0')) continue;
     let note = '';
@@ -143,6 +156,6 @@ export async function expandFileMentions(root, text) {
     attachments.push('<file path="' + relative + '"' + note + '>\n' + content + '\n</file>');
     files.push(relative);
   }
-  if (!attachments.length) return { text: source, files };
-  return { text: source + '\n\nReferenced files:\n' + attachments.join('\n'), files };
+  if (!attachments.length) return { text: source, files, images };
+  return { text: source + '\n\nReferenced files:\n' + attachments.join('\n'), files, images };
 }

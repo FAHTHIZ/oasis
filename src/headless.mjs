@@ -9,6 +9,7 @@
 // denied unless a permission rule, permission mode, or --yes allows it.
 import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
+import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
 
 export const OUTPUT_FORMATS = ['text', 'json', 'stream-json'];
@@ -47,10 +48,11 @@ export async function runHeadless(options) {
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions });
     emit({ type: 'system', subtype: 'init', session_id: session.sessionId || null, cwd: root, model: config.model, permission_mode: session.permissions.mode, tools: session.toolDefinitions.map((tool) => tool.function.name) });
-    const expanded = await expandFileMentions(root, rawPrompt).catch(() => ({ text: rawPrompt, files: [] }));
+    const expanded = await expandFileMentions(root, rawPrompt, { images: visionEnabled(config, env) }).catch(() => ({ text: rawPrompt, files: [] }));
     const runner = planOnly ? runAgentPlan : runAgentTurn;
     result = await runner(session, expanded.text, {
       autoApprove,
+      ...(expanded.images && expanded.images.length ? { images: expanded.images } : {}),
       env,
       ...(maxTurns ? { maxSteps: maxTurns } : {}),
       approval: async (message, forceInteractive = false, meta = {}) => {
