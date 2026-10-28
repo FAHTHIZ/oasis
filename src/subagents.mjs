@@ -23,11 +23,11 @@ export const MAX_PARALLEL_SUBAGENTS = 6;
 const CLAUDE_TO_OASIS = {
   read: ['read_file'], write: ['write_file'], edit: ['edit_file'], multiedit: ['multi_edit'],
   bash: ['run_command', 'run_shell', 'command_output', 'kill_command', 'list_background'],
-  grep: ['grep', 'search_files'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'],
+  grep: ['grep', 'search_files'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'], websearch: ['web_search'],
   todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command']
 };
 
-const READ_ONLY = ['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'list_skills', 'load_skill', 'read_skill_resource'];
+const READ_ONLY = ['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource'];
 
 export const BUILTIN_AGENTS = {
   'general-purpose': {

@@ -12,6 +12,7 @@ import { loadSettings } from './settings.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
+import { webSearchEnabled } from './web-search.mjs';
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool } from './subagents.mjs';
 
@@ -261,7 +262,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     ...(environment ? ['Environment:\n' + environment] : []),
     'Workspace paths are relative to that root. Secret files and paths outside the workspace are intentionally inaccessible through file tools.',
     'You may make and revise source files in the workspace. Prefer edit_file with exact old_string/new_string patches for existing files, use glob_files to locate files, and read_file with offset/limit to inspect large files in sections. Existing files are snapshotted before edits/overwrites; deleted files require interactive approval and are snapshotted.',
-    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
+    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. Use web_search for current library documentation, unfamiliar errors, or recent releases, then fetch_url to read the best result; prefer official documentation. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
     'Use the task tool to delegate self-contained work to a subagent: broad codebase exploration (subagent_type "explore"), independent research, or a separate implementation slice. Launch several task calls in one response to run them in parallel when the pieces are independent. Subagents start with no memory of this conversation, so give each a complete, specific prompt and say exactly what to report back. Parallel subagents share the workspace, so do not give two of them edits to the same files.',
     'For dev servers, watchers, and other long-running processes, use run_command with run_in_background: true, then check command_output and stop them with kill_command when finished. Never start a server in the foreground and wait for it to exit.',
     'Code quality: follow the existing style, structure, libraries, and naming of the codebase. Check that a library is already used before relying on it. Prefer editing existing files to creating new ones, never create documentation files unless asked, and keep comments for non-obvious reasoning. Never commit, push, or publish unless the user asks.',
@@ -308,7 +309,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     mcpClients: mcp.clients,
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
-    toolDefinitions: TOOL_DEFINITIONS.concat(dynamic.definitions),
+    toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.function.name !== 'web_search' || webSearchEnabled(env)).concat(dynamic.definitions),
     toolCallsThisSession: 0,
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
     settings: loadedSettings,
@@ -1008,7 +1009,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'list_skills', 'load_skill', 'command_output', 'list_background']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background']);
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;

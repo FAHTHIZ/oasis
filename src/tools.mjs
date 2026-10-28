@@ -1,4 +1,5 @@
 import { loadMemory } from './memory.mjs';
+import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -1598,6 +1599,8 @@ export async function executeTool(name, args = {}, context = {}) {
     }
     case 'fetch_url':
       return await fetchPublicUrl(args.url);
+    case 'web_search':
+      return await webSearch(args, { env: context.env || process.env });
     default:
       if (POWER_TOOL_NAMES.has(name)) return await executePowerTool(name, args, context, root);
       throw new Error('Unknown or unavailable tool: ' + name);
@@ -1612,6 +1615,7 @@ export async function loadProjectInstructions(root, options = {}) {
 }
 
 TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
+TOOL_DEFINITIONS.push(WEB_SEARCH_TOOL_DEFINITION);
 
 export function toolCount() {
   return TOOL_DEFINITIONS.length;

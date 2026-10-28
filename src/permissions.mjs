@@ -18,6 +18,7 @@ const TOOL_ALIASES = {
   write: ['write_file'],
   read: ['read_file'],
   webfetch: ['fetch_url'],
+  websearch: ['web_search'],
   grep: ['grep', 'search_files'],
   glob: ['glob_files'],
   ls: ['list_files'],
