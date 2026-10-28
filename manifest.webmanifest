@@ -1,15 +1,18 @@
 {
   "id": "./",
-  "name": "Oasis OSS — Open Source Studio",
-  "short_name": "Oasis",
-  "description": "A calm, local-first workspace for projects, tasks, and notes.",
+  "name": "OASIS — Coding Agent Workspace",
+  "short_name": "OASIS",
+  "description": "OASIS is an open-source coding agent and local-first developer workspace for multi-step software tasks.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#101b17",
-  "theme_color": "#101b17",
-  "categories": ["productivity", "utilities"],
+  "background_color": "#0B0F0C",
+  "theme_color": "#0B0F0C",
+  "categories": [
+    "productivity",
+    "developer-tools"
+  ],
   "icons": [
     {
       "src": "./assets/oasis-icon.svg",
