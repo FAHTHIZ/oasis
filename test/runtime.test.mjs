@@ -13,6 +13,10 @@ import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } fro
 import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 
+// These scripted fixtures overwrite files without reading them first; read-before-edit
+// enforcement is covered by test/file-state.test.mjs.
+process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
+
 async function temporaryDirectory(prefix = 'oasis-test-') {
   return await mkdtemp(path.join(os.tmpdir(), prefix));
 }

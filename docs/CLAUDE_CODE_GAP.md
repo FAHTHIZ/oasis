@@ -51,6 +51,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Gap | Claude Code behavior | OASIS now |
 | --- | --- | --- |
 | Output-token ceiling | 32k output tokens by default on current models; `CLAUDE_CODE_MAX_OUTPUT_TOKENS` override; recovers when a reply is cut off | **Closed.** Model-aware 32k/16k/8k defaults, `maxOutputTokens` / `OASIS_MAX_OUTPUT_TOKENS` / `CLAUDE_CODE_MAX_OUTPUT_TOKENS`. A `max_tokens` / `length` / `max_output_tokens` stop on Anthropic, Chat Completions or Responses no longer fails the turn or runs a half-written tool call: the incomplete call is dropped and the model resumes in smaller steps (max 3 recoveries per turn). A provider 400 naming a smaller cap is learned for the session. |
+| Read-before-edit and stale-file protection | Edit/Write refuse files not read this session, and files modified since they were read | **Closed.** Session file-state tracking (mtime + size + SHA-256). Overwrites require a prior read; every edit/overwrite is refused if the file changed on disk since it was read (content-hash check avoids false positives from touch/format no-ops). The agent's own writes refresh state. `requireReadBeforeEdit: "strict"` matches Claude Code exactly; the default also allows exact-match edits of unread files. |
 
 ## Ranked next improvements
 

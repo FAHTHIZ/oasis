@@ -7,6 +7,10 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { readTrigger, buildPrompt, runAction } from '../src/github-action.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
+// These scripted fixtures overwrite files without reading them first; read-before-edit
+// enforcement is covered by test/file-state.test.mjs.
+process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
+
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const comment = (body, extra = {}) => ({ action: 'created', issue: { number: 7, title: 'Login is broken', body: 'Steps: click login.', ...(extra.pr ? { pull_request: {} } : {}) }, comment: { id: 99, body, author_association: extra.association || 'OWNER', user: { login: extra.login || 'ada', type: extra.type || 'User' } }, repository: { full_name: 'acme/app', default_branch: 'main' } });
 

@@ -141,6 +141,7 @@ export async function saveConfig(config, options = {}) {
   if (config.promptCache === false) safe.promptCache = false;
   const thinkingBudget = Number.parseInt(config.thinkingBudget, 10);
   if (Number.isInteger(thinkingBudget) && thinkingBudget >= 1024 && thinkingBudget <= 64000) safe.thinkingBudget = thinkingBudget;
+  if (config.requireReadBeforeEdit === false || config.requireReadBeforeEdit === 'strict') safe.requireReadBeforeEdit = config.requireReadBeforeEdit;
   const maxOutputTokens = Number.parseInt(config.maxOutputTokens, 10);
   if (Number.isInteger(maxOutputTokens) && maxOutputTokens >= 1024 && maxOutputTokens <= 128000) safe.maxOutputTokens = maxOutputTokens;
   if (['minimal', 'low', 'medium', 'high'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
