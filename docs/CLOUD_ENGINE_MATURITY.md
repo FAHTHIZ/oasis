@@ -41,7 +41,9 @@ Do not rewrite these from scratch just to resemble another product. Harden and c
 
 **Required behavior:** durable task records; safe, bounded event history; status recovery after restart; task list/detail APIs; idempotent event cursors; clear distinction between a completed task and a task interrupted by server shutdown. Persist under the user's private Oasis config directory with restrictive file permissions, not inside a project checkout. Do not persist pending approvals as if they were still valid.
 
-**Initial implementation:** the cloud-task-store.mjs layer, browser runtime integration, /api/jobs history endpoint, and tests in this branch establish the first part of this foundation. It is local persistence, not hosted compute.
+**Initial implementation:** the cloud-task-store.mjs layer, browser runtime integration, authenticated /api/jobs history endpoint, browser Cloud runs panel, and restart/redaction/API tests establish the first part of this foundation. It is durable local persistence, not hosted compute.
+
+A conservative single-writer guard now prevents an agent task, terminal command, or GitHub workspace switch from racing against another mutation in the active workspace. This intentionally trades same-workspace parallelism for correctness until jobs have dedicated worktrees or containers. The next concurrency milestone should replace this guard with real task-level isolation, not simply remove it.
 
 ### P1 — true task isolation and concurrency
 
