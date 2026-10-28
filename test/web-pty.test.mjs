@@ -23,10 +23,11 @@ function fakePtyManager() {
       if (id !== 'term_web_test') throw new Error('No terminal session exists with that id in this OASIS session.');
       return { id, state: 'running', output: 'ready\n', offset: options.offset || 0, nextOffset: (options.offset || 0) + 6, truncated: false, waiting: false };
     },
-    write(id, data) { calls.push({ kind: 'write', id, data }); return { id, writtenChars: data.length, state: 'running' }; },
-    resize(id, cols, rows) { calls.push({ kind: 'resize', id, cols, rows }); return { id, cols, rows, state: 'running' }; },
-    interrupt(id) { calls.push({ kind: 'interrupt', id }); return { id, interrupted: true, state: 'running' }; },
-    stop(id) { calls.push({ kind: 'stop', id }); return { id, stopped: true, state: 'stopping' }; },
+    assertKnown(id) { if (id !== 'term_web_test') throw new Error('No terminal session exists with that id in this OASIS session.'); },
+    write(id, data) { this.assertKnown(id); calls.push({ kind: 'write', id, data }); return { id, writtenChars: data.length, state: 'running' }; },
+    resize(id, cols, rows) { this.assertKnown(id); calls.push({ kind: 'resize', id, cols, rows }); return { id, cols, rows, state: 'running' }; },
+    interrupt(id) { this.assertKnown(id); calls.push({ kind: 'interrupt', id }); return { id, interrupted: true, state: 'running' }; },
+    stop(id) { this.assertKnown(id); calls.push({ kind: 'stop', id }); return { id, stopped: true, state: 'stopping' }; },
     closeAll() { calls.push({ kind: 'close' }); return { stopped: 0 }; }
   };
 }
@@ -60,6 +61,14 @@ test('browser PTY endpoints require the bearer token and control only authorized
   const denied = await fetch(base + '/api/terminal/pty/list');
   assert.equal(denied.status, 401);
   assert.deepEqual((await (await fetch(base + '/api/terminal/pty/list', { headers: auth })).json()).sessions[0].id, 'term_web_test');
+
+  const xtermScript = await fetch(base + '/assets/vendor/xterm.js');
+  assert.equal(xtermScript.status, 200, 'Bundled terminal renderer script must be served locally.');
+  assert.match(await xtermScript.text(), /Terminal/);
+  const xtermCss = await fetch(base + '/assets/vendor/xterm.css');
+  assert.equal(xtermCss.status, 200, 'Bundled terminal CSS must be served locally.');
+  const fitAddon = await fetch(base + '/assets/vendor/xterm-addon-fit.js');
+  assert.equal(fitAddon.status, 200, 'Bundled terminal resize addon must be served locally.');
 
   const start = await fetch(base + '/api/terminal/command', {
     method: 'POST', headers: { ...auth, 'content-type': 'application/json' },

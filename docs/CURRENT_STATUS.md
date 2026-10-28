@@ -40,7 +40,7 @@ CI details: [Quality Checks run](https://github.com/FAHTHIZ/oasis/actions/runs/4
 - One-shot/headless text, JSON, and stream-JSON workflows, an SDK, budget/cost tracking, token/tool-call limits, saved sessions, and best-effort context compaction.
 - Workspace-bound read/write/edit/delete tools, glob/search, shell and argv command tools, background-process controls, package-install planning, checkpoints, backups, rewind, and Git operations.
 - Slash commands and workflows including `/plan`, `/goal`, `/batch`, `/simplify`, `/verify`, `/btw`, `/recap`, `/loop`, `/schedule`, `/commit`, and `/pr`.
-- The CLI is **not** a full-screen terminal UI and does **not** provide a general real-PTY lifecycle for interactive programs and TUI applications.
+- The CLI now exposes persistent PTY sessions to the agent; the browser workspace renders them with bundled xterm.js. Native PTY support still needs Windows/macOS validation and reliable process-tree cleanup, and this is not yet a polished standalone full-screen CLI TUI.
 
 ### 2. Models and providers
 
@@ -112,7 +112,7 @@ This ranking considers how much each gap constrains real work and what it unlock
 - Permission prompts and path checks reduce risk but are not a substitute for OS isolation. A local model does not make code execution safe.
 - Third-party plugin imports are safety-reviewed subsets; detection does not mean full runtime compatibility.
 - History compaction is heuristic. Long sessions still need provider-by-provider and long-horizon evaluation for continuity.
-- The browser command runner is not a PTY. Browser TLS setup still depends on user-provided certificates.
+- The browser command panel now supports approved PTY sessions through a locally bundled xterm.js renderer; browser TLS setup for non-loopback access still depends on user-provided certificates.
 - Current CI is green, but coverage does not establish a full security audit, real-device support, cross-platform usability, or equivalence with Claude Code's code quality.
 
 ## Source references
@@ -130,4 +130,4 @@ This ranking considers how much each gap constrains real work and what it unlock
 
 The agent runtime now has a real PTY session manager wired into the approved `run_command` path. Set `interactive=true` to start a persistent interactive session; `terminal_read`, `terminal_input`, `terminal_resize`, `terminal_interrupt`, `terminal_stop`, and `terminal_list` control it. The manager bounds captured output and input, limits active sessions, tracks exit status, supports incremental reads and stops sessions when the parent OASIS session closes. The native `node-pty` binding is optional and lazy-loaded; ordinary commands keep working if it is unavailable.
 
-This is **partial PTY groundwork, not completion of the whole terminal gap**. Native integration currently has a Linux/Node 22 CI smoke test. The browser command API still does not provide a rendered interactive terminal surface, the current CLI is not a full-screen terminal emulator, native build prerequisites can complicate first-time installation, and a signed no-terminal desktop installer has not shipped. Cross-platform PTY tests (especially Windows and macOS), child-process tree cleanup, browser terminal transport/UI and beginner-first installers remain open.
+This is **partial terminal and desktop-install groundwork, not completion of the whole gap**. The browser now has an xterm.js renderer connected to authenticated PTY routes. Native PTY integration is tested on Linux/Node 22, while Windows/macOS process behavior and child-process-tree cleanup remain open. Desktop install packaging is scaffolded for Windows, macOS and Linux, but platform build artifacts must pass and signing credentials are not configured, so a verified signed release has not shipped.

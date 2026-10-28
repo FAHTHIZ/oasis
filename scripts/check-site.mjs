@@ -31,7 +31,8 @@ const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
 assert.equal(scripts.length, 1, 'Expected exactly one inline application script.');
 assert.ok(scripts[0][1].trim().length > 0, 'Inline app script must not be empty.');
 new Function(scripts[0][1]);
-assert.ok(!/<script[^>]+src=/i.test(html), 'The starter should not depend on external scripts.');
+assert.ok(!/<script[^>]+src=[\"']https?:/i.test(html), 'The starter must not load third-party scripts.');
+for (const asset of ['/assets/vendor/xterm.js', '/assets/vendor/xterm-addon-fit.js']) assert.ok(html.includes(asset), 'Missing local terminal renderer asset reference: ' + asset);
 assert.ok(!html.includes('window.prompt('), 'Core creation and management flows should use in-app dialogs, not browser prompts.');
 
 const packageManifest = JSON.parse(packageText);
