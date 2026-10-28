@@ -15,6 +15,7 @@ import { microcompact, contextWindowSize, compactionThresholdChars } from './con
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { loadSettings } from './settings.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
+import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled } from './web-search.mjs';
@@ -346,6 +347,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     permissions,
     sandbox,
     hooks: loadedSettings.hooks || {},
+    autoModeSettings: loadedSettings.autoMode || null,
     background: new Map(),
     hookMessages: []
   };
@@ -1501,6 +1503,10 @@ async function runSubagent(parent, args, context, options) {
     hooks: parent.hooks || {},
     background: parent.background,
     hookMessages: parent.hookMessages || [],
+    // Auto mode judges a subagent's actions against what the user asked the parent.
+    autoModeSettings: parent.autoModeSettings || null,
+    autoMode: parent.autoMode ||= newAutoModeState(),
+    intentMessages: parent.intentMessages || parent.messages,
     // Rewind checkpoints are keyed to the parent root; a worktree is its own undo.
     checkpoints: worktree ? null : parent.checkpoints,
     agents: {}
@@ -1698,7 +1704,22 @@ async function authorizeCall(session, name, args, context, options) {
       const verdict = request.permissionRequest;
       if (verdict && verdict.behavior === 'allow' && !request.blocked) return true;
       if (request.blocked || (verdict && verdict.behavior === 'deny')) {
-        overlay.permissionHookDenial = (verdict && verdict.message) || request.reason || 'Denied by a PermissionRequest hook.';
+        overlay.permissionHookDenial = 'Denied by a PermissionRequest hook: ' + ((verdict && verdict.message) || request.reason || 'no reason given');
+        return false;
+      }
+    }
+    // Auto mode: the classifier answers instead of you unless it is unsure.
+    // Explicit "ask" rules (force) always reach you.
+    if (mode === 'auto' && !force) {
+      session.autoMode ||= newAutoModeState();
+      const autoSettings = session.autoModeSettings || {};
+      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model });
+      session.autoMode.log.push({ tool: name, decision: verdict.decision, reason: verdict.reason, at: Date.now() });
+      if (session.autoMode.log.length > 100) session.autoMode.log.shift();
+      if (options.onAutoMode) options.onAutoMode({ tool: name, ...verdict });
+      if (verdict.decision === 'allow') return true;
+      if (verdict.decision === 'block') {
+        overlay.permissionHookDenial = 'Auto mode blocked this: ' + (verdict.reason || 'it looked risky') + ' Try a safer approach, or ask the user to run it.';
         return false;
       }
     }
@@ -1713,7 +1734,7 @@ async function authorizeCall(session, name, args, context, options) {
   };
   if (decision === 'ask') {
     const ok = await overlay.approval('Permission rule ' + (verdict.rule || 'from a PreToolUse hook') + ' requires approval for ' + name + ':\n  ' + JSON.stringify(args).slice(0, 1500), true);
-    if (!ok) return { deniedReason: overlay.permissionHookDenial ? 'Denied by a PermissionRequest hook: ' + overlay.permissionHookDenial : 'The user did not approve this ' + name + ' call.' };
+    if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve this ' + name + ' call.' };
     overlay.ruleAllowed = true;
     overlay.autoApprove = true;
   } else if (decision === 'allow') {
@@ -1831,7 +1852,7 @@ async function executeOneCall(session, call, context, options) {
     }
   } catch (error) {
     result = { error: error.message || String(error) };
-    if (callContext && callContext.permissionHookDenial && !/PermissionRequest hook/.test(result.error)) result.error += ' (PermissionRequest hook: ' + callContext.permissionHookDenial + ')';
+    if (callContext && callContext.permissionHookDenial && !result.error.includes(callContext.permissionHookDenial)) result.error += ' (' + callContext.permissionHookDenial + ')';
     if (attemptedArgs && error.name !== 'AbortError') {
       const feedback = await runToolFailureHooks(session, name, attemptedArgs, result.error, context).catch(() => '');
       if (feedback) result.hookFeedback = feedback;
