@@ -41,6 +41,7 @@ test('stream-json events become chat UI messages', () => {
   assert.equal(perm.canAlways, true);
   assert.ok(state.pending.has('r1'));
   assert.deepEqual(translateEvent({ type: 'result', subtype: 'turn', result: 'x' }).map((e) => e.kind), ['turnEnd', 'busy']);
+  assert.match(translateEvent({ type: 'system', subtype: 'background_event', kinds: ['monitor'], ids: ['m1'] })[0].text, /Background event \(monitor\): m1/);
   assert.deepEqual(splitCommand('"/opt/my node/node" cli.mjs'), ['/opt/my node/node', 'cli.mjs']);
 });
 

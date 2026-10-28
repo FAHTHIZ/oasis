@@ -114,6 +114,8 @@ function translateEvent(event, state = {}) {
       if (event.subtype === 'init') { state.sessionId = event.session_id || null; out.push({ kind: 'init', model: event.model, cwd: event.cwd, permissionMode: event.permission_mode }); }
       else if (event.subtype === 'ide_selection') out.push({ kind: 'note', text: event.label });
       else if (event.subtype === 'interrupted') out.push({ kind: 'note', text: 'Interrupted.' });
+      else if (event.subtype === 'background_event') out.push({ kind: 'note', text: 'Background event (' + (event.kinds || []).join(', ') + ')' + (event.ids && event.ids.length ? ': ' + event.ids.slice(0, 3).join(', ') : '') + ' — Oasis is responding.' });
+      else if (event.subtype === 'plugin_monitors') out.push({ kind: 'note', text: event.started + ' plugin monitor(s) running.' });
       else if (event.subtype === 'permission' && event.via === 'ide_diff') out.push({ kind: 'note', text: (event.allowed ? 'Accepted' : 'Rejected') + ' ' + (event.tool || 'edit') + ' in the diff view.' });
       break;
     case 'stream_event': {

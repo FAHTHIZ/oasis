@@ -7,7 +7,10 @@
 //                tool_result, then a final result event
 // No terminal is available for approvals, so anything that would need a prompt is
 // denied unless a permission rule, permission mode, or --yes allows it.
-import { activeAgentMonitors } from './monitors.mjs';
+import { activeAgentMonitors, startPluginMonitorsFor } from './monitors.mjs';
+
+const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'agent-notice', 'channel']);
+const WAKE_PREFIX = '[background event] ';
 import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
@@ -97,6 +100,8 @@ export function createStreamJsonChannel(lines, write) {
       return new Promise((resolve) => { pending.set(id, resolve); write({ type: 'control_request', request_id: id, request }); });
     },
     onInterrupt(handler) { interruptHandler = handler; },
+    /** Queue a synthetic turn (a background event woke the idle session). */
+    wake(text) { if (!ended) push({ wake: String(text || '') }); },
     get closed() { return ended; }
   };
 }
@@ -242,7 +247,7 @@ export async function runHeadless(options) {
         currentTurn = new AbortController();
         if (signal) signal.addEventListener('abort', () => currentTurn && currentTurn.abort(), { once: true });
         const turnSignal = currentTurn.signal;
-        if (replayUser) emit({ type: 'user', message: { role: 'user', content: text } });
+        if (replayUser && !text.startsWith(WAKE_PREFIX)) emit({ type: 'user', message: { role: 'user', content: text } });
         let prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
         if (session.ide) {
           try {
@@ -258,7 +263,7 @@ export async function runHeadless(options) {
           throw caught;
         } finally { currentTurn = null; }
       }
-      if (replayUser) emit({ type: 'user', message: { role: 'user', content: text } });
+      if (replayUser && !text.startsWith(WAKE_PREFIX)) emit({ type: 'user', message: { role: 'user', content: text } });
       const prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
       return runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
     };
@@ -266,12 +271,51 @@ export async function runHeadless(options) {
       // --input-format stream-json: each user message is one turn in the same session.
       let turns = 0;
       if (String(rawPrompt || '').trim()) { result = await runOne(rawPrompt); turns += 1; emit({ type: 'result', subtype: 'turn', result: String(result.text || ''), num_turns: turns }); }
+      // Monitors, channels, background commands and background agents wake an idle
+      // session: their events queue a synthetic turn, like the interactive CLI.
+      let busy = false;
+      let wakeQueued = false;
+      let wakeTimer = null;
+      const pendingWake = () => (session.inbox || []).filter((entry) => WAKE_KINDS.has(entry.kind));
+      const scheduleWake = () => {
+        if (typeof inputStream.wake !== 'function' || wakeTimer || wakeQueued || busy) return;
+        wakeTimer = setTimeout(() => {
+          wakeTimer = null;
+          if (busy || wakeQueued || !pendingWake().length) return;
+          wakeQueued = true;
+          inputStream.wake();
+        }, 300);
+        wakeTimer.unref?.();
+      };
+      session.onBackgroundEvent = (event) => {
+        const last = session.inbox && session.inbox[session.inbox.length - 1];
+        if (last && event) last.label = event.description || (event.kind === 'background-exit' ? 'background command ' + event.id + ' finished' : event.id);
+        scheduleWake();
+      };
+      if (env.OASIS_DISABLE_PLUGIN_MONITORS !== '1' && typeof inputStream.wake === 'function') {
+        session.pluginMonitorsEnabled = true;
+        const started = startPluginMonitorsFor(session, 'always', { root, env });
+        if (started.length) emit({ type: 'system', subtype: 'plugin_monitors', started: started.length });
+      }
       for await (const item of inputStream) {
         if (item === null || item === undefined) continue;
-        result = await runOne(String(item));
+        let text = item;
+        if (typeof item === 'object' && 'wake' in item) {
+          wakeQueued = false;
+          const events = pendingWake();
+          if (!events.length) continue;
+          const labels = [...new Set(events.map((entry) => entry.label).filter(Boolean))];
+          emit({ type: 'system', subtype: 'background_event', events: events.length, kinds: [...new Set(events.map((entry) => entry.kind))], ids: [...new Set(events.map((entry) => entry.id).filter(Boolean))] });
+          text = WAKE_PREFIX + (labels.join(', ') || events.length + ' new event(s)').slice(0, 160);
+        }
+        busy = true;
+        try { result = await runOne(String(text)); } finally { busy = false; }
         turns += 1;
         emit({ type: 'result', subtype: 'turn', result: String(result.text || ''), num_turns: turns, total_cost_usd: Number(costUsd.toFixed(6)) });
+        if (pendingWake().length) scheduleWake();
       }
+      if (wakeTimer) clearTimeout(wakeTimer);
+      session.onBackgroundEvent = null;
       if (!result) result = { text: '', finished: true, toolCalls: 0 };
     } else {
       result = await runOne(rawPrompt);
