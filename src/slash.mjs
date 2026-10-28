@@ -12,6 +12,7 @@ import { listSessions } from './sessions.mjs';
 import { setAdditionalDirectories } from './tools.mjs';
 import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
 import { writeFile } from 'node:fs/promises';
+import { listWorktrees } from './worktrees.mjs';
 import path from 'node:path';
 
 export const BUILTIN_COMMANDS = {
@@ -27,6 +28,7 @@ export const BUILTIN_COMMANDS = {
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + ')',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
+  worktrees: 'List subagent worktree branches waiting for review',
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
@@ -101,6 +103,11 @@ export async function runBuiltinCommand(name, argument, state) {
         '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, used - system)),
         'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
       ].join('\n') };
+    }
+    case 'worktrees': {
+      const items = await listWorktrees(root, { env });
+      if (!items.length) return { output: 'No subagent worktrees. Ask for parallel work with isolation "worktree" to get one branch per agent.' };
+      return { output: ['Subagent worktrees:', ...items.map((item) => '  ' + (item.branch || '(detached)').padEnd(36) + ' ' + item.relative), 'Review: git diff HEAD...BRANCH   Merge: git merge BRANCH   Remove: git worktree remove PATH && git branch -D BRANCH'].join('\n') };
     }
     case 'cost': {
       const u = usage || createUsageTracker();

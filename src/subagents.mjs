@@ -111,6 +111,7 @@ export async function loadAgentDefinitions(root, options = {}) {
         description: String(data.description || 'Custom agent ' + name).slice(0, 600),
         tools: mapToolNames(data.tools),
         model: data.model && data.model !== 'inherit' ? String(data.model) : null,
+        isolation: String(data.isolation || '').toLowerCase() === 'worktree' ? 'worktree' : null,
         prompt: body.trim().slice(0, 30000),
         source: source + ':' + path.join(dir, entry.name)
       };
@@ -127,7 +128,8 @@ export function taskToolDefinition(agents) {
     parameters: { type: 'object', properties: {
       description: { type: 'string', description: 'Short (3-5 word) label for the task' },
       prompt: { type: 'string', description: 'Complete instructions for the subagent, including what to return' },
-      subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' }
+      subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' },
+      isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' }
     }, required: ['description', 'prompt'] }
   } };
 }
