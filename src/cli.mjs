@@ -32,6 +32,11 @@ import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
+import { readInput } from './line-editor.mjs';
+import { loadHistory, appendHistory } from './input-history.mjs';
+import { createCompleter } from './completion.mjs';
+import { MarkdownStream, colorEnabled } from './markdown.mjs';
+import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit } from './terminal-ui.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [] };
@@ -449,15 +454,24 @@ async function askApproval(prompt, forceInteractive, meta) {
 
 // Streaming: print assistant text as it arrives; onText then only ends the line.
 let streamedSoFar = '';
+let markdownStream = null;
+const richOutput = () => colorEnabled(stdout) && process.env.OASIS_PLAIN_OUTPUT !== '1';
 function streamDelta(accumulated) {
   const text = String(accumulated || '');
+  if (richOutput()) {
+    if (!markdownStream) markdownStream = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' });
+    if (text.startsWith(streamedSoFar)) markdownStream.push(text.slice(streamedSoFar.length));
+    streamedSoFar = text || ' ';
+    return;
+  }
   if (!streamedSoFar) stdout.write('\nOasis> ');
   if (text.startsWith(streamedSoFar)) stdout.write(text.slice(streamedSoFar.length));
   streamedSoFar = text || ' ';
 }
 function endStream() {
   if (!streamedSoFar) return false;
-  stdout.write('\n');
+  if (markdownStream) { markdownStream.end(); markdownStream = null; }
+  else stdout.write('\n');
   streamedSoFar = '';
   return true;
 }
@@ -958,16 +972,26 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
-      onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
+      onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' ? { onDelta: streamDelta } : {}),
-      onToolResult: ({ name, result }) => {
+      onToolResult: ({ name, result, call }) => {
+        if (richOutput() && call && ['edit_file', 'multi_edit', 'write_file'].includes(name)) {
+          let args = {};
+          try { args = JSON.parse(call.function && call.function.arguments || '{}'); } catch {}
+          const shown = describeEdit({ name, args, result }, { color: true });
+          if (shown) stdout.write(shown + '\n');
+        }
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
       },
-      onText: (text) => { if (!endStream()) stdout.write('\nOasis> ' + text + '\n'); }
+      onText: (text) => {
+        if (endStream()) return;
+        if (richOutput()) { const md = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' }); md.push(String(text)); md.end(); }
+        else stdout.write('\nOasis> ' + text + '\n');
+      }
     }).finally(() => { if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
     if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
@@ -1154,12 +1178,71 @@ async function memoryCommand(args, root) {
   stdout.write(handled.output + '\n');
 }
 
+async function interactiveCommandList(root) {
+  const list = Object.entries(BUILTIN_COMMANDS).map(([name, description]) => ({ name, description }));
+  list.push({ name: 'init', description: 'Create project instructions for this workspace' }, { name: 'quit', description: 'Exit Oasis' });
+  try { for (const [name, command] of (await loadCustomCommands(root, { env: process.env })).entries()) list.push({ name, description: (command && command.description) || 'Custom command' }); } catch {}
+  try { for (const skill of await listAvailableSkills(root, { env: process.env })) list.push({ name: skill.name, description: skill.description ? 'Skill: ' + String(skill.description).slice(0, 70) : 'Skill' }); } catch {}
+  return list;
+}
+
+async function pasteClipboardImage(root) {
+  const { mkdir: mk, writeFile: wf } = await import('node:fs/promises');
+  const attempts = process.platform === 'darwin'
+    ? [['pngpaste', ['-']], ['osascript', ['-e', 'set png to (the clipboard as «class PNGf»)', '-e', 'set f to (open for access POSIX file "/dev/stdout" with write permission)', '-e', 'write png to f', '-e', 'close access f']]]
+    : process.platform === 'win32' ? []
+      : [['wl-paste', ['--type', 'image/png']], ['xclip', ['-selection', 'clipboard', '-t', 'image/png', '-o']]];
+  for (const [command, args] of attempts) {
+    const result = spawnSync(command, args, { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024, timeout: 5000 });
+    const data = result.stdout;
+    if (result.status === 0 && data && data.length > 8 && data[0] === 0x89 && data[1] === 0x50) {
+      const dir = path.join(root, '.oasis', 'pastes');
+      await mk(dir, { recursive: true });
+      const name = 'paste-' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+      await wf(path.join(dir, name), data);
+      return '@.oasis/pastes/' + name;
+    }
+  }
+  return null;
+}
+
+async function readMainInput(root, session, state) {
+  if (!stdin.isTTY || !stdout.isTTY || process.env.OASIS_SIMPLE_INPUT === '1') return askLine('\nYou> ');
+  const color = colorEnabled(stdout);
+  const currentMode = () => (session && session.permissions ? session.permissions.mode : SESSION_OPTIONS.permissionMode || 'default');
+  stdout.write('\n');
+  const result = await readInput({
+    history: state.history,
+    color,
+    prompt: (editor) => promptFor(editor.text, color),
+    footer: (editor) => footerFor({ text: editor.text, mode: currentMode(), color }),
+    complete: state.completer,
+    onShiftTab: async () => {
+      const mode = nextMode(currentMode(), { allowBypass: Boolean(SESSION_OPTIONS.allowBypass) });
+      await runBuiltinCommand('mode', mode, { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
+    },
+    onDoubleEscape: () => '/rewind',
+    onPasteImage: () => pasteClipboardImage(root),
+    onTodos: async () => {
+      const handled = await runBuiltinCommand('todos', '', { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS }).catch(() => null);
+      return handled ? String(handled.output).split('\n') : [];
+    }
+  });
+  if (result.type === 'eof') throw new Error('eof');
+  state.history.push(result.text);
+  appendHistory(root, result.text).catch(() => {});
+  return result.text;
+}
+
 async function interactive(root, autoApprove, persistence = {}) {
-  stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\n');
   let session = null;
   await ensureModelProviderSetup(root);
-  stdout.write('Type your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
+  const bannerConfig = await loadConfig().catch(() => ({}));
+  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || bannerConfig.model || '', provider: bannerConfig.protocol || '', mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
+  else stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   const startupSettings = await loadSettings(root).catch(() => null);
+  const inputState = { history: await loadHistory(root).catch(() => []), completer: createCompleter({ root, commands: () => interactiveCommandList(root) }) };
+  const pendingShell = [];
   while (true) {
     let input;
     const statusLine = (session && session.settings || startupSettings || {}).statusLine;
@@ -1167,9 +1250,21 @@ async function interactive(root, autoApprove, persistence = {}) {
       const line = await renderStatusLine(statusLine, statusLinePayload({ root, session, config: await loadConfig().catch(() => ({})), usage: USAGE, outputStyle: SESSION_OPTIONS.outputStyle }), { root, env: process.env, keepColor: Boolean(stdout.isTTY) }).catch(() => null);
       if (line) stdout.write('\n' + line);
     }
-    try { input = await askLine('\nYou> '); } catch { break; }
-    const text = input.trim();
+    try { input = await readMainInput(root, session, inputState); } catch { break; }
+    let text = input.trim();
     if (!text) continue;
+    if (text.startsWith('!') && text.length > 1) {
+      const command = text.slice(1).trim();
+      const ran = await runShellPassthrough(command, { root });
+      if (ran.code) stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '[exit ' + ran.code + ']' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n');
+      pendingShell.push({ command, code: ran.code, output: ran.output });
+      if (pendingShell.length > 10) pendingShell.shift();
+      continue;
+    }
+    if (pendingShell.length && !text.startsWith('/') && !text.startsWith('#')) {
+      text = 'Commands I ran in my terminal (for context):\n' + shellContextBlock(pendingShell) + '\n\n' + text;
+      pendingShell.length = 0;
+    }
     if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
     if (text.startsWith('#') && !text.startsWith('#!')) {
       try {
