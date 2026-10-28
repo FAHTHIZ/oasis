@@ -1187,7 +1187,7 @@ async function requestPublicUrl(url, addresses, signal) {
       method: 'GET',
       signal,
       headers: {
-        'user-agent': 'OasisOSS/0.3 (+https://github.com/FAHTHIZ/oasis)',
+        'user-agent': 'OasisOSS/0.2 (+https://github.com/FAHTHIZ/oasis)',
         accept: 'text/plain,text/html,application/json,text/markdown,*/*;q=0.2'
       }
     };
