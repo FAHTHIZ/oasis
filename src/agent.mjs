@@ -25,7 +25,7 @@ async function pathExists(file) { try { await access(file); return true; } catch
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, stopAgent, stopAllAgents, getAgent } from './agent-tasks.mjs';
-import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool } from './subagents.mjs';
+import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter } from './subagents.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -1453,7 +1453,9 @@ function isReadOnlyAgent(session, type) {
 async function runSubagent(parent, args, context, options) {
   if (options.isSubagent) throw new Error('Subagents cannot launch further subagents.');
   const agents = parent.agents || BUILTIN_AGENTS;
-  const type = String(args.subagent_type || 'general-purpose');
+  const requested = String(args.subagent_type || 'general-purpose');
+  // Claude Code spells built-ins "Explore" and "Plan"; accept any case.
+  const type = agents[requested] ? requested : Object.keys(agents).find((key) => key.toLowerCase() === requested.toLowerCase()) || requested;
   const agent = agents[type];
   if (!agent) throw new Error('Unknown subagent_type ' + type + '. Available: ' + Object.keys(agents).join(', '));
   let prompt = String(args.prompt || '').trim();
@@ -1721,6 +1723,32 @@ async function authorizeCall(session, name, args, context, options) {
   return { context: overlay, args, hookContext };
 }
 
+// Skills with "context: fork" in their front matter run in a subagent; the model gets
+// the report instead of the instructions, so the main context stays small.
+async function maybeForkSkill(session, skill, args, context, options) {
+  const { data, body } = parseFrontMatter(skill.content);
+  if (String(data.context || '').toLowerCase() !== 'fork') return skill;
+  const request = String(args.arguments || '').trim();
+  const prompt = body.trim().replace(/\$ARGUMENTS/g, request) + (request && !body.includes('$ARGUMENTS') ? '\n\nTask: ' + request : '');
+  const report = await runSubagent(session, { subagent_type: String(data.agent || 'general-purpose'), description: 'skill ' + skill.name, prompt }, context, options);
+  return { name: skill.name, source: skill.source, context: 'fork', agent: report.agent, report: report.report, finished: report.finished, toolCalls: report.toolCalls, ...(report.worktree ? { worktree: report.worktree } : {}) };
+}
+
+// Runs a prompt in a forked subagent (custom commands and skills with context: fork)
+// and records the exchange in the main conversation.
+export async function runForkedTurn(session, prompt, options = {}) {
+  const context = { root: session.root, env: options.env || process.env, session, approval: options.approval, autoApprove: Boolean(options.autoApprove) };
+  const label = options.label || 'a forked task';
+  const result = await runSubagent(session, { subagent_type: options.agent || 'general-purpose', description: label, prompt }, context, options);
+  const report = String(result.report || '').trim() || '(the subagent returned no report)';
+  session.messages.push(
+    { role: 'user', content: 'I ran ' + label + ' in a forked ' + result.agent + ' subagent with this request:\n' + prompt.slice(0, 4000) },
+    { role: 'assistant', content: report }
+  );
+  if (options.onText) options.onText(report);
+  return { text: report, finished: result.finished, toolCalls: result.toolCalls, tokensUsed: result.tokensUsed, forked: true };
+}
+
 async function runToolFailureHooks(session, name, args, error, context) {
   if (!hasHooks(session.hooks, 'PostToolUseFailure')) return '';
   const failed = await runHooks('PostToolUseFailure', {
@@ -1780,6 +1808,7 @@ async function executeOneCall(session, call, context, options) {
     } else {
       if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
       result = await executeTool(name, args, callContext);
+      if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
     }
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
     if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;

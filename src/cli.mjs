@@ -7,7 +7,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
-import { applyEffort, createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
+import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
@@ -893,6 +893,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (modeOptions.model) config.model = modeOptions.model;
+  if (modeOptions.effort) Object.assign(config, applyEffort(config, modeOptions.effort));
   try {
     const expanded = await expandFileMentions(root, prompt, { images: visionEnabled(config) });
     if (expanded.files.length) {
@@ -933,7 +934,12 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   };
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
   try {
-    const runner = modeOptions.planOnly ? runAgentPlan : runAgentTurn;
+    const fork = modeOptions.fork;
+    const runner = fork ? (s, p, o) => runForkedTurn(s, p, { ...o, agent: fork.agent, label: fork.label, env: process.env }) : modeOptions.planOnly ? runAgentPlan : runAgentTurn;
+    // allowed-tools from a command apply only while it runs.
+    const granted = session.permissions && Array.isArray(modeOptions.grantTools) ? session.permissions.sessionAllow.length : -1;
+    if (granted >= 0) for (const rule of modeOptions.grantTools) session.permissions.rememberForSession(rule);
+    if (fork) stdout.write('[fork] Running ' + fork.label + ' in a ' + (fork.agent || 'general-purpose') + ' subagent.\n');
     const result = await runner(session, prompt, {
       signal: controller.signal,
       autoApprove,
@@ -952,7 +958,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         }
       },
       onText: (text) => { if (!endStream()) stdout.write('\nOasis> ' + text + '\n'); }
-    });
+    }).finally(() => { if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
     if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
       stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
@@ -998,6 +1004,19 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
   const piped = await readPipedStdin();
   if (piped.trim()) prompt = prompt ? prompt + '\n\n<stdin>\n' + piped + '\n</stdin>' : piped;
+  if (prompt.trim().startsWith('/')) {
+    // oasis -p "/review src" runs a custom command or skill, like the interactive prompt.
+    const custom = await resolveCustomCommand(root, prompt.trim(), await customCommandContext(root)).catch(() => null);
+    if (custom) {
+      for (const item of custom.shell || []) if (item.skipped) stderr.write('[command] Skipped !`' + item.command + '`: ' + item.skipped + '\n');
+      prompt = custom.prompt;
+      if (custom.command.model && !SESSION_OPTIONS.model) SESSION_OPTIONS.model = custom.command.model;
+      if (custom.command.effort && !SESSION_OPTIONS.effort) SESSION_OPTIONS.effort = custom.command.effort;
+    } else {
+      const skillCommand = await resolveSkillCommand(root, prompt.trim()).catch(() => null);
+      if (skillCommand) prompt = skillCommand.options.fork ? 'Use the task tool with subagent_type "' + (skillCommand.options.fork.agent || 'general-purpose') + '" to run this, then report its result:\n\n' + skillCommand.prompt : skillCommand.prompt;
+    }
+  }
   if (!prompt.trim()) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--model ID]');
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
@@ -1052,6 +1071,47 @@ async function endSessionWorktree(root, worktree, out) {
 }
 
 // /loop: run the prompt, wait, repeat. Ctrl+C stops the current run and the loop.
+// Trust and deny rules decide whether a command's !`cmd` lines may run.
+async function customCommandContext(root) {
+  const { PermissionPolicy } = await import('./permissions.mjs');
+  const settings = await loadSettings(root).catch(() => null);
+  return { env: process.env, trusted: Boolean(settings && settings.trusted), policy: settings ? new PermissionPolicy(settings) : null };
+}
+
+function customRunOptions(custom) {
+  const command = custom.command;
+  return {
+    ...(command.model ? { model: command.model } : {}),
+    ...(command.effort ? { effort: command.effort } : {}),
+    ...(custom.grantTools ? { grantTools: custom.grantTools } : {}),
+    ...(command.context === 'fork' ? { fork: { agent: command.agent, label: '/' + custom.name } } : {})
+  };
+}
+
+function reportInlineShell(ran = []) {
+  for (const item of ran) stdout.write(item.skipped ? '[command] Skipped !`' + item.command + '`: ' + item.skipped + '\n' : '[command] Ran !`' + item.command + '`' + (item.code ? ' (exit ' + item.code + ')' : '') + '\n');
+}
+
+// "/skill-name args" runs a skill directly, like Claude Code.
+async function resolveSkillCommand(root, text) {
+  const match = String(text).trim().match(/^\/([a-zA-Z][a-zA-Z0-9-]{0,63})(?:\s+([\s\S]*))?$/);
+  if (!match) return null;
+  const { loadSkillText } = await import('./tools.mjs');
+  const { parseFrontMatter } = await import('./subagents.mjs');
+  const { commandOptions } = await import('./commands.mjs');
+  let skill;
+  try { skill = await loadSkillText(root, match[1], { env: process.env }); } catch { return null; }
+  const { data, body } = parseFrontMatter(skill.content);
+  const request = String(match[2] || '').trim();
+  const options = commandOptions(data);
+  if (options.context === 'fork') {
+    const prompt = body.trim().replace(/\$ARGUMENTS/g, request) + (request && !body.includes('$ARGUMENTS') ? '\n\nTask: ' + request : '');
+    return { name: skill.name, prompt, options: { fork: { agent: options.agent, label: 'the ' + skill.name + ' skill' }, ...(data.model ? { model: String(data.model) } : {}) } };
+  }
+  const prompt = 'Use the "' + skill.name + '" skill for this request.\n\n<skill name="' + skill.name + '">\n' + body.trim() + '\n</skill>\n\n' + (request ? 'Request: ' + request : 'Follow the skill for the current workspace.');
+  return { name: skill.name, prompt, options: data.model ? { model: String(data.model) } : {} };
+}
+
 async function runLoop(loop, root, autoApprove, session, persistence) {
   let stopped = false;
   let wake = null;
@@ -1061,11 +1121,12 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
     for (let run = 1; !stopped && run <= (loop.times || 1000); run += 1) {
       stdout.write('[loop] Run ' + run + (loop.times ? ' of ' + loop.times : '') + '\n');
       let prompt = loop.prompt;
+      let loopOptions = {};
       if (prompt.startsWith('/')) {
-        const custom = await resolveCustomCommand(root, prompt).catch(() => null);
-        if (custom) prompt = custom.prompt;
+        const custom = await resolveCustomCommand(root, prompt, await customCommandContext(root)).catch(() => null);
+        if (custom) { reportInlineShell(custom.shell); prompt = custom.prompt; loopOptions = customRunOptions(custom); }
       }
-      session = await runPrompt(prompt, root, autoApprove, session, persistence);
+      session = await runPrompt(prompt, root, autoApprove, session, persistence, loopOptions);
       persistence.resumeId = null;
       if (stopped || (loop.times && run >= loop.times)) break;
       stdout.write('[loop] Next run in ' + formatInterval(loop.intervalMs) + '. Press Ctrl+C to stop.\n');
@@ -1147,10 +1208,11 @@ async function interactive(root, autoApprove, persistence = {}) {
     }
     if (text.startsWith('/')) {
       try {
-        const custom = await resolveCustomCommand(root, text, { env: process.env });
+        const custom = await resolveCustomCommand(root, text, await customCommandContext(root));
         if (custom) {
           stdout.write('Running /' + custom.name + ' from ' + custom.command.file + '.\n');
-          session = await runPrompt(custom.prompt, root, autoApprove, session, persistence, custom.command.model ? { model: custom.command.model } : {});
+          reportInlineShell(custom.shell);
+          session = await runPrompt(custom.prompt, root, autoApprove, session, persistence, customRunOptions(custom));
           persistence.resumeId = null;
           continue;
         }
@@ -1171,6 +1233,13 @@ async function interactive(root, autoApprove, persistence = {}) {
         continue;
       }
       if (/^\/mcp__[a-z0-9_-]+__/.test(text)) { session = await runPrompt(text, root, autoApprove, session, persistence); persistence.resumeId = null; continue; }
+      const skillCommand = await resolveSkillCommand(root, text).catch(() => null);
+      if (skillCommand) {
+        stdout.write('Running the ' + skillCommand.name + ' skill.\n');
+        session = await runPrompt(skillCommand.prompt, root, autoApprove, session, persistence, skillCommand.options);
+        persistence.resumeId = null;
+        continue;
+      }
       stdout.write('Unknown command. Type /help to list built-in and custom commands.\n');
       continue;
     }

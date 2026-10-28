@@ -33,6 +33,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - User-level provider configuration, environment setup diagnostics, built-in skills, project instructions, file snapshots, and snapshot restore.
 - PDF text extraction in `read_file` (page ranges), headless `--json-schema` structured output with validation and retries, and `-w/--worktree` sessions on their own branch.
 - Hooks: 14 events (including PostToolUseFailure, PermissionRequest, SubagentStart, Pre/PostCompact, Notification, CwdChanged) and `command`, `http`, and `prompt` hook types.
+- Custom commands and skills: inline `` !`cmd` `` output, `allowed-tools`, `effort`, `context: fork` subagent runs, `/skill-name`, and headless `/command` expansion.
 - CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
 
 ## Milestone 1 — make the CLI release-quality
