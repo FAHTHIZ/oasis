@@ -102,6 +102,21 @@ export async function addPermissionRule(scope, kind, rule, root, env = process.e
   throw new Error('Scope must be user, project, or local.');
 }
 
+function normalizeHook(hook) {
+  if (!hook || typeof hook !== 'object') return null;
+  const timeout = Number(hook.timeout) || 0;
+  const type = hook.type || 'command';
+  if (type === 'command' && typeof hook.command === 'string' && hook.command.trim()) return { type, command: hook.command, timeout: timeout || 60 };
+  if (type === 'http' && typeof hook.url === 'string' && /^https?:\/\//i.test(hook.url)) {
+    const headers = {};
+    if (hook.headers && typeof hook.headers === 'object') for (const [key, value] of Object.entries(hook.headers)) if (typeof value === 'string') headers[key] = value;
+    const allowedEnvVars = Array.isArray(hook.allowedEnvVars) ? hook.allowedEnvVars.filter((name) => typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) : [];
+    return { type, url: hook.url, headers, allowedEnvVars, timeout: timeout || 30 };
+  }
+  if (type === 'prompt' && typeof hook.prompt === 'string' && hook.prompt.trim()) return { type, prompt: hook.prompt, model: typeof hook.model === 'string' ? hook.model : undefined, timeout: timeout || 30 };
+  return null;
+}
+
 function normalizeHooks(raw) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
@@ -111,8 +126,8 @@ function normalizeHooks(raw) {
       if (!group || !Array.isArray(group.hooks)) continue;
       const matcher = typeof group.matcher === 'string' ? group.matcher : '';
       const hooks = group.hooks
-        .filter((hook) => hook && hook.type === 'command' && typeof hook.command === 'string' && hook.command.trim())
-        .map((hook) => ({ type: 'command', command: hook.command, timeout: Number(hook.timeout) || 60 }));
+        .map(normalizeHook)
+        .filter(Boolean);
       if (!hooks.length) continue;
       (out[event] ||= []).push({ matcher, hooks });
     }

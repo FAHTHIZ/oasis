@@ -1016,6 +1016,17 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   process.exitCode = exitCode;
 }
 
+// CwdChanged hooks run when /cd switches the workspace.
+async function fireCwdChanged(session, oldRoot, newRoot) {
+  const { runHooks, hasHooks } = await import('./hooks.mjs');
+  const { hookOptions } = await import('./agent.mjs');
+  const hooks = session ? session.hooks : (await loadSettings(oldRoot).catch(() => ({}))).hooks;
+  if (!hasHooks(hooks, 'CwdChanged')) return;
+  const options = session ? hookOptions(session) : { hooks, root: oldRoot, env: process.env };
+  const result = await runHooks('CwdChanged', { session_id: session && session.sessionId || 'unsaved', old_cwd: oldRoot, new_cwd: newRoot }, options).catch(() => null);
+  if (result) for (const message of result.messages) stdout.write('[hook] ' + message + '\n');
+}
+
 // oasis -w NAME: run the whole session in a fresh git worktree on its own branch.
 async function startSessionWorktree(root, name, out) {
   const { createWorktree } = await import('./worktrees.mjs');
@@ -1128,7 +1139,7 @@ async function interactive(root, autoApprove, persistence = {}) {
           }
           if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
           if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
-          if (handled.cd) { closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
+          if (handled.cd) { await fireCwdChanged(session, root, handled.cd); closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
           if (handled.loop) session = await runLoop(handled.loop, root, autoApprove, session, persistence);
           continue;
         }
