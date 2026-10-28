@@ -136,6 +136,7 @@ export async function loadSettings(root, options = {}) {
     model: null,
     outputStyle: null,
     statusLine: null,
+    lspServers: {},
     trusted: false,
     sources: [],
     ignoredUntrusted: []
@@ -148,7 +149,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (!trusted) {
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
@@ -163,6 +164,13 @@ export async function loadSettings(root, options = {}) {
     }
     if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') result.shell.enabled = settings.shell.enabled;
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
+    if (settings.lspServers && typeof settings.lspServers === 'object' && !Array.isArray(settings.lspServers)) {
+      for (const [name, spec] of Object.entries(settings.lspServers)) {
+        if (/^[\w.-]{1,40}$/.test(name) && spec && typeof spec.command === 'string' && spec.command.trim() && Array.isArray(spec.extensions)) {
+          result.lspServers[name] = { command: spec.command.trim(), args: stringList(spec.args), extensions: stringList(spec.extensions).map((ext) => ext.startsWith('.') ? ext : '.' + ext), ...(typeof spec.languageId === 'string' ? { languageId: spec.languageId } : {}) };
+        }
+      }
+    }
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
 

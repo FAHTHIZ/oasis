@@ -12,6 +12,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 |---|---|
 | File tools | read (ranged, images, notebooks), write, edit, multi_edit, notebook_edit, glob, grep (ripgrep), delete |
 | Commands | argv `run_command`, opt-in `run_shell`, background processes with output/kill/list |
+| Code intelligence | `lsp` tool: definition, references, hover, implementation, type definition, document/workspace symbols, call hierarchy, diagnostics, with 12 built-in language servers plus custom ones |
 | Code checks | `diagnostics` tool (tsc, ESLint, Ruff, mypy, Pyright, go vet, cargo, JS/JSON syntax), `/diagnostics`, `oasis diagnostics` |
 | Web | `fetch_url`, `web_search` (keyless or Tavily/Brave/SearXNG) |
 | Planning | plan mode, `exit_plan_mode`, `todo_write` checklists persisted with sessions |
@@ -32,7 +33,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 
 ### P1 — agent power (biggest impact on real coding tasks)
 
-1. **LSP tool.** Claude Code has go-to-definition, find references, and hover through language servers. Oasis now has one-shot `diagnostics`, but no persistent language-server client. Plan: a small LSP client (stdio JSON-RPC) for `typescript-language-server`, `pyright-langserver`, `gopls`, and `rust-analyzer`, exposed as an `lsp` tool with `definition`, `references`, `hover`, `symbols`, and `diagnostics` operations.
+1. ~~**LSP tool.**~~ Done: the `lsp` tool.
 2. **Background agents and messaging.** Claude Code can run subagents in the background, list them (`/tasks`), message them, and attach to them. In Oasis, `task` blocks until it finishes. Plan: `run_in_background` on `task`, plus `agent_status`, `send_message`, a `/tasks` command, and a `Monitor`-style event stream.
 3. **Git and PR workflow.** Claude Code commits, creates branches, and opens PRs. Oasis has read-only `git_status`/`git_diff` only. Plan: approval-gated `git_commit` and `git_branch`, `create_pull_request` through `gh`, a `/pr` command, and `/review` on a PR (part of this already exists).
 4. **MCP depth.** Missing: resources (`resources/list`/`read`, `@server:resource` mentions), prompts as slash commands (`/mcp__server__prompt`), OAuth for remote servers, and `oasis mcp serve`, which exposes Oasis tools to other clients.
@@ -62,7 +63,7 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 
 ## Suggested build order
 
-1. LSP tool (definition, references, hover, symbols)
+1. ~~LSP tool~~ (done)
 2. Git commit/branch/PR tools and `/pr`
 3. Background subagents with `/tasks` and `send_message`
 4. Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`)

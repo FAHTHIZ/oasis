@@ -21,6 +21,7 @@ import { access } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
+import { stopLspClients } from './lsp.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool } from './subagents.mjs';
 
 const MAX_REPLY_CHARS = 24000;
@@ -269,7 +270,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     ...(environment ? ['Environment:\n' + environment] : []),
     'Workspace paths are relative to that root. Secret files and paths outside the workspace are intentionally inaccessible through file tools.',
     'You may make and revise source files in the workspace. Prefer edit_file with exact old_string/new_string patches for existing files, use glob_files to locate files, and read_file with offset/limit to inspect large files in sections. Existing files are snapshotted before edits/overwrites; deleted files require interactive approval and are snapshotted.',
-    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. For Jupyter notebooks, read_file shows cells with ids and notebook_edit changes them; never rewrite .ipynb JSON by hand. After editing code, call diagnostics (optionally with the edited paths) to catch type, lint and syntax errors before running tests, and fix what it reports. Use web_search for current library documentation, unfamiliar errors, or recent releases, then fetch_url to read the best result; prefer official documentation. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
+    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. For Jupyter notebooks, read_file shows cells with ids and notebook_edit changes them; never rewrite .ipynb JSON by hand. To navigate code, prefer lsp (definition, references, hover, document_symbols, workspace_symbols, call hierarchy) over grep when a language server is available; fall back to grep if it is not. After editing code, call diagnostics (optionally with the edited paths) to catch type, lint and syntax errors before running tests, and fix what it reports. Use web_search for current library documentation, unfamiliar errors, or recent releases, then fetch_url to read the best result; prefer official documentation. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
     'Use the task tool to delegate self-contained work to a subagent: broad codebase exploration (subagent_type "explore"), independent research, or a separate implementation slice. Launch several task calls in one response to run them in parallel when the pieces are independent. Subagents start with no memory of this conversation, so give each a complete, specific prompt and say exactly what to report back. Parallel subagents share the workspace, so do not give two of them edits to the same files.',
     'For dev servers, watchers, and other long-running processes, use run_command with run_in_background: true, then check command_output and stop them with kill_command when finished. Never start a server in the foreground and wait for it to exit.',
     'Code quality: follow the existing style, structure, libraries, and naming of the codebase. Check that a library is already used before relying on it. Prefer editing existing files to creating new ones, never create documentation files unless asked, and keep comments for non-obvious reasoning. Never commit, push, or publish unless the user asks.',
@@ -369,6 +370,7 @@ export async function createSession({ root, config, restore = null, permissionMo
 
 export function closeSession(session) {
   if (session && session.background) killAllBackground(session.background);
+  if (session && session.lspClients) stopLspClients(session).catch(() => {});
   if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
     runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, { hooks: session.hooks, root: session.root }).catch(() => {});
   }
@@ -1112,7 +1114,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp']);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
