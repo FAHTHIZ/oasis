@@ -12,6 +12,59 @@ import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+const OAUTH_FETCH_TIMEOUT_MS = 5000;
+const OAUTH_JSON_MAX_BYTES = 256 * 1024;
+
+function boundedTimeoutMs(value = OAUTH_FETCH_TIMEOUT_MS) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(30000, Math.max(1, Math.trunc(parsed)))
+    : OAUTH_FETCH_TIMEOUT_MS;
+}
+
+function requestTimeoutSignal(value = OAUTH_FETCH_TIMEOUT_MS) {
+  return AbortSignal.timeout(boundedTimeoutMs(value));
+}
+
+// Parse protocol JSON from a bounded stream rather than letting response.json()
+// buffer an untrusted response of arbitrary size.
+async function readBoundedJson(response, maxBytes = OAUTH_JSON_MAX_BYTES) {
+  const declared = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    try { await response.body?.cancel(); } catch {}
+    return null;
+  }
+
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    if (typeof response.text !== 'function') return null;
+    const text = await response.text();
+    if (Buffer.byteLength(text, 'utf8') > maxBytes) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      size += chunk.length;
+      if (size > maxBytes) {
+        try { await reader.cancel(); } catch {}
+        return null;
+      }
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    try { await reader.cancel(); } catch {}
+    throw error;
+  }
+
+  try { return JSON.parse(Buffer.concat(chunks, size).toString('utf8')); }
+  catch { return null; }
+}
 
 function authFile(env = process.env) {
   return path.join(getConfigDirectory(env), 'mcp-auth.json');
@@ -71,11 +124,23 @@ export function parseWwwAuthenticate(header) {
   return out;
 }
 
-async function getJson(fetchImpl, url) {
+async function getJson(fetchImpl, url, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS) {
   try {
-    const response = await fetchImpl(url, { headers: { accept: 'application/json' }, redirect: 'follow' });
-    if (!response.ok) return null;
-    return await response.json();
+    const response = await fetchImpl(url, {
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+      signal: requestTimeoutSignal(fetchTimeoutMs)
+    });
+    if (!response.ok) {
+      try { await response.body?.cancel(); } catch {}
+      return null;
+    }
+    const type = response.headers?.get?.('content-type') || '';
+    if (type && !/(?:application\\/json|application\\/[^;]+\\+json)/i.test(type)) {
+      try { await response.body?.cancel(); } catch {}
+      return null;
+    }
+    return await readBoundedJson(response);
   } catch { return null; }
 }
 
@@ -89,16 +154,22 @@ function wellKnownUrls(base, suffix) {
 }
 
 // Finds the authorization server for an MCP server URL.
-export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null } = {}) {
+export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS } = {}) {
   let resourceMetadata = null;
   if (!resourceMetadataUrl) {
     try {
-      const probe = await fetchImpl(serverUrl, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }) });
+      const probe = await fetchImpl(serverUrl, {
+        method: 'POST',
+        redirect: 'error',
+        signal: requestTimeoutSignal(fetchTimeoutMs),
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' })
+      });
       if (probe.status === 401) resourceMetadataUrl = parseWwwAuthenticate(probe.headers.get('www-authenticate')).resource_metadata || null;
     } catch {}
   }
   for (const candidate of resourceMetadataUrl ? [resourceMetadataUrl] : wellKnownUrls(serverUrl, 'oauth-protected-resource')) {
-    resourceMetadata = await getJson(fetchImpl, candidate);
+    resourceMetadata = await getJson(fetchImpl, candidate, fetchTimeoutMs);
     if (resourceMetadata) break;
   }
   const issuer = resourceMetadata && Array.isArray(resourceMetadata.authorization_servers) && resourceMetadata.authorization_servers[0] || new URL(serverUrl).origin;
@@ -107,7 +178,7 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
   const candidates = [...wellKnownUrls(issuer, 'oauth-authorization-server'), ...wellKnownUrls(issuer, 'openid-configuration')];
   if (issuerUrl.pathname.replace(/\/$/, '')) candidates.push(issuer.replace(/\/$/, '') + '/.well-known/openid-configuration');
   for (const candidate of candidates) {
-    metadata = await getJson(fetchImpl, candidate);
+    metadata = await getJson(fetchImpl, candidate, fetchTimeoutMs);
     if (metadata && metadata.authorization_endpoint && metadata.token_endpoint) break;
     metadata = null;
   }
@@ -125,10 +196,15 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
 
 const b64url = (buffer) => Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-async function postForm(fetchImpl, url, form) {
-  const response = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams(form).toString() });
-  let body = null;
-  try { body = await response.json(); } catch {}
+async function postForm(fetchImpl, url, form, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS) {
+  const response = await fetchImpl(url, {
+    method: 'POST',
+    redirect: 'error',
+    signal: requestTimeoutSignal(fetchTimeoutMs),
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+    body: new URLSearchParams(form).toString()
+  });
+  const body = await readBoundedJson(response);
   if (!response.ok || !body || !body.access_token) throw new Error('Token request failed (HTTP ' + response.status + ')' + (body && body.error ? ': ' + body.error + (body.error_description ? ' - ' + body.error_description : '') : '') + '.');
   return body;
 }
@@ -188,10 +264,12 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
       if (!discovered.registrationEndpoint) throw new Error('This server does not support automatic client registration. Add "oauth": {"clientId": "..."} to its .mcp.json entry.');
       const response = await fetchImpl(discovered.registrationEndpoint, {
         method: 'POST',
+        redirect: 'error',
+        signal: requestTimeoutSignal(),
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ client_name: 'Oasis', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' })
       });
-      const registered = await response.json().catch(() => null);
+      const registered = await readBoundedJson(response);
       if (!response.ok || !registered || !registered.client_id) throw new Error('Client registration failed (HTTP ' + response.status + ').');
       clientId = registered.client_id;
       clientSecret = registered.client_secret || null;
