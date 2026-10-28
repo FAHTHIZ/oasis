@@ -144,7 +144,8 @@ function printHelp() {
     '  --init | --init-only          Create project instructions first (and exit with --init-only); runs Setup hooks',
     '  --maintenance                 Run Setup hooks with trigger "maintenance" before starting',
     '  --disable-slash-commands      Treat /text as a normal message (built-ins still work)',
-    '  --verbose | --debug [cats]    More detail about what Oasis is doing',
+    '  --verbose | --debug [cats]    More detail; --debug logs api,tools,hooks,mcp,permissions to <config>/debug/',
+    '  --debug-file PATH             Write the debug log to PATH',
     '  --help, -h                    Show this help',
     '  --version                     Show the installed version',
     '',
@@ -2245,6 +2246,7 @@ async function main() {
     if (arg === '--fork-session') { SESSION_OPTIONS.forkSession = true; continue; }
     if (arg === '--name' || arg === '-n') { SESSION_OPTIONS.sessionName = needValue(arg); persistSession = true; continue; }
     if (arg === '--verbose') { SESSION_OPTIONS.verbose = true; continue; }
+    if (arg === '--debug-file') { SESSION_OPTIONS.debugFile = needValue(arg); process.env.OASIS_DEBUG_FILE = SESSION_OPTIONS.debugFile; if (!SESSION_OPTIONS.debug) { SESSION_OPTIONS.debug = 'all'; process.env.OASIS_DEBUG = 'all'; } continue; }
     if (arg === '--debug') { SESSION_OPTIONS.debug = rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-') && !/\s/.test(rawArgs[i + 1]) && /^[a-z,!]+$/i.test(rawArgs[i + 1]) ? rawArgs[++i] : 'all'; process.env.OASIS_DEBUG = SESSION_OPTIONS.debug; continue; }
     if (arg === '--disable-slash-commands') { SESSION_OPTIONS.disableSlashCommands = true; continue; }
     if (arg === '--input-format') {

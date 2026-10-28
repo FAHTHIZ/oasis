@@ -72,6 +72,9 @@ export const BUILTIN_COMMANDS = {
   color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
   focus: 'Show the last prompt, a one-line summary of each tool call with edit line counts, and the final response',
   background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
+  debug: 'Turn on debug logging and troubleshoot an issue from the session debug log (/debug [description] | /debug off)',
+  'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of Oasis usage (/team-onboarding [DAYS])',
+  heapdump: 'Write a JavaScript heap snapshot and memory breakdown for diagnosing high memory use',
   chrome: 'Turn the Chrome browser tool on or off for this session (/chrome [on|off|status])',
   'skill-doctor': 'Show each skill\'s context cost and recent usage so you can turn off unused ones (/skill-doctor [DAYS])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
@@ -474,6 +477,41 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'background': {
       if (!session) return { output: 'Start a conversation first; /background hands the current session to a background agent. Use oasis --bg "task" to start a new one.' };
       return { background: { prompt: argument || 'Continue the task from where we left off. When you are done, summarize what you did.' } };
+    }
+    case 'debug': {
+      const dbg = await import('./debug-log.mjs');
+      if (String(argument).trim().toLowerCase() === 'off') { dbg.disableDebug(); return { output: 'Debug logging off.' }; }
+      const file = dbg.debugEnabled() ? dbg.debugFile() : dbg.enableDebug({ categories: env.OASIS_DEBUG || 'all', file: env.OASIS_DEBUG_FILE || null, env, sessionId: session && session.sessionId });
+      if (session) session.debugFile = file;
+      if (!argument) return { output: 'Debug logging on: ' + file + '\nReproduce the problem, then run /debug DESCRIPTION to have Oasis read the log and troubleshoot it.' };
+      return {
+        output: 'Debug log: ' + file + '. Troubleshooting.',
+        prompt: 'Troubleshoot this Oasis problem: ' + argument + '\n\nThe session debug log is at ' + file + ' (lines tagged [API], [TOOLS], [HOOKS], [MCP], [PERMISSIONS], [SESSION]). Read the end of it with run_command (for example `tail -n 200 ' + JSON.stringify(file) + '`), together with relevant settings files (.claude/settings.json, .oasis/settings.json, ~/.claude/settings.json), hook scripts and MCP configs. Identify the root cause, explain it in plain words, and propose or apply the fix. If the log does not show the problem yet, say what to reproduce.'
+      };
+    }
+    case 'team-onboarding': {
+      const days = Math.min(365, Math.max(1, parseInt(argument, 10) || 30));
+      const { collectInsights, insightsSummaryText } = await import('./insights.mjs');
+      const stats = await collectInsights({ env, days });
+      const top = (map, n) => [...(map || new Map()).entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => k + ' (' + v + ')').join(', ') || 'none';
+      const usage = [insightsSummaryText(stats), 'Slash commands used: ' + top(stats.commands, 12) + '.', 'Files touched most: ' + top(stats.files, 12) + '.', 'File types: ' + top(stats.extensions, 8) + '.'].join('\n');
+      return {
+        output: '[team-onboarding] Drafting an onboarding guide from ' + stats.sessions + ' sessions in the last ' + days + ' days.',
+        prompt: 'Write a team onboarding guide for working on this project with Oasis (or Claude Code, which reads the same files). Base it on how the project is actually worked on. Usage over the last ' + days + ' days:\n' + usage + '\n\nAlso read, read-only: CLAUDE.md / AGENTS.md / OASIS.md and .claude/rules, .claude/settings.json and .oasis/settings.json (permissions, hooks, env; never copy secrets), .claude/commands, .claude/agents and .claude/skills, .mcp.json, the README, package scripts or Makefile targets, and the test setup. Then write ONBOARDING.md at the workspace root (ask before overwriting an existing file) with these sections: What this project is; Setup (install, provider/model config, MCP servers to connect); Everyday workflow (the commands, skills and agents people actually use, with when to use each); Project conventions the agent already follows (from the instruction files); Permissions and hooks in place, and why; Testing and verification; Common pitfalls (from the friction numbers above: tool errors, denials, corrections); and First tasks to try. Keep it concrete and short, and say where each fact came from.'
+      };
+    }
+    case 'heapdump': {
+      const v8 = await import('node:v8');
+      const { mkdir } = await import('node:fs/promises');
+      const { getConfigDirectory } = await import('./config.mjs');
+      const dir = path.join(getConfigDirectory(env), 'debug');
+      await mkdir(dir, { recursive: true });
+      const file = v8.writeHeapSnapshot(path.join(dir, 'heap-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-' + process.pid + '.heapsnapshot'));
+      const mem = process.memoryUsage();
+      const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
+      const heap = v8.getHeapSpaceStatistics().sort((a, b) => b.space_used_size - a.space_used_size).slice(0, 6).map((space) => '  ' + space.space_name.padEnd(26) + mb(space.space_used_size));
+      const sessionInfo = session ? ['Session: ' + session.messages.length + ' messages, ~' + Math.round(JSON.stringify(session.messages).length / 1024) + ' KB of conversation' + (session.background ? ', ' + session.background.size + ' background commands' : '') + (session.mcpClients ? ', ' + session.mcpClients.size + ' MCP servers' : '')] : [];
+      return { output: ['Heap snapshot: ' + file + ' (open it in Chrome DevTools > Memory).', 'RSS ' + mb(mem.rss) + ', heap ' + mb(mem.heapUsed) + ' of ' + mb(mem.heapTotal) + ', external ' + mb(mem.external) + ', array buffers ' + mb(mem.arrayBuffers) + '.', 'Largest heap spaces:', ...heap, ...sessionInfo].join('\n') };
     }
     case 'chrome': {
       if (!session) return { output: 'Start a conversation first, or launch with oasis --chrome.' };

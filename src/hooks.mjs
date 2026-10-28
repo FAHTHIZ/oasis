@@ -21,6 +21,7 @@
 //           UserPromptSubmit drops the prompt, Stop forces the agent to keep working)
 //   other   non-blocking error; shown to the user, execution continues
 // Hooks come from user settings or trusted workspaces only (see settings.mjs).
+import { debugLog, debugEnabled } from './debug-log.mjs';
 import { spawn } from 'node:child_process';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
@@ -247,6 +248,16 @@ function defaultTimeout(hook, event) {
 }
 
 function runOneHook(hook, payload, options) {
+  if (!debugEnabled('hooks')) return runOneHookInner(hook, payload, options);
+  const started = Date.now();
+  debugLog('hooks', payload.hook_event_name + ' run ' + describeHook(hook));
+  return Promise.resolve(runOneHookInner(hook, payload, options)).then((out) => {
+    debugLog('hooks', payload.hook_event_name + ' done in ' + (Date.now() - started) + 'ms' + (out && out.code !== undefined ? ' exit=' + out.code : '') + (out && out.stderr ? ' stderr=' + String(out.stderr).slice(0, 300) : ''));
+    return out;
+  }, (error) => { debugLog('hooks', payload.hook_event_name + ' failed: ' + error.message); throw error; });
+}
+
+function runOneHookInner(hook, payload, options) {
   const event = payload.hook_event_name;
   const timeout = defaultTimeout(hook, event);
   if (hook.type === 'http') return runHttpHook({ ...hook, timeout }, payload, options);
@@ -286,6 +297,7 @@ export async function runHooks(event, payload, options = {}) {
   const result = { ran: 0, blocked: false, reason: '', additionalContext: [], permissionDecision: null, permissionRequest: null, stopContinuation: false, messages: [], updatedInput: null, updatedToolOutput: undefined, retry: false, background: 0, failed: false, worktreePath: null, watchPaths: null };
   if (!groups.length) return result;
   const target = matchTarget(event, payload || {});
+  if (debugEnabled('hooks')) debugLog('hooks', event + ' matcher target=' + JSON.stringify(target) + ' groups=' + groups.length);
   const commands = [];
   for (const group of groups) {
     if (group.matcher && target && !matcherAccepts(group.matcher, target, event)) continue;

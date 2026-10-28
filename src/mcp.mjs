@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { debugLog } from './debug-log.mjs';
 import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -325,7 +326,9 @@ export async function connectMcpServers(options = {}) {
       client.source = source;
       await client.start();
       clients.set(config.name, client);
+      debugLog('mcp', 'connected ' + config.name + ' (' + (config.type || 'stdio') + ', ' + source + ')');
     } catch (error) {
+      debugLog('mcp', 'failed ' + config.name + ': ' + error.message);
       failures.push({ name: config.name, error: error.message });
       if (client) client.close();
     }
