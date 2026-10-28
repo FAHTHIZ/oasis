@@ -126,6 +126,7 @@ function printHelp() {
     '  --append-system-prompt-file F Add instructions from a file',
     '  --system-prompt TEXT | --system-prompt-file F  Replace the default system prompt',
     '  --fallback-model ID           Switch to this model when the main one is overloaded or failing',
+    '  --chrome, --no-chrome         Give the agent a Chrome browser tool (navigate, click, type, screenshot, console)',
     '  --max-budget-usd N            Stop once the estimated model cost reaches N dollars',
     '  --tools "Read,Edit,Bash"      Only offer these tools (Claude or Oasis names; "" for none)',
     '  --plugin-dir DIR              Load a Claude Code plugin directory for this session (repeatable)',
@@ -711,6 +712,7 @@ function sessionCreateOptions() {
     sessionId: firstSessionId,
     fallbackModel: SESSION_OPTIONS.fallbackModel || '',
     advisor: SESSION_OPTIONS.advisor || '',
+    chrome: SESSION_OPTIONS.chrome === undefined ? null : SESSION_OPTIONS.chrome,
     maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
     settingsOverrides: SESSION_OPTIONS.settingsOverrides,
     settingSources: SESSION_OPTIONS.settingSources || null,
@@ -2205,6 +2207,8 @@ async function main() {
     if (arg === '--append-system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'append', file: needValue(arg) }); continue; }
     if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
     if (arg === '--advisor') { SESSION_OPTIONS.advisor = needValue(arg); continue; }
+    if (arg === '--chrome') { SESSION_OPTIONS.chrome = true; continue; }
+    if (arg === '--no-chrome') { SESSION_OPTIONS.chrome = false; continue; }
     if (arg === '--bg' || arg === '--background') { SESSION_OPTIONS.background = true; continue; }
     if (arg === '--max-budget-usd') {
       const value = Number(needValue(arg));
