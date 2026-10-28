@@ -21,6 +21,7 @@ import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES, executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
+import { GIT_TOOL_DEFINITIONS, GIT_TOOL_NAMES, runGitTool } from './git-tools.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
@@ -1645,6 +1646,18 @@ export async function executeTool(name, args = {}, context = {}) {
       return await fetchPublicUrl(args.url);
     case 'web_search':
       return await webSearch(args, { env: context.env || process.env });
+    case 'git_log':
+    case 'git_commit':
+    case 'git_branch':
+    case 'git_push':
+    case 'create_pull_request':
+      return await runGitTool(name, root, args, {
+        approval: context.approval,
+        autoApprove: Boolean(context.autoApprove),
+        ruleAllowed: Boolean(context.ruleAllowed),
+        env: context.env || process.env,
+        signal: context.signal
+      });
     case 'lsp':
       return await runLsp(root, args, {
         session: context.session,
@@ -1680,6 +1693,7 @@ TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
 TOOL_DEFINITIONS.push(WEB_SEARCH_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(DIAGNOSTICS_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(LSP_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);
 
 export function toolCount() {
   return TOOL_DEFINITIONS.length;
