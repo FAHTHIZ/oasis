@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cronState } from './session-tools.mjs';
+import { startPluginMonitorsFor } from './monitors.mjs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
@@ -162,6 +163,37 @@ function attachCron(session) {
     QUEUED_INPUT.push(prompt);
   };
   if (state.pending && state.pending.length) QUEUED_INPUT.push(...state.pending.splice(0));
+}
+// Monitor events and finished background commands wake an idle session, like
+// Claude Code interjecting when a Monitor event arrives.
+const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit']);
+const WAKE_PREFIX = '[background event] ';
+function pendingWake(session) {
+  return session && Array.isArray(session.inbox) ? session.inbox.filter((entry) => WAKE_KINDS.has(entry.kind)) : [];
+}
+function wakeIfPending(session) {
+  const pending = pendingWake(session);
+  if (!pending.length || !IDLE_SUBMIT) return false;
+  const labels = [...new Set(pending.map((entry) => entry.label).filter(Boolean))];
+  return IDLE_SUBMIT(WAKE_PREFIX + (labels.join(', ') || pending.length + ' new event(s)').slice(0, 160));
+}
+function attachMonitors(session) {
+  if (!session || session.monitorsAttached) return;
+  session.monitorsAttached = true;
+  let timer = null;
+  session.onBackgroundEvent = (event) => {
+    const last = session.inbox && session.inbox[session.inbox.length - 1];
+    if (last && event) last.label = event.description || (event.kind === 'background-exit' ? 'background command ' + event.id + ' finished' : event.id);
+    if (timer) return;
+    timer = setTimeout(() => { timer = null; wakeIfPending(session); }, 300);
+    timer.unref?.();
+  };
+  if (process.env.OASIS_DISABLE_PLUGIN_MONITORS !== '1') {
+    session.pluginMonitorsEnabled = true;
+    const started = startPluginMonitorsFor(session, 'always', { root: session.root, env: process.env });
+    if (started.length) stdout.write('[monitors] ' + started.length + ' plugin monitor(s) running (/tasks to see them).\n');
+    for (const error of (session.settings && session.settings.pluginMonitorErrors) || []) stdout.write('[monitors] ' + error + '\n');
+  }
 }
 let queuedDraft = '';
 let turnKeys = null;
@@ -1487,7 +1519,7 @@ async function readMainInput(root, session, state) {
       const mode = nextMode(currentMode(), { allowBypass: Boolean(SESSION_OPTIONS.allowBypass) });
       await runBuiltinCommand('mode', mode, { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
     },
-    onReady: (submit) => { IDLE_SUBMIT = submit; },
+    onReady: (submit) => { IDLE_SUBMIT = submit; setTimeout(() => wakeIfPending(session), 0); },
     onDoubleEscape: () => '/rewind',
     onPasteImage: () => pasteClipboardImage(root),
     onTodos: async () => {
@@ -1497,6 +1529,7 @@ async function readMainInput(root, session, state) {
   });
   IDLE_SUBMIT = null;
   if (result.type === 'eof') throw new Error('eof');
+  if (result.text.startsWith(WAKE_PREFIX)) return result.text;
   state.history.push(result.text);
   appendHistory(root, result.text).catch(() => {});
   return result.text;
@@ -1519,6 +1552,7 @@ async function interactive(root, autoApprove, persistence = {}) {
       if (line) stdout.write('\n' + line);
     }
     attachCron(session);
+    attachMonitors(session);
     if (QUEUED_INPUT.length) {
       input = QUEUED_INPUT.shift();
       stdout.write('\n' + (colorEnabled(stdout) ? '\x1b[2m❯ ' + input + '\x1b[22m' : '> ' + input) + '\n');

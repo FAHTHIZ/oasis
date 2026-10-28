@@ -13,6 +13,8 @@
 //   - hooks (run with CLAUDE_PLUGIN_ROOT / CLAUDE_PLUGIN_DATA in their environment)
 //   - MCP servers (with ${CLAUDE_PLUGIN_ROOT} expanded)
 //   - LSP servers (.lsp.json / lspServers) for the `lsp` code-intelligence tool
+//   - monitors (monitors/monitors.json / experimental.monitors): background watches whose
+//     output lines become events for the agent (interactive sessions only)
 //   - output styles (output-styles/*.md, named plugin:style)
 //   - executables in bin/, added to PATH for run_command / run_shell
 //   - a default main-thread agent from the plugin's settings.json ("agent")
@@ -445,6 +447,37 @@ export async function pluginLspServers(plugins, options = {}) {
   return out;
 }
 
+/**
+ * Monitors: [{ plugin, name, command, description, when, env }]. Source is
+ * manifest experimental.monitors (or top-level monitors): a .json path or an inline
+ * array; otherwise monitors/monitors.json. Invalid entries reject the plugin's monitors.
+ */
+export async function pluginMonitors(plugins, options = {}) {
+  const { validatePluginMonitors } = await import('./monitors.mjs');
+  const out = [];
+  const errors = [];
+  for (const plugin of plugins) {
+    const declared = plugin.manifest.experimental && plugin.manifest.experimental.monitors !== undefined ? plugin.manifest.experimental.monitors : plugin.manifest.monitors;
+    let list = null;
+    try {
+      if (Array.isArray(declared)) list = declared;
+      else {
+        const file = typeof declared === 'string' ? resolveInPlugin(plugin, declared) : path.join(plugin.root, 'monitors', 'monitors.json');
+        if (!file) throw new Error('monitors path escapes plugin directory: ' + declared);
+        if (!(await exists(file))) { if (typeof declared === 'string') throw new Error('monitors path not found: ' + declared); continue; }
+        const data = await readJson(file, null);
+        list = Array.isArray(data) ? data : data && Array.isArray(data.monitors) ? data.monitors : null;
+        if (!list) throw new Error('monitors file must hold an array');
+      }
+      const vars = pluginVariables(plugin, options.env, options.root);
+      const pluginEnv = Object.fromEntries(Object.entries(vars).filter(([key]) => !key.startsWith('CLAUDE_PLUGIN_OPTION_')));
+      for (const spec of validatePluginMonitors(list, plugin.name)) out.push({ ...spec, command: expandPluginVariables(spec.command, vars), plugin: plugin.name, env: pluginEnv });
+    } catch (error) { errors.push(plugin.name + ': ' + error.message.replace(new RegExp('^' + plugin.name + ': '), '')); }
+  }
+  if (options.errors) options.errors.push(...errors);
+  return out;
+}
+
 /** Output styles: [{ name: 'plugin:style', description, prompt, file, plugin }]. */
 export async function pluginOutputStyles(plugins) {
   const { parseFrontMatter } = await import('./subagents.mjs');
@@ -683,9 +716,9 @@ export async function setPluginEnabled(spec, value, options = {}) {
 }
 
 export async function summarizePlugin(plugin, options = {}) {
-  const [commands, agents, skills, hooks, mcp, lsp, styles, bins, defaults] = await Promise.all([
+  const [commands, agents, skills, hooks, mcp, lsp, styles, bins, defaults, monitors] = await Promise.all([
     pluginCommands([plugin], options), pluginAgents([plugin], options), pluginSkills([plugin]), pluginHooks([plugin], options), pluginMcpServers([plugin], options),
-    pluginLspServers([plugin], options), pluginOutputStyles([plugin]), pluginBinDirs([plugin]), pluginDefaultSettings([plugin])
+    pluginLspServers([plugin], options), pluginOutputStyles([plugin]), pluginBinDirs([plugin]), pluginDefaultSettings([plugin]), pluginMonitors([plugin], options)
   ]);
   const hookCount = hooks.reduce((sum, item) => sum + Object.values(item.hooks || {}).reduce((n, groups) => n + (Array.isArray(groups) ? groups.length : 0), 0), 0);
   return {
@@ -696,6 +729,7 @@ export async function summarizePlugin(plugin, options = {}) {
     mcpServers: mcp.flatMap((item) => Object.keys(item.mcpServers || {})),
     lspServers: Object.keys(lsp),
     outputStyles: styles.map((style) => style.name),
+    monitors: monitors.map((monitor) => monitor.name),
     bin: bins.length > 0,
     ...(defaults.agent ? { agent: defaults.agent } : {}),
     options: Object.keys(userConfigSchema(plugin.manifest))
@@ -726,7 +760,7 @@ export async function validatePath(target) {
       if (manifest.name && !NAME.test(String(manifest.name))) problems.push('plugin.json "name" must be kebab-case.');
       const plugin = { id: String(manifest.name || path.basename(dir)), name: String(manifest.name || path.basename(dir)).toLowerCase(), root: dir, manifest };
       const summary = await summarizePlugin(plugin);
-      report.push('Plugin "' + plugin.name + '"' + (manifest.version ? ' v' + manifest.version : '') + ': ' + summary.commands.length + ' command(s), ' + summary.agents.length + ' agent(s), ' + summary.skills.length + ' skill(s), ' + summary.hooks + ' hook group(s), ' + summary.mcpServers.length + ' MCP server(s), ' + summary.lspServers.length + ' LSP server(s), ' + summary.outputStyles.length + ' output style(s)' + (summary.bin ? ', bin/ executables' : '') + (summary.agent ? ', default agent ' + summary.agent : '') + '.');
+      report.push('Plugin "' + plugin.name + '"' + (manifest.version ? ' v' + manifest.version : '') + ': ' + summary.commands.length + ' command(s), ' + summary.agents.length + ' agent(s), ' + summary.skills.length + ' skill(s), ' + summary.hooks + ' hook group(s), ' + summary.mcpServers.length + ' MCP server(s), ' + summary.lspServers.length + ' LSP server(s), ' + summary.outputStyles.length + ' output style(s)' + (summary.monitors.length ? ', ' + summary.monitors.length + ' monitor(s)' : '') + (summary.bin ? ', bin/ executables' : '') + (summary.agent ? ', default agent ' + summary.agent : '') + '.');
       for (const [key, option] of Object.entries(userConfigSchema(manifest))) {
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) problems.push('userConfig key "' + key + '" must use letters, digits and underscores and not start with a digit.');
         else if (!option || typeof option !== 'object') problems.push('userConfig "' + key + '" must be an object.');
@@ -747,6 +781,10 @@ export async function validatePath(target) {
           else if (!(await exists(path.resolve(dir, rel)))) problems.push(key + ' path not found: ' + rel);
         }
       }
+      const monitorErrors = [];
+      await pluginMonitors([plugin], { errors: monitorErrors });
+      problems.push(...monitorErrors);
+      if (manifest.monitors !== undefined && !(manifest.experimental && manifest.experimental.monitors !== undefined)) report.push('Warning: put "monitors" under "experimental" (top-level still loads).');
       const hooksFile = path.join(dir, 'hooks', 'hooks.json');
       if (await exists(hooksFile)) {
         const hooks = await readJson(hooksFile, null);

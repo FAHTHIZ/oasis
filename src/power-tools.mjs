@@ -228,13 +228,33 @@ export function startBackgroundProcess(registry, launch, options) {
       entry.dropped += cut;
     }
   };
-  child.stdout.on('data', append);
+  // Optional line stream (stdout only) for monitors.
+  let pending = '';
+  const onLine = typeof options.onLine === 'function' ? options.onLine : null;
+  child.stdout.on('data', (chunk) => {
+    append(chunk);
+    if (!onLine) return;
+    pending += chunk.toString();
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop();
+    if (pending.length > 8000) { lines.push(pending); pending = ''; }
+    for (const line of lines) { try { onLine(line, entry); } catch {} }
+  });
   child.stderr.on('data', append);
   child.on('error', (error) => { entry.status = 'failed'; append('\n[oasis] ' + error.message + '\n'); });
-  child.on('close', (code, signal) => { if (entry.status === 'running') entry.status = signal ? 'killed' : 'exited'; entry.exitCode = code; entry.signal = signal; });
+  child.on('close', (code, signal) => {
+    const stoppedByUser = entry.status === 'killed';
+    if (entry.status === 'running') entry.status = signal ? 'killed' : 'exited';
+    entry.exitCode = code; entry.signal = signal; entry.endedAt = Date.now();
+    if (onLine && pending) { try { onLine(pending, entry); } catch {} pending = ''; }
+    if (typeof options.onExit === 'function') { try { options.onExit(entry, { stoppedByUser }); } catch {} }
+  });
+  if (options.monitor) entry.monitor = options.monitor;
   registry.set(id, entry);
   return { approved: true, background: true, id, pid: child.pid, command: options.display, message: 'Started in the background. Use command_output with id ' + id + ' to read output and kill_command to stop it.', ...(options.sandboxed ? { sandboxed: options.sandboxed } : {}) };
 }
+
+export function killBackgroundEntry(entry) { return killEntry(entry); }
 
 function killEntry(entry) {
   if (!entry || entry.status !== 'running') return false;
@@ -256,7 +276,7 @@ export function killAllBackground(registry) {
 }
 
 function describeBackground(entry) {
-  return { id: entry.id, command: entry.command, pid: entry.pid, status: entry.status, exitCode: entry.exitCode, startedAt: entry.startedAt };
+  return { id: entry.id, command: entry.command, pid: entry.pid, status: entry.status, exitCode: entry.exitCode, startedAt: entry.startedAt, ...(entry.monitor ? { monitor: entry.monitor.description } : {}) };
 }
 
 // ---------------------------------------------------------------- run_shell

@@ -7,6 +7,7 @@
 //                tool_result, then a final result event
 // No terminal is available for approvals, so anything that would need a prompt is
 // denied unless a permission rule, permission mode, or --yes allows it.
+import { activeAgentMonitors } from './monitors.mjs';
 import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
@@ -151,6 +152,7 @@ export async function runHeadless(options) {
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
     if (restored && persistence.fork) restored = { ...restored, id: null };
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions });
+    session.headless = true;
     if (onSession) await onSession(session);
     // Launched by the IDE (chat panel or an integrated terminal): connect to its bridge.
     if (env.OASIS_IDE_PORT && !session.ide) {
@@ -273,6 +275,19 @@ export async function runHeadless(options) {
       if (!result) result = { text: '', finished: true, toolCalls: 0 };
     } else {
       result = await runOne(rawPrompt);
+      // Monitors the agent started keep the run open (up to their headless deadline);
+      // each batch of events becomes a follow-up turn.
+      while (!(signal && signal.aborted) && result && !result.limitReached) {
+        const isEvent = (entry) => entry.kind === 'monitor' || entry.kind === 'monitor-end';
+        if (!(session.inbox || []).some(isEvent)) {
+          if (!activeAgentMonitors(session).length) break;
+          await new Promise((resolve) => { session.onBackgroundEvent = () => { session.onBackgroundEvent = null; setTimeout(resolve, 300); }; });
+          continue;
+        }
+        const events = session.inbox.filter(isEvent);
+        emit({ type: 'system', subtype: 'monitor_event', events: events.length, ids: [...new Set(events.map((entry) => entry.id).filter(Boolean))] });
+        result = await runOne('[background event] ' + events.length + ' new monitor event(s).');
+      }
     }
     // Structured output: validate, and give the model two chances to fix it.
     for (let attempt = 0; jsonSchema && result && !result.limitReached; attempt += 1) {

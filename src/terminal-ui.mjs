@@ -172,7 +172,7 @@ const TOOL_LABELS = {
   list_files: 'List', glob_files: 'Search', grep: 'Search', search_files: 'Search', run_command: 'Bash', run_shell: 'Bash',
   fetch_url: 'Fetch', web_search: 'Web Search', task: 'Agent', todo_write: 'Update Todos', git_status: 'Git', git_diff: 'Git',
   git_log: 'Git', git_commit: 'Git Commit', git_push: 'Git Push', git_branch: 'Git', create_pull_request: 'Pull Request',
-  diagnostics: 'Diagnostics', lsp: 'LSP', notebook_edit: 'Notebook', load_skill: 'Skill', install_package: 'Install'
+  diagnostics: 'Diagnostics', lsp: 'LSP', notebook_edit: 'Notebook', load_skill: 'Skill', install_package: 'Install', monitor: 'Monitor'
 };
 
 export function toolLabel(name) {
@@ -184,6 +184,7 @@ export function toolLabel(name) {
 export function describeTool({ name, args = {}, subagent }, { color = true } = {}) {
   let detail = '';
   if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
+  if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
   else if (name === 'run_shell') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);

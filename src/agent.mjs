@@ -1,3 +1,4 @@
+import { startPluginMonitorsFor } from './monitors.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
@@ -508,6 +509,7 @@ export async function reloadSessionSettings(session) {
 }
 
 export function closeSession(session) {
+  if (session) session.closing = true;
   try { stopCron(session); } catch {}
   if (session && session.fileWatchers) { try { session.fileWatchers.stop(); } catch {} session.fileWatchers = null; }
   if (session && session.background) killAllBackground(session.background);
@@ -2542,6 +2544,7 @@ async function executeOneCallRaw(session, call, context, options) {
       if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
       result = await executeTool(name, args, callContext);
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
+      if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext.env || process.env });
     }
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
     if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;
@@ -2668,6 +2671,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (expanded.blocked) return { text: 'A UserPromptExpansion hook blocked /' + options.expansion.command_name + ': ' + (expanded.reason || 'no reason given'), toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false, blockedByHook: true };
     if (expanded.additionalContext.length) userContent += '\n\n<user-prompt-expansion-hook>\n' + expanded.additionalContext.join('\n') + '\n</user-prompt-expansion-hook>';
   }
+  if (options.expansion && options.expansion.command_name && session.pluginMonitorsEnabled) startPluginMonitorsFor(session, String(options.expansion.command_name), { root: session.root, env: options.env || process.env });
   if (!options.isSubagent && /^\/mcp__/.test(request)) {
     const resolved = await resolveMcpPrompt(session, request);
     if (resolved && resolved.error) return { text: resolved.error, toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false };
