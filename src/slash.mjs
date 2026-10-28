@@ -63,7 +63,7 @@ export const BUILTIN_COMMANDS = {
   loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT)',
   cd: 'Switch the workspace to another directory and start a fresh conversation (/cd PATH)',
   sandbox: 'Show or change the OS sandbox for this session (/sandbox [on|off|network on|network off])',
-  config: 'Show effective settings and where they come from',
+  config: 'Settings pane (theme, model, mode, editor, output style, verbose, auto-compact, memory...); /config list | get KEY | set KEY VALUE',
   doctor: 'Check this workspace: tools, language servers, sandbox, settings, provider',
   'release-notes': 'Show recent changes to Oasis',
   export: 'Save this conversation as Markdown (/export [file])',
@@ -405,6 +405,24 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: skills.map((skill) => skill.name + ' [' + skill.source + ']\n    ' + String(skill.description || '').slice(0, 200)).join('\n') };
     }
     case 'config': {
+      const configWords = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      if (configWords.length) {
+        const pane = await import('./config-pane.mjs');
+        const run = (command, value) => runBuiltinCommand(command, value, state);
+        const [verb, key, ...rest] = configWords;
+        try {
+          if (verb === 'list' || verb === 'ls') return { output: await pane.describeConfig(state) };
+          if (verb === 'get') {
+            const item = pane.findConfigItem(key);
+            if (!item) return { output: 'Unknown setting ' + key + '. Run /config list.' };
+            const row = (await pane.configRows(state)).find((entry) => entry.item === item || entry.item.key === item.key);
+            return { output: item.key + ' = ' + (row ? row.value : '') };
+          }
+          if (verb === 'set') return { output: await pane.setConfigValue(key, rest.join(' '), state, run) };
+          if (pane.findConfigItem(verb) && key) return { output: await pane.setConfigValue(verb, [key, ...rest].join(' '), state, run) };
+        } catch (error) { return { output: error.message }; }
+        return { output: 'Usage: /config [list | get KEY | set KEY VALUE]' };
+      }
       const settings = await loadSettings(root, { env });
       const lines = ['Settings files (later ones win):'];
       for (const source of settings.sources) lines.push('  ' + source.scope.padEnd(13) + ' ' + source.file);

@@ -528,6 +528,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES]) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
+  if (loadedSettings.autoCompactEnabled === false && config && config.autoCompactPercent === undefined) config.autoCompactPercent = 0;
   if (restricted) {
     // --restricted: command execution and network tools are removed unless --tools names them individually.
     const named = new Set(Array.isArray(allowedToolNames) ? allowedToolNames : []);

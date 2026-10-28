@@ -241,6 +241,9 @@ export async function loadSettings(root, options = {}) {
     if (settings.defaultShell === 'powershell' || settings.defaultShell === 'bash') result.defaultShell = settings.defaultShell;
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
     if (settings.autoMemory === true) result.autoMemory = true;
+    if (typeof settings.verbose === 'boolean') result.verbose = settings.verbose;
+    // Claude Code's autoCompactEnabled: false turns automatic compaction off.
+    if (typeof settings.autoCompactEnabled === 'boolean') result.autoCompactEnabled = settings.autoCompactEnabled;
     // Auto mode classifier. Claude Code's schema { environment, allow, soft_deny, hard_deny } (each
     // replaces the defaults unless it lists "$defaults"), plus Oasis's { model, rules, classifyAllShell }.
     // Like Claude Code, shared project settings cannot loosen the classifier: from project/local scopes
