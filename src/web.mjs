@@ -17,6 +17,7 @@ import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
+import { createWorktree, finishWorktree, removeWorktree } from './worktrees.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
@@ -277,6 +278,9 @@ export function createOasisWebServer(options = {}) {
     if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
     let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId).toLowerCase();
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
+    const isolation = input.isolation == null || input.isolation === '' ? 'workspace' : String(input.isolation);
+    if (!['workspace', 'worktree'].includes(isolation)) throw Object.assign(new Error('Isolation must be workspace or worktree.'), { statusCode: 400 });
+    if (isolation === 'worktree' && sessionId) throw Object.assign(new Error('Start a new chat for isolated worktree runs. Existing saved sessions remain available in the normal workspace mode.'), { statusCode: 400 });
     const workspaceKey = activeRoot;
     if (busyWorkspaces.has(workspaceKey) || startingWorkspaces.has(workspaceKey)) {
       throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before starting another task in the same workspace.'), { statusCode: 409 });
@@ -288,11 +292,44 @@ export function createOasisWebServer(options = {}) {
     if (sessionId) startingSessions.add(sessionId);
 
     let releaseJobReservation = null;
+    let taskRoot = workspaceKey;
+    let taskWorkspaceKey = workspaceKey;
+    let taskWorktree = null;
+    let worktreeFinalized = false;
+    const finalizeTaskWorktree = async () => {
+      if (!taskWorktree || worktreeFinalized) return null;
+      worktreeFinalized = true;
+      try {
+        return await finishWorktree(workspaceKey, taskWorktree, {
+          env,
+          message: 'Oasis cloud task: ' + incomingMessage.replace(/\\s+/g, ' ').slice(0, 160)
+        });
+      } catch (error) {
+        return {
+          changed: false,
+          branch: taskWorktree.branch,
+          path: taskWorktree.relative,
+          error: String(error && error.message || error || 'Could not finalize the isolated worktree').slice(0, 1200),
+          note: 'The isolated worktree was retained for recovery; inspect it before cleanup.'
+        };
+      }
+    };
     try {
       // Acquire both locks before any asynchronous initialization can interleave with another request.
       releaseJobReservation = reserveJobSlot();
+      if (isolation === 'worktree') {
+        try {
+          taskWorktree = await createWorktree(workspaceKey, 'cloud-' + incomingMessage, { env, requireClean: true });
+        } catch (error) {
+          throw Object.assign(new Error(error.message || 'Could not create an isolated Git worktree.'), { statusCode: 409 });
+        }
+        taskRoot = taskWorktree.path;
+        taskWorkspaceKey = taskRoot;
+        startingWorkspaces.delete(workspaceKey);
+        startingWorkspaces.add(taskWorkspaceKey);
+      }
       const importedCommand = incomingMessage.startsWith('/')
-        ? await resolveImportedSlashCommand(activeRoot, incomingMessage, { env })
+        ? await resolveImportedSlashCommand(taskRoot, incomingMessage, { env })
         : null;
       const message = importedCommand ? importedCommand.prompt : incomingMessage;
       if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
@@ -302,14 +339,14 @@ export function createOasisWebServer(options = {}) {
       throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
     }
     let session = sessionId ? activeSessions.get(sessionId) : null;
-    if (session && path.resolve(session.root) !== activeRoot) session = null;
+    if (session && path.resolve(session.root) !== taskRoot) session = null;
     if (sessionId && !session) {
-      const restore = await loadSession(activeRoot, sessionId, { env });
-      session = await createSession({ root: activeRoot, config, restore });
+      const restore = await loadSession(taskRoot, sessionId, { env });
+      session = await createSession({ root: taskRoot, config, restore });
       activeSessions.set(sessionId, session);
     }
     if (!session) {
-      session = await createSession({ root: activeRoot, config });
+      session = await createSession({ root: taskRoot, config });
       const temporaryId = randomUUID();
       session.sessionId = temporaryId;
       activeSessions.set(temporaryId, session);
@@ -320,15 +357,20 @@ export function createOasisWebServer(options = {}) {
     job.type = 'agent';
     job.title = incomingMessage.replace(/\s+/g, ' ').slice(0, 160) || 'Coding task';
     job.sessionId = activeId;
-    job.workspaceName = path.basename(activeRoot);
+    job.workspaceName = taskWorktree ? taskWorktree.branch : path.basename(taskRoot);
+    if (taskWorktree) job.isolation = 'worktree';
     jobs.set(job.id, job);
     releaseJobReservation();
     releaseJobReservation = null;
     if (sessionId) startingSessions.delete(sessionId);
-    startingWorkspaces.delete(workspaceKey);
+    startingWorkspaces.delete(taskWorkspaceKey);
     busySessions.add(activeId);
-    busyWorkspaces.add(workspaceKey);
-    emit(job, 'started', { sessionId: activeId });
+    busyWorkspaces.add(taskWorkspaceKey);
+    emit(job, 'started', {
+      sessionId: activeId,
+      isolation,
+      ...(taskWorktree ? { branch: taskWorktree.branch, worktreePath: taskWorktree.relative, baseCommit: taskWorktree.base } : {})
+    });
     void (async () => {
       try {
         let prompt = message;
@@ -340,13 +382,17 @@ export function createOasisWebServer(options = {}) {
           session.webUsage = session.webUsage || createUsageTracker();
           const blockedBypass = slash[1].toLowerCase() === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
           const terminalOnly = ['copy', 'sandbox', 'loop', 'cd'].includes(slash[1].toLowerCase()) || (slash[1].toLowerCase() === 'mcp' && /^login\b/i.test(String(slash[2] || '').trim()));
-          const handled = terminalOnly ? { output: '/' + slash[1].toLowerCase() + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: activeRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
+          const handled = terminalOnly ? { output: '/' + slash[1].toLowerCase() + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
               const saved = await saveSession(session, { env });
               if (saved.id !== activeId) { activeSessions.delete(activeId); activeSessions.set(saved.id, session); }
               job.result = { text: String(handled.output || ''), command: slash[1].toLowerCase(), finished: true, toolCalls: 0, sessionId: saved.id };
+              if (taskWorktree) {
+                job.result.isolatedWorktree = await finalizeTaskWorktree();
+                emit(job, 'worktree_ready', job.result.isolatedWorktree);
+              }
               emit(job, 'session_state', webSessionState(session, env));
               job.status = 'completed';
               emit(job, 'completed', job.result);
@@ -356,7 +402,7 @@ export function createOasisWebServer(options = {}) {
           }
         }
         if (prompt === message) {
-          const expanded = await expandFileMentions(activeRoot, message, { images: visionEnabled(session.config, env) }).catch(() => null);
+          const expanded = await expandFileMentions(taskRoot, message, { images: visionEnabled(session.config, env) }).catch(() => null);
           if (expanded && expanded.files.length) {
             prompt = expanded.text;
             images = expanded.images || [];
@@ -385,6 +431,10 @@ export function createOasisWebServer(options = {}) {
           activeSessions.set(saved.id, session);
         }
         job.result = { ...result, sessionId: saved.id };
+        if (taskWorktree) {
+          job.result.isolatedWorktree = await finalizeTaskWorktree();
+          emit(job, 'worktree_ready', job.result.isolatedWorktree);
+        }
         if (session.webUsage) session.webUsage.turns += 1;
         emit(job, 'session_state', webSessionState(session, env));
         if (job.cancelRequested || result.cancelled) {
@@ -407,23 +457,41 @@ export function createOasisWebServer(options = {}) {
           } catch {
             job.result = { cancelled: true, sessionId: activeId, sessionSaved: false };
           }
+          if (taskWorktree) {
+            job.result.isolatedWorktree = await finalizeTaskWorktree();
+            emit(job, 'worktree_ready', job.result.isolatedWorktree);
+          }
           job.status = 'cancelled';
           job.error = null;
           emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId });
         } else {
           job.error = String(error && error.message || error || 'Agent request failed').slice(0, 4000);
+          if (taskWorktree) {
+            job.result = { isolatedWorktree: await finalizeTaskWorktree() };
+            emit(job, 'worktree_ready', job.result.isolatedWorktree);
+          }
           job.status = 'error';
           emit(job, 'failed', { message: job.error });
         }
       } finally {
         busySessions.delete(activeId);
-        busyWorkspaces.delete(workspaceKey);
+        busyWorkspaces.delete(taskWorkspaceKey);
+        if (taskWorktree) {
+          activeSessions.delete(activeId);
+          await closeSession(session).catch(() => {});
+        }
       }
     })();
-    return { jobId: job.id, sessionId: activeId };
+    return {
+      jobId: job.id,
+      sessionId: activeId,
+      ...(taskWorktree ? { isolation: 'worktree', branch: taskWorktree.branch, worktreePath: taskWorktree.relative } : {})
+    };
     } catch (error) {
       if (sessionId) startingSessions.delete(sessionId);
       startingWorkspaces.delete(workspaceKey);
+      startingWorkspaces.delete(taskWorkspaceKey);
+      if (taskWorktree && !worktreeFinalized) await removeWorktree(workspaceKey, taskWorktree, { env, deleteBranch: true }).catch(() => {});
       if (releaseJobReservation) releaseJobReservation();
       throw error;
     }
