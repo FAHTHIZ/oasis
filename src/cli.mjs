@@ -29,7 +29,7 @@ import { searchBackend } from './web-search.mjs';
 import { loadAgentDefinitions } from './subagents.mjs';
 import { loadOutputStyles } from './output-styles.mjs';
 import { renderStatusLine, statusLinePayload } from './status-line.mjs';
-import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
+import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync, readFileSync } from 'node:fs';
@@ -836,6 +836,8 @@ async function listSkills(root) {
     workspace: '.oasis/skills',
     'portable-workspace': '.agents/skills',
     'global-portable': 'global universal skills',
+    'claude-project': '.claude/skills',
+    'claude-user': '~/.claude/skills',
     'global-extension': 'global extension',
     'project-extension': 'project extension'
   };
@@ -1564,6 +1566,16 @@ async function readMainInput(root, session, state) {
   return result.text;
 }
 
+// /reload-plugins and /reload-skills: rebuild the session (settings, plugins, skills,
+// agents, hooks, MCP servers, system prompt) while keeping the conversation.
+async function reloadSessionComponents(session, root, what) {
+  const { rebuildSession } = await import('./agent.mjs');
+  const { session: next, summary } = await rebuildSession(session, { root, ...sessionCreateOptions(), watchFiles: true }, what);
+  attachMonitors(next);
+  stdout.write(summary + '\n');
+  return next;
+}
+
 // /theme and the "theme" setting (Claude Code's ~/.claude.json theme is honored too).
 async function applyThemeFromSettings(settings) {
   try {
@@ -1661,11 +1673,16 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (text === '/setup') { try { await configureProvider(root); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
     const slash = text.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
     if (slash && slash[1].toLowerCase() === 'init') { try { await initWorkspace(root); } catch (error) { stdout.write(error.message + '\n'); } continue; }
+    if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
       try {
         const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {
-          stdout.write(handled.output + '\n');
+          if (handled.output) stdout.write(handled.output + '\n');
+          if (handled.reload && session) {
+            session = await reloadSessionComponents(session, root, handled.reload);
+            continue;
+          }
           if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
           if (handled.forked) persistence.enabled = true;
           if (handled.mcpLogin) {

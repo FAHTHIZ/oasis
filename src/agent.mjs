@@ -327,7 +327,7 @@ export function commandEnvironment(env, settings) {
 export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [] }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
-  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
+  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root, { env })]);
   let loadedSettings = settings;
   let settingsError = null;
   if (!loadedSettings) {
@@ -511,6 +511,32 @@ export async function reloadSessionSettings(session) {
   session.autoModeSettings = loaded.autoMode || null;
   if (session.fileWatchers) session.fileWatchers.refresh();
   return loaded;
+}
+
+/**
+ * /reload-plugins and /reload-skills: close the session and create a fresh one from
+ * current settings, plugins, skills, agents, hooks and MCP servers, keeping the
+ * conversation, todos and name. Returns { session, summary }.
+ */
+export async function rebuildSession(session, createOptions = {}, what = 'plugins') {
+  const root = createOptions.root || session.root;
+  const env = createOptions.env || process.env;
+  const countSkills = async () => { try { const { listAvailableSkills } = await import('./tools.mjs'); return (await listAvailableSkills(root, { env })).length; } catch { return 0; } };
+  const before = { plugins: (session.settings && session.settings.plugins || []).length };
+  const snapshot = { id: session.sessionId || null, name: session.sessionName || null, messages: session.messages, todos: session.todos, sharedTasks: session.sharedTasks };
+  const running = session.background ? [...session.background.values()].filter((entry) => entry.status === 'running').length : 0;
+  const config = session.config;
+  closeSession(session);
+  const next = await createSession({ ...createOptions, root, config, restore: snapshot });
+  if (snapshot.name) next.sessionName = snapshot.name;
+  const after = { skills: await countSkills(), plugins: (next.settings && next.settings.plugins || []).length };
+  const agents = next.agents ? Object.keys(next.agents).length : 0;
+  const hooks = Object.values(next.hooks || {}).reduce((sum, groups) => sum + (Array.isArray(groups) ? groups.length : 0), 0);
+  const mcp = next.mcpClients ? next.mcpClients.size : 0;
+  const summary = 'Reloaded ' + (what === 'plugins' ? after.plugins + ' plugin(s), ' : '') + after.skills + ' skill(s), ' + agents + ' agent(s), ' + hooks + ' hook group(s), ' + mcp + ' MCP server(s)' +
+    (what === 'plugins' && after.plugins !== before.plugins ? ' (plugins ' + before.plugins + ' → ' + after.plugins + ')' : '') + '. The conversation is kept.' +
+    (running ? ' ' + running + ' background process(es) were stopped.' : '');
+  return { session: next, summary };
 }
 
 export function closeSession(session) {

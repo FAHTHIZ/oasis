@@ -91,7 +91,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
 - A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
 - Bounded specialist reviews for code quality, security, architecture, and test strategy. Each reviewer is a separate read-only model session with no edit, command, package-install, or MCP tools; a per-task cap prevents unbounded delegation.
-- Layered memory from user, project, and local files (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `OASIS.local.md`), plus installed `.oasis/skills/*/SKILL.md` files.
+- Layered memory from user, project, and local files (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `OASIS.local.md`), plus skills from `.oasis/skills/`, Claude Code's `.claude/skills/` (project) and `~/.claude/skills/` (personal, wins over project), `.agents/skills/` and enabled plugins. `${CLAUDE_SKILL_DIR}` in a skill expands to its folder.
 - Claude Code-style permission rules and modes, lifecycle hooks, parallel subagents with custom agent files, custom slash commands, `@file` mentions, per-turn checkpoints with `/rewind`, and a headless `oasis -p` mode for scripts and CI.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
 - Workspace-scoped saved sessions (on by default) that can be resumed, renamed or deleted; skill descriptions load first and full skill guides load only on demand.
@@ -390,6 +390,15 @@ Run `oasis` in a project to open the interactive prompt. Press `?` on an empty l
 `/vim` turns on vim editing for the prompt (`/vim off` turns it off). The choice is saved as `"editorMode": "vim"` in your user settings, and Claude Code's `editorMode` in `~/.claude.json` is honored too. The input starts in INSERT mode. Esc switches to NORMAL, and the current mode shows under the prompt. Enter sends from either mode.
 
 `/theme` lists and switches color themes, Claude Code style: `dark` (default), `light`, `dark-daltonized`, `light-daltonized` (color-blind friendly), `dark-ansi`, `light-ansi` (16-color terminals) and `auto`, which picks light or dark from `COLORFGBG` (override with `OASIS_TERMINAL_BACKGROUND=light|dark`). The choice is saved as `"theme"` in your user settings; `OASIS_THEME` overrides it and Claude Code's `~/.claude.json` `theme` is honored. Custom themes are the same JSON files Claude Code reads from `~/.claude/themes/` (or `<OASIS config>/themes/`), selected as `custom:<slug>`:
+
+More Claude Code commands:
+
+- `/diff [PATH] [--stat]` shows uncommitted changes (against `HEAD`) and untracked files.
+- `/autocompact PERCENT|off|reset` moves the auto-compaction trigger for this session; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (or `OASIS_AUTOCOMPACT_PCT`) sets it for every session.
+- `/reload-plugins` and `/reload-skills` rebuild the session from current settings, plugins, skills, agents, hooks and MCP servers without losing the conversation (running background commands are stopped).
+- `/list-agents` (alias `/peers`) lists running subagents, teams and background processes.
+- `/statusline [what to show]` has the agent write and register a status line script; `/update-config DESCRIPTION` has it edit the right `settings.json`.
+- Aliases: `/settings` (`/config`), `/checkpoint` (`/rewind`), `/continue` (`/resume`), `/allowed-tools` (`/permissions`), `/stats` (`/usage`), `/checkup` (`/doctor`), `/code-review` (`/review`).
 
 ```json
 { "name": "Dracula", "base": "dark", "overrides": { "claude": "#bd93f9", "error": "#ff5555", "success": "#50fa7b" } }

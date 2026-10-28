@@ -17,6 +17,9 @@ import { listWorktrees } from './worktrees.mjs';
 import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
+// Claude Code aliases for built-in commands.
+export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review' };
+
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
   status: 'Show the model provider configuration',
@@ -76,6 +79,13 @@ export const BUILTIN_COMMANDS = {
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
   keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
+  diff: 'Show uncommitted changes in the working tree (/diff [PATH], /diff --stat)',
+  autocompact: 'Show or set the auto-compaction threshold (/autocompact 70 = compact at 70% of the window, off, reset)',
+  'reload-plugins': 'Reload plugins, skills, agents, hooks and MCP servers without losing the conversation',
+  'reload-skills': 'Re-scan skill and command directories without losing the conversation',
+  'list-agents': 'List running subagents, agent teams and background processes (alias /peers)',
+  statusline: 'Have Oasis set up a status line command for you (/statusline [what to show])',
+  'update-config': 'Describe a settings change and have Oasis edit the matching settings.json',
   theme: 'List or switch color themes (/theme NAME, custom:<slug>, plugin:<plugin>:<slug>, auto)',
   'terminal-setup': 'Set up Shift+Enter for newlines in your terminal',
   'privacy-settings': 'Show what Oasis sends where and how to turn things off',
@@ -100,6 +110,7 @@ export function recordUsage(tracker, usage = {}) {
 }
 
 export async function runBuiltinCommand(name, argument, state) {
+  if (Object.hasOwn(COMMAND_ALIASES, name) && !Object.hasOwn(BUILTIN_COMMANDS, name)) name = COMMAND_ALIASES[name];
   const { root, session, env = process.env, usage, sessionOptions = {} } = state;
   if (!state.sessionOptions) state.sessionOptions = sessionOptions;
   switch (name) {
@@ -468,6 +479,65 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'fewer-permission-prompts':
       return { output: '[permissions] Looking for safe commands to allowlist.', prompt: 'Help me get fewer permission prompts. Read this project\'s saved Oasis sessions and settings (.oasis/settings.json, .oasis/settings.local.json; sessions are listed by /resume) and find commands and MCP tools I approved repeatedly. Keep only clearly read-only ones (for example git status, git diff, git log, ls, test runners, linters, read-only MCP getters). Never include anything that writes, deletes, installs, pushes, or runs arbitrary code (no rm, curl | sh, npm install, git push, bash -c). Show the prioritized list with a one-line reason each, then add them to permissions.allow in .oasis/settings.json using rules like "run_command(git status)" or "run_command(npm test:*)" after I approve.' };
+    case 'diff': {
+      const { spawnSync } = await import('node:child_process');
+      const git = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env });
+      const inside = git(['rev-parse', '--is-inside-work-tree']);
+      if (inside.status !== 0) return { output: 'Not a Git repository; /diff needs Git.' };
+      const words = argument ? argument.split(/\s+/).filter(Boolean) : [];
+      const stat = words.includes('--stat');
+      const paths = words.filter((word) => !word.startsWith('-'));
+      const hasHead = git(['rev-parse', '--verify', '-q', 'HEAD']).status === 0;
+      const color = env.NO_COLOR ? 'never' : 'always';
+      const diff = git(['diff', '--color=' + color, ...(stat ? ['--stat'] : []), ...(hasHead ? ['HEAD'] : ['--cached']), '--', ...paths]);
+      const untracked = git(['ls-files', '--others', '--exclude-standard', '--', ...paths]).stdout.split('\n').filter(Boolean);
+      let text = String(diff.stdout || '').trimEnd();
+      const limit = 200_000;
+      if (text.length > limit) text = text.slice(0, limit) + '\n… diff truncated (' + Math.round(diff.stdout.length / 1024) + ' KB); try /diff --stat or /diff PATH';
+      const lines = [];
+      if (text) lines.push(text);
+      if (untracked.length) lines.push('Untracked files:\n' + untracked.slice(0, 50).map((file) => '  ' + file).join('\n') + (untracked.length > 50 ? '\n  … ' + (untracked.length - 50) + ' more' : ''));
+      return { output: lines.length ? lines.join('\n\n') : 'No uncommitted changes' + (paths.length ? ' in ' + paths.join(' ') : '') + '.' };
+    }
+    case 'autocompact': {
+      if (!session) return { output: 'Start a conversation first; /autocompact applies to the current session (set CLAUDE_AUTOCOMPACT_PCT_OVERRIDE for every session).' };
+      const config = session.config || (session.config = {});
+      const { compactionThresholdChars } = await import('./context.mjs');
+      const word = argument.toLowerCase().replace(/%$/, '');
+      if (!word) {
+        const chars = compactionThresholdChars(config || {}, env);
+        const window = contextWindowSize(config || {}, env);
+        return { output: 'Auto-compaction triggers at about ' + Math.round(chars / 4).toLocaleString() + ' tokens (' + Math.round(chars / 4 / window * 100) + '% of a ' + window.toLocaleString() + '-token window)' + (config && config.autoCompactPercent === 0 ? ' — off' : '') + '.\nUsage: /autocompact PERCENT | off | reset' };
+      }
+      if (word === 'reset') { if (config) delete config.autoCompactPercent; return { output: 'Auto-compaction threshold reset to the default.' }; }
+      const pct = word === 'off' ? 0 : Number(word);
+      if (!(pct === 0 || (Number.isInteger(pct) && pct >= 1 && pct <= 100))) return { output: 'Usage: /autocompact PERCENT (1-100) | off | reset' };
+      if (config) config.autoCompactPercent = pct;
+      return { output: pct === 0 ? 'Auto-compaction off for this session (/compact still works).' : 'Auto-compaction will trigger at ' + pct + '% of the context window for this session.' };
+    }
+    case 'reload-plugins':
+    case 'reload-skills': {
+      if (!session) return { output: 'Nothing to reload yet; plugins and skills load fresh when the next session starts.' };
+      return { output: '', reload: name === 'reload-plugins' ? 'plugins' : 'skills' };
+    }
+    case 'list-agents': {
+      const { listAgents } = await import('./agent-tasks.mjs');
+      const agents = session ? listAgents(session) : [];
+      const teams = session ? listAgentTeams(session) : [];
+      const procs = session && session.background ? [...session.background.values()] : [];
+      const lines = [];
+      if (agents.length) { lines.push('Subagents:'); for (const agent of agents) lines.push('  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + agent.agent + ': ' + agent.description); }
+      if (teams.length) { lines.push('Agent teams:'); for (const team of teams) lines.push('  ' + team.id + '  ' + team.name + '  ' + team.status + '  ' + team.running + '/' + team.member_count + ' running'); }
+      if (procs.length) { lines.push('Background processes:'); for (const entry of procs) lines.push('  ' + entry.id + '  ' + entry.status + '  ' + entry.command); }
+      if (!lines.length) return { output: 'No subagents, teammates or background processes in this session. Message a running agent with send_message, or start one with the task tool.' };
+      lines.push('Message one with send_message (agents) or team_send_message (teammates); stop with /tasks stop ID.');
+      return { output: lines.join('\n') };
+    }
+    case 'statusline':
+      return { output: '[statusline] Setting up a status line.', prompt: 'Set up an Oasis status line for me' + (argument ? ': ' + argument : ' that shows the model, the current directory and the Git branch') + '. Oasis runs the "statusLine" command from settings ({ "statusLine": { "type": "command", "command": "...", "padding": 0 } }) and pipes JSON session data on stdin (model.display_name, workspace.current_dir, cost, session_id and so on); the first line of stdout is shown under the prompt, ANSI colors allowed. If ~/.claude/settings.json already has a statusLine, reuse it. Write a small script under ~/.config/oasis/ (or the OASIS config directory), make it executable, test it by piping sample JSON into it, then add statusLine to my user settings file. Show me the result.' };
+    case 'update-config':
+      if (!argument) return { output: 'Usage: /update-config DESCRIPTION (for example: /update-config always allow npm test, or /update-config use the light theme)' };
+      return { output: '[config] Updating settings.', prompt: 'Change my Oasis settings: ' + argument + '\n\nPick the right file: project .oasis/settings.json (shared with the team), .oasis/settings.local.json (personal, this project) or the user settings file in the OASIS config directory (all projects). Claude Code settings keys work (permissions.allow/deny/ask, hooks, env, model, statusLine, theme, outputStyle, sandbox, enabledPlugins, and so on). Read the file first, make the smallest edit that keeps it valid JSON, then tell me what changed and where.' };
     case 'theme': {
       // Claude Code-compatible themes; the choice is saved as "theme" in user settings.
       const themes = await import('./themes.mjs');
