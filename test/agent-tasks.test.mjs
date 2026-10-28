@@ -178,6 +178,60 @@ test('team messages reach running peer inboxes without enabling parent-only agen
   assert.throws(() => sendTeamMessage(senderSession, { to: receiver.id, message: 'too late' }), /not running/);
 });
 
+test('background teammates can message each other and deliver messages into the next model step', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-team-message-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const senderRelease = gate();
+  const receiverRelease = gate();
+  const senderEntered = gate();
+  const receiverEntered = gate();
+  const { config, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && last.content === 'launch sender') {
+        return { content: null, tool_calls: [call('start-sender', 'task', { description: 'sender', prompt: 'SENDER_ROLE: message agent_2 after it has started.', run_in_background: true })] };
+      }
+      if (last.role === 'user' && last.content === 'launch receiver') {
+        return { content: null, tool_calls: [call('start-receiver', 'task', { description: 'receiver', prompt: 'RECEIVER_ROLE: wait for a teammate message, then inspect the task board.', run_in_background: true })] };
+      }
+      return { content: 'parent turn finished' };
+    },
+    child: async (payload) => {
+      const all = text(payload.messages);
+      if (all.includes('SENDER_ROLE')) {
+        if (payload.messages.some((message) => message.role === 'tool')) return { content: 'sender delivered the peer message' };
+        senderEntered.open();
+        await senderRelease.promise;
+        return { content: null, tool_calls: [call('peer-message', 'team_send_message', { to: 'agent_2', message: 'Please check task_1 and report the API field names.' })] };
+      }
+      if (all.includes('RECEIVER_ROLE')) {
+        if (payload.messages.some((message) => message.role === 'tool') && all.includes('Direct message from teammate agent_1')) {
+          assert.match(all, /Please check task_1 and report the API field names/);
+          return { content: 'recipient received the direct message and continued its task' };
+        }
+        receiverEntered.open();
+        await receiverRelease.promise;
+        return { content: null, tool_calls: [call('receiver-list', 'task_list', {})] };
+      }
+      return { content: 'Unexpected teammate prompt.' };
+    }
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+
+  assert.equal((await runAgentTurn(session, 'launch sender')).text, 'parent turn finished');
+  await senderEntered.promise;
+  assert.equal((await runAgentTurn(session, 'launch receiver')).text, 'parent turn finished');
+  await receiverEntered.promise;
+  senderRelease.open();
+
+  await until(() => session.agentTasks.agents.get('agent_2')?.child?.inbox?.some((entry) => entry.kind === 'peer-message'));
+  assert.ok(childRequests.some((request) => request.tools.some((tool) => tool.function.name === 'team_send_message')));
+  receiverRelease.open();
+  await until(() => ['agent_1', 'agent_2'].every((id) => session.agentTasks.agents.get(id)?.status !== 'running'));
+  assert.match(session.agentTasks.agents.get('agent_2').report, /received the direct message/);
+});
+
 test('subagents cannot manage other agents', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
   t.after(() => rm(root, { recursive: true, force: true }));
