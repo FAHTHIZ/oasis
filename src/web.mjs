@@ -16,6 +16,7 @@ import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } 
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
+import { createCloudTaskStore } from './cloud-task-store.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
@@ -174,6 +175,7 @@ export function createOasisWebServer(options = {}) {
   const token = options.token || randomBytes(32).toString('base64url');
   const activeSessions = new Map();
   const jobs = new Map();
+  const taskStore = createCloudTaskStore(root, { env });
   const busySessions = new Set();
   const startingSessions = new Set();
   let reservedJobSlots = 0;
@@ -181,6 +183,7 @@ export function createOasisWebServer(options = {}) {
   function emit(job, type, data = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
+    taskStore.schedule(job);
   }
 
   // meta (from the agent) can offer "always allow <rule> this session"; that
@@ -306,6 +309,10 @@ export function createOasisWebServer(options = {}) {
     }
     const activeId = sessionId || session.sessionId;
     const job = newJob();
+    job.type = 'agent';
+    job.title = incomingMessage.replace(/\s+/g, ' ').slice(0, 160) || 'Coding task';
+    job.sessionId = activeId;
+    job.workspaceName = path.basename(activeRoot);
     jobs.set(job.id, job);
     releaseJobReservation();
     releaseJobReservation = null;
@@ -493,6 +500,8 @@ export function createOasisWebServer(options = {}) {
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = 'github-clone';
+    job.title = 'Clone ' + repository;
+    job.workspaceName = path.basename(root);
     jobs.set(job.id, job);
     releaseJobReservation();
     emit(job, 'github_clone_started', { repository });
@@ -570,6 +579,8 @@ export function createOasisWebServer(options = {}) {
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = 'terminal';
+    job.title = [command, ...args].join(' ').replace(/\s+/g, ' ').slice(0, 160);
+    job.workspaceName = path.basename(activeRoot);
     jobs.set(job.id, job);
     releaseJobReservation();
     emit(job, 'terminal_started', { command, args });
@@ -969,9 +980,16 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/jobs') {
+      // Include durable task history so clients can reconnect after a runtime restart.
+      await taskStore.flush([...jobs.values()]);
+      json(res, 200, { tasks: await taskStore.list({ limit: 100 }) });
+      return;
+    }
+
     const jobMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})$/i);
     if (req.method === 'GET' && jobMatch) {
-      const job = jobs.get(jobMatch[1]);
+      const job = jobs.get(jobMatch[1]) || await taskStore.get(jobMatch[1]);
       if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
       const after = Math.max(0, Number.parseInt(parsedUrl.searchParams.get('after') || '0', 10) || 0);
       json(res, 200, {
@@ -1054,6 +1072,7 @@ export function createOasisWebServer(options = {}) {
         job.controller.abort(new Error('Oasis web server is closing.'));
         for (const pending of job.pendingApprovals.values()) pending.resolve(false);
       }
+      await taskStore.flush([...jobs.values()]).catch(() => {});
       for (const session of activeSessions.values()) closeSession(session);
       activeSessions.clear();
       if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
