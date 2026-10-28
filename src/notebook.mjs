@@ -140,7 +140,7 @@ export async function editNotebook(root, args = {}) {
   }
   const indentMatch = text.match(/^\{\s*\n(\s+)"/);
   const next = JSON.stringify(notebook, null, indentMatch ? indentMatch[1].length : 1) + (text.endsWith('\n') ? '\n' : '');
-  await snapshotFile(root, target.absolute, 'before-agent-notebook-edit');
+  await snapshotFile(target.root, target.absolute, 'before-agent-notebook-edit');
   await writeFile(target.absolute, next, 'utf8');
   return { path: target.relative.split(path.sep).join('/'), changed: true, edit_mode: mode, cell_id: cellId, cells: notebook.cells.length, backupCreated: true };
 }

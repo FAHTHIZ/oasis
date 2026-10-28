@@ -9,6 +9,7 @@ import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
 import { listSessions } from './sessions.mjs';
+import { setAdditionalDirectories } from './tools.mjs';
 import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -30,6 +31,7 @@ export const BUILTIN_COMMANDS = {
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
   mcp: 'Show connected MCP servers and their tools',
+  'add-dir': 'Add a working directory for this session (/add-dir PATH)',
   'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
   todos: 'Show the current todo list',
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
@@ -152,6 +154,24 @@ export async function runBuiltinCommand(name, argument, state) {
       sessionOptions.outputStyle = style.name;
       if (session) applyOutputStyle(session, style);
       return { output: 'Output style set to ' + style.name + '.' };
+    }
+    case 'add-dir': {
+      if (!argument) {
+        const dirs = session && session.additionalDirectories || [];
+        return { output: dirs.length ? 'Additional directories:\n' + dirs.map((dir) => '  ' + dir).join('\n') : 'No additional directories. Add one with /add-dir PATH.' };
+      }
+      const wanted = [...(session && session.additionalDirectories || []), path.resolve(root, argument)];
+      const result = await setAdditionalDirectories(root, wanted);
+      if (result.rejected.length) return { output: 'Could not add ' + argument + ': ' + result.rejected[0].error + '.' };
+      sessionOptions.addDirs = [...new Set([...(sessionOptions.addDirs || []), ...result.accepted])];
+      if (session) {
+        session.additionalDirectories = result.accepted;
+        if (session.sandbox && Array.isArray(session.sandbox.writable)) session.sandbox.writable = [root, ...result.accepted];
+        const note = '\n\nAdditional working directory added: ' + result.accepted.at(-1) + ' (you may read and edit files there).';
+        session.baseSystemPrompt = (session.baseSystemPrompt || session.messages[0].content) + note;
+        if (session.messages[0] && session.messages[0].role === 'system') session.messages[0].content += note;
+      }
+      return { output: 'Added ' + result.accepted.at(-1) + ' for this session.' };
     }
     case 'mcp': {
       const clients = session && session.mcpClients ? [...session.mcpClients.entries()] : [];

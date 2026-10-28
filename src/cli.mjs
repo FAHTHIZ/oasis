@@ -29,7 +29,7 @@ import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
 
 // Options that shape every agent session created by this process.
-const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, outputStyle: null };
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, outputStyle: null, addDirs: [] };
 const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
@@ -88,6 +88,7 @@ function printHelp() {
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
     '  --permission-mode MODE        default | acceptEdits | plan | bypassPermissions',
+    '  --add-dir PATH                Let tools read and edit another directory (repeatable)',
     '  --dangerously-skip-permissions  Same as --permission-mode bypassPermissions --yes',
     '  --continue, -c                Continue the most recent saved session',
     '  --resume ID, -r ID            Resume a saved session (see oasis sessions list)',
@@ -387,7 +388,8 @@ function sessionCreateOptions() {
     allowedTools: SESSION_OPTIONS.allowedTools,
     disallowedTools: SESSION_OPTIONS.disallowedTools,
     appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt,
-    outputStyle: SESSION_OPTIONS.outputStyle || null
+    outputStyle: SESSION_OPTIONS.outputStyle || null,
+    addDirs: SESSION_OPTIONS.addDirs
   };
 }
 
@@ -397,6 +399,8 @@ function reportSessionNotices(session) {
     settingsWarningShown = true;
     if (session.settingsError) stdout.write('[settings] ' + session.settingsError + '\n');
     if (session.styleWarning) stdout.write('[settings] ' + session.styleWarning + '\n');
+    for (const item of session.rejectedDirectories || []) stdout.write('[settings] Additional directory ' + item.dir + ' was not added: ' + item.error + '.\n');
+    if (session.additionalDirectories && session.additionalDirectories.length) stdout.write('[settings] Additional directories: ' + session.additionalDirectories.join(', ') + '\n');
     const ignored = session.settings && session.settings.ignoredUntrusted || [];
     if (ignored.length) stdout.write('[settings] This workspace is not trusted, so allow rules, hooks, and mode/sandbox changes in ' + ignored.map((file) => path.relative(session.root, file)).join(', ') + ' were ignored. Deny/ask rules still apply. Run oasis trust after reviewing them.\n');
     if (session.sandbox && session.sandbox.enabled) stdout.write(session.sandbox.available ? '[sandbox] Commands run inside ' + session.sandbox.kind + (session.sandbox.network ? '' : ' with network disabled') + '.\n' : '[sandbox] Requested but unavailable: ' + session.sandbox.reason + '\n');
@@ -1307,6 +1311,7 @@ async function main() {
       continue;
     }
     if (arg === '--plan') { headless.planOnly = true; continue; }
+    if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; autoApprove = true; continue; }
     if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume' || arg === '-r') {

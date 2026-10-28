@@ -204,7 +204,7 @@ export async function multiEditFile(root, args = {}) {
   if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('The edited file would exceed the 256 KiB limit.');
   const relative = target.relative.split(path.sep).join('/');
   if (next === original) return { path: relative, changed: false };
-  await snapshotFile(root, target.absolute, 'before-agent-multi-edit');
+  await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
   await writeFile(target.absolute, next, 'utf8');
   return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true };
 }
