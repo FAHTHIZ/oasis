@@ -80,12 +80,14 @@ async function inspectWorktreeSecrets(worktree, options = {}) {
     if (!absolute.startsWith(path.resolve(worktree.path) + path.sep)) continue;
     const info = await lstat(absolute).catch(() => null);
     if (!info || !info.isFile() || info.isSymbolicLink()) continue;
-    if (info.size > 2 * 1024 * 1024) continue;
+    if (info.size > 2 * 1024 * 1024) throw new Error('Automatic task commit blocked: a changed file exceeded the 2 MB secret-scan limit (' + file + '). Inspect the worktree manually.');
     scannedBytes += info.size;
     if (scannedBytes > 8 * 1024 * 1024) throw new Error('Automatic task commit blocked: the changed files exceeded the safety scan byte limit. Inspect the worktree manually.');
     const contents = await readFile(absolute).catch(() => null);
-    if (!contents || contents.includes(0)) continue;
-    if (SECRET_VALUE.test(contents.toString('utf8'))) possibleSecrets.push(file);
+    if (!contents) continue;
+    // Credential formats are ASCII; scan the raw byte values too, rather than
+    // skipping binary files that might contain an embedded token.
+    if (SECRET_VALUE.test(contents.toString('latin1'))) possibleSecrets.push(file);
   }
   if (possibleSecrets.length) {
     throw new Error('Automatic task commit blocked because possible credentials were detected in: ' + possibleSecrets.slice(0, 20).join(', ') + '. The worktree was retained; review the content locally before staging or committing.');
