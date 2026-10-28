@@ -166,7 +166,7 @@ function attachCron(session) {
 }
 // Monitor events and finished background commands wake an idle session, like
 // Claude Code interjecting when a Monitor event arrives.
-const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit']);
+const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'agent-notice']);
 const WAKE_PREFIX = '[background event] ';
 function pendingWake(session) {
   return session && Array.isArray(session.inbox) ? session.inbox.filter((entry) => WAKE_KINDS.has(entry.kind)) : [];
