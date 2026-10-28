@@ -46,7 +46,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 
 ### P2 — everyday UX
 
-- Slash commands: `/copy`, `/loop`, `/cd`, `/doctor`, `/effort`, `/branch` (`/fork`), `/usage` (with `/cost` as an alias), `/config`, `/skills`, `/sandbox`, `/tasks`, `/undo` (alias of `/rewind`), `/release-notes`.
+- ~~Slash commands: `/copy`, `/loop`, `/cd`, `/doctor`, `/effort`, `/branch` (`/fork`), `/usage`, `/config`, `/skills`, `/sandbox`, `/tasks`, `/undo`, `/release-notes`~~ (done; `--effort` also works on the command line).
 - Terminal: Vim mode, configurable keybindings, image paste from the clipboard, fullscreen/transcript view.
 - Auto mode: a permission mode where a cheap model classifies each action as safe or needing approval.
 
@@ -67,7 +67,7 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 1. ~~LSP tool~~ (done)
 2. ~~Git commit/branch/PR tools and `/pr`~~ (done)
 3. ~~Background subagents with `/tasks` and `send_message`~~ (done)
-4. Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`)
+4. ~~Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`, `/sandbox`, `/fork`, `/release-notes`)~~ (done)
 5. MCP resources, prompts, and OAuth
 6. PDF reading, `--json-schema`, `--worktree`, `--permission-prompts none`
 7. Hook events and types, skill `context: fork`, and inline `` !`cmd` ``

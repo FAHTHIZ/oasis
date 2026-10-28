@@ -7,7 +7,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
-import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
+import { applyEffort, createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
@@ -26,14 +26,14 @@ import { searchBackend } from './web-search.mjs';
 import { loadAgentDefinitions } from './subagents.mjs';
 import { loadOutputStyles } from './output-styles.mjs';
 import { renderStatusLine, statusLinePayload } from './status-line.mjs';
-import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
+import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 
 // Options that shape every agent session created by this process.
-const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, outputStyle: null, addDirs: [] };
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [] };
 const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
@@ -873,6 +873,7 @@ function printConfig(config) {
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+  if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (modeOptions.model) config.model = modeOptions.model;
   try {
     const expanded = await expandFileMentions(root, prompt, { images: visionEnabled(config) });
@@ -981,6 +982,7 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   if (!prompt.trim()) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--model ID]');
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+  if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (!config.configured) throw new Error('No model provider is configured. Run oasis setup, or set OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the API key variable.');
   const { exitCode } = await runHeadless({
     prompt, root, config, autoApprove,
@@ -992,6 +994,32 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     env: process.env
   });
   process.exitCode = exitCode;
+}
+
+// /loop: run the prompt, wait, repeat. Ctrl+C stops the current run and the loop.
+async function runLoop(loop, root, autoApprove, session, persistence) {
+  let stopped = false;
+  let wake = null;
+  const onStop = () => { stopped = true; if (wake) wake(); };
+  process.on('SIGINT', onStop);
+  try {
+    for (let run = 1; !stopped && run <= (loop.times || 1000); run += 1) {
+      stdout.write('[loop] Run ' + run + (loop.times ? ' of ' + loop.times : '') + '\n');
+      let prompt = loop.prompt;
+      if (prompt.startsWith('/')) {
+        const custom = await resolveCustomCommand(root, prompt).catch(() => null);
+        if (custom) prompt = custom.prompt;
+      }
+      session = await runPrompt(prompt, root, autoApprove, session, persistence);
+      persistence.resumeId = null;
+      if (stopped || (loop.times && run >= loop.times)) break;
+      stdout.write('[loop] Next run in ' + formatInterval(loop.intervalMs) + '. Press Ctrl+C to stop.\n');
+      await new Promise((resolve) => { const timer = setTimeout(resolve, loop.intervalMs); wake = () => { clearTimeout(timer); resolve(); }; });
+      wake = null;
+    }
+  } finally { process.removeListener('SIGINT', onStop); }
+  stdout.write('[loop] Stopped.\n');
+  return session;
 }
 
 async function interactive(root, autoApprove, persistence = {}) {
@@ -1042,8 +1070,12 @@ async function interactive(root, autoApprove, persistence = {}) {
         const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
         if (handled) {
           stdout.write(handled.output + '\n');
+          if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
+          if (handled.forked) persistence.enabled = true;
           if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
           if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
+          if (handled.cd) { closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
+          if (handled.loop) session = await runLoop(handled.loop, root, autoApprove, session, persistence);
           continue;
         }
       } catch (error) { stdout.write('Command failed: ' + error.message + '\n'); continue; }
@@ -1412,6 +1444,12 @@ async function main() {
     if (arg === '--model') {
       if (!rawArgs[i + 1]) throw new Error('--model requires a model id.');
       SESSION_OPTIONS.model = rawArgs[++i];
+      continue;
+    }
+    if (arg === '--effort') {
+      const level = String(rawArgs[++i] || '').toLowerCase();
+      if (!['low', 'medium', 'high', 'max', 'auto'].includes(level)) throw new Error('--effort must be low, medium, high, max or auto.');
+      SESSION_OPTIONS.effort = level === 'auto' ? null : level;
       continue;
     }
     if (arg === '--plan') { headless.planOnly = true; continue; }

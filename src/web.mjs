@@ -322,7 +322,8 @@ export function createOasisWebServer(options = {}) {
           session.webOptions = session.webOptions || {};
           session.webUsage = session.webUsage || createUsageTracker();
           const blockedBypass = slash[1].toLowerCase() === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
-          const handled = blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: activeRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
+          const terminalOnly = ['copy', 'sandbox', 'loop', 'cd'].includes(slash[1].toLowerCase());
+          const handled = terminalOnly ? { output: '/' + slash[1].toLowerCase() + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: activeRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
