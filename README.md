@@ -152,6 +152,49 @@ Oasis is a local developer tool, not a security sandbox.
 
 These guards reduce risk but cannot guarantee that every third-party package or project script is safe. Code executed by the OS still runs with the user's operating-system permissions. Review the requested operation, keep backups, and use an isolated development environment for untrusted code.
 
+## Permission rules and modes
+
+Oasis reads layered settings in the same format as Claude Code, so an existing `.claude/settings.json` works as-is:
+
+| File | Scope |
+|---|---|
+| `~/.config/oasis/settings.json` | You, every project |
+| `.oasis/settings.json`, `.claude/settings.json` | Project (shared) |
+| `.oasis/settings.local.json`, `.claude/settings.local.json` | Project (personal) |
+
+~~~json
+{
+  "permissions": {
+    "allow": ["run_command(npm test:*)", "run_command(git status)", "Edit(src/**)"],
+    "ask":   ["run_command(git push:*)"],
+    "deny":  ["Read(secrets/**)", "WebFetch(domain:internal.example.com)"],
+    "defaultMode": "default"
+  }
+}
+~~~
+
+Precedence is deny > ask > allow. `name(prefix:*)` matches a command prefix, file rules take globs, `fetch_url(domain:x)` matches a domain and its subdomains, and `mcp_server` matches every tool of one MCP server. Claude Code names (`Bash`, `Edit`, `Write`, `Read`, `WebFetch`, `Grep`, `Glob`) are accepted as aliases. At a command prompt you can answer `a` to always allow that command prefix for the rest of the session.
+
+Modes: `default`, `acceptEdits`, `plan` (read-only), and `bypassPermissions` (same as `--yes`). Set one per run with `--permission-mode`, or add rules for one run with `--allowedTools` / `--disallowedTools`.
+
+**Trust:** a cloned repository can ship any settings file. Project rules that make Oasis stricter (`deny`, `ask`) always apply. Rules that loosen it (`allow`, hooks, mode, sandbox) apply only after you run `oasis trust` in that workspace. `oasis permissions` shows the effective policy.
+
+## Hooks
+
+Hooks run your own shell commands at points in the agent lifecycle, using Claude Code's format:
+
+~~~json
+{
+  "hooks": {
+    "PostToolUse": [{ "matcher": "Edit|Write|multi_edit", "hooks": [{ "type": "command", "command": "npx prettier --write \"$(jq -r .tool_input.path)\"" }] }],
+    "PreToolUse":  [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "./scripts/check-command.sh", "timeout": 30 }] }],
+    "Stop":        [{ "hooks": [{ "type": "command", "command": "npm test --silent || (echo 'tests fail' >&2; exit 2)" }] }]
+  }
+}
+~~~
+
+Events: `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`. Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `prompt`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, or makes the agent keep working after `Stop`, and stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. Matchers accept Oasis or Claude Code tool names. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
+
 ## Command safety and OS sandbox
 
 The general `run_command` tool runs one executable with an argument array and no shell. Beyond the executable denylist, Oasis now unwraps wrapper programs (`env`, `xargs`, `timeout`, `nice`, `nohup`, ...) and checks the program they launch, so `env rm` or `xargs rm` are blocked like `rm`. Commands that run inline code or arbitrary programs (`node -e`, `python -c`, `perl -e`, `find -exec/-delete`, `awk 'system()'`, `git -c`, `curl -o`, ...) are classified as **high risk**: they always need an interactive answer, even with `--yes`, unless an explicit permission rule allows them.
