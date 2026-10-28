@@ -324,7 +324,15 @@ export async function runHooks(event, payload, options = {}) {
   commands.length = 0;
   commands.push(...foreground);
   // Claude Code runs matching hooks in parallel.
-  const outputs = await Promise.all(commands.map((hook) => runOneHook(hook, fullPayload, options)));
+  const observe = typeof options.onHookEvent === 'function' ? options.onHookEvent : null;
+  const hookName = event + (target ? ':' + target : '');
+  const outputs = await Promise.all(commands.map(async (hook, index) => {
+    const hookId = observe ? 'hook_' + Date.now().toString(36) + '_' + index + Math.random().toString(36).slice(2, 6) : null;
+    if (observe) { try { observe({ subtype: 'hook_started', hook_id: hookId, hook_name: hookName, hook_event: event }); } catch {} }
+    const out = await runOneHook(hook, fullPayload, options);
+    if (observe) { try { observe({ subtype: 'hook_response', hook_id: hookId, hook_name: hookName, hook_event: event, output: String(out.stdout || '').slice(0, 4000), stdout: String(out.stdout || '').slice(0, 4000), stderr: String(out.stderr || '').slice(0, 4000), exit_code: out.exitCode, outcome: out.exitCode === 0 ? 'success' : out.timedOut ? 'cancelled' : 'error' }); } catch {} }
+    return out;
+  }));
   for (let i = 0; i < outputs.length; i++) {
     let out = outputs[i];
     result.ran++;

@@ -150,6 +150,10 @@ function printHelp() {
     '  --input-format stream-json    Read user messages as JSON lines on stdin (with -p)',
     '  --include-partial-messages    Stream text deltas as stream_event lines (with stream-json)',
     '  --replay-user-messages        Echo user messages back in stream-json output',
+    '  --include-hook-events         Stream hook_started/hook_response events for every hook (stream-json)',
+    '  --forward-subagent-text       Stream subagent text as assistant messages tagged parent_tool_use_id',
+    '  --prompt-suggestions          Emit a prompt_suggestion line (predicted next prompt) after each turn',
+    '  --exclude-dynamic-system-prompt-sections  Move cwd, env, git and memory context into the first user message (cache-friendly)',
     '  --permission-prompt-tool NAME Ask this MCP tool to approve actions in -p mode (stdio: control_request over stream-json)',
     '  --from-pr N                   Start with a GitHub pull request\'s description and diff as context',
     '  --init | --init-only          Create project instructions first (and exit with --init-only); runs Setup hooks',
@@ -723,6 +727,7 @@ function sessionCreateOptions() {
     bare: Boolean(SESSION_OPTIONS.bare || SESSION_OPTIONS.safeMode),
     restricted: Boolean(SESSION_OPTIONS.restricted),
     subagentSystemAppend: SESSION_OPTIONS.subagentSystemAppend || '',
+    excludeDynamicSections: Boolean(SESSION_OPTIONS.excludeDynamicSections),
     systemPromptOverride: SESSION_OPTIONS.systemPromptOverride || '',
     tools: SESSION_OPTIONS.tools,
     mcpServers: SESSION_OPTIONS.mcpServers,
@@ -1519,7 +1524,10 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     includePartial: Boolean(headless.includePartial),
     replayUser: Boolean(headless.replayUser),
     permissionPromptTool: headless.permissionPromptTool || null,
-    permissionPrompts: headless.permissionPrompts || null
+    permissionPrompts: headless.permissionPrompts || null,
+    includeHookEvents: Boolean(headless.includeHookEvents),
+    forwardSubagentText: Boolean(headless.forwardSubagentText),
+    promptSuggestions: Boolean(headless.promptSuggestions)
   });
   process.exitCode = exitCode;
   if (process.env.OASIS_BACKGROUND_ID) {
@@ -2423,6 +2431,10 @@ async function main() {
     }
     if (arg === '--include-partial-messages') { headless.includePartial = true; continue; }
     if (arg === '--replay-user-messages') { headless.replayUser = true; continue; }
+    if (arg === '--include-hook-events') { headless.includeHookEvents = true; continue; }
+    if (arg === '--forward-subagent-text') { headless.forwardSubagentText = true; continue; }
+    if (arg === '--prompt-suggestions') { headless.promptSuggestions = true; continue; }
+    if (arg === '--exclude-dynamic-system-prompt-sections') { SESSION_OPTIONS.excludeDynamicSections = true; continue; }
     if (arg === '--permission-prompt-tool') { headless.permissionPromptTool = needValue(arg); continue; }
     if (arg === '--init' || arg === '--init-only') { SESSION_OPTIONS.runInit = arg === '--init-only' ? 'only' : 'continue'; continue; }
     if (arg === '--maintenance') { SESSION_OPTIONS.runMaintenance = true; continue; }

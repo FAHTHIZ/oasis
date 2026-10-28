@@ -11,7 +11,7 @@ import { activeAgentMonitors, startPluginMonitorsFor } from './monitors.mjs';
 
 const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'agent-notice', 'channel']);
 const WAKE_PREFIX = '[background event] ';
-import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
@@ -136,7 +136,10 @@ export async function runHeadless(options) {
     includePartial = false,
     replayUser = false,
     permissionPromptTool = null,
-    permissionPrompts = null
+    permissionPrompts = null,
+    includeHookEvents = false,
+    forwardSubagentText = false,
+    promptSuggestions = false
   } = options;
   if (!OUTPUT_FORMATS.includes(outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
   const started = Date.now();
@@ -157,8 +160,10 @@ export async function runHeadless(options) {
     let restored = null;
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
     if (restored && persistence.fork) restored = { ...restored, id: null };
-    session = await createSession({ root, config, restore: restored, env, ...sessionOptions });
+    const hookObserver = outputFormat === 'stream-json' || onEvent ? (event) => { if (includeHookEvents || ['SessionStart', 'Setup'].includes(event.hook_event)) emit({ type: 'system', ...event, session_id: session && session.sessionId || null }); } : null;
+    session = await createSession({ root, config, restore: restored, env, ...sessionOptions, ...(hookObserver ? { onHookEvent: hookObserver } : {}) });
     session.headless = true;
+    // Hook lifecycle events: SessionStart/Setup always (Claude Code), the rest with --include-hook-events.
     if (onSession) await onSession(session);
     // Launched by the IDE (chat panel or an integrated terminal): connect to its bridge.
     if (env.OASIS_IDE_PORT && !session.ide) {
@@ -223,7 +228,8 @@ export async function runHeadless(options) {
         denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
         return false;
       },
-      onToolStart: ({ name, args, subagent }) => emit({ type: 'tool_use', name, input: args, ...(subagent ? { subagent } : {}) }),
+      onToolStart: ({ name, args, subagent, call }) => emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) }),
+      ...(forwardSubagentText || env.CLAUDE_CODE_FORWARD_SUBAGENT_TEXT === '1' || env.OASIS_FORWARD_SUBAGENT_TEXT === '1' ? { onSubagentText: ({ text, subagent, agentId, parentToolUseId }) => emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: parentToolUseId, subagent, agent_id: agentId, session_id: session.sessionId || null }) } : {}),
       onToolResult: ({ name, result: toolResult, subagent }) => emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }),
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
@@ -352,6 +358,8 @@ export async function runHeadless(options) {
   if (session && persistence.enabled && !error) {
     try { sessionId = (await saveSession(session, { env })).id; } catch {}
   }
+  let suggestion = '';
+  if (session && promptSuggestions && !error && result && (outputFormat === 'stream-json' || onEvent)) suggestion = await suggestNextPrompt(session, { signal });
   if (session) closeSession(session);
   const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors);
   const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
@@ -376,5 +384,6 @@ export async function runHeadless(options) {
   else if (outputFormat === 'text') write(structured !== undefined ? JSON.stringify(structured) + '\n' : summary.result + (summary.result.endsWith('\n') ? '' : '\n'));
   else if (outputFormat !== 'none') write(JSON.stringify(summary) + '\n');
   if (onEvent) onEvent(summary);
+  if (suggestion) emit({ type: 'prompt_suggestion', suggestion, session_id: sessionId });
   return { exitCode: isError ? 1 : 0, summary };
 }
