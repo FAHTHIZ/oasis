@@ -26,6 +26,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install production dependencies and vendor terminal assets
+        run: npm install --omit=dev --no-audit --no-fund
       - name: Run app, runtime, evaluation, and public-site checks
         run: npm run check
       - name: Verify installable CLI package contents
