@@ -195,6 +195,10 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'model': {
       if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID or an alias (opus, sonnet, haiku, fable, best, opusplan) to switch for this session, /model default to reset.' };
       // PreModelSwitch hooks can allow, deny, or ask; PostModelSwitch adds context for the next request.
+      if (session && session.availableModels) {
+        const { modelAllowed, modelRestrictionMessage } = await import('./model-aliases.mjs');
+        if (!modelAllowed(argument, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) return { output: modelRestrictionMessage(argument, session.availableModels) };
+      }
       const previous = session ? session.config.model : null;
       if (session && hasHooks(session.hooks, 'PreModelSwitch')) {
         const pre = await runHooks('PreModelSwitch', { session_id: session.sessionId || 'unsaved', model: argument, previous_model: previous, source: 'slash_command' }, hookOptions(session, env));
@@ -499,7 +503,8 @@ export async function runBuiltinCommand(name, argument, state) {
         const u = session.advisorUsage;
         return { output: session.advisorModel ? 'Advisor: ' + session.advisorModel + (u ? ' (' + u.calls + ' consultation' + (u.calls === 1 ? '' : 's') + ', ' + u.input + ' in / ' + u.output + ' out tokens)' : ' (not consulted yet)') + '. /advisor off turns it off.' : 'No advisor. /advisor MODEL (for example /advisor opus) lets the agent consult that model mid-task.' };
       }
-      const chosen = setAdvisor(session, argument);
+      let chosen;
+      try { chosen = setAdvisor(session, argument); } catch (error) { return { output: error.message }; }
       return { output: chosen ? 'Advisor set to ' + chosen + '. The agent can now consult it with the advisor tool.' : 'Advisor turned off.' };
     }
     case 'subtask': {

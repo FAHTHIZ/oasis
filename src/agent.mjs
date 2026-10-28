@@ -6,7 +6,7 @@ import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
-import { resolveModelAlias, isModelAlias } from './model-aliases.mjs';
+import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
 
 function withResolvedModel(config, env, planMode) {
   if (!config || !isModelAlias(config.model)) return config;
@@ -436,9 +436,16 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
   session.modelEnv = env;
-  session.initialModel = config && config.model;
+  session.availableModels = loadedSettings.availableModels || null;
+  if (session.availableModels && session.config && session.config.model && !modelAllowed(session.config.model, session.availableModels, { env, protocol: session.config.protocol })) {
+    // Like Claude Code, a disallowed startup model falls back instead of failing.
+    const fallback = session.availableModels[0];
+    session.modelRestrictionNote = 'Model ' + session.config.model + ' is not in availableModels; using ' + fallback + '.';
+    session.config = { ...session.config, model: fallback };
+  }
+  session.initialModel = session.config && session.config.model;
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
-  if (advisorModel && advisorModel !== 'off') setAdvisor(session, advisorModel);
+  if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol })) setAdvisor(session, advisorModel);
   if (autoMemoryEnabled(loadedSettings, env)) {
     session.autoMemory = true;
     session.recalledMemoryIds = new Set();
@@ -1854,7 +1861,7 @@ async function runSubagent(parent, args, context, options) {
   const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
   const child = {
     root: worktree ? worktree.path : parent.root,
-    config: agent.model ? { ...parent.config, model: agent.model } : parent.config,
+    config: agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: agent.model } : parent.config,
     sessionId: parent.sessionId,
     messages: [{ role: 'system', content: systemText + isolationNote }, ...(args.fork_context === true ? forkedConversation(parent) : [])],
     baseSystemPrompt: systemText + isolationNote,
@@ -3186,6 +3193,7 @@ export const ADVISOR_TOOL_DEFINITION = { type: 'function', function: { name: 'ad
 
 export function setAdvisor(session, model) {
   const name = String(model || '').trim();
+  if (name && name !== 'off' && !modelAllowed(name, session.availableModels, { env: session.modelEnv, protocol: session.config && session.config.protocol })) throw new Error(modelRestrictionMessage(name, session.availableModels));
   session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => tool.function.name !== 'advisor');
   if (!name || name === 'off') { session.advisorModel = null; return null; }
   session.advisorModel = name;

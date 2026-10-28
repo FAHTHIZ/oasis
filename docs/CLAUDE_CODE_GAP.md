@@ -76,6 +76,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Background sessions | `--bg`, `/background`, `/bg`, attach/logs/stop | **Closed.** Detached headless runs with a registry in `<oasis config>/background/`, readable logs, attach (resume interactively) and stop. Also fixed `-p --session-id` not naming the saved session. |
 | PowerShell tool | `PowerShell` tool, `CLAUDE_CODE_USE_POWERSHELL_TOOL`, `PowerShell(...)` rules, `defaultShell` | **Closed.** Default on Windows, opt-in elsewhere; shares run_shell's approval, sandbox and background paths; benign exit-code notes; execution policy bypass at process scope. |
 | /color, /focus | Prompt color per session; focus view of the last turn | **Closed.** |
+| availableModels | Restrict selectable models via settings | **Closed.** Applies to /model, startup model, advisor and subagent models. |
 
 ## Ranked next improvements
 
