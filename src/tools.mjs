@@ -6,6 +6,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { snapshotFile } from './backups.mjs';
@@ -1116,16 +1118,37 @@ function isPrivateIPv4(address) {
     (parts[0] === 192 && parts[1] === 168) || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) ||
     (parts[0] >= 224) || (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19));
 }
+
+// Node's URL parser canonicalizes dotted IPv4-mapped IPv6 hosts to hex form,
+// e.g. ::ffff:127.0.0.1 becomes ::ffff:7f00:1. Decode both representations
+// before applying the IPv4 private/reserved-address policy.
+function mappedIPv4Address(address) {
+  const value = String(address || '').toLowerCase();
+  if (!value.startsWith('::ffff:')) return null;
+  const tail = value.slice(7);
+  if (isIP(tail) === 4) return tail;
+  const parts = tail.split(':');
+  if (parts.length !== 2 || parts.some((part) => !/^[a-f0-9]{1,4}$/.test(part))) return null;
+  const high = Number.parseInt(parts[0], 16);
+  const low = Number.parseInt(parts[1], 16);
+  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join('.');
+}
+
 function isPrivateAddress(address) {
   const version = isIP(address);
   if (version === 4) return isPrivateIPv4(address);
   if (version === 6) {
     const value = address.toLowerCase();
-    return value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('::ffff:127.');
+    const mappedIPv4 = mappedIPv4Address(value);
+    if (mappedIPv4) return isPrivateIPv4(mappedIPv4);
+    return value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') ||
+      value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') ||
+      value.startsWith('ff');
   }
   return true;
 }
-async function validatePublicUrl(raw) {
+
+async function validatePublicUrl(raw, options = {}) {
   let url;
   try { url = new URL(raw); } catch { throw new Error('Provide a valid public URL.'); }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS links can be fetched.');
@@ -1134,31 +1157,110 @@ async function validatePublicUrl(raw) {
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === 'metadata.google.internal') throw new Error('Local and metadata URLs are blocked.');
   const ip = isIP(host);
   if (ip && isPrivateAddress(host)) throw new Error('Private-network addresses are blocked.');
+  let addresses = null;
   if (!ip) {
     let records;
-    try { records = await lookup(host, { all: true, verbatim: true }); } catch { throw new Error('Could not resolve this public hostname.'); }
-    if (!records.length || records.some((record) => isPrivateAddress(record.address))) throw new Error('This hostname resolves to a private or reserved address and is blocked.');
+    try { records = await (options.lookupImpl || lookup)(host, { all: true, verbatim: true }); }
+    catch { throw new Error('Could not resolve this public hostname.'); }
+    if (!records.length || records.some((record) => isPrivateAddress(record.address))) {
+      throw new Error('This hostname resolves to a private or reserved address and is blocked.');
+    }
+    // Pin the exact DNS answers that passed validation to prevent DNS rebinding.
+    addresses = records.map((record) => ({ address: record.address, family: record.family || isIP(record.address) }));
   }
-  return url;
+  return { url, addresses };
 }
 
-async function fetchPublicUrl(raw) {
-  const url = await validatePublicUrl(raw);
+const MAX_PUBLIC_RESPONSE_BYTES = 1024 * 1024;
+
+async function requestPublicUrl(url, addresses, signal) {
+  return await new Promise((resolve, reject) => {
+    const transport = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    let settled = false;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const requestOptions = {
+      method: 'GET',
+      signal,
+      headers: {
+        'user-agent': 'OasisOSS/0.3 (+https://github.com/FAHTHIZ/oasis)',
+        accept: 'text/plain,text/html,application/json,text/markdown,*/*;q=0.2'
+      }
+    };
+    if (addresses && addresses.length) {
+      requestOptions.lookup = (_hostname, lookupOptions, callback) => {
+        if (typeof lookupOptions === 'function') {
+          callback = lookupOptions;
+          lookupOptions = {};
+        }
+        if (lookupOptions && lookupOptions.all) callback(null, addresses);
+        else callback(null, addresses[0].address, addresses[0].family);
+      };
+    }
+    const request = transport(url, requestOptions, (response) => {
+      const headers = {
+        get(name) {
+          const value = response.headers[String(name).toLowerCase()];
+          return Array.isArray(value) ? value.join(', ') : (value === undefined ? null : String(value));
+        }
+      };
+      const status = response.statusCode || 0;
+      let total = 0;
+      const chunks = [];
+      let responseSettled = false;
+      const finishResponse = (value, error) => {
+        if (responseSettled) return;
+        responseSettled = true;
+        if (error) finish(error);
+        else finish(null, value);
+      };
+      response.on('error', (error) => finishResponse(null, error));
+      const declared = Number(headers.get('content-length') || 0);
+      if (Number.isFinite(declared) && declared > MAX_PUBLIC_RESPONSE_BYTES) {
+        finishResponse({ status, headers, body: '', tooLarge: true });
+        response.destroy();
+        return;
+      }
+      response.on('data', (chunk) => {
+        total += chunk.length;
+        if (total > MAX_PUBLIC_RESPONSE_BYTES) {
+          finishResponse({ status, headers, body: '', tooLarge: true });
+          response.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('end', () => finishResponse({
+        status, headers, body: Buffer.concat(chunks).toString('utf8'), tooLarge: false
+      }));
+    });
+    request.on('error', (error) => finish(error));
+    request.setTimeout(15000, () => request.destroy(new Error('Public URL request timed out.')));
+    request.end();
+  });
+}
+
+async function fetchPublicUrl(raw, options = {}) {
+  const { url, addresses } = await validatePublicUrl(raw, options);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(url, { method: 'GET', redirect: 'manual', signal: controller.signal, headers: { 'user-agent': 'OasisOSS/0.2 (+https://github.com/FAHTHIZ/oasis)', accept: 'text/plain,text/html,application/json,text/markdown,*/*;q=0.2' } });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
+    const response = await (options.requestImpl || requestPublicUrl)(url, addresses, controller.signal);
+    if (response.tooLarge) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
+    const responseStatus = Number(response.status) || 0;
+    if ([301, 302, 303, 307, 308].includes(responseStatus)) {
       const location = response.headers.get('location');
-      return { url: url.toString(), status: response.status, redirect: location ? new URL(location, url).toString() : null, message: 'Redirects are not followed automatically. Validate and fetch the destination separately if appropriate.' };
+      return { url: url.toString(), status: responseStatus, redirect: location ? new URL(location, url).toString() : null, message: 'Redirects are not followed automatically. Validate and fetch the destination separately if appropriate.' };
     }
+    if (responseStatus < 200 || responseStatus >= 300) return { url: url.toString(), status: responseStatus, error: 'The server returned an unsuccessful status.' };
     const type = response.headers.get('content-type') || '';
-    if (!response.ok) return { url: url.toString(), status: response.status, error: 'The server returned an unsuccessful status.' };
-    if (!/(text\/|application\/json|application\/xml|application\/xhtml\+xml)/i.test(type)) return { url: url.toString(), status: response.status, contentType: type, error: 'The response is not an accepted text content type.' };
-    const declared = Number(response.headers.get('content-length') || 0);
-    if (declared > 1024 * 1024) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
-    const text = await response.text();
-    if (text.length > 1024 * 1024) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
+    if (!/(text\/|application\/json|application\/xml|application\/xhtml\+xml)/i.test(type)) return { url: url.toString(), status: responseStatus, contentType: type, error: 'The response is not an accepted text content type.' };
+    const text = String(response.body || '');
+    if (Buffer.byteLength(text, 'utf8') > MAX_PUBLIC_RESPONSE_BYTES) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
     let content = text;
     if (/text\/html|application\/xhtml\+xml/i.test(type)) {
       content = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -1168,10 +1270,9 @@ async function fetchPublicUrl(raw) {
         .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
         .replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n');
     }
-    return { url: url.toString(), status: response.status, contentType: type, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT };
+    return { url: url.toString(), status: responseStatus, contentType: type, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT };
   } finally { clearTimeout(timer); }
 }
-
 
 function parseSkillMetadata(content, fallbackName) {
   const front = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
@@ -1648,7 +1749,7 @@ export async function executeTool(name, args = {}, context = {}) {
       return await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env, signal: context.signal });
     }
     case 'fetch_url':
-      return await fetchPublicUrl(args.url);
+      return await fetchPublicUrl(args.url, { lookupImpl: context.lookupImpl, requestImpl: context.requestImpl });
     case 'web_search':
       return await webSearch(args, { env: context.env || process.env });
     case 'git_log':
