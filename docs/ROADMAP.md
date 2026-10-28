@@ -36,6 +36,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Custom commands and skills: inline `` !`cmd` `` output, `allowed-tools`, `effort`, `context: fork` subagent runs, `/skill-name`, and headless `/command` expansion.
 - Auto permission mode: a classifier model allows routine actions and blocks risky ones. It is resistant to prompt injection because it never sees tool output.
 - SDK (`import { query, tool } from 'oasis-oss'`) with in-process tools and `canUseTool`, plus a `--bare` headless mode.
+- GitHub Action (`action.yml`): `@oasis` mentions on issues and PRs lead to a branch, a PR, and a reply in the thread.
 - CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
 
 ## Milestone 1 — make the CLI release-quality

@@ -54,7 +54,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 
 - Bedrock, Vertex AI, and Azure Foundry provider adapters, plus native Gemini (Gemini currently runs through the OpenAI-compatible endpoint).
 - VS Code and JetBrains extensions (inline diffs, selection context, IDE diagnostics).
-- GitHub Actions workflow (`@oasis` on issues and PRs), similar to Claude Code's GitHub app.
+- ~~GitHub Action~~ (done): `uses: gtxnrg-ship-it/oasis@main`. `@oasis` on issues, PRs, and review comments makes the change, then pushes a branch or opens a PR and replies in the thread. Only trusted associations can trigger it, and it uses auto mode by default.
 - ~~Importable SDK~~ (done): `import { query, tool } from 'oasis-oss'` provides streaming events, in-process tools, `canUseTool`, and structured output.
 - OpenTelemetry metrics and traces.
 - Browser control (Playwright) for debugging live web apps.
@@ -73,4 +73,4 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 6. ~~PDF reading, `--json-schema`, `--worktree`, `--bare`~~ (done)
 7. ~~Hook events and types, skill `context: fork`, inline `` !`cmd` ``~~ (done)
 8. ~~Auto memory~~ and ~~auto mode classifier~~ (done)
-9. Bedrock/Vertex adapters, VS Code extension, GitHub Action
+9. ~~GitHub Action~~ (done); Bedrock/Vertex adapters and VS Code extension still open
