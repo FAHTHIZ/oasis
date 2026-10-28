@@ -1,6 +1,6 @@
 # Oasis OSS architecture
 
-Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasis web` serves the same browser UI from Node and connects it to the chosen workspace through an authenticated local HTTP API.
+Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasis web` serves the same browser UI from Node and connects it to the chosen workspace through an authenticated local HTTP API. The current implementation inventory and verified baseline are tracked in [CURRENT_STATUS.md](CURRENT_STATUS.md); this document describes the system boundaries rather than claiming feature parity with Claude Code.
 
 ## Terminal runtime
 
@@ -26,6 +26,7 @@ Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasi
 - `src/sandbox.mjs` wraps commands in bubblewrap (Linux) or sandbox-exec (macOS): the host is read-only, the workspace is writable, `/tmp` is private, and the network is off unless enabled.
 - `src/power-tools.mjs` adds `grep` (ripgrep with a JS fallback), atomic `multi_edit`, background processes (`command_output`, `kill_command`, `list_background`), and the opt-in `run_shell`.
 - `src/subagents.mjs` defines built-in and custom agents (`.oasis/agents`, `.claude/agents`). `agent.mjs` runs each `task` call in a child session that shares permissions, hooks, sandbox, background processes, and checkpoints with its parent; consecutive `task` calls run in a pool of up to six.
+- `src/shared-tasks.mjs` provides `task_create`, `task_list`, `task_get`, and `task_update` for one dependency-aware task board shared by the main session and its child agents. It validates IDs, prerequisites, cycles and status transitions. `src/session-tools.mjs` registers the tools; `src/sessions.mjs` sanitizes and persists the board with saved sessions. It does not provide atomic claims, a task scheduler, cross-session synchronization, peer messages, or a visual team manager.
 - `src/commands.mjs` loads custom slash commands and expands `@path` mentions. `src/slash.mjs` implements the built-in interactive commands.
 - `src/checkpoints.mjs` saves each file's original content before its first change in a turn, and `/rewind` restores files and trims the conversation.
 - `src/headless.mjs` implements `oasis -p` with `text`, `json`, and `stream-json` output; approvals that would need a person are denied and reported.
@@ -89,7 +90,7 @@ The root `index.html` provides a dependency-free dashboard for projects, tasks, 
 
 ## Current architectural gaps
 
-Container isolation and a Windows sandbox, a full interactive PTY, embedded GitHub OAuth, a general remote plugin marketplace, edit-conflict handling between parallel subagents, formal configuration migrations, cross-platform end-to-end tests, and browser-to-CLI data syncing are not implemented. The browser agent supports TLS with user-provided certificates and incremental streamed model output, but certificate provisioning/device-trust onboarding and broad real-device tests remain incomplete. Between-turn compaction is best-effort and does not replace long-horizon benchmark coverage.
+OASIS is not feature-parity complete. It has no full-screen TUI or real PTY lifecycle for interactive programs; no native VS Code/JetBrains extension; no Chrome-control, desktop, mobile, cloud-session, Remote Control, Slack, or cross-session messaging surface; no embedded GitHub OAuth; no general remote plugin marketplace; no Windows sandbox; and no native Gemini or Azure Foundry adapter. Shared agent tasks now exist, but peer-to-peer messages, atomic task claims, team lifecycle management, visible team monitoring, and safe conflict coordination are not implemented. The browser projects/tasks/notes store remains separate from CLI task/session data. HTTPS depends on user-provided certificates, with onboarding and real-device validation still incomplete. History compaction is best-effort and does not replace long-horizon evaluation. See [CURRENT_STATUS.md](CURRENT_STATUS.md) and [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the prioritized view.
 
 
 ## Cross-ecosystem extension compatibility

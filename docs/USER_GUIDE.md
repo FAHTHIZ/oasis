@@ -1,6 +1,6 @@
 # Oasis OSS — Detailed User Guide
 
-For the project overview and quickest start, see the [main README](../README.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
+For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](CURRENT_STATUS.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
 ---
 
@@ -484,6 +484,21 @@ When a choice really changes the work (which library, which approach, how much s
 ### Worktree isolation
 
 For parallel edits, a `task` call can set `"isolation": "worktree"` (or an agent file can set `isolation: worktree` in its front matter). The subagent then works on its own branch, `oasis/<name>`, in `.oasis/worktrees/<name>`. Your checkout is never touched, and agents running at the same time cannot overwrite each other. When the subagent finishes, Oasis commits its changes on that branch and reports the branch, the changed files and the merge command. A worktree with no changes is removed. `/worktrees` lists the branches still waiting for review. The worktrees are added to `.git/info/exclude`, so they stay out of `git status` and search. The commit uses `--no-verify`, so repository hooks are not run for agent commits.
+
+### Shared task board across the main agent and subagents
+
+The main agent and its child agents have access to one dependency-aware task board for the current session. The model can use these tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `task_create` | Add a task with a title, optional description, optional owner, and existing prerequisite IDs in `blocked_by`. |
+| `task_list` | List tasks, filter by `status` or `owner`, or hide completed work. Each result reports whether it is ready and which prerequisites are still waiting. |
+| `task_get` | Read one task and its direct downstream dependents. |
+| `task_update` | Change a title, description, owner, prerequisites, or status (`pending`, `in_progress`, `completed`). |
+
+Example request to the agent: “Split this migration into shared tasks, record the prerequisite relationships, and keep task status current while you verify each step.” The agent creates task IDs such as `task_1`; a dependent task uses `blocked_by: ["task_1"]`. Oasis rejects missing dependencies, cycles and attempts to start or complete work that is still blocked. The board is limited to 100 tasks, with up to 20 direct prerequisites per task.
+
+**Important limits:** these are model tools, not standalone slash commands or a separate task-board UI. The board is shared between the main session and subagents in that session, and it is persisted with saved sessions; it does not sync across independent Oasis sessions, the browser dashboard’s local-storage tasks, or remote machines. Setting an owner records assignment metadata but does not start or reserve the task. There is no atomic claim/lock mechanism, automatic task scheduler, direct peer-to-peer agent messaging, team manager, or code-edit conflict resolver yet. Use `isolation: "worktree"` for independently editing subagents; a shared task board by itself does not isolate files.
 
 ## Longer tasks
 
