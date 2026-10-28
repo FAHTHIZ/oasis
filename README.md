@@ -224,6 +224,22 @@ A line like `@docs/style.md` inside a memory file includes that file. Start a me
 
 The terminal streams the model's replies as they arrive. Set `OASIS_NO_STREAM=1` to print each reply only when it is finished.
 
+## Headless mode for scripts and CI
+
+`oasis -p "task"` runs one task without any prompts and prints the answer, like `claude -p`.
+
+~~~bash
+oasis -p "summarize what changed in the last commit"
+git diff | oasis -p "review this diff for bugs" --output-format json
+oasis -p "fix the failing test" --permission-mode acceptEdits --allowedTools "Bash(npm test:*)" --max-turns 30
+oasis -p "list TODOs" --output-format stream-json --model gpt-4.1-mini
+~~~
+
+- `--output-format text` (default) prints the final answer. `json` prints one object with `result`, `subtype` (`success`, `error_max_turns`, `error_during_execution`), `is_error`, `num_turns`, `usage`, `tool_calls`, `session_id`, and `permission_denials`. `stream-json` prints one JSON event per line (`system`, `tool_use`, `tool_result`, `assistant`, then `result`).
+- Piped input is added to the prompt inside `<stdin>` tags.
+- With nobody to answer prompts, anything that needs approval is denied and listed in `permission_denials`. Allow what the job needs with `--allowedTools`, settings rules, `--permission-mode`, or `--yes`. High-risk commands stay blocked.
+- The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` or `--resume ID` to keep a conversation across runs.
+
 ## Subagents
 
 The `task` tool lets Oasis hand self-contained work to a subagent with its own context window. Only the subagent's final report returns to the main conversation, which keeps long investigations from crowding it out. Several `task` calls in one response run in parallel (up to 6 at once). Built-in agents: `general-purpose` (all tools), `explore` (read-only search), and `plan` (read-only planning).
