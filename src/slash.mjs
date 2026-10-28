@@ -69,6 +69,7 @@ export const BUILTIN_COMMANDS = {
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
   subtask: 'Run a task in a forked background subagent that inherits this conversation and reports back (/subtask TASK)',
   btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
   recap: 'One-line summary of this session',
@@ -187,13 +188,18 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money };
     }
     case 'model': {
-      if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID to switch for this session.' };
+      if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID or an alias (opus, sonnet, haiku, fable, best, opusplan) to switch for this session, /model default to reset.' };
       // PreModelSwitch hooks can allow, deny, or ask; PostModelSwitch adds context for the next request.
       const previous = session ? session.config.model : null;
       if (session && hasHooks(session.hooks, 'PreModelSwitch')) {
         const pre = await runHooks('PreModelSwitch', { session_id: session.sessionId || 'unsaved', model: argument, previous_model: previous, source: 'slash_command' }, hookOptions(session, env));
         if (pre.blocked || pre.permissionDecision === 'deny') return { output: 'A PreModelSwitch hook blocked switching to ' + argument + ': ' + (pre.reason || 'no reason given') };
         if (pre.permissionDecision === 'ask' && typeof state.confirm === 'function' && !(await state.confirm('A hook asks you to confirm switching to ' + argument + '. Switch?'))) return { output: 'Model switch cancelled.' };
+      }
+      if (argument.toLowerCase() === 'default' && session && session.initialModel && session.initialModel !== 'default') {
+        sessionOptions.model = null;
+        session.config = { ...session.config, model: session.initialModel };
+        return { output: 'Model reset to the configured default, ' + session.initialModel + '.' };
       }
       sessionOptions.model = argument;
       if (session) session.config = { ...session.config, model: argument };
@@ -436,6 +442,16 @@ export async function runBuiltinCommand(name, argument, state) {
       const answer = await askSideQuestion(session, argument, { onUsage: (u) => usage && recordUsage(usage, { ...u, phase: 'side' }) });
       session.lastSideQuestion = { question: argument, answer };
       return { output: answer };
+    }
+    case 'advisor': {
+      if (!session) return { output: 'Start a conversation first, or set "advisorModel" in settings or pass --advisor MODEL.' };
+      const { setAdvisor } = await import('./agent.mjs');
+      if (!argument) {
+        const u = session.advisorUsage;
+        return { output: session.advisorModel ? 'Advisor: ' + session.advisorModel + (u ? ' (' + u.calls + ' consultation' + (u.calls === 1 ? '' : 's') + ', ' + u.input + ' in / ' + u.output + ' out tokens)' : ' (not consulted yet)') + '. /advisor off turns it off.' : 'No advisor. /advisor MODEL (for example /advisor opus) lets the agent consult that model mid-task.' };
+      }
+      const chosen = setAdvisor(session, argument);
+      return { output: chosen ? 'Advisor set to ' + chosen + '. The agent can now consult it with the advisor tool.' : 'Advisor turned off.' };
     }
     case 'subtask': {
       if (!argument) return { output: 'Usage: /subtask TASK. A background copy of this conversation works on TASK and reports back here.' };
