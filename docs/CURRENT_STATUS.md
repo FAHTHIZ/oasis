@@ -2,7 +2,7 @@
 
 **Audit date:** October 28, 2026  
 **Implementation baseline:** [`eaa828d1fafce684737f4458e1fb3b9b1fe0a901`](https://github.com/FAHTHIZ/oasis/commit/eaa828d1fafce684737f4458e1fb3b9b1fe0a901)  
-**Package version:** `0.2.0` · **Runtime:** Node.js 22+ · **License:** MIT
+**Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It distinguishes working code, CI evidence, and incomplete work. A planned feature, detected extension, README statement, or successful unit test is not by itself evidence of production readiness or competitive parity.
 
@@ -62,7 +62,7 @@ CI details: [Quality Checks run](https://github.com/FAHTHIZ/oasis/actions/runs/4
 - Built-in/custom subagents with separate context, bounded parallel execution, background status, steering/resume/cancel tools, and optional worktree isolation.
 - Separate specialist reviews for code, security, architecture, and test strategy are bounded and read-only.
 - A shared **session-local** dependency-aware task board is available to the main agent and child agents through `task_create`, `task_list`, `task_get`, and `task_update`. It validates task IDs, prerequisite existence, cycles, and blocked status transitions. Its task data is included in saved sessions.
-- The board is not an atomic claim/lock service. An owner field is metadata; it does not automatically launch or reserve work. There is no auto-scheduler, peer-to-peer agent messaging, team lifecycle, visual team manager, cross-session synchronization, or built-in edit-conflict resolver.
+- The board supports exclusive lease-based `task_claim`/`task_release`, dependency gates, and shared status. Running agents can message peers directly; `team_create`, `team_status`, and `team_shutdown` provide named session-local teams, a member roster, membership-aware messaging, and controlled shutdown. These mechanisms do not provide an autonomous task dispatcher, cross-session synchronization, a visual team manager, or an edit-conflict resolver.
 - Worktree isolation can keep independent edits apart, but it is an explicit execution choice, not an automatic coordination guarantee.
 
 ### 5. Integrations, skills, and extensions
@@ -100,7 +100,7 @@ Repository-level verification also covers `index.html`, `manifest.webmanifest`, 
 This ranking considers how much each gap constrains real work and what it unlocks downstream. It is a proposed engineering order, not a promise that later work is trivial.
 
 1. **A real PTY and terminal process lifecycle.** The current argv runner does not provide the terminal semantics needed by interactive REPLs, TUI programs, stdin-driven tools, terminal resizing, and dependable long-running interactive sessions. This is the recommended next foundational engineering target.
-2. **Complete multi-agent coordination.** Add safe task claiming/locking, peer messaging, explicit lifecycle management, visible team status, and conflict-aware worktree/merge handling on top of the existing shared board.
+2. **Complete multi-agent coordination.** Lease-based task claiming, peer messages, named team membership/shutdown, and approval-gated worktree merge are implemented. Remaining work: team event visibility, cross-session coordination, autonomous dispatch, and conflict-aware review workflows.
 3. **IDE integration.** A VS Code extension would put reviewable diffs, task/session status and the same agent runtime inside the main coding surface.
 4. **Remote and cross-surface workflows.** Cloud/remote sessions, mobile steering, desktop, Chrome and chat integrations require a stronger authentication, execution-isolation and lifecycle design than the current local browser bridge.
 5. **Platform and extension parity.** Native Gemini/Azure adapters, PowerShell/Windows sandboxing, broad extension runtime compatibility and a remote plugin marketplace.

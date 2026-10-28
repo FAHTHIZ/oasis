@@ -14,6 +14,7 @@ import { setAdditionalDirectories } from './tools.mjs';
 import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
 import { writeFile } from 'node:fs/promises';
 import { listWorktrees } from './worktrees.mjs';
+import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
 export const BUILTIN_COMMANDS = {
@@ -31,6 +32,7 @@ export const BUILTIN_COMMANDS = {
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + ')',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
+  teams: 'List named agent teams and their member status',
   worktrees: 'List subagent worktree branches waiting for review',
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
@@ -137,6 +139,12 @@ export async function runBuiltinCommand(name, argument, state) {
         '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, used - system)),
         'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
       ].join('\n') };
+    }
+    case 'teams': {
+      if (!session) return { output: 'Start a session first; named agent teams are session-local.' };
+      const teams = listAgentTeams(session);
+      if (!teams.length) return { output: 'No named agent teams. Use team_create to create a team, then launch workers with team_id.' };
+      return { output: ['Agent teams:', ...teams.map((team) => '  ' + team.id + '  ' + team.name + '  ' + team.status + '  ' + team.running + '/' + team.member_count + ' running' + (team.description ? '\n    ' + team.description : '') + (team.members.length ? '\n' + team.members.map((member) => '    ' + member.id + '  ' + member.status + '  ' + member.description).join('\n') : ''))].join('\n') };
     }
     case 'worktrees': {
       const items = await listWorktrees(root, { env });

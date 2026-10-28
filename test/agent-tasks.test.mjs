@@ -6,7 +6,7 @@ import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
-import { agentRegistry, registerAgent, sendTeamMessage, drainInbox } from '../src/agent-tasks.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES } from '../src/agent-tasks.mjs';
 
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
@@ -247,4 +247,67 @@ test('subagents cannot manage other agents', async (t) => {
   for (const name of ['task', 'agent_status', 'send_message', 'agent_stop']) assert.ok(!names.includes(name), name);
   assert.ok(names.includes('team_send_message'), 'subagents can message peers without managing their lifecycle');
   assert.equal(session.agentTasks.agents.get('agent_1').status, 'completed', 'foreground agents are registered too');
+});
+
+
+test('named teams track membership, isolate peer messages, and shut down safely', () => {
+  const main = {};
+  const created = createAgentTeam(main, { name: 'API Design', description: 'Agree on the response contract' });
+  assert.equal(created.team.id, 'team_1');
+  assert.equal(created.team.status, 'active');
+  assert.ok(AGENT_TOOL_NAMES.has('team_create'));
+  assert.ok(AGENT_TOOL_NAMES.has('team_status'));
+  assert.ok(AGENT_TOOL_NAMES.has('team_shutdown'));
+
+  const sameTeam = registerAgent(main, {
+    type: 'general-purpose', description: 'API designer', teamId: created.team.id,
+    child: { inbox: [] }, controller: new AbortController()
+  });
+  const otherTeam = createAgentTeam(main, { name: 'Docs Review' });
+  const outsider = registerAgent(main, {
+    type: 'general-purpose', description: 'Docs reviewer', teamId: otherTeam.team.id,
+    child: { inbox: [] }
+  });
+  assert.equal(listAgentTeams(main)[0].members[0].id, sameTeam.id);
+  assert.equal(sameTeam.teamId, created.team.id);
+  assert.throws(() => sendTeamMessage({ agentTasks: main.agentTasks, agentId: sameTeam.id }, { to: outsider.id, message: 'cross-team' }), /same team/);
+
+  const teammate = registerAgent(main, {
+    type: 'general-purpose', description: 'API tester', teamId: created.team.id,
+    child: { inbox: [] }
+  });
+  const sent = sendTeamMessage({ agentTasks: main.agentTasks, agentId: sameTeam.id }, { to: teammate.id, message: 'Use the same response envelope.' });
+  assert.equal(sent.delivered, 'queued');
+  assert.match(teammate.child.inbox[0].text, /same response envelope/);
+
+  const stopped = shutdownAgentTeam(main, { team_id: created.team.id });
+  assert.equal(stopped.team.status, 'shutting_down');
+  assert.equal(stopped.stop_requested, 2);
+  assert.equal(sameTeam.controller.signal.aborted, true);
+  assert.throws(() => registerAgent(main, { type: 'general-purpose', description: 'late worker', teamId: created.team.id, child: { inbox: [] } }), /shutting_down/);
+
+  sameTeam.status = 'cancelled';
+  teammate.status = 'cancelled';
+  assert.equal(listAgentTeams(main).find((team) => team.id === created.team.id).status, 'closed');
+});
+
+test('the task tool launches a registered worker into its named team', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-team-launch-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && last.content === 'create team') return { content: null, tool_calls: [call('tc', 'team_create', { name: 'Review Team' })] };
+      if (last.role === 'user' && last.content === 'launch member') return { content: null, tool_calls: [call('launch', 'task', { description: 'team member', prompt: 'Report the team assignment.', team_id: 'team_1' })] };
+      return { content: 'done' };
+    },
+    child: () => ({ content: 'team worker complete' })
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'create team');
+  await runAgentTurn(session, 'launch member');
+  assert.equal(session.agentTasks.agents.get('agent_1').teamId, 'team_1');
+  assert.deepEqual(session.agentTasks.teams.get('team_1').members, ['agent_1']);
+  assert.match((await runBuiltinCommand('teams', '', { root, session, env: process.env })).output, /Review Team/);
 });
