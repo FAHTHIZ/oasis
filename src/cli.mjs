@@ -20,11 +20,14 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { startOasisWebServer } from './web.mjs';
 import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, userSettingsPath } from './settings.mjs';
 import { detectSandbox } from './sandbox.mjs';
-import { resolveCustomCommand, expandFileMentions } from './commands.mjs';
+import { resolveCustomCommand, expandFileMentions, loadCustomCommands } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
+import { searchBackend } from './web-search.mjs';
+import { loadAgentDefinitions } from './subagents.mjs';
+import { loadOutputStyles } from './output-styles.mjs';
 import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
-import { appendMemoryNote } from './memory.mjs';
+import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
 
@@ -282,7 +285,7 @@ function commandAvailable(name) {
   return spawnSync(probe, [name], { stdio: 'ignore', timeout: 1500, windowsHide: true }).status === 0;
 }
 
-async function doctor(args = []) {
+async function doctor(args = [], root = process.cwd()) {
   stdout.write('Oasis environment report\n');
   stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
   stdout.write('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
@@ -311,9 +314,54 @@ async function doctor(args = []) {
     stdout.write('  Provider config: invalid (' + error.message + ')\n');
     if (args.includes('--test-provider')) process.exitCode = 1;
   }
-  stdout.write('  Workspace: ' + process.cwd() + '\n');
-  stdout.write('  MCP config: ' + getMcpConfigPath() + '\n');
-  stdout.write('  Note: terminal commands run locally and are not sandboxed by Oasis.\n');
+  await doctorWorkspaceReport(root);
+}
+
+// Workspace-level checks: tools Oasis relies on, settings/trust, sandbox, MCP,
+// memory and extension files. Problems are listed with a suggested fix.
+async function doctorWorkspaceReport(root) {
+  const problems = [];
+  stdout.write('\nTools\n');
+  const rg = commandAvailable('rg');
+  stdout.write('  ripgrep (rg): ' + (rg ? 'available (fast grep)' : 'not found (grep uses a slower built-in search)') + '\n');
+  stdout.write('  gh: ' + (commandAvailable('gh') ? 'available (/review can read pull requests)' : 'not found (/review PR-number needs the GitHub CLI)') + '\n');
+  const search = process.env.OASIS_WEB_SEARCH === 'off' ? 'off' : searchBackend(process.env);
+  stdout.write('  Web search: ' + search + (search === 'duckduckgo' ? ' (no key; set TAVILY_API_KEY or BRAVE_SEARCH_API_KEY for more reliable results)' : '') + '\n');
+  stdout.write('\nWorkspace: ' + root + '\n');
+  let settings = null;
+  try {
+    settings = await loadSettings(root);
+    stdout.write('  Trusted: ' + (settings.trusted ? 'yes' : 'no (project allow rules, hooks, .mcp.json servers, and status line are ignored; run oasis trust after reviewing them)') + '\n');
+    stdout.write('  Settings files: ' + (settings.sources.length ? settings.sources.map((item) => item.scope + ' ' + item.file).join(', ') : 'none') + '\n');
+    stdout.write('  Permission mode: ' + settings.permissions.defaultMode + '; rules: ' + settings.permissions.allow.length + ' allow, ' + settings.permissions.ask.length + ' ask, ' + settings.permissions.deny.length + ' deny\n');
+    const hookCount = Object.values(settings.hooks || {}).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+    stdout.write('  Hooks: ' + hookCount + '\n');
+    if (settings.ignoredUntrusted.length) problems.push('Untrusted workspace settings were ignored: ' + settings.ignoredUntrusted.join(', ') + '. Run oasis trust if you want them.');
+  } catch (error) {
+    stdout.write('  Settings: invalid (' + error.message + ')\n');
+    problems.push('Fix the settings file: ' + error.message);
+  }
+  const sandbox = detectSandbox();
+  const sandboxOn = Boolean(settings && settings.sandbox && settings.sandbox.enabled);
+  stdout.write('  OS sandbox: ' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable — ' + sandbox.reason) + '; ' + (sandboxOn ? 'enabled' : 'off (enable with "sandbox": {"enabled": true} or OASIS_SANDBOX=1)') + '\n');
+  if (sandboxOn && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
+  stdout.write('  User MCP config: ' + getMcpConfigPath() + '\n');
+  try {
+    const project = await loadProjectMcpServers(root, { env: process.env });
+    if (project.file || project.failures.length) stdout.write('  Project .mcp.json: ' + project.servers.length + ' usable server(s)' + (project.failures.length ? ', ' + project.failures.length + ' with problems' : '') + '\n');
+    for (const failure of project.failures) problems.push('.mcp.json server ' + failure.name + ': ' + failure.error);
+  } catch (error) { problems.push('.mcp.json: ' + error.message); }
+  const memory = await memoryFiles(root).catch(() => []);
+  const present = memory.filter((file) => file.exists);
+  stdout.write('  Memory files: ' + (present.length ? present.map((file) => file.label + ' ' + file.path).join(', ') : 'none (run /init to create OASIS.md)') + '\n');
+  const [commands, agents, styles] = await Promise.all([
+    loadCustomCommands(root).catch(() => new Map()),
+    loadAgentDefinitions(root).catch(() => ({})),
+    loadOutputStyles(root).catch(() => ({}))
+  ]);
+  stdout.write('  Custom commands: ' + commands.size + '; agents: ' + Object.keys(agents).length + '; output styles: ' + Object.keys(styles).length + '\n');
+  if (!commandAvailable('git')) problems.push('git is not installed; checkpoints still work, but git context and /review do not.');
+  stdout.write('\n' + (problems.length ? 'Problems found:\n' + problems.map((item) => '  - ' + item).join('\n') : 'No problems found.') + '\n');
 }
 
 function scrubChildEnvironment() {
@@ -1346,7 +1394,7 @@ async function main() {
     return;
   }
   if (command === 'setup') return await configureProvider(workspace);
-  if (command === 'doctor') return await doctor(rest);
+  if (command === 'doctor') return await doctor(rest, workspace);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
