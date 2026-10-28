@@ -1,8 +1,10 @@
 # Oasis OSS
 
-**An open-source, plain-English coding agent plus a local-first project workspace.**
+**A personal, just-for-fun open-source coding agent experiment.**
 
-Oasis turns requests like “inspect this project, install the missing tool, implement the feature, and run the tests” into a verified, multi-step workflow. Use the CLI directly or start `oasis web` to connect mobile-friendly browser chat, the authenticated agent runtime, and approval-gated command execution. The separate static dashboard keeps projects, tasks, and notes in browser storage.
+Oasis turns plain-English requests into multi-step development workflows: a configured model can inspect a project, propose changes, and run checks through the available tools. It combines a CLI agent with a local browser workspace, multi-provider tool calling, MCP integrations, skills, and subagents.
+
+> **Hobby-project note:** This is a personal project shared as-is, not a supported product or a promise of production readiness. You’re welcome to explore it, try it, and report issues. Review each approval carefully, and use an isolated workspace for projects you don’t trust.
 
 ## Install the terminal agent
 
