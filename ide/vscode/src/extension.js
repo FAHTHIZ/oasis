@@ -9,11 +9,13 @@
 const vscode = require('vscode');
 const path = require('node:path');
 const { startIdeServer } = require('./server.js');
+const { ChatController, ChatViewProvider, openChatPanel } = require('./chat-view.js');
 
 const PROPOSED_SCHEME = 'oasis-proposed';
 const proposed = new Map();
 let bridge = null;
 let lastSelection = null;
+let chat = null;
 
 function workspaceFolders() { return (vscode.workspace.workspaceFolders || []).map((folder) => folder.uri.fsPath); }
 
@@ -128,11 +130,17 @@ function openTerminal(extraArgs = '') {
   return terminal;
 }
 
+function referenceFor(editor) {
+  const info = selectionPayload(editor);
+  if (!info) return null;
+  return '@' + info.relativePath + (info.isEmpty ? '' : '#L' + info.startLine + (info.endLine !== info.startLine ? '-' + info.endLine : ''));
+}
+
 function insertReference() {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
-  const info = selectionPayload(editor);
-  const ref = '@' + info.relativePath + (info.isEmpty ? '' : '#L' + info.startLine + (info.endLine !== info.startLine ? '-' + info.endLine : ''));
+  const ref = referenceFor(editor);
+  if (!ref) return;
   const terminal = vscode.window.terminals.find((item) => item.name === 'OASIS') || vscode.window.activeTerminal;
   if (terminal) { terminal.show(); terminal.sendText(ref + ' ', false); }
   else vscode.env.clipboard.writeText(ref).then(() => vscode.window.showInformationMessage('Copied ' + ref));
@@ -154,7 +162,22 @@ async function activate(context) {
     const payload = selectionPayload(event.textEditor);
     if (payload) lastSelection = payload;
   }));
+  chat = new ChatController({
+    getCommand: oasisCommand,
+    getCwd: () => workspaceFolders()[0] || process.cwd(),
+    getEnv: () => (bridge ? { OASIS_IDE_PORT: String(bridge.port) } : {})
+  });
+  context.subscriptions.push({ dispose: () => chat && chat.dispose() });
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider('oasis.chat', new ChatViewProvider(chat), { webviewOptions: { retainContextWhenHidden: true } }));
   context.subscriptions.push(
+    vscode.commands.registerCommand('oasis.openChat', () => openChatPanel(chat)),
+    vscode.commands.registerCommand('oasis.focusChat', () => vscode.commands.executeCommand('oasis.chat.focus')),
+    vscode.commands.registerCommand('oasis.newChat', () => chat.reset()),
+    vscode.commands.registerCommand('oasis.addSelectionToChat', async () => {
+      const ref = referenceFor(vscode.window.activeTextEditor);
+      await vscode.commands.executeCommand('oasis.chat.focus');
+      if (ref) chat.insert(ref + ' ');
+    }),
     vscode.commands.registerCommand('oasis.openTerminal', () => openTerminal()),
     vscode.commands.registerCommand('oasis.continueSession', () => openTerminal('--continue')),
     vscode.commands.registerCommand('oasis.insertReference', insertReference),
