@@ -15,9 +15,25 @@ import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
+import { estimateTokens, contextWindowSize } from './context.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
+
+// Compact session status for the browser: permission mode, context use, token totals.
+export function webSessionState(session, env = process.env) {
+  const windowSize = contextWindowSize(session.config, env);
+  const contextTokens = estimateTokens(session.messages || []);
+  const usage = session.webUsage || {};
+  return {
+    mode: session.permissions ? session.permissions.mode : 'default',
+    model: String(session.config && session.config.model || '').slice(0, 200),
+    contextTokens,
+    contextWindow: windowSize,
+    contextPercent: windowSize ? Math.min(100, Math.round(contextTokens / windowSize * 100)) : 0,
+    totalTokens: Number(usage.totalTokens || 0)
+  };
+}
 
 export function toolDetail(name, args = {}) {
   if (!args || typeof args !== 'object') return '';
@@ -278,17 +294,20 @@ export function createOasisWebServer(options = {}) {
       try {
         let prompt = message;
         let images = [];
+        session.webUsage = session.webUsage || createUsageTracker();
         const slash = message.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
         if (!importedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
           session.webOptions = session.webOptions || {};
           session.webUsage = session.webUsage || createUsageTracker();
-          const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: activeRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
+          const blockedBypass = slash[1].toLowerCase() === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
+          const handled = blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: activeRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
               const saved = await saveSession(session, { env });
               if (saved.id !== activeId) { activeSessions.delete(activeId); activeSessions.set(saved.id, session); }
               job.result = { text: String(handled.output || ''), command: slash[1].toLowerCase(), finished: true, toolCalls: 0, sessionId: saved.id };
+              emit(job, 'session_state', webSessionState(session, env));
               job.status = 'completed';
               emit(job, 'completed', job.result);
               return;
@@ -325,6 +344,8 @@ export function createOasisWebServer(options = {}) {
           activeSessions.set(saved.id, session);
         }
         job.result = { ...result, sessionId: saved.id };
+        if (session.webUsage) session.webUsage.turns += 1;
+        emit(job, 'session_state', webSessionState(session, env));
         if (job.cancelRequested || result.cancelled) {
           job.result.cancelled = true;
           job.status = 'cancelled';

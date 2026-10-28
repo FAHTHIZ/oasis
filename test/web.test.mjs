@@ -956,4 +956,14 @@ test('browser chat supports built-in slash commands, @file mentions, tool detail
   assert.equal(output.data.command, 'cost');
   assert.match(output.data.text, /token/i);
   assert.equal(requests.length, 4, '/cost must not call the model');
+  const state = snapshot.events.find((e) => e.type === 'session_state');
+  assert.ok(state && state.data.contextWindow > 0 && state.data.totalTokens >= 15, JSON.stringify(state));
+
+  const plan = await start('/mode plan', snapshot.result.sessionId);
+  snapshot = await waitFor(plan.jobId, done);
+  assert.equal(snapshot.events.find((e) => e.type === 'session_state').data.mode, 'plan');
+  const bypass = await start('/mode bypassPermissions', snapshot.result.sessionId);
+  snapshot = await waitFor(bypass.jobId, done);
+  assert.match(snapshot.events.find((e) => e.type === 'command_output').data.text, /only in the terminal/);
+  assert.equal(snapshot.events.find((e) => e.type === 'session_state').data.mode, 'plan');
 });
