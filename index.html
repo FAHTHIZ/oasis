@@ -89,6 +89,28 @@ body.light .extension-card,body.light .integration-card{background:#fff}
 .agent-model-pill-copy{display:grid;gap:1px;min-width:0}.agent-model-pill-copy strong{font-size:11px;white-space:nowrap;max-width:205px;overflow:hidden;text-overflow:ellipsis}.agent-model-pill-copy small{font-size:10px;color:var(--muted);white-space:nowrap;max-width:205px;overflow:hidden;text-overflow:ellipsis}.agent-model-chevron{color:var(--muted);font-size:13px}
 @media(max-width:780px){#view-agent.active>.agent-chat-panel{min-height:440px}.agent-chat-header .agent-model-summary{align-items:flex-start;flex-direction:column;gap:7px}.agent-model-pill{max-width:100%;width:100%}.agent-model-pill-copy strong,.agent-model-pill-copy small{max-width:220px}.agent-chat-header{align-items:flex-start;flex-wrap:wrap}.agent-chat-header .agent-model-summary{flex:1 1 100%}.agent-session-tools{width:100%;justify-content:space-between}}
 
+
+/* Durable cloud-task history panel */
+.cloud-runs-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
+.cloud-runs-toolbar p{margin:0;max-width:620px}
+.cloud-runs-list{display:grid;gap:8px}
+.cloud-run-row{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);background:#ffffff03;border-radius:12px;min-width:0}
+.cloud-run-main{flex:1;min-width:0}
+.cloud-run-title{font-size:12px;font-weight:700;overflow-wrap:anywhere}
+.cloud-run-meta{font-size:10px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.cloud-run-status{font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;padding:5px 7px;border-radius:6px;background:#ffffff0b;color:var(--muted);white-space:nowrap}
+.cloud-run-status[data-status="completed"]{background:#b9ed8218;color:var(--accent)}
+.cloud-run-status[data-status="error"],.cloud-run-status[data-status="interrupted"]{background:#ff9c8d15;color:var(--danger)}
+.cloud-run-status[data-status="running"],.cloud-run-status[data-status="waiting_approval"]{background:#a4c7ff15;color:#a4c7ff}
+.cloud-run-detail{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
+.cloud-run-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.cloud-run-events{display:grid;gap:7px}
+.cloud-run-event{padding:10px 11px;border:1px solid #ffffff0d;border-radius:10px;background:#ffffff02}
+.cloud-run-event strong{display:block;font-size:11px;font-weight:700;overflow-wrap:anywhere}
+.cloud-run-event small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.cloud-run-empty{color:var(--muted);font-size:12px;padding:15px;border:1px dashed var(--line);border-radius:12px}
+@media(max-width:640px){.cloud-runs-toolbar{flex-direction:column}.cloud-run-row{align-items:flex-start;flex-wrap:wrap}.cloud-run-status{order:2}.cloud-run-row .btn{margin-left:auto}}
+
 </style>
 </head><body>
 <div class="shell">
@@ -170,6 +192,19 @@ body.light .extension-card,body.light .integration-card{background:#fff}
     </label><button class="btn btn-primary" id="githubCloneBtn" type="button">Clone / use repository</button></div>
     <div class="github-actions"><button class="btn btn-secondary" id="githubResetWorkspaceBtn" type="button">Return to launch workspace</button></div>
     <p class="github-help" id="githubHelp">One-time setup: install GitHub CLI (<code>gh</code>) on the computer, run <code>gh auth login</code> in its terminal, then check the connection here. Choosing a repository downloads it into <code>.oasis/workspaces/</code> and switches the agent and command runner into that repo. Oasis does not execute cloned project scripts until you approve a command.</p>
+  </div>
+</div>
+
+
+<div class="panel github-panel cloud-runs-panel">
+  <div class="agent-chat-header"><span><strong>Cloud runs</strong> · task history</span><span id="cloudRunsStatus" class="github-state" data-connected="false">Connect runtime</span></div>
+  <div class="panel-pad">
+    <div class="cloud-runs-toolbar"><p class="agent-help">See the latest agent and terminal runs, including tasks interrupted by a runtime restart. This is durable local history for the connected Oasis host, not hosted cloud compute yet.</p><button class="btn btn-secondary" id="cloudRunsRefreshBtn" type="button">Refresh runs</button></div>
+    <div class="cloud-runs-list" id="cloudRunsList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div>
+    <div class="cloud-run-detail" id="cloudRunDetail" hidden>
+      <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div>
+      <div class="cloud-run-events" id="cloudRunEvents"></div>
+    </div>
   </div>
 </div>
 
@@ -319,6 +354,55 @@ async function agentLoadHistoryList(){var sel=document.getElementById('agentHist
 async function agentOpenSession(id){if(!id||agentBusy)return;agentSessionId=id;sessionStorage.setItem('oasis.web.sessionId',id);try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(id));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});agentActivity('Saved chat reopened. Send a message to continue it.')}catch(e){agentActivity('Could not open that chat: '+e.message)}}
 function agentShowSessionState(d){var sel=document.getElementById('agentModeSelect');if(d.mode&&sel.querySelector('option[value="'+d.mode+'"]'))sel.value=d.mode;var m=document.getElementById('agentContextMeter');m.hidden=false;m.textContent='Context '+(d.contextPercent||0)+'% · '+Number(d.totalTokens||0).toLocaleString()+' tokens';m.title='~'+Number(d.contextTokens||0).toLocaleString()+' of '+Number(d.contextWindow||0).toLocaleString()+' context tokens'+(d.model?' · '+d.model:'');m.dataset.level=d.contextPercent>=80?'high':d.contextPercent>=50?'mid':'low'}
 function agentSetStatus(text,connected){var el=document.getElementById('agentRuntimeState');el.textContent=text;el.dataset.connected=connected?'true':'false'}
+
+async function agentLoadCloudTasks(silent){
+  var status=document.getElementById('cloudRunsStatus'),list=document.getElementById('cloudRunsList');
+  if(!agentToken){status.textContent='Connect runtime';status.dataset.connected='false';list.replaceChildren();var empty=document.createElement('div');empty.className='cloud-run-empty';empty.textContent='Connect the runtime to load task history.';list.appendChild(empty);return}
+  try{
+    var response=await agentApi('/api/jobs'),tasks=Array.isArray(response.tasks)?response.tasks:[];
+    list.replaceChildren();status.textContent=tasks.length+' saved run'+(tasks.length===1?'':'s');status.dataset.connected='true';
+    if(!tasks.length){var none=document.createElement('div');none.className='cloud-run-empty';none.textContent='No runs yet. Send a task to Oasis and it will appear here.';list.appendChild(none);return}
+    tasks.forEach(function(task){
+      var row=document.createElement('div');row.className='cloud-run-row';
+      var main=document.createElement('div');main.className='cloud-run-main';
+      var title=document.createElement('div');title.className='cloud-run-title';title.textContent=task.title||task.type||'Coding task';
+      var meta=document.createElement('div');meta.className='cloud-run-meta';
+      var when=task.updatedAt?new Date(task.updatedAt):null;
+      meta.textContent=(task.type||'agent')+' · '+(when&&!Number.isNaN(when.getTime())?when.toLocaleString():'time unknown')+(Number.isFinite(task.eventCount)?' · '+task.eventCount+' events':'');
+      var state=document.createElement('span');state.className='cloud-run-status';state.dataset.status=task.status||'unknown';state.textContent=String(task.status||'unknown').replace(/_/g,' ');
+      var open=document.createElement('button');open.className='btn btn-secondary';open.type='button';open.textContent='View run';open.dataset.cloudRunId=task.id;
+      main.appendChild(title);main.appendChild(meta);row.appendChild(main);row.appendChild(state);row.appendChild(open);list.appendChild(row);
+    });
+  }catch(error){
+    status.textContent='Unable to load';status.dataset.connected='false';
+    if(!silent)notify('Could not load task history: '+error.message);
+  }
+}
+async function agentOpenCloudRun(id){
+  var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),title=document.getElementById('cloudRunDetailTitle');
+  try{
+    var task=await agentApi('/api/jobs/'+encodeURIComponent(id)+'?after=0');
+    title.textContent='Run · '+String(task.status||'unknown').replace(/_/g,' ');
+    events.replaceChildren();
+    (task.events||[]).slice(-120).forEach(function(event){
+      var row=document.createElement('div');row.className='cloud-run-event';
+      var label=document.createElement('strong');label.textContent=String(event.type||'event').replace(/_/g,' ');
+      var data=event.data||{},summary='';
+      if(typeof data.message==='string')summary=data.message;
+      else if(typeof data.tool==='string')summary=data.tool;
+      else if(typeof data.name==='string')summary=data.name+(data.detail?' · '+data.detail:'');
+      var text=document.createElement('small'),when=event.at?new Date(event.at):null;
+      text.textContent=(when&&!Number.isNaN(when.getTime())?when.toLocaleString():'')+(summary?' · '+summary:'');
+      row.appendChild(label);row.appendChild(text);events.appendChild(row);
+    });
+    if(!events.childNodes.length){var none=document.createElement('div');none.className='cloud-run-empty';none.textContent='No saved events for this run.';events.appendChild(none)}
+    detail.hidden=false;
+  }catch(error){notify('Could not open task history: '+error.message)}
+}
+document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
+document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId)});
+document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true});
+
 function agentApi(url,options){options=options||{};var headers=Object.assign({},options.headers||{});if(agentToken)headers.Authorization='Bearer '+agentToken;if(options.body)headers['Content-Type']='application/json';return fetch(url,Object.assign({},options,{headers:headers,cache:'no-store'})).then(function(r){return r.json().catch(function(){return {error:'Invalid response from Oasis runtime'}}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data})})}
 function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
 function agentAppendMessage(role,text,jobId){var empty=document.getElementById('agentEmptyState');if(empty)empty.remove();var el=document.createElement('div');el.className='agent-message '+role;el.textContent=text||'';if(jobId)el.dataset.jobId=jobId;document.getElementById('agentMessages').appendChild(el);agentScroll();return el}
@@ -326,7 +410,7 @@ function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if
 function agentActivity(text){agentAppendMessage('activity',text)}
 function agentClearMessages(){document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null}
 function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=!agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy}
-async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
+async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');void agentLoadCloudTasks(true);if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
 function agentDisconnect(){agentToken='';sessionStorage.removeItem('oasis.web.token');document.getElementById('agentTokenInput').value='';agentSetStatus('Runtime not connected',false);document.getElementById('agentModelName').textContent='Choose a model';document.getElementById('agentModelDetail').textContent='Connect a runtime';document.getElementById('agentConnectionHelp').textContent='Disconnected. Start or return to oasis web, then paste its token to reconnect.';notify('Runtime disconnected from this browser tab.')}
 var agentQuestionId=null,agentQuestionMulti=false;
 function agentShowQuestion(d){agentQuestionId=d.questionId;agentQuestionMulti=!!d.multiSelect;document.getElementById('agentQuestionHeader').textContent=d.header?d.header:'Oasis has a question';document.getElementById('agentQuestionText').textContent=d.question;var box=document.getElementById('agentQuestionOptions');box.innerHTML='';(d.options||[]).forEach(function(o){var b=document.createElement('button');b.type='button';b.className='agent-question-option';b.setAttribute('aria-pressed','false');var l=document.createElement('strong');l.textContent=o.label;b.appendChild(l);if(o.description){var s=document.createElement('span');s.textContent=o.description;b.appendChild(s)}b.addEventListener('click',function(){if(agentQuestionMulti){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')}else{void agentAnswerQuestion(o.label)}});box.appendChild(b)});document.getElementById('agentQuestionInput').value='';document.getElementById('agentQuestionSubmit').textContent=agentQuestionMulti?'Send selected':'Send';document.getElementById('agentQuestionCard').hidden=false;agentSetStatus('Waiting for your answer',true);agentScroll()}
@@ -345,7 +429,7 @@ document.getElementById('agentQuestionForm').addEventListener('submit',function(
 document.getElementById('agentQuestionSkip').addEventListener('click',function(){void agentAnswerQuestion('')});
 document.getElementById('agentHistorySelect').addEventListener('change',function(){if(this.value)void agentOpenSession(this.value)});
 document.getElementById('agentModeSelect').addEventListener('change',function(){if(agentBusy||!agentToken)return;document.getElementById('agentPrompt').value='/mode '+this.value;document.getElementById('agentForm').requestSubmit()});
-document.getElementById('agentForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;var message=document.getElementById('agentPrompt').value.trim();if(!message)return;if(!agentToken){agentSetStatus('Connect a runtime before sending',false);notify('Connect Oasis first.');return}agentAppendMessage('user',message);document.getElementById('agentPrompt').value='';agentSetBusy(true);agentSetStatus('Starting task…',true);try{var d=await agentApi('/api/chat',{method:'POST',body:JSON.stringify({message:message,sessionId:agentSessionId||null})});agentActiveJob=d.jobId;agentSessionId=d.sessionId||agentSessionId;if(agentSessionId)sessionStorage.setItem('oasis.web.sessionId',agentSessionId);agentAssistantUpdate(agentActiveJob,'Oasis is working…');void agentPoll(agentActiveJob)}catch(err){agentAppendMessage('assistant','Could not start the task: '+err.message);agentSetStatus('Unable to start task',false);agentSetBusy(false)}});
+document.getElementById('agentForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;var message=document.getElementById('agentPrompt').value.trim();if(!message)return;if(!agentToken){agentSetStatus('Connect a runtime before sending',false);notify('Connect Oasis first.');return}agentAppendMessage('user',message);document.getElementById('agentPrompt').value='';agentSetBusy(true);agentSetStatus('Starting task…',true);try{var d=await agentApi('/api/chat',{method:'POST',body:JSON.stringify({message:message,sessionId:agentSessionId||null})});agentActiveJob=d.jobId;agentSessionId=d.sessionId||agentSessionId;if(agentSessionId)sessionStorage.setItem('oasis.web.sessionId',agentSessionId);agentAssistantUpdate(agentActiveJob,'Oasis is working…');void agentLoadCloudTasks(true);void agentPoll(agentActiveJob)}catch(err){agentAppendMessage('assistant','Could not start the task: '+err.message);agentSetStatus('Unable to start task',false);agentSetBusy(false)}});
 
 function terminalStatus(text){document.getElementById('terminalStatus').textContent=text}
 function terminalAppend(text){var out=document.getElementById('terminalOutput');out.textContent=(out.textContent+'\n'+String(text||'')).slice(-24000);out.scrollTop=out.scrollHeight}
