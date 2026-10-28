@@ -120,7 +120,9 @@ export async function listSessions(root, options = {}) {
     try {
       const data = JSON.parse(await readFile(path.join(directory, name), 'utf8'));
       if (data && data.schemaVersion === 1 && path.resolve(data.workspaceRoot || '') === path.resolve(root)) {
-        sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0 });
+        const firstUser = Array.isArray(data.messages) ? data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string') : null;
+        const title = firstUser ? firstUser.content.replace(/<[a-z-]+>[\s\S]*?<\/[a-z-]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+        sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0, title });
       }
     } catch { /* Ignore corrupt session files in listings. */ }
   }
