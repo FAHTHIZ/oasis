@@ -341,6 +341,46 @@ test('agent activity timeline records lifecycle and messages, filters safely, an
 });
 
 
+test('dispatch_ready_tasks rejects overlapping dispatch attempts without claiming tasks', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-lock-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-lock-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'dispatch-lock@example.com');
+  git('config', 'user.name', 'OASIS test');
+  await writeFile(path.join(root, 'target.txt'), 'target\n');
+  git('add', '-A');
+  git('commit', '-qm', 'fixture baseline');
+
+  const { config } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user') {
+        return { content: null, tool_calls: [
+          call('create-task', 'task_create', { subject: 'Inspect target', description: 'Read target.txt and report its contents.' }),
+          call('blocked-dispatch', 'dispatch_ready_tasks', { max_parallel: 1 })
+        ] };
+      }
+      if (last.role === 'tool' && last.name === 'dispatch_ready_tasks') return { content: 'dispatch guarded' };
+      return { content: 'Unexpected parent step.' };
+    }
+  });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+  agentRegistry(session).dispatchInFlight = true;
+
+  const result = await runAgentTurn(session, 'Create a task and try dispatching while another wave is already running.', { autoApprove: true, env, approval: async () => true });
+  assert.equal(result.text, 'dispatch guarded');
+  assert.equal(session.sharedTasks.tasks.length, 1);
+  assert.equal(session.sharedTasks.tasks[0].status, 'pending');
+  assert.equal(session.agentTasks.agents.size, 0);
+  assert.ok(session.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks' && /already in progress/.test(String(message.content))));
+  session.agentTasks.dispatchInFlight = false;
+});
+
+
 test('dispatch_ready_tasks launches dependency-ready work in isolated waves and carries task IDs into agent status', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-home-'));
