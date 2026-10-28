@@ -25,6 +25,7 @@ export const BUILTIN_COMMANDS = {
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
+  mcp: 'Show connected MCP servers and their tools',
   todos: 'Show the current todo list',
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
@@ -131,6 +132,14 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!entries.length) return { output: 'No hooks configured. Add them under "hooks" in .oasis/settings.json or .claude/settings.json.' };
       const lines = [];
       for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + hook.command);
+      return { output: lines.join('\n') };
+    }
+    case 'mcp': {
+      const clients = session && session.mcpClients ? [...session.mcpClients.entries()] : [];
+      const failures = session && session.mcpFailures || [];
+      const lines = clients.map(([name, client]) => name + ' [' + (client.source || 'user') + ', ' + (client.config && client.config.type === 'http' ? 'http' : 'stdio') + '] ' + (client.tools || []).length + ' tool(s): ' + (client.tools || []).map((tool) => tool.name).join(', '));
+      for (const failure of failures) lines.push(failure.name + ' - not connected: ' + failure.error);
+      if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
       return { output: lines.join('\n') };
     }
     case 'bashes': {

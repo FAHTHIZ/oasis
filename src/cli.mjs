@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
 import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
+import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
@@ -652,15 +653,12 @@ async function manageSessions(root, rest) {
   throw new Error('Unknown sessions action. Use oasis sessions list or oasis sessions clear SESSION_ID.');
 }
 
-async function manageMcp(rest) {
+async function manageMcp(rest, root = process.cwd()) {
   const action = rest[0] || 'list';
   const config = await loadMcpServers();
   if (action === 'list') {
     stdout.write('MCP server configuration: ' + config.configPath + '\n');
-    if (!config.servers.length) {
-      stdout.write('No MCP servers configured. See README.md for setup syntax.\n');
-      return;
-    }
+    if (!config.servers.length) stdout.write('No user-level MCP servers configured. See README.md for setup syntax.\n');
     for (const server of config.servers) {
       stdout.write('  ' + server.name + ' — ' + (server.enabled ? 'enabled' : 'disabled') + '\n');
       stdout.write('    executable: ' + server.command + '\n');
@@ -671,6 +669,13 @@ async function manageMcp(rest) {
         stdout.write('    source revision: ' + server.origin.commitSha + '\n');
         stdout.write('    source manifest: ' + server.origin.filePath + '\n');
       }
+    }
+    const project = await loadProjectMcpServers(root, { env: process.env }).catch((error) => ({ servers: [], failures: [{ name: '.mcp.json', error: error.message }] }));
+    if (project.servers.length || project.failures.length) {
+      const trusted = (await loadSettings(root)).trusted;
+      stdout.write('Project servers from .mcp.json' + (trusted ? '' : ' (ignored until you run oasis trust)') + ':\n');
+      for (const server of project.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const failure of project.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
     return;
@@ -1332,7 +1337,7 @@ async function main() {
   if (command === 'init') return await initWorkspace(workspace);
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
-  if (command === 'mcp') return await manageMcp(rest);
+  if (command === 'mcp') return await manageMcp(rest, workspace);
   if (command === 'extensions' || command === 'extension') return await manageExternalExtensions(workspace, rest, autoApprove);
   if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
   if (command === 'sessions') return await manageSessions(workspace, rest);

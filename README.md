@@ -180,6 +180,25 @@ Modes: `default`, `acceptEdits`, `plan` (read-only), and `bypassPermissions` (sa
 
 
 In `plan` mode (`--permission-mode plan` or `/mode plan`), Oasis researches with read-only tools, then presents its plan and asks whether to start. Say yes and it leaves plan mode and implements the plan in the same turn; say no and it stays in plan mode so you can ask for changes.
+## Project MCP servers (.mcp.json)
+
+Oasis reads a Claude Code-style `.mcp.json` at the workspace root, so a team can share MCP servers through the repository:
+
+```json
+{
+  "mcpServers": {
+    "postgres": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres"], "env": { "DATABASE_URL": "${DATABASE_URL}" } },
+    "github": { "type": "http", "url": "https://api.githubcopilot.com/mcp/", "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" } }
+  }
+}
+```
+
+- `stdio` (the default) and Streamable `http` transports are supported. SSE-only servers are reported as unsupported.
+- `${VAR}` and `${VAR:-default}` are expanded from your environment. A missing variable disables only that server, with a clear message.
+- Remote servers must use HTTPS unless they are on localhost.
+- Project servers start only after you run `oasis trust` for the workspace. A user-level server with the same name wins.
+- `oasis mcp list` and `/mcp` show both user and project servers. Every MCP tool call still asks for approval unless your permission rules allow it.
+
 ## Hooks
 
 Hooks run your own shell commands at points in the agent lifecycle, using Claude Code's format:

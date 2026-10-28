@@ -13,6 +13,10 @@ import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled } from './web-search.mjs';
+import { loadProjectMcpServers } from './mcp-project.mjs';
+import { access } from 'node:fs/promises';
+
+async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool } from './subagents.mjs';
 
@@ -297,7 +301,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
   const sandbox = resolveSandbox(loadedSettings, root);
-  const mcp = await connectMcpServers({ root });
+  // Project .mcp.json servers start third-party code, so they need a trusted workspace.
+  let project = { servers: [], failures: [] };
+  if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
+  else if (await pathExists(path.join(root, '.mcp.json'))) project.failures.push({ name: '.mcp.json', error: 'ignored because this workspace is not trusted. Run oasis trust to enable its MCP servers.' });
+  const mcp = await connectMcpServers({ root, env, extraServers: project.servers, extraFailures: project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
   let systemText = systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);

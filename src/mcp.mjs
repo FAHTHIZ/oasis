@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { McpHttpClient } from './mcp-project.mjs';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const MAX_LINE = 1024 * 1024;
@@ -97,7 +98,7 @@ export async function saveMcpServers(servers, options = {}) {
   return configPath;
 }
 
-function safeEnvironment(server, source = process.env) {
+function safeEnvironment(server, source = process.env, extra = {}) {
   const env = {};
   for (const [key, value] of Object.entries(source)) {
     if (/(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i.test(key)) continue;
@@ -107,6 +108,8 @@ function safeEnvironment(server, source = process.env) {
   for (const key of server.passEnv) {
     if (source[key] !== undefined) env[key] = source[key];
   }
+  // Values from .mcp.json "env" (already expanded from ${VAR} references).
+  for (const [key, value] of Object.entries(extra || {})) env[key] = String(value);
   return env;
 }
 
@@ -129,6 +132,7 @@ function compactText(result) {
 export class McpServerClient {
   constructor(config, options = {}) {
     this.config = validateMcpServerConfig(config);
+    this.extraEnv = config.extraEnv || {};
     this.root = options.root || process.cwd();
     this.env = options.env || process.env;
     this.child = null;
@@ -151,7 +155,7 @@ export class McpServerClient {
     if (!this.config.enabled) throw new Error('MCP server is disabled: ' + this.config.name);
     this.child = spawn(this.config.command, this.config.args, {
       cwd: this.root,
-      env: safeEnvironment(this.config, this.env),
+      env: safeEnvironment(this.config, this.env, this.extraEnv),
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe']
@@ -271,20 +275,31 @@ export class McpServerClient {
   }
 }
 
+// Starts user-level servers plus any extra (project .mcp.json) servers in parallel.
+// Project servers with the same name as a user server are skipped.
 export async function connectMcpServers(options = {}) {
   const { servers } = await loadMcpServers(options);
   const clients = new Map();
-  const failures = [];
-  for (const config of servers.filter((item) => item.enabled)) {
-    const client = new McpServerClient(config, options);
+  const failures = [...(options.extraFailures || [])];
+  const names = new Set(servers.map((server) => server.name));
+  const all = servers.filter((item) => item.enabled).map((config) => ({ config, source: 'user' }));
+  for (const config of options.extraServers || []) {
+    if (names.has(config.name)) { failures.push({ name: config.name, error: 'skipped: a user-level MCP server already uses this name' }); continue; }
+    names.add(config.name);
+    all.push({ config, source: config.source || 'project' });
+  }
+  await Promise.all(all.map(async ({ config, source }) => {
+    let client;
     try {
+      client = config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
+      client.source = source;
       await client.start();
       clients.set(config.name, client);
     } catch (error) {
       failures.push({ name: config.name, error: error.message });
-      client.close();
+      if (client) client.close();
     }
-  }
+  }));
   return { clients, failures };
 }
 
