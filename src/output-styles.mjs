@@ -1,6 +1,7 @@
 // Output styles (Claude Code compatible): change how Oasis explains its work.
 // Built-ins: default, explanatory, learning. Custom styles are Markdown files in
 // .oasis/output-styles, .claude/output-styles, or the user-level equivalents.
+// Enabled Claude Code plugins add theirs as plugin-name:style.
 import { readdir, readFile, lstat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,6 +58,15 @@ export async function loadOutputStyles(root, options = {}) {
         styles[name] = { name, description: String(data.description || body.trim().split('\n')[0]).slice(0, 200), source: scope, file: full, prompt: 'Output style: ' + name + '.\n' + body.trim() };
       } catch { /* Skip unreadable style files. */ }
     }
+  }
+  // Output styles shipped by enabled Claude Code plugins, named plugin:style.
+  if (!options.skipPlugins) {
+    try {
+      const { loadEnabledPlugins, pluginOutputStyles } = await import('./claude-plugins.mjs');
+      for (const style of await pluginOutputStyles(await loadEnabledPlugins(root, { env: options.env || process.env }))) {
+        if (!styles[style.name]) styles[style.name] = style;
+      }
+    } catch { /* Plugins are optional. */ }
   }
   return styles;
 }

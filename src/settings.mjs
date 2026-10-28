@@ -150,6 +150,8 @@ export async function loadSettings(root, options = {}) {
     shell: { enabled: false },
     model: null,
     outputStyle: null,
+    agent: null,
+    pluginBinDirs: [],
     statusLine: null,
     lspServers: {},
     trusted: false,
@@ -163,6 +165,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.deny.push(...stringList(permissions.deny));
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
+    if (typeof settings.agent === 'string' && settings.agent.trim()) { result.agent = settings.agent.trim().toLowerCase(); result.agentSource = scope; }
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
@@ -217,9 +220,14 @@ export async function loadSettings(root, options = {}) {
   // Hooks from enabled Claude Code plugins run with CLAUDE_PLUGIN_ROOT in their environment.
   if (!options.skipPlugins) {
     try {
-      const { loadEnabledPlugins, pluginHooks } = await import('./claude-plugins.mjs');
+      const { loadEnabledPlugins, pluginHooks, pluginLspServers, pluginBinDirs, pluginDefaultSettings } = await import('./claude-plugins.mjs');
       const plugins = await loadEnabledPlugins(root, { env });
       result.plugins = plugins.map((plugin) => ({ id: plugin.id, name: plugin.name, root: plugin.root, origin: plugin.origin }));
+      // Plugin LSP servers come after user/project ones, so explicit settings win for an extension.
+      for (const [name, spec] of Object.entries(await pluginLspServers(plugins, { env, root }))) if (!result.lspServers[name]) result.lspServers[name] = spec;
+      result.pluginBinDirs = await pluginBinDirs(plugins);
+      const defaults = await pluginDefaultSettings(plugins);
+      if (defaults.agent && !result.agent) { result.agent = defaults.agent; result.agentSource = 'plugin:' + defaults.agentPlugin; }
       for (const item of await pluginHooks(plugins, { env, root })) {
         const normalized = normalizeHooks(item.hooks);
         for (const groups of Object.values(normalized)) for (const group of groups) for (const hook of group.hooks) if (hook.type === 'command' || hook.command) hook.pluginEnv = item.env;

@@ -118,6 +118,7 @@ function printHelp() {
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
     '  --disallowedTools RULES       Extra deny rules for this run',
     '  --append-system-prompt TEXT   Add instructions to the system prompt',
+    '  --agent NAME                  Run the session as a subagent (its prompt and tools), e.g. feature-dev:code-architect',
     '  --append-system-prompt-file F Add instructions from a file',
     '  --system-prompt TEXT | --system-prompt-file F  Replace the default system prompt',
     '  --fallback-model ID           Switch to this model when the main one is overloaded or failing',
@@ -627,7 +628,8 @@ function sessionCreateOptions() {
     fallbackModel: SESSION_OPTIONS.fallbackModel || '',
     maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
     settingsOverrides: SESSION_OPTIONS.settingsOverrides,
-    settingSources: SESSION_OPTIONS.settingSources || null
+    settingSources: SESSION_OPTIONS.settingSources || null,
+    agent: SESSION_OPTIONS.agent || null
   };
 }
 
@@ -637,6 +639,8 @@ function reportSessionNotices(session) {
     settingsWarningShown = true;
     if (session.settingsError) stdout.write('[settings] ' + session.settingsError + '\n');
     if (session.styleWarning) stdout.write('[settings] ' + session.styleWarning + '\n');
+    if (session.agentWarning) stdout.write('[settings] ' + session.agentWarning + '\n');
+    else if (session.mainAgent) stdout.write('[agent] Running as ' + session.mainAgent + (session.settings && session.settings.agentSource && !SESSION_OPTIONS.agent ? ' (from ' + session.settings.agentSource + ' settings)' : '') + '.\n');
     for (const item of session.rejectedDirectories || []) stdout.write('[settings] Additional directory ' + item.dir + ' was not added: ' + item.error + '.\n');
     if (session.additionalDirectories && session.additionalDirectories.length) stdout.write('[settings] Additional directories: ' + session.additionalDirectories.join(', ') + '\n');
     const ignored = session.settings && session.settings.ignoredUntrusted || [];
@@ -1895,6 +1899,7 @@ async function main() {
       SESSION_OPTIONS.maxBudgetUsd = value;
       continue;
     }
+    if (arg === '--agent') { SESSION_OPTIONS.agent = needValue(arg).trim().toLowerCase(); continue; }
     if (arg === '--tools') { SESSION_OPTIONS.tools = needValue(arg).split(/[\s,]+/).filter(Boolean); continue; }
     if (arg === '--mcp-config') { SESSION_OPTIONS.pendingFiles.push({ kind: 'mcp', file: needValue(arg) }); continue; }
     if (arg === '--strict-mcp-config') { SESSION_OPTIONS.strictMcpConfig = true; continue; }
