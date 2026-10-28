@@ -478,7 +478,7 @@ export function createOasisWebServer(options = {}) {
         busyWorkspaces.delete(taskWorkspaceKey);
         if (taskWorktree) {
           activeSessions.delete(activeId);
-          await closeSession(session).catch(() => {});
+          try { await closeSession(session); } catch {}
         }
       }
     })();
