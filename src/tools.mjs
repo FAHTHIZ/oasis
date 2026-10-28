@@ -72,24 +72,62 @@ export function sensitivePath(relative) {
   return false;
 }
 
+// Extra directories (--add-dir / permissions.additionalDirectories) that tools may
+// use besides the workspace, keyed by the workspace's real path.
+const ADDITIONAL_DIRECTORIES = new Map();
+
+export async function setAdditionalDirectories(root, dirs = []) {
+  const rootReal = await realpath(root);
+  const accepted = [];
+  const rejected = [];
+  for (const dir of dirs) {
+    const input = String(dir || '').trim();
+    if (!input) continue;
+    try {
+      const real = await realpath(path.resolve(rootReal, input.replace(/^~(?=$|[\\/])/, os.homedir())));
+      const info = await lstat(real);
+      if (!info.isDirectory()) throw new Error('not a directory');
+      if (real === path.parse(real).root || real === os.homedir()) throw new Error('too broad; choose a project folder');
+      if (inside(rootReal, real) || accepted.includes(real)) continue;
+      accepted.push(real);
+    } catch (error) {
+      rejected.push({ dir: input, error: error.code === 'ENOENT' ? 'does not exist' : error.message });
+    }
+  }
+  if (accepted.length) ADDITIONAL_DIRECTORIES.set(rootReal, accepted);
+  else ADDITIONAL_DIRECTORIES.delete(rootReal);
+  return { accepted, rejected };
+}
+
+export function additionalDirectories(rootReal) {
+  return ADDITIONAL_DIRECTORIES.get(rootReal) || [];
+}
+
 export async function resolveWorkspacePath(root, rawPath, options = {}) {
   const rootReal = await realpath(root);
   const input = String(rawPath || '.');
   if (input.includes('\0')) throw new Error('Invalid path.');
   const target = path.resolve(rootReal, input);
-  if (!inside(rootReal, target) || target === path.parse(rootReal).root) throw new Error('That path is outside the workspace.');
+  let base = rootReal;
+  if (!inside(rootReal, target) && !options.workspaceOnly) {
+    const extra = additionalDirectories(rootReal).find((dir) => inside(dir, target));
+    if (extra) base = extra;
+  }
+  if (!inside(base, target) || target === path.parse(base).root) throw new Error('That path is outside the workspace.');
+  // Paths in extra directories are reported relative to the workspace (../other/file).
   const relative = path.relative(rootReal, target);
-  if (!options.allowSensitive && sensitivePath(relative)) throw new Error('That file path looks sensitive. Oasis will not read, overwrite, or delete it.');
+  const baseRelative = path.relative(base, target);
+  if (!options.allowSensitive && sensitivePath(baseRelative)) throw new Error('That file path looks sensitive. Oasis will not read, overwrite, or delete it.');
   let cursor = target;
   while (true) {
     try {
       const linkInfo = await lstat(cursor);
       if (cursor === target && options.rejectSymlinks && linkInfo.isSymbolicLink()) throw new Error('Oasis will not write to or delete a symbolic link.');
       const resolved = await realpath(cursor);
-      if (!inside(rootReal, resolved)) throw new Error('That path resolves outside the workspace through a symbolic link.');
-      const resolvedRelative = path.relative(rootReal, resolved);
+      if (!inside(base, resolved)) throw new Error('That path resolves outside the workspace through a symbolic link.');
+      const resolvedRelative = path.relative(base, resolved);
       if (!options.allowSensitive && sensitivePath(resolvedRelative)) throw new Error('That symbolic link resolves to a sensitive file. Oasis will not access it.');
-      if (cursor === target) return { absolute: target, real: resolved, relative: relative || '.', root: rootReal };
+      if (cursor === target) return { absolute: target, real: resolved, relative: relative || '.', root: base, external: base !== rootReal };
       break;
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
@@ -99,8 +137,8 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
     }
   }
   const existingAncestor = await realpath(cursor);
-  if (!inside(rootReal, existingAncestor)) throw new Error('That path resolves outside the workspace through a symbolic link.');
-  return { absolute: target, real: target, relative: relative || '.', root: rootReal };
+  if (!inside(base, existingAncestor)) throw new Error('That path resolves outside the workspace through a symbolic link.');
+  return { absolute: target, real: target, relative: relative || '.', root: base, external: base !== rootReal };
 }
 
 function shouldSkip(entry, includeHidden) {
@@ -1554,7 +1592,7 @@ export async function executeTool(name, args = {}, context = {}) {
       const next = args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
       if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('The edited file would exceed the 256 KiB limit.');
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
-      await snapshotFile(root, target.absolute, 'before-agent-edit');
+      await snapshotFile(target.root, target.absolute, 'before-agent-edit');
       await writeFile(target.absolute, next, { encoding: 'utf8' });
       return { path: target.relative.split(path.sep).join('/'), changed: true, replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true };
     }
@@ -1566,7 +1604,7 @@ export async function executeTool(name, args = {}, context = {}) {
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
-        await snapshotFile(root, target.absolute, 'before-agent-write');
+        await snapshotFile(target.root, target.absolute, 'before-agent-write');
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       await mkdir(path.dirname(target.absolute), { recursive: true });
@@ -1580,7 +1618,7 @@ export async function executeTool(name, args = {}, context = {}) {
       if (!context.approval || !(await context.approval('Delete the workspace file ' + target.relative + '? Its current contents will be backed up first.'))) {
         return { approved: false, path: target.relative, message: 'Deletion was not approved. No file was removed.' };
       }
-      await snapshotFile(root, target.absolute, 'before-agent-delete');
+      await snapshotFile(target.root, target.absolute, 'before-agent-delete');
       await unlink(target.absolute);
       return { path: target.relative, deleted: true, backupCreated: true };
     }

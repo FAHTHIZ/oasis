@@ -6,7 +6,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
-import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions } from './tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
@@ -291,7 +291,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
   ].join('\n\n');
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [] }) {
   const [projectContext, skillDescriptions] = await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
   let loadedSettings = settings;
   let settingsError = null;
@@ -303,6 +303,8 @@ export async function createSession({ root, config, restore = null, permissionMo
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
   const sandbox = resolveSandbox(loadedSettings, root);
+  const extraDirs = await setAdditionalDirectories(root, [...(loadedSettings.permissions.additionalDirectories || []), ...(addDirs || [])]);
+  if (sandbox && Array.isArray(sandbox.writable)) sandbox.writable = [root, ...extraDirs.accepted];
   // Project .mcp.json servers start third-party code, so they need a trusted workspace.
   let project = { servers: [], failures: [] };
   if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
@@ -310,9 +312,12 @@ export async function createSession({ root, config, restore = null, permissionMo
   const mcp = await connectMcpServers({ root, env, extraServers: project.servers, extraFailures: project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
   let systemText = systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
+  if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
     root,
+    additionalDirectories: extraDirs.accepted,
+    rejectedDirectories: extraDirs.rejected,
     config,
     sessionId: restore && restore.id || null,
     messages: [],

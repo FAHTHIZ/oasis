@@ -368,7 +368,7 @@ export function createOasisWebServer(options = {}) {
 
     const [owner, name] = repository.split('/');
     const relative = '.oasis/workspaces/' + owner + '--' + name;
-    const resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+    const resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true });
     try {
       await access(resolved.absolute);
       const check = await executeTool('run_command', {
@@ -407,7 +407,7 @@ export function createOasisWebServer(options = {}) {
         }
         await mkdir(path.dirname(resolved.absolute), { recursive: true });
         const stagingRelative = relative + '.clone-' + job.id;
-        const staging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true });
+        const staging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true, workspaceOnly: true });
         const result = await executeTool('run_command', {
           command: 'gh',
           args: ['repo', 'clone', repository, staging.absolute],
@@ -416,13 +416,13 @@ export function createOasisWebServer(options = {}) {
         const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
         const cleanStaging = async () => {
           try {
-            const safeStaging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true });
+            const safeStaging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true, workspaceOnly: true });
             await rm(safeStaging.absolute, { recursive: true, force: true });
           } catch { /* Never follow or remove an unsafe/symlinked path during cleanup. */ }
         };
         if (result.exitCode === 0 && !result.error) {
           try {
-            const safeTarget = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+            const safeTarget = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true });
             try {
               await access(safeTarget.absolute);
               throw Object.assign(new Error('The clone destination appeared while cloning. The new checkout was left in staging rather than replacing existing files.'), { statusCode: 409 });
