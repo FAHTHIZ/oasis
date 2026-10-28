@@ -32,7 +32,7 @@ import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
-import { readInput } from './line-editor.mjs';
+import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
@@ -126,8 +126,47 @@ function printHelp() {
   ].join('\n'));
 }
 
+// While a turn runs, keystrokes are captured: Esc or Ctrl+C interrupts, and
+// typed lines are queued as the next messages (type-ahead, like Claude Code).
+const QUEUED_INPUT = [];
+let queuedDraft = '';
+let turnKeys = null;
+function startTurnKeys(onInterrupt) {
+  if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function' || process.env.OASIS_SIMPLE_INPUT === '1') return null;
+  const decoder = new KeyDecoder();
+  let buffer = '';
+  let active = false;
+  const dim = (text) => (colorEnabled(stdout) ? '\x1b[2m' + text + '\x1b[22m' : text);
+  const onData = (chunk) => {
+    for (const key of decoder.feed(chunk.toString('utf8'))) {
+      if (key.name === 'escape') onInterrupt('escape');
+      else if (key.name === 'ctrlC') onInterrupt('ctrlC');
+      else if (key.name === 'char' || key.name === 'paste') buffer += key.text;
+      else if (key.name === 'backspace') buffer = buffer.slice(0, -1);
+      else if (key.name === 'enter' && buffer.trim()) {
+        QUEUED_INPUT.push(buffer);
+        stdout.write('\n' + dim('  ↳ queued: ' + buffer.replace(/\s+/g, ' ').slice(0, 90)) + '\n');
+        buffer = '';
+      }
+    }
+  };
+  const handle = {
+    resume() { if (active) return; active = true; try { stdin.setRawMode(true); } catch {} stdin.setEncoding('utf8'); stdin.resume(); stdin.on('data', onData); },
+    suspend() { if (!active) return; active = false; stdin.off('data', onData); try { stdin.setRawMode(false); } catch {} stdin.pause(); },
+    stop() { handle.suspend(); if (buffer.trim()) queuedDraft = buffer; buffer = ''; }
+  };
+  handle.resume();
+  return handle;
+}
+
 async function askLine(question) {
   if (!stdin.isTTY || !stdout.isTTY) throw new Error('This action needs an interactive terminal. Re-run it from a terminal session.');
+  const paused = turnKeys;
+  if (paused) paused.suspend();
+  try { return await askLineRaw(question); } finally { if (paused && turnKeys === paused) paused.resume(); }
+}
+
+async function askLineRaw(question) {
   const rl = createInterface({ input: stdin, output: stdout });
   // Readline swallows Ctrl+C; forward it so a running task can be interrupted.
   const controller = new AbortController();
@@ -949,13 +988,15 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   }
   // Ctrl+C stops the current task and returns to the prompt; a second Ctrl+C exits.
   const controller = new AbortController();
-  const onInterrupt = () => {
+  const onInterrupt = (kind) => {
+    if (controller.signal.aborted && kind === 'escape') return;
     if (controller.signal.aborted) { stdout.write('\nExiting Oasis.\n'); closeSession(session); process.exit(130); }
     endStream();
-    stdout.write('\n[interrupted] Stopping the current task. Press Ctrl+C again to quit.\n');
+    stdout.write('\n[interrupted] Stopping the current task. Press Ctrl+C again to quit' + '.\n');
     controller.abort();
   };
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
+  turnKeys = startTurnKeys(onInterrupt);
   try {
     const fork = modeOptions.fork;
     const runner = fork ? (s, p, o) => runForkedTurn(s, p, { ...o, agent: fork.agent, label: fork.label, env: process.env }) : modeOptions.planOnly ? runAgentPlan : runAgentTurn;
@@ -1007,6 +1048,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     } else stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
   } finally {
     process.removeListener('SIGINT', onInterrupt);
+    if (turnKeys) { turnKeys.stop(); turnKeys = null; }
   }
   reportSessionNotices(session);
   if (persistence.enabled) {
@@ -1211,7 +1253,10 @@ async function readMainInput(root, session, state) {
   const color = colorEnabled(stdout);
   const currentMode = () => (session && session.permissions ? session.permissions.mode : SESSION_OPTIONS.permissionMode || 'default');
   stdout.write('\n');
+  const initialText = queuedDraft;
+  queuedDraft = '';
   const result = await readInput({
+    initialText,
     history: state.history,
     color,
     prompt: (editor) => promptFor(editor.text, color),
@@ -1250,7 +1295,14 @@ async function interactive(root, autoApprove, persistence = {}) {
       const line = await renderStatusLine(statusLine, statusLinePayload({ root, session, config: await loadConfig().catch(() => ({})), usage: USAGE, outputStyle: SESSION_OPTIONS.outputStyle }), { root, env: process.env, keepColor: Boolean(stdout.isTTY) }).catch(() => null);
       if (line) stdout.write('\n' + line);
     }
-    try { input = await readMainInput(root, session, inputState); } catch { break; }
+    if (QUEUED_INPUT.length) {
+      input = QUEUED_INPUT.shift();
+      stdout.write('\n' + (colorEnabled(stdout) ? '\x1b[2m❯ ' + input + '\x1b[22m' : '> ' + input) + '\n');
+      inputState.history.push(input);
+      appendHistory(root, input).catch(() => {});
+    } else {
+      try { input = await readMainInput(root, session, inputState); } catch { break; }
+    }
     let text = input.trim();
     if (!text) continue;
     if (text.startsWith('!') && text.length > 1) {
