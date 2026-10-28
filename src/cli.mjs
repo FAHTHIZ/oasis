@@ -50,6 +50,7 @@ function printHelp() {
     '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
+    '  oasis update [--check] [--yes] Check GitHub main for a newer Oasis and install it',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
@@ -319,6 +320,24 @@ async function doctor(args = [], root = process.cwd()) {
 
 // Workspace-level checks: tools Oasis relies on, settings/trust, sandbox, MCP,
 // memory and extension files. Problems are listed with a suggested fix.
+async function updateOasis(args = []) {
+  const { latestMainCommit, installedVersion, updatePlan, describeUpdate } = await import('./update.mjs');
+  const checkOnly = args.includes('--check');
+  const yes = args.includes('--yes') || args.includes('-y');
+  const [installed, latest] = await Promise.all([installedVersion(APP_ROOT), latestMainCommit()]);
+  const plan = updatePlan(installed, latest);
+  stdout.write(describeUpdate(installed, latest, plan) + '\n');
+  if (plan.upToDate || plan.blocked || checkOnly) { if (plan.blocked) process.exitCode = 1; return; }
+  if (!yes) {
+    const answer = (await askLine('Install the update now? [y/N] ')).trim().toLowerCase();
+    if (!['y', 'yes'].includes(answer)) { stdout.write('Update skipped.\n'); return; }
+  }
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(plan.command, plan.args, { stdio: 'inherit', shell: process.platform === 'win32' });
+  if (result.status !== 0) { stderr.write('The update command failed (exit ' + result.status + ').\n'); process.exitCode = 1; return; }
+  stdout.write('Oasis updated to ' + latest.sha.slice(0, 7) + '. Restart any running oasis sessions.\n');
+}
+
 async function doctorWorkspaceReport(root) {
   const problems = [];
   stdout.write('\nTools\n');
@@ -1396,6 +1415,7 @@ async function main() {
   }
   if (command === 'setup') return await configureProvider(workspace);
   if (command === 'doctor') return await doctor(rest, workspace);
+  if (command === 'update') return await updateOasis(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
