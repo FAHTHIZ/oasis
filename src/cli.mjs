@@ -56,6 +56,7 @@ function printHelp() {
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
+    '  oasis -p PROMPT --bare        Skip project instructions, skills, hooks, MCP, and memory',
     '  oasis -w [NAME]               Work in a new git worktree on its own branch',
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
@@ -471,7 +472,8 @@ function sessionCreateOptions() {
     disallowedTools: SESSION_OPTIONS.disallowedTools,
     appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt,
     outputStyle: SESSION_OPTIONS.outputStyle || null,
-    addDirs: SESSION_OPTIONS.addDirs
+    addDirs: SESSION_OPTIONS.addDirs,
+    bare: Boolean(SESSION_OPTIONS.bare)
   };
 }
 
@@ -1560,6 +1562,7 @@ async function main() {
       (arg.toLowerCase().includes('disallowed') ? SESSION_OPTIONS.disallowedTools : SESSION_OPTIONS.allowedTools).push(...rules);
       continue;
     }
+    if (arg === '--bare') { SESSION_OPTIONS.bare = true; continue; }
     if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = rawArgs[++i] || ''; continue; }
     if (arg === '-p' || arg === '--print') {
       headless.enabled = true;

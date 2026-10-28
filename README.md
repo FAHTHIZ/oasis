@@ -350,6 +350,8 @@ oasis -p "find bugs in src/" --json-schema @bug-schema.json --output-format json
 oasis -w fix-login "fix the login redirect"
 ~~~
 
+`--bare` starts a minimal session for scripts. It skips project instructions (AGENTS.md, CLAUDE.md, OASIS.md), skills, hooks, MCP servers, and auto memory. Only the model, the built-in tools, and your permission rules remain.
+
 `--json-schema` takes a JSON Schema (inline or `@file.json`). Oasis asks the model for JSON that matches it, validates the reply and retries up to twice. With `--output-format json` the result is in `structured_output`; in text mode only the JSON is printed. If it still fails, the result has subtype `error_max_structured_output_retries`.
 
 `-w/--worktree [NAME]` runs the session (interactive or `-p`) in a new git worktree under `.oasis/worktrees/` on its own `oasis/NAME-*` branch, so your checkout is untouched. When the session ends, a worktree with no changes is removed along with its branch. Otherwise Oasis keeps it and prints how to review, merge or remove it.
@@ -358,6 +360,29 @@ oasis -w fix-login "fix the login redirect"
 - Piped input is added to the prompt inside `<stdin>` tags.
 - With nobody to answer prompts, anything that needs approval is denied and listed in `permission_denials`. Allow what the job needs with `--allowedTools`, settings rules, `--permission-mode`, or `--yes`. High-risk commands stay blocked.
 - The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` (`-c`) or `--resume ID` to keep a conversation across runs.
+
+## SDK: build on Oasis from Node
+
+Oasis can be imported as a library, much like the Claude Agent SDK, and it works with any model Oasis supports:
+
+~~~js
+import { query, tool } from 'oasis-oss';
+
+const weather = tool('weather', 'Current weather for a city',
+  { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+  async ({ city }) => ({ city, forecast: 'sunny' }));
+
+for await (const event of query({ prompt: 'Plan a picnic in Dhaka', options: { tools: [weather], maxTurns: 10, permissionMode: 'auto' } })) {
+  if (event.type === 'assistant') console.log(event.text);
+  if (event.type === 'result') console.log(event.subtype, event.usage);
+}
+~~~
+
+- **Events:** they are the same as `--output-format stream-json`.
+- **Tools:** `tool()` defines an in-process tool, and `createToolServer(name, tools)` groups several. Pass `{ needsApproval: true }` to send a tool's calls through `canUseTool(toolName, input)`, which can also approve or deny built-in tools.
+- **Options:** `cwd`, `model`, `effort`, `provider` (`{ protocol, baseURL, apiKey }`), `permissionMode`, `allowedTools`, `disallowedTools`, `appendSystemPrompt`, `jsonSchema`, `planOnly`, `abortController`, `resume`, `persistSession`, and `bare`.
+- **Shortcut:** `run(prompt, options)` returns just the final result.
+- **Lower-level pieces:** the package also exports `createSession`, `runAgentTurn`, `runHooks`, `executeTool`, and `loadSettings`.
 
 ## Checkpoints and /rewind
 

@@ -306,14 +306,17 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
   ].join('\n\n');
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [] }) {
-  const [projectContext, skillDescriptions] = await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false }) {
+  // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
+  // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
+  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
   let loadedSettings = settings;
   let settingsError = null;
   if (!loadedSettings) {
     try { loadedSettings = await loadSettings(root, { env }); }
     catch (error) { settingsError = error.message; loadedSettings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } }; }
   }
+  if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null };
   const permissions = new PermissionPolicy(loadedSettings, { mode: permissionMode || undefined });
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
@@ -322,9 +325,10 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (sandbox && Array.isArray(sandbox.writable)) sandbox.writable = [root, ...extraDirs.accepted];
   // Project .mcp.json servers start third-party code, so they need a trusted workspace.
   let project = { servers: [], failures: [] };
-  if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
+  if (bare) project = { servers: [], failures: [] };
+  else if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
   else if (await pathExists(path.join(root, '.mcp.json'))) project.failures.push({ name: '.mcp.json', error: 'ignored because this workspace is not trusted. Run oasis trust to enable its MCP servers.' });
-  const mcp = await connectMcpServers({ root, env, extraServers: project.servers, extraFailures: project.failures });
+  const mcp = bare ? { clients: new Map(), failures: [] } : await connectMcpServers({ root, env, extraServers: project.servers, extraFailures: project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
   let systemText = systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
@@ -1728,7 +1732,7 @@ async function authorizeCall(session, name, args, context, options) {
       runHooks('Notification', { session_id: session.sessionId || 'unsaved', notification_type: 'permission_prompt', title: 'Permission needed', message: 'Oasis needs your permission to use ' + (CLAUDE_TOOL_NAMES[name] || name) }, hookOptions(session, context.env))
         .then((note) => session.hookMessages.push(...note.messages)).catch(() => {});
     }
-    const answer = await baseApproval(message, force, { tool: name, suggestion });
+    const answer = await baseApproval(message, force, { tool: name, suggestion, input: args });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);
   };
