@@ -26,6 +26,10 @@ export const AGENT_TOOL_DEFINITIONS = [
     team_id: { type: 'string', description: 'Optional team ID such as team_1' },
     limit: { type: 'integer', description: 'Maximum events to return, 1 to 100; defaults to 30' }
   }, required: [] } } },
+  { type: 'function', function: { name: 'dispatch_ready_tasks', description: 'Dispatch a bounded wave of ready shared tasks to background general-purpose agents. Each worker uses an isolated Git worktree and must claim its exact task before editing. The dispatcher respects dependencies, active leases, already-running workers, and the background-agent limit. Background workers cannot prompt for per-tool approval; edits or commands that require interactive approval are denied unless the inherited permission mode or explicit allow rules permit them. It does not merge worker branches.', parameters: { type: 'object', properties: {
+    max_parallel: { type: 'integer', minimum: 1, maximum: 6, description: 'Maximum workers to launch in this wave; defaults to 3' },
+    team_id: { type: 'string', description: 'Optional active team ID such as team_1 for named roster and peer messaging' }
+  }, required: [] } } },
   { type: 'function', function: { name: 'team_create', description: 'Create a named agent team before launching coordinated workers. Then use the task tool with team_id so members share a named roster and can coordinate directly.', parameters: { type: 'object', properties: {
     name: { type: 'string', description: 'Short unique team name, maximum 100 characters' },
     description: { type: 'string', description: 'Goal or scope for this team, maximum 1,000 characters' }
@@ -191,6 +195,7 @@ export function registerAgent(session, fields) {
   registry.agents.set(id, record);
   if (team) team.members.push(id);
   recordAgentEvent(session, 'agent.started', { agentId: id, teamId: teamId || undefined, description: record.description || record.type || id });
+  if (record.sharedTaskId) recordAgentEvent(session, 'task.dispatched', { agentId: id, teamId: teamId || undefined, description: record.sharedTaskId, detail: record.description || '' });
   return record;
 }
 
@@ -225,6 +230,7 @@ function elapsed(record) {
 export function summarizeAgent(record, { full = false } = {}) {
   const out = { id: record.id, agent: record.type, description: record.description, status: record.status, background: Boolean(record.background), elapsed: elapsed(record), runs: record.runs, toolCalls: record.toolCalls };
   if (record.teamId) out.team_id = record.teamId;
+  if (record.sharedTaskId) out.task_id = record.sharedTaskId;
   if (record.status === 'running' && record.recentTools.length) out.recentTools = record.recentTools.slice(-5);
   const queuedMessages = Array.isArray(record.child && record.child.inbox) ? record.child.inbox.length : 0;
   if (queuedMessages) out.queuedMessages = queuedMessages;
