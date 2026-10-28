@@ -208,6 +208,16 @@ Oasis reads a Claude Code-style `.mcp.json` at the workspace root, so a team can
 
 Add your own as Markdown in `.oasis/output-styles/NAME.md` (or `.claude/output-styles/`, `~/.config/oasis/output-styles/`, `~/.claude/output-styles/`). Use front matter with `name` and `description`; the body is the instruction. Set a default with `"outputStyle": "explanatory"` in `.oasis/settings.json` or your user settings.
 
+## Status line
+
+Show your own status line above the input prompt, using the same settings format as Claude Code:
+
+```json
+{ "statusLine": { "type": "command", "command": "~/.config/oasis/statusline.sh" } }
+```
+
+The command receives JSON on stdin with `model`, `cwd`, `workspace`, `output_style`, `permission_mode`, `cost` (token totals), and `session_id`. Oasis shows the first line of its output; ANSI colors are kept in a terminal. A project-level status line runs only after `oasis trust`.
+
 ## Hooks
 
 Hooks run your own shell commands at points in the agent lifecycle, using Claude Code's format:

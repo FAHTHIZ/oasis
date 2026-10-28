@@ -22,6 +22,7 @@ import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, u
 import { detectSandbox } from './sandbox.mjs';
 import { resolveCustomCommand, expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
+import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
@@ -890,8 +891,14 @@ async function interactive(root, autoApprove, persistence = {}) {
   let session = null;
   await ensureModelProviderSetup(root);
   stdout.write('Type your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
+  const startupSettings = await loadSettings(root).catch(() => null);
   while (true) {
     let input;
+    const statusLine = (session && session.settings || startupSettings || {}).statusLine;
+    if (statusLine) {
+      const line = await renderStatusLine(statusLine, statusLinePayload({ root, session, config: await loadConfig().catch(() => ({})), usage: USAGE, outputStyle: SESSION_OPTIONS.outputStyle }), { root, env: process.env, keepColor: Boolean(stdout.isTTY) }).catch(() => null);
+      if (line) stdout.write('\n' + line);
+    }
     try { input = await askLine('\nYou> '); } catch { break; }
     const text = input.trim();
     if (!text) continue;

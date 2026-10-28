@@ -135,6 +135,7 @@ export async function loadSettings(root, options = {}) {
     shell: { enabled: false },
     model: null,
     outputStyle: null,
+    statusLine: null,
     trusted: false,
     sources: [],
     ignoredUntrusted: []
@@ -147,7 +148,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (!trusted) {
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
@@ -162,6 +163,7 @@ export async function loadSettings(root, options = {}) {
     }
     if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') result.shell.enabled = settings.shell.enabled;
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
+    if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
 
   const userFile = userSettingsPath(env);
