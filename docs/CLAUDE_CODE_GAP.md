@@ -78,6 +78,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | /color, /focus | Prompt color per session; focus view of the last turn | **Closed.** |
 | availableModels | Restrict selectable models via settings | **Closed.** Applies to /model, startup model, advisor and subagent models. |
 | Transcript mode | Ctrl+O full-screen transcript with expanded tool calls | **Closed.** Pager with scroll, paging and jump keys; prompt draft preserved. |
+| Permission dialog | Arrow-select approval dialog; Confirmation/Select keybinding contexts | **Closed.** Arrows/j/k, digits, y/n/a hotkeys, Esc; rebindable; channel relay still races the dialog. |
 
 ## Ranked next improvements
 
@@ -107,7 +108,7 @@ A native Gemini adapter; Windows sandboxing; Windows Credential Manager for sens
 
 ### 6. Terminal experience polish
 
-Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Theme hot-reload shipped as well. The Ctrl+O full-screen transcript pager shipped too. Remaining: bindable dialog contexts. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Theme hot-reload shipped as well. The Ctrl+O full-screen transcript pager shipped too, and permission prompts are now select dialogs bound through the `Confirmation`/`Select` keybinding contexts. Remaining: picker dialogs (model, theme, settings) as full-screen selects. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
 
 ## What OASIS already does well
 

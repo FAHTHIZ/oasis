@@ -594,6 +594,18 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
     stdout.write('\nPermission request\n' + prompt + '\n');
     const offerAlways = meta && meta.suggestion && !forceInteractive;
     if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
+    if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
+      // Claude Code-style dialog: arrows/j/k + Enter, 1-3, y/n/a, Esc; rebindable via the Confirmation context.
+      const { selectDialog } = await import('./select-dialog.mjs');
+      const options = [{ label: 'Yes', value: true, hotkey: 'yes' }];
+      if (offerAlways) options.push({ label: "Yes, and don't ask again this session for " + meta.suggestion, value: 'always', hotkey: 'always' });
+      options.push({ label: 'No', value: false, hotkey: 'no' });
+      stdout.write('Do you want to proceed?\n');
+      const paused = turnKeys;
+      if (paused) paused.suspend();
+      try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal }); }
+      finally { if (paused && turnKeys === paused) paused.resume(); }
+    }
     const answer = (await askLine(offerAlways ? 'Proceed? [y]es / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Proceed? [y/N] ', signal)).trim().toLowerCase();
     if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
     return ['y', 'yes'].includes(answer);
