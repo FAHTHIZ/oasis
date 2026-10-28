@@ -1,34 +1,35 @@
-# Oasis OSS
+# OASIS
 
 <p align="center">
-  <img src="assets/oasis-icon.svg" alt="Oasis logo" width="88" />
+  <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish. — open-source coding agent and local-first developer workspace" width="100%" />
 </p>
 
-<p align="center"><strong>An open-source coding agent and local-first developer workspace.</strong></p>
+<p align="center"><strong>Code. Automate. Flourish.</strong></p>
+<p align="center">An open-source AI coding agent and local-first developer workspace.</p>
 <p align="center">CLI · Browser workspace · Multi-provider tools · MCP · Skills · Subagents</p>
 
 <p align="center">
-  <a href="https://github.com/gtxnrg-ship-it/oasis/actions/workflows/quality.yml"><img src="https://github.com/gtxnrg-ship-it/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22 or newer" /></a>
 </p>
 
-Oasis turns plain-English software requests into multi-step workflows. It can inspect a project, make focused file changes, run approved commands and tests, and report what changed. Work directly in the terminal or start the local browser agent with `oasis web`.
+OASIS is an open-source AI coding agent and local-first developer workspace for multi-step software development. It can inspect a codebase, plan and apply focused changes, run approved shell commands and tests, and report what changed. Use the CLI coding assistant in your terminal or open the local browser workspace with `oasis web`. Connect supported model providers and extend the agent with Model Context Protocol (MCP) tools, reusable skills, hooks, and bounded subagents.
 
 ## Get started
 
 **Requirements:** Node.js 22 or newer and Git.
 
 ```bash
-npm install -g git+https://github.com/gtxnrg-ship-it/oasis.git#main
+npm install -g git+https://github.com/FAHTHIZ/oasis.git#main
 oasis
 ```
 
-On first launch, follow the guided setup to choose a model provider. Oasis does not include a model or API subscription; your selected provider must support tool calling.
+On first launch, follow the guided setup to choose a model provider. OASIS does not include a model or API subscription; your selected provider must support tool calling.
 
 ## Try it
 
-From the project you want Oasis to work on:
+From the project you want OASIS to work on:
 
 ```bash
 cd /path/to/your/project
@@ -55,7 +56,7 @@ To use the browser interface, run `oasis web` in that project and open the local
 
 ## Safety and current limits
 
-Oasis uses workspace-bound file tools, secret-file exclusions, snapshots, and approval gates to reduce risk. Commands normally run with your operating-system permissions; the optional OS sandbox is disabled by default and currently targets Linux and macOS. These safeguards are not a guarantee that untrusted code is safe—review operations and use an isolated workspace for unfamiliar projects.
+OASIS uses workspace-bound file tools, secret-file exclusions, snapshots, and approval gates to reduce risk. Commands normally run with your operating-system permissions; the optional OS sandbox is disabled by default and currently targets Linux and macOS. These safeguards are not a guarantee that untrusted code is safe—review operations and use an isolated workspace for unfamiliar projects.
 
 Some boundaries are intentional and documented: full native compatibility with third-party coding-agent plugin systems and a general remote plugin marketplace are not implemented; Windows sandbox/container isolation is not available; the browser command runner is not a full interactive terminal; and the browser dashboard’s projects/tasks/notes do not sync with the CLI workspace. The browser’s GitHub connection currently uses the host’s GitHub CLI login.
 
@@ -66,7 +67,7 @@ Some boundaries are intentional and documented: full native compatibility with t
 ## Development
 
 ```bash
-git clone https://github.com/gtxnrg-ship-it/oasis.git
+git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm run check
 ```
