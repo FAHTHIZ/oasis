@@ -139,6 +139,7 @@ export async function saveConfig(config, options = {}) {
   if (config.promptCache === false) safe.promptCache = false;
   const thinkingBudget = Number.parseInt(config.thinkingBudget, 10);
   if (Number.isInteger(thinkingBudget) && thinkingBudget >= 1024 && thinkingBudget <= 64000) safe.thinkingBudget = thinkingBudget;
+  if (['minimal', 'low', 'medium', 'high'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
   if (!safe.model) throw new Error('The model name cannot be empty.');
   await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
   try { await chmod(configPath, 0o600); } catch { /* POSIX mode bits are unavailable on some filesystems. */ }

@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { createSession, runAgentTurn, closeSession, thinkingBudgetFor } from '../src/agent.mjs';
+import { createSession, runAgentTurn, closeSession, thinkingBudgetFor, reasoningEffortFor } from '../src/agent.mjs';
+import { scriptedModel } from './helpers/scripted-model.mjs';
 
 test('thinking keywords map to Claude Code budgets', () => {
   assert.equal(thinkingBudgetFor('fix the typo', {}, {}), 0);
@@ -58,4 +59,32 @@ test('Anthropic extended thinking: budget sent, thinking blocks replayed with si
   assert.equal(requests[2].thinking, undefined);
   assert.equal(requests[2].max_tokens, 8192);
   assert.ok(requests[2].messages.every((message) => !Array.isArray(message.content) || message.content.every((block) => block.type !== 'thinking')));
+});
+
+test('think keywords map to OpenAI reasoning effort for reasoning models only', () => {
+  assert.equal(reasoningEffortFor('ultrathink', { model: 'gpt-4o' }, {}), '');
+  assert.equal(reasoningEffortFor('fix it', { model: 'o3' }, {}), '');
+  assert.equal(reasoningEffortFor('think about it', { model: 'o4-mini' }, {}), 'low');
+  assert.equal(reasoningEffortFor('think hard', { model: 'gpt-5' }, {}), 'medium');
+  assert.equal(reasoningEffortFor('ultrathink', { model: 'openai/gpt-5-mini' }, {}), 'high');
+  assert.equal(reasoningEffortFor('fix it', { model: 'custom', reasoningEffort: 'medium' }, {}), 'medium');
+  assert.equal(reasoningEffortFor('think about it', { model: 'o3', reasoningEffort: 'high' }, {}), 'high');
+  assert.equal(reasoningEffortFor('ultrathink', { model: 'o3' }, { OASIS_THINKING: 'off' }), '');
+});
+
+test('chat completions requests carry reasoning_effort only when it applies', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-effort-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-effort-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const { config, requests } = await scriptedModel(t, [{ content: 'ok' }]);
+  config.model = 'o3';
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  const efforts = [];
+  await runAgentTurn(session, 'ultrathink about the design', { autoApprove: true, env, approval: async () => true, onReasoningEffort: (e) => efforts.push(e) });
+  assert.equal(requests[0].reasoning_effort, 'high');
+  assert.deepEqual(efforts, ['high']);
+  await runAgentTurn(session, 'thanks', { autoApprove: true, env, approval: async () => true });
+  assert.equal(requests[1].reasoning_effort, undefined);
 });
