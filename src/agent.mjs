@@ -3208,6 +3208,12 @@ export async function consultAdvisor(session, args = {}, options = {}) {
   return { advisor: session.advisorModel, advice: String(completion.content || '').trim() || '(the advisor returned no advice)' };
 }
 
+// One tool-free completion with the session's provider (used by /insights narration).
+export async function completeText(session, system, prompt, options = {}) {
+  const completion = await requestCompletion({ config: session.config, toolDefinitions: [], providerEnv: session.providerEnv, messages: [{ role: 'system', content: system }, { role: 'user', content: String(prompt).slice(0, 60000) }] }, { noTools: true, signal: options.signal });
+  return String(completion.content || '').trim();
+}
+
 export async function askSideQuestion(session, question, options = {}) {
   if (!session || !session.config) throw new Error('Start a conversation first.');
   const transcript = session.messages.slice(1).map(safeHistoryLine).filter(Boolean).join('\n').slice(-(options.maxChars || 60000));

@@ -75,6 +75,7 @@ function printHelp() {
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis ide [install|package]   Connect VS Code/Cursor/Windsurf: selection context, diff review, diagnostics',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
+    '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
     '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
@@ -2289,6 +2290,12 @@ async function main() {
   if (command === 'permissions') return await managePermissions(workspace, rest);
   if (command === 'trust') return await manageTrust(workspace, rest);
   if (command === 'import') return await importCommand(workspace, rest, autoApprove);
+  if (command === 'insights') {
+    const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
+    const { file, stats } = await writeInsightsReport({ env: process.env, days: Math.min(365, Math.max(1, parseInt(rest[0], 10) || 30)) });
+    stdout.write(insightsSummaryText(stats) + '\nReport: ' + file + '\n');
+    return;
+  }
   if (command === 'backups') return await showBackups(workspace);
   if (command === 'restore') return await restoreOne(workspace, rest[0]);
   if (command === 'install') {
