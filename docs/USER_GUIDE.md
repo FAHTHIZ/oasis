@@ -473,7 +473,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 - `/team-onboarding [DAYS]` drafts ONBOARDING.md for your team from the last 30 days of usage (commands, files, friction) and the project's instruction files, settings, commands, skills, agents and MCP config.
 - `/skill-doctor [DAYS]` lists every skill with its always-loaded listing cost, its body cost (loaded only when used) and how often it was used in the last 30 days (load_skill calls and `/skill` invocations in saved sessions). Turn one off with a `Skill(name)` deny rule (globs like `Skill(legacy-*)` work); denied skills disappear from the system prompt and cannot be loaded. `/new` and `/reset` are aliases for `/clear`, `/proactive` for `/loop`.
 - `/color red|blue|green|yellow|purple|orange|pink|cyan|random|default` colors this session's prompt so parallel terminals are easy to tell apart. `/focus` shows a full-screen view of the last prompt, one line per tool call (with `+added -removed` line counts for edits) and the final response; press Enter to return.
-- Background sessions free the terminal while Oasis keeps working. `oasis --bg "TASK"` starts one; `/background [one more instruction]` (or `/bg`) saves the current conversation and hands it to one, then exits. `oasis bg list` shows runs, `oasis bg logs ID --follow` streams progress, `oasis bg attach ID` continues the conversation in your terminal (stopping it first if it is still running), and `oasis bg stop ID` / `oasis bg rm ID` clean up. Background sessions cannot prompt you, so only tools that your permission mode and allow rules permit will run; the conversation is saved, so `oasis --resume SESSION_ID` also works.
+- Background sessions free the terminal while Oasis keeps working. `oasis --bg "TASK"` starts one; `/background [one more instruction]` (or `/bg`) saves the current conversation and hands it to one, then exits. `oasis bg list` shows runs, `oasis bg logs ID --follow` streams progress, `oasis bg attach ID` continues the conversation in your terminal (stopping it first if it is still running), and `oasis bg stop ID` / `oasis bg rm ID` clean up. The same commands work at the top level, as in Claude Code: `oasis attach`, `oasis logs`, `oasis stop` (or `oasis kill`) and `oasis rm`. They take a full ID, an ID prefix, or part of the session name (`--name`). `oasis respawn ID` restarts a session, running or stopped, with its conversation intact, and `oasis respawn --all` restarts every running one. `oasis --bg --exec 'pytest -x'` runs a shell command as a background job; logs, stop, rm and respawn work for it too, and the exit code is recorded. Background sessions cannot prompt you, so only tools that your permission mode and allow rules permit will run; the conversation is saved, so `oasis --resume SESSION_ID` also works.
 - `/subtask TASK` starts a background subagent that gets a copy of the whole conversation so far, works on TASK while you keep going, and reports back to this conversation when it finishes (`/tasks` shows progress). Like other background agents it cannot ask you for approval, so tools your permission rules don't allow are refused.
 - `/btw QUESTION` asks about the session without adding to the conversation and without tools. `/recap` gives a one-line summary.
 - `/batch INSTRUCTION` plans a large change as independent units. After you approve, it runs them in parallel subagents, each in its own git worktree.
@@ -592,6 +592,17 @@ oasis -w fix-login "fix the login redirect"
 ~~~
 
 `--bare` starts a minimal session for scripts. It skips project instructions (AGENTS.md, CLAUDE.md, OASIS.md), skills, hooks, MCP servers, and auto memory. Only the model, the built-in tools, and your permission rules remain.
+
+`--safe-mode` (or `CLAUDE_CODE_SAFE_MODE=1`) is for troubleshooting a broken setup. Like `--bare` it skips project instructions, skills, plugins, hooks, MCP servers, auto memory and the status line, and it also skips custom slash commands, output styles, custom themes and `keybindings.json`. Your model, built-in tools and permission rules still work.
+
+`--restricted` is for evaluation harnesses on shared machines. It removes the tools that run commands or reach the network (`run_command`, `powershell`, `monitor`, background-command tools, `fetch_url`, `web_search`, the browser, installers, `git_push`, `create_pull_request`) unless you name them one by one in `--tools`. It loads only managed settings and `--settings`, disables `!` shell commands and `--exec`, and refuses `bypassPermissions`, `--dangerously-skip-permissions` and `--yes`.
+
+Other session flags:
+
+- `--permission-prompts none` denies every permission prompt instead of asking. Use it in unattended `-p` runs where nobody can answer; the denials show up in `permission_denials`. The default, `host`, sends prompts to the SDK host or `--permission-prompt-tool`.
+- `--autocompact 70` (percent of the window), `--autocompact 500k` (a token count), `--autocompact off` or `--autocompact auto` sets the auto-compaction point for this session only.
+- `--append-subagent-system-prompt TEXT` and `--append-subagent-system-prompt-file PATH` add text to every subagent's system prompt, but not the main agent's.
+- `--allow-dangerously-skip-permissions` adds `bypassPermissions` to the Shift+Tab mode cycle without starting in it. `--dangerously-skip-permissions` also enables it.
 
 `--json-schema` takes a JSON Schema (inline or `@file.json`). Oasis asks the model for JSON that matches it, validates the reply and retries up to twice. With `--output-format json` the result is in `structured_output`; in text mode only the JSON is printed. If it still fails, the result has subtype `error_max_structured_output_retries`.
 
@@ -846,3 +857,15 @@ The resulting terminal id can be used with:
 Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
 
 The native `node-pty` component is an optional dependency. See [Install OASIS](INSTALL.md) for supported platforms and native build prerequisites. The CLI session API does not yet mean the browser workspace has a full terminal emulator.
+
+## Clearing local data
+
+`oasis purge [PATH]` deletes all local Oasis state for one project: saved transcripts (with their task lists and checkpoints), debug logs for those sessions, background-session entries and logs, the project's prompt-history lines, and its workspace-trust entry. Without a path it opens a picker of the projects that have saved state. Options:
+
+- `--dry-run` lists what would go and deletes nothing.
+- `-y` skips the confirmation.
+- `-i` asks about each item.
+- `--all` purges every project.
+- `--memory` also deletes the project's auto memory, which is kept by default.
+
+Running background sessions are skipped.

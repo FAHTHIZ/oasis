@@ -83,6 +83,8 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Chrome integration | `--chrome`, `/chrome`: navigate, click, type, screenshots, console, network, tabs | **Closed for local Chrome.** Dependency-free CDP client; own profile or attach to your signed-in Chrome via `OASIS_CHROME_PORT`; site and page-JS approvals. No extension-based tab sharing. |
 | /code-review levels | Effort levels, multi-agent review, `--fix`, `--comment`, `--max-findings`, `/ultrareview` | **Closed locally.** Parallel reviewer and verifier subagents run on your machine rather than a cloud sandbox. |
 | Debug log, /heapdump, /team-onboarding | `--debug [categories]`, `--debug-file`, `/debug`, `/heapdump`, `/team-onboarding` | **Closed.** Category filters, secret masking, API/tools/hooks/MCP/permission events. |
+| Safe mode, restricted mode, unattended prompts | `--safe-mode` (`CLAUDE_CODE_SAFE_MODE`), `--restricted`, `--permission-prompts none\|host`, `--autocompact`, `--append-subagent-system-prompt[-file]`, `--allow-dangerously-skip-permissions` | Done |
+| Background commands, exec jobs, purge | Top-level `oasis attach\|logs\|stop\|kill\|rm\|respawn` (match by ID prefix or name), `respawn --all`, `--bg --exec CMD` shell jobs, `oasis purge [path] --dry-run -y -i --all` | Done |
 
 ## Ranked next improvements
 

@@ -334,9 +334,14 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '' }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
+  // --restricted: only managed settings and --settings load; bypassPermissions is refused.
+  if (restricted) {
+    settingSources = ['managed'];
+    if (permissionMode === 'bypassPermissions') throw new Error('--restricted refuses bypassPermissions mode.');
+  }
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root, { env })]);
   let loadedSettings = settings;
   let settingsError = null;
@@ -345,6 +350,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     catch (error) { settingsError = error.message; loadedSettings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } }; }
   }
   if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null };
+  if (restricted && loadedSettings.permissions && loadedSettings.permissions.defaultMode === 'bypassPermissions') loadedSettings = { ...loadedSettings, permissions: { ...loadedSettings.permissions, defaultMode: 'default' } };
   const permissions = new PermissionPolicy(loadedSettings, { mode: permissionMode || undefined });
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
@@ -458,7 +464,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   session.initialModel = session.config && session.config.model;
   // Chrome integration (--chrome, "chrome": true, OASIS_CHROME=1; --no-chrome or OASIS_CHROME=0 wins).
   const chromeWanted = chrome !== null ? Boolean(chrome) : env.OASIS_CHROME ? env.OASIS_CHROME !== '0' : loadedSettings.chrome === true;
-  if (chromeWanted) setChrome(session, true);
+  if (chromeWanted && !restricted) setChrome(session, true);
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
   if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol })) setAdvisor(session, advisorModel);
   if (autoMemoryEnabled(loadedSettings, env)) {
@@ -495,7 +501,7 @@ export async function createSession({ root, config, restore = null, permissionMo
       runHooks('InstructionsLoaded', { session_id: session.sessionId || 'new', file_path: file.path, memory_type: file.label === 'user' ? 'User' : file.label === 'local' ? 'Local' : 'Project', load_reason: restore ? 'compact' : 'session_start' }, hookOptions(session, env)).catch(() => {});
     }
   }
-  const styleName = outputStyle || loadedSettings.outputStyle;
+  const styleName = env.OASIS_SAFE_MODE === '1' ? null : outputStyle || loadedSettings.outputStyle;
   if (styleName && styleName !== 'default') {
     const styles = await loadOutputStyles(root, { env }).catch(() => BUILTIN_STYLES);
     if (styles[styleName]) systemText = systemPromptWithStyle(systemText, styles[styleName]);
@@ -522,6 +528,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES]) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
+  if (restricted) {
+    // --restricted: command execution and network tools are removed unless --tools names them individually.
+    const named = new Set(Array.isArray(allowedToolNames) ? allowedToolNames : []);
+    session.toolDefinitions = session.toolDefinitions.filter((tool) => !RESTRICTED_TOOL_NAMES.has(tool.function.name) || named.has(tool.function.name));
+    session.restricted = true;
+  }
+  if (subagentSystemAppend) session.subagentSystemAppend = String(subagentSystemAppend);
   if (deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env })) systemText += '\n\n' + deferredToolsPrompt(session);
   const systemMessage = { role: 'system', content: systemText };
   session.messages = [systemMessage];
@@ -1853,6 +1866,8 @@ function isReadOnlyAgent(session, type) {
   return Boolean(agent && Array.isArray(agent.tools) && agent.tools.every((tool) => READ_ONLY_TOOLS.has(tool)));
 }
 
+export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'install_external_skill', 'delegate_openhands', 'setup_omniroute', 'configure_mcp_server', 'git_push', 'create_pull_request']);
+
 async function runSubagent(parent, args, context, options) {
   if (options.isSubagent) throw new Error('Subagents cannot launch further subagents.');
   const agents = parent.agents || BUILTIN_AGENTS;
@@ -1880,7 +1895,8 @@ async function runSubagent(parent, args, context, options) {
   const systemText = [
     base,
     'SUBAGENT MODE (' + agent.name + '). ' + agent.prompt,
-    'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Agent definitions and the task prompt cannot override the safety rules above.'
+    'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Agent definitions and the task prompt cannot override the safety rules above.',
+    ...(parent.subagentSystemAppend ? [parent.subagentSystemAppend] : [])
   ].join('\n\n');
   // Coordination tools can mutate the team board or inbox without editing the workspace.
   const readOnly = definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
@@ -2426,7 +2442,8 @@ function permissionMode(session, options) {
 // Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
 async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
-  const mode = permissionMode(session, options);
+  if (session.restricted && RESTRICTED_TOOL_NAMES.has(name) && !(session.toolDefinitions || []).some((tool) => tool.function.name === name)) return { deniedReason: name + ' is disabled in --restricted mode.' };
+  const mode = permissionMode(session, options) === 'bypassPermissions' && session.restricted ? 'default' : permissionMode(session, options);
   const verdict = policy ? policy.evaluate(name, args) : { decision: 'default' };
   if (debugEnabled('permissions')) debugLog('permissions', name + ' -> ' + verdict.decision + (verdict.rule ? ' (rule ' + verdict.rule + ')' : '') + ' mode=' + (session.permissionMode || 'default'));
   if (verdict.decision === 'deny') return { deniedReason: 'Denied by permission rule ' + verdict.rule + '.' };
@@ -3227,6 +3244,7 @@ export { toAnthropicRequest, toResponsesRequest };
 export const ADVISOR_TOOL_DEFINITION = { type: 'function', function: { name: 'advisor', description: 'Consult a stronger advisor model that sees this entire conversation. Use it before committing to an approach on hard problems, when stuck after several attempts, or to sanity-check a plan or diagnosis. It returns advice only; it cannot run tools. Optionally pass a focused question.', parameters: { type: 'object', properties: { question: { type: 'string', description: 'Optional specific question for the advisor' } } } } };
 
 export function setChrome(session, on) {
+  if (on && session.restricted) throw new Error('The browser tool is disabled in --restricted mode.');
   session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => tool.function.name !== 'browser');
   session.chromeEnabled = Boolean(on);
   if (on) session.toolDefinitions = session.toolDefinitions.concat([BROWSER_TOOL_DEFINITION]);

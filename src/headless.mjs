@@ -135,7 +135,8 @@ export async function runHeadless(options) {
     inputStream = null,
     includePartial = false,
     replayUser = false,
-    permissionPromptTool = null
+    permissionPromptTool = null,
+    permissionPrompts = null
   } = options;
   if (!OUTPUT_FORMATS.includes(outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
   const started = Date.now();
@@ -179,6 +180,8 @@ export async function runHeadless(options) {
       ...(signal ? { signal } : {}),
       approval: async (message, forceInteractive = false, meta = {}) => {
         if (autoApprove && !forceInteractive) return true;
+        // --permission-prompts none: never ask anyone; anything not pre-approved is denied.
+        if (permissionPrompts === 'none') { denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) }); return false; }
         if (permissionPromptTool === 'stdio' && session && session.ide && meta && meta.tool) {
           // Edits open in the IDE's native diff view; Accept/Reject there answers the approval.
           const { reviewEditInIde } = await import('./ide.mjs');
