@@ -1,0 +1,177 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
+import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
+import { runBuiltinCommand } from '../src/slash.mjs';
+
+const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
+const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+const text = (messages) => messages.map((m) => typeof m.content === 'string' ? m.content : '').join('\n');
+
+// A model server: `parent` and `child` are functions (payload, index) => message, possibly async.
+async function modelServer(t, { parent, child }) {
+  const parentRequests = [];
+  const childRequests = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const payload = JSON.parse(body);
+    const isChild = payload.messages[0].content.includes('SUBAGENT MODE');
+    const list = isChild ? childRequests : parentRequests;
+    list.push(payload);
+    const message = await (isChild ? child : parent)(payload, list.length);
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', ...message } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 8, maxCommandSeconds: 10 };
+  return { config, parentRequests, childRequests };
+}
+
+function gate() { let open; const promise = new Promise((resolve) => { open = resolve; }); return { promise, open }; }
+async function until(check, ms = 5000) {
+  const start = Date.now();
+  while (!check()) { if (Date.now() - start > ms) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 10)); }
+}
+
+test('background task returns at once, reports back on the next turn, and can be resumed with context', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const release = gate();
+  let parentTurn = 0;
+  const { config, parentRequests, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && last.content.startsWith('start')) return { content: null, tool_calls: [call('t1', 'task', { description: 'audit deps', prompt: 'audit the dependencies', subagent_type: 'explore', run_in_background: true })] };
+      if (last.role === 'user' && last.content.startsWith('follow')) return { content: null, tool_calls: [call('s1', 'send_message', { id: 'agent_1', message: 'now check licenses too' })] };
+      parentTurn++;
+      return { content: 'parent reply ' + parentTurn };
+    },
+    child: async (payload) => {
+      if (text(payload.messages).includes('check licenses')) return { content: 'LICENSES OK (I remember: audited deps)' };
+      await release.promise;
+      return { content: 'DEPS REPORT: 3 outdated' };
+    }
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  const notices = [];
+  session.onAgentNotice = (notice) => notices.push(notice);
+  const first = await runAgentTurn(session, 'start the audit');
+  assert.equal(first.text, 'parent reply 1');
+  const launched = parentRequests[1].messages.find((m) => m.role === 'tool');
+  assert.match(launched.content, /"id":"agent_1"/);
+  assert.match(launched.content, /"status":"running"/);
+  const listing = await runBuiltinCommand('tasks', '', { root, session });
+  assert.match(listing.output, /agent_1\s+running\s+bg explore: audit deps/);
+  release.open();
+  await until(() => notices.length === 1);
+  assert.match(notices[0], /agent_1.*finished/);
+  const detail = await runBuiltinCommand('tasks', 'agent_1', { root, session });
+  assert.match(detail.output, /DEPS REPORT/);
+  await runAgentTurn(session, 'anything new?');
+  const turnTwo = parentRequests[parentRequests.length - 1];
+  const userText = turnTwo.messages.filter((m) => m.role === 'user').pop().content;
+  assert.match(userText, /Background agent agent_1 \("audit deps"\) finished/);
+  assert.match(userText, /DEPS REPORT: 3 outdated/);
+  // Resume the finished agent: it keeps its earlier conversation.
+  await runAgentTurn(session, 'follow up with the agent');
+  await until(() => session.agentTasks.agents.get('agent_1').status === 'completed' && session.agentTasks.agents.get('agent_1').runs === 2);
+  const resumed = childRequests[childRequests.length - 1];
+  assert.match(text(resumed.messages), /DEPS REPORT: 3 outdated/, 'previous context is kept');
+  assert.match(text(resumed.messages), /now check licenses too/);
+  assert.equal(session.agentTasks.agents.get('agent_1').report, 'LICENSES OK (I remember: audited deps)');
+});
+
+test('send_message steers a running agent, agent_status waits, and agent_stop cancels', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'a.txt'), 'hello');
+  const firstStep = gate();
+  const hang = gate();
+  const { config, parentRequests, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && last.content.startsWith('go')) return { content: null, tool_calls: [
+        call('t1', 'task', { description: 'reader', prompt: 'read a.txt', subagent_type: 'explore', run_in_background: true }),
+        call('t2', 'task', { description: 'sleeper', prompt: 'sleep forever', subagent_type: 'explore', run_in_background: true })
+      ] };
+      if (last.role === 'tool' && last.content.includes('"delivered"')) return { content: null, tool_calls: [call('w1', 'agent_status', { id: 'agent_1', wait_seconds: 20 })] };
+      if (last.role === 'tool' && last.content.includes('"report"')) return { content: null, tool_calls: [call('x1', 'agent_stop', { id: 'agent_2' })] };
+      if (last.role === 'tool' && last.content.includes('stopping')) return { content: 'all done' };
+      if (last.role === 'user' && last.content.startsWith('steer')) return { content: null, tool_calls: [call('m1', 'send_message', { id: 'agent_1', message: 'ALSO COUNT THE LETTERS' })] };
+      return { content: 'ok' };
+    },
+    child: async (payload) => {
+      const all = text(payload.messages);
+      if (all.includes('sleep forever')) { await hang.promise; return { content: 'never' }; }
+      if (!payload.messages.some((m) => m.role === 'tool')) { await firstStep.promise; return { content: null, tool_calls: [call('r1', 'read_file', { path: 'a.txt' })] }; }
+      return { content: all.includes('ALSO COUNT THE LETTERS') ? 'read hello, 5 letters' : 'read hello' };
+    }
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => { hang.open(); closeSession(session); });
+  await runAgentTurn(session, 'go');
+  assert.equal(session.agentTasks.agents.size, 2);
+  // While agent_1 is still on its first step, queue a message; it arrives at the next step.
+  const steering = runAgentTurn(session, 'steer agent one');
+  await until(() => parentRequests.some((p) => text(p.messages).includes('"delivered":"queued"')) || parentRequests.length > 6);
+  firstStep.open();
+  const final = await steering;
+  assert.equal(final.text, 'all done');
+  const agent1 = session.agentTasks.agents.get('agent_1');
+  assert.equal(agent1.status, 'completed');
+  assert.equal(agent1.report, 'read hello, 5 letters');
+  const stepTwo = childRequests.find((p) => text(p.messages).includes('ALSO COUNT THE LETTERS'));
+  assert.ok(stepTwo, 'child saw the steering message');
+  await until(() => session.agentTasks.agents.get('agent_2').status === 'cancelled');
+  // The finish notice for agent_1 was already read via agent_status, so it is not repeated.
+  await runAgentTurn(session, 'anything else');
+  const lastUser = parentRequests[parentRequests.length - 1].messages.filter((m) => m.role === 'user').pop().content;
+  assert.ok(!lastUser.includes('agent_1 ("reader") finished'), 'no duplicate notice for a report already read');
+  assert.ok(parentRequests.some((p) => /agent_2 \("sleeper"\) cancelled/.test(text(p.messages))), 'cancellation is reported to the parent');
+});
+
+test('background agents cannot prompt: unapproved actions are denied', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let prompts = 0;
+  const { config, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && last.content.startsWith('write')) return { content: null, tool_calls: [call('t1', 'task', { description: 'writer', prompt: 'write a file', run_in_background: true })] };
+      return { content: 'ok' };
+    },
+    child: (payload) => payload.messages.some((m) => m.role === 'tool')
+      ? { content: 'tried' }
+      : { content: null, tool_calls: [call('w1', 'run_command', { command: process.execPath, args: ['-e', 'require("fs").writeFileSync("made.txt","x")'] })] }
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'write something', { approval: async () => { prompts++; return true; } });
+  await until(() => session.agentTasks.agents.get('agent_1').status !== 'running');
+  assert.equal(prompts, 0, 'the user was never prompted');
+  await assert.rejects(access(path.join(root, 'made.txt')));
+  const toolResult = childRequests[1].messages.find((m) => m.role === 'tool').content;
+  assert.match(toolResult, /not approved|denied/i);
+});
+
+test('subagents cannot manage other agents', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, childRequests } = await modelServer(t, {
+    parent: (payload) => payload.messages.some((m) => m.role === 'tool') ? { content: 'done' } : { content: null, tool_calls: [call('t1', 'task', { description: 'x', prompt: 'do x' })] },
+    child: () => ({ content: 'child done' })
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  assert.ok(session.toolDefinitions.some((d) => d.function.name === 'send_message'));
+  await runAgentTurn(session, 'delegate');
+  const names = childRequests[0].tools.map((tool) => tool.function.name);
+  for (const name of ['task', 'agent_status', 'send_message', 'agent_stop']) assert.ok(!names.includes(name), name);
+  assert.equal(session.agentTasks.agents.get('agent_1').status, 'completed', 'foreground agents are registered too');
+});

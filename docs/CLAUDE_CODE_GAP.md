@@ -18,7 +18,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 | Web | `fetch_url`, `web_search` (keyless or Tavily/Brave/SearXNG) |
 | Planning | plan mode, `exit_plan_mode`, `todo_write` checklists persisted with sessions |
 | Questions | `ask_user_question` with multiple choice in the terminal and browser |
-| Subagents | `task` tool, custom agents from `.claude/agents` and `.oasis/agents`, per-agent tools and model, worktree isolation |
+| Subagents | background agents (`run_in_background`, `agent_status`, `send_message` steering and resume, `agent_stop`, `/tasks`), `task` tool, custom agents from `.claude/agents` and `.oasis/agents`, per-agent tools and model, worktree isolation |
 | Permissions | default / acceptEdits / plan / bypassPermissions modes, Claude Code rule syntax (`Bash(npm test:*)`, `Edit(src/**)`), deny > ask > allow |
 | Sandbox | bubblewrap (Linux), sandbox-exec (macOS), secret env scrubbing |
 | Hooks | PreToolUse, PostToolUse, UserPromptSubmit, Stop, SubagentStop, SessionStart, SessionEnd, PreCompact, Notification (command hooks, exit-code 2 blocking, JSON decisions) |
@@ -35,7 +35,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 ### P1 — agent power (biggest impact on real coding tasks)
 
 1. ~~**LSP tool.**~~ Done: the `lsp` tool.
-2. **Background agents and messaging.** Claude Code can run subagents in the background, list them (`/tasks`), message them, and attach to them. In Oasis, `task` blocks until it finishes. Plan: `run_in_background` on `task`, plus `agent_status`, `send_message`, a `/tasks` command, and a `Monitor`-style event stream.
+2. ~~**Background agents and messaging.**~~ Done: `run_in_background`, `agent_status`, `send_message`, `agent_stop`, `/tasks`.
 3. ~~**Git and PR workflow.**~~ Done: `git_log`, `git_commit`, `git_branch`, `git_push`, `create_pull_request`, `/commit`, `/pr`.
 4. **MCP depth.** Missing: resources (`resources/list`/`read`, `@server:resource` mentions), prompts as slash commands (`/mcp__server__prompt`), OAuth for remote servers, and `oasis mcp serve`, which exposes Oasis tools to other clients.
 5. **Skill and command frontmatter.** Missing: `context: fork` (run a skill in a subagent), inline `` !`cmd` `` shell output in commands, `model`/`effort` per command, and hot reload.
@@ -66,7 +66,7 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 
 1. ~~LSP tool~~ (done)
 2. ~~Git commit/branch/PR tools and `/pr`~~ (done)
-3. Background subagents with `/tasks` and `send_message`
+3. ~~Background subagents with `/tasks` and `send_message`~~ (done)
 4. Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`)
 5. MCP resources, prompts, and OAuth
 6. PDF reading, `--json-schema`, `--worktree`, `--permission-prompts none`

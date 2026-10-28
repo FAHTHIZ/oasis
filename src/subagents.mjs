@@ -124,11 +124,12 @@ export function taskToolDefinition(agents) {
   const list = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + agent.description + (agent.tools ? ' (tools: ' + agent.tools.join(', ') + ')' : '')).join('\n');
   return { type: 'function', function: {
     name: 'task',
-    description: 'Launch a subagent to handle a complex, multi-step task autonomously in its own context window. The subagent returns one final report; it cannot see this conversation, so give it a complete, self-contained prompt. Launch several task calls in ONE response to run them in parallel (up to ' + MAX_PARALLEL_SUBAGENTS + ' at once) when the work is independent.\nAvailable agent types:\n' + list,
+    description: 'Launch a subagent to handle a complex, multi-step task autonomously in its own context window. The subagent returns one final report; it cannot see this conversation, so give it a complete, self-contained prompt. Launch several task calls in ONE response to run them in parallel (up to ' + MAX_PARALLEL_SUBAGENTS + ' at once) when the work is independent. Set run_in_background for long jobs you do not need to wait on; every task returns an id that send_message can use to follow up with the same agent later.\nAvailable agent types:\n' + list,
     parameters: { type: 'object', properties: {
       description: { type: 'string', description: 'Short (3-5 word) label for the task' },
       prompt: { type: 'string', description: 'Complete instructions for the subagent, including what to return' },
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' },
+      run_in_background: { type: 'boolean', description: 'Start the agent and return its id immediately, so you can keep working (or launch more agents) while it runs. You are notified with its report when it finishes. In the background it cannot ask for approval: actions not already allowed by permission rules are denied, so prefer read-only agents or worktree isolation.' },
       isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' }
     }, required: ['description', 'prompt'] }
   } };

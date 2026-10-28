@@ -39,6 +39,7 @@ export const BUILTIN_COMMANDS = {
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for bugs (/review [PR number | git ref])',
+  tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks stop ID)',
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
   diagnostics: 'Run type checkers and linters, then fix errors (/diagnostics [paths])',
@@ -228,6 +229,38 @@ export async function runBuiltinCommand(name, argument, state) {
       const pick = saved.find((item) => item.id === argument) || (/^\d{1,3}$/.test(argument) ? saved[Number(argument) - 1] : null) || saved.find((item) => item.id.startsWith(argument));
       if (!pick) return { output: 'No saved session matches ' + argument + '. Run /resume to list them.' };
       return { output: 'Resuming session ' + pick.id + ' on your next message.', resume: pick.id };
+    }
+    case 'tasks': {
+      const { listAgents, getAgent, stopAgent, summarizeAgent } = await import('./agent-tasks.mjs');
+      const words = argument ? argument.split(/\s+/) : [];
+      if (session && words[0] === 'stop' && words[1]) {
+        if (session.agentTasks && session.agentTasks.agents.has(words[1])) return { output: stopAgent(session, { id: words[1] }).message };
+        const proc = session.background && session.background.get(words[1]);
+        if (proc) {
+          const { killAllBackground } = await import('./power-tools.mjs');
+          killAllBackground(new Map([[words[1], proc]]));
+          return { output: 'Stopped background process ' + words[1] + '.' };
+        }
+        return { output: 'No agent or process with id ' + words[1] + '.' };
+      }
+      if (session && words[0] && session.agentTasks && session.agentTasks.agents.has(words[0])) {
+        const info = summarizeAgent(getAgent(session, words[0]), { full: true });
+        return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls)', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
+      }
+      const agents = session ? listAgents(session) : [];
+      const procs = session && session.background ? [...session.background.values()] : [];
+      if (!agents.length && !procs.length) return { output: 'No subagents or background processes in this session.' };
+      const lines = [];
+      if (agents.length) {
+        lines.push('Agents:');
+        for (const agent of agents) lines.push('  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')');
+      }
+      if (procs.length) {
+        lines.push('Processes:');
+        for (const entry of procs) lines.push('  ' + entry.id + '  ' + entry.status + (entry.exitCode !== null ? ' (exit ' + entry.exitCode + ')' : '') + '  ' + entry.command);
+      }
+      lines.push('Details: /tasks ID   Stop: /tasks stop ID');
+      return { output: lines.join('\n') };
     }
     case 'bashes': {
       const list = session && session.background ? [...session.background.values()] : [];
