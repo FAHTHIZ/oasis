@@ -922,8 +922,8 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'fetch_url', 'list_skills', 'load_skill']);
-const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'list_skills', 'load_skill', 'command_output', 'list_background']);
+const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 30;
@@ -1275,7 +1275,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
             'Outstanding items: ' + issues.join('; ') + '.',
             'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
-          ].join('\\n')
+          ].join('\n')
         });
         continue;
       }
@@ -1385,7 +1385,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
         }
       }
       if (result && result.path && (
-        name === 'edit_file' && result.changed === true ||
+        (name === 'edit_file' || name === 'multi_edit') && result.changed === true ||
         name === 'write_file' && typeof result.writtenBytes === 'number' ||
         name === 'delete_file' && result.deleted === true
       )) {
@@ -1418,7 +1418,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   }
 
   const pendingVerification = verificationIssues(verification);
-  session.messages.push({ role: 'user', content: 'The tool-step budget has been reached. Give a concise and honest report of what is completed, which checks ran, and anything unfinished. Do not request more tools.' + (pendingVerification.length ? '\\nVerification still incomplete: ' + pendingVerification.join('; ') : '') });
+  session.messages.push({ role: 'user', content: 'The tool-step budget has been reached. Give a concise and honest report of what is completed, which checks ran, and anything unfinished. Do not request more tools.' + (pendingVerification.length ? '\nVerification still incomplete: ' + pendingVerification.join('; ') : '') });
   let final = { content: '' };
   try {
     final = await requestCompletion(session, { noTools: true });
@@ -1431,7 +1431,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   }
   const baseFinalText = typeof final.content === 'string' ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
   const finalIssues = verificationIssues(verification);
-  const finalText = finalIssues.length ? baseFinalText + '\\n\\nVerification incomplete: ' + finalIssues.join('; ') + '.' : baseFinalText;
+  const finalText = finalIssues.length ? baseFinalText + '\n\nVerification incomplete: ' + finalIssues.join('; ') + '.' : baseFinalText;
   const finalMessage = { role: 'assistant', content: finalText };
   if (Array.isArray(final.responseItems)) finalMessage.responseItems = final.responseItems;
   session.messages.push(finalMessage);

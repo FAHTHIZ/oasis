@@ -152,6 +152,25 @@ Oasis is a local developer tool, not a security sandbox.
 
 These guards reduce risk but cannot guarantee that every third-party package or project script is safe. Code executed by the OS still runs with the user's operating-system permissions. Review the requested operation, keep backups, and use an isolated development environment for untrusted code.
 
+## Command safety and OS sandbox
+
+The general `run_command` tool runs one executable with an argument array and no shell. Beyond the executable denylist, Oasis now unwraps wrapper programs (`env`, `xargs`, `timeout`, `nice`, `nohup`, ...) and checks the program they launch, so `env rm` or `xargs rm` are blocked like `rm`. Commands that run inline code or arbitrary programs (`node -e`, `python -c`, `perl -e`, `find -exec/-delete`, `awk 'system()'`, `git -c`, `curl -o`, ...) are classified as **high risk**: they always need an interactive answer, even with `--yes`, unless an explicit permission rule allows them.
+
+Enable the OS sandbox to confine commands to the workspace:
+
+~~~json
+// ~/.config/oasis/settings.json
+{ "sandbox": { "enabled": true, "network": false } }
+~~~
+
+On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is read-only, the workspace is writable, `/tmp` is private, and the network is unshared unless `network` is true. On macOS it uses `sandbox-exec`. Inside the sandbox, normal (not high-risk) commands run without a prompt; set `autoAllowCommands: false` to keep prompting. `OASIS_SANDBOX=1` enables it for one run.
+
+## Extra agent tools
+
+- `grep`: regex search backed by ripgrep (JS fallback) with globs, context lines, and `content` / `files_with_matches` / `count` modes. Secret files are never returned.
+- `multi_edit`: several exact-string edits to one file, applied atomically.
+- Background processes: `run_command` with `run_in_background: true` starts dev servers or watchers; `command_output`, `kill_command`, and `list_background` manage them.
+
 ## Useful commands
 
 | Command | Purpose |
