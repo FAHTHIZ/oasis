@@ -334,8 +334,8 @@ export async function runBuiltinCommand(name, argument, state) {
       const { fileURLToPath } = await import('node:url');
       const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
       const log = await runGitTool('git_log', appRoot, { limit: Number.parseInt(argument, 10) || 15 }, { env }).catch(() => null);
-      if (!log || !log.ok || !log.commits.length) return { output: 'Release notes: https://github.com/gtxnrg-ship-it/Oasis/commits/main (this install has no Git history). Update with oasis update.' };
-      return { output: ['Recent Oasis changes:', ...log.commits.map((c) => '  ' + c.date + '  ' + c.subject), 'Full history: https://github.com/gtxnrg-ship-it/Oasis/commits/main'].join('\n') };
+      if (!log || !log.ok || !log.commits.length) return { output: 'Release notes: https://github.com/FAHTHIZ/oasis/commits/main (this install has no Git history). Update with oasis update.' };
+      return { output: ['Recent Oasis changes:', ...log.commits.map((c) => '  ' + c.date + '  ' + c.subject), 'Full history: https://github.com/FAHTHIZ/oasis/commits/main'].join('\n') };
     }
     case 'loop': {
       const parsed = parseLoopArgs(argument);

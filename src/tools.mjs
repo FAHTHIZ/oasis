@@ -1147,7 +1147,7 @@ async function fetchPublicUrl(raw) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(url, { method: 'GET', redirect: 'manual', signal: controller.signal, headers: { 'user-agent': 'OasisOSS/0.2 (+https://github.com/gtxnrg-ship-it/Oasis)', accept: 'text/plain,text/html,application/json,text/markdown,*/*;q=0.2' } });
+    const response = await fetch(url, { method: 'GET', redirect: 'manual', signal: controller.signal, headers: { 'user-agent': 'OasisOSS/0.2 (+https://github.com/FAHTHIZ/oasis)', accept: 'text/plain,text/html,application/json,text/markdown,*/*;q=0.2' } });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       return { url: url.toString(), status: response.status, redirect: location ? new URL(location, url).toString() : null, message: 'Redirects are not followed automatically. Validate and fetch the destination separately if appropriate.' };

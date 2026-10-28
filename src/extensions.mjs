@@ -52,7 +52,7 @@ async function getResponseText(fetchImpl, url, options = {}) {
       redirect: 'manual',
       signal: timer.signal,
       headers: {
-        'user-agent': 'OasisOSS/0.3 (+https://github.com/gtxnrg-ship-it/oasis)',
+        'user-agent': 'OasisOSS/0.3 (+https://github.com/FAHTHIZ/oasis)',
         accept: options.json ? 'application/vnd.github+json' : 'text/plain, text/markdown, */*;q=0.1'
       }
     });

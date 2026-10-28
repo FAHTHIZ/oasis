@@ -9,7 +9,7 @@ For the project overview and quickest start, see the [main README](../README.md)
 Requirements: Node.js 22+ and npm. Git is required for installing directly from this repository.
 
 ~~~bash
-npm install -g git+https://github.com/gtxnrg-ship-it/oasis.git#main
+npm install -g git+https://github.com/FAHTHIZ/oasis.git#main
 oasis
 ~~~
 

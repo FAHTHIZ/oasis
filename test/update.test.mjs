@@ -7,7 +7,7 @@ const SHA_B = 'b'.repeat(40);
 
 test('latestMainCommit reads the GitHub commit API', async () => {
   const latest = await latestMainCommit({ fetch: async (url) => {
-    assert.match(url, /repos\/gtxnrg-ship-it\/oasis\/commits\/main$/);
+    assert.match(url, /repos\/FAHTHIZ\/oasis\/commits\/main$/);
     return { ok: true, json: async () => ({ sha: SHA_B, commit: { message: 'Add worktrees\n\nbody', committer: { date: '2026-10-28T00:00:00Z' } } }) };
   } });
   assert.deepEqual(latest, { sha: SHA_B, message: 'Add worktrees', date: '2026-10-28T00:00:00Z' });
@@ -16,7 +16,7 @@ test('latestMainCommit reads the GitHub commit API', async () => {
 
 test('npm installs read the commit npm recorded; plans pick npm or git', async () => {
   const exec = async (cmd) => {
-    if (cmd === 'npm') return JSON.stringify({ dependencies: { 'oasis-oss': { resolved: 'git+ssh://git@github.com/gtxnrg-ship-it/Oasis.git#' + SHA_A } } });
+    if (cmd === 'npm') return JSON.stringify({ dependencies: { 'oasis-oss': { resolved: 'git+ssh://git@github.com/FAHTHIZ/oasis.git#' + SHA_A } } });
     throw new Error('no');
   };
   const installed = await installedVersion('/nonexistent-oasis-root', { exec });

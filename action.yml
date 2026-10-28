@@ -1,6 +1,6 @@
 name: Oasis coding agent
 description: Mention @oasis on an issue or pull request and Oasis makes the change, opens a PR, and replies in the thread. Works with any model provider.
-author: gtxnrg-ship-it
+author: FAHTHIZ
 branding:
   icon: terminal
   color: green

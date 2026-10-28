@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gtxnrg-ship-it/oasis@main
+      - uses: FAHTHIZ/oasis@main
         with:
           api_key: ${{ secrets.OASIS_API_KEY }}
           protocol: anthropic            # or openai-responses / openai-compatible

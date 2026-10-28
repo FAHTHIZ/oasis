@@ -39,7 +39,7 @@ const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const INSTALL_URL = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
+const INSTALL_URL = 'git+https://github.com/FAHTHIZ/oasis.git#main';
 
 function printHelp() {
   stdout.write([

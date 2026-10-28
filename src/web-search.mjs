@@ -115,7 +115,7 @@ export async function webSearch(args = {}, options = {}) {
     const data = await response.json();
     results = (data.results || []).map((item) => ({ title: item.title, url: item.url, snippet: item.content }));
   } else {
-    const headers = { 'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/0.2; +https://github.com/gtxnrg-ship-it/oasis)', accept: 'text/html' };
+    const headers = { 'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/0.2; +https://github.com/FAHTHIZ/oasis)', accept: 'text/html' };
     const response = await request('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(effectiveQuery), { headers }, fetchImpl);
     const html = await response.text();
     results = parseDuckDuckGoHtml(html);

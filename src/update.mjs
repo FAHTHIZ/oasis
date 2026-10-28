@@ -7,8 +7,8 @@ import { promisify } from 'node:util';
 import { access } from 'node:fs/promises';
 
 const execFileAsync = promisify(execFile);
-export const UPDATE_REPO = 'gtxnrg-ship-it/oasis';
-export const INSTALL_SPEC = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
+export const UPDATE_REPO = 'FAHTHIZ/oasis';
+export const INSTALL_SPEC = 'git+https://github.com/FAHTHIZ/oasis.git#main';
 
 async function run(command, args, options = {}) {
   const { stdout } = await execFileAsync(command, args, { timeout: options.timeout || 30000, maxBuffer: 8 * 1024 * 1024, cwd: options.cwd, env: options.env || process.env });
