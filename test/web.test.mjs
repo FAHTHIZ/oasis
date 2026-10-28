@@ -901,3 +901,59 @@ test('authenticated browser jobs can be cancelled while awaiting command approva
   assert.ok((snapshot.events || []).some((item) => item.type === 'cancel_requested'));
   assert.ok((snapshot.events || []).some((item) => item.type === 'cancelled'));
 });
+
+test('browser chat supports built-in slash commands, @file mentions, tool details, and session-wide "always allow"', async (t) => {
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root };
+  await writeFile(path.join(root, 'NOTES.md'), 'remember the purple flag');
+  const nodeVersion = toolCall('v1', 'run_command', { command: process.execPath, args: ['--version'], timeoutSeconds: 10 });
+  const { config, requests } = await scriptedModel(t, [nodeVersion, { content: 'Done once.' }, { ...nodeVersion, tool_calls: [{ ...nodeVersion.tool_calls[0], id: 'v2' }] }, { content: 'Done twice.' }]);
+  await saveConfig(config, { env });
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  async function start(message, sessionId) {
+    const response = await fetch(base + '/api/chat', { method: 'POST', headers, body: JSON.stringify({ message, ...(sessionId ? { sessionId } : {}) }) });
+    assert.equal(response.status, 202, await response.clone().text());
+    return await response.json();
+  }
+  async function waitFor(jobId, predicate) {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      const snapshot = await (await fetch(base + '/api/jobs/' + jobId + '?after=0', { headers })).json();
+      if (predicate(snapshot)) return snapshot;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error('timed out waiting for job ' + jobId + ' ' + JSON.stringify((await (await fetch(base + '/api/jobs/' + jobId + '?after=0', { headers })).json()).events.map((e) => e.type + ':' + JSON.stringify(e.data).slice(0, 200))));
+  }
+  const done = (snapshot) => ['completed', 'error', 'cancelled'].includes(snapshot.status);
+
+  const first = await start('Check node and read @NOTES.md');
+  let snapshot = await waitFor(first.jobId, (s) => s.events.some((e) => e.type === 'approval_required') || done(s));
+  const approval = snapshot.events.find((e) => e.type === 'approval_required');
+  assert.ok(approval, JSON.stringify(snapshot));
+  assert.ok(approval.data.suggestion, 'run_command approvals offer a session rule');
+  assert.ok(snapshot.events.some((e) => e.type === 'context_files' && e.data.files.includes('NOTES.md')));
+  assert.match(requests[0].messages.at(-1).content, /purple flag/);
+  const tool = snapshot.events.find((e) => e.type === 'tool_start');
+  assert.match(tool.data.detail, /--version/);
+  const answered = await fetch(base + '/api/jobs/' + first.jobId + '/approval', { method: 'POST', headers, body: JSON.stringify({ approvalId: approval.data.approvalId, approved: true, always: true }) });
+  assert.equal((await answered.json()).always, true);
+  snapshot = await waitFor(first.jobId, done);
+  assert.equal(snapshot.status, 'completed', snapshot.error);
+
+  const second = await start('Check node again', snapshot.result.sessionId);
+  snapshot = await waitFor(second.jobId, done);
+  assert.equal(snapshot.status, 'completed', snapshot.error);
+  assert.equal(snapshot.events.some((e) => e.type === 'approval_required'), false, 'the session rule skips the second approval');
+
+  const cost = await start('/cost', snapshot.result.sessionId);
+  snapshot = await waitFor(cost.jobId, done);
+  assert.equal(snapshot.status, 'completed', snapshot.error);
+  const output = snapshot.events.find((e) => e.type === 'command_output');
+  assert.equal(output.data.command, 'cost');
+  assert.match(output.data.text, /token/i);
+  assert.equal(requests.length, 4, '/cost must not call the model');
+});
