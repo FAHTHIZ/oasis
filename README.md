@@ -34,12 +34,12 @@ Open the local URL printed by Oasis, paste its one-time connection token into **
 For access from another device, prefer HTTPS with a certificate trusted by the phone and with a subject alternative name matching the computer's LAN IP. Oasis supports `oasis web --host 0.0.0.0 --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem`. Non-loopback plaintext requires an explicit `--allow-insecure-lan` opt-in, which exposes traffic and bearer tokens to network observation. Do not port-forward the bridge or expose it to the public Internet. Real Android/Termux and device-trust workflows still need additional platform testing.
 
 Supported provider shapes:
-Supported provider shapes:
+
 - Native OpenAI Responses API (`openai-responses`), recommended for current OpenAI reasoning models that require Responses for tool calling.
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
 - Native Anthropic Messages API endpoints. Select `anthropic` during `oasis setup`.
-- Local Ollama-style endpoints such as \`http://localhost:11434/v1\`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
-- Environment overrides: \`OASIS_BASE_URL\`, \`OASIS_MODEL\`, and \`OASIS_API_KEY\`. Provider-specific keys are recognised for matching presets: \`OPENAI_API_KEY\`, \`ANTHROPIC_API_KEY\`, \`OPENROUTER_API_KEY\`, \`GEMINI_API_KEY\` (or \`GOOGLE_API_KEY\`), and \`OLLAMA_API_KEY\` for Ollama Cloud. Run \`oasis doctor --test-provider\` to send a live inert-tool probe without executing the tool; a successful check confirms the model can call tools.
+- Local Ollama-style endpoints such as `http://localhost:11434/v1`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
+- Environment overrides: `OASIS_BASE_URL`, `OASIS_MODEL`, and `OASIS_API_KEY`. Provider-specific keys are recognised for matching presets: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), and `OLLAMA_API_KEY` for Ollama Cloud. Run `oasis doctor --test-provider` to send a live inert-tool probe without executing the tool; a successful check confirms the model can call tools.
 
 Oasis does not include an API subscription or a model. A provider must be reachable and the selected model must support tool calling.
 
@@ -69,8 +69,6 @@ oasis extensions mcp-import https://github.com/owner/repository
 oasis extensions update https://github.com/owner/repository --scope project
 oasis extensions list
 oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
-oasis extensions list
-oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
 ~~~
 
 A simple request such as `oasis install pnpm` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model. Once the model is live, requests such as “set up OmniRoute”, “add this Agent Skill”, or “install the code-quality plugin” can be made in the same chat; Oasis selects the appropriate setup tool and asks for approval before installing packages, switching providers, or importing external instructions. Provider credentials are never requested through chat messages. The Skills commands integrate the pinned Vercel Skills CLI on demand: `find` searches skills.sh, `inspect` lists a source's skills, and `add` installs only the chosen skill (or all skills when explicitly requested) into the universal `.agents/skills/` path or its global equivalent. Oasis loads those standard `SKILL.md` files in new sessions and treats them as external/untrusted instructions. The external CLI requires Node.js 22.20+; telemetry is disabled for Oasis-launched runs.
@@ -83,13 +81,14 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Chat-driven provider switching and OmniRoute bootstrap: the agent can request approved CLI installation/startup, probe the gateway with a non-executed tool call, and change the user-level provider only after verification succeeds. Free routes and provider quotas depend on the gateway and upstream service.
 - MCP stdio server integration configured either by CLI or normal chat; chat setup requires a dedicated manual approval, validates the server handshake before persistence, and exposes discovered tools in the current session. Every MCP tool call still requires its own approval by default.
 - Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
-- Command execution through an executable plus argument array, without shell expansion.
+- Command execution through an executable plus argument array, without shell expansion; an optional `run_shell` tool (enabled by settings or the OS sandbox) handles pipes and `&&`. Long-running commands can run in the background.
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
 - Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
 - A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
 - Bounded specialist reviews for code quality, security, architecture, and test strategy. Each reviewer is a separate read-only model session with no edit, command, package-install, or MCP tools; a per-task cap prevents unbounded delegation.
-- Project instructions from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and installed \`.oasis/skills/*/SKILL.md\` files.
+- Layered memory from user, project, and local files (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `OASIS.local.md`), plus installed `.oasis/skills/*/SKILL.md` files.
+- Claude Code-style permission rules and modes, lifecycle hooks, parallel subagents with custom agent files, custom slash commands, `@file` mentions, per-turn checkpoints with `/rewind`, and a headless `oasis -p` mode for scripts and CI.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
 - Optional workspace-scoped saved sessions that can be resumed or deleted; skill descriptions load first and full skill guides load only on demand.
 - Environment diagnosis, workspace initialization, provider configuration, and self-update.
@@ -139,14 +138,14 @@ Delegation always asks for explicit approval, even with --yes. The conversation 
 
 ## Safety model
 
-Oasis is a local developer tool, not a security sandbox.
+Oasis is a local developer tool. By default commands run with your normal user permissions; turn on the optional OS sandbox (see [Command safety and OS sandbox](#command-safety-and-os-sandbox)) to confine them to the workspace.
 
 - File tools are confined to the selected workspace and reject paths that escape via traversal or symlinks.
 - Common secret files, private keys, and credential files are excluded from file tools.
 - Existing files are snapshotted before the agent overwrites them. File deletions require a separate interactive approval and are snapshotted first.
 - Shell interpreters and several high-impact destructive executables are blocked by the general command tool. Commands and package installs require approval by default.
-- \`--yes\` (or \`OASIS_AUTO_APPROVE=1\`) auto-approves supported command/install actions. Do not use it for an untrusted repository; explicitly destructive operations remain blocked, and file deletion still requires interactive approval.
-- Child processes do not inherit common API keys, tokens, passwords, and credential variables by default. Use \`OASIS_COMMAND_ENV_ALLOWLIST\` only when a command genuinely needs a specifically named variable.
+- `--yes` (or `OASIS_AUTO_APPROVE=1`) auto-approves supported command/install actions. Do not use it for an untrusted repository; explicitly destructive operations remain blocked, and file deletion still requires interactive approval.
+- Child processes do not inherit common API keys, tokens, passwords, and credential variables by default. Use `OASIS_COMMAND_ENV_ALLOWLIST` only when a command genuinely needs a specifically named variable.
 - Web fetching rejects localhost/private-network targets, does not follow redirects automatically, and caps response size.
 - Project instructions, skill files, repository contents, and web pages are untrusted input and cannot override Oasis's safety rules.
 
@@ -295,23 +294,28 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 | Command | Purpose |
 |---|---|
-| \`oasis\` | Start an interactive coding session |
-| \`oasis "task"\` | Run a plain-English task |
-| \`oasis setup\` | Configure a provider |
-| \`oasis doctor\` | Check Node, package managers, and provider config |
-| \`oasis init\` | Create an \`OASIS.md\` project context file |
-| \`oasis plan \"task\"\` | Inspect the workspace and create a read-only implementation plan |
-| \`/plan task\` | Plan within an interactive session without file writes or commands |
+| `oasis` | Start an interactive coding session |
+| `oasis "task"` | Run a plain-English task |
+| `oasis setup` | Configure a provider |
+| `oasis doctor` | Check Node, package managers, and provider config |
+| `oasis init` | Create an `OASIS.md` project context file |
+| `oasis plan "task"` | Inspect the workspace and create a read-only implementation plan |
+| `/plan task` | Plan within an interactive session without file writes or commands |
+| `oasis -p "task"` | Run one task without prompts; add `--output-format json` for scripts |
+| `/help` | List built-in and custom slash commands inside a session |
+| `/rewind` | Undo the file changes and conversation of recent turns |
+| `oasis permissions` | Show permission rules, hooks, trust, and sandbox status |
+| `oasis trust` | Let this workspace's allow rules and hooks apply |
 | Git tools | Read-only status and diff inspection; whole-worktree diffs exclude common secret-bearing paths |
-| \`oasis install PACKAGE\` | Install a tool or package |
-| \`oasis skills list\` | List bundled and workspace skills |
-| \`oasis skills install NAME\` | Install a bundled skill into the workspace |
-| \`oasis backups\` | List recoverable file snapshots |
-| \`oasis restore BACKUP_ID\` | Restore a snapshot after confirmation |
-| \`oasis config\` | Show provider settings without revealing the key |
-| \`oasis update\` | Update the CLI from this public repository |
+| `oasis install PACKAGE` | Install a tool or package |
+| `oasis skills list` | List bundled and workspace skills |
+| `oasis skills install NAME` | Install a bundled skill into the workspace |
+| `oasis backups` | List recoverable file snapshots |
+| `oasis restore BACKUP_ID` | Restore a snapshot after confirmation |
+| `oasis config` | Show provider settings without revealing the key |
+| `oasis update` | Update the CLI from this public repository |
 
-Options: \`--workspace PATH\` chooses the workspace and \`--yes\` explicitly enables automatic approval for supported actions.
+Options: `--workspace PATH` chooses the workspace and `--yes` explicitly enables automatic approval for supported actions.
 
 ## Coding-agent evaluations (experimental)
 
@@ -330,13 +334,13 @@ Results are written as JSON under the user-level Oasis configuration directory i
 
 ## Run the browser workspace
 
-No build step or package installation is needed for the static workspace. Open \`index.html\` in a modern browser, or run:
+No build step or package installation is needed for the static workspace. Open `index.html` in a modern browser, or run:
 
 ~~~bash
 python -m http.server 8000
 ~~~
 
-Then open \`http://localhost:8000\`.
+Then open `http://localhost:8000`.
 
 ## Development and verification
 
@@ -354,10 +358,11 @@ A passing test suite is not a full security audit or a substitute for exercising
 ## Known limitations — not claimed as finished
 
 - The built-in capability catalog contains reviewed workflow-skill bundles only. Oasis can install supported external Agent Skills through the pinned Vercel Skills CLI and import reviewed Markdown prompts from GitHub extensions, but that is not a general remote plugin marketplace. Signed publisher manifests and fully native lifecycle compatibility are not implemented.
-- No OS-level sandbox or container isolation is provided.
-- Saved conversations are opt-in and workspace-scoped. Oasis provides read-only plan mode (`oasis plan \"task\"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
+- The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default, and there is no Windows sandbox or container isolation yet.
+- Checkpoints only track changes made through Oasis's file tools, and they live in memory for the current session; they are not saved with resumed sessions.
+- Saved conversations are opt-in and workspace-scoped. Oasis provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
-- Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions; independent parallel subagent execution and advanced conflict handling are not implemented.
+- Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions. Parallel subagents (the `task` tool) run in separate contexts, but they share one workspace, so Oasis does not resolve conflicting edits between them; give parallel agents separate files or read-only work.
 - The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
 - GitHub connection currently reuses GitHub CLI authentication (`gh auth login`) on the host; embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, creating repositories, branch/push/PR workflows, and fine-grained GitHub App scopes are not implemented yet.
 - The Terminal panel is an argv-based command runner, not a full interactive PTY: shell chaining, shell interpreters, TUI programs, and interactive prompts are not supported by the web bridge yet.

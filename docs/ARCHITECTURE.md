@@ -4,27 +4,39 @@ Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasi
 
 ## Terminal runtime
 
-- \`src/cli.mjs\` is the command-line entry point exposed by the \`oasis\` executable in \`package.json\`.
-- \`src/config.mjs\` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
+- `src/cli.mjs` is the command-line entry point exposed by the `oasis` executable in `package.json`.
+- `src/config.mjs` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
 - src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage. Long histories are compacted between turns using a tool-free model summary, with a deterministic bounded fallback if summarization fails. During a task, oversized history estimates also trigger deterministic pruning of older bulky tool outputs; this preserves tool-call/result pairing and leaves recent output intact. `OASIS_CONTEXT_WINDOW` can set the context-window estimate, defaulting to 32,768 tokens.
 - When the browser runtime requests live output, `src/agent.mjs` requests provider SSE streams and normalizes text/tool-call deltas across Chat Completions, Responses, and Anthropic Messages. Stream payloads are capped at 8 MiB; providers that respond with ordinary JSON fall back to a completed-text event rather than failing the task.
 - Browser jobs own an abort controller. The authenticated cancel route denies pending approvals, aborts model requests, and forwards cancellation to supported child-process commands and package installs; jobs end in an explicit `cancelled` state and the current session is saved when possible. Cancellation cannot roll back file changes that completed before the request.
 - The `run_specialist_review` tool creates a separate, bounded reviewer session for code review, security review, architecture, or test strategy. It receives only file-search/read and Git-inspection tools, has no MCP client, cannot run commands or edit, caps itself at eight read-only tool calls and 18,000 tokens, and is limited to two reviews per parent task. Nested token/tool use is included in the parent usage totals.
 - src/tools.mjs exposes a session-local `todo_write` checklist, read-only Git status/diff inspection, file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching. Whole-worktree diffs exclude common secret-bearing paths; explicitly scoped paths pass through workspace/sensitive-path checks.
-- \`src/installer.mjs\` parses simple installation requests and selects a package ecosystem or host package manager.
-- \`src/backups.mjs\` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
+- `src/installer.mjs` parses simple installation requests and selects a package ecosystem or host package manager.
+- `src/backups.mjs` snapshots changed files to the user's Oasis config directory, outside the project, and restores them by ID.
 - src/eval.mjs runs reference tasks in disposable copies, captures token/time/cost estimates, and stores JSON results. evals/tasks/<id>/ keeps the task prompt, pre-change snapshot, patch, and verifier outside the agent's workspace.
 - `skills/*/SKILL.md` contains bundled workflow guidance. `plugins/catalog.json` defines reviewed skill bundles; `src/plugins.mjs` installs/removes these bundles under `.oasis/plugins/` and `.oasis/skills/`. Bundles currently contain instruction files only; MCP server configuration is separate and explicit. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. Oasis also discovers portable project skills under `.agents/skills/<name>/SKILL.md` and Vercel universal global skills under `~/.config/agents/skills/<name>/SKILL.md`. `oasis skills find|inspect|add` launches the pinned `skills@1.7.4` CLI only after approval (unless the operator already enabled `--yes`), uses `--copy` and `--agent universal`, and disables telemetry; imported instructions/resources remain untrusted text. Standard skill resources are restricted to regular text files under `references/` or `assets/` with path and symlink checks.
 - The runtime exposes `setup_omniroute`, `configure_provider`, `install_external_skill`, `configure_mcp_server`, and `delegate_openhands` as normal agent tools. Provider changes are verify-before-save; MCP activation requires dedicated manual approval, starts the exact configured stdio command, checks its handshake, then refreshes the current session's tool map. External Agent Skill instructions remain untrusted text; imported hooks/scripts are not activated. OpenHands delegation requires a preconfigured Agent Profile and server URL, always asks Oasis for manual approval, sends no Oasis model credentials, requests OpenHands' AlwaysConfirm policy and a worktree, and returns a conversation ID when the remote task is pending.
-- Project context can come from \`OASIS.md\`, \`AGENTS.md\`, \`CLAUDE.md\`, and \`.oasis/skills\`.
+- `src/memory.mjs` loads layered memory: user (`~/.config/oasis/OASIS.md`, `~/.claude/CLAUDE.md`), project (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`), local (`OASIS.local.md`, `CLAUDE.local.md`), and `README.md`, with `@path` imports limited to the workspace. Lines typed as `# note` are appended to the chosen memory file.
+
+### Claude Code-compatible layer
+
+- `src/settings.mjs` merges user, project (`.claude/settings.json`, `.oasis/settings.json`), and local (`*.local.json`) settings. In untrusted workspaces only deny/ask rules apply; allow rules, hooks, modes, sandbox, and shell settings wait for `oasis trust`.
+- `src/permissions.mjs` parses rules such as `Bash(npm test:*)`, `Edit(src/**)`, and `WebFetch(domain:docs.github.com)`, evaluates them in the order deny, ask, allow, session approvals, then default, and implements the `default`, `acceptEdits`, `plan`, and `bypassPermissions` modes. `analyzeCommand` unwraps wrappers like `env`, `xargs`, and `timeout` and flags high-risk commands, which always need an interactive approval.
+- `src/hooks.mjs` runs `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, and `SessionEnd` hooks through `/bin/sh` with secrets removed from the environment. Exit code 2 blocks, and JSON output can allow, deny, rewrite tool input, or add context.
+- `src/sandbox.mjs` wraps commands in bubblewrap (Linux) or sandbox-exec (macOS): the host is read-only, the workspace is writable, `/tmp` is private, and the network is off unless enabled.
+- `src/power-tools.mjs` adds `grep` (ripgrep with a JS fallback), atomic `multi_edit`, background processes (`command_output`, `kill_command`, `list_background`), and the opt-in `run_shell`.
+- `src/subagents.mjs` defines built-in and custom agents (`.oasis/agents`, `.claude/agents`). `agent.mjs` runs each `task` call in a child session that shares permissions, hooks, sandbox, background processes, and checkpoints with its parent; consecutive `task` calls run in a pool of up to six.
+- `src/commands.mjs` loads custom slash commands and expands `@path` mentions. `src/slash.mjs` implements the built-in interactive commands.
+- `src/checkpoints.mjs` saves each file's original content before its first change in a turn, and `/rewind` restores files and trims the conversation.
+- `src/headless.mjs` implements `oasis -p` with `text`, `json`, and `stream-json` output; approvals that would need a person are denied and reported.
 
 ### Data and trust boundaries
 
 Workspace file tools apply path traversal and symlink checks, block common credential-file patterns, and cap individual text-file sizes. A snapshot is created before overwriting an existing file. Deletion needs interactive approval. Shell interpreters and selected high-impact commands are denied by the general command tool; normal commands require approval unless automatic approval is deliberately enabled.
 
-Processes launch with an argument array and \`shell: false\`; common credential environment variables are filtered. The package installer is a separate, explicit side-effecting tool and its command plan is shown before approval. Public URL fetching checks host resolution for private addresses, rejects redirects, and limits content size.
+Processes launch with an argument array and `shell: false`; common credential environment variables are filtered. The package installer is a separate, explicit side-effecting tool and its command plan is shown before approval. Public URL fetching checks host resolution for private addresses, rejects redirects, and limits content size.
 
-This is not an OS sandbox. An approved test, build, or project script can execute code with the current user's privileges. A local model endpoint may avoid sending prompts to a hosted provider, but that does not itself sandbox command execution.
+Without the optional OS sandbox, an approved test, build, or project script can execute code with the current user's privileges. With the sandbox on, commands can only write inside the workspace and have no network unless it is enabled. A local model endpoint may avoid sending prompts to a hosted provider, but that does not itself sandbox command execution.
 
 ## Browser agent runtime
 
@@ -64,20 +76,20 @@ The runtime supports the native OpenAI Responses API (`/responses` appended to t
 
 ## Browser workspace
 
-The root \`index.html\` provides a dependency-free dashboard for projects, tasks, and notes. The browser stores workspace data in local storage and exports/imports JSON backups. The PWA manifest, SVG icon, and service worker support an installable app shell and static offline cache on compatible HTTPS hosts. Browser data is not encrypted and does not sync between devices.
+The root `index.html` provides a dependency-free dashboard for projects, tasks, and notes. The browser stores workspace data in local storage and exports/imports JSON backups. The PWA manifest, SVG icon, and service worker support an installable app shell and static offline cache on compatible HTTPS hosts. Browser data is not encrypted and does not sync between devices.
 
 ## Quality gates
 
-- \`scripts/check-site.mjs\`: validates interface anchors, inline JavaScript syntax, and PWA assets.
-- \`test/runtime.test.mjs\`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
+- `scripts/check-site.mjs`: validates interface anchors, inline JavaScript syntax, and PWA assets.
+- `test/runtime.test.mjs`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
 - test/eval.test.mjs covers task validation and a model run against a local OpenAI-compatible fixture server.
-- \`.github/workflows/quality.yml\`: runs the checks and package dry-run for pushes and pull requests.
+- `.github/workflows/quality.yml`: runs the checks and package dry-run for pushes and pull requests.
 - The agent also has a read-only plan mode (`oasis plan` or `/plan`) with a separate tool allowlist and an executor-side check against write/command/install/delete/MCP calls. The quality gate runs `oasis eval --validate` to ensure each reference patch turns a failing no-op verifier into a passing verification.
-- \`.github/workflows/pages.yml\`: checks the repository and deploys the static site when GitHub Pages is configured.
+- `.github/workflows/pages.yml`: checks the repository and deploys the static site when GitHub Pages is configured.
 
 ## Current architectural gaps
 
-OS-level container isolation, a full interactive PTY, embedded GitHub OAuth, a general remote plugin marketplace, mid-turn compaction, independent parallel subagent execution, formal configuration migrations, cross-platform end-to-end tests, and browser-to-CLI data syncing are not implemented. The browser agent supports TLS with user-provided certificates and incremental streamed model output, but certificate provisioning/device-trust onboarding and broad real-device tests remain incomplete. Between-turn compaction is best-effort and does not replace long-horizon benchmark coverage.
+Container isolation and a Windows sandbox, a full interactive PTY, embedded GitHub OAuth, a general remote plugin marketplace, edit-conflict handling between parallel subagents, formal configuration migrations, cross-platform end-to-end tests, and browser-to-CLI data syncing are not implemented. The browser agent supports TLS with user-provided certificates and incremental streamed model output, but certificate provisioning/device-trust onboarding and broad real-device tests remain incomplete. Between-turn compaction is best-effort and does not replace long-horizon benchmark coverage.
 
 
 ## Cross-ecosystem extension compatibility
