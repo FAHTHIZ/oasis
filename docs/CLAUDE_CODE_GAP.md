@@ -10,14 +10,14 @@ This comparison is based on the current OASIS source tree and the current offici
 
 OASIS already implements a broad share of the **single-machine CLI coding loop**: multi-step tool calling, workspace file operations, approvals, context handling, Git tools, subagents, MCP, hooks, skills, saved sessions, headless mode and an SDK. It also has model-provider flexibility and a local browser workspace.
 
-It is **not** a drop-in Claude Code replacement across all workflows, and it is not yet at full feature parity. A real PTY session API and browser xterm.js rendering are now in place, but process cleanup and cross-platform validation are incomplete. Other major gaps include multi-agent team coordination, IDE/Chrome/cloud/mobile integrations, unsigned desktop packaging, no embedded GitHub OAuth, a partial extension-compatibility layer, no Windows sandbox, and no native Gemini or Azure Foundry adapter.
+It is **not** a drop-in Claude Code replacement across all workflows, and it is not yet at full feature parity. A real PTY session API and browser xterm.js rendering are now in place, but process cleanup and cross-platform validation are incomplete. Other major gaps include multi-agent team coordination, IDE/Chrome/cloud/mobile integrations, unsigned desktop packaging, no embedded GitHub OAuth, a partial extension-compatibility layer, no Windows sandbox, and no native Gemini adapter.
 
 ## Side-by-side capability check
 
 | Area | OASIS today | Claude Code documented capability | OASIS status |
 | --- | --- | --- | --- |
 | Agentic coding loop | Multi-step model/tool calls; scoped file operations; command approvals; snapshots/checkpoints; Git and test tools; token/cost controls | Multi-step repository work with tool calls, approvals, terminal operations and verification | Core loop exists; comparative coding quality is not benchmarked |
-| Model providers | OpenAI Responses, compatible Chat Completions, Anthropic Messages, Bedrock, Vertex, compatible gateways and local models | Anthropic models through supported first-party and third-party hosting routes | OASIS is broader in provider choice; native Gemini/Azure adapters remain absent |
+| Model providers | OpenAI Responses, compatible Chat Completions, Anthropic Messages, Bedrock, Vertex, Microsoft Foundry, compatible gateways and local models | Anthropic models through supported first-party and third-party hosting routes | OASIS is broader in provider choice; Claude on Bedrock, Vertex and Microsoft Foundry all work with Claude Code's env vars; only a native Gemini adapter is absent |
 | Interactive terminal | Custom CLI editor plus persistent PTY agent sessions; browser uses bundled xterm.js with input/ANSI/resize | Full-featured terminal UI and background-process workflows | **Partial:** PTY lifecycle API exists; cross-platform process cleanup and full workflow validation remain |
 | Subagents | Built-in/custom subagents, up to six parallel child runs, background status/steering/cancel, optional worktree isolation | Subagents, agent view, agent teams, dynamic workflows and longer-running project sessions | Useful delegation exists; no visual agent manager or cloud project orchestration |
 | Multi-agent coordination | Shared dependency-aware tasks, exclusive time-limited claims/releases, peer-to-peer messages, agent status/cancel, optional isolated worktrees, named teams with roster and controlled shutdown | Subagents plus agent teams with shared tasks, teammate messaging, worktree isolation and lifecycle controls | **Partial:** core coordination is implemented; no autonomous task scheduler, cross-session team sync, or dedicated visual team monitor |
@@ -59,6 +59,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Keybindings | `~/.claude/keybindings.json`, contexts, chords, `null` unbind, `/keybindings`, Ctrl+G external editor, Ctrl+S stash | **Closed** for the prompt contexts (Global, Chat, Autocomplete, HistorySearch). It reads Claude Code's file plus an OASIS override, hot-reloads, supports 3 s chords, `command:NAME` actions, reserved-key warnings and `/keybindings init`. Dialog contexts (Confirmation, Transcript, pickers) are parsed but not yet bindable. |
 | MCP client features | Elicitation (form and URL), `roots/list`, `notifications/tools/list_changed`, `ping`, server log messages | **Closed.** OASIS now advertises `roots` and `elicitation` (protocol 2025-06-18) over stdio and Streamable HTTP, including server requests sent on the SSE response stream. Elicitations show a validated terminal form or a URL prompt. `Elicitation`/`ElicitationResult` hooks can answer them, and they are declined in headless runs. Tool lists refresh live when a server announces changes. MCP sampling is not supported, as in Claude Code. |
 | Editor chat panel + SDK control protocol | Claude Code VS Code panel; SDK `control_request` `can_use_tool` / `interrupt` | **Closed.** OASIS sidebar and editor-tab chat with streaming text, tool rows, permission cards, Stop, New chat and Add Selection; `oasis -p --input-format stream-json --permission-prompt-tool stdio` answers approvals and interrupts over stdin/stdout for any host. |
+| Microsoft Foundry | `CLAUDE_CODE_USE_FOUNDRY`, `ANTHROPIC_FOUNDRY_RESOURCE` / `_BASE_URL`, `_API_KEY`, `_AUTH_TOKEN`, Entra ID default credentials | **Closed.** Native `foundry` protocol with the same env vars and auth order (bearer > API key > `az` Entra token), resource-name validation, deployment-name models, streaming, setup preset. |
 
 ## Ranked next improvements
 
@@ -84,7 +85,7 @@ Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require proces
 
 ### 5. Remaining platform and ecosystem gaps
 
-Native Gemini and Azure Foundry adapters; PowerShell and Windows sandboxing; npm plugin sources, plugin monitors/themes/channels, OS-keychain storage for sensitive plugin options.
+A native Gemini adapter; PowerShell and Windows sandboxing; npm plugin sources, plugin monitors/themes/channels, OS-keychain storage for sensitive plugin options.
 
 ### 6. Terminal experience polish
 

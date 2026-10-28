@@ -45,9 +45,9 @@ CI details: [Quality Checks run](https://github.com/FAHTHIZ/oasis/actions/runs/4
 ### 2. Models and providers
 
 - Native OpenAI Responses, OpenAI-compatible Chat Completions, and native Anthropic Messages protocol.
-- Supported provider paths include Anthropic on AWS Bedrock and Google Vertex, plus compatible gateways and local endpoints such as OpenRouter, Gemini's OpenAI-compatible endpoint, Ollama/LM Studio, and OmniRoute.
+- Supported provider paths include Anthropic on AWS Bedrock, Google Vertex and Microsoft Foundry (Azure), plus compatible gateways and local endpoints such as OpenRouter, Gemini's OpenAI-compatible endpoint, Ollama/LM Studio, and OmniRoute.
 - Provider setup verifies an inert tool call before saving settings; configured models must support tool calling.
-- Native Gemini and Azure Foundry adapters are not implemented in this baseline. A Gemini-compatible endpoint is not the same as a native Gemini adapter. Live authenticated testing of all cloud accounts is still needed.
+- Claude on Microsoft Foundry is supported natively (`foundry` protocol). A native Gemini adapter is not implemented in this baseline. A Gemini-compatible endpoint is not the same as a native Gemini adapter. Live authenticated testing of all cloud accounts is still needed.
 
 ### 3. Code understanding and verification
 
@@ -104,7 +104,7 @@ This ranking considers how much each gap constrains real work and what it unlock
 2. **Complete multi-agent coordination.** A bounded `dispatch_ready_tasks` wave is now implemented with task-linked workers, isolated worktrees, dependency gating, and lease cleanup on cancellation/failure. Remaining work: autonomous/persistent workflow scheduling, visual monitoring, cross-session coordination, and richer conflict-aware review.
 3. **IDE integration.** A VS Code extension would put reviewable diffs, task/session status and the same agent runtime inside the main coding surface.
 4. **Remote and cross-surface workflows.** Cloud/remote sessions, mobile steering, desktop, Chrome and chat integrations require a stronger authentication, execution-isolation and lifecycle design than the current local browser bridge.
-5. **Platform and extension parity.** Native Gemini/Azure adapters, PowerShell/Windows sandboxing, broad extension runtime compatibility and a remote plugin marketplace.
+5. **Platform and extension parity.** A native Gemini adapter, PowerShell/Windows sandboxing, broad extension runtime compatibility and a remote plugin marketplace.
 6. **Terminal polish.** Full-screen transcript, vim mode, themes and editable keybinding files.
 
 ## Safety and release-readiness boundaries
