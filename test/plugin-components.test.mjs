@@ -16,7 +16,7 @@ async function fixture(t) {
   t.after(() => rm(base, { recursive: true, force: true }));
   const home = path.join(base, 'home');
   const plugin = path.join(base, 'golang-tools');
-  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), OASIS_PLUGIN_DIRS: plugin, OASIS_PLUGINS: '' };
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), OASIS_PLUGIN_DIRS: plugin, OASIS_PLUGINS: '', OASIS_SECURE_STORAGE: 'file' };
   await put(path.join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({
     name: 'golang-tools', version: '0.1.0',
     userConfig: {
@@ -131,7 +131,7 @@ test('plugin CLI show/config and validate report the new components', async (t) 
   assert.match(output, /missing required: api_token/);
   output = '';
   await pluginCli(root, ['config', 'golang-tools', 'api_token=abc'], { env, write });
-  assert.match(output, /stored in a private file/);
+  assert.match(output, /stored in a private 0600 file/);
   output = '';
   await pluginCli(root, ['config', 'golang-tools'], { env, write });
   assert.match(output, /api_token\s+\(set, hidden\)/);
@@ -151,4 +151,23 @@ test('plugins disabled with OASIS_PLUGINS=off contribute nothing', async (t) => 
   assert.deepEqual(settings.pluginBinDirs, []);
   assert.equal(settings.agent, null);
   assert.ok(!Object.keys(settings.lspServers).some((name) => name.includes(':')));
+});
+
+test('sensitive userConfig values go to the OS keychain (Secret Service) when one is available', { skip: process.platform === 'win32' }, async (t) => {
+  const { env, root } = await fixture(t);
+  // A fake secret-tool that keeps items in a directory, keyed by the account attribute.
+  const bin = path.join(env.HOME, 'fakebin');
+  const store = path.join(env.HOME, 'keyring');
+  await mkdir(store, { recursive: true });
+  await put(path.join(bin, 'secret-tool'), '#!/bin/sh\ncmd="$1"; shift\nacct=""\nwhile [ $# -gt 0 ]; do case "$1" in account) acct="$2"; shift 2;; *) shift;; esac; done\nkey=$(printf %s "$acct" | od -An -tx1 | tr -d " \\n")\ncase "$cmd" in\n  store) cat > "' + store + '/$key";;\n  lookup) [ -f "' + store + '/$key" ] && cat "' + store + '/$key" || exit 1;;\n  clear) rm -f "' + store + '/$key";;\nesac\n');
+  await chmod(path.join(bin, 'secret-tool'), 0o755);
+  const keyEnv = { ...env, OASIS_SECURE_STORAGE: 'libsecret', PATH: bin + path.delimiter + env.PATH };
+  let [plugin] = await loadEnabledPlugins(root, { env: keyEnv });
+  const result = await setPluginOption(plugin, 'api_token', 'k3ychain', { env: keyEnv });
+  assert.equal(result.storage, 'libsecret');
+  const marker = JSON.parse(await readFile(path.join(env.OASIS_CONFIG_DIR, 'plugins', 'plugin-secrets.json'), 'utf8'));
+  assert.deepEqual(marker, { __storage: 'libsecret' }, 'the file holds only a marker, not the secret');
+  [plugin] = await loadEnabledPlugins(root, { env: keyEnv });
+  assert.equal(plugin.options.api_token, 'k3ychain');
+  assert.deepEqual(missingPluginOptions(plugin), []);
 });
