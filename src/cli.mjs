@@ -22,6 +22,8 @@ import { detectSandbox } from './sandbox.mjs';
 import { resolveCustomCommand, expandFileMentions } from './commands.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
+import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
+import { fstatSync } from 'node:fs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null };
@@ -38,6 +40,8 @@ function printHelp() {
     'Usage:',
     '  oasis                         Start an interactive agent session',
     '  oasis "fix the failing tests"  Give a task in plain English',
+    '  oasis -p "task" [--output-format text|json|stream-json] [--max-turns N]  Run once without prompts (scripts/CI)',
+    '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
@@ -81,6 +85,8 @@ function printHelp() {
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
     '  --permission-mode MODE        default | acceptEdits | plan | bypassPermissions',
+    '  --model ID                    Use a different model for this run',
+    '  --max-turns N                 Limit model steps for one task (1-400)',
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
     '  --disallowedTools RULES       Extra deny rules for this run',
     '  --append-system-prompt TEXT   Add instructions to the system prompt',
@@ -813,6 +819,40 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   return session;
 }
 
+async function readPipedStdin() {
+  // Only read stdin when it is a pipe, socket, or redirected file (not a terminal or
+  // /dev/null). Use `< /dev/null` if a job inherits an open stdin it never closes.
+  let info;
+  try { info = fstatSync(0); } catch { return ''; }
+  if (stdin.isTTY || !(info.isFIFO() || info.isFile() || info.isSocket())) return '';
+  let data = '';
+  for await (const chunk of stdin) {
+    data += chunk;
+    if (data.length > 1024 * 1024) break;
+  }
+  return data.slice(0, 1024 * 1024);
+}
+
+async function printMode(root, headless, args, autoApprove, persistence) {
+  let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
+  const piped = await readPipedStdin();
+  if (piped.trim()) prompt = prompt ? prompt + '\n\n<stdin>\n' + piped + '\n</stdin>' : piped;
+  if (!prompt.trim()) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--model ID]');
+  const config = await loadConfig();
+  if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+  if (!config.configured) throw new Error('No model provider is configured. Run oasis setup, or set OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the API key variable.');
+  const { exitCode } = await runHeadless({
+    prompt, root, config, autoApprove,
+    outputFormat: headless.outputFormat,
+    maxTurns: headless.maxTurns,
+    planOnly: headless.planOnly,
+    sessionOptions: sessionCreateOptions(),
+    persistence,
+    env: process.env
+  });
+  process.exitCode = exitCode;
+}
+
 async function interactive(root, autoApprove, persistence = {}) {
   stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\n');
   let session = null;
@@ -1182,6 +1222,7 @@ async function main() {
   let resumeId = null;
   let workspace = process.cwd();
   const args = [];
+  const headless = { enabled: false, prompt: '', outputFormat: 'text', maxTurns: null, planOnly: false };
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; continue; }
@@ -1199,6 +1240,29 @@ async function main() {
       continue;
     }
     if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = rawArgs[++i] || ''; continue; }
+    if (arg === '-p' || arg === '--print') {
+      headless.enabled = true;
+      if (rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-')) headless.prompt = rawArgs[++i];
+      continue;
+    }
+    if (arg === '--output-format') {
+      headless.outputFormat = rawArgs[++i];
+      if (!OUTPUT_FORMATS.includes(headless.outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
+      continue;
+    }
+    if (arg.startsWith('--output-format=')) { headless.outputFormat = arg.slice(16); continue; }
+    if (arg === '--max-turns') {
+      const value = Number.parseInt(rawArgs[++i], 10);
+      if (!Number.isInteger(value) || value < 1 || value > 400) throw new Error('--max-turns must be a whole number from 1 to 400.');
+      headless.maxTurns = value;
+      continue;
+    }
+    if (arg === '--model') {
+      if (!rawArgs[i + 1]) throw new Error('--model requires a model id.');
+      SESSION_OPTIONS.model = rawArgs[++i];
+      continue;
+    }
+    if (arg === '--plan') { headless.planOnly = true; continue; }
     if (arg === '--continue') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume') {
       if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
@@ -1222,6 +1286,7 @@ async function main() {
     if (!persistence.resumeId) stdout.write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
   }
 
+  if (headless.enabled) return await printMode(workspace, headless, args, autoApprove, persistence);
   if (!command || command === '--interactive') return await interactive(workspace, autoApprove, persistence);
   if (command === '--help' || command === '-h' || command === 'help') return printHelp();
   if (command === '--version' || command === '-v') {
