@@ -917,7 +917,12 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
       try {
         const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
-        if (handled) { stdout.write(handled.output + '\n'); continue; }
+        if (handled) {
+          stdout.write(handled.output + '\n');
+          if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
+          if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
+          continue;
+        }
       } catch (error) { stdout.write('Command failed: ' + error.message + '\n'); continue; }
     }
     if (text.startsWith('/')) {

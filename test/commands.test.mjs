@@ -114,3 +114,57 @@ test('built-in slash commands report state and switch modes', async () => {
   assert.match((await runBuiltinCommand('help', '', state)).output, /\/compact/);
   assert.equal(await runBuiltinCommand('nope', '', state), null);
 });
+
+test('/review, /security-review, /export, /resume and /mcp built-ins', async () => {
+  const { root, env } = await workspace();
+  const session = {
+    root, config: { model: 'm1' }, toolDefinitions: [],
+    messages: [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'fix the bug' },
+      { role: 'assistant', content: 'Looking.', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.js"}' } }] },
+      { role: 'tool', tool_call_id: 'c1', content: 'const a = 1;' },
+      { role: 'assistant', content: 'Fixed it.' }
+    ],
+    mcpClients: new Map([['docs', { source: 'project', config: { type: 'http' }, tools: [{ name: 'search' }] }]]),
+    mcpFailures: [{ name: 'db', error: 'DATABASE_URL is not set' }]
+  };
+  const state = { root, env, session };
+  const review = await runBuiltinCommand('review', '', state);
+  assert.match(review.prompt, /git diff HEAD/);
+  assert.match(review.prompt, /read-only review/);
+  const pr = await runBuiltinCommand('review', '#42', state);
+  assert.match(pr.prompt, /gh pr diff 42/);
+  const security = await runBuiltinCommand('security-review', 'main', state);
+  assert.match(security.prompt, /git diff main/);
+  assert.match(security.prompt, /injection/);
+
+  const exported = await runBuiltinCommand('export', 'chat.md', state);
+  assert.match(exported.output, /Exported 4 messages to chat\.md/);
+  const markdown = await readFile(path.join(root, 'chat.md'), 'utf8');
+  assert.match(markdown, /## User\n\nfix the bug/);
+  assert.match(markdown, /Tool call: `read_file`/);
+  assert.match(markdown, /## Oasis\n\nFixed it\./);
+  await assert.rejects(runBuiltinCommand('export', 'chat.md', state), /already exists/);
+  assert.match((await runBuiltinCommand('export', '../outside.md', state)).output, /inside the workspace/);
+
+  assert.match((await runBuiltinCommand('resume', '', state)).output, /No saved sessions/);
+  const mcp = await runBuiltinCommand('mcp', '', state);
+  assert.match(mcp.output, /docs \[project, http\] 1 tool\(s\): search/);
+  assert.match(mcp.output, /db - not connected: DATABASE_URL is not set/);
+
+  await mkdir(path.join(root, '.oasis', 'commands'), { recursive: true });
+  await writeFile(path.join(root, '.oasis', 'commands', 'review.md'), 'Team review checklist');
+  assert.equal(await runBuiltinCommand('review', '', state), null);
+});
+
+test('/resume lists saved sessions and picks one by number or id prefix', async () => {
+  const { root, env } = await workspace();
+  const { saveSession } = await import('../src/sessions.mjs');
+  const saved = await saveSession({ root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'hi' }] }, { env });
+  const state = { root, env, session: null };
+  assert.match((await runBuiltinCommand('resume', '', state)).output, new RegExp('1\\. ' + saved.id));
+  assert.equal((await runBuiltinCommand('resume', '1', state)).resume, saved.id);
+  assert.equal((await runBuiltinCommand('resume', saved.id.slice(0, 8), state)).resume, saved.id);
+  assert.match((await runBuiltinCommand('resume', 'zzzz', state)).output, /No saved session/);
+});
