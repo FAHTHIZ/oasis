@@ -78,6 +78,9 @@ test('worktree isolation refuses non-git folders and cleans up unchanged worktre
   const run = gitRepo(plain);
   await assert.rejects(createWorktree(plain, 'x'), /at least one commit/);
   await writeFile(path.join(plain, 'a.txt'), 'a'); run('add', '-A'); run('commit', '-qm', 'i');
+  await writeFile(path.join(plain, 'dirty.txt'), 'uncommitted');
+  await assert.rejects(createWorktree(plain, 'Dirty task', { requireClean: true }), /clean Git workspace/i);
+  await rm(path.join(plain, 'dirty.txt'));
   const wt = await createWorktree(plain, 'Nothing To Do');
   assert.match(wt.branch, /^oasis\/nothing-to-do-/);
   const done = await finishWorktree(plain, wt);
