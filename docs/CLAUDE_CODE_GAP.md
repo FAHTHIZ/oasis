@@ -54,7 +54,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 
 - ~~Bedrock and Vertex AI adapters~~ (done): `bedrock` and `vertex` protocols. Claude Code's `CLAUDE_CODE_USE_BEDROCK` / `CLAUDE_CODE_USE_VERTEX` env vars are honored. Still open: Azure Foundry, and native Gemini (Gemini currently runs through the OpenAI-compatible endpoint).
 - VS Code and JetBrains extensions (inline diffs, selection context, IDE diagnostics).
-- ~~GitHub Action~~ (done): `uses: gtxnrg-ship-it/oasis@main`. `@oasis` on issues, PRs, and review comments makes the change, then pushes a branch or opens a PR and replies in the thread. Only trusted associations can trigger it, and it uses auto mode by default.
+- ~~GitHub Action~~ (done): `uses: FAHTHIZ/oasis@main`. `@oasis` on issues, PRs, and review comments makes the change, then pushes a branch or opens a PR and replies in the thread. Only trusted associations can trigger it, and it uses auto mode by default.
 - ~~Importable SDK~~ (done): `import { query, tool } from 'oasis-oss'` provides streaming events, in-process tools, `canUseTool`, and structured output.
 - ~~OpenTelemetry metrics and traces~~ (done): OTLP/HTTP JSON metrics, events and traces with no dependencies. `CLAUDE_CODE_ENABLE_TELEMETRY` and the standard `OTEL_*` variables are honored. Unlike Claude Code, Oasis also exports nested traces (turn > model request / tool > subagent).
 - Browser control (Playwright) for debugging live web apps.

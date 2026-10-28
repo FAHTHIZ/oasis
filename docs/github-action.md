@@ -50,7 +50,7 @@ jobs:
     permissions: { contents: write, pull-requests: write }
     steps:
       - uses: actions/checkout@v4
-      - uses: gtxnrg-ship-it/oasis@main
+      - uses: FAHTHIZ/oasis@main
         with:
           api_key: ${{ secrets.OASIS_API_KEY }}
           model: ${{ vars.OASIS_MODEL }}
