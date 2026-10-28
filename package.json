@@ -33,7 +33,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node scripts/check-site.mjs && node --test && node src/cli.mjs eval --validate"
+    "check": "node scripts/check-site.mjs && node scripts/check-public-site.mjs && node --test && node src/cli.mjs eval --validate"
   },
   "repository": {
     "type": "git",
