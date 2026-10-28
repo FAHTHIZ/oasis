@@ -13,6 +13,7 @@ import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
+import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { loadSettings } from './settings.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
@@ -608,9 +609,9 @@ function formatApiError(status, body, protocol) {
   try {
     const parsed = JSON.parse(body);
     detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type)
-      ? String(parsed.error.message || parsed.error.code || parsed.error.type) : '';
+      ? String(parsed.error.message || parsed.error.code || parsed.error.type) : (typeof parsed.message === 'string' ? parsed.message : '');
   } catch { detail = String(body || '').slice(0, 500); }
-  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' :
+  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' :
     protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
   return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') +
     '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
@@ -688,7 +689,7 @@ function parseProviderEvent(raw) {
 }
 
 async function readProviderStream(response, protocol, onDelta) {
-  if (protocol === 'anthropic') {
+  if (isAnthropicFamily(protocol)) {
     const blocks = new Map();
     const usage = { input_tokens: 0, output_tokens: 0 };
     let messageId;
@@ -881,13 +882,15 @@ async function runPostCompactHooks(session, trigger, summary, options) {
 
 async function requestCompletion(session, options = {}) {
   const config = session.config;
-  const nativeAnthropic = config.protocol === 'anthropic';
+  const nativeAnthropic = isAnthropicFamily(config.protocol);
+  const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex';
+  const providerEnv = options.env || session.providerEnv || process.env;
   const nativeResponses = config.protocol === 'openai-responses';
   const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS);
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
   if (nativeAnthropic) {
-    if (config.apiKey) headers['x-api-key'] = config.apiKey;
-    headers['anthropic-version'] = '2023-06-01';
+    if (config.apiKey && !cloudAnthropic) headers['x-api-key'] = config.apiKey;
+    if (!cloudAnthropic) headers['anthropic-version'] = '2023-06-01';
   } else if (config.apiKey) {
     headers.authorization = 'Bearer ' + config.apiKey;
   }
@@ -895,7 +898,7 @@ async function requestCompletion(session, options = {}) {
   let endpoint;
   let bodyObject;
   if (nativeAnthropic) {
-    endpoint = anthropicEndpoint(config.baseURL);
+    endpoint = cloudAnthropic ? cloudEndpoint(config, providerEnv, typeof options.onDelta === 'function' && cloudStreams(config.protocol)) : anthropicEndpoint(config.baseURL);
     const converted = toAnthropicRequest(session.messages, { thinking: Boolean(session.thinkingBudget) && !options.forceTool });
     const cache = promptCachingEnabled(config, options.env || process.env);
     const anthropicTools = availableTools.map((tool) => ({
@@ -914,6 +917,7 @@ async function requestCompletion(session, options = {}) {
       messages: converted.messages,
       ...(availableTools.length ? { tools: anthropicTools, tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {})
     };
+    if (cloudAnthropic) bodyObject = cloudBody(config.protocol, bodyObject);
   } else if (nativeResponses) {
     endpoint = responsesEndpoint(config.baseURL);
     const converted = toResponsesRequest(session.messages);
@@ -957,13 +961,15 @@ async function requestCompletion(session, options = {}) {
   }
   try {
     let response = null;
+    const bodyText = JSON.stringify(bodyObject);
+    const requestHeaders = cloudAnthropic ? await cloudHeaders(config, providerEnv, endpoint, bodyText, headers) : headers;
     for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
       try {
         response = await fetch(endpoint, {
           method: 'POST',
-          headers,
+          headers: requestHeaders,
           signal: controller.signal,
-          body: JSON.stringify(bodyObject)
+          body: bodyText
         });
       } catch (error) {
         if (attempt < MAX_PROVIDER_RETRIES && error instanceof TypeError && !controller.signal.aborted) {
@@ -1969,9 +1975,11 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const startNotice = drainInbox(session);
   if (startNotice) userContent += '\n\n' + startNotice;
   if (!options.isSubagent) repairInterruptedHistory(session);
-  session.thinkingBudget = session.config.protocol === 'anthropic' ? thinkingBudgetFor(request, session.config, options.env || process.env) : 0;
+  // Non-enumerable so provider credentials in the env never end up in copies or logs.
+  if (options.env) Object.defineProperty(session, 'providerEnv', { value: options.env, writable: true, configurable: true, enumerable: false });
+  session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, session.config, options.env || process.env) : 0;
   if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
-  session.reasoningEffort = session.config.protocol === 'anthropic' ? '' : reasoningEffortFor(request, session.config, options.env || process.env);
+  session.reasoningEffort = isAnthropicFamily(session.config.protocol) ? '' : reasoningEffortFor(request, session.config, options.env || process.env);
   if (session.reasoningEffort && typeof options.onReasoningEffort === 'function') options.onReasoningEffort(session.reasoningEffort);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };

@@ -6,6 +6,7 @@ import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/p
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
+import { defaultCloudBaseURL } from './cloud-providers.mjs';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
@@ -205,7 +206,7 @@ async function configureOmniRoute(root = process.cwd()) {
 
 async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
-  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, and local Ollama.\n');
+  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, and Google Vertex AI.\n');
   const rl = createInterface({ input: stdin, output: stdout });
   let protocol, baseURL, model, presetName;
   const presets = {
@@ -214,21 +215,23 @@ async function configureProvider(root = process.cwd(), options = {}) {
     openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
     gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
     ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' },
-    omniroute: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', model: 'auto' }
+    omniroute: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', model: 'auto' },
+    bedrock: { protocol: 'bedrock', baseURL: defaultCloudBaseURL('bedrock', process.env), model: process.env.ANTHROPIC_MODEL || '' },
+    vertex: { protocol: 'vertex', baseURL: defaultCloudBaseURL('vertex', process.env), model: process.env.ANTHROPIC_MODEL || '' }
   };
   try {
     const defaultPreset = resolveSetupProviderPreset(options.defaultPreset);
-    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
+    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
     if (presetName === 'custom') {
-      protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
-      const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+      protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
+      const defaultBase = protocol === 'bedrock' || protocol === 'vertex' ? defaultCloudBaseURL(protocol, process.env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
       baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
       const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
       const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (exact model ID required): ';
       model = (await rl.question(modelPrompt)).trim() || defaultModel;
     } else {
       const selected = presets[presetName];
-      if (!selected) throw new Error('Unknown provider preset. Choose omniroute, openai, anthropic, openrouter, gemini, ollama, or custom.');
+      if (!selected) throw new Error('Unknown provider preset. Choose omniroute, openai, anthropic, openrouter, gemini, ollama, bedrock, vertex, or custom.');
       protocol = selected.protocol;
       baseURL = selected.baseURL;
       model = selected.model;
@@ -246,7 +249,11 @@ async function configureProvider(root = process.cwd(), options = {}) {
   const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
   let apiKey = '';
   const localEndpoint = isLoopbackUrl(baseURL);
-  if (!localEndpoint || presetName === 'custom') {
+  if (protocol === 'bedrock' || protocol === 'vertex') {
+    stdout.write(protocol === 'bedrock'
+      ? 'Bedrock uses AWS_BEARER_TOKEN_BEDROCK, or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, or AWS_PROFILE. Region: ' + (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1') + '.\n'
+      : 'Vertex uses GOOGLE_OAUTH_ACCESS_TOKEN or gcloud auth print-access-token. Project: ' + (process.env.ANTHROPIC_VERTEX_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '(set ANTHROPIC_VERTEX_PROJECT_ID)') + '.\n');
+  } else if (!localEndpoint || presetName === 'custom') {
     const label = localEndpoint ? 'Optional local endpoint key' : (protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key');
     apiKey = await askSecret(label + ' (input hidden; Enter keeps a key only if the endpoint is unchanged, otherwise use a matching environment variable): ');
     if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
