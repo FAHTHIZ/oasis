@@ -793,6 +793,89 @@ async function managePermissions(root, rest) {
   stdout.write('Usage: oasis permissions [list] | oasis permissions add allow|ask|deny "RULE" [--scope user|project|local]\n');
 }
 
+async function authCommand(root, rest) {
+  const auth = await import('./auth-cli.mjs');
+  const [sub = 'status', ...more] = rest;
+  const options = auth.parseAuthArgs(more);
+  if (sub === 'status') {
+    const status = await auth.authStatus(process.env);
+    stdout.write(options.text ? auth.describeAuthStatus(status) + '\n' : JSON.stringify(status, null, 2) + '\n');
+    process.exitCode = status.loggedIn ? 0 : 1;
+    return;
+  }
+  if (sub === 'logout') {
+    const out = await auth.authLogout(process.env);
+    stdout.write((out.removed ? 'Removed the stored API key from ' + out.file + '.' : 'No stored API key in ' + out.file + '.') + (out.envKeys.length ? ' Still set in your environment: ' + out.envKeys.join(', ') + ' (unset them to fully sign out).' : '') + '\n');
+    return;
+  }
+  if (sub === 'login') {
+    if (options.apiKeyStdin) options.apiKey = (await readPipedStdin()).trim();
+    if (options.ignored) stderr.write('[auth] ' + options.ignored.join(', ') + ' only apply to Anthropic account sign-in; OASIS signs in with a provider API key.\n');
+    if (options.apiKey) {
+      const status = await auth.authLoginWithKey(options, process.env);
+      stdout.write(auth.describeAuthStatus(status) + '\n');
+      return;
+    }
+    if (!stdin.isTTY) throw new Error('Usage: oasis auth login --api-key KEY | --api-key-stdin [--protocol anthropic|openai-compatible|openai-responses] [--base-url URL] [--model ID]');
+    return await configureProvider(root);
+  }
+  throw new Error('Usage: oasis auth status [--text] | login [--api-key KEY|--api-key-stdin] [--protocol P] [--base-url URL] [--model ID] | logout');
+}
+
+// Claude's setup-token mints an OAuth token; OASIS uses provider keys, so it prints how to pass one to CI.
+async function setupTokenCommand() {
+  const auth = await import('./auth-cli.mjs');
+  const status = await auth.authStatus(process.env);
+  stdout.write([
+    'OASIS uses your model provider\'s API key rather than an account token.',
+    'For CI and scripts, store the key as a secret and expose it as an environment variable:',
+    '  ' + (status.protocol === 'anthropic' ? 'ANTHROPIC_API_KEY' : status.protocol === 'bedrock' ? 'AWS_BEARER_TOKEN_BEDROCK (or AWS credentials)' : status.protocol === 'vertex' ? 'GOOGLE_APPLICATION_CREDENTIALS' : status.protocol === 'foundry' ? 'ANTHROPIC_FOUNDRY_API_KEY' : 'OASIS_API_KEY') + '=<your key>',
+    '  OASIS_PROTOCOL=' + (status.protocol || 'anthropic') + (status.model ? '  OASIS_MODEL=' + status.model : '') + (status.baseURL && !/api\.anthropic\.com|api\.openai\.com/.test(status.baseURL) ? '  OASIS_BASE_URL=' + status.baseURL : ''),
+    'Then run: oasis -p "your task" --output-format json',
+    'Or use an apiKeyHelper script in settings to fetch a short-lived key at request time.'
+  ].join('\n') + '\n');
+}
+
+async function agentsCommand(rest) {
+  const { agentsJson } = await import('./auth-cli.mjs');
+  const cwdIndex = rest.indexOf('--cwd');
+  const list = await agentsJson({ all: rest.includes('--all'), cwd: cwdIndex >= 0 ? rest[cwdIndex + 1] : null }, process.env);
+  if (rest.includes('--json')) stdout.write(JSON.stringify(list, null, 2) + '\n');
+  else stdout.write(list.length ? list.map((entry) => entry.id + '  ' + entry.status.padEnd(9) + ' ' + (entry.name || '') + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 70)).join('\n') + '\n' : 'No background sessions.\n');
+}
+
+// `oasis ultrareview [target] [--json] [--timeout MIN] [--post]`: the deep review, non-interactively.
+async function ultrareviewCommand(root, rest, autoApprove, persistence) {
+  const words = [];
+  let json = false; let post = false; let minutes = 45;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === '--json') json = true;
+    else if (arg === '--post') post = true;
+    else if (arg === '--no-post') post = false;
+    else if (arg === '--timeout') minutes = Math.max(1, Number.parseFloat(rest[++i]) || 45);
+    else if (arg.startsWith('--timeout=')) minutes = Math.max(1, Number.parseFloat(arg.split('=')[1]) || 45);
+    else words.push(arg);
+  }
+  const target = words.join(' ');
+  if (post && !/^#?\d+$|github\.com\/.+\/pull\/\d+/.test(target)) throw new Error('--post needs a GitHub pull request target (a number or a github.com pull request URL).');
+  const prNumber = (target.match(/\/pull\/(\d+)/) || [])[1];
+  const { reviewPrompt } = await import('./slash.mjs');
+  let prompt = reviewPrompt('review', 'ultra ' + (prNumber || target));
+  prompt += post
+    ? '\n\nWhen the review is complete, post the findings to the pull request as ONE plain comment with `gh pr comment ' + (prNumber || target.replace('#', '')) + ' --body-file -` and say that you did.'
+    : '\n\nDo not post anything to GitHub and do not change files: print the findings only.';
+  if (json) prompt += '\n\nEnd your reply with a JSON object on its own: {"findings":[{"severity":"high|medium|low","file":"...","line":N,"title":"...","detail":"..."}],"summary":"..."}';
+  const timer = setTimeout(() => { stderr.write('Oasis error: ultrareview timed out after ' + minutes + ' minutes.\n'); process.exit(1); }, minutes * 60000);
+  timer.unref();
+  try {
+    if (post) SESSION_OPTIONS.allowedTools.push('Bash(gh pr comment:*)', 'Bash(gh pr view:*)', 'Bash(gh pr diff:*)');
+    else SESSION_OPTIONS.allowedTools.push('Bash(gh pr view:*)', 'Bash(gh pr diff:*)');
+    SESSION_OPTIONS.disallowedTools.push('Write', 'Edit');
+    await printMode(root, { prompt, outputFormat: json ? 'json' : 'text' }, [], autoApprove, persistence);
+  } finally { clearTimeout(timer); }
+}
+
 async function backgroundCommand(root, rest) {
   const bg = await import('./background-sessions.mjs');
   const [sub = 'list', query, ...more] = rest;
@@ -2609,6 +2692,10 @@ async function main() {
   if (['attach', 'logs', 'stop', 'kill', 'rm', 'respawn'].includes(command)) return await backgroundCommand(workspace, [command, ...rest]);
   if (command === 'purge') return await purgeCommand(workspace, rest, autoApprove);
   if (command === 'auto-mode') return await autoModeCommand(workspace, rest, autoApprove);
+  if (command === 'auth') return await authCommand(workspace, rest);
+  if (command === 'setup-token') return await setupTokenCommand(rest);
+  if (command === 'agents' && (rest.includes('--json') || !stdin.isTTY)) return await agentsCommand(rest);
+  if (command === 'ultrareview') return await ultrareviewCommand(workspace, rest, autoApprove, persistence);
   if (command === 'insights') {
     const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
     const { file, stats } = await writeInsightsReport({ env: process.env, days: Math.min(365, Math.max(1, parseInt(rest[0], 10) || 30)) });

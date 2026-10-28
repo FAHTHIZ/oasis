@@ -795,6 +795,10 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- `oasis auth status` prints sign-in state as JSON (`loggedIn`, `authMethod`: `api_key`, `api_key_helper`, `oauth_token`, `third_party` for Bedrock/Vertex/Foundry, `local`, or `none`, plus `apiKeySource`, provider, model and `configDirectory`) and exits 1 when nothing is configured; `--text` is human-readable. `oasis auth login --api-key KEY` (or `--api-key-stdin`, with optional `--protocol`, `--base-url`, `--model`) saves a key without prompts; plain `oasis auth login` opens setup. `oasis auth logout` removes the stored key. `oasis setup-token` explains which environment variables to set for CI. Keys are never printed.
+- `oasis agents --json [--all] [--cwd PATH]` prints background sessions as a JSON array for scripts.
+- `oasis ultrareview [target] [--json] [--timeout MIN] [--post]` runs the deep multi-agent review without a session: it prints findings and exits 0, or 1 on failure (default timeout 45 minutes). `--json` adds a findings object; `--post` with a pull request number or URL posts the findings as one `gh pr comment`.
+
 | Command | Purpose |
 |---|---|
 | `oasis` | Start an interactive coding session |
