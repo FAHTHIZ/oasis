@@ -93,6 +93,7 @@ async function inspectWorktreeSecrets(worktree, options = {}) {
 }
 
 // Commit the subagent's work on its branch. Unchanged worktrees are removed entirely.
+export async function finishWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
   const status = await git(worktree.path, ['status', '--porcelain', '--untracked-files=all'], env).catch(() => '');
   if (!status) {
