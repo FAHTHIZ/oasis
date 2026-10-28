@@ -349,3 +349,20 @@ export async function callMappedMcpTool(session, safeName, args, options = {}) {
 export function closeMcpClients(clients) {
   for (const client of clients.values()) client.close();
 }
+
+// Starts (or restarts) one server inside a running session and refreshes the
+// session's tool list, e.g. right after oasis mcp login.
+export async function reconnectMcpServer(session, config, options = {}) {
+  const client = config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
+  client.source = config.source || 'project';
+  await client.start();
+  const previous = session.mcpClients.get(config.name);
+  if (previous) previous.close();
+  session.mcpClients.set(config.name, client);
+  session.mcpFailures = (session.mcpFailures || []).filter((failure) => failure.name !== config.name);
+  const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
+  const dynamic = mcpToolDefinitions(session.mcpClients);
+  session.mcpToolMap = dynamic.map;
+  session.toolDefinitions = session.toolDefinitions.filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
+  return client;
+}
