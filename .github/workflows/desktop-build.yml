@@ -36,7 +36,7 @@ jobs:
       matrix:
         include:
           - platform: windows-x64
-            os: windows-latest
+            os: windows-2022
             command: win
           - platform: macos
             os: macos-latest
@@ -52,7 +52,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Set up Visual Studio Build Tools
+        if: matrix.command == 'win'
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
       - name: Install app and packaging dependencies
+        env:
+          GYP_MSVS_VERSION: ${{ matrix.command == 'win' && '2022' || '' }}
         run: npm install --no-audit --no-fund
       - name: Package Windows installer
         if: matrix.command == 'win'
