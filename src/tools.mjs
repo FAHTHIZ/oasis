@@ -1,3 +1,4 @@
+import { loadMemory } from './memory.mjs';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -1603,18 +1604,11 @@ export async function executeTool(name, args = {}, context = {}) {
   }
 }
 
-export async function loadProjectInstructions(root) {
-  const names = ['OASIS.md', 'AGENTS.md', 'CLAUDE.md', 'README.md'];
-  const parts = [];
-  for (const name of names) {
-    try {
-      const result = await readWorkspaceFile(root, name);
-      if (result.content.trim()) parts.push('--- Project context: ' + name + ' ---\n' + result.content.slice(0, 9000));
-    } catch {}
-  }
-  // Skill instructions are deliberately not loaded here. The model receives only a
-  // compact name/description catalogue and calls load_skill when one is relevant.
-  return parts.join('\n\n').slice(0, 26000);
+export async function loadProjectInstructions(root, options = {}) {
+  // User, project, and local memory files (see memory.mjs). Skill instructions are
+  // deliberately not loaded here: the model receives a compact catalogue and calls
+  // load_skill when one is relevant.
+  return await loadMemory(root, options);
 }
 
 TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);

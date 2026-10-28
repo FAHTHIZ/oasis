@@ -19,9 +19,13 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { startOasisWebServer } from './web.mjs';
 import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, userSettingsPath } from './settings.mjs';
 import { detectSandbox } from './sandbox.mjs';
+import { resolveCustomCommand, expandFileMentions } from './commands.mjs';
+import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
+import { appendMemoryNote } from './memory.mjs';
 
 // Options that shape every agent session created by this process.
-const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '' };
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null };
+const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -335,6 +339,21 @@ async function askApproval(prompt, forceInteractive, meta) {
     stdout.write('No interactive approval was available; action denied.\n');
     return false;
   }
+}
+
+// Streaming: print assistant text as it arrives; onText then only ends the line.
+let streamedSoFar = '';
+function streamDelta(accumulated) {
+  const text = String(accumulated || '');
+  if (!streamedSoFar) stdout.write('\nOasis> ');
+  if (text.startsWith(streamedSoFar)) stdout.write(text.slice(streamedSoFar.length));
+  streamedSoFar = text || ' ';
+}
+function endStream() {
+  if (!streamedSoFar) return false;
+  stdout.write('\n');
+  streamedSoFar = '';
+  return true;
 }
 
 function describeToolStart({ name, args = {}, subagent }) {
@@ -728,6 +747,15 @@ function printConfig(config) {
 
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
   const config = await loadConfig();
+  if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+  if (modeOptions.model) config.model = modeOptions.model;
+  try {
+    const expanded = await expandFileMentions(root, prompt);
+    if (expanded.files.length) {
+      stdout.write('[context] Included ' + expanded.files.map((file) => '@' + file).join(', ') + '\n');
+      prompt = expanded.text;
+    }
+  } catch {}
   if (!config.configured) {
     stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
     return session;
@@ -754,14 +782,17 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     const result = await runner(session, prompt, {
       autoApprove,
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
-      onToolStart: (event) => stdout.write('\n' + describeToolStart(event) + '\n'),
+      onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
+      onUsage: (usage) => recordUsage(USAGE, usage),
+      ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' ? { onDelta: streamDelta } : {}),
       onToolResult: ({ name, result }) => {
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
       },
-      onText: (text) => stdout.write('\nOasis> ' + text + '\n')
+      onText: (text) => { if (!endStream()) stdout.write('\nOasis> ' + text + '\n'); }
     });
+    USAGE.turns += 1;
     if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
       stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
     } else if (!result.finished) {
@@ -793,7 +824,20 @@ async function interactive(root, autoApprove, persistence = {}) {
     const text = input.trim();
     if (!text) continue;
     if (['/exit', '/quit', 'exit', 'quit'].includes(text.toLowerCase())) break;
-    if (text === '/help') { stdout.write('Commands: /help /status /clear /setup /plan TASK /exit. Use /plan TASK to inspect and plan without writing files or running commands. You can also say “install pnpm” or “install yourself”.\n'); continue; }
+    if (text.startsWith('#') && !text.startsWith('#!')) {
+      try {
+        const scope = /^#\s*user:/i.test(text) ? 'user' : /^#\s*local:/i.test(text) ? 'local' : 'project';
+        const note = text.replace(/^#+\s*(?:(?:user|local|project):)?\s*/i, '');
+        const file = await appendMemoryNote(root, note, { scope });
+        if (session && session.messages && session.messages[0]) {
+          const line = '\n- ' + note;
+          session.baseSystemPrompt = (session.baseSystemPrompt || session.messages[0].content) + line;
+          session.messages[0].content += line;
+        }
+        stdout.write('[memory] Saved to ' + file + '\n');
+      } catch (error) { stdout.write('[memory] ' + error.message + '\n'); }
+      continue;
+    }
     if (text === '/plan' || text.startsWith('/plan ')) {
       const planPrompt = text.slice('/plan'.length).trim();
       if (!planPrompt) { stdout.write('Usage: /plan Describe the task to plan.\n'); continue; }
@@ -804,7 +848,27 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (text === '/clear') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text === '/setup') { try { await configureProvider(root); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
+    const slash = text.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
+    if (slash && slash[1].toLowerCase() === 'init') { try { await initWorkspace(root); } catch (error) { stdout.write(error.message + '\n'); } continue; }
+    if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
+      try {
+        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
+        if (handled) { stdout.write(handled.output + '\n'); continue; }
+      } catch (error) { stdout.write('Command failed: ' + error.message + '\n'); continue; }
+    }
     if (text.startsWith('/')) {
+      try {
+        const custom = await resolveCustomCommand(root, text, { env: process.env });
+        if (custom) {
+          stdout.write('Running /' + custom.name + ' from ' + custom.command.file + '.\n');
+          session = await runPrompt(custom.prompt, root, autoApprove, session, persistence, custom.command.model ? { model: custom.command.model } : {});
+          persistence.resumeId = null;
+          continue;
+        }
+      } catch (error) {
+        stdout.write('Could not run custom command: ' + error.message + '\n');
+        continue;
+      }
       try {
         const imported = await resolveImportedSlashCommand(root, text, { env: process.env });
         if (imported) {
@@ -817,7 +881,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         stdout.write('Could not resolve imported command: ' + error.message + '\n');
         continue;
       }
-      stdout.write('Unknown command. Type /help or use oasis extensions list to view imported commands.\n');
+      stdout.write('Unknown command. Type /help to list built-in and custom commands.\n');
       continue;
     }
     let providerReadyForThisTurn = false;
