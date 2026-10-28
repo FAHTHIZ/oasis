@@ -389,6 +389,22 @@ for await (const event of query({ prompt: 'Plan a picnic in Dhaka', options: { t
 - **Shortcut:** `run(prompt, options)` returns just the final result.
 - **Lower-level pieces:** the package also exports `createSession`, `runAgentTurn`, `runHooks`, `executeTool`, and `loadSettings`.
 
+## OpenTelemetry
+
+Oasis can export metrics, events and traces over OTLP/HTTP JSON with no extra packages. It is off by default. Turn it on with `OASIS_ENABLE_TELEMETRY=1`; `CLAUDE_CODE_ENABLE_TELEMETRY=1` also works, so an existing Claude Code monitoring setup keeps working.
+
+```bash
+export OASIS_ENABLE_TELEMETRY=1
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # any OTLP/HTTP collector
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer%20xyz"
+export OTEL_METRICS_EXPORTER=otlp     # otlp | console | none (same for LOGS and TRACES)
+```
+
+- **Metrics:** `oasis.session.count`, `oasis.token.usage` (by `type`: input, output, cacheRead, cacheCreation), `oasis.api.duration`, `oasis.api.error.count`, `oasis.tool.count` (by `tool_name` and `success`), `oasis.tool.duration`, `oasis.turn.duration`, `oasis.active_time.total`, `oasis.lines_of_code.count` (added/removed), `oasis.commit.count`, and `oasis.pull_request.count`.
+- **Events (logs):** `oasis.session_start`, `oasis.user_prompt` (length only, unless `OTEL_LOG_USER_PROMPTS=1`), `oasis.api_request`, `oasis.api_error`, and `oasis.tool_result` (arguments only with `OTEL_LOG_TOOL_DETAILS=1`).
+- **Traces:** each turn is a trace. Every model request and tool call is a child span, and subagent turns nest under the tool call that started them. Events carry the span they happened in. This is something Claude Code's metrics and logs export does not give you.
+- Standard variables are honored: `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRIC_EXPORT_INTERVAL` (default 60 s), `OTEL_LOGS_EXPORT_INTERVAL` (default 5 s), and per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` / `_HEADERS`. Only the HTTP/JSON wire format is supported, not gRPC or protobuf. Data is flushed on exit.
+
 ## Checkpoints and /rewind
 
 Before Oasis edits, writes, or deletes a file, it saves that file's original content for the current turn. Type `/rewind` to see recent turns and the files each one changed, then:

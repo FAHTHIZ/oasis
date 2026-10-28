@@ -56,7 +56,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 - VS Code and JetBrains extensions (inline diffs, selection context, IDE diagnostics).
 - ~~GitHub Action~~ (done): `uses: gtxnrg-ship-it/oasis@main`. `@oasis` on issues, PRs, and review comments makes the change, then pushes a branch or opens a PR and replies in the thread. Only trusted associations can trigger it, and it uses auto mode by default.
 - ~~Importable SDK~~ (done): `import { query, tool } from 'oasis-oss'` provides streaming events, in-process tools, `canUseTool`, and structured output.
-- OpenTelemetry metrics and traces.
+- ~~OpenTelemetry metrics and traces~~ (done): OTLP/HTTP JSON metrics, events and traces with no dependencies. `CLAUDE_CODE_ENABLE_TELEMETRY` and the standard `OTEL_*` variables are honored. Unlike Claude Code, Oasis also exports nested traces (turn > model request / tool > subagent).
 - Browser control (Playwright) for debugging live web apps.
 
 ### P4 — platform features (out of scope for a local tool)
@@ -73,4 +73,4 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 6. ~~PDF reading, `--json-schema`, `--worktree`, `--bare`~~ (done)
 7. ~~Hook events and types, skill `context: fork`, inline `` !`cmd` ``~~ (done)
 8. ~~Auto memory~~ and ~~auto mode classifier~~ (done)
-9. ~~GitHub Action~~ and ~~Bedrock/Vertex adapters~~ (done); VS Code extension still open
+9. ~~GitHub Action~~, ~~Bedrock/Vertex adapters~~ and ~~OpenTelemetry~~ (done); VS Code extension still open
