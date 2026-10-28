@@ -134,6 +134,30 @@ test('expired or rejected tokens are refreshed automatically', async (t) => {
   assert.equal(state.refreshes, before + 1, 'a 401 triggers one refresh and a retry');
 });
 
+test('OAuth metadata discovery rejects oversized bodies and never follows redirects', async () => {
+  const origin = 'http://127.0.0.1:43210';
+  const requests = [];
+  const fakeFetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (options.method === 'POST') {
+      return new Response(null, {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer resource_metadata="https://auth.example.test/metadata"' }
+      });
+    }
+    if (String(url) === 'https://auth.example.test/metadata') {
+      return new Response('x'.repeat(256 * 1024 + 1), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(null, { status: 302, headers: { location: 'https://attacker.example.test/metadata' } });
+  };
+
+  const found = await discoverOAuth(origin + '/mcp', { fetch: fakeFetch });
+  assert.equal(found.tokenEndpoint, origin + '/token', 'invalid metadata falls back to the server origin');
+  assert.ok(requests.some((request) => request.url === 'https://auth.example.test/metadata'));
+  assert.ok(requests.filter((request) => request.options.method !== 'POST').every((request) => request.options.redirect === 'manual'));
+  assert.equal(requests.some((request) => request.url.includes('attacker.example.test')), false, 'redirect targets are never requested');
+});
+
 test('login rejects stdio servers and unknown names', async (t) => {
   const { root, env } = await workspace(t, 'http://127.0.0.1:9');
   await writeFile(path.join(root, '.mcp.json'), JSON.stringify({ mcpServers: { local: { command: 'node' } } }));
