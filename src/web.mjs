@@ -989,7 +989,9 @@ export function createOasisWebServer(options = {}) {
 
     const jobMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})$/i);
     if (req.method === 'GET' && jobMatch) {
-      const job = jobs.get(jobMatch[1]) || await taskStore.get(jobMatch[1]);
+      const liveJob = jobs.get(jobMatch[1]);
+      // Pass live task details through the persistence sanitizer before exposing them to a browser.
+      const job = liveJob ? await taskStore.save(liveJob) : await taskStore.get(jobMatch[1]);
       if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
       const after = Math.max(0, Number.parseInt(parsedUrl.searchParams.get('after') || '0', 10) || 0);
       json(res, 200, {
