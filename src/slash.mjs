@@ -75,6 +75,7 @@ export const BUILTIN_COMMANDS = {
   schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID)',
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
   keybindings: 'Show keyboard shortcuts',
+  vim: 'Toggle vim editing for the prompt (/vim on|off)',
   'terminal-setup': 'Set up Shift+Enter for newlines in your terminal',
   'privacy-settings': 'Show what Oasis sends where and how to turn things off',
   stop: 'Stop background agents and processes in this session',
@@ -466,6 +467,22 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'fewer-permission-prompts':
       return { output: '[permissions] Looking for safe commands to allowlist.', prompt: 'Help me get fewer permission prompts. Read this project\'s saved Oasis sessions and settings (.oasis/settings.json, .oasis/settings.local.json; sessions are listed by /resume) and find commands and MCP tools I approved repeatedly. Keep only clearly read-only ones (for example git status, git diff, git log, ls, test runners, linters, read-only MCP getters). Never include anything that writes, deletes, installs, pushes, or runs arbitrary code (no rm, curl | sh, npm install, git push, bash -c). Show the prioritized list with a one-line reason each, then add them to permissions.allow in .oasis/settings.json using rules like "run_command(git status)" or "run_command(npm test:*)" after I approve.' };
+    case 'vim': {
+      // Toggle vim editing for the prompt; saved as "editorMode" in user settings.
+      const { userSettingsPath } = await import('./settings.mjs');
+      const { readFile, writeFile, mkdir } = await import('node:fs/promises');
+      const current = sessionOptions.editorMode || (session && session.settings && session.settings.editorMode) || 'normal';
+      const wanted = /^(on|vim)$/i.test(argument) ? 'vim' : /^(off|normal|emacs)$/i.test(argument) ? 'normal' : current === 'vim' ? 'normal' : 'vim';
+      sessionOptions.editorMode = wanted;
+      if (session && session.settings) session.settings.editorMode = wanted;
+      const file = userSettingsPath(env);
+      let saved = {};
+      try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
+      saved.editorMode = wanted;
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
+      return { output: wanted === 'vim' ? 'Vim mode on. Esc enters NORMAL mode; i, a, o, A, I return to INSERT. /vim again to turn it off.' : 'Vim mode off (standard editing).' };
+    }
     case 'keybindings': {
       const { SHORTCUTS_HELP } = await import('./line-editor.mjs');
       return { output: 'Keyboard shortcuts:\n' + SHORTCUTS_HELP.join('\n') + '\n  While a turn runs: Esc interrupts it, and anything you type is queued as the next message.' };

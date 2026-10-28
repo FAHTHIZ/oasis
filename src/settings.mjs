@@ -172,6 +172,7 @@ export async function loadSettings(root, options = {}) {
     outputStyle: null,
     agent: null,
     pluginBinDirs: [],
+    editorMode: null,
     statusLine: null,
     lspServers: {},
     trusted: false,
@@ -185,6 +186,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.deny.push(...stringList(permissions.deny));
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
+    if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
     if (typeof settings.agent === 'string' && settings.agent.trim()) { result.agent = settings.agent.trim().toLowerCase(); result.agentSource = scope; }
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;

@@ -55,6 +55,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Plugins and marketplaces | `/plugin marketplace add`, `/plugin install name@market`, enable/disable/update/validate; plugins ship commands, agents, skills, hooks, MCP servers | **Closed.** `oasis plugin ...` and `/plugin ...` with the same verbs. Claude Code `marketplace.json` / `plugin.json` layouts, relative/github/url/git-subdir sources, `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`, `enabledPlugins` across user and trusted project settings, `--plugin-dir`, and plugins already installed by Claude Code are all honored. Verified against `anthropics/claude-code` (12 plugins). Also loaded: plugin LSP servers (`.lsp.json`, `extensionToLanguage`), output styles (`plugin:style`), `bin/` executables on `PATH`, the `settings.json` default `agent` (plus `--agent NAME`), and `userConfig` with `${user_config.KEY}`, `CLAUDE_PLUGIN_OPTION_*` and private storage for sensitive values (`oasis plugin config`, `oasis plugin show`). Not yet: npm sources, monitors, themes, channels. |
 | IDE integration | VS Code/JetBrains extensions: selection context, diff review, diagnostics (`mcp__ide__getDiagnostics`), auto-connect from IDE terminals, `/ide` | **Closed for VS Code, Cursor, Windsurf.** Token-authenticated loopback bridge + lock-file discovery, `[ide] Selected N lines` context, edit approvals as native diffs with Accept/Reject, `ide_get_diagnostics` / `ide_open_file`, Ctrl/Cmd+Esc launch, Ctrl/Cmd+Alt+K `@file#L` references, dependency-free VSIX build. JetBrains not yet. |
 | Hooks parity | 25+ events, command/http/mcp_tool/prompt/agent handlers, `if` rules, async hooks, `onFailure`, exact-vs-regex matchers, `updatedToolOutput` | **Closed for the single-session loop.** All five handler types; `if` permission-rule filters; exec-form `args`; `async`/`asyncRewake` with next-request delivery; `onFailure: "block"`; Claude Code matcher semantics with `mcp__server__tool` names; `updatedToolOutput`; `PermissionDenied` retry; `impossible` Stop verdicts. New events: `PostToolBatch`, `PermissionDenied`, `StopFailure`, `UserPromptExpansion`, `InstructionsLoaded`, `TaskCreated`, `TaskCompleted`, `PreModelSwitch`, `PostModelSwitch`, `DirectoryAdded`. Not yet: `ConfigChange`, `FileChanged`, `WorktreeCreate/Remove`, `TeammateIdle`, `Elicitation`, `Setup`. |
+| Vim mode | `/vim` / `editorMode: "vim"`: INSERT/NORMAL, motions, operators, text objects | **Closed.** Same toggle and setting (Claude Code's `~/.claude.json` honored), mode indicator, `hjkl wbe WBE 0^$ gg G fFtT;,`, `d/c/y` + motions/text objects (`iw aw i" i( i{ ...`), `dd cc yy D C Y x X s S r ~ J p P u .`, counts, history on `j`/`k`. |
 
 ## Ranked next improvements
 
@@ -84,7 +85,7 @@ Native Gemini and Azure Foundry adapters; PowerShell and Windows sandboxing; npm
 
 ### 6. Terminal experience polish
 
-Full-screen transcript, vim mode, themes and an editable keybinding configuration. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Remaining: full-screen transcript, themes and an editable keybinding configuration. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
 
 ## What OASIS already does well
 

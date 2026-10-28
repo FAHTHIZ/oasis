@@ -348,6 +348,22 @@ Run `oasis` in a project to open the interactive prompt. Press `?` on an empty l
 | Esc Esc | Clear the input, or rewind when it is empty |
 | Ctrl+L, Ctrl+D | Clear the screen, exit |
 
+### Vim mode
+
+`/vim` turns on vim editing for the prompt (`/vim off` turns it off). The choice is saved as `"editorMode": "vim"` in your user settings, and Claude Code's `editorMode` in `~/.claude.json` is honored too. The input starts in INSERT mode. Esc switches to NORMAL, and the current mode shows under the prompt. Enter sends from either mode.
+
+| NORMAL keys | |
+| --- | --- |
+| `h l j k`, `w b e W B E`, `0 ^ $`, `gg G` | Move. `j`/`k` on the first or last line walk the input history |
+| `f F t T` + char, `;` `,` | Find a character on the line, repeat the find |
+| `d c y` + motion, `dd cc yy`, `D C Y` | Delete, change, or yank (counts work: `d2w`, `3dd`) |
+| `iw aw iW aW`, `i" a" i' a'`, `i( a( i[ a[ i{ a{ i< a<` | Text objects after an operator (`ciw`, `da(`, `di"`) |
+| `x X s S r ~ J` | Delete, substitute, replace, toggle case, join lines |
+| `i a I A o O` | Back to INSERT |
+| `p P u .` | Put, undo, repeat the last change (including the typed text of `cw…`) |
+
+Esc in NORMAL mode keeps its usual role, so Esc Esc still clears the input or rewinds. Ctrl shortcuts, Tab, and Shift+Tab work the same in both modes.
+
 Replies render as Markdown with syntax-highlighted code, and edits show as colored diffs. Settings: `OASIS_NO_ANIMATION=1` skips the startup animation, `OASIS_SIMPLE_INPUT=1` uses a plain line reader, `OASIS_PLAIN_OUTPUT=1` prints raw text, and `NO_COLOR` turns off colors.
 
 ### Workflow commands
