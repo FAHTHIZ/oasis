@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSharedTaskStore, runSharedTaskTool, sanitizeSharedTaskStore } from '../src/shared-tasks.mjs';
+import { createSharedTaskStore, runSharedTaskTool, sanitizeSharedTaskStore, SHARED_TASK_TOOL_NAMES } from '../src/shared-tasks.mjs';
 
 test('shared board supports creation, dependencies, claims, ownership and completion', () => {
   const session = { sharedTasks: createSharedTaskStore(), agentId: 'agent_2' };
   const first = runSharedTaskTool(session, 'task_create', { subject: 'Inspect runtime', description: 'Find the implementation seam', owner: 'agent_2' });
   assert.equal(first.task.id, 'task_1');
   assert.equal(first.task.created_by, 'agent_2');
+  assert.ok(SHARED_TASK_TOOL_NAMES.has('task_renew'));
   const second = runSharedTaskTool(session, 'task_create', { subject: 'Verify behavior', blocked_by: ['task_1'] });
   assert.deepEqual(second.task.blocked_by, ['task_1']);
   assert.equal(second.task.ready, false);
@@ -44,6 +45,13 @@ test('exclusive claims prevent duplicate work and expired leases can be reclaime
   const takeover = runSharedTaskTool(agent2, 'task_claim', { task_id: 'task_1', lease_seconds: 30 });
   assert.equal(takeover.reclaimed_from, 'agent_1');
   assert.equal(takeover.task.claimed_by, 'agent_2');
+  const renewed = runSharedTaskTool(agent2, 'task_renew', { task_id: 'task_1', lease_seconds: 120 });
+  assert.equal(renewed.renewed, true);
+  assert.equal(renewed.lease_seconds, 120);
+  assert.equal(renewed.task.claimed_by, 'agent_2');
+  assert.ok(Date.parse(renewed.task.claim_expires_at) > Date.now() + 110000);
+  assert.throws(() => runSharedTaskTool(agent1, 'task_renew', { task_id: 'task_1' }), /only that agent can renew/);
+  assert.throws(() => runSharedTaskTool(agent2, 'task_renew', { task_id: 'task_1', lease_seconds: 29 }), /lease_seconds/);
   runSharedTaskTool(agent2, 'task_update', { task_id: 'task_1', status: 'completed' });
   assert.equal(sharedTasks.tasks[0].claimExpiresAt, null);
 
