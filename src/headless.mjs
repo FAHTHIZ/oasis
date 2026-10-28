@@ -11,6 +11,7 @@ import { createSession, runAgentTurn, runAgentPlan, closeSession } from './agent
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
+import { validateJsonSchema, extractJson } from './json-schema.mjs';
 
 export const OUTPUT_FORMATS = ['text', 'json', 'stream-json'];
 
@@ -29,6 +30,7 @@ export async function runHeadless(options) {
     maxTurns = null,
     autoApprove = false,
     planOnly = false,
+    jsonSchema = null,
     sessionOptions = {},
     persistence = {},
     env = process.env,
@@ -43,6 +45,8 @@ export async function runHeadless(options) {
   let error = null;
   const usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
   let requests = 0;
+  let structured;
+  let schemaErrors = null;
   try {
     let restored = null;
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
@@ -50,7 +54,8 @@ export async function runHeadless(options) {
     emit({ type: 'system', subtype: 'init', session_id: session.sessionId || null, cwd: root, model: config.model, permission_mode: session.permissions.mode, tools: session.toolDefinitions.map((tool) => tool.function.name) });
     const expanded = await expandFileMentions(root, rawPrompt, { images: visionEnabled(config, env) }).catch(() => ({ text: rawPrompt, files: [] }));
     const runner = planOnly ? runAgentPlan : runAgentTurn;
-    result = await runner(session, expanded.text, {
+    const schemaInstruction = jsonSchema ? '\n\nWhen you are done, your final message must be only a JSON value that matches this JSON Schema, with no other text and no code fence:\n' + JSON.stringify(jsonSchema) : '';
+    const turnOptions = {
       autoApprove,
       ...(expanded.images && expanded.images.length ? { images: expanded.images } : {}),
       env,
@@ -69,7 +74,17 @@ export async function runHeadless(options) {
         usage.total_tokens += Number(step.totalTokens || 0);
         if (step.phase === undefined) requests += 1;
       }
-    });
+    };
+    result = await runner(session, expanded.text + schemaInstruction, turnOptions);
+    // Structured output: validate, and give the model two chances to fix it.
+    for (let attempt = 0; jsonSchema && result && !result.limitReached; attempt += 1) {
+      const parsed = extractJson(result.text);
+      schemaErrors = parsed.ok ? validateJsonSchema(jsonSchema, parsed.value) : ['the reply is not valid JSON'];
+      if (!schemaErrors.length) { structured = parsed.value; schemaErrors = null; break; }
+      if (attempt >= 2) break;
+      emit({ type: 'system', subtype: 'structured_output_retry', errors: schemaErrors.slice(0, 10) });
+      result = await runAgentTurn(session, 'Your final answer did not match the required JSON Schema:\n- ' + schemaErrors.slice(0, 10).join('\n- ') + '\nReply again with only the corrected JSON value.', turnOptions);
+    }
   } catch (caught) {
     error = caught;
   }
@@ -78,8 +93,8 @@ export async function runHeadless(options) {
     try { sessionId = (await saveSession(session, { env })).id; } catch {}
   }
   if (session) closeSession(session);
-  const isError = Boolean(error) || !result || result.blockedByHook === true;
-  const subtype = error ? 'error_during_execution' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
+  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors);
+  const subtype = error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
   const summary = {
     type: 'result',
     subtype,
@@ -91,9 +106,11 @@ export async function runHeadless(options) {
     tool_calls: result ? Number(result.toolCalls || 0) : 0,
     usage,
     permission_denials: denied,
+    ...(structured !== undefined ? { structured_output: structured } : {}),
+    ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
     ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {})
   };
-  if (outputFormat === 'text') write(summary.result + (summary.result.endsWith('\n') ? '' : '\n'));
+  if (outputFormat === 'text') write(structured !== undefined ? JSON.stringify(structured) + '\n' : summary.result + (summary.result.endsWith('\n') ? '' : '\n'));
   else write(JSON.stringify(summary) + '\n');
   return { exitCode: isError ? 1 : 0, summary };
 }

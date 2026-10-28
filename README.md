@@ -309,7 +309,13 @@ oasis -p "summarize what changed in the last commit"
 git diff | oasis -p "review this diff for bugs" --output-format json
 oasis -p "fix the failing test" --permission-mode acceptEdits --allowedTools "Bash(npm test:*)" --max-turns 30
 oasis -p "list TODOs" --output-format stream-json --model gpt-4.1-mini
+oasis -p "find bugs in src/" --json-schema @bug-schema.json --output-format json
+oasis -w fix-login "fix the login redirect"
 ~~~
+
+`--json-schema` takes a JSON Schema (inline or `@file.json`). Oasis asks the model for JSON that matches it, validates the reply and retries up to twice. With `--output-format json` the result is in `structured_output`; in text mode only the JSON is printed. If it still fails, the result has subtype `error_max_structured_output_retries`.
+
+`-w/--worktree [NAME]` runs the session (interactive or `-p`) in a new git worktree under `.oasis/worktrees/` on its own `oasis/NAME-*` branch, so your checkout is untouched. When the session ends, a worktree with no changes is removed along with its branch. Otherwise Oasis keeps it and prints how to review, merge or remove it.
 
 - `--output-format text` (default) prints the final answer. `json` prints one object with `result`, `subtype` (`success`, `error_max_turns`, `error_during_execution`), `is_error`, `num_turns`, `usage`, `tool_calls`, `session_id`, and `permission_denials`. `stream-json` prints one JSON event per line (`system`, `tool_use`, `tool_result`, `assistant`, then `result`).
 - Piped input is added to the prompt inside `<stdin>` tags.
@@ -380,6 +386,7 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 - Reasoning effort (OpenAI o-series and gpt-5 models): the same keywords set `reasoning_effort` (chat) or `reasoning.effort` (Responses): "think about" → low, "think hard" → medium, "ultrathink" → high. Set a floor with `"reasoningEffort": "medium"` or `OASIS_REASONING_EFFORT`; setting it explicitly also enables the field for other models.
 - Prompt caching: with the Anthropic protocol, Oasis marks the system prompt, tool list, and newest message as cacheable, so long sessions reuse the cached prefix and cost less. Turn it off with `OASIS_PROMPT_CACHE=off` or `"promptCache": false`.
 - Extra folders: `oasis --add-dir ../shared-lib` (repeatable), `/add-dir PATH`, or `permissions.additionalDirectories` in trusted settings let file tools read and edit another folder. Secret files and symlink escapes stay blocked there, edits get their own snapshots, and the OS sandbox can write there too.
+- PDFs: `read_file` on a `.pdf` returns its text with `--- page N ---` markers. Pass `pages` (`"3"`, `"1-10"`, at most 50 pages per call) for long documents. Oasis uses `pdftotext` (poppler) when it is installed, or set `OASIS_PDFTOTEXT` to its path. Otherwise a built-in extractor handles most text PDFs. Scanned PDFs without a text layer return no text.
 - Jupyter notebooks: `read_file` on a `.ipynb` shows each cell with its id, type, and text outputs (images are summarized). `notebook_edit` replaces, inserts, or deletes cells and clears stale outputs. Permission rules can target it as `NotebookEdit`, and it is covered by checkpoints and `/rewind`.
 - `web_search`: searches the web for current docs, error messages, and release notes, then `fetch_url` reads a result. It works without a key through DuckDuckGo. For more dependable results set `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, or `OASIS_SEARXNG_URL` (a self-hosted SearXNG). Queries go to that search service; set `OASIS_WEB_SEARCH=off` to remove the tool.
 - Background agents: `task` with `run_in_background: true` starts a subagent and returns its id right away, so Oasis keeps working while it runs. Finished agents report back automatically, as a terminal notice and in the model's next step. `agent_status` lists agents or reads one report (`wait_seconds` blocks until it finishes). `send_message` steers a running agent mid-task or resumes a finished one with its full earlier context. `agent_stop` cancels one. `/tasks` lists agents and background processes (`/tasks ID`, `/tasks stop ID`). Background agents can't show approval prompts, so anything not already allowed by a rule or bypass mode is denied. Use read-only agents or `isolation: "worktree"` for edits.
