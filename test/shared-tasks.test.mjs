@@ -82,7 +82,7 @@ test('shared board validates limits, blocks unauthorized status transitions and 
   assert.throws(() => runSharedTaskTool({ sharedTasks: session.sharedTasks, agentId: 'agent_1' }, 'task_update', { task_id: task.task.id, status: 'completed' }), /task_claim/);
 
   const restored = sanitizeSharedTaskStore({ nextId: 1, tasks: [
-    { id: 'task_2', subject: 'Later', status: 'in_progress', blockedBy: ['task_1'], claimedBy: 'agent_2', claimExpiresAt: new Date(Date.now() + 60000).toISOString(), createdBy: 'agent_1' },
+    { id: 'task_2', subject: 'Later', status: 'in_progress', blockedBy: ['task_1'], claimedBy: 'agent_2', claimExpiresAt: new Date(Date.now() + 60000).toISOString(), createdBy: 'agent_1', worktreeChanged: true, worktreeBranch: 'oasis/safe-branch-123abc', worktreeCommit: '0123456789abcdef0123456789abcdef01234567' },
     { id: 'task_1', subject: 'First', status: 'pending', blockedBy: ['task_2'], claimedBy: 'agent_1', claimExpiresAt: new Date(Date.now() + 60000).toISOString(), createdBy: 'main' },
     { id: 'bad-id', subject: 'Ignore me', status: 'pending' },
     { id: 'task_2', subject: 'Duplicate', status: 'completed' }
@@ -91,5 +91,8 @@ test('shared board validates limits, blocks unauthorized status transitions and 
   assert.ok(restored.tasks.every((item) => item.status === 'pending'));
   assert.ok(restored.tasks.every((item) => item.claimedBy === '' && item.claimExpiresAt === null));
   assert.deepEqual(restored.tasks.map((item) => [item.id, item.blockedBy]), [['task_2', ['task_1']], ['task_1', []]]);
+  assert.equal(restored.tasks[0].worktreeChanged, true);
+  assert.equal(restored.tasks[0].worktreeBranch, 'oasis/safe-branch-123abc');
+  assert.equal(restored.tasks[0].worktreeCommit, '0123456789abcdef0123456789abcdef01234567');
   assert.equal(restored.nextId, 3);
 });

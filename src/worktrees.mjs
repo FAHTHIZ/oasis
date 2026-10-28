@@ -70,7 +70,8 @@ export async function finishWorktree(root, worktree, options = {}) {
   // The caller must opt in explicitly; normal/direct finishWorktree calls run hooks.
   const hookPolicy = options.skipHooks === true ? ['--no-verify'] : [];
   await git(worktree.path, [...identity, 'commit', ...hookPolicy, '-q', '-m', 'Oasis subagent: ' + String(options.message || worktree.name).slice(0, 200)], env, 60000);
-  const commit = await git(worktree.path, ['rev-parse', '--short', 'HEAD'], env);
+  const commitSha = await git(worktree.path, ['rev-parse', 'HEAD'], env);
+  const commit = commitSha.slice(0, 7);
   const stat = await git(worktree.path, ['diff', '--stat', worktree.base, 'HEAD'], env).catch(() => '');
   const files = (await git(worktree.path, ['diff', '--name-only', worktree.base, 'HEAD'], env).catch(() => '')).split('\n').filter(Boolean);
   return {
@@ -78,6 +79,7 @@ export async function finishWorktree(root, worktree, options = {}) {
     branch: worktree.branch,
     path: worktree.relative,
     commit,
+    commitSha,
     files: files.slice(0, 200),
     diffStat: stat.slice(-4000),
     merge: 'git merge ' + worktree.branch + '   (or review with: git diff HEAD...' + worktree.branch + ')',
@@ -131,6 +133,23 @@ async function commandResult(root, args, env, timeout = 30000) {
 
 function nameList(value) {
   return [...new Set(String(value || '').split('\n').map((line) => line.trim()).filter(Boolean))].sort();
+}
+
+/**
+ * Return true only when a worker commit is already an ancestor of the main checkout.
+ * Require a full SHA so stored task metadata cannot accidentally match an ambiguous short hash.
+ */
+export async function isCommitIntegrated(root, commitValue, options = {}) {
+  const commit = String(commitValue || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(commit)) return false;
+  const env = options.env || process.env;
+  try {
+    await git(root, ['rev-parse', '--verify', commit + '^{commit}'], env);
+    await git(root, ['merge-base', '--is-ancestor', commit, 'HEAD'], env);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Inspect an attached OASIS worktree without changing either checkout. */

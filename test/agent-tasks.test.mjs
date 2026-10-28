@@ -496,6 +496,71 @@ test('opt-in auto-dispatch advances dependency waves and pauses with the lease r
   assert.ok(agentEvents(session, { limit: 100 }).events.some((event) => event.type === 'task.auto_dispatch_paused'));
 });
 
+test('auto-dispatch blocks dependent tasks until prerequisite worktree changes are integrated', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-auto-integration-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-auto-integration-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'auto-integration@example.com');
+  git('config', 'user.name', 'OASIS test');
+  await writeFile(path.join(root, 'fixture.txt'), 'baseline from main\n');
+  git('add', '-A');
+  git('commit', '-qm', 'fixture baseline');
+
+  const { config, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && /Create tasks and enable auto-dispatch with changed upstream code/.test(last.content)) {
+        return { content: null, tool_calls: [
+          call('create-upstream', 'task_create', { subject: 'Change the fixture', description: 'Write an updated fixture.txt in the worker worktree, then mark this task completed.' }),
+          call('create-downstream', 'task_create', { subject: 'Check the updated fixture', description: 'Inspect the updated fixture after task_1 is integrated.', blocked_by: ['task_1'] })
+        ] };
+      }
+      if (!payload.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks')) {
+        return { content: null, tool_calls: [call('auto-wave', 'dispatch_ready_tasks', { max_parallel: 1, auto_dispatch: true })] };
+      }
+      return { content: 'auto-dispatch started' };
+    },
+    child: (payload) => {
+      const match = text(payload.messages).match(/You have been assigned shared task (task_[1-9][0-9]*)/i);
+      const taskId = match && match[1];
+      const last = payload.messages[payload.messages.length - 1];
+      if (taskId !== 'task_1') return { content: 'Unexpected downstream task launch before integration.' };
+      if (last.role === 'user' && /You have been assigned shared task/i.test(last.content)) {
+        return { content: null, tool_calls: [call('claim-upstream', 'task_claim', { task_id: taskId, lease_seconds: 60 })] };
+      }
+      if (last.role === 'tool' && last.name === 'task_claim') {
+        return { content: null, tool_calls: [call('write-upstream', 'write_file', { path: 'fixture.txt', content: 'changed by upstream\n' })] };
+      }
+      if (last.role === 'tool' && last.name === 'write_file') {
+        return { content: null, tool_calls: [call('complete-upstream', 'task_update', { task_id: taskId, status: 'completed' })] };
+      }
+      if (last.role === 'tool' && last.name === 'task_update') return { content: 'Updated fixture.txt and completed task_1.' };
+      return { content: 'Unexpected worker step for task_1.' };
+    }
+  });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+
+  const result = await runAgentTurn(session, 'Create tasks and enable auto-dispatch with changed upstream code.', { autoApprove: true, env, approval: async () => true });
+  assert.equal(result.text, 'auto-dispatch started');
+  await until(() => session.sharedTasks.tasks.find((task) => task.id === 'task_1')?.status === 'completed' && session.agentTasks.autoDispatch?.enabled === false);
+
+  const upstream = session.sharedTasks.tasks.find((task) => task.id === 'task_1');
+  const downstream = session.sharedTasks.tasks.find((task) => task.id === 'task_2');
+  assert.equal(upstream.worktreeChanged, true);
+  assert.match(upstream.worktreeBranch, /^oasis\//);
+  assert.match(upstream.worktreeCommit, /^[0-9a-f]{40}$/i);
+  assert.equal(await isCommitIntegrated(root, upstream.worktreeCommit, { env }), false);
+  assert.equal(downstream.status, 'pending');
+  assert.equal(session.agentTasks.agents.size, 1, 'downstream worker must not start on stale main-checkout code');
+  assert.ok(childRequests.some((request) => text(request.messages).includes('You have been assigned shared task task_1')));
+  assert.ok(!childRequests.some((request) => text(request.messages).includes('You have been assigned shared task task_2')));
+  assert.ok(agentEvents(session, { limit: 100 }).events.some((event) => event.type === 'task.auto_dispatch_paused' && /unintegrated prerequisite changes/.test(event.detail || '')));
+});
+
 test('cancelling a dispatched worker immediately releases its shared task lease', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-cancel-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-cancel-home-'));

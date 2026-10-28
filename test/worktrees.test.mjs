@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile, rm, access, chmod } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { listWorktrees, inspectWorktree, mergeWorktree } from '../src/worktrees.mjs';
+import { listWorktrees, inspectWorktree, mergeWorktree, isCommitIntegrated } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 function gitRepo(root) {
@@ -98,7 +98,9 @@ test('worktree merge preflight integrates disjoint changes and preserves the sou
   const env = { ...process.env, HOME: home };
   const wt = await (await import('../src/worktrees.mjs')).createWorktree(root, 'disjoint change', { env });
   await writeFile(path.join(wt.path, 'agent.txt'), 'from agent\n');
-  await (await import('../src/worktrees.mjs')).finishWorktree(root, wt, { env });
+  const workerResult = await (await import('../src/worktrees.mjs')).finishWorktree(root, wt, { env });
+  assert.match(workerResult.commitSha, /^[0-9a-f]{40}$/i);
+  assert.equal(await isCommitIntegrated(root, workerResult.commitSha, { env }), false, 'worker commit is not integrated just because its branch exists');
   await writeFile(path.join(root, 'main.txt'), 'from main\n');
   run('add', '-A'); run('commit', '-qm', 'main edit');
   const before = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim();
@@ -108,6 +110,7 @@ test('worktree merge preflight integrates disjoint changes and preserves the sou
   assert.deepEqual(preview.merge_conflicts, []);
   const merged = await mergeWorktree(root, wt.branch, { env, expectedHead: before });
   assert.equal(merged.merged, true);
+  assert.equal(await isCommitIntegrated(root, workerResult.commitSha, { env }), true, 'the merge makes the worker commit an ancestor of HEAD');
   assert.equal(await readFile(path.join(root, 'agent.txt'), 'utf8'), 'from agent\n');
   assert.equal(await readFile(path.join(root, 'main.txt'), 'utf8'), 'from main\n');
   assert.equal((await listWorktrees(root, { env })).length, 1);
