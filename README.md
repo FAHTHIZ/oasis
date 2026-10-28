@@ -287,6 +287,17 @@ Press Ctrl+C while a task is running to stop it and return to the prompt (press 
 
 The terminal streams the model's replies as they arrive. Set `OASIS_NO_STREAM=1` to print each reply only when it is finished.
 
+## Auto memory
+
+Oasis keeps durable notes across sessions on its own, so you don't repeat yourself. The design borrows from two open-source projects: [OpenViking](https://github.com/volcengine/OpenViking) (memory as plain files with a one-line abstract loaded first and the full text read on demand) and [agentmemory](https://github.com/rohitg00/agentmemory) (keyword-ranked recall for each prompt under a token budget, secret redaction, and merging duplicates).
+
+- The agent saves a memory with `memory_save` when you state a preference or correct it, when a decision is made, when it learns a non-obvious project fact (build, test, deploy commands, gotchas), or when a fix took several attempts. It looks memories up with `memory_search` and `memory_read`, and removes wrong ones with `memory_delete`.
+- Every session starts with an index of one-line abstracts (about 2,000 tokens at most). On each message, the few most relevant memories are ranked with BM25 and attached in full, and Oasis prints `[memory] Recalled ...`.
+- Memories are Markdown files you can read and edit: `~/.config/oasis/memory/projects/<workspace>/<category>/<name>.md` for this workspace and `~/.config/oasis/memory/user/...` for every project. Each folder has a generated `MEMORY.md` index. Categories are preferences, project, decisions, lessons, people and reference.
+- Secrets (API keys, tokens, private keys, passwords in URLs) and anything inside `<private>...</private>` are redacted before a memory is written. Near-duplicates merge into the existing memory instead of piling up.
+- `/memory` lists them; `/memory search WORDS`, `/memory show ID`, `/memory forget ID`, `/memory add NOTE` (start with `user:` for every project) and `/memory path` manage them. `/remember [focus]` asks the agent to review the conversation and save what is worth keeping. The same commands work as `oasis memory ...` in a terminal.
+- Turn it off with `"autoMemory": false` in settings or `OASIS_AUTO_MEMORY=0`.
+
 ## Headless mode for scripts and CI
 
 `oasis -p "task"` runs one task without any prompts and prints the answer, like `claude -p`.

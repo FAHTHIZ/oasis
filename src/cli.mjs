@@ -54,6 +54,7 @@ function printHelp() {
     '  oasis update [--check] [--yes] Check GitHub main for a newer Oasis and install it',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
+    '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
@@ -922,6 +923,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       ...(modeOptions.images ? { images: modeOptions.images } : {}),
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
+      onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
@@ -1020,6 +1022,12 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
   } finally { process.removeListener('SIGINT', onStop); }
   stdout.write('[loop] Stopped.\n');
   return session;
+}
+
+async function memoryCommand(args, root) {
+  const { runBuiltinCommand } = await import('./slash.mjs');
+  const handled = await runBuiltinCommand('memory', args.join(' '), { root, env: process.env });
+  stdout.write(handled.output + '\n');
 }
 
 async function interactive(root, autoApprove, persistence = {}) {
@@ -1489,6 +1497,7 @@ async function main() {
   }
   if (command === 'setup') return await configureProvider(workspace);
   if (command === 'doctor') return await doctor(rest, workspace);
+  if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
   if (command === 'update') return await updateOasis(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);

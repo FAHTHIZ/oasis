@@ -40,7 +40,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 4. **MCP depth.** Done: resources (`list_mcp_resources`, `read_mcp_resource`, `@server:uri` mentions) and prompts as slash commands (`/mcp__server__prompt`). Still missing: OAuth for remote servers and `oasis mcp serve`, which exposes Oasis tools to other clients.
 5. **Skill and command frontmatter.** Missing: `context: fork` (run a skill in a subagent), inline `` !`cmd` `` shell output in commands, `model`/`effort` per command, and hot reload.
 6. **Hooks breadth.** Missing events: PostToolUseFailure, SubagentStart, PostCompact, PermissionRequest, CwdChanged, FileChanged, WorktreeCreate/Remove, and others. Missing hook types: `http`, `prompt` (model-evaluated), and `mcp_tool`.
-7. **Auto memory.** Claude Code saves learnings across sessions automatically. Oasis only saves `# note` entries the user writes.
+7. **Auto memory.** Done: `memory_save`/`memory_search`/`memory_read`/`memory_delete`, an index of abstracts in every session, BM25 recall per prompt, secret redaction, duplicate merging, Markdown files per project and per user, `/memory`, `/remember`, and `oasis memory`. The design draws on [OpenViking](https://github.com/volcengine/OpenViking) and [agentmemory](https://github.com/rohitg00/agentmemory). Still missing: optional embedding search.
 8. **PDF reading.** `read_file` should extract text from PDF page ranges.
 9. **Headless extras.** Missing: `--json-schema` structured output, `--permission-prompts none`, `--bare`, and `-w/--worktree` for the main session.
 
@@ -71,5 +71,5 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 5. MCP resources, prompts, and OAuth
 6. PDF reading, `--json-schema`, `--worktree`, `--permission-prompts none`
 7. Hook events and types, skill `context: fork`, and inline `` !`cmd` ``
-8. Auto memory and auto mode classifier
+8. ~~Auto memory~~ (done) and auto mode classifier
 9. Bedrock/Vertex adapters, VS Code extension, GitHub Action

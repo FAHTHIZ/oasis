@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
+import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { loadSettings } from './settings.mjs';
@@ -342,6 +343,12 @@ export async function createSession({ root, config, restore = null, permissionMo
   };
   try { session.agents = await loadAgentDefinitions(root, { env }); } catch { session.agents = { ...BUILTIN_AGENTS }; }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION]);
+  if (autoMemoryEnabled(loadedSettings, env)) {
+    session.autoMemory = true;
+    session.recalledMemoryIds = new Set();
+    session.toolDefinitions = session.toolDefinitions.concat(MEMORY_TOOL_DEFINITIONS);
+    try { systemText += '\n\n' + await memoryIndexPrompt(root, { env }); } catch {}
+  }
   const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
   if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
   if (sandbox.enabled) {
@@ -1132,7 +1139,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'agent_status', 'list_mcp_resources', 'read_mcp_resource']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read']);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -1785,6 +1792,16 @@ export async function runAgentTurn(session, prompt, options = {}) {
     const resolved = await resolveMcpPrompt(session, request);
     if (resolved && resolved.error) return { text: resolved.error, toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false };
     if (resolved) userContent = resolved.prompt;
+  }
+  if (session.autoMemory && !options.isSubagent && !options.planOnly) {
+    try {
+      const recalled = await recallForPrompt(session.root, request, { env: options.env || process.env, exclude: session.recalledMemoryIds });
+      if (recalled.text) {
+        userContent += '\n\n' + recalled.text;
+        for (const id of recalled.ids) session.recalledMemoryIds.add(id);
+        if (options.onMemoryRecall) options.onMemoryRecall(recalled.ids);
+      }
+    } catch {}
   }
   if (!options.isSubagent && /@[a-z][a-z0-9_-]*:\S/.test(request)) {
     const mentioned = await expandMcpResourceMentions(session, request);

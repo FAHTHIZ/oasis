@@ -38,7 +38,7 @@ export const BUILTIN_COMMANDS = {
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
   'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
   todos: 'Show the current todo list',
-  memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
+  memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for bugs (/review [PR number | git ref])',
@@ -51,6 +51,7 @@ export const BUILTIN_COMMANDS = {
   fork: 'Fork the conversation: keep the original saved and continue in a copy (alias /branch)',
   branch: 'Fork the conversation (same as /fork)',
   skills: 'List available skills',
+  remember: 'Save what is worth keeping from this conversation to auto memory (/remember [focus])',
   loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT)',
   cd: 'Switch the workspace to another directory and start a fresh conversation (/cd PATH)',
   sandbox: 'Show or change the OS sandbox for this session (/sandbox [on|off|network on|network off])',
@@ -403,10 +404,49 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: todos.map((todo) => (mark[todo.status] || '[ ]') + ' ' + (todo.content || todo.text || todo.title || '')).join('\n') };
     }
     case 'memory': {
+      const memory = await import('./auto-memory.mjs');
+      const [sub, ...restWords] = argument.split(/\s+/).filter(Boolean);
+      const rest = restWords.join(' ');
+      if (sub === 'search') {
+        if (!rest) return { output: 'Usage: /memory search WORDS' };
+        const ranked = memory.rankMemories(await memory.listMemories(root, { env }), rest, { limit: 10 });
+        return { output: ranked.length ? ranked.map(({ memory: item, score }) => item.id + '  (' + score.toFixed(2) + ')\n    ' + item.description).join('\n') : 'No memories match.' };
+      }
+      if (sub === 'show') {
+        const item = await memory.findMemory(root, rest, { env });
+        return { output: item ? item.id + '\n' + item.file + '\nupdated ' + item.updated + ', recalled ' + item.recalls + ' times\n\n' + item.content : 'No memory matches ' + rest + '.' };
+      }
+      if (sub === 'forget' || sub === 'delete') {
+        try { const removed = await memory.deleteMemory(root, rest, { env }); return { output: 'Deleted ' + removed.deleted + '.' }; } catch (error) { return { output: error.message }; }
+      }
+      if (sub === 'path') {
+        const roots = memory.memoryRoots(root, env);
+        return { output: 'Project memory: ' + roots.project + '\nUser memory:    ' + roots.user };
+      }
+      if (sub === 'add' || sub === 'save') {
+        if (!rest) return { output: 'Usage: /memory add NOTE  (add "user:" in front to save it for every project)' };
+        const userScope = /^user:\s*/i.test(rest);
+        const text = rest.replace(/^(user|project):\s*/i, '');
+        const saved = await memory.saveMemory(root, { name: text.split(/[.:\n]/)[0].slice(0, 60), content: text, scope: userScope ? 'user' : 'project', category: userScope ? 'preferences' : 'project' }, { env });
+        return { output: 'Memory ' + saved.action + ': ' + saved.id + (saved.redacted ? ' (secrets were redacted)' : '') };
+      }
       const files = await memoryFiles(root, { env });
-      const lines = files.map((file) => (file.exists ? '[loaded] ' : '[none]   ') + file.label + ': ' + file.path);
-      lines.push('Start a message with # to save a note to the project OASIS.md (for example: # always run npm test before committing).');
+      const lines = ['Instruction files:'];
+      lines.push(...files.map((file) => '  ' + (file.exists ? '[loaded] ' : '[none]   ') + file.label + ': ' + file.path));
+      const items = await memory.listMemories(root, { env });
+      const enabled = memory.autoMemoryEnabled(session && session.settings || {}, env);
+      lines.push('Auto memory (' + (enabled ? 'on' : 'off') + '): ' + items.length + ' saved');
+      for (const item of items.slice(0, 40)) lines.push('  ' + item.id + ' - ' + item.description.slice(0, 100));
+      if (items.length > 40) lines.push('  ... ' + (items.length - 40) + ' more (/memory search WORDS)');
+      lines.push('Commands: /memory search WORDS, /memory show ID, /memory forget ID, /memory add NOTE, /memory path, /remember [focus]. Turn it off with "autoMemory": false in settings or OASIS_AUTO_MEMORY=0.');
+      lines.push('Start a message with # to save a note to the project OASIS.md instead (for example: # always run npm test before committing).');
       return { output: lines.join('\n') };
+    }
+    case 'remember': {
+      return {
+        output: 'Reviewing this conversation for things worth remembering.',
+        prompt: 'Review this conversation and save durable memories with memory_save' + (argument ? ', focusing on: ' + argument : '') + '. Good memories: preferences or corrections the user gave, decisions and their reasons, non-obvious project facts (build, test, deploy commands; where things live; gotchas), and lessons from fixes that took several attempts. Search existing memories first with memory_search and update them instead of adding duplicates; delete ones this conversation proved wrong. Skip secrets and one-off details. Finish with a short list of what you saved, updated or deleted.'
+      };
     }
     case 'rewind': {
       const turns = session ? listCheckpoints(session) : [];
