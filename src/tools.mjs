@@ -1301,6 +1301,14 @@ function parseSkillMetadata(content, fallbackName) {
   return { name, description };
 }
 
+// Claude Code personal skills: ~/.claude/skills (or $CLAUDE_CONFIG_DIR/skills).
+function getClaudeUserSkillsDirectory(env = process.env) {
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  return path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'skills');
+}
+const PORTABLE_SKILL_SOURCES = ['portable-workspace', 'global-portable', 'claude-project', 'claude-user'];
+const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDirectory, 'claude-user': getClaudeUserSkillsDirectory };
+
 function getUniversalGlobalSkillsDirectory(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
@@ -1318,12 +1326,12 @@ export async function listAvailableSkills(root, options = {}) {
       const filePath = path.join(directory, entry.name, 'SKILL.md');
       try {
         const info = await lstat(filePath);
-        const maxSkillBytes = ['portable-workspace', 'global-portable'].includes(source) ? 96 * 1024 : 32 * 1024;
+        const maxSkillBytes = PORTABLE_SKILL_SOURCES.includes(source) ? 96 * 1024 : 32 * 1024;
         if (!info.isFile() || info.isSymbolicLink() || info.size > maxSkillBytes) continue;
         const content = await readFile(filePath, 'utf8');
         if (content.includes('\0')) continue;
         const meta = parseSkillMetadata(content, entry.name);
-        const localSource = ['workspace', 'portable-workspace'].includes(source);
+        const localSource = ['workspace', 'portable-workspace', 'claude-project'].includes(source);
         const skill = {
           name: meta.name,
           description: meta.description,
@@ -1331,8 +1339,8 @@ export async function listAvailableSkills(root, options = {}) {
           directoryName: entry.name,
           relativePath: localSource ? path.posix.join(relativePrefix, entry.name, 'SKILL.md') : entry.name,
           relativeSkillDirectory: localSource ? path.posix.join(relativePrefix, entry.name) : undefined,
-          absolutePath: source === 'global-portable' ? filePath : undefined,
-          absoluteSkillDirectory: source === 'global-portable' ? path.join(directory, entry.name) : undefined
+          absolutePath: ABSOLUTE_SKILL_SOURCES[source] ? filePath : undefined,
+          absoluteSkillDirectory: ABSOLUTE_SKILL_SOURCES[source] ? path.join(directory, entry.name) : undefined
         };
         byName.set(meta.name.toLowerCase(), skill);
       } catch { /* Ignore incomplete or unsafe skill files. */ }
@@ -1400,6 +1408,9 @@ export async function listAvailableSkills(root, options = {}) {
   } catch { /* Plugins are optional. */ }
   await scan(getUniversalGlobalSkillsDirectory(env), 'global-portable');
   await scan(path.join(root, '.agents', 'skills'), 'portable-workspace', '.agents/skills');
+  // Claude Code skill locations; personal skills win over project ones, as in Claude Code.
+  await scan(path.join(root, '.claude', 'skills'), 'claude-project', '.claude/skills');
+  await scan(getClaudeUserSkillsDirectory(env), 'claude-user');
   await scan(path.join(root, '.oasis', 'skills'), 'workspace', '.oasis/skills');
   await scanImportedExtensions(path.join(root, '.oasis', 'extensions'), 'project-extension', '.oasis/extensions');
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
@@ -1414,8 +1425,17 @@ export async function loadSkillText(root, rawName, options = {}) {
   let content;
   if (skill.source === 'workspace' || skill.source === 'portable-workspace' || skill.source === 'project-extension') {
     content = (await readWorkspaceFile(root, skill.relativePath)).content;
-  } else if (skill.source === 'global-portable') {
-    const globalSkillsRoot = path.resolve(getUniversalGlobalSkillsDirectory(options.env || process.env));
+  } else if (skill.source === 'claude-project') {
+    const dir = path.resolve(root, ...String(skill.relativeSkillDirectory || '').split('/'));
+    const target = path.join(dir, 'SKILL.md');
+    const rootReal = await realpath(path.resolve(root));
+    const info = await lstat(target);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Project skill is not a safe regular Markdown file.');
+    const targetReal = await realpath(target);
+    if (!inside(rootReal, targetReal)) throw new Error('Project skill resolves outside the workspace.');
+    content = (await readFile(targetReal, 'utf8')).replace(/\$\{CLAUDE_SKILL_DIR\}/g, path.dirname(targetReal));
+  } else if (ABSOLUTE_SKILL_SOURCES[skill.source]) {
+    const globalSkillsRoot = path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env));
     const rootReal = await realpath(globalSkillsRoot);
     const target = path.resolve(skill.absolutePath || '');
     if (!inside(rootReal, target)) throw new Error('Portable global skill path is outside the universal skills directory.');
@@ -1423,7 +1443,7 @@ export async function loadSkillText(root, rawName, options = {}) {
     if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Portable global skill is not a safe regular Markdown file.');
     const targetReal = await realpath(target);
     if (!inside(rootReal, targetReal)) throw new Error('Portable global skill resolves outside the universal skills directory.');
-    content = await readFile(targetReal, 'utf8');
+    content = (await readFile(targetReal, 'utf8')).replace(/\$\{CLAUDE_SKILL_DIR\}/g, path.dirname(targetReal));
   } else if (skill.source === 'plugin') {
     const dirReal = await realpath(path.resolve(skill.absoluteSkillDirectory || ''));
     const targetReal = await realpath(path.resolve(skill.absolutePath || ''));
@@ -1467,11 +1487,11 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
   const skills = await listAvailableSkills(workspaceRoot, options);
   const skill = skills.find((item) => item.name.toLowerCase() === name.toLowerCase());
   if (!skill) throw new Error('No installed external skill named "' + name + '" was found.');
-  if (['portable-workspace', 'global-portable'].includes(skill.source)) {
-    const safetyRoot = skill.source === 'global-portable'
-      ? path.resolve(getUniversalGlobalSkillsDirectory(options.env || process.env))
+  if (PORTABLE_SKILL_SOURCES.includes(skill.source)) {
+    const safetyRoot = ABSOLUTE_SKILL_SOURCES[skill.source]
+      ? path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env))
       : workspaceRoot;
-    const skillDirectory = skill.source === 'global-portable'
+    const skillDirectory = ABSOLUTE_SKILL_SOURCES[skill.source]
       ? path.resolve(skill.absoluteSkillDirectory || '')
       : path.resolve(workspaceRoot, ...(String(skill.relativeSkillDirectory || '').split('/')));
     if (!inside(safetyRoot, skillDirectory)) throw new Error('Portable skill resource directory is outside its permitted root.');

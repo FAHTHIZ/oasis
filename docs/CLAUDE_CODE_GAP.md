@@ -65,6 +65,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | npm plugin sources | Marketplace entries with `source: { source: "npm", package, version, registry }` | **Closed.** `npm pack` (scripts never run) + `tar`, version ranges, custom https registry (http only for localhost), resolved version and integrity recorded in `installed_plugins.json`. |
 | Sensitive plugin options in secure storage | `userConfig` options with `sensitive: true` kept in the system keychain | **Closed.** macOS Keychain (`security`) and Linux Secret Service (`secret-tool`, value via stdin); the plugin secrets file then holds only a backend marker. 0600 file fallback elsewhere; `OASIS_SECURE_STORAGE` override. |
 | Themes | `/theme`, dark/light/daltonized/ansi presets, `auto`, custom `~/.claude/themes/*.json`, plugin `themes/` | **Closed.** Same presets, file format (`name`/`base`/`overrides`), color syntax and `custom:<slug>` preference; plugin themes as `plugin:<plugin>:<slug>`, checked by `plugin validate`. Live reload on file change is not done; `/theme` re-reads. |
+| Claude skill folders + more commands | `.claude/skills`, `~/.claude/skills`; `/diff`, `/autocompact`, `/reload-plugins`, `/reload-skills`, `/list-agents`, `/statusline`, `/update-config`, command aliases | **Closed.** Both skill folders load (personal wins, `${CLAUDE_SKILL_DIR}`, references/assets); the commands and aliases above, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`. |
 
 ## Ranked next improvements
 
