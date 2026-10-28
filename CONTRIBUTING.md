@@ -11,7 +11,7 @@ Thanks for helping improve Oasis. The goal is a useful, calm workspace with hone
 
 ## Local verification
 
-Use Node.js 20 or newer, then run:
+Use Node.js 22 or newer, then run:
 
 ~~~bash
 node scripts/check-site.mjs
