@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, access, chmod } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { listWorktrees, inspectWorktree, mergeWorktree } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
@@ -133,4 +133,31 @@ test('worktree merge refuses conflicting or unreviewed overlapping changes', asy
   await assert.rejects(mergeWorktree(root, wt.branch, { env, expectedHead: before, allowOverlaps: true }), /predicts conflicts/);
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim(), before);
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root }).toString().trim(), '');
+});
+
+
+test('worktree completion runs hooks by default and only bypasses them when explicitly requested', async (t) => {
+  if (process.platform === 'win32') { t.skip('Unix hook executable-bit behavior is platform-specific'); return; }
+  const { createWorktree, finishWorktree } = await import('../src/worktrees.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-hooks-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'base.txt'), 'base\n');
+  run('add', '-A'); run('commit', '-qm', 'init');
+  const marker = path.join(root, '.git', 'pre-commit-ran');
+  const hook = path.join(root, '.git', 'hooks', 'pre-commit');
+  await writeFile(hook, '#!/bin/sh\nprintf ran > "' + marker + '"\nexit 42\n');
+  await chmod(hook, 0o755);
+
+  const ordinary = await createWorktree(root, 'normal hook policy');
+  await writeFile(path.join(ordinary.path, 'normal.txt'), 'normal\n');
+  await assert.rejects(finishWorktree(root, ordinary), /hook|commit/i);
+  assert.equal(await readFile(marker, 'utf8'), 'ran', 'normal completion invoked the repository hook');
+
+  await rm(marker);
+  const unattended = await createWorktree(root, 'unattended worker policy');
+  await writeFile(path.join(unattended.path, 'worker.txt'), 'worker\n');
+  const result = await finishWorktree(root, unattended, { skipHooks: true });
+  assert.equal(result.changed, true);
+  await assert.rejects(access(marker), { code: 'ENOENT' }, 'the explicit unattended-worker exception must not run the hook');
 });

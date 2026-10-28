@@ -66,8 +66,10 @@ export async function finishWorktree(root, worktree, options = {}) {
   const identity = [];
   const email = await git(worktree.path, ['config', 'user.email'], env).catch(() => '');
   if (!email) identity.push('-c', 'user.name=Oasis subagent', '-c', 'user.email=oasis@localhost');
-  // --no-verify: repository hooks run arbitrary code; the user reviews the branch instead.
-  await git(worktree.path, [...identity, 'commit', '--no-verify', '-q', '-m', 'Oasis subagent: ' + String(options.message || worktree.name).slice(0, 200)], env, 60000);
+  // Unattended worker completion must not execute repository-controlled hook scripts.
+  // The caller must opt in explicitly; normal/direct finishWorktree calls run hooks.
+  const hookPolicy = options.skipHooks === true ? ['--no-verify'] : [];
+  await git(worktree.path, [...identity, 'commit', ...hookPolicy, '-q', '-m', 'Oasis subagent: ' + String(options.message || worktree.name).slice(0, 200)], env, 60000);
   const commit = await git(worktree.path, ['rev-parse', '--short', 'HEAD'], env);
   const stat = await git(worktree.path, ['diff', '--stat', worktree.base, 'HEAD'], env).catch(() => '');
   const files = (await git(worktree.path, ['diff', '--name-only', worktree.base, 'HEAD'], env).catch(() => '')).split('\n').filter(Boolean);

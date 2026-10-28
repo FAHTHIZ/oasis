@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
-import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent } from '../src/agent-tasks.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, summarizeAgent, stopAgent } from '../src/agent-tasks.mjs';
+import { runSharedTaskTool } from '../src/shared-tasks.mjs';
 
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
@@ -335,4 +337,153 @@ test('agent activity timeline records lifecycle and messages, filters safely, an
   for (let i = 0; i < 510; i++) recordAgentEvent(main, 'test.noise', { detail: String(i) });
   assert.equal(agentRegistry(main).events.length, 500);
   assert.equal(agentEvents(main, { limit: 100 }).returned, 100);
+});
+
+
+test('dispatch_ready_tasks launches dependency-ready work in isolated waves and carries task IDs into agent status', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'dispatch@example.com');
+  git('config', 'user.name', 'OASIS test');
+  await writeFile(path.join(root, 'alpha.txt'), 'alpha verified\n');
+  await writeFile(path.join(root, 'beta.txt'), 'beta verified\n');
+  await writeFile(path.join(root, 'gamma.txt'), 'gamma verified\n');
+  git('add', '-A');
+  git('commit', '-qm', 'fixture baseline');
+
+  let dispatchCalls = 0;
+  const { config, parentRequests, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && /Create the shared dependency tasks/.test(last.content)) {
+        return { content: null, tool_calls: [
+          call('create1', 'task_create', { subject: 'Read alpha', description: 'Read alpha.txt and report its existing contents.' }),
+          call('create2', 'task_create', { subject: 'Read beta', description: 'Read beta.txt and report its existing contents.', blocked_by: ['task_1'] }),
+          call('create3', 'task_create', { subject: 'Read gamma', description: 'Read gamma.txt and report its existing contents.' })
+        ] };
+      }
+      if (last.role === 'user' && /dispatch the next wave/i.test(last.content)) {
+        dispatchCalls++;
+        return { content: null, tool_calls: [call('wave' + dispatchCalls, 'dispatch_ready_tasks', { max_parallel: 2 })] };
+      }
+      const alreadyDispatched = payload.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks');
+      if (!alreadyDispatched) {
+        dispatchCalls++;
+        return { content: null, tool_calls: [call('wave' + dispatchCalls, 'dispatch_ready_tasks', { max_parallel: 2 })] };
+      }
+      return { content: 'dispatch wave finished' };
+    },
+    child: (payload) => {
+      const all = text(payload.messages);
+      const match = all.match(/You have been assigned shared task (task_[1-9][0-9]*)/i);
+      const taskId = match && match[1];
+      const file = ({ task_1: 'alpha.txt', task_2: 'beta.txt', task_3: 'gamma.txt' })[taskId];
+      const last = payload.messages[payload.messages.length - 1];
+      if (!taskId || !file) return { content: 'Worker prompt did not include a valid shared task assignment.' };
+      if (last.role === 'user' && /You have been assigned shared task/i.test(last.content)) {
+        return { content: null, tool_calls: [call('claim-' + taskId, 'task_claim', { task_id: taskId, lease_seconds: 60 })] };
+      }
+      if (last.role === 'tool' && last.name === 'task_claim') {
+        return { content: null, tool_calls: [call('read-' + taskId, 'read_file', { path: file })] };
+      }
+      if (last.role === 'tool' && last.name === 'read_file') {
+        assert.ok(last.content.includes(file.replace('.txt', '') + ' verified'), 'worker read expected file content');
+        return { content: null, tool_calls: [call('complete-' + taskId, 'task_update', { task_id: taskId, status: 'completed' })] };
+      }
+      if (last.role === 'tool' && last.name === 'task_update') return { content: 'Verified ' + file + ' and completed ' + taskId + '.' };
+      return { content: 'Unexpected child step for ' + taskId + '.' };
+    }
+  });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+
+  const first = await runAgentTurn(session, 'Create the shared dependency tasks and start wave one.', { autoApprove: true, env, approval: async () => true });
+  assert.equal(first.text, 'dispatch wave finished');
+  await until(() => {
+    const tasks = session.sharedTasks.tasks;
+    return ['task_1', 'task_3'].every((id) => tasks.find((task) => task.id === id)?.status === 'completed');
+  });
+
+  const waveOneRequest = parentRequests.find((request) => request.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks'));
+  const waveOneResult = JSON.parse(waveOneRequest.messages.filter((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks').at(-1).content);
+  assert.equal(waveOneResult.launched_count, 2);
+  assert.deepEqual(waveOneResult.launched.map((item) => item.task_id).sort(), ['task_1', 'task_3']);
+  assert.equal(session.sharedTasks.tasks.find((task) => task.id === 'task_2').status, 'pending');
+
+  const workers = [...session.agentTasks.agents.values()];
+  assert.deepEqual(workers.map((worker) => worker.sharedTaskId).sort(), ['task_1', 'task_3']);
+  assert.ok(workers.every((worker) => worker.worktreeInfo && worker.worktreeInfo.path));
+  assert.ok(workers.every((worker) => summarizeAgent(worker).task_id === worker.sharedTaskId));
+  assert.ok(agentEvents(session, { limit: 100 }).events.some((event) => event.type === 'task.dispatched'));
+  const afterFirstWave = runSharedTaskTool(session, 'task_list', { include_completed: false });
+  assert.equal(afterFirstWave.tasks.find((task) => task.id === 'task_2').ready, true, 'completing task_1 unlocks task_2 without retroactively adding it to wave one');
+
+  const second = await runAgentTurn(session, 'dispatch the next wave', { autoApprove: true, env, approval: async () => true });
+  assert.equal(second.text, 'dispatch wave finished');
+  await until(() => session.sharedTasks.tasks.find((task) => task.id === 'task_2')?.status === 'completed');
+  assert.equal(session.agentTasks.agents.size, 3);
+  assert.equal(session.agentTasks.agents.get('agent_3').sharedTaskId, 'task_2');
+  assert.ok(childRequests.some((request) => text(request.messages).includes('You have been assigned shared task task_2')));
+});
+
+
+test('cancelling a dispatched worker immediately releases its shared task lease', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-cancel-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-cancel-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'dispatch@example.com');
+  git('config', 'user.name', 'OASIS test');
+  await writeFile(path.join(root, 'target.txt'), 'target\n');
+  git('add', '-A'); git('commit', '-qm', 'fixture baseline');
+
+  const hold = gate();
+  let reachedWorkerAfterClaim = false;
+  const { config } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && /Create and dispatch one task/.test(last.content)) {
+        return { content: null, tool_calls: [call('create', 'task_create', { subject: 'Inspect target', description: 'Read target.txt and report what it contains.' })] };
+      }
+      if (!payload.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks')) {
+        return { content: null, tool_calls: [call('dispatch', 'dispatch_ready_tasks', { max_parallel: 1 })] };
+      }
+      return { content: 'dispatcher returned' };
+    },
+    child: async (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      const match = text(payload.messages).match(/You have been assigned shared task (task_[1-9][0-9]*)/i);
+      const taskId = match && match[1];
+      if (!taskId) return { content: 'Missing task assignment.' };
+      if (last.role === 'user') return { content: null, tool_calls: [call('claim', 'task_claim', { task_id: taskId, lease_seconds: 60 })] };
+      if (last.role === 'tool' && last.name === 'task_claim') {
+        reachedWorkerAfterClaim = true;
+        await hold.promise;
+        return { content: 'This report should not finish before cancellation.' };
+      }
+      return { content: 'Unexpected worker step.' };
+    }
+  });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+
+  const result = await runAgentTurn(session, 'Create and dispatch one task', { autoApprove: true, env, approval: async () => true });
+  assert.equal(result.text, 'dispatcher returned');
+  await until(() => reachedWorkerAfterClaim && session.sharedTasks.tasks[0]?.status === 'in_progress');
+  const worker = [...session.agentTasks.agents.values()][0];
+  assert.equal(worker.sharedTaskId, 'task_1');
+  stopAgent(session, { id: worker.id });
+  await until(() => worker.status === 'cancelled');
+  hold.open();
+
+  const task = session.sharedTasks.tasks[0];
+  assert.equal(task.status, 'pending');
+  assert.equal(task.claimedBy, '');
+  assert.equal(task.claimExpiresAt, null);
 });
