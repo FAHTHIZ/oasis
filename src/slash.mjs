@@ -204,7 +204,8 @@ export async function runBuiltinCommand(name, argument, state) {
         if (!saved.length) return { output: 'No saved sessions for this workspace. Start Oasis with --save (or --continue) to keep conversations.' };
         return { output: ['Saved sessions (newest first):', ...saved.slice(0, 15).map((item, index) => '  ' + (index + 1) + '. ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages' + (item.model ? '  ' + item.model : '')), 'Resume with /resume ID or /resume NUMBER.'].join('\n') };
       }
-      const pick = /^\d+$/.test(argument) ? saved[Number(argument) - 1] : saved.find((item) => item.id === argument || item.id.startsWith(argument));
+      // Ids may start with digits, so prefer an id match before treating the argument as a list number.
+      const pick = saved.find((item) => item.id === argument) || (/^\d{1,3}$/.test(argument) ? saved[Number(argument) - 1] : null) || saved.find((item) => item.id.startsWith(argument));
       if (!pick) return { output: 'No saved session matches ' + argument + '. Run /resume to list them.' };
       return { output: 'Resuming session ' + pick.id + ' on your next message.', resume: pick.id };
     }

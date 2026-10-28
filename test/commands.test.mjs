@@ -167,4 +167,6 @@ test('/resume lists saved sessions and picks one by number or id prefix', async 
   assert.equal((await runBuiltinCommand('resume', '1', state)).resume, saved.id);
   assert.equal((await runBuiltinCommand('resume', saved.id.slice(0, 8), state)).resume, saved.id);
   assert.match((await runBuiltinCommand('resume', 'zzzz', state)).output, /No saved session/);
+  const numeric = await saveSession({ sessionId: '12345678-0000-4000-8000-000000000000', root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'x' }] }, { env });
+  assert.equal((await runBuiltinCommand('resume', '12345678', state)).resume, numeric.id);
 });
