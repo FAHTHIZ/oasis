@@ -37,3 +37,25 @@ export function resolveModelAlias(model, options = {}) {
   else resolved = family(name, protocol, env);
   return resolved || raw;
 }
+
+// Claude Code's availableModels setting: a list of aliases and model ids users may pick
+// with /model, --model, agent front matter or the advisor. "default" is always allowed.
+// A family alias ("opus") allows every model of that family; an id allows itself and any
+// alias that resolves to it.
+export function modelAllowed(model, list, options = {}) {
+  if (!Array.isArray(list) || !list.length) return true;
+  const raw = String(model || '').trim().toLowerCase().replace(/\[1m\]$/, '');
+  if (!raw || raw === 'default') return true;
+  const resolved = String(resolveModelAlias(raw, options)).toLowerCase();
+  return list.some((item) => {
+    const entry = String(item || '').trim().toLowerCase().replace(/\[1m\]$/, '');
+    if (!entry) return false;
+    if (entry === raw || entry === resolved) return true;
+    if (['opus', 'sonnet', 'haiku', 'fable'].includes(entry) && (resolved.includes(entry) || raw.includes(entry))) return true;
+    return isModelAlias(entry) && String(resolveModelAlias(entry, options)).toLowerCase() === resolved;
+  });
+}
+
+export function modelRestrictionMessage(model, list) {
+  return 'Model ' + model + ' is not in availableModels (' + list.join(', ') + '). Pick one of those, or "default".';
+}

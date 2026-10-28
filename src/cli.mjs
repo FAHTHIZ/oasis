@@ -712,6 +712,7 @@ function reportSessionNotices(session) {
   if (!settingsWarningShown) {
     settingsWarningShown = true;
     if (session.settingsError) stdout.write('[settings] ' + session.settingsError + '\n');
+    if (session.modelRestrictionNote) stdout.write('[settings] ' + session.modelRestrictionNote + '\n');
     if (session.styleWarning) stdout.write('[settings] ' + session.styleWarning + '\n');
     if (session.agentWarning) stdout.write('[settings] ' + session.agentWarning + '\n');
     else if (session.mainAgent) stdout.write('[agent] Running as ' + session.mainAgent + (session.settings && session.settings.agentSource && !SESSION_OPTIONS.agent ? ' (from ' + session.settings.agentSource + ' settings)' : '') + '.\n');
