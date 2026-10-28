@@ -13,6 +13,7 @@ import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
+import { getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { loadSettings } from './settings.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
@@ -390,6 +391,11 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
   }
   session.baseSystemPrompt = systemMessage.content;
+  const tel = getTelemetry(env);
+  if (tel) {
+    tel.add('oasis.session.count', 1, { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), resumed: Boolean(restore) }, '1', 'Sessions started');
+    tel.event('oasis.session_start', { model: config && config.model || '', provider: config && config.protocol || '', resumed: Boolean(restore) });
+  }
   return session;
 }
 
@@ -881,6 +887,33 @@ async function runPostCompactHooks(session, trigger, summary, options) {
 }
 
 async function requestCompletion(session, options = {}) {
+  const tel = getTelemetry(options.env || session.providerEnv || process.env);
+  if (!tel) return requestCompletionRaw(session, options);
+  const model = session.config && session.config.model || '';
+  const attrs = { model, provider: session.config && session.config.protocol || '', ...(session.sessionId ? { 'session.id': session.sessionId } : {}) };
+  return tel.span('oasis.llm_request', attrs, async (span) => {
+    const started = Date.now();
+    try {
+      const reply = await requestCompletionRaw(session, options);
+      const usage = reply.usage || {};
+      const duration = Date.now() - started;
+      tel.record('oasis.api.duration', duration, attrs, 'ms', 'Model request latency');
+      tel.add('oasis.token.usage', usage.inputTokens || 0, { ...attrs, type: 'input' }, 'tokens', 'Tokens used');
+      tel.add('oasis.token.usage', usage.outputTokens || 0, { ...attrs, type: 'output' }, 'tokens', 'Tokens used');
+      tel.add('oasis.token.usage', usage.cacheReadTokens || 0, { ...attrs, type: 'cacheRead' }, 'tokens', 'Tokens used');
+      tel.add('oasis.token.usage', usage.cacheCreationTokens || 0, { ...attrs, type: 'cacheCreation' }, 'tokens', 'Tokens used');
+      Object.assign(span.attrs, { input_tokens: usage.inputTokens || 0, output_tokens: usage.outputTokens || 0, tool_calls: (reply.tool_calls || []).length });
+      tel.event('oasis.api_request', { ...attrs, duration_ms: duration, input_tokens: usage.inputTokens || 0, output_tokens: usage.outputTokens || 0, cache_read_tokens: usage.cacheReadTokens || 0 });
+      return reply;
+    } catch (error) {
+      tel.add('oasis.api.error.count', 1, attrs, '1', 'Failed model requests');
+      tel.event('oasis.api_error', { ...attrs, duration_ms: Date.now() - started, error: String(error && error.message || error).slice(0, 500) });
+      throw error;
+    }
+  });
+}
+
+async function requestCompletionRaw(session, options = {}) {
   const config = session.config;
   const nativeAnthropic = isAnthropicFamily(config.protocol);
   const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex';
@@ -1191,7 +1224,11 @@ function normalizeUsage(usage = {}) {
   const cacheRead = usage.cache_read_input_tokens || 0;
   const inputTokens = usage.input_tokens !== undefined ? baseInput + cacheTokens + cacheRead : baseInput;
   const outputTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0;
-  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
+  const cachedOpenAI = Number(usage.prompt_tokens_details && usage.prompt_tokens_details.cached_tokens || usage.input_tokens_details && usage.input_tokens_details.cached_tokens || 0) || 0;
+  const out = { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
+  if (cacheRead || cachedOpenAI) out.cacheReadTokens = Number(cacheRead || cachedOpenAI);
+  if (cacheTokens) out.cacheCreationTokens = Number(cacheTokens);
+  return out;
 }
 
 const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read']);
@@ -1791,6 +1828,33 @@ async function runToolFailureHooks(session, name, args, error, context) {
 }
 
 async function executeOneCall(session, call, context, options) {
+  const tel = getTelemetry(context && context.env || process.env);
+  if (!tel) return executeOneCallRaw(session, call, context, options);
+  const name = call.function && call.function.name || 'unknown';
+  const attrs = { tool_name: name, ...(session.sessionId ? { 'session.id': session.sessionId } : {}), ...(options.isSubagent ? { subagent: true } : {}) };
+  return tel.span('oasis.tool', attrs, async (span) => {
+    const started = Date.now();
+    const message = await executeOneCallRaw(session, call, context, options);
+    const result = message && message.result;
+    const error = result && typeof result === 'object' && typeof result.error === 'string' ? result.error : '';
+    const duration = Date.now() - started;
+    if (error) span.error = error;
+    tel.add('oasis.tool.count', 1, { ...attrs, success: !error }, '1', 'Tool calls');
+    tel.record('oasis.tool.duration', duration, attrs, 'ms', 'Tool latency');
+    const args = safeToolArguments(call.function && call.function.arguments);
+    if (!error) {
+      const changes = lineChanges(name, args);
+      tel.add('oasis.lines_of_code.count', changes.added, { type: 'added' }, '1', 'Lines changed');
+      tel.add('oasis.lines_of_code.count', changes.removed, { type: 'removed' }, '1', 'Lines changed');
+      if (name === 'git_commit') tel.add('oasis.commit.count', 1, {}, '1', 'Commits created');
+      if (name === 'create_pull_request') tel.add('oasis.pull_request.count', 1, {}, '1', 'Pull requests created');
+    }
+    tel.event('oasis.tool_result', { ...attrs, success: !error, duration_ms: duration, ...(error ? { error: error.slice(0, 500) } : {}), ...(tel.logToolDetails ? { tool_parameters: JSON.stringify(args).slice(0, 2000) } : {}) });
+    return message;
+  });
+}
+
+async function executeOneCallRaw(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
   let attemptedArgs = null;
@@ -1935,6 +1999,22 @@ function refreshTodoPrompt(session) {
 }
 
 export async function runAgentTurn(session, prompt, options = {}) {
+  const tel = getTelemetry(options.env || process.env);
+  if (!tel) return runAgentTurnRaw(session, prompt, options);
+  const request = String(prompt || '');
+  const attrs = { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), model: session.config && session.config.model || '', ...(options.isSubagent ? { subagent: true } : {}) };
+  tel.event('oasis.user_prompt', { ...attrs, prompt_length: request.length, ...(tel.logPrompts ? { prompt: request.slice(0, 20000) } : {}) });
+  return tel.span(options.isSubagent ? 'oasis.subagent_turn' : 'oasis.turn', attrs, async (span) => {
+    const started = Date.now();
+    const result = await runAgentTurnRaw(session, prompt, options);
+    Object.assign(span.attrs, { tool_calls: result.toolCalls || 0, tokens: result.tokensUsed || 0, finished: Boolean(result.finished) });
+    tel.record('oasis.turn.duration', Date.now() - started, attrs, 'ms', 'Turn wall time');
+    tel.add('oasis.active_time.total', (Date.now() - started) / 1000, attrs, 's', 'Time spent working');
+    return result;
+  });
+}
+
+async function runAgentTurnRaw(session, prompt, options = {}) {
   const request = String(prompt || '').trim();
   if (!request) throw new Error('Enter a task or question.');
   throwIfCancelled(options.signal);
