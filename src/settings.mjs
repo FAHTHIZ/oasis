@@ -13,6 +13,7 @@
 // with `oasis trust` or `/trust`. User-level settings always apply.
 import { readFile, writeFile, mkdir, realpath, chmod } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
 
 const MAX_SETTINGS_BYTES = 256 * 1024;
@@ -20,6 +21,20 @@ export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'bypa
 
 export function userSettingsPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'settings.json');
+}
+
+// Claude Code's user settings (~/.claude/settings.json); Oasis user settings load after it and win.
+export function claudeUserSettingsPath(env = process.env) {
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  return path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'settings.json');
+}
+
+// Enterprise managed settings (Claude Code's managed-settings.json). They load last and win.
+export function managedSettingsPaths(env = process.env, platform = process.platform) {
+  if (env.OASIS_MANAGED_SETTINGS !== undefined) return env.OASIS_MANAGED_SETTINGS ? [env.OASIS_MANAGED_SETTINGS] : [];
+  if (platform === 'darwin') return ['/Library/Application Support/ClaudeCode/managed-settings.json', '/Library/Application Support/Oasis/managed-settings.json'];
+  if (platform === 'win32') return ['C:\\Program Files\\ClaudeCode\\managed-settings.json', 'C:\\Program Files\\Oasis\\managed-settings.json'];
+  return ['/etc/claude-code/managed-settings.json', '/etc/oasis/managed-settings.json'];
 }
 
 export function projectSettingsPaths(root) {
@@ -195,9 +210,18 @@ export async function loadSettings(root, options = {}) {
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || settings.env;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
+    }
+    // "disableBypassPermissionsMode": "disable" only tightens; honor it from any trusted scope.
+    if (permissions.disableBypassPermissionsMode === 'disable') result.permissions.disableBypassPermissionsMode = true;
+    // "env": variables applied to every session (Claude Code settings key).
+    if (settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)) {
+      result.env ||= {};
+      for (const [key, value] of Object.entries(settings.env)) {
+        if (/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key) && ['string', 'number', 'boolean'].includes(typeof value)) result.env[key] = String(value).slice(0, 32768);
+      }
     }
     result.permissions.allow.push(...stringList(permissions.allow));
     result.permissions.additionalDirectories.push(...stringList(permissions.additionalDirectories));
@@ -232,7 +256,11 @@ export async function loadSettings(root, options = {}) {
   // --setting-sources user,project,local limits which files load; --settings adds a file or JSON on top.
   const sources = Array.isArray(options.settingSources) && options.settingSources.length ? new Set(options.settingSources) : null;
   const userFile = userSettingsPath(env);
-  if (!sources || sources.has('user')) apply(await readJsonFile(userFile), 'user', userFile, true);
+  if (!sources || sources.has('user')) {
+    const claudeFile = claudeUserSettingsPath(env);
+    if (env.OASIS_IGNORE_CLAUDE_SETTINGS !== '1' && path.resolve(claudeFile) !== path.resolve(userFile)) apply(await readJsonFile(claudeFile).catch(() => null), 'user', claudeFile, true);
+    apply(await readJsonFile(userFile), 'user', userFile, true);
+  }
   result.trusted = await isWorkspaceTrusted(root, env);
   if (root) {
     for (const { scope, file } of projectSettingsPaths(root)) {
@@ -243,6 +271,8 @@ export async function loadSettings(root, options = {}) {
   for (const extra of options.extraSettings || []) {
     if (extra && extra.settings && typeof extra.settings === 'object') apply(extra.settings, 'flag', extra.file || '--settings', true);
   }
+  for (const file of managedSettingsPaths(env)) apply(await readJsonFile(file).catch(() => null), 'managed', file, true);
+  if (result.permissions.disableBypassPermissionsMode && result.permissions.defaultMode === 'bypassPermissions') result.permissions.defaultMode = 'default';
   // Hooks from enabled Claude Code plugins run with CLAUDE_PLUGIN_ROOT in their environment.
   if (!options.skipPlugins) {
     try {

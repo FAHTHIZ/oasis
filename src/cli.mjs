@@ -1566,6 +1566,18 @@ async function readMainInput(root, session, state) {
   return result.text;
 }
 
+// Settings "env" (Claude Code key) is applied to process.env before the provider loads;
+// "disableBypassPermissionsMode": "disable" (often from managed settings) blocks bypass mode.
+async function applySettingsPolicy(root, autoApprove) {
+  const settings = await loadSettings(root).catch(() => null);
+  if (!settings) return;
+  for (const [key, value] of Object.entries(settings.env || {})) process.env[key] = value;
+  if (settings.permissions && settings.permissions.disableBypassPermissionsMode) {
+    if (SESSION_OPTIONS.permissionMode === 'bypassPermissions') throw new Error('bypassPermissions mode is disabled by settings (permissions.disableBypassPermissionsMode).');
+    SESSION_OPTIONS.disableBypass = true;
+  }
+}
+
 // /reload-plugins and /reload-skills: rebuild the session (settings, plugins, skills,
 // agents, hooks, MCP servers, system prompt) while keeping the conversation.
 async function reloadSessionComponents(session, root, what) {
@@ -2187,6 +2199,7 @@ async function main() {
     if (!headless.jsonSchema || typeof headless.jsonSchema !== 'object') throw new Error('--json-schema must be a JSON object.');
     if (!headless.enabled) throw new Error('--json-schema works with -p (headless mode).');
   }
+  await applySettingsPolicy(workspace, autoApprove);
   if (worktreeName && (headless.enabled || !command || command === '--interactive')) {
     const session = await startSessionWorktree(workspace, worktreeName, headless.enabled ? stderr : stdout);
     try {

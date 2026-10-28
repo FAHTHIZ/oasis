@@ -3,8 +3,12 @@
 //   project  OASIS.md, AGENTS.md, CLAUDE.md                     (shared, committed)
 //   local    OASIS.local.md, CLAUDE.local.md                    (personal, gitignored)
 // README.md is still included as general project context.
+//   parent   CLAUDE.md, CLAUDE.local.md, AGENTS.md, OASIS.md in directories above the
+//            workspace (monorepos), nearest last, as Claude Code walks up from the cwd
+//   rules    .claude/rules/**/*.md (project) and ~/.claude/rules/**/*.md (user); a
+//            "paths:" front-matter list scopes a rule to matching files
 // Lines starting with "@path" inside a memory file include that workspace file.
-import { appendFile, lstat, mkdir, readFile, realpath } from 'node:fs/promises';
+import { appendFile, lstat, mkdir, readFile, readdir, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -17,9 +21,17 @@ export function memoryFiles(root, options = {}) {
   const env = options.env || process.env;
   const home = options.home || os.homedir();
   const workspace = path.resolve(root);
+  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
+  const parents = [];
+  if (env.OASIS_DISABLE_PARENT_MEMORY !== '1') {
+    const dirs = [];
+    for (let dir = path.dirname(workspace); dir && dir !== path.dirname(dir) && dirs.length < 20; dir = path.dirname(dir)) dirs.unshift(dir);
+    for (const dir of dirs) for (const name of ['CLAUDE.md', 'AGENTS.md', 'OASIS.md', 'CLAUDE.local.md']) parents.push({ label: 'parent', path: path.join(dir, name) });
+  }
   const candidates = [
     { label: 'user', path: path.join(getConfigDirectory(env, home), 'OASIS.md') },
-    { label: 'user', path: path.join(home, '.claude', 'CLAUDE.md') },
+    { label: 'user', path: path.join(claudeHome, 'CLAUDE.md') },
+    ...parents,
     { label: 'project', path: path.join(workspace, 'OASIS.md') },
     { label: 'project', path: path.join(workspace, 'AGENTS.md') },
     { label: 'project', path: path.join(workspace, 'CLAUDE.md') },
@@ -64,7 +76,7 @@ export async function loadMemory(root, options = {}) {
     if (!file.exists) continue;
     let real;
     try { real = await realpath(file.path); } catch { continue; }
-    if (file.label !== 'user') {
+    if (file.label !== 'user' && file.label !== 'parent') {
       const workspace = await realpath(path.resolve(root)).catch(() => path.resolve(root));
       const relative = path.relative(workspace, real);
       if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue;
@@ -75,11 +87,67 @@ export async function loadMemory(root, options = {}) {
     try { content = await readFile(real, 'utf8'); } catch { continue; }
     if (!content.trim() || content.includes('\0')) continue;
     if (file.label !== 'readme') content = await readImports(root, content);
-    const name = file.label === 'user' ? file.path.replace(os.homedir(), '~') : path.relative(path.resolve(root), file.path);
-    const heading = file.label === 'user' ? 'User memory (applies to all projects)' : file.label === 'local' ? 'Personal project memory' : 'Project context';
+    const name = file.label === 'user' || file.label === 'parent' ? file.path.replace(os.homedir(), '~') : path.relative(path.resolve(root), file.path);
+    const heading = file.label === 'user' ? 'User memory (applies to all projects)' : file.label === 'local' ? 'Personal project memory' : file.label === 'parent' ? 'Parent directory memory' : 'Project context';
     parts.push('--- ' + heading + ': ' + name + ' ---\n' + content.slice(0, PER_FILE_LIMIT));
   }
+  const env = options.env || process.env;
+  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
+  const rules = [...await loadRules(path.join(claudeHome, 'rules'), 'user'), ...await loadRules(path.join(path.resolve(root), '.claude', 'rules'), 'project', path.resolve(root))];
+  for (const rule of rules) {
+    if (seen.has(rule.real)) continue;
+    seen.add(rule.real);
+    const scope = rule.paths.length ? ' (applies when working on files matching ' + rule.paths.join(', ') + ')' : '';
+    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + scope + ' ---\n' + rule.body.slice(0, PER_FILE_LIMIT));
+  }
   return parts.join('\n\n').slice(0, MAX_TOTAL);
+}
+
+// Claude Code rules: every .md file under a rules/ directory (recursive, sorted).
+async function loadRules(dir, scope, workspace = null) {
+  const out = [];
+  const walk = async (current, depth) => {
+    if (depth > 4 || out.length >= 60) return;
+    let entries;
+    try { entries = await readdir(current, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) await walk(full, depth + 1);
+      else if (entry.isFile() && entry.name.endsWith('.md')) {
+        try {
+          const info = await lstat(full);
+          if (info.size > MAX_MEMORY_FILE) continue;
+          const real = await realpath(full);
+          if (workspace) {
+            const relative = path.relative(await realpath(workspace).catch(() => workspace), real);
+            if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue;
+          }
+          const text = await readFile(real, 'utf8');
+          if (!text.trim() || text.includes('\0')) continue;
+          const { paths, body } = splitRuleFrontMatter(text);
+          out.push({ scope, real, name: path.relative(dir, full).split(path.sep).join('/'), paths, body: workspace ? await readImports(workspace, body) : body });
+        } catch {}
+      }
+    }
+  };
+  await walk(dir, 0);
+  return out;
+}
+
+function splitRuleFrontMatter(text) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
+  if (!match) return { paths: [], body: text };
+  const paths = [];
+  const lines = match[1].split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^paths\s*:\s*(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const inline = m[1].trim();
+    if (inline.startsWith('[')) paths.push(...inline.replace(/^\[|\]$/g, '').split(',').map((p) => p.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean));
+    else if (inline) paths.push(...inline.split(',').map((p) => p.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean));
+    else for (let j = i + 1; j < lines.length && /^\s*-\s+/.test(lines[j]); j++) paths.push(lines[j].replace(/^\s*-\s+/, '').trim().replace(/^['"]|['"]$/g, ''));
+  }
+  return { paths: paths.slice(0, 20), body: text.slice(match[0].length) };
 }
 
 // "# note" in the prompt: append a bullet to the project memory file.
