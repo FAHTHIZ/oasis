@@ -130,7 +130,8 @@ export function taskToolDefinition(agents) {
       prompt: { type: 'string', description: 'Complete instructions for the subagent, including what to return' },
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' },
       run_in_background: { type: 'boolean', description: 'Start the agent and return its id immediately, so you can keep working (or launch more agents) while it runs. You are notified with its report when it finishes. In the background it cannot ask for approval: actions not already allowed by permission rules are denied, so prefer read-only agents or worktree isolation.' },
-      isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' }
+      isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' },
+      team_id: { type: 'string', description: 'Optional named team ID created by team_create (for example team_1). Team members share a roster and can message one another directly.' }
     }, required: ['description', 'prompt'] }
   } };
 }

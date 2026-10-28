@@ -20,7 +20,7 @@ It is **not** a drop-in Claude Code replacement across all workflows, and it is 
 | Model providers | OpenAI Responses, compatible Chat Completions, Anthropic Messages, Bedrock, Vertex, compatible gateways and local models | Anthropic models through supported first-party and third-party hosting routes | OASIS is broader in provider choice; native Gemini/Azure adapters remain absent |
 | Interactive terminal | Custom CLI editor plus persistent PTY agent sessions; browser uses bundled xterm.js with input/ANSI/resize | Full-featured terminal UI and background-process workflows | **Partial:** PTY lifecycle API exists; cross-platform process cleanup and full workflow validation remain |
 | Subagents | Built-in/custom subagents, up to six parallel child runs, background status/steering/cancel, optional worktree isolation | Subagents, agent view, agent teams, dynamic workflows and longer-running project sessions | Useful delegation exists; no visual agent manager or cloud project orchestration |
-| Shared tasks | `task_create/list/get/update`, dependency validation, owner metadata, status transitions, persistence with saved sessions | Agent teams share a task list; teammates with Task tools can see/claim tasks, and teams support direct messaging | **Partial:** task board exists; no atomic claims/locks, peer messages, lifecycle manager, visible team monitor or conflict-safe coordination |
+| Multi-agent coordination | Shared dependency-aware tasks, exclusive time-limited claims/releases, peer-to-peer messages, agent status/cancel, optional isolated worktrees, named teams with roster and controlled shutdown | Subagents plus agent teams with shared tasks, teammate messaging, worktree isolation and lifecycle controls | **Partial:** core coordination is implemented; no autonomous task scheduler, cross-session team sync, or dedicated visual team monitor |
 | Code intelligence | Language-server navigation/references/hover/symbols/call hierarchy plus detected diagnostics and linters | Terminal/IDE code context and corresponding tool capabilities depending on surface | Substantial local functionality; language/platform breadth still needs validation |
 | Extensions | MCP stdio/Streamable HTTP, OAuth where supported, resources/prompts, hooks, skills, slash commands and reviewed imports | Plugins, MCP, skills, hooks, subagents and commands; full integrated setup in supported surfaces | Native ecosystem imports are partial, not drop-in plugin compatibility; no general remote marketplace |
 | Browser workspace | Local-hosted authenticated web agent with streamed events, approvals and host-GitHub-CLI repository cloning; separate local-storage dashboard | Web/desktop/IDE/mobile surfaces, Remote Control and cloud-backed projects/routines | Local web UI exists; no equivalent cloud/remote lifecycle, embedded GitHub OAuth, or dashboard/CLI data sync |
@@ -29,19 +29,18 @@ It is **not** a drop-in Claude Code replacement across all workflows, and it is 
 | Safety | Workspace/path checks, secret exclusions, approvals, opt-in Linux/macOS sandbox, snapshots and explicit untrusted extension handling | Permission modes, hooks and tool-execution safeguards integrated across supported surfaces | Useful safeguards exist, but no Windows sandbox and no claim of complete OS isolation |
 | Evaluation | Built-in fixture runner; 21 small tasks; cost/time/token output | Official workflow and agent features; no equivalent OASIS-vs-Claude measured result is available from this repo | Good regression smoke harness; not a ranking benchmark |
 
-## The shared task board is a milestone, not agent-team parity
+## Agent-team parity: what is implemented and what remains
 
-The task board shipped in the implementation baseline is implemented in `src/shared-tasks.mjs`, registered through `src/session-tools.mjs`, and persisted by `src/sessions.mjs`. It lets the main agent and child agents create tasks, inspect them, assign owner metadata, record prerequisite IDs, and update statuses. Cycles and blocked transitions are rejected.
+OASIS now has several core coordination mechanisms: an exclusive lease-based task board, peer-to-peer messages between running agents, per-agent status and cancellation, named teams, team rosters, membership-aware messaging, and a shutdown operation that blocks new members and requests cancellation of running workers. Team membership is selected when the main coordinator launches a worker with the `team_id` returned by `team_create`. The CLI `/teams` command shows the roster.
 
-It does **not** yet:
-- provide atomic "claim this next task" behavior or task locks;
-- automatically schedule tasks or assign a worker to an owner field;
-- enable peer-to-peer agent messaging or autonomous team self-coordination;
-- manage team create/join/leave/shutdown lifecycles or show a visual agent roster;
-- prevent file edits from colliding unless work is explicitly isolated in worktrees;
-- synchronize the task board between independent sessions, machines or the browser dashboard's local-storage tasks.
+This still is not full Claude Code agent-team parity:
+- Task scheduling is model-directed rather than an autonomous queue dispatcher; a task owner is metadata and a lease is the actual work reservation.
+- Teams are scoped to one OASIS session. They do not coordinate across separate sessions or machines.
+- There is no dedicated visual agent/team monitor, live team event timeline, or automatic resolution of overlapping file edits. Use worktree isolation and inspect/approval-gated merges for separate editing work.
+- Team shutdown requests cancellation; a team becomes closed after its active workers exit. It does not promise instantaneous process termination.
+- Agent teams are a capability comparison, not a claim of equal coding quality. The 21-fixture suite is not an apples-to-apples benchmark.
 
-Claude Code documents agent teams as **experimental and disabled by default**. Its official comparison distinguishes subagents (lead-managed delegated workers) from teams (shared tasks plus teammate messages). That is the correct bar for the remaining Oasis coordination work, not a reason to overstate what the current board already does.
+The next team milestone should add stronger event visibility and task dispatch only after the lifecycle semantics remain covered by integration tests.
 
 ## Ranked next improvements
 
@@ -53,9 +52,9 @@ The CLI agent now supports a persistent PTY session API over the optional `node-
 
 The gap is not closed yet. The first native integration smoke test targets Linux/Node 22; Windows/macOS compatibility, child-process-tree cleanup, robust reconnection semantics, browser terminal transport and UI, and a beginner-friendly signed installer are still missing. The native dependency is optional to preserve CLI usability when local compilation fails. Closure requires native PTY tests on supported operating systems, deterministic cancellation and cleanup tests, permission/sandbox enforcement tests, interactive fixtures, bounded output verification and browser/CLI end-to-end behavior.
 
-### 2. Complete multi-agent coordination
+### 2. Automated team dispatch and visibility
 
-Build on the shared dependency-aware board with atomic claims/locks, explicit ownership rules, peer-to-peer message routing, team lifecycle controls, worktree conflict reporting and safe merge/review. Do not describe tasks as auto-claimed or files as conflict-safe until there are tests for those guarantees.
+Lease-based task claiming, peer messaging, named team membership and shutdown, and approval-gated worktree merge are implemented. The next step is an event timeline and optional model-directed queue dispatcher that can launch workers against ready tasks, with cancellation, lease renewal, conflict reports, and regression tests before claiming that the agents self-coordinate autonomously.
 
 ### 3. IDE integration
 
