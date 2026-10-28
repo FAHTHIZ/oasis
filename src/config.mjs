@@ -136,6 +136,7 @@ export async function saveConfig(config, options = {}) {
   const contextWindow = Number.parseInt(config.contextWindow, 10);
   if (Number.isInteger(contextWindow) && contextWindow >= 4000 && contextWindow <= 2000000) safe.contextWindow = contextWindow;
   if (config.vision === false) safe.vision = false;
+  if (config.promptCache === false) safe.promptCache = false;
   if (!safe.model) throw new Error('The model name cannot be empty.');
   await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
   try { await chmod(configPath, 0o600); } catch { /* POSIX mode bits are unavailable on some filesystems. */ }
