@@ -302,7 +302,7 @@ export function createOasisWebServer(options = {}) {
       try {
         const finalized = await finishWorktree(workspaceKey, taskWorktree, {
           env,
-          message: 'Oasis cloud task: ' + incomingMessage.replace(/\\s+/g, ' ').slice(0, 160)
+          message: 'Oasis cloud task: ' + incomingMessage.replace(/\s+/g, ' ').slice(0, 160)
         });
         return { ...finalized, isolation: 'worktree', baseCommit: taskWorktree.base };
       } catch (error) {
