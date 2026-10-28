@@ -307,12 +307,15 @@ export function createOasisWebServer(options = {}) {
       try {
         const finalized = await finishWorktree(workspaceKey, taskWorktree, {
           env,
-          message: 'Oasis cloud task: ' + incomingMessage.replace(/\s+/g, ' ').slice(0, 160)
+          message: 'Oasis cloud task: ' + incomingMessage.replace(/\s+/g, ' ').slice(0, 160),
+          blockSecrets: true
         });
         return { ...finalized, isolation: 'worktree', baseCommit: taskWorktree.base };
       } catch (error) {
         return {
-          changed: false,
+          changed: true,
+          committed: false,
+          requiresReview: true,
           branch: taskWorktree.branch,
           path: taskWorktree.relative,
           isolation: 'worktree',
@@ -1135,7 +1138,8 @@ export function createOasisWebServer(options = {}) {
       const commit = artifact && artifact.commit || null;
       const relative = artifact && artifact.path || task.worktreePath;
       const committed = Boolean(artifact && artifact.changed && commit);
-      const recoverable = !committed && ['interrupted', 'error', 'cancelled'].includes(task.status);
+      const requiresReview = Boolean(artifact && artifact.error && relative && baseCommit);
+      const recoverable = !committed && (['interrupted', 'error', 'cancelled'].includes(task.status) || requiresReview);
       if (!branch || !baseCommit || !relative || (!committed && !recoverable)) {
         json(res, 409, { error: 'This task has no available isolated-worktree diff to review.' });
         return;
@@ -1179,6 +1183,7 @@ export function createOasisWebServer(options = {}) {
           baseCommit,
           commit,
           complete: committed,
+          requiresReview,
           status: task.status,
           files: Array.isArray(artifact && artifact.files) ? artifact.files.slice(0, 200) : [],
           untrackedFiles: Array.isArray(diff.untrackedFiles) ? diff.untrackedFiles : [],
