@@ -31,6 +31,7 @@ import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, stopAgent, stopAllAgents, getAgent } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
+import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -277,6 +278,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     'Work in short, meaningful loops: inspect the repository; make the smallest coherent change; run relevant tests or checks; inspect the result; report what truly happened.',
     'For every non-trivial task, maintain a compact checklist of acceptance criteria and implementation steps. Re-check the original request before declaring completion; clearly mark unfinished criteria instead of silently dropping them.',
     'For tasks with three or more steps, use todo_write before implementation and keep it current. Mark a step completed only after its result is verified, and keep at most one step in_progress.',
+    'For work coordinated across the main session and subagents, use task_create, task_list, task_get and task_update as a shared dependency-aware task board. Create scoped tasks, record prerequisites with blocked_by, assign an owner when useful, and only mark work completed after verification.',
     'Git: commit only when the user asks. Use git_commit (never run_command git commit), git_branch, git_push, and create_pull_request. Before committing, read git_status, git_diff, and git_log so the message matches the repository style and describes why, not just what. Never force-push, amend, rebase, reset, skip hooks, or change git config unless the user explicitly asks; if a hook rejects a commit, fix the problem and commit again. Do not commit secrets. When asked to open a pull request on the default branch, create a feature branch first.',
     'Before editing, inspect the current working-tree state with git_status when available so you do not overwrite or misattribute the user\'s existing changes. Never assume a dirty file was created by you.',
     'After changing files in a Git workspace, inspect git_diff before finishing. Use the project\'s own scripts and package metadata to select focused tests, type checks, lint, or build checks; run relevant checks when permitted and fix failures rather than only reporting them.',
@@ -357,6 +359,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.function.name !== 'web_search' || webSearchEnabled(env)).concat(dynamic.definitions),
     toolCallsThisSession: 0,
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
+    sharedTasks: createSharedTaskStore(restore && restore.sharedTasks),
     settings: loadedSettings,
     settingsError,
     permissions,
@@ -405,7 +408,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (Array.isArray(tools) || typeof tools === 'string') {
     const keep = new Set(allowedToolNames || []);
     // Coordination tools stay so the agent can finish or ask; everything else must be listed.
-    for (const name of ['exit_plan_mode', 'ask_user_question']) keep.add(name);
+    for (const name of ['exit_plan_mode', 'ask_user_question', ...SHARED_TASK_TOOL_NAMES]) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
   if (deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env })) systemText += '\n\n' + deferredToolsPrompt(session);
@@ -1557,7 +1560,7 @@ async function runSubagent(parent, args, context, options) {
   const definitions = (parent.toolDefinitions || TOOL_DEFINITIONS).filter((definition) => {
     const name = definition && definition.function && definition.function.name;
     if (!name || name === 'task' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name.startsWith('cron_') || AGENT_TOOL_NAMES.has(name)) return false;
-    return !allowed || allowed.has(name);
+    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name);
   });
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
   const systemText = [
@@ -1586,6 +1589,7 @@ async function runSubagent(parent, args, context, options) {
     allowedToolNames: new Set(definitions.map((definition) => definition.function.name)),
     toolCallsThisSession: 0,
     todos: [],
+    sharedTasks: parent.sharedTasks,
     settings: parent.settings,
     permissions: parent.permissions,
     sandbox: parent.sandbox,
@@ -1606,6 +1610,7 @@ async function runSubagent(parent, args, context, options) {
     throw new Error('Already running ' + MAX_BACKGROUND_AGENTS + ' background agents. Wait for one with agent_status or stop one with agent_stop.');
   }
   const record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree });
+  child.agentId = record.id;
   let startPrompt = prompt;
   if (hasHooks(parent.hooks, 'SubagentStart')) {
     const started = await runHooks('SubagentStart', { session_id: parent.sessionId || 'unsaved', agent_id: record.id, agent_type: type, description, prompt: prompt.slice(0, 8000), background }, hookOptions(parent, options.env));

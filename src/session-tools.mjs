@@ -1,6 +1,7 @@
 // Session-level tools: deferred MCP tool search, background process monitoring,
 // entering plan mode, desktop notifications, and in-session scheduled prompts.
 import { spawn } from 'node:child_process';
+import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 
@@ -18,11 +19,12 @@ export const SESSION_TOOL_DEFINITIONS = [
   fn('cron_create', 'Schedule a prompt to run in this session on a 5-field cron schedule (minute hour day-of-month month day-of-week, local time). Jobs end when the session ends.',
     { cron: { type: 'string' }, prompt: { type: 'string' }, recurring: { type: 'boolean', description: 'Default true. false runs once at the next match.' } }, ['cron', 'prompt']),
   fn('cron_list', 'List scheduled prompts in this session.', {}),
-  fn('cron_delete', 'Cancel a scheduled prompt by id.', { id: { type: 'string' } }, ['id'])
+  fn('cron_delete', 'Cancel a scheduled prompt by id.', { id: { type: 'string' } }, ['id']),
+  ...SHARED_TASK_TOOL_DEFINITIONS
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list'];
+export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
@@ -228,6 +230,8 @@ export async function runSessionTool(session, name, args, options = {}) {
     case 'cron_create': return createCronJob(session, args);
     case 'cron_list': return listCronJobs(session);
     case 'cron_delete': return deleteCronJob(session, args.id);
-    default: throw new Error('Unknown session tool ' + name);
+    default:
+      if (SHARED_TASK_TOOL_NAMES.has(name)) return runSharedTaskTool(session, name, args);
+      throw new Error('Unknown session tool ' + name);
   }
 }

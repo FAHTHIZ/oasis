@@ -76,7 +76,7 @@ The remaining gaps are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md): vim 
 ## Milestone 3 — agent strength
 
 - Upgrade plan mode into persistent task checklists with explicit acceptance criteria, execution gates, and regression-oriented verifier cycles.
-- Add narrow specialist agents for review/testing/research, with bounded concurrency and shared task state.
+- Add narrow specialist agents for review/testing/research, with bounded concurrency. **Progress:** a dependency-aware shared task board (`task_create`, `task_list`, `task_get`, `task_update`) is available to the main session and subagents and persists with saved sessions; direct peer-to-peer agent messaging and team lifecycle coordination remain future work.
 - **Progress:** up to two independent read-only specialist reviews can execute concurrently; parent tool-call results remain ordered. Parallel code-writing agents and shared edit coordination remain future work.
 - **Progress:** OpenTelemetry export is implemented (metrics, events and nested traces over OTLP/HTTP JSON) and tested against a local collector.
 - Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.

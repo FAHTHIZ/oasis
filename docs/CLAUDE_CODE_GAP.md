@@ -1,6 +1,6 @@
 # Oasis vs Claude Code: gap analysis
 
-Audited October 28, 2026, against Claude Code v2.1.x using its [commands reference](https://code.claude.com/docs/en/commands.md), [tools reference](https://code.claude.com/docs/en/tools-reference.md), [CLI reference](https://code.claude.com/docs/en/cli-reference.md) and [changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md). Every "have" below was checked in `src/` and covered by tests (319 passing), not taken from older docs.
+Audited October 28, 2026, against Claude Code v2.1.x using its [commands reference](https://code.claude.com/docs/en/commands.md), [tools reference](https://code.claude.com/docs/en/tools-reference.md), [CLI reference](https://code.claude.com/docs/en/cli-reference.md) and [changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md). All "have" claims below were checked in `src/`; the baseline suite had 319 passing tests before this shared-task change.
 
 ## Short answer
 
@@ -40,7 +40,7 @@ What remains is mostly UI polish: a full-screen TUI, vim mode, themes and keybin
 | Web | `fetch_url`, `web_search` (keyless, Tavily, Brave, SearXNG) |
 | Planning | plan mode, `enter_plan_mode`, `exit_plan_mode`, `todo_write`, `/plan` |
 | Questions | `ask_user_question` (terminal and browser) |
-| Subagents | `task` with custom agents (`.claude/agents`, `.oasis/agents`, `--agents` JSON), per-agent tools and model, worktree isolation, background agents with `agent_status`, `send_message`, `agent_stop`, `/tasks`, `/stop`; up to 6 in parallel |
+| Subagents and tasks | `task` with custom agents (`.claude/agents`, `.oasis/agents`, `--agents` JSON), per-agent tools and model, worktree isolation, background agents, and a shared dependency-aware task board (`task_create/list/get/update`) visible to the main session and subagents |
 | Workflows | `/goal` (model-judged condition across turns), `/loop`, `/batch` (plan, then parallel worktree subagents), `/simplify` (four parallel reviewers), `/verify` (run the app), `/btw` and `/recap` (side questions that leave history untouched) |
 | Scheduling | `cron_create`, `cron_list`, `cron_delete` and `/schedule`; prompts fire while the editor is idle |
 | Tool search | MCP tools are deferred above 25 and loaded on demand with `tool_search` (`OASIS_TOOL_SEARCH=on/off`, `OASIS_TOOL_SEARCH_THRESHOLD`) |
@@ -68,9 +68,9 @@ Claude Code has these and Oasis does not yet:
 
 ### Agents
 
-- Agent view, agent teams and visual workflows.
+- Independent agent teams with peer-to-peer messaging, team lifecycle controls, and a visual team manager.
 - `/advisor` and `/ultrareview` (multi-agent cloud review).
-- Task* tools for a shared task list between agents. Oasis uses `todo_write` per agent.
+- Full Claude Code agent-team parity remains unfinished; this change closes the shared dependency-aware task-board gap, not peer-to-peer messaging or visual management.
 - EnterWorktree and ExitWorktree for the main session mid-conversation. `-w` works at startup.
 
 ### Platform
