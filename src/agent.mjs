@@ -22,6 +22,7 @@ import { access } from 'node:fs/promises';
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, stopAgent, stopAllAgents, getAgent } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool } from './subagents.mjs';
 
 const MAX_REPLY_CHARS = 24000;
@@ -339,7 +340,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     hookMessages: []
   };
   try { session.agents = await loadAgentDefinitions(root, { env }); } catch { session.agents = { ...BUILTIN_AGENTS }; }
-  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION]);
+  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION]);
   const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
   if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
   if (sandbox.enabled) {
@@ -372,6 +373,7 @@ export async function createSession({ root, config, restore = null, permissionMo
 export function closeSession(session) {
   if (session && session.background) killAllBackground(session.background);
   if (session && session.lspClients) stopLspClients(session).catch(() => {});
+  if (session && session.agentTasks) stopAllAgents(session);
   if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
     runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, { hooks: session.hooks, root: session.root }).catch(() => {});
   }
@@ -1115,7 +1117,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'agent_status']);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -1396,7 +1398,7 @@ async function runSubagent(parent, args, context, options) {
   const allowed = agent.tools ? new Set(agent.tools) : null;
   const definitions = (parent.toolDefinitions || TOOL_DEFINITIONS).filter((definition) => {
     const name = definition && definition.function && definition.function.name;
-    if (!name || name === 'task' || name === 'run_specialist_review' || name === 'ask_user_question') return false;
+    if (!name || name === 'task' || name === 'run_specialist_review' || name === 'ask_user_question' || AGENT_TOOL_NAMES.has(name)) return false;
     return !allowed || allowed.has(name);
   });
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
@@ -1436,39 +1438,122 @@ async function runSubagent(parent, args, context, options) {
     checkpoints: worktree ? null : parent.checkpoints,
     agents: {}
   };
-  const tag = (event) => ({ ...event, subagent: description, agentType: type });
-  let outcome;
-  try {
-  outcome = await runAgentTurn(child, prompt, {
+  const background = args.run_in_background === true || args.run_in_background === 'true';
+  if (background && runningBackgroundCount(parent) >= MAX_BACKGROUND_AGENTS) {
+    if (worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true }).catch(() => {});
+    throw new Error('Already running ' + MAX_BACKGROUND_AGENTS + ' background agents. Wait for one with agent_status or stop one with agent_stop.');
+  }
+  const record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree });
+  if (!background) {
+    const result = await runChildTurn(parent, record, prompt, options, { foreground: true });
+    return { id: record.id, ...result };
+  }
+  startBackgroundRun(parent, record, prompt, options);
+  return {
+    id: record.id, agent: type, description, status: 'running', background: true,
+    message: 'Started in the background. You will be told when it finishes; meanwhile continue with other work. Use agent_status (wait_seconds to block), send_message to steer it, or agent_stop to cancel.'
+  };
+}
+
+// Runs one turn of a subagent's own conversation and records the outcome.
+async function runChildTurn(parent, record, prompt, options, { foreground }) {
+  const { child, type, description } = record;
+  const worktree = record.worktreeInfo;
+  const tag = (event) => ({ ...event, subagent: description, agentType: type, agentId: record.id });
+  const track = (event) => {
+    record.toolCalls++;
+    if (event && event.name) { record.recentTools.push(event.name); if (record.recentTools.length > 20) record.recentTools.shift(); }
+  };
+  const runOptions = foreground ? {
     approval: options.approval,
-    autoApprove: Boolean(options.autoApprove),
-    planOnly: readOnly || Boolean(options.planOnly),
-    env: options.env || process.env,
     signal: options.signal,
-    isSubagent: true,
-    maxSteps: options.subagentMaxSteps,
-    onToolStart: options.onToolStart ? (event) => options.onToolStart(tag(event)) : undefined,
+    onToolStart: (event) => { track(event); if (options.onToolStart) options.onToolStart(tag(event)); },
     onToolResult: options.onToolResult ? (event) => options.onToolResult(tag(event)) : undefined,
     onUsage: options.onUsage ? (usage) => options.onUsage({ ...usage, subagent: description }) : undefined
-  });
+  } : {
+    // Nobody can answer a prompt while the agent works in the background.
+    approval: async () => false,
+    signal: record.controller.signal,
+    onToolStart: track
+  };
+  let outcome;
+  try {
+    outcome = await runAgentTurn(child, prompt, {
+      ...runOptions,
+      autoApprove: Boolean(options.autoApprove),
+      planOnly: record.readOnly || Boolean(options.planOnly),
+      env: options.env || process.env,
+      isSubagent: true,
+      maxSteps: options.subagentMaxSteps
+    });
   } catch (error) {
-    if (worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true }).catch(() => {});
+    if (worktree && !record.worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true }).catch(() => {});
+    record.finishedAt = Date.now();
+    record.status = record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
+    record.error = error.message;
     throw error;
   }
   let worktreeResult = null;
-  if (worktree) {
+  if (worktree && !record.worktree) {
     try { worktreeResult = await finishWorktree(parent.root, worktree, { env: options.env || process.env, message: description }); }
     catch (error) { worktreeResult = { changed: true, branch: worktree.branch, path: worktree.relative, error: 'Could not commit the worktree changes: ' + error.message }; }
+    record.worktree = worktreeResult;
   }
+  record.finishedAt = Date.now();
+  record.status = 'completed';
+  record.report = String(outcome.text || '').slice(0, 30000);
+  record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
   return {
     agent: type,
     description,
     ...(worktreeResult ? { worktree: worktreeResult } : {}),
     finished: outcome.finished === true,
-    report: String(outcome.text || '').slice(0, 30000),
+    report: record.report,
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0)
   };
+}
+
+function startBackgroundRun(parent, record, prompt, options) {
+  record.background = true;
+  record.status = 'running';
+  record.cancelRequested = false;
+  record.noticeRead = false;
+  record.error = null;
+  record.finishedAt = null;
+  record.controller = new AbortController();
+  // Detach from the parent turn: its cancellation must not kill the agent.
+  const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onUsage: undefined, onDelta: undefined };
+  record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).then((result) => {
+    const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
+    if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
+    parts.push('Report:\n' + record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : ''));
+    notifyParent(parent, parts.join(' '), record);
+    return result;
+  }, (error) => {
+    notifyParent(parent, 'Background agent ' + record.id + ' ("' + record.description + '") ' + record.status + ': ' + error.message, record);
+    return null;
+  });
+}
+
+async function runAgentTool(session, name, args, context, options) {
+  if (name === 'agent_status') return await agentStatus(session, args, context.signal);
+  if (name === 'agent_stop') return stopAgent(session, args);
+  // send_message
+  const record = getAgent(session, args.id);
+  const message = String(args.message || '').trim();
+  if (!message) throw new Error('send_message needs a message.');
+  if (message.length > 20000) throw new Error('Messages must be 20,000 characters or fewer.');
+  if (record.status === 'running') {
+    (record.child.inbox || (record.child.inbox = [])).push({ text: 'New message from the parent agent:\n' + message });
+    return { id: record.id, status: 'running', delivered: 'queued', message: 'The agent will see this at its next step.' };
+  }
+  if (!record.resumable) throw new Error('Agent ' + record.id + ' ran in a worktree that has already been committed and cleaned up; launch a new task instead (it can start from branch ' + ((record.worktree && record.worktree.branch) || 'its branch') + ').');
+  if (record.status === 'cancelled' && !record.child) throw new Error('Agent ' + record.id + ' cannot be resumed.');
+  if (runningBackgroundCount(session) >= MAX_BACKGROUND_AGENTS) throw new Error('Too many background agents are running; wait for one to finish first.');
+  record.runs++;
+  startBackgroundRun(session, record, message, options);
+  return { id: record.id, status: 'running', delivered: 'resumed', message: 'The agent resumed in the background with its previous context. You will be told when it finishes.' };
 }
 
 // Plan mode hand-off, like Claude Code's ExitPlanMode: show the plan, and on approval
@@ -1582,6 +1667,8 @@ async function executeOneCall(session, call, context, options) {
       result = await runSpecialistReview(session, args, callContext, options, budget);
     } else if (name === 'task') {
       result = await runSubagent(session, args, callContext, options);
+    } else if (AGENT_TOOL_NAMES.has(name)) {
+      result = await runAgentTool(session, name, args, callContext, options);
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
       result = await callMappedMcpTool(session, name, args, callContext);
     } else {
@@ -1690,6 +1777,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
     }
     if (submitted.additionalContext.length) userContent += '\n\n<hook-context>\n' + submitted.additionalContext.join('\n').slice(0, 10000) + '\n</hook-context>';
   }
+  const startNotice = drainInbox(session);
+  if (startNotice) userContent += '\n\n' + startNotice;
   if (!options.isSubagent) repairInterruptedHistory(session);
   session.thinkingBudget = session.config.protocol === 'anthropic' ? thinkingBudgetFor(request, session.config, options.env || process.env) : 0;
   if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
@@ -1723,6 +1812,13 @@ export async function runAgentTurn(session, prompt, options = {}) {
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
     refreshTodoPrompt(session);
+    // Background-agent notices and messages sent to this agent arrive between steps.
+    const notice = step > 0 ? drainInbox(session) : '';
+    if (notice) {
+      const last = session.messages[session.messages.length - 1];
+      if (last && last.role === 'tool' && typeof last.content === 'string') last.content += '\n\n' + notice;
+      else session.messages.push({ role: 'user', content: notice });
+    }
     const midTurnCompaction = await compactMidTurnHistoryIfNeeded(session, activeRequestIndex, options);
     tokensUsed += Number(midTurnCompaction.tokensUsed || 0);
     if (midTurnCompaction.tokensUsed && options.onUsage) {

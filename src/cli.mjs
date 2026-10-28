@@ -898,6 +898,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     session = await createSession({ root, config, ...sessionCreateOptions() });
   }
   session.config = config;
+  if (!session.onAgentNotice) session.onAgentNotice = (text) => stdout.write('\n[agents] ' + String(text).split('\n')[0] + ' The report will be shared with Oasis on your next message (/tasks to read it now).\n');
   reportSessionNotices(session);
   if (session.mcpFailures && session.mcpFailures.length) {
     for (const failure of session.mcpFailures) stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + '\n');
