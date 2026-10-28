@@ -40,7 +40,7 @@ This still is not full Claude Code agent-team parity:
 - Team shutdown requests cancellation; a team becomes closed after its active workers exit. It does not promise instantaneous process termination.
 - Agent teams are a capability comparison, not a claim of equal coding quality. The 21-fixture suite is not an apples-to-apples benchmark.
 
-The next team milestone should add stronger event visibility and task dispatch only after the lifecycle semantics remain covered by integration tests.
+The agent lifecycle now emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. The next team milestone is a model-directed ready-task dispatcher with cancellation, lease renewal, conflict reports, and regression tests; the timeline is observability, not proof of autonomous coordination.
 
 ## Ranked next improvements
 
@@ -79,6 +79,7 @@ Full-screen transcript, vim mode, themes and an editable keybinding configuratio
 - Built-in coding-agent regression fixtures and opt-in OpenTelemetry export.
 - A broad tool layer for workspace editing, LSP/diagnostics, MCP, skills, hooks, notebooks, PDFs, Git and worktrees.
 - Shared dependency-aware session task board, now present and tested, with honest documented limits.
+- Bounded agent/team activity timeline, queryable by agent or team, to make coordination and failures auditable within a session.
 
 ## Evaluation and readiness caveats
 

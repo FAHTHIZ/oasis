@@ -6,7 +6,7 @@ import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
-import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES } from '../src/agent-tasks.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent } from '../src/agent-tasks.mjs';
 
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
@@ -258,6 +258,7 @@ test('named teams track membership, isolate peer messages, and shut down safely'
   assert.ok(AGENT_TOOL_NAMES.has('team_create'));
   assert.ok(AGENT_TOOL_NAMES.has('team_status'));
   assert.ok(AGENT_TOOL_NAMES.has('team_shutdown'));
+  assert.ok(AGENT_TOOL_NAMES.has('agent_events'));
 
   const sameTeam = registerAgent(main, {
     type: 'general-purpose', description: 'API designer', teamId: created.team.id,
@@ -310,4 +311,28 @@ test('the task tool launches a registered worker into its named team', async (t)
   assert.equal(session.agentTasks.agents.get('agent_1').teamId, 'team_1');
   assert.deepEqual(session.agentTasks.teams.get('team_1').members, ['agent_1']);
   assert.match((await runBuiltinCommand('teams', '', { root, session, env: process.env })).output, /Review Team/);
+});
+
+
+test('agent activity timeline records lifecycle and messages, filters safely, and caps results', () => {
+  const main = {};
+  const team = createAgentTeam(main, { name: 'Timeline Team' });
+  const worker = registerAgent(main, { type: 'explore', description: 'Inspect routes', teamId: team.team.id, child: { inbox: [] } });
+  const peer = registerAgent(main, { type: 'explore', description: 'Inspect tests', teamId: team.team.id, child: { inbox: [] } });
+  sendTeamMessage({ agentTasks: main.agentTasks, agentId: worker.id }, { to: peer.id, message: 'Check the edge cases.' });
+  recordAgentEvent(main, 'agent.completed', { agentId: worker.id, teamId: team.team.id, description: worker.description });
+
+  const all = agentEvents(main, { limit: 100 });
+  assert.ok(all.total >= 5);
+  assert.equal(all.events.at(-1).type, 'agent.completed');
+  assert.ok(all.events.some((event) => event.type === 'team.created'));
+  assert.ok(all.events.some((event) => event.type === 'agent.message_queued' && /edge cases/.test(event.detail)));
+  assert.ok(agentEvents(main, { agent_id: worker.id }).events.every((event) => event.agent_id === worker.id));
+  assert.ok(agentEvents(main, { team_id: team.team.id }).events.every((event) => event.team_id === team.team.id));
+  assert.equal(agentEvents(main, { limit: 1 }).returned, 1);
+  assert.throws(() => agentEvents({ agentId: worker.id, agentTasks: main.agentTasks }, {}), /main coordinator/);
+
+  for (let i = 0; i < 510; i++) recordAgentEvent(main, 'test.noise', { detail: String(i) });
+  assert.equal(agentRegistry(main).events.length, 500);
+  assert.equal(agentEvents(main, { limit: 100 }).returned, 100);
 });
