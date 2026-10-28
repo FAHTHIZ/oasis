@@ -4,6 +4,7 @@ import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
+import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
@@ -321,7 +322,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
@@ -426,6 +427,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     const started = await runHooks('SessionStart', { session_id: session.sessionId || 'new', source: restore ? 'resume' : 'startup' }, hookOptions(session, env));
     if (started.additionalContext.length) systemText += '\n\nSession start context from hooks:\n' + started.additionalContext.join('\n').slice(0, 10000);
     session.hookMessages.push(...started.messages);
+    if (Array.isArray(started.watchPaths)) session.hookWatchPaths = started.watchPaths.filter((item) => path.isAbsolute(item));
   }
   // InstructionsLoaded: observability only, one event per instruction file in context.
   if (!bare && hasHooks(session.hooks, 'InstructionsLoaded')) {
@@ -474,11 +476,35 @@ export async function createSession({ root, config, restore = null, permissionMo
     tel.add('oasis.session.count', 1, { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), resumed: Boolean(restore) }, '1', 'Sessions started');
     tel.event('oasis.session_start', { model: config && config.model || '', provider: config && config.protocol || '', resumed: Boolean(restore) });
   }
+  // FileChanged / ConfigChange hooks, and live settings reload in interactive sessions.
+  const liveReload = Boolean(watchFiles) && !settings && !bare;
+  session.settingsLoadOptions = { env, extraSettings: settingsOverrides, settingSources, cliAllow: allowedTools || [], cliDeny: disallowedTools || [] };
+  if (!bare && needsHookWatchers(session.hooks, liveReload)) {
+    try { session.fileWatchers = startHookWatchers(session, { env, liveReload, hookOptions: () => hookOptions(session, env), reload: reloadSessionSettings }); } catch {}
+  }
   return session;
+}
+
+/** Re-reads settings files into a running session (hooks, permission rules, sandbox flags). */
+export async function reloadSessionSettings(session) {
+  const opts = session.settingsLoadOptions || {};
+  const loaded = await loadSettings(session.root, { env: opts.env || process.env, extraSettings: opts.extraSettings, settingSources: opts.settingSources });
+  const previous = session.permissions;
+  const permissions = new PermissionPolicy(loaded, { mode: previous ? previous.mode : undefined });
+  for (const rule of opts.cliAllow || []) permissions.addRule('allow', rule);
+  for (const rule of opts.cliDeny || []) permissions.addRule('deny', rule);
+  if (previous && Array.isArray(previous.sessionAllow)) permissions.sessionAllow = previous.sessionAllow;
+  session.permissions = permissions;
+  session.settings = loaded;
+  session.hooks = loaded.hooks || {};
+  session.autoModeSettings = loaded.autoMode || null;
+  if (session.fileWatchers) session.fileWatchers.refresh();
+  return loaded;
 }
 
 export function closeSession(session) {
   try { stopCron(session); } catch {}
+  if (session && session.fileWatchers) { try { session.fileWatchers.stop(); } catch {} session.fileWatchers = null; }
   if (session && session.background) killAllBackground(session.background);
   if (session && session.ptyManager) { try { session.ptyManager.closeAll(); } catch {} }
   if (session && session.lspClients) stopLspClients(session).catch(() => {});
@@ -1744,9 +1770,9 @@ async function runSubagent(parent, args, context, options) {
   let worktree = null;
   if (isolation === 'worktree' && !readOnly) {
     if (options.planOnly) throw new Error('Worktree subagents edit files; leave plan mode first.');
-    worktree = await createWorktree(parent.root, description, { env: options.env || process.env });
+    worktree = await createWorktree(parent.root, description, { env: options.env || process.env, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId });
   }
-  const isolationNote = worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
+  const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
   const child = {
     root: worktree ? worktree.path : parent.root,
     config: agent.model ? { ...parent.config, model: agent.model } : parent.config,
@@ -1777,7 +1803,7 @@ async function runSubagent(parent, args, context, options) {
   };
   const background = args.run_in_background === true || args.run_in_background === 'true';
   if (background && runningBackgroundCount(parent) >= MAX_BACKGROUND_AGENTS) {
-    if (worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true }).catch(() => {});
+    if (worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});
     throw new Error('Already running ' + MAX_BACKGROUND_AGENTS + ' background agents. Wait for one with agent_status or stop one with agent_stop.');
   }
   const sharedTaskId = /^task_[1-9]\d{0,8}$/.test(String(args.shared_task_id || '')) ? String(args.shared_task_id) : null;
@@ -1832,10 +1858,11 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
       isSubagent: true,
       agentType: type,
       agentId: record.id,
+      teammate: record.teamId ? { name: record.description || record.id, team: (() => { try { const team = agentRegistry(parent).teams.get(record.teamId); return team ? team.name : record.teamId; } catch { return record.teamId; } })() } : null,
       maxSteps: options.subagentMaxSteps
     });
   } catch (error) {
-    if (worktree && !record.worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true }).catch(() => {});
+    if (worktree && !record.worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});
     // A cancelled/failed worker must relinquish its shared task lease immediately.
     if (record.sharedTaskId) {
       try { runSharedTaskTool(child, 'task_release', { task_id: record.sharedTaskId }); } catch {}
@@ -2816,6 +2843,17 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           stopHookContinuations++;
           if (text && options.onText) options.onText(text);
           session.messages.push({ role: 'user', content: 'A ' + stopEvent + ' hook asked you to continue before finishing:\n' + stop.reason.slice(0, 4000) });
+          continue;
+        }
+      }
+      // TeammateIdle: a team member is about to go idle. Exit 2 keeps it working; continue:false stops it.
+      if (options.teammate && session.hooks && hasHooks(session.hooks, 'TeammateIdle') && stopHookContinuations < 3) {
+        const idle = await runHooks('TeammateIdle', { session_id: session.sessionId || 'unsaved', teammate_name: options.teammate.name, team_name: options.teammate.team, agent_id: options.agentId }, hookOptions(session, options.env));
+        session.hookMessages.push(...idle.messages);
+        if (idle.blocked && !idle.stopContinuation) {
+          stopHookContinuations++;
+          if (text && options.onText) options.onText(text);
+          session.messages.push({ role: 'user', content: 'A TeammateIdle hook asked you to keep working:\n' + idle.reason.slice(0, 4000) });
           continue;
         }
       }

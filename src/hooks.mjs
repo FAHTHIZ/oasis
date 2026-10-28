@@ -25,7 +25,7 @@ import { spawn } from 'node:child_process';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
 
-export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch'];
+export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'FileChanged', 'ConfigChange', 'WorktreeCreate', 'WorktreeRemove', 'TeammateIdle', 'Setup'];
 export const HOOK_TYPES = ['command', 'http', 'mcp_tool', 'prompt', 'agent'];
 
 const TOOL_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest', 'PermissionDenied']);
@@ -45,6 +45,8 @@ function matchTarget(event, payload) {
   if (event === 'InstructionsLoaded') return payload.load_reason;
   if (event === 'DirectoryAdded') return payload.source;
   if (event === 'PreModelSwitch' || event === 'PostModelSwitch') return payload.model;
+  if (event === 'FileChanged') return payload.file_path ? String(payload.file_path).split(/[\\/]/).pop() : null;
+  if (event === 'ConfigChange') return payload.source;
   return null;
 }
 
@@ -65,9 +67,10 @@ export function matcherAccepts(matcher, toolName, event = '') {
   if (!matcher || matcher === '*') return true;
   if (!toolName || (Array.isArray(toolName) && !toolName.length)) return true;
   const names = [...new Set((Array.isArray(toolName) ? toolName : [toolName]).flatMap((name) => [name, CLAUDE_TOOL_NAMES[name]]).filter(Boolean))];
-  const exact = event === 'StopFailure' ? /^[A-Za-z0-9_|]+$/ : /^[A-Za-z0-9_\- ,|]+$/;
+  const narrow = event === 'StopFailure' || event === 'FileChanged';
+  const exact = narrow ? /^[A-Za-z0-9_|]+$/ : /^[A-Za-z0-9_\- ,|]+$/;
   if (exact.test(matcher)) {
-    const wanted = matcher.split(event === 'StopFailure' ? '|' : /[|,]/).map((item) => item.trim()).filter(Boolean);
+    const wanted = matcher.split(narrow ? '|' : /[|,]/).map((item) => item.trim()).filter(Boolean);
     return names.some((name) => wanted.includes(name));
   }
   let regex;
@@ -279,13 +282,16 @@ function asyncFeedback(event, hook, out) {
 export async function runHooks(event, payload, options = {}) {
   const hooks = options.hooks || {};
   const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
-  const result = { ran: 0, blocked: false, reason: '', additionalContext: [], permissionDecision: null, permissionRequest: null, stopContinuation: false, messages: [], updatedInput: null, updatedToolOutput: undefined, retry: false, background: 0 };
+  const result = { ran: 0, blocked: false, reason: '', additionalContext: [], permissionDecision: null, permissionRequest: null, stopContinuation: false, messages: [], updatedInput: null, updatedToolOutput: undefined, retry: false, background: 0, failed: false, worktreePath: null, watchPaths: null };
   if (!groups.length) return result;
   const target = matchTarget(event, payload || {});
   const commands = [];
   for (const group of groups) {
     if (group.matcher && target && !matcherAccepts(group.matcher, target, event)) continue;
-    for (const hook of group.hooks) if (ifAccepts(hook.if, event, payload || {})) commands.push(hook);
+    for (const hook of group.hooks) {
+      if (event === 'Setup' && (hook.type || 'command') !== 'command') continue; // Setup runs command hooks only.
+      if (ifAccepts(hook.if, event, payload || {})) commands.push(hook);
+    }
   }
   if (!commands.length) return result;
   const fullPayload = { ...payload, hook_event_name: event, cwd: options.root };
@@ -310,10 +316,23 @@ export async function runHooks(event, payload, options = {}) {
     let out = outputs[i];
     result.ran++;
     // onFailure: "block" turns a crash, timeout, HTTP error, or non-2 exit into a block.
-    if (out.exitCode !== 0 && out.exitCode !== 2 && commands[i].onFailure === 'block' && (commands[i].type === 'command' || commands[i].type === 'http' || !commands[i].type) && !['Stop', 'SubagentStop', 'TaskCompleted'].includes(event)) {
+    if (out.exitCode !== 0 && out.exitCode !== 2 && commands[i].onFailure === 'block' && (commands[i].type === 'command' || commands[i].type === 'http' || !commands[i].type) && !['Stop', 'SubagentStop', 'TaskCompleted', 'TeammateIdle'].includes(event)) {
       out = { ...out, exitCode: 2, stderr: event + ' hook failed and is configured to block (' + (out.timedOut ? 'timeout' : out.exitCode === null ? 'did not run' : 'exit ' + out.exitCode) + '): ' + (out.stderr.trim() || describeHook(commands[i])).slice(0, 500) };
     }
     if (out.note) result.messages.push(event + ' hook: ' + out.note);
+    if (out.exitCode !== 0) result.failed = true;
+    // WorktreeCreate: the last non-empty stdout line (ANSI stripped) is the worktree path.
+    if (event === 'WorktreeCreate' && out.exitCode === 0 && !result.worktreePath) {
+      const json = parseJsonOutput(out.stdout);
+      const fromJson = json && json.hookSpecificOutput && typeof json.hookSpecificOutput.worktreePath === 'string' ? json.hookSpecificOutput.worktreePath : '';
+      const lines = String(out.stdout || '').replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      result.worktreePath = fromJson || (json ? '' : lines.at(-1) || '') || null;
+      continue;
+    }
+    if (event === 'Setup' || event === 'WorktreeRemove' || event === 'WorktreeCreate') {
+      if (out.exitCode !== 0) result.messages.push(event + ' hook failed (' + (out.timedOut ? 'timeout' : 'exit ' + out.exitCode) + '): ' + (out.stderr.trim() || describeHook(commands[i])).slice(0, 500));
+      continue;
+    }
     if (out.exitCode === 2) {
       // Exit 2 alone does not decide a PermissionRequest (only a JSON decision does),
       // except for onFailure: "block", which denies it.
@@ -343,6 +362,7 @@ export async function runHooks(event, payload, options = {}) {
       if (event === 'PostToolUse' && specific.updatedToolOutput !== undefined) result.updatedToolOutput = specific.updatedToolOutput;
       if (event === 'PostToolUse' && specific.updatedMCPToolOutput !== undefined && result.updatedToolOutput === undefined) result.updatedToolOutput = specific.updatedMCPToolOutput;
       if (event === 'PermissionDenied' && specific.retry === true) result.retry = true;
+      if (['SessionStart', 'CwdChanged', 'FileChanged'].includes(event) && Array.isArray(specific.watchPaths)) result.watchPaths = [...(result.watchPaths || []), ...specific.watchPaths.filter((item) => typeof item === 'string')];
       // PermissionRequest: {"hookSpecificOutput": {"decision": {"behavior": "allow"|"deny", "message"}}}; deny wins.
       const request = specific.decision && typeof specific.decision === 'object' ? specific.decision : null;
       if (event === 'PermissionRequest' && request && ['allow', 'deny'].includes(request.behavior)) {
