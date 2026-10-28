@@ -1658,6 +1658,13 @@ export async function executeTool(name, args = {}, context = {}) {
         env: context.env || process.env,
         signal: context.signal
       });
+    case 'memory_save':
+    case 'memory_search':
+    case 'memory_read':
+    case 'memory_delete': {
+      const { runMemoryTool } = await import('./auto-memory.mjs');
+      return await runMemoryTool(name, args, { root, env: context.env || process.env, session: context.session });
+    }
     case 'lsp':
       return await runLsp(root, args, {
         session: context.session,

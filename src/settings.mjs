@@ -148,6 +148,8 @@ export async function loadSettings(root, options = {}) {
     result.permissions.deny.push(...stringList(permissions.deny));
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
+    // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
+    if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers;
       if (loosening) result.ignoredUntrusted.push(file);
@@ -164,6 +166,7 @@ export async function loadSettings(root, options = {}) {
     }
     if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') result.shell.enabled = settings.shell.enabled;
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
+    if (settings.autoMemory === true) result.autoMemory = true;
     if (settings.lspServers && typeof settings.lspServers === 'object' && !Array.isArray(settings.lspServers)) {
       for (const [name, spec] of Object.entries(settings.lspServers)) {
         if (/^[\w.-]{1,40}$/.test(name) && spec && typeof spec.command === 'string' && spec.command.trim() && Array.isArray(spec.extensions)) {
