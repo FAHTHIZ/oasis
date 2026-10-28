@@ -6,6 +6,8 @@
 // hints. Editing logic is pure (state in, state out) so it can be unit tested
 // without a terminal; `readInput` wires it to a TTY.
 
+import { applyVimKey, createVimState, trackInsert, vimModeLabel } from './vim-mode.mjs';
+
 const ANSI_PATTERN = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 
 export function stripAnsi(text) {
@@ -409,7 +411,8 @@ const DIM = (text, color) => (color ? '\x1b[2m' + text + '\x1b[22m' : text);
 export const SHORTCUTS_HELP = [
   '  Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ add a line · Tab complete /commands and @files',
   '  ↑/↓ history · Ctrl+R search history · Shift+Tab cycle permission mode · Esc Esc clear input (empty: rewind)',
-  '  ! run a shell command · # save a memory note · Ctrl+V paste an image · Ctrl+L clear screen · Ctrl+D exit'
+  '  ! run a shell command · # save a memory note · Ctrl+V paste an image · Ctrl+L clear screen · Ctrl+D exit',
+  '  /vim toggles vim editing (Esc for NORMAL, i/a/o for INSERT)'
 ];
 
 // Reads one message from a TTY. Resolves to { type: 'submit', text } or
@@ -422,6 +425,7 @@ export function readInput(options = {}) {
   const columns = () => output.columns || 80;
   return new Promise((resolve) => {
     let state = createEditorState({ history, text: options.initialText || '' });
+    if (options.vim) state.vim = createVimState(options.vim === 'normal' ? 'normal' : 'insert');
     let hints = [];
     let previousCursorRow = 0;
     let lastCtrlC = 0;
@@ -443,7 +447,7 @@ export function readInput(options = {}) {
       let rows = [];
       if (!final) {
         if (state.search) rows = [DIM('(reverse-i-search) ', color) + state.search.query + (state.search.match < 0 && state.search.query ? DIM('  (no match)', color) : '')];
-        else rows = [...hints, ...footer()];
+        else rows = [...hints, ...(state.vim ? [DIM(vimModeLabel(state), color)] : []), ...footer()];
       }
       const frame = layoutFrame({ prompt: promptText(), continuation: continuation(), text: state.text, cursor: final ? state.text.length : state.cursor, hints: rows, columns: columns() });
       let s = '';
@@ -509,7 +513,12 @@ export function readInput(options = {}) {
       if (key.name !== 'tab') completion = null;
       if (key.name !== 'ctrlC') lastCtrlC = 0;
       const wasHinting = hints.length > 0;
-      const { state: next, action } = applyKey(state, key);
+      let outcome = state.vim && !state.search ? applyVimKey(state, key) : null;
+      if (!outcome) {
+        outcome = applyKey(state, key);
+        if (state.vim) outcome = { ...outcome, state: trackInsert(state, outcome.state) };
+      }
+      const { state: next, action } = outcome;
       state = next;
       if (action !== 'complete' && wasHinting && action !== 'escape') hints = [];
       switch (action) {

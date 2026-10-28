@@ -31,7 +31,7 @@ import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
-import { fstatSync } from 'node:fs';
+import { fstatSync, readFileSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -1414,6 +1414,22 @@ async function pasteClipboardImage(root) {
   return null;
 }
 
+// /vim and the "editorMode" setting; Claude Code's ~/.claude.json editorMode is honored too.
+let claudeEditorMode;
+function editorModeFor(session) {
+  if (SESSION_OPTIONS.editorMode) return SESSION_OPTIONS.editorMode;
+  if (session && session.settings && session.settings.editorMode) return session.settings.editorMode;
+  if (claudeEditorMode === undefined) {
+    claudeEditorMode = null;
+    try {
+      const home = process.env.HOME || process.env.USERPROFILE || '';
+      const raw = JSON.parse(readFileSync(path.join(home, '.claude.json'), 'utf8'));
+      if (raw && (raw.editorMode === 'vim' || raw.editorMode === 'normal')) claudeEditorMode = raw.editorMode;
+    } catch {}
+  }
+  return claudeEditorMode || 'normal';
+}
+
 async function readMainInput(root, session, state) {
   if (!stdin.isTTY || !stdout.isTTY || process.env.OASIS_SIMPLE_INPUT === '1') return askLine('\nYou> ');
   const color = colorEnabled(stdout);
@@ -1425,6 +1441,7 @@ async function readMainInput(root, session, state) {
     initialText,
     history: state.history,
     color,
+    vim: editorModeFor(session) === 'vim',
     prompt: (editor) => promptFor(editor.text, color),
     footer: (editor) => footerFor({ text: editor.text, mode: currentMode(), color }),
     complete: state.completer,
