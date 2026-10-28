@@ -81,7 +81,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           OASIS_REPO_ADMIN_TOKEN: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
           OASIS_PUBLIC_URL: ${{ steps.deployment.outputs.page_url }}
-        run: node scripts/apply-repository-metadata.mjs
+        run: node .github/scripts/apply-repository-metadata.mjs
       - name: Write launch status
         if: always()
         env:
