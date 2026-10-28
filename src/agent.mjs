@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
+import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { loadSettings } from './settings.mjs';
@@ -1131,7 +1132,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'agent_status']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'agent_status', 'list_mcp_resources', 'read_mcp_resource']);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -1780,6 +1781,16 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
   let userContent = request;
+  if (!options.isSubagent && /^\/mcp__/.test(request)) {
+    const resolved = await resolveMcpPrompt(session, request);
+    if (resolved && resolved.error) return { text: resolved.error, toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false };
+    if (resolved) userContent = resolved.prompt;
+  }
+  if (!options.isSubagent && /@[a-z][a-z0-9_-]*:\S/.test(request)) {
+    const mentioned = await expandMcpResourceMentions(session, request);
+    if (mentioned.blocks.length) userContent += '\n\n' + mentioned.blocks.join('\n\n');
+    if (mentioned.errors.length) userContent += '\n\n<mcp-resource-errors>\n' + mentioned.errors.join('\n') + '\n</mcp-resource-errors>';
+  }
   if (!options.planOnly && !options.isSubagent && session.permissions && session.permissions.mode === 'plan') {
     userContent += '\n\n<system-reminder>Plan mode is active. Research with read-only tools only; edits, commands, and installs are blocked. When your plan is ready, call exit_plan_mode with it so the user can approve implementation. For a pure question, just answer.</system-reminder>';
   }

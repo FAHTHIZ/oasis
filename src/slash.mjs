@@ -211,7 +211,13 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'mcp': {
       const clients = session && session.mcpClients ? [...session.mcpClients.entries()] : [];
       const failures = session && session.mcpFailures || [];
-      const lines = clients.map(([name, client]) => name + ' [' + (client.source || 'user') + ', ' + (client.config && client.config.type === 'http' ? 'http' : 'stdio') + '] ' + (client.tools || []).length + ' tool(s): ' + (client.tools || []).map((tool) => tool.name).join(', '));
+      const lines = [];
+      for (const [name, client] of clients) {
+        lines.push(name + ' [' + (client.source || 'user') + ', ' + (client.config && client.config.type === 'http' ? 'http' : 'stdio') + '] ' + (client.tools || []).length + ' tool(s): ' + (client.tools || []).map((tool) => tool.name).join(', '));
+        const resources = (client.resources || []).length + (client.resourceTemplates || []).length;
+        if (resources) lines.push('    resources: ' + resources + ' (mention one as @' + name + ':URI, e.g. @' + name + ':' + ((client.resources || [])[0] || { uri: 'URI' }).uri + ')');
+        for (const prompt of client.prompts || []) lines.push('    /mcp__' + name + '__' + prompt.name + (prompt.arguments && prompt.arguments.length ? ' ' + prompt.arguments.map((arg) => arg.required ? '<' + arg.name + '>' : '[' + arg.name + ']').join(' ') : '') + (prompt.description ? '  ' + String(prompt.description).slice(0, 120) : ''));
+      }
       for (const failure of failures) lines.push(failure.name + ' - not connected: ' + failure.error);
       if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
       return { output: lines.join('\n') };

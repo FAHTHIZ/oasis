@@ -37,7 +37,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 1. ~~**LSP tool.**~~ Done: the `lsp` tool.
 2. ~~**Background agents and messaging.**~~ Done: `run_in_background`, `agent_status`, `send_message`, `agent_stop`, `/tasks`.
 3. ~~**Git and PR workflow.**~~ Done: `git_log`, `git_commit`, `git_branch`, `git_push`, `create_pull_request`, `/commit`, `/pr`.
-4. **MCP depth.** Missing: resources (`resources/list`/`read`, `@server:resource` mentions), prompts as slash commands (`/mcp__server__prompt`), OAuth for remote servers, and `oasis mcp serve`, which exposes Oasis tools to other clients.
+4. **MCP depth.** Done: resources (`list_mcp_resources`, `read_mcp_resource`, `@server:uri` mentions) and prompts as slash commands (`/mcp__server__prompt`). Still missing: OAuth for remote servers and `oasis mcp serve`, which exposes Oasis tools to other clients.
 5. **Skill and command frontmatter.** Missing: `context: fork` (run a skill in a subagent), inline `` !`cmd` `` shell output in commands, `model`/`effort` per command, and hot reload.
 6. **Hooks breadth.** Missing events: PostToolUseFailure, SubagentStart, PostCompact, PermissionRequest, CwdChanged, FileChanged, WorktreeCreate/Remove, and others. Missing hook types: `http`, `prompt` (model-evaluated), and `mcp_tool`.
 7. **Auto memory.** Claude Code saves learnings across sessions automatically. Oasis only saves `# note` entries the user writes.

@@ -14,6 +14,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
+import { loadMcpExtras } from './mcp-extras.mjs';
 
 const PROTOCOL_VERSION = '2025-03-26';
 const MAX_RESPONSE = 4 * 1024 * 1024;
@@ -177,6 +178,7 @@ export class McpHttpClient {
     this.tools = (Array.isArray(listed.tools) ? listed.tools : [])
       .filter((tool) => tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) && tool.name !== '__proto__')
       .slice(0, 80);
+    await loadMcpExtras(this, init);
     return this.tools;
   }
 
