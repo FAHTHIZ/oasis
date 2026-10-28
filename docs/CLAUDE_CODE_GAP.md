@@ -25,7 +25,7 @@ It is **not** a drop-in Claude Code replacement across all workflows, and it is 
 | Extensions | MCP stdio/Streamable HTTP, OAuth where supported, resources/prompts, hooks, skills, slash commands and reviewed imports | Plugins, MCP, skills, hooks, subagents and commands; full integrated setup in supported surfaces | Closed for the Claude Code plugin format: marketplaces, `name@marketplace` installs, commands, agents, skills, hooks and MCP servers run natively (see sprint table) |
 | Browser workspace | Local-hosted authenticated web agent with streamed events, approvals and host-GitHub-CLI repository cloning; separate local-storage dashboard | Web/desktop/IDE/mobile surfaces, Remote Control and cloud-backed projects/routines | Local web UI exists; no equivalent cloud/remote lifecycle, embedded GitHub OAuth, or dashboard/CLI data sync |
 | IDEs | VS Code / Cursor / Windsurf extension (`oasis ide install`): auto-connect from integrated terminals, selection context, native diff Accept/Reject for edit approvals, IDE diagnostics tool, @file#lines references | Official VS Code and JetBrains integrations with editor-specific context/diff workflows | **Closed for VS Code family** (including the in-editor chat panel); no JetBrains plugin yet |
-| Other surfaces | CLI + local browser runtime + GitHub Action | Desktop, web/cloud, mobile, Chrome, Slack and CI integrations | **Major gap** |
+| Other surfaces | CLI + local browser runtime + GitHub Action + Chrome browser tool (`--chrome`) | Desktop, web/cloud, mobile, Chrome, Slack and CI integrations | **Major gap** |
 | Safety | Workspace/path checks, secret exclusions, approvals, opt-in Linux/macOS sandbox, snapshots and explicit untrusted extension handling | Permission modes, hooks and tool-execution safeguards integrated across supported surfaces | Useful safeguards exist, but no Windows sandbox and no claim of complete OS isolation |
 | Evaluation | Built-in fixture runner; 21 small tasks; cost/time/token output | Official workflow and agent features; no equivalent OASIS-vs-Claude measured result is available from this repo | Good regression smoke harness; not a ranking benchmark |
 
@@ -80,6 +80,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Transcript mode | Ctrl+O full-screen transcript with expanded tool calls | **Closed.** Pager with scroll, paging and jump keys; prompt draft preserved. |
 | Permission dialog | Arrow-select approval dialog; Confirmation/Select keybinding contexts | **Closed.** Arrows/j/k, digits, y/n/a hotkeys, Esc; rebindable; channel relay still races the dialog. |
 | /skill-doctor, Skill() rules | Skill context cost and usage; `Skill(name)` permission rules | **Closed.** Denied skills are dropped from the prompt listing. `/new`, `/reset`, `/proactive` aliases added. |
+| Chrome integration | `--chrome`, `/chrome`: navigate, click, type, screenshots, console, network, tabs | **Closed for local Chrome.** Dependency-free CDP client; own profile or attach to your signed-in Chrome via `OASIS_CHROME_PORT`; site and page-JS approvals. No extension-based tab sharing. |
 
 ## Ranked next improvements
 

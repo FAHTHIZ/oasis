@@ -72,6 +72,7 @@ export const BUILTIN_COMMANDS = {
   color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
   focus: 'Show the last prompt, a one-line summary of each tool call with edit line counts, and the final response',
   background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
+  chrome: 'Turn the Chrome browser tool on or off for this session (/chrome [on|off|status])',
   'skill-doctor': 'Show each skill\'s context cost and recent usage so you can turn off unused ones (/skill-doctor [DAYS])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
   import: 'Import MCP servers, instructions, commands and rules from Codex, Gemini CLI or Cursor (/import [codex|gemini|cursor] [--dry-run] [--yes])',
@@ -470,6 +471,19 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'background': {
       if (!session) return { output: 'Start a conversation first; /background hands the current session to a background agent. Use oasis --bg "task" to start a new one.' };
       return { background: { prompt: argument || 'Continue the task from where we left off. When you are done, summarize what you did.' } };
+    }
+    case 'chrome': {
+      if (!session) return { output: 'Start a conversation first, or launch with oasis --chrome.' };
+      const { setChrome } = await import('./agent.mjs');
+      const { findChrome } = await import('./cdp.mjs');
+      const wanted = String(argument || '').trim().toLowerCase();
+      const exe = env.OASIS_CHROME_PORT ? 'attached to port ' + env.OASIS_CHROME_PORT : findChrome(env);
+      if (!wanted || wanted === 'status') return { output: 'Chrome tool: ' + (session.chromeEnabled ? 'on' : 'off') + (session.browserState ? ' (browser open)' : '') + '. Browser: ' + (exe || 'not found; set OASIS_CHROME_PATH') + '.' };
+      if (wanted === 'off') { setChrome(session, false); return { output: 'Chrome tool off; the browser was closed.' }; }
+      if (wanted !== 'on') return { output: 'Usage: /chrome [on|off|status]' };
+      if (!exe) return { output: 'No Chrome, Chromium or Edge found. Install one or set OASIS_CHROME_PATH.' };
+      setChrome(session, true);
+      return { output: 'Chrome tool on (' + exe + '). The agent can now open pages, click, type, take screenshots and read the console.' };
     }
     case 'skill-doctor': {
       const { skillDoctor, skillDoctorText } = await import('./skill-doctor.mjs');

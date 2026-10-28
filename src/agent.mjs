@@ -15,6 +15,7 @@ function withResolvedModel(config, env, planMode) {
 const NESTED_MEMORY_TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'multi_edit', 'notebook_edit']);
 import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
+import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
@@ -332,7 +333,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '' }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root, { env })]);
@@ -450,6 +451,9 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.config = { ...session.config, model: fallback };
   }
   session.initialModel = session.config && session.config.model;
+  // Chrome integration (--chrome, "chrome": true, OASIS_CHROME=1; --no-chrome or OASIS_CHROME=0 wins).
+  const chromeWanted = chrome !== null ? Boolean(chrome) : env.OASIS_CHROME ? env.OASIS_CHROME !== '0' : loadedSettings.chrome === true;
+  if (chromeWanted) setChrome(session, true);
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
   if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol })) setAdvisor(session, advisorModel);
   if (autoMemoryEnabled(loadedSettings, env)) {
@@ -586,6 +590,7 @@ export function closeSession(session) {
   if (session && session.fileWatchers) { try { session.fileWatchers.stop(); } catch {} session.fileWatchers = null; }
   if (session && session.background) killAllBackground(session.background);
   if (session && session.ptyManager) { try { session.ptyManager.closeAll(); } catch {} }
+  if (session && session.browserState) closeBrowser(session).catch(() => {});
   if (session && session.lspClients) stopLspClients(session).catch(() => {});
   if (session && session.agentTasks) stopAllAgents(session);
   if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
@@ -3196,6 +3201,14 @@ export { toAnthropicRequest, toResponsesRequest };
 // consult a second, usually stronger, model mid-task. The advisor sees the whole conversation
 // and answers with guidance only; it never runs tools.
 export const ADVISOR_TOOL_DEFINITION = { type: 'function', function: { name: 'advisor', description: 'Consult a stronger advisor model that sees this entire conversation. Use it before committing to an approach on hard problems, when stuck after several attempts, or to sanity-check a plan or diagnosis. It returns advice only; it cannot run tools. Optionally pass a focused question.', parameters: { type: 'object', properties: { question: { type: 'string', description: 'Optional specific question for the advisor' } } } } };
+
+export function setChrome(session, on) {
+  session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => tool.function.name !== 'browser');
+  session.chromeEnabled = Boolean(on);
+  if (on) session.toolDefinitions = session.toolDefinitions.concat([BROWSER_TOOL_DEFINITION]);
+  else closeBrowser(session).catch(() => {});
+  return session.chromeEnabled;
+}
 
 export function setAdvisor(session, model) {
   const name = String(model || '').trim();

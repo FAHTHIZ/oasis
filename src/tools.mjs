@@ -1873,6 +1873,10 @@ export async function executeTool(name, args = {}, context = {}) {
         signal: context.signal,
         sandbox: context.sandbox
       });
+    case 'browser': {
+      const { executeBrowserTool } = await import('./browser-tool.mjs');
+      return await executeBrowserTool(args, { ...context, session: context.session || context });
+    }
     default:
       if (POWER_TOOL_NAMES.has(name)) return await executePowerTool(name, args, context, root);
       throw new Error('Unknown or unavailable tool: ' + name);
