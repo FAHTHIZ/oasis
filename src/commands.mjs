@@ -104,6 +104,23 @@ export async function loadCustomCommands(root, options = {}) {
       });
     }
   } catch { /* Plugins are optional. */ }
+  // Saved dynamic workflows run as /name (Claude Code saves workflows as commands).
+  try {
+    const { loadWorkflows } = await import('./workflows.mjs');
+    for (const item of (await loadWorkflows(root, { env: options.env || process.env })).values()) {
+      if (commands.has(item.name)) continue;
+      commands.set(item.name, {
+        name: item.name,
+        description: (item.description || 'Saved workflow') + ' (workflow)',
+        argumentHint: '[args]',
+        model: null, allowedTools: null, effort: null, context: null, agent: null,
+        body: 'Run the saved workflow "' + item.name + '" now with the workflow tool (action "run", name "' + item.name + '") and pass args: $ARGUMENTS\nWhen it finishes, report the result.',
+        file: item.file,
+        scope: item.scope === 'project' ? 'project' : 'user',
+        workflow: true
+      });
+    }
+  } catch { /* Workflows are optional. */ }
   return commands;
 }
 

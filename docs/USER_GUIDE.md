@@ -727,6 +727,30 @@ Example request to the agent: “Split this migration into shared tasks, record 
 
 **Important limits:** these are model tools, not standalone slash commands or a separate task-board UI. The board is shared between the main session and subagents in that session, and it is persisted with saved sessions; it does not sync across independent Oasis sessions, the browser dashboard’s local-storage tasks, or remote machines. Setting an owner records assignment metadata but does not start or reserve the task; `task_claim` supplies the actual time-limited lease. `dispatch_ready_tasks` launches a single bounded wave; the main model must request another wave after prerequisites complete, so this is not a persistent autonomous scheduler or dynamic-workflow runner. Background workers cannot prompt for per-tool approval: edits/commands requiring a prompt are denied unless the inherited permission mode or explicit allow rules permit them. Branches are not merged by dispatch; review/preflight and approval are required. Use `isolation: "worktree"` for independently editing subagents; a shared task board by itself does not isolate files.
 
+## Dynamic workflows
+
+For work too big for one conversation turn — auditing every file, a codebase-wide migration, cross-checked research — OASIS can write a workflow script and run it with the `workflow` tool, like Claude Code. Ask for a workflow, or put `ultracode` in your prompt (or set `"ultracode": true` in settings) to make it plan the task that way.
+
+A workflow is plain JavaScript with top-level `await`:
+
+```js
+export const meta = { name: 'audit-routes', description: 'Audit every route file', phases: ['Find', 'Audit'] }
+phase('Find')
+const found = await agent('List every file under src/routes', { schema: { type: 'object', required: ['files'], properties: { files: { type: 'array', items: { type: 'string' } } } } })
+phase('Audit')
+const reports = await pipeline(found.files, (file) => agent('Audit ' + file + ' for missing auth checks. Report findings.', { label: file }))
+return reports.filter(Boolean)
+```
+
+- `agent(prompt, { label, schema, agentType, model, isolation: 'worktree' })` runs one subagent; with `schema` its reply is parsed and validated JSON (retried up to `MAX_STRUCTURED_OUTPUT_RETRIES`, default 5).
+- `pipeline(items, fn)` runs one task per item and `parallel([...fns])` runs tasks together; a failed agent becomes `null` instead of failing the run.
+- `phase(title)` groups progress and `log(...)` adds notes. `args` holds the input.
+- Scripts cannot touch files, run commands, `import`, or read the clock or `Math.random()`; agents do the real work under your normal permissions. At most 1000 agents run per workflow, with up to 10 at once (`OASIS_WORKFLOW_MAX_CONCURRENT_AGENTS`).
+
+Runs can go to the background (`run_in_background`); you get a notice when they finish. `/workflows` lists runs and saved workflows, `/workflows ID` shows per-phase progress, `/workflows stop ID` stops one, and asking to resume relaunches it with `resume_run_id` — agents that already finished return their saved results.
+
+`/workflows save ID` saves a run's script to `.claude/workflows/` (add `--user` for your personal folder). Saved workflows from `.claude/workflows`, `.oasis/workflows`, your personal workflows folder, and enabled plugins become commands: `/audit-routes`. The built-in `/deep-research QUESTION` plans sub-questions, researches them in parallel, cross-checks the claims, and writes a cited report. Permission rules can name the tool: `Workflow` or `Workflow(deep-research)`. Set `"workflowsEnabled": false` or `OASIS_DISABLE_WORKFLOWS=1` to turn the tool off.
+
 ## Longer tasks
 
 Oasis knows the context window of common models (Claude 200K, GPT-4.1 and Gemini 1M, GPT-5 400K, o-series 200K, GPT-4o 128K, and others) and compacts history at about 60% full. Unknown or local models use a conservative 32K. Set `"contextWindow"` in the provider config or `OASIS_CONTEXT_WINDOW` to override it, and `OASIS_COMPACT_THRESHOLD_CHARS` to change when compaction starts.

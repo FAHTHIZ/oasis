@@ -51,6 +51,7 @@ export const BUILTIN_COMMANDS = {
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
   tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks stop ID)',
+  workflows: 'List workflow runs and saved workflows (/workflows, /workflows ID, stop ID, save ID [--user])',
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
   diagnostics: 'Run type checkers and linters, then fix errors (/diagnostics [paths])',
@@ -821,6 +822,30 @@ export async function runBuiltinCommand(name, argument, state) {
       session.sandbox = resolveSandbox({ sandbox: { enabled, network, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
       if (session.sandbox.enabled) session.sandbox.writable = writable;
       return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
+    }
+    case 'workflows': {
+      const wf = await import('./workflows.mjs');
+      const runs = session && session.workflowRuns ? session.workflowRuns : new Map();
+      const words = argument ? argument.split(/\s+/) : [];
+      if (words[0] === 'stop' && words[1]) {
+        const run = runs.get(words[1]);
+        if (!run) return { output: 'No workflow run ' + words[1] + '.' };
+        run.controller.abort();
+        return { output: 'Stopping workflow ' + run.id + '. Ask to resume it later with resume_run_id ' + run.id + '.' };
+      }
+      if (words[0] === 'save' && words[1]) {
+        const run = runs.get(words[1]);
+        if (!run) return { output: 'No workflow run ' + words[1] + '.' };
+        const { readFile } = await import('node:fs/promises');
+        const target = await wf.saveWorkflow(await readFile(run.scriptPath, 'utf8'), { root, env, scope: words.includes('--user') ? 'user' : 'project', name: words.find((word, index) => index > 1 && !word.startsWith('--')) || null });
+        return { output: 'Saved workflow to ' + (target.file || target) + '. Run it with /' + String(target).split(/[\\/]/).pop().replace(/\.js$/, '') + '.' };
+      }
+      if (words[0] && runs.has(words[0])) return { output: wf.describeRun(runs.get(words[0]), { detail: true }) };
+      const lines = [];
+      if (runs.size) { lines.push('Workflow runs:'); for (const run of runs.values()) lines.push('  ' + wf.describeRun(run)); }
+      const saved = await wf.loadWorkflows(root, { env }).catch(() => new Map());
+      if (saved.size) { lines.push('Saved workflows (run as /name):'); for (const item of saved.values()) lines.push('  /' + item.name.padEnd(18) + ' ' + item.scope.padEnd(8) + ' ' + item.description); }
+      return { output: lines.length ? lines.join('\n') : 'No workflows yet. Ask for a workflow (or say ultracode) to start one.' };
     }
     case 'tasks': {
       const { listAgents, getAgent, stopAgent, summarizeAgent } = await import('./agent-tasks.mjs');
