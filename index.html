@@ -375,7 +375,7 @@ async function agentLoadCloudTasks(silent){
       var title=document.createElement('div');title.className='cloud-run-title';title.textContent=task.title||task.type||'Coding task';
       var meta=document.createElement('div');meta.className='cloud-run-meta';
       var when=task.updatedAt?new Date(task.updatedAt):null;
-      meta.textContent=(task.type||'agent')+' · '+(when&&!Number.isNaN(when.getTime())?when.toLocaleString():'time unknown')+(Number.isFinite(task.eventCount)?' · '+task.eventCount+' events':'');
+      meta.textContent=(task.type||'agent')+' · '+(when&&!Number.isNaN(when.getTime())?when.toLocaleString():'time unknown')+(task.workspaceName?' · '+task.workspaceName:'')+(Number.isFinite(task.eventCount)?' · '+task.eventCount+' events':'');
       var state=document.createElement('span');state.className='cloud-run-status';state.dataset.status=task.status||'unknown';state.textContent=String(task.status||'unknown').replace(/_/g,' ');
       var open=document.createElement('button');open.className='btn btn-secondary';open.type='button';open.textContent='View run';open.dataset.cloudRunId=task.id;
       main.appendChild(title);main.appendChild(meta);row.appendChild(main);row.appendChild(state);row.appendChild(open);list.appendChild(row);
@@ -389,13 +389,15 @@ async function agentOpenCloudRun(id){
   var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),title=document.getElementById('cloudRunDetailTitle');
   try{
     var task=await agentApi('/api/jobs/'+encodeURIComponent(id)+'?after=0');
-    title.textContent='Run · '+String(task.status||'unknown').replace(/_/g,' ');
+    title.textContent=(task.title||'Run')+' · '+String(task.status||'unknown').replace(/_/g,' ');
     events.replaceChildren();
+    if(task.result&&task.result.isolatedWorktree){var wt=task.result.isolatedWorktree,summaryRow=document.createElement('div');summaryRow.className='cloud-run-empty';summaryRow.textContent=wt.changed?'Branch '+(wt.branch||'unknown')+(wt.commit?' · commit '+wt.commit:'')+(wt.files&&wt.files.length?' · '+wt.files.length+' changed files':'')+(wt.error?' · '+wt.error:''):(wt.error?'Worktree retained for recovery: '+wt.error:'No committed changes; temporary worktree cleaned up.');events.appendChild(summaryRow);}
     (task.events||[]).slice(-120).forEach(function(event){
       var row=document.createElement('div');row.className='cloud-run-event';
       var label=document.createElement('strong');label.textContent=String(event.type||'event').replace(/_/g,' ');
       var data=event.data||{},summary='';
       if(typeof data.message==='string')summary=data.message;
+      else if(typeof data.branch==='string')summary=data.branch+(data.commit?' · '+data.commit:'')+(data.files&&data.files.length?' · '+data.files.length+' files':'');
       else if(typeof data.tool==='string')summary=data.tool;
       else if(typeof data.name==='string')summary=data.name+(data.detail?' · '+data.detail:'');
       var text=document.createElement('small'),when=event.at?new Date(event.at):null;
