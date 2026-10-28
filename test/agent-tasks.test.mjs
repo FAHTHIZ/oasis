@@ -429,6 +429,73 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
 });
 
 
+test('opt-in auto-dispatch advances dependency waves and pauses with the lease released when a worker exits incomplete', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-auto-dispatch-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-auto-dispatch-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'auto-dispatch@example.com');
+  git('config', 'user.name', 'OASIS test');
+  await writeFile(path.join(root, 'fixture.txt'), 'workflow fixture\\n');
+  git('add', '-A');
+  git('commit', '-qm', 'fixture baseline');
+
+  const { config, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && /Create dependency tasks and enable auto-dispatch/.test(last.content)) {
+        return { content: null, tool_calls: [
+          call('create-first', 'task_create', { subject: 'Verify first task', description: 'Verify the first prerequisite.' }),
+          call('create-second', 'task_create', { subject: 'Verify dependent task', description: 'Verify the dependent task.', blocked_by: ['task_1'] })
+        ] };
+      }
+      if (!payload.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks')) {
+        return { content: null, tool_calls: [call('auto-wave', 'dispatch_ready_tasks', { max_parallel: 1, auto_dispatch: true })] };
+      }
+      return { content: 'auto-dispatch started' };
+    },
+    child: (payload) => {
+      const all = text(payload.messages);
+      const match = all.match(/You have been assigned shared task (task_[1-9][0-9]*)/i);
+      const taskId = match && match[1];
+      const last = payload.messages[payload.messages.length - 1];
+      if (!taskId) return { content: 'Worker prompt did not include a shared task ID.' };
+      if (last.role === 'user' && /You have been assigned shared task/i.test(last.content)) {
+        return { content: null, tool_calls: [call('claim-' + taskId, 'task_claim', { task_id: taskId, lease_seconds: 60 })] };
+      }
+      if (last.role === 'tool' && last.name === 'task_claim') {
+        if (taskId === 'task_1') {
+          return { content: null, tool_calls: [call('complete-' + taskId, 'task_update', { task_id: taskId, status: 'completed' })] };
+        }
+        return { content: 'I could not verify the dependent task. Leaving it for coordinator review.' };
+      }
+      if (last.role === 'tool' && last.name === 'task_update') return { content: 'Verified prerequisite ' + taskId + '.' };
+      return { content: 'Unexpected worker step for ' + taskId + '.' };
+    }
+  });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+
+  const first = await runAgentTurn(session, 'Create dependency tasks and enable auto-dispatch.', { autoApprove: true, env, approval: async () => true });
+  assert.equal(first.text, 'auto-dispatch started');
+  await until(() => session.agentTasks.agents.size === 2 &&
+    session.sharedTasks.tasks.find((task) => task.id === 'task_1')?.status === 'completed' &&
+    session.agentTasks.autoDispatch?.enabled === false);
+
+  const firstTask = session.sharedTasks.tasks.find((task) => task.id === 'task_1');
+  const secondTask = session.sharedTasks.tasks.find((task) => task.id === 'task_2');
+  assert.equal(firstTask.status, 'completed');
+  assert.equal(secondTask.status, 'pending');
+  assert.equal(secondTask.claimedBy, '');
+  assert.equal(secondTask.claimExpiresAt, null);
+  assert.deepEqual([...session.agentTasks.agents.values()].map((agent) => agent.sharedTaskId), ['task_1', 'task_2']);
+  assert.ok(childRequests.some((request) => text(request.messages).includes('You have been assigned shared task task_2')));
+  assert.ok(agentEvents(session, { limit: 100 }).events.some((event) => event.type === 'task.lease_recovered'));
+  assert.ok(agentEvents(session, { limit: 100 }).events.some((event) => event.type === 'task.auto_dispatch_paused'));
+});
+
 test('cancelling a dispatched worker immediately releases its shared task lease', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-cancel-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-cancel-home-'));

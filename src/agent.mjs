@@ -1619,7 +1619,7 @@ async function runSubagent(parent, args, context, options) {
     throw new Error('Already running ' + MAX_BACKGROUND_AGENTS + ' background agents. Wait for one with agent_status or stop one with agent_stop.');
   }
   const sharedTaskId = /^task_[1-9]\d{0,8}$/.test(String(args.shared_task_id || '')) ? String(args.shared_task_id) : null;
-  const record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId });
+  const record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
   child.agentId = record.id;
   let startPrompt = prompt;
   if (hasHooks(parent.hooks, 'SubagentStart')) {
@@ -1721,16 +1721,127 @@ function startBackgroundRun(parent, record, prompt, options) {
   recordAgentEvent(parent, record.runs > 1 ? 'agent.resumed' : 'agent.background_started', { agentId: record.id, teamId: record.teamId || undefined, description: record.description });
   // Detach from the parent turn: its cancellation must not kill the agent.
   const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onUsage: undefined, onDelta: undefined };
-  record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).then((result) => {
+  record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).then(async (result) => {
     const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
     if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
     parts.push('Report:\n' + record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : ''));
     notifyParent(parent, parts.join(' '), record);
+    if (record.autoDispatchManaged || (parent.agentTasks && parent.agentTasks.autoDispatch && parent.agentTasks.autoDispatch.enabled)) {
+      await advanceAutoDispatch(parent, record.autoDispatchManaged ? record : null);
+    }
     return result;
-  }, (error) => {
+  }, async (error) => {
     notifyParent(parent, 'Background agent ' + record.id + ' ("' + record.description + '") ' + record.status + ': ' + error.message, record);
+    if (record.autoDispatchManaged || (parent.agentTasks && parent.agentTasks.autoDispatch && parent.agentTasks.autoDispatch.enabled)) {
+      await advanceAutoDispatch(parent, record.autoDispatchManaged ? record : null);
+    }
     return null;
   });
+}
+
+function pauseAutoDispatch(session, reason, record = null) {
+  const workflow = session && session.agentTasks && session.agentTasks.autoDispatch;
+  if (!workflow || !workflow.enabled) return false;
+  workflow.enabled = false;
+  workflow.pending = false;
+  recordAgentEvent(session, 'task.auto_dispatch_paused', {
+    agentId: record && record.id,
+    teamId: workflow.teamId || undefined,
+    description: record && (record.description || record.id) || 'automatic task dispatch',
+    detail: String(reason || 'paused').slice(0, 500)
+  });
+  notifyParent(session, 'Automatic task dispatch paused: ' + reason);
+  return true;
+}
+
+async function advanceAutoDispatch(session, record = null) {
+  const registry = agentRegistry(session);
+  const workflow = registry.autoDispatch;
+  if (!workflow || !workflow.enabled) return;
+
+  if (record && record.status !== 'completed') {
+    pauseAutoDispatch(session, 'worker ' + record.id + ' ended as ' + record.status + '. Review the task and restart dispatch explicitly when ready.', record);
+    return;
+  }
+
+  if (record && record.sharedTaskId) {
+    const task = session.sharedTasks && session.sharedTasks.tasks.find((item) => item.id === record.sharedTaskId);
+    if (!task || task.status !== 'completed') {
+      let leaseReleased = false;
+      if (task && task.status !== 'completed' && task.claimedBy === record.id && record.child) {
+        try {
+          const release = runSharedTaskTool(record.child, 'task_release', { task_id: task.id });
+          leaseReleased = release.released === true;
+          if (leaseReleased) recordAgentEvent(session, 'task.lease_recovered', {
+            agentId: record.id,
+            teamId: workflow.teamId || undefined,
+            description: task.id,
+            detail: 'Worker exited without completing the task; its lease was released.'
+          });
+        } catch {}
+      }
+      const current = session.sharedTasks && session.sharedTasks.tasks.find((item) => item.id === record.sharedTaskId);
+      const status = current ? current.status : 'missing';
+      pauseAutoDispatch(session,
+        'worker ' + record.id + ' exited without completing ' + record.sharedTaskId +
+        ' (task status: ' + status + ')' +
+        (leaseReleased ? '; its lease was released and the task is available for review/retry.' : '; no other worker task lease was changed.'),
+        record);
+      return;
+    }
+  }
+
+  if (workflow.dispatching) {
+    workflow.pending = true;
+    return;
+  }
+
+  workflow.dispatching = true;
+  try {
+    const activeManaged = [...registry.agents.values()].filter((agent) =>
+      agent.autoDispatchManaged && agent.background && agent.status === 'running'
+    ).length;
+    const openSlots = workflow.maxParallel - activeManaged;
+    if (openSlots <= 0) return;
+
+    const continuationOptions = {
+      ...workflow.options,
+      signal: undefined,
+      onToolStart: undefined,
+      onToolResult: undefined,
+      onUsage: undefined,
+      onDelta: undefined,
+      autoDispatchContinuation: true
+    };
+    const result = await dispatchReadyTasks(session, {
+      max_parallel: openSlots,
+      ...(workflow.teamId ? { team_id: workflow.teamId } : {}),
+      auto_dispatch: true
+    }, {}, continuationOptions);
+    if (result.launched_count > 0) {
+      recordAgentEvent(session, 'task.auto_dispatch_wave', {
+        teamId: workflow.teamId || undefined,
+        description: 'Launched ' + result.launched_count + ' task worker(s)',
+        detail: result.launched.map((item) => item.task_id).join(', ')
+      });
+      notifyParent(session, 'Automatic task dispatch launched ' + result.launched_count + ' additional worker(s): ' + result.launched.map((item) => item.task_id).join(', ') + '.');
+    } else if (runningBackgroundCount(session) === 0) {
+      workflow.enabled = false;
+      recordAgentEvent(session, 'task.auto_dispatch_idle', {
+        teamId: workflow.teamId || undefined,
+        description: 'No ready unclaimed tasks remain'
+      });
+      notifyParent(session, 'Automatic task dispatch is idle: no ready, unclaimed shared tasks remain. Completed task work is still in isolated branches and has not been merged.');
+    }
+  } catch (error) {
+    pauseAutoDispatch(session, 'could not launch the next task wave: ' + String(error && error.message || error).slice(0, 800));
+  } finally {
+    workflow.dispatching = false;
+    if (workflow.pending && workflow.enabled) {
+      workflow.pending = false;
+      queueMicrotask(() => { void advanceAutoDispatch(session).catch(() => {}); });
+    }
+  }
 }
 
 async function dispatchReadyTasks(session, args = {}, context = {}, options = {}) {
@@ -1748,6 +1859,45 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
   }
 
   const registry = agentRegistry(session);
+  const continuation = options.autoDispatchContinuation === true;
+  if (continuation && (!registry.autoDispatch || !registry.autoDispatch.enabled)) {
+    return { launched: [], failed: [], ready_count: 0, launched_count: 0, available_slots: 0, deferred_count: 0, message: 'Automatic task dispatch was stopped before this wave launched.' };
+  }
+
+  if (!continuation && registry.autoDispatch && registry.autoDispatch.enabled) {
+    if (Object.hasOwn(args, 'auto_dispatch') && args.auto_dispatch === false) {
+      pauseAutoDispatch(session, 'disabled by the main coordinator');
+      return { launched: [], failed: [], ready_count: 0, launched_count: 0, available_slots: 0, deferred_count: 0, message: 'Automatic chaining stopped. Already-running workers will continue; call dispatch_ready_tasks again without auto_dispatch to launch a one-time manual wave.' };
+    }
+    throw new Error('Automatic task dispatch is already active. Monitor agent_status and agent_events; set auto_dispatch=false to stop chaining before starting a manual wave.');
+  }
+
+  const ownsAutoDispatchLock = !continuation && args.auto_dispatch === true;
+  if (ownsAutoDispatchLock) {
+    const continuationOptions = {
+      ...options,
+      signal: undefined,
+      onToolStart: undefined,
+      onToolResult: undefined,
+      onUsage: undefined,
+      onDelta: undefined,
+      autoDispatchContinuation: true
+    };
+    registry.autoDispatch = {
+      enabled: true,
+      maxParallel: requested,
+      teamId: teamId || null,
+      dispatching: true,
+      pending: false,
+      options: continuationOptions
+    };
+    recordAgentEvent(session, 'task.auto_dispatch_started', {
+      teamId: teamId || undefined,
+      description: 'Automatic task dispatch enabled',
+      detail: 'max_parallel=' + requested
+    });
+  }
+
   const runningTaskIds = new Set([...registry.agents.values()]
     .filter((agent) => agent.status === 'running' && agent.sharedTaskId)
     .map((agent) => agent.sharedTaskId));
@@ -1774,12 +1924,12 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
     }
     const prompt = [
       'You have been assigned shared task ' + task.id + ': ' + task.subject + '.',
-      'Task description and acceptance criteria:\n' + (task.description || '(No additional criteria were supplied; inspect the repository and derive a narrow, verifiable scope from the task title.)'),
+      'Task description and acceptance criteria:\\n' + (task.description || '(No additional criteria were supplied; inspect the repository and derive a narrow, verifiable scope from the task title.)'),
       'First, call task_claim for exactly ' + task.id + ' before inspecting or changing project files. If the claim is denied or the task is no longer ready, do not edit anything; report the blocker.',
       'Work only in your isolated Git worktree. Do not switch branches, commit, merge, or edit the parent checkout. Implement only this task and avoid unrelated work.',
       'Verify the result: inspect the relevant diff, run the narrowest meaningful test/check and report the command and actual outcome. Only call task_update with status completed after the acceptance criteria have actually been verified. If blocked or unsuccessful, release the task with task_release when your claim is active and explain what remains.',
       'Your final report must name the files changed, checks actually run, results, and any unresolved issues. A successful tool call alone is not proof that the task is complete.'
-    ].join('\n\n');
+    ].join('\\n\\n');
     try {
       const result = await runSubagent(session, {
         subagent_type: 'general-purpose',
@@ -1788,7 +1938,8 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
         isolation: 'worktree',
         run_in_background: true,
         team_id: teamId || undefined,
-        shared_task_id: task.id
+        shared_task_id: task.id,
+        auto_dispatch_managed: Boolean(registry.autoDispatch && registry.autoDispatch.enabled)
       }, context, options);
       launched.push({ task_id: task.id, agent_id: result.id, status: result.status, subject: task.subject });
     } catch (error) {
@@ -1796,7 +1947,7 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
     }
   }
 
-  return {
+  const response = {
     launched,
     failed,
     ready_count: ready.length,
@@ -1804,13 +1955,34 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
     available_slots: availableSlots,
     deferred_count: Math.max(0, ready.length - launched.length),
     message: launched.length
-      ? 'Started ' + launched.length + ' background worker(s) in isolated worktrees. Monitor them with agent_status or agent_events; dispatch the next wave after prerequisite tasks complete. No branch was merged.'
+      ? 'Started ' + launched.length + ' background worker(s) in isolated worktrees. Monitor them with agent_status or agent_events; dispatch the next wave after prerequisites complete. No branch was merged.'
       : failed.length
         ? 'No worker started successfully. Review the per-task errors and clear the blocker before retrying.'
         : ready.length && availableSlots === 0
           ? 'Ready tasks exist, but the active background-worker limit is full. Wait for a worker to finish or stop one, then dispatch again.'
           : 'No unclaimed ready tasks can be dispatched in this wave. Check task_list for dependencies, live leases, and task owners.'
   };
+
+  if (ownsAutoDispatchLock) {
+    const workflow = registry.autoDispatch;
+    workflow.dispatching = false;
+    if (!launched.length) {
+      workflow.enabled = false;
+      workflow.pending = false;
+      recordAgentEvent(session, 'task.auto_dispatch_idle', {
+        teamId: workflow.teamId || undefined,
+        description: 'Initial auto-dispatch wave launched no workers'
+      });
+      response.message += ' Automatic chaining was not left active because no worker was launched.';
+    } else {
+      response.message += ' Automatic chaining is enabled: newly ready work will be dispatched as workers finish. It pauses on failed/cancelled workers or tasks left incomplete; worktrees are never merged automatically.';
+      if (workflow.pending && workflow.enabled) {
+        workflow.pending = false;
+        queueMicrotask(() => { void advanceAutoDispatch(session).catch(() => {}); });
+      }
+    }
+  }
+  return response;
 }
 
 async function runAgentTool(session, name, args, context, options) {
