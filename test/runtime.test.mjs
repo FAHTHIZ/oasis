@@ -654,6 +654,72 @@ test('public URL fetch blocks loopback and private network addresses', async () 
   await assert.rejects(executeTool('fetch_url', { url: 'http://localhost/' }, { root: process.cwd() }), /Local and metadata/);
 });
 
+test('public URL fetch blocks IPv4-mapped IPv6 addresses that resolve to private IPv4 ranges', async () => {
+  for (const url of [
+    'http://[::ffff:7f00:1]/',
+    'http://[::ffff:a00:1]/',
+    'http://[::ffff:0a00:0001]/'
+  ]) {
+    await assert.rejects(
+      executeTool('fetch_url', { url }, { root: process.cwd() }),
+      /Private-network addresses are blocked/,
+      'expected mapped private address to be rejected: ' + url
+    );
+  }
+});
+
+test('public URL fetch pins validated DNS answers and rejects mixed public/private answers', async () => {
+  let requestArgs = null;
+  const lookupImpl = async (hostname, options) => {
+    assert.equal(hostname, 'safe.example.test');
+    assert.deepEqual(options, { all: true, verbatim: true });
+    return [{ address: '93.184.216.34', family: 4 }];
+  };
+  const requestImpl = async (url, addresses, signal) => {
+    requestArgs = { url: url.toString(), addresses, aborted: signal.aborted };
+    return {
+      status: 200,
+      headers: { get(name) { return ({ 'content-type': 'text/plain', 'content-length': '13' })[name.toLowerCase()] || null; } },
+      body: 'safe fixture!',
+      tooLarge: false
+    };
+  };
+  const result = await executeTool('fetch_url', { url: 'https://safe.example.test/readme.txt' }, {
+    root: process.cwd(), lookupImpl, requestImpl
+  });
+  assert.equal(result.content, 'safe fixture!');
+  assert.deepEqual(requestArgs, {
+    url: 'https://safe.example.test/readme.txt',
+    addresses: [{ address: '93.184.216.34', family: 4 }],
+    aborted: false
+  });
+
+  let attemptedRequest = false;
+  await assert.rejects(executeTool('fetch_url', { url: 'https://safe.example.test/' }, {
+    root: process.cwd(),
+    lookupImpl: async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.7', family: 4 }
+    ],
+    requestImpl: async () => { attemptedRequest = true; throw new Error('must not connect'); }
+  }), /resolves to a private or reserved address/);
+  assert.equal(attemptedRequest, false, 'must reject the DNS set before connecting');
+});
+
+test('public URL fetch rejects an oversized response before consuming its body as content', async () => {
+  const result = await executeTool('fetch_url', { url: 'https://safe.example.test/large.txt' }, {
+    root: process.cwd(),
+    lookupImpl: async () => [{ address: '93.184.216.34', family: 4 }],
+    requestImpl: async () => ({
+      status: 200,
+      headers: { get(name) { return name.toLowerCase() === 'content-type' ? 'text/plain' : null; } },
+      body: '',
+      tooLarge: true
+    })
+  });
+  assert.match(result.error, /1 MiB limit/);
+});
+
 test('read-only Git tools inspect diffs while protecting sensitive paths', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
