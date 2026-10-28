@@ -143,7 +143,9 @@ test('plugin monitors load from monitors/monitors.json and start always or on sk
   assert.equal(startPluginMonitorsFor(session, 'other-skill', { root }).length, 0);
   assert.equal(startPluginMonitorsFor(session, 'plug:deploy', { root }).length, 1);
   assert.ok(await until(() => (session.inbox || []).filter((e) => e.kind === 'monitor' && /plugin says hi/.test(e.text)).length === 2));
-  assert.match(session.inbox.find((e) => e.kind === 'monitor').text, /plug:greeter/);
+  const texts = session.inbox.filter((e) => e.kind === 'monitor').map((e) => e.text).join('\n');
+  assert.match(texts, /plug:greeter/);
+  assert.match(texts, /plug:deploy-watch/);
 });
 
 test('a WebSocket monitor turns messages into events', { skip: typeof WebSocket !== 'function' }, async (t) => {
@@ -169,4 +171,31 @@ test('a WebSocket monitor turns messages into events', { skip: typeof WebSocket 
   const text = session.inbox.map((e) => e.text).join('\n');
   assert.match(text, /build #2 failed/);
   assert.doesNotMatch(text, /build #1 passed/);
+});
+
+test('an idle stream-json session (VS Code chat panel) wakes on monitor events', async (t) => {
+  const root = await tmp(t);
+  await writeFile(path.join(root, 'ticker.js'), TICKER);
+  const { config, requests } = await scriptedModel(t, [(payload) => {
+    const last = payload.messages.at(-1);
+    const text = JSON.stringify(last.content);
+    if (last.role === 'tool') return { content: 'Watching the ticker.' };
+    if (/background event/.test(text)) return { content: /ended=/.test(text) ? 'Ticker finished.' : 'Saw ticks.' };
+    return toolCall('m1', 'monitor', { description: 'ticker', command: process.execPath, args: ['ticker.js'] });
+  }]);
+  const { PassThrough } = await import('node:stream');
+  const { createInterface } = await import('node:readline');
+  const { createStreamJsonChannel } = await import('../src/headless.mjs');
+  const input = new PassThrough();
+  const events = [];
+  const write = (line) => { for (const part of String(line).split('\n')) if (part.trim()) events.push(JSON.parse(part)); };
+  const channel = createStreamJsonChannel(createInterface({ input, crlfDelay: Infinity }), (event) => events.push(event));
+  const run = runHeadless({ prompt: '', root, config, autoApprove: true, outputFormat: 'stream-json', inputStream: channel, replayUser: true, env: { ...process.env, OASIS_DISABLE_PLUGIN_MONITORS: '1' }, sessionOptions: { settings }, write });
+  input.write(JSON.stringify({ type: 'user', message: { role: 'user', content: 'watch the ticker' } }) + '\n');
+  assert.ok(await until(() => events.some((e) => e.type === 'result' && e.result === 'Ticker finished.'), 10000), 'the ended event woke the session');
+  assert.ok(events.some((e) => e.type === 'system' && e.subtype === 'background_event' && e.kinds.includes('monitor')));
+  assert.ok(!events.some((e) => e.type === 'user' && /background event/.test(e.message.content)), 'wake prompts are not replayed as user messages');
+  assert.match(allText(requests), /tick 3/);
+  input.end();
+  await run;
 });
