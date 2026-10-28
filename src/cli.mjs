@@ -818,6 +818,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       signal: controller.signal,
       autoApprove,
       ...(modeOptions.images ? { images: modeOptions.images } : {}),
+      onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
