@@ -18,6 +18,7 @@ const SECRET_KEY = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]
 
 function scrubText(value, limit = 4000) {
   return String(value)
+    .replace(/(\bauthorization\b\s*[:=]\s*)(?:Bearer\s+)?("[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]')
     .replace(/\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[REDACTED]')
     .replace(/(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization)\b\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[REDACTED]')
