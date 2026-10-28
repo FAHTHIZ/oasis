@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here.
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 28, 2026**, against `main` at implementation baseline `eaa828d1fafce684737f4458e1fb3b9b1fe0a901`. The current test and capability inventory lives in [CURRENT_STATUS.md](CURRENT_STATUS.md); the competitor-specific backlog lives in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -46,7 +46,16 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Next: Claude Code parity
 
-The remaining gaps are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md): vim mode, themes and keybindings, a full-screen transcript, EnterWorktree/ExitWorktree, a `rules/` folder, native Gemini and Azure adapters, a PTY, Windows support, a plugin marketplace, and IDE extensions.
+Recommended order is based on capability impact, not ease of implementation:
+
+1. **Real PTY and terminal lifecycle** — support interactive programs, full terminal sessions, streaming output, resize, stdin, cancellation and process cleanup. The current browser runner is argv-only and not a PTY.
+2. **Complete multi-agent coordination** — task claiming/locking, peer-to-peer messages, lifecycle controls, visible agent monitoring and worktree conflict/merge handling on top of the shared dependency-aware board already shipped.
+3. **IDE integrations** — start with a VS Code extension that can review diffs, expose task/session state and hand off to the same runtime.
+4. **Remote and cross-surface workflows** — cloud/remote sessions, mobile steering, Chrome, desktop and chat integrations; this requires an explicit server trust/auth model rather than merely exposing `oasis web`.
+5. **Platform and extension parity** — native Gemini and Azure adapters, PowerShell/Windows sandboxing, broader plugin compatibility and a remote marketplace.
+6. **Terminal polish** — full-screen transcript, vim mode, themes and an editable keybinding file.
+
+See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CURRENT_STATUS.md](CURRENT_STATUS.md) for the current verification baseline.
 
 ## Milestone 1 — make the CLI release-quality
 
@@ -76,7 +85,7 @@ The remaining gaps are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md): vim 
 ## Milestone 3 — agent strength
 
 - Upgrade plan mode into persistent task checklists with explicit acceptance criteria, execution gates, and regression-oriented verifier cycles.
-- Add narrow specialist agents for review/testing/research, with bounded concurrency. **Progress:** a dependency-aware shared task board (`task_create`, `task_list`, `task_get`, `task_update`) is available to the main session and subagents and persists with saved sessions; direct peer-to-peer agent messaging and team lifecycle coordination remain future work.
+- Add narrow specialist agents for review/testing/research, with bounded concurrency. **Progress:** a dependency-aware shared task board (`task_create`, `task_list`, `task_get`, `task_update`) is available to the main session and subagents and persists with saved sessions. It is a task board, not a complete agent-team system: task claims/locking, a scheduler, direct peer-to-peer messaging, team lifecycle controls, visual monitoring, and edit-conflict coordination remain future work.
 - **Progress:** up to two independent read-only specialist reviews can execute concurrently; parent tool-call results remain ordered. Parallel code-writing agents and shared edit coordination remain future work.
 - **Progress:** OpenTelemetry export is implemented (metrics, events and nested traces over OTLP/HTTP JSON) and tested against a local collector.
 - Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.
@@ -94,4 +103,4 @@ The remaining gaps are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md): vim 
 
 ## Deliberate non-claims
 
-Oasis is not yet at Claude Code feature parity. It includes MCP stdio integration, opt-in saved sessions, patch edits, glob discovery, ranged reads, bounded tool-loop safeguards, best-effort between-turn context compaction, incremental streamed output, and bounded read-only specialist reviews. It still lacks a full PTY, embedded GitHub OAuth, a general remote plugin marketplace, OS-level sandboxing, parallel code-writing subagents with shared edit coordination, broad cross-platform end-to-end UI tests (a Linux Chromium chat smoke test is in place), and a mature browser/GitHub execution environment. Mid-turn compaction is implemented as a bounded heuristic and still needs long-task evaluation across provider protocols.
+OASIS is not yet at Claude Code feature parity. The tested baseline is strong for a single-machine CLI coding agent, but does not establish equal coding outcomes or full platform parity. It includes MCP, saved sessions, patch edits, glob/ranged reads, permissions, optional Linux/macOS sandboxing, a shared dependency-aware agent task board, incremental streaming, and bounded read-only specialist reviews. It still lacks a full PTY/TUI, atomic task claims and full agent-team coordination, embedded GitHub OAuth, a general remote plugin marketplace, Windows sandboxing, native Gemini/Azure adapters, IDE and Chrome integrations, cloud/remote sessions, mobile/desktop surfaces, broad cross-platform end-to-end tests, and a mature browser/GitHub execution environment. Mid-turn compaction remains a best-effort heuristic and the 21 evaluation fixtures are only a smoke suite.

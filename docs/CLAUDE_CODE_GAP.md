@@ -1,100 +1,98 @@
-# Oasis vs Claude Code: gap analysis
+# OASIS vs Claude Code — current gap analysis
 
-Audited October 28, 2026, against Claude Code v2.1.x using its [commands reference](https://code.claude.com/docs/en/commands.md), [tools reference](https://code.claude.com/docs/en/tools-reference.md), [CLI reference](https://code.claude.com/docs/en/cli-reference.md) and [changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md). All "have" claims below were checked in `src/`; the baseline suite had 319 passing tests before this shared-task change.
+**Comparison audited:** October 28, 2026  
+**OASIS implementation baseline:** [`eaa828d1fafce684737f4458e1fb3b9b1fe0a901`](https://github.com/FAHTHIZ/oasis/commit/eaa828d1fafce684737f4458e1fb3b9b1fe0a901)  
+**Verification:** 328 passing Node tests; 21/21 evaluation fixtures; Node.js 22/24/26 CI checks; authenticated browser chat E2E passed. Details: [Current status](CURRENT_STATUS.md).
 
-## Short answer
+This comparison is based on the current OASIS source tree and the current official Claude Code documentation linked at the end. Feature similarity does not prove equivalent coding quality, speed, reliability, or safety.
 
-For a developer working in a terminal on one machine, Oasis now covers almost all of Claude Code's day-to-day loop. That loop includes:
+## Verdict
 
-- The interactive editor, history, completion, modes, `!` shell, image paste, Markdown and diff rendering, type-ahead and Esc-to-interrupt.
-- Tools, subagents, permissions, hooks, MCP, memory, rewind, headless and SDK.
-- Most of the CLI flags.
-- The newer workflow commands: `/goal`, `/btw`, `/batch`, `/simplify`, `/verify`, scheduling and tool search.
+OASIS already implements a broad share of the **single-machine CLI coding loop**: multi-step tool calling, workspace file operations, approvals, context handling, Git tools, subagents, MCP, hooks, skills, saved sessions, headless mode and an SDK. It also has model-provider flexibility and a local browser workspace.
 
-What remains is mostly UI polish: a full-screen TUI, vim mode, themes and keybinding files. Integration surfaces are the other gap: IDE extensions, Chrome, desktop, cloud and mobile.
+It is **not** a drop-in Claude Code replacement across all workflows, and it is not yet at full feature parity. The major gaps are no real PTY/full-screen terminal, incomplete multi-agent team coordination, no IDE extensions, no Chrome/desktop/mobile/cloud surfaces, no embedded GitHub OAuth, a partial extension-compatibility layer, no Windows sandbox, and no native Gemini or Azure Foundry adapter.
 
-## Where Oasis is ahead
+## Side-by-side capability check
 
-| Area | Oasis | Claude Code |
-|---|---|---|
-| Models | Any provider: OpenAI, Anthropic, Bedrock, Vertex, OpenRouter, Gemini (OpenAI-compatible), Ollama, LM Studio, OmniRoute. Fully offline with a local model. | Anthropic models only (direct, Bedrock, Vertex, Foundry) |
-| License | MIT, all source in this repo | Proprietary |
-| Cost | `/cost` in USD with per-model pricing, `--max-budget-usd`; local models cost $0 | API pricing or a subscription |
-| Extensions | Imports Claude Code plugins, Codex and Gemini extensions, with integrity-checked updates and rollback | Claude plugins only |
-| Browser workspace | `oasis web`: authenticated chat with tool activity and approvals, usable from a phone over LAN with TLS | Needs claude.ai or Remote Control (Anthropic cloud) |
-| Evaluation | `oasis eval` harness for coding-agent fixtures | None built in |
-| Delegation | Optional OpenHands delegation | None |
-| Telemetry | None by default; opt-in OTLP with nested traces (turn > request / tool > subagent) | Telemetry on by default; flat OTel events |
-| Extra commands | `/commit`, `/pr`, `/diagnostics`, `/undo`, `/todos`, `/bashes`, `/worktrees`, `/remember`, `/mode`, `/cd`, `/privacy-settings` (local, no plan needed), backups/restore/trust | Several exist only as skills or plugins |
-| Lean mode | Bundled [Ponytail](https://github.com/DietrichGebert/ponytail) skills (`/ponytail`, `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`) for the smallest complete change | Not bundled |
+| Area | OASIS today | Claude Code documented capability | OASIS status |
+| --- | --- | --- | --- |
+| Agentic coding loop | Multi-step model/tool calls; scoped file operations; command approvals; snapshots/checkpoints; Git and test tools; token/cost controls | Multi-step repository work with tool calls, approvals, terminal operations and verification | Core loop exists; comparative coding quality is not benchmarked |
+| Model providers | OpenAI Responses, compatible Chat Completions, Anthropic Messages, Bedrock, Vertex, compatible gateways and local models | Anthropic models through supported first-party and third-party hosting routes | OASIS is broader in provider choice; native Gemini/Azure adapters remain absent |
+| Interactive terminal | Custom line editor, history, completions, streaming, diffs, background argv commands and optional shell mode | Full-featured CLI interaction plus a fullscreen renderer; terminal and background-command workflows | **Major gap:** no real PTY lifecycle or full-screen TUI |
+| Subagents | Built-in/custom subagents, up to six parallel child runs, background status/steering/cancel, optional worktree isolation | Subagents, agent view, agent teams, dynamic workflows and longer-running project sessions | Useful delegation exists; no visual agent manager or cloud project orchestration |
+| Shared tasks | `task_create/list/get/update`, dependency validation, owner metadata, status transitions, persistence with saved sessions | Agent teams share a task list; teammates with Task tools can see/claim tasks, and teams support direct messaging | **Partial:** task board exists; no atomic claims/locks, peer messages, lifecycle manager, visible team monitor or conflict-safe coordination |
+| Code intelligence | Language-server navigation/references/hover/symbols/call hierarchy plus detected diagnostics and linters | Terminal/IDE code context and corresponding tool capabilities depending on surface | Substantial local functionality; language/platform breadth still needs validation |
+| Extensions | MCP stdio/Streamable HTTP, OAuth where supported, resources/prompts, hooks, skills, slash commands and reviewed imports | Plugins, MCP, skills, hooks, subagents and commands; full integrated setup in supported surfaces | Native ecosystem imports are partial, not drop-in plugin compatibility; no general remote marketplace |
+| Browser workspace | Local-hosted authenticated web agent with streamed events, approvals and host-GitHub-CLI repository cloning; separate local-storage dashboard | Web/desktop/IDE/mobile surfaces, Remote Control and cloud-backed projects/routines | Local web UI exists; no equivalent cloud/remote lifecycle, embedded GitHub OAuth, or dashboard/CLI data sync |
+| IDEs | No native VS Code or JetBrains extension | Official VS Code and JetBrains integrations with editor-specific context/diff workflows | **Major gap** |
+| Other surfaces | CLI + local browser runtime + GitHub Action | Desktop, web/cloud, mobile, Chrome, Slack and CI integrations | **Major gap** |
+| Safety | Workspace/path checks, secret exclusions, approvals, opt-in Linux/macOS sandbox, snapshots and explicit untrusted extension handling | Permission modes, hooks and tool-execution safeguards integrated across supported surfaces | Useful safeguards exist, but no Windows sandbox and no claim of complete OS isolation |
+| Evaluation | Built-in fixture runner; 21 small tasks; cost/time/token output | Official workflow and agent features; no equivalent OASIS-vs-Claude measured result is available from this repo | Good regression smoke harness; not a ranking benchmark |
 
-## What Oasis matches
+## The shared task board is a milestone, not agent-team parity
 
-| Area | Oasis today |
-|---|---|
-| Interactive terminal | Multiline editor (Shift+Enter, Alt+Enter, Ctrl+J, trailing `\`), history per workspace in `~/.oasis/history.jsonl`, Ctrl+R search, Tab completion for `/commands` and fuzzy `@files`, Shift+Tab mode cycling, `!` shell mode feeding context into the next message, Ctrl+V image paste, `?` shortcuts, `#` memory, Esc Esc rewind, type-ahead queue, Esc to interrupt, animated startup banner, streaming Markdown with syntax highlighting, colored edit diffs |
-| File tools | read (ranged, images, notebooks, PDFs), write, edit, multi_edit, notebook_edit, glob, grep (ripgrep), delete |
-| Commands | argv `run_command`, opt-in `run_shell`, background processes, `command_output`, `kill_command`, `list_background`, `monitor_command` (wait for a regex, exit or timeout) |
-| Code intelligence | `lsp` (definition, references, hover, implementation, symbols, call hierarchy, diagnostics; 12 built-in servers), `diagnostics` tool |
-| Git | `git_status`, `git_diff`, `git_log`, `git_commit`, `git_branch`, `git_push`, `create_pull_request`, `/commit`, `/pr`, `/review [PR]`, `/security-review`, `--from-pr` |
-| Web | `fetch_url`, `web_search` (keyless, Tavily, Brave, SearXNG) |
-| Planning | plan mode, `enter_plan_mode`, `exit_plan_mode`, `todo_write`, `/plan` |
-| Questions | `ask_user_question` (terminal and browser) |
-| Subagents and tasks | `task` with custom agents (`.claude/agents`, `.oasis/agents`, `--agents` JSON), per-agent tools and model, worktree isolation, background agents, and a shared dependency-aware task board (`task_create/list/get/update`) visible to the main session and subagents |
-| Workflows | `/goal` (model-judged condition across turns), `/loop`, `/batch` (plan, then parallel worktree subagents), `/simplify` (four parallel reviewers), `/verify` (run the app), `/btw` and `/recap` (side questions that leave history untouched) |
-| Scheduling | `cron_create`, `cron_list`, `cron_delete` and `/schedule`; prompts fire while the editor is idle |
-| Tool search | MCP tools are deferred above 25 and loaded on demand with `tool_search` (`OASIS_TOOL_SEARCH=on/off`, `OASIS_TOOL_SEARCH_THRESHOLD`) |
-| Notifications | `notify` (OSC 9, notify-send, osascript) and the Notification hook |
-| Permissions | default, acceptEdits, plan, auto (classifier), bypassPermissions; Claude Code rule syntax; deny > ask > allow; `/fewer-permission-prompts` |
-| Sandbox | bubblewrap (Linux), sandbox-exec (macOS), secret env scrubbing, `/sandbox` |
-| Hooks | PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, UserPromptSubmit, Stop, SubagentStart, SubagentStop, SessionStart, SessionEnd, PreCompact, PostCompact, Notification, CwdChanged; command, http and prompt types |
-| MCP | stdio and Streamable HTTP, `.mcp.json`, `--mcp-config`, `--strict-mcp-config`, OAuth (`oasis mcp login`), resources, prompts as commands, `oasis mcp serve` |
-| Memory | OASIS.md / AGENTS.md / CLAUDE.md hierarchy, `#` notes, `/memory`, `/init`, auto memory with recall and redaction |
-| Sessions | Saved by default, `-c`, `-r`, `--session-id`, `-n/--name`, `/rename`, `/resume`, `/fork`, `/export`, `/compact`, `/rewind`, `/undo`, `--no-session-persistence` |
-| Headless | `-p`, text/json/stream-json output, `--input-format stream-json`, `--include-partial-messages`, `--replay-user-messages`, `--max-turns`, `--max-budget-usd`, `--json-schema`, `--permission-prompt-tool`, `--fallback-model`, `--allowedTools`, `--disallowedTools`, `--tools`, `--system-prompt(-file)`, `--append-system-prompt(-file)`, `--settings`, `--setting-sources`, `--bare`, `-w/--worktree` |
-| SDK and CI | `import { query, tool } from 'oasis-oss'`, GitHub Action (`uses: FAHTHIZ/oasis@main`) |
-| Skills | Agent Skills from `.claude/skills` and `.oasis/skills`, `/skill-name`, `context: fork`, inline `` !`cmd` ``, per-skill model, effort and allowed-tools |
+The task board shipped in the implementation baseline is implemented in `src/shared-tasks.mjs`, registered through `src/session-tools.mjs`, and persisted by `src/sessions.mjs`. It lets the main agent and child agents create tasks, inspect them, assign owner metadata, record prerequisite IDs, and update statuses. Cycles and blocked transitions are rejected.
 
-## What is still missing
+It does **not** yet:
+- provide atomic "claim this next task" behavior or task locks;
+- automatically schedule tasks or assign a worker to an owner field;
+- enable peer-to-peer agent messaging or autonomous team self-coordination;
+- manage team create/join/leave/shutdown lifecycles or show a visual agent roster;
+- prevent file edits from colliding unless work is explicitly isolated in worktrees;
+- synchronize the task board between independent sessions, machines or the browser dashboard's local-storage tasks.
 
-Claude Code has these and Oasis does not yet:
+Claude Code documents agent teams as **experimental and disabled by default**. Its official comparison distinguishes subagents (lead-managed delegated workers) from teams (shared tasks plus teammate messages). That is the correct bar for the remaining Oasis coordination work, not a reason to overstate what the current board already does.
 
-### Terminal UI
+## Ranked next improvements
 
-- A full-screen TUI with a scrollable transcript (Ctrl+O), and Ctrl+B to send a running command to the background.
-- Vim mode (`/vim`), `/theme`, and a user keybindings file.
-- `/statusline` setup assistant. A status line itself is already supported in settings.
-- An automatic recap after you've been away. `/recap` works on demand.
+This order is intentionally ranked by impact and architectural leverage rather than ease.
 
-### Agents
+### 1. Real PTY and terminal lifecycle — next foundational target
 
-- Independent agent teams with peer-to-peer messaging, team lifecycle controls, and a visual team manager.
-- `/advisor` and `/ultrareview` (multi-agent cloud review).
-- Full Claude Code agent-team parity remains unfinished; this change closes the shared dependency-aware task-board gap, not peer-to-peer messaging or visual management.
-- EnterWorktree and ExitWorktree for the main session mid-conversation. `-w` works at startup.
+The current command runner intentionally launches argv processes without a real terminal. That prevents reliable interactive stdin, TUI applications, terminal dimensions/resizing, and full interactive process control. Implementing a PTY behind a clear lifecycle API (start, stream, write input, resize, interrupt/kill, exit status, cleanup) would improve the CLI and browser runtime rather than adding one isolated feature.
 
-### Platform
+Acceptance gates should include deterministic process cleanup, cancellation, bounded output, permission/sandbox enforcement, interactive fixture tests, and platform-specific tests before claiming the PTY is complete.
 
-- A real PTY for interactive commands.
-- A PowerShell tool and a Windows sandbox.
-- Native Gemini and Azure Foundry adapters. Gemini runs through its OpenAI-compatible endpoint today.
-- Hook events FileChanged, WorktreeCreate and WorktreeRemove, and the `mcp_tool` hook type.
-- Managed (enterprise) settings, and a `rules/` folder.
-- A plugin marketplace (`marketplace.json`). A built-in catalog and Claude plugin import exist.
+### 2. Complete multi-agent coordination
 
-### Surfaces
+Build on the shared dependency-aware board with atomic claims/locks, explicit ownership rules, peer-to-peer message routing, team lifecycle controls, worktree conflict reporting and safe merge/review. Do not describe tasks as auto-claimed or files as conflict-safe until there are tests for those guarantees.
 
-- VS Code and JetBrains extensions.
-- Chrome control.
-- A desktop app.
-- Cloud sessions, Remote Control, Slack, mobile, and cloud routines (`/schedule` in Claude Code is cloud-backed; in Oasis it is in-session).
+### 3. IDE integration
 
-## Build order from here
+Start with VS Code: authenticated handoff to the existing runtime, selected-file context, inline/diff review, approval visibility, cancellation, session continuation and shared task state. Add JetBrains only after the common transport/API is stable and tested.
 
-1. Vim mode, themes and a keybindings file in the line editor.
-2. Ctrl+O transcript view and Ctrl+B background for running commands.
-3. EnterWorktree/ExitWorktree tools and the `rules/` folder.
-4. Native Gemini and Azure adapters.
-5. A PTY tool, then PowerShell and Windows sandboxing.
-6. A plugin marketplace format.
-7. A VS Code extension.
+### 4. Remote and cross-surface lifecycle
+
+Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require process lifecycle, authentication, access scopes, workspace isolation, auditability and resumable jobs. A LAN-accessible `oasis web` server is not equivalent to those hosted services.
+
+### 5. Remaining platform and ecosystem gaps
+
+Native Gemini and Azure Foundry adapters; PowerShell and Windows sandboxing; a real plugin-marketplace format and safer lifecycle/secret provisioning for full external ecosystems; broader hook parity.
+
+### 6. Terminal experience polish
+
+Full-screen transcript, vim mode, themes and an editable keybinding configuration. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+
+## What OASIS already does well
+
+- MIT-licensed source and user choice across hosted and local model providers.
+- Local-first CLI plus an authenticated browser agent without requiring OASIS model credentials to be shared with the browser.
+- Built-in coding-agent regression fixtures and opt-in OpenTelemetry export.
+- A broad tool layer for workspace editing, LSP/diagnostics, MCP, skills, hooks, notebooks, PDFs, Git and worktrees.
+- Shared dependency-aware session task board, now present and tested, with honest documented limits.
+
+## Evaluation and readiness caveats
+
+- The **328 passing tests** demonstrate tested code paths, not 328 user-level end-to-end workflows.
+- The **21 evaluation fixtures** are a smoke suite of small tasks, mostly standalone utilities. They are not a full-repository benchmark or an apples-to-apples Claude Code comparison.
+- The authenticated browser E2E job is Linux Chromium; it does not establish mobile/Termux, Windows, cross-browser, real-device TLS, or live-cloud-provider readiness.
+- The optional OS sandbox is disabled by default and currently targets Linux/macOS. Approved code can run with host privileges when it is off.
+- History compaction is bounded and heuristic, so long-horizon continuity still requires evaluation across providers and long coding tasks.
+
+## Official Claude Code sources checked October 28, 2026
+
+- [Run agents in parallel](https://code.claude.com/docs/en/agents) — subagents, agent view, agent teams, dynamic workflows and projects.
+- [Agent teams](https://code.claude.com/docs/en/agent-teams) — shared task lists, task claims, teammate messaging, experimental status and known limitations.
+- [Platforms and integrations](https://code.claude.com/docs/en/platforms) — CLI, Desktop, VS Code, JetBrains, web, mobile, Chrome, Slack and CI/CD.
+- [Commands](https://code.claude.com/docs/en/commands) — workflow commands including `/batch`, agent workflows, review and session controls.
+- [Claude Code release changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) — implementation/release changes should be re-checked before each future parity audit.
