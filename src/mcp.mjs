@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient } from './mcp-project.mjs';
+import { loadMcpExtras, RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const MAX_LINE = 1024 * 1024;
@@ -172,7 +173,7 @@ export class McpServerClient {
       this._failAll(new Error('MCP server ' + this.config.name + ' exited' + (code === null ? '' : ' with code ' + code) + '.'));
     });
 
-    await this._request('initialize', {
+    const init = await this._request('initialize', {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: 'oasis-oss', version: '0.2.0' }
@@ -185,6 +186,7 @@ export class McpServerClient {
       /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) &&
       tool.name !== '__proto__'
     ).slice(0, 80);
+    await loadMcpExtras(this, init);
     return this.tools;
   }
 
@@ -308,7 +310,7 @@ export function mcpToolDefinitions(clients) {
   const map = new Map();
   for (const [serverName, client] of clients) {
     for (const tool of client.tools) {
-      if (definitions.length >= 100) return { definitions, map };
+      if (definitions.length >= 100) continue;
       const safeName = ('mcp_' + serverName + '_' + tool.name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
       if (map.has(safeName)) continue;
       const input = tool.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : { type: 'object', properties: {} };
@@ -326,12 +328,19 @@ export function mcpToolDefinitions(clients) {
       map.set(safeName, { serverName, toolName: tool.name });
     }
   }
+  if ([...clients.values()].some((client) => client.capabilities && client.capabilities.resources)) {
+    for (const definition of RESOURCE_TOOL_DEFINITIONS) {
+      definitions.push(definition);
+      map.set(definition.function.name, { resourceTool: true });
+    }
+  }
   return { definitions, map };
 }
 
 export async function callMappedMcpTool(session, safeName, args, options = {}) {
   const mapped = session.mcpToolMap && session.mcpToolMap.get(safeName);
   if (!mapped) throw new Error('Unknown MCP tool: ' + safeName);
+  if (mapped.resourceTool) return await runResourceTool(session, safeName, args);
   const client = session.mcpClients && session.mcpClients.get(mapped.serverName);
   if (!client) throw new Error('MCP server is unavailable: ' + mapped.serverName);
   return await client.callTool(mapped.toolName, args, options);

@@ -15,6 +15,7 @@ export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'St
 
 // Claude Code tool names, so matchers such as "Edit|Write" or "Bash" keep working.
 export const CLAUDE_TOOL_NAMES = {
+  list_mcp_resources: 'ListMcpResourcesTool', read_mcp_resource: 'ReadMcpResourceTool',
   run_command: 'Bash', run_shell: 'Bash', edit_file: 'Edit', multi_edit: 'MultiEdit', notebook_edit: 'NotebookEdit', write_file: 'Write',
   read_file: 'Read', glob_files: 'Glob', grep: 'Grep', search_files: 'Grep', list_files: 'LS',
   fetch_url: 'WebFetch', web_search: 'WebSearch', task: 'Task', todo_write: 'TodoWrite', delete_file: 'Delete',

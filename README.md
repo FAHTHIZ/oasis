@@ -200,6 +200,8 @@ Oasis reads a Claude Code-style `.mcp.json` at the workspace root, so a team can
 - Remote servers must use HTTPS unless they are on localhost.
 - Project servers start only after you run `oasis trust` for the workspace. A user-level server with the same name wins.
 - `oasis mcp list` and `/mcp` show both user and project servers. Every MCP tool call still asks for approval unless your permission rules allow it.
+- Resources: when a server offers resources, Oasis gets read-only `list_mcp_resources` and `read_mcp_resource` tools (`ListMcpResourcesTool` and `ReadMcpResourceTool` in permission rules), and you can pull one into your message with `@server:uri`, for example `summarize @docs:notes://todo`.
+- Prompts: each server prompt becomes a command named `/mcp__server__prompt`. Pass arguments in order or as `name=value`, for example `/mcp__github__review_pr 123 focus=security`. `/mcp` lists the prompts and resources of each server.
 
 ## Output styles
 

@@ -1105,6 +1105,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         stdout.write('Could not resolve imported command: ' + error.message + '\n');
         continue;
       }
+      if (/^\/mcp__[a-z0-9_-]+__/.test(text)) { session = await runPrompt(text, root, autoApprove, session, persistence); persistence.resumeId = null; continue; }
       stdout.write('Unknown command. Type /help to list built-in and custom commands.\n');
       continue;
     }

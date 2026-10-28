@@ -12,6 +12,8 @@ import path from 'node:path';
 
 const TOOL_ALIASES = {
   bash: ['run_command', 'run_shell'],
+  listmcpresourcestool: ['list_mcp_resources'],
+  readmcpresourcetool: ['read_mcp_resource'],
   shell: ['run_shell'],
   edit: ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'],
   multiedit: ['multi_edit'],
