@@ -106,7 +106,38 @@ function compactResult(result) {
   return ((result.isError ? 'MCP tool reported an error:\n' : '') + parts.join('\n\n')).slice(0, MAX_CONTENT);
 }
 
+async function readBoundedResponseText(response) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error('MCP response exceeded 4 MiB.');
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE) throw new Error('MCP response exceeded 4 MiB.');
+      chunks.push(Buffer.from(value));
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  }
+  return Buffer.concat(chunks, total).toString('utf8');
+}
+
 async function readSseResponse(response, id) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error('MCP response exceeded 4 MiB.');
+  }
+  if (!response.body) throw new Error('MCP server returned an empty response stream.');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -182,7 +213,7 @@ export class McpHttpClient {
       if (!response.ok && response.status !== 202) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + '.');
       if (message.id === undefined || response.status === 202 || response.status === 204) return null;
       const type = response.headers.get('content-type') || '';
-      const reply = type.includes('text/event-stream') ? await readSseResponse(response, message.id) : JSON.parse(await response.text());
+      const reply = type.includes('text/event-stream') ? await readSseResponse(response, message.id) : JSON.parse(await readBoundedResponseText(response));
       const matched = Array.isArray(reply) ? reply.find((item) => String(item.id) === String(message.id)) : reply;
       if (!matched) throw new Error('MCP server sent no matching response.');
       if (matched.error) throw new Error(matched.error.message || 'MCP request failed.');
