@@ -1,12 +1,20 @@
 // Lifecycle hooks compatible with Claude Code's settings.json "hooks" format.
 //
-// Events: PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest,
-// UserPromptSubmit, Stop, SubagentStart, SubagentStop, SessionStart, SessionEnd,
-// PreCompact, PostCompact, Notification, CwdChanged.
+// Events: PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, PermissionRequest,
+// PermissionDenied, UserPromptSubmit, UserPromptExpansion, Stop, StopFailure,
+// SubagentStart, SubagentStop, SessionStart, SessionEnd, PreCompact, PostCompact,
+// Notification, CwdChanged, DirectoryAdded, InstructionsLoaded, TaskCreated,
+// TaskCompleted, PreModelSwitch, PostModelSwitch.
 // Hook types:
-//   command  a shell command; gets the JSON payload on stdin
-//   http     POSTs the JSON payload to a URL; the response body is read like stdout
-//   prompt   asks the model to judge the payload; {"ok": false, "reason"} blocks
+//   command   a shell command (or, with "args", an executable run without a shell);
+//             gets the JSON payload on stdin. "async": true runs it in the background;
+//             "asyncRewake": true also feeds an exit-2 result back to the model.
+//   http      POSTs the JSON payload to a URL; the response body is read like stdout
+//   mcp_tool  calls a tool on a connected MCP server; text output is read like stdout
+//   prompt    asks the model to judge the payload; {"ok": false, "reason"} blocks
+//   agent     like prompt, but a read-only verifier subagent can inspect the workspace
+// Handlers may carry "if" (one permission rule such as "Bash(git *)" or "Edit(*.ts)")
+// on tool events, and "onFailure": "block" to treat a crash/timeout like exit 2.
 // A command controls Oasis through its exit code and optional JSON stdout:
 //   exit 0  success; stdout JSON may carry decision/permissionDecision/additionalContext
 //   exit 2  blocking error; stderr is fed back to the model (PreToolUse blocks the tool,
@@ -15,18 +23,28 @@
 // Hooks come from user settings or trusted workspaces only (see settings.mjs).
 import { spawn } from 'node:child_process';
 
-export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest', 'UserPromptSubmit', 'Stop', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged'];
-export const HOOK_TYPES = ['command', 'http', 'prompt'];
+import { parseRule, ruleMatches } from './permissions.mjs';
 
-const TOOL_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest']);
-// What a group's "matcher" is compared with, per event.
+export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch'];
+export const HOOK_TYPES = ['command', 'http', 'mcp_tool', 'prompt', 'agent'];
+
+const TOOL_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest', 'PermissionDenied']);
+// Events whose plain (non-JSON) stdout on exit 0 becomes context for the model.
+const STDOUT_CONTEXT_EVENTS = new Set(['UserPromptSubmit', 'UserPromptExpansion', 'SessionStart', 'SubagentStart', 'PostModelSwitch']);
+const MAX_CONTEXT = 10000;
+// What a group's "matcher" is compared with, per event (null: matcher ignored).
 function matchTarget(event, payload) {
-  if (TOOL_EVENTS.has(event)) return payload.tool_name_oasis;
+  if (TOOL_EVENTS.has(event)) return [payload.tool_name_oasis, payload.tool_name].filter(Boolean);
   if (event === 'SessionStart') return payload.source;
   if (event === 'SessionEnd') return payload.reason;
   if (event === 'PreCompact' || event === 'PostCompact') return payload.trigger;
   if (event === 'Notification') return payload.notification_type;
   if (event === 'SubagentStart' || event === 'SubagentStop') return payload.agent_type;
+  if (event === 'StopFailure') return payload.error_type;
+  if (event === 'UserPromptExpansion') return payload.command_name;
+  if (event === 'InstructionsLoaded') return payload.load_reason;
+  if (event === 'DirectoryAdded') return payload.source;
+  if (event === 'PreModelSwitch' || event === 'PostModelSwitch') return payload.model;
   return null;
 }
 
@@ -41,13 +59,36 @@ export const CLAUDE_TOOL_NAMES = {
 
 const MAX_HOOK_OUTPUT = 64 * 1024;
 
-function matcherAccepts(matcher, toolName) {
+// Claude Code matcher rules: only letters, digits, _, -, spaces, "," and "|" means an
+// exact name or list of names; anything else is an unanchored regular expression.
+export function matcherAccepts(matcher, toolName, event = '') {
   if (!matcher || matcher === '*') return true;
-  if (!toolName) return true;
-  const names = [toolName, CLAUDE_TOOL_NAMES[toolName]].filter(Boolean);
+  if (!toolName || (Array.isArray(toolName) && !toolName.length)) return true;
+  const names = [...new Set((Array.isArray(toolName) ? toolName : [toolName]).flatMap((name) => [name, CLAUDE_TOOL_NAMES[name]]).filter(Boolean))];
+  const exact = event === 'StopFailure' ? /^[A-Za-z0-9_|]+$/ : /^[A-Za-z0-9_\- ,|]+$/;
+  if (exact.test(matcher)) {
+    const wanted = matcher.split(event === 'StopFailure' ? '|' : /[|,]/).map((item) => item.trim()).filter(Boolean);
+    return names.some((name) => wanted.includes(name));
+  }
   let regex;
-  try { regex = new RegExp('^(?:' + matcher + ')$'); } catch { return names.includes(matcher); }
+  try { regex = new RegExp(matcher); } catch { return names.includes(matcher); }
   return names.some((name) => regex.test(name));
+}
+
+// "if": one permission rule, evaluated against the OASIS tool name and input.
+export function ifAccepts(condition, event, payload) {
+  if (!condition) return true;
+  if (!TOOL_EVENTS.has(event)) return false;
+  const rule = parseRule(condition);
+  if (!rule) return false;
+  const input = payload.tool_input || {};
+  if (ruleMatches(rule, payload.tool_name_oasis, input, { matchBasename: true })) return true;
+  // gitignore-style: a file pattern without "/" (Edit(*.ts)) matches at any depth.
+  const file = input.path || input.file_path || input.notebook_path;
+  if (rule.specifier && !rule.specifier.includes('/') && typeof file === 'string' && /[\\/]/.test(file)) {
+    return ruleMatches(rule, payload.tool_name_oasis, { ...input, path: file.split(/[\\/]/).pop() });
+  }
+  return false;
 }
 
 function hookEnvironment(baseEnv, root) {
@@ -62,18 +103,32 @@ function hookEnvironment(baseEnv, root) {
 }
 
 export function runHookCommand(command, payload, options = {}) {
-  const timeoutMs = Math.max(1, Math.min(600, Number(options.timeout) || 60)) * 1000;
-  const shell = process.platform === 'win32' ? { cmd: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { cmd: '/bin/sh', args: ['-c', command] };
+  const timeoutMs = options.timeout === Infinity ? 0 : Math.max(1, Math.min(600, Number(options.timeout) || 600)) * 1000;
+  const vars = { CLAUDE_PROJECT_DIR: options.root, OASIS_PROJECT_DIR: options.root, ...(options.pluginEnv || {}) };
+  const substitute = (text) => String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => vars[name] ?? match)
+    .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? '');
+  let shell;
+  if (Array.isArray(options.args)) shell = { cmd: substitute(command), args: options.args.map(substitute) };
+  else if (options.shell === 'powershell') shell = { cmd: process.platform === 'win32' ? 'powershell.exe' : 'pwsh', args: ['-NoProfile', '-NonInteractive', '-Command', command] };
+  else shell = process.platform === 'win32' ? { cmd: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { cmd: '/bin/sh', args: ['-c', command] };
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const child = spawn(shell.cmd, shell.args, { cwd: options.root, env: hookEnvironment(options.env, options.root), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-    const finish = (value) => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
-    const timer = setTimeout(() => { child.kill('SIGKILL'); finish({ exitCode: null, stdout, stderr: stderr + '\nHook timed out.', timedOut: true }); }, timeoutMs);
+    const env = hookEnvironment(options.env, options.root);
+    Object.assign(env, options.pluginEnv || {});
+    let child;
+    try {
+      child = spawn(shell.cmd, shell.args, { cwd: options.root, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    } catch (error) {
+      resolve({ exitCode: null, stdout: '', stderr: error.message, failed: true });
+      return;
+    }
+    const finish = (value) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); resolve(value); };
+    const timer = timeoutMs ? setTimeout(() => { child.kill('SIGKILL'); finish({ exitCode: null, stdout, stderr: stderr + '\nHook timed out.', timedOut: true }); }, timeoutMs) : null;
     child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(0, MAX_HOOK_OUTPUT); });
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(0, MAX_HOOK_OUTPUT); });
-    child.on('error', (error) => finish({ exitCode: null, stdout, stderr: error.message }));
+    child.on('error', (error) => finish({ exitCode: null, stdout, stderr: error.message, failed: true }));
     child.on('close', (code) => finish({ exitCode: code, stdout, stderr }));
     child.stdin.on('error', () => {});
     child.stdin.end(JSON.stringify(payload));
@@ -136,43 +191,133 @@ export async function runPromptHook(hook, payload, options = {}) {
   try { verdict = match ? JSON.parse(match[0]) : null; } catch { verdict = null; }
   if (!verdict || typeof verdict.ok !== 'boolean') return { exitCode: 1, stdout: '', stderr: 'Prompt hook reply was not {"ok": boolean}: ' + raw.slice(0, 200) };
   if (verdict.ok) return { exitCode: 0, stdout: '', stderr: '' };
-  return { exitCode: 2, stdout: '', stderr: String(verdict.reason || 'The prompt hook rejected this.').slice(0, 2000) };
+  // On Stop/SubagentStop, {"ok": false, "impossible": true} lets the turn end anyway.
+  if (verdict.impossible === true && (payload.hook_event_name === 'Stop' || payload.hook_event_name === 'SubagentStop')) return { exitCode: 0, stdout: '', stderr: '', note: String(verdict.reason || '') };
+  return { exitCode: 2, stdout: '', stderr: String(verdict.reason || 'The ' + (hook.type || 'prompt') + ' hook rejected this.').slice(0, 2000) };
+}
+
+// Agent hooks: a read-only verifier subagent investigates, then answers {"ok": ...}.
+export async function runAgentHook(hook, payload, options = {}) {
+  if (typeof options.evaluateAgent !== 'function') return { exitCode: 1, stdout: '', stderr: 'Agent hooks need a model, and none is available here.' };
+  return runPromptHook({ ...hook, timeout: hook.timeout || 60 }, payload, { evaluatePrompt: (request) => options.evaluateAgent(request) });
+}
+
+// "${tool_input.file_path}"-style substitution from the hook payload.
+function substitutePayload(value, payload) {
+  if (typeof value === 'string') {
+    return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, pathText) => {
+      let current = payload;
+      for (const part of pathText.split('.')) current = current && typeof current === 'object' ? current[part] : undefined;
+      return current === undefined || current === null ? '' : typeof current === 'object' ? JSON.stringify(current) : String(current);
+    });
+  }
+  if (Array.isArray(value)) return value.map((item) => substitutePayload(item, payload));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, substitutePayload(item, payload)]));
+  return value;
+}
+
+export async function runMcpToolHook(hook, payload, options = {}) {
+  if (typeof options.callMcpTool !== 'function') return { exitCode: 1, stdout: '', stderr: 'MCP tool hook: no MCP servers are connected in this session.' };
+  const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 600)) * 1000;
+  try {
+    const result = await Promise.race([
+      options.callMcpTool({ server: hook.server, tool: hook.tool, input: substitutePayload(hook.input || {}, payload) }),
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('Hook timed out.'), { name: 'TimeoutError' })), timeoutMs).unref())
+    ]);
+    const text = String(result && result.text || '').slice(0, MAX_HOOK_OUTPUT);
+    if (result && result.isError) return { exitCode: 1, stdout: '', stderr: text || 'MCP tool returned an error.' };
+    return { exitCode: 0, stdout: text, stderr: '' };
+  } catch (error) {
+    const timedOut = error && error.name === 'TimeoutError';
+    return { exitCode: null, stdout: '', stderr: timedOut ? 'Hook timed out.' : 'MCP tool hook failed: ' + (error.message || error), timedOut, failed: !timedOut };
+  }
+}
+
+function defaultTimeout(hook, event) {
+  if (hook.timeout) return hook.timeout;
+  if (hook.type === 'prompt') return 30;
+  if (hook.type === 'agent') return 60;
+  if (event === 'UserPromptSubmit' || event === 'PreModelSwitch' || event === 'PostModelSwitch') return 30;
+  if (event === 'SessionEnd') return 2;
+  return 600;
 }
 
 function runOneHook(hook, payload, options) {
-  if (hook.type === 'http') return runHttpHook(hook, payload, options);
-  if (hook.type === 'prompt') return runPromptHook(hook, payload, options);
-  const env = hook.pluginEnv ? { ...(options.env || process.env), ...hook.pluginEnv } : options.env;
-  return runHookCommand(hook.command, payload, { root: options.root, env, timeout: hook.timeout });
+  const event = payload.hook_event_name;
+  const timeout = defaultTimeout(hook, event);
+  if (hook.type === 'http') return runHttpHook({ ...hook, timeout }, payload, options);
+  if (hook.type === 'prompt') return runPromptHook({ ...hook, timeout }, payload, options);
+  if (hook.type === 'agent') return runAgentHook({ ...hook, timeout }, payload, options);
+  if (hook.type === 'mcp_tool') return runMcpToolHook({ ...hook, timeout }, payload, options);
+  return runHookCommand(hook.command, payload, { root: options.root, env: options.env, pluginEnv: hook.pluginEnv, timeout: hook.async && !hook.asyncRewake ? Infinity : timeout, args: hook.args, shell: hook.shell });
 }
 
 export function describeHook(hook) {
   if (hook.type === 'http') return 'POST ' + hook.url;
-  if (hook.type === 'prompt') return 'prompt: ' + String(hook.prompt).replace(/\s+/g, ' ').slice(0, 80);
-  return hook.command;
+  if (hook.type === 'prompt' || hook.type === 'agent') return hook.type + ': ' + String(hook.prompt).replace(/\s+/g, ' ').slice(0, 80);
+  if (hook.type === 'mcp_tool') return 'mcp_tool: ' + hook.server + '/' + hook.tool;
+  return hook.command + (Array.isArray(hook.args) && hook.args.length ? ' ' + hook.args.join(' ') : '');
+}
+
+function capContext(text) {
+  const value = String(text || '').trim();
+  return value.length > MAX_CONTEXT ? value.slice(0, 2000) + '\n[hook output truncated from ' + value.length + ' characters]' : value;
+}
+
+// Folds a finished background hook into a message for the model's next request.
+function asyncFeedback(event, hook, out) {
+  if (hook.asyncRewake && out.exitCode === 2) return 'Background ' + event + ' hook (' + describeHook(hook).slice(0, 120) + ') reported:\n' + capContext(out.stderr.trim() || out.stdout.trim() || 'exit code 2');
+  if (out.exitCode !== 0) return '';
+  const json = parseJsonOutput(out.stdout);
+  if (!json) return '';
+  const specific = json.hookSpecificOutput && typeof json.hookSpecificOutput === 'object' ? json.hookSpecificOutput : {};
+  const parts = [specific.additionalContext, json.systemMessage].filter((item) => typeof item === 'string' && item.trim());
+  return parts.length ? 'Background ' + event + ' hook: ' + capContext(parts.join('\n')) : '';
 }
 
 // Runs every matching hook for an event and folds their results.
 export async function runHooks(event, payload, options = {}) {
   const hooks = options.hooks || {};
   const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
-  const result = { ran: 0, blocked: false, reason: '', additionalContext: [], permissionDecision: null, permissionRequest: null, stopContinuation: false, messages: [], updatedInput: null };
+  const result = { ran: 0, blocked: false, reason: '', additionalContext: [], permissionDecision: null, permissionRequest: null, stopContinuation: false, messages: [], updatedInput: null, updatedToolOutput: undefined, retry: false, background: 0 };
   if (!groups.length) return result;
   const target = matchTarget(event, payload || {});
   const commands = [];
   for (const group of groups) {
-    if (group.matcher && target && !matcherAccepts(group.matcher, target)) continue;
-    for (const hook of group.hooks) commands.push(hook);
+    if (group.matcher && target && !matcherAccepts(group.matcher, target, event)) continue;
+    for (const hook of group.hooks) if (ifAccepts(hook.if, event, payload || {})) commands.push(hook);
   }
   if (!commands.length) return result;
   const fullPayload = { ...payload, hook_event_name: event, cwd: options.root };
   delete fullPayload.tool_name_oasis;
+  // Background command hooks never control the action; their results reach the model
+  // on its next request through options.onAsyncResult.
+  const foreground = [];
+  for (const hook of commands) {
+    if ((hook.type || 'command') === 'command' && (hook.async || hook.asyncRewake)) {
+      result.background++;
+      runOneHook(hook, fullPayload, options).then((out) => {
+        const feedback = asyncFeedback(event, hook, out);
+        if (feedback && typeof options.onAsyncResult === 'function') options.onAsyncResult(feedback, { event, hook, out });
+      }).catch(() => {});
+    } else foreground.push(hook);
+  }
+  commands.length = 0;
+  commands.push(...foreground);
   // Claude Code runs matching hooks in parallel.
   const outputs = await Promise.all(commands.map((hook) => runOneHook(hook, fullPayload, options)));
   for (let i = 0; i < outputs.length; i++) {
-    const out = outputs[i];
+    let out = outputs[i];
     result.ran++;
+    // onFailure: "block" turns a crash, timeout, HTTP error, or non-2 exit into a block.
+    if (out.exitCode !== 0 && out.exitCode !== 2 && commands[i].onFailure === 'block' && (commands[i].type === 'command' || commands[i].type === 'http' || !commands[i].type) && !['Stop', 'SubagentStop', 'TaskCompleted'].includes(event)) {
+      out = { ...out, exitCode: 2, stderr: event + ' hook failed and is configured to block (' + (out.timedOut ? 'timeout' : out.exitCode === null ? 'did not run' : 'exit ' + out.exitCode) + '): ' + (out.stderr.trim() || describeHook(commands[i])).slice(0, 500) };
+    }
+    if (out.note) result.messages.push(event + ' hook: ' + out.note);
     if (out.exitCode === 2) {
+      // Exit 2 alone does not decide a PermissionRequest (only a JSON decision does),
+      // except for onFailure: "block", which denies it.
+      if (event === 'PermissionRequest' && commands[i].onFailure !== 'block') { result.messages.push('PermissionRequest hook exited 2; ignored (use a JSON decision).'); continue; }
       result.blocked = true;
       result.reason += (result.reason ? '\n' : '') + (out.stderr.trim() || 'Blocked by ' + event + ' hook.');
       continue;
@@ -187,22 +332,26 @@ export async function runHooks(event, payload, options = {}) {
       if (json.decision === 'block') { result.blocked = true; result.reason += (result.reason ? '\n' : '') + (json.reason || 'Blocked by hook.'); }
       if (json.decision === 'approve' && !result.permissionDecision) result.permissionDecision = 'allow';
       const specific = json.hookSpecificOutput && typeof json.hookSpecificOutput === 'object' ? json.hookSpecificOutput : {};
-      const decision = specific.permissionDecision;
+      // "defer" (Claude Code's -p hand-off) is treated as "ask" here.
+      const decision = specific.permissionDecision === 'defer' ? 'ask' : specific.permissionDecision;
       if (['allow', 'deny', 'ask'].includes(decision)) {
         const rank = { deny: 3, ask: 2, allow: 1 };
         if (!result.permissionDecision || rank[decision] > rank[result.permissionDecision]) result.permissionDecision = decision;
-        if (decision === 'deny') result.reason += (result.reason ? '\n' : '') + (specific.permissionDecisionReason || 'Denied by PreToolUse hook.');
+        if (decision === 'deny') result.reason += (result.reason ? '\n' : '') + (specific.permissionDecisionReason || 'Denied by ' + event + ' hook.');
       }
       if (specific.updatedInput && typeof specific.updatedInput === 'object') result.updatedInput = specific.updatedInput;
+      if (event === 'PostToolUse' && specific.updatedToolOutput !== undefined) result.updatedToolOutput = specific.updatedToolOutput;
+      if (event === 'PostToolUse' && specific.updatedMCPToolOutput !== undefined && result.updatedToolOutput === undefined) result.updatedToolOutput = specific.updatedMCPToolOutput;
+      if (event === 'PermissionDenied' && specific.retry === true) result.retry = true;
       // PermissionRequest: {"hookSpecificOutput": {"decision": {"behavior": "allow"|"deny", "message"}}}; deny wins.
       const request = specific.decision && typeof specific.decision === 'object' ? specific.decision : null;
       if (event === 'PermissionRequest' && request && ['allow', 'deny'].includes(request.behavior)) {
         if (!result.permissionRequest || request.behavior === 'deny') result.permissionRequest = { behavior: request.behavior, message: typeof request.message === 'string' ? request.message : '', updatedInput: request.updatedInput && typeof request.updatedInput === 'object' ? request.updatedInput : null };
       }
-      if (typeof specific.additionalContext === 'string' && specific.additionalContext.trim()) result.additionalContext.push(specific.additionalContext.trim());
-      if (typeof json.systemMessage === 'string') result.messages.push(json.systemMessage);
-    } else if ((event === 'UserPromptSubmit' || event === 'SessionStart' || event === 'SubagentStart') && out.stdout.trim()) {
-      result.additionalContext.push(out.stdout.trim().slice(0, 10000));
+      if (typeof specific.additionalContext === 'string' && specific.additionalContext.trim()) result.additionalContext.push(capContext(specific.additionalContext));
+      if (typeof json.systemMessage === 'string') result.messages.push(capContext(json.systemMessage));
+    } else if (STDOUT_CONTEXT_EVENTS.has(event) && out.stdout.trim()) {
+      result.additionalContext.push(capContext(out.stdout));
     }
   }
   return result;

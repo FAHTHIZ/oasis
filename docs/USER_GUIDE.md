@@ -285,7 +285,7 @@ Hooks run your own shell commands at points in the agent lifecycle, using Claude
 }
 ~~~
 
-Events: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `UserPromptSubmit`, `Stop`, `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`, `compact`), `SessionEnd`, `PreCompact`, `PostCompact`, `Notification` (`permission_prompt`), and `CwdChanged` (after `/cd`). Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `error`, `prompt`, `agent_type`, `trigger`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, makes the agent keep working after `Stop`, or cancels a manual `/compact` from `PreCompact`. stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. A `PermissionRequest` hook answers an approval prompt before you see it with `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}` or `"deny"` plus a `message`. This works for background agents too. `PreCompact` context is kept in the summary, and `SessionStart` with matcher `compact` can re-add context after compaction. Matchers compare against the tool name (Oasis or Claude Code names), the session source, the compaction trigger, the notification type, or the subagent type. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
+Events: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `PermissionDenied`, `UserPromptSubmit`, `UserPromptExpansion`, `Stop`, `StopFailure`, `TaskCreated`, `TaskCompleted`, `InstructionsLoaded`, `PreModelSwitch`, `PostModelSwitch`, `DirectoryAdded`, `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`, `compact`), `SessionEnd`, `PreCompact`, `PostCompact`, `Notification` (`permission_prompt`), and `CwdChanged` (after `/cd`). Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `error`, `prompt`, `agent_type`, `trigger`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, makes the agent keep working after `Stop`, or cancels a manual `/compact` from `PreCompact`. stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. A `PermissionRequest` hook answers an approval prompt before you see it with `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}` or `"deny"` plus a `message`. This works for background agents too. `PreCompact` context is kept in the summary, and `SessionStart` with matcher `compact` can re-add context after compaction. Matchers compare against the tool name (Oasis or Claude Code names), the session source, the compaction trigger, the notification type, or the subagent type. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
 
 Besides `command`, there are two more hook types:
 
@@ -295,6 +295,40 @@ Besides `command`, there are two more hook types:
 ~~~
 
 An `http` hook POSTs the payload as JSON, and its response body is read like a command's stdout. A failed request or a non-2xx status is a non-blocking error; only a JSON decision can block. Headers can use only the environment variables listed in `allowedEnvVars`. A `prompt` hook asks the model (optionally a cheaper `model`) whether the payload meets your policy. `$ARGUMENTS` is replaced with the payload, and a reply of `{"ok": false, "reason": "..."}` blocks like exit code 2.
+
+Two more types match Claude Code:
+
+~~~json
+{ "type": "mcp_tool", "server": "scanner", "tool": "scan_file", "input": { "path": "${tool_input.path}" } }
+{ "type": "agent", "prompt": "Verify the unit tests pass before stopping. $ARGUMENTS", "timeout": 120 }
+~~~
+
+An `mcp_tool` hook calls a tool on an already connected MCP server (`${tool_input.path}`-style placeholders come from the payload), and its text output is read like stdout. An `agent` hook is a `prompt` hook backed by a read-only verifier subagent that can read files and search the workspace before answering `{"ok": ...}`. On `Stop`, `{"ok": false, "impossible": true}` lets the turn end when the condition cannot be met.
+
+Handler options (any type unless noted):
+
+- `"if": "Bash(git *)"`: run only when the tool call matches one permission rule (tool events only). File patterns without `/`, such as `Edit(*.ts)`, match at any depth.
+- `"args": ["--strict", "${CLAUDE_PROJECT_DIR}"]` (command): run `command` directly with these arguments and no shell. `"shell": "powershell"` runs it with PowerShell.
+- `"async": true` (command): run in the background without delaying the agent. JSON `additionalContext`/`systemMessage` reaches the model on its next request. `"asyncRewake": true` also feeds a background exit-2 result back as a reminder.
+- `"onFailure": "block"`: treat a crash, timeout, or non-2 exit as a block (not for `Stop`, `SubagentStop`, or `TaskCompleted`).
+- `"timeout"` in seconds. Defaults: 600 for command, http and mcp_tool; 30 for prompt and for `UserPromptSubmit`; 60 for agent.
+
+Matchers follow Claude Code: a matcher made only of letters, digits, `_`, `-`, spaces, `,` and `|` is an exact name or list (`Edit|Write`; `Edit` no longer matches `MultiEdit`). Anything else is an unanchored regular expression (`mcp__memory__.*`, `^Notebook`). MCP tools are seen as `mcp__<server>__<tool>`.
+
+More events:
+
+| Event | When | Can block |
+|---|---|---|
+| `PostToolBatch` | after a batch of parallel tool calls, before the next model request (`tool_calls` list) | yes: `decision: "block"` ends the turn |
+| `PermissionDenied` | auto mode refused a tool call | no; `hookSpecificOutput.retry: true` tells the model it may retry |
+| `StopFailure` | the turn ended on an API error; matcher `rate_limit`, `authentication_failed`, `billing_error`, `invalid_request`, `server_error`, `max_output_tokens`, `model_not_found`, `overloaded`, `unknown` | no |
+| `UserPromptExpansion` | a typed custom `/command` expanded into a prompt; matcher is the command name | yes |
+| `InstructionsLoaded` | a CLAUDE.md / AGENTS.md / memory file loaded at session start; matcher `session_start` | no |
+| `TaskCreated` / `TaskCompleted` | a shared task is created / marked completed | yes: creation is rolled back, completion is refused |
+| `PreModelSwitch` / `PostModelSwitch` | `/model` changes the model; matcher is the new model | Pre: `permissionDecision` deny/ask |
+| `DirectoryAdded` | `/add-dir` added a directory | no |
+
+`PostToolUse` can also replace what the model sees with `hookSpecificOutput.updatedToolOutput` (for example to redact secrets). A `PermissionRequest` is decided only by JSON; a bare exit 2 is ignored unless `onFailure` is `"block"`.
 
 ## The interactive terminal
 

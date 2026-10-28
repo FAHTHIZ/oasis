@@ -200,7 +200,7 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   if (argumentText && !usedArguments) prompt += '\n\nArguments: ' + argumentText;
   const shell = await expandInlineShell(prompt, { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), allowedTools: command.allowedTools, policy: options.policy });
   const expanded = await expandFileMentions(root, shell.text);
-  return { name: command.name, command, prompt: expanded.text, mentions: expanded.files, shell: shell.ran, grantTools: command.scope === 'user' || options.trusted ? command.allowedTools : null };
+  return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: shell.ran, grantTools: command.scope === 'user' || options.trusted ? command.allowedTools : null };
 }
 
 // Replace or annotate "@path" mentions with file contents from the workspace.

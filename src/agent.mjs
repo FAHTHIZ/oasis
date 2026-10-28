@@ -427,6 +427,14 @@ export async function createSession({ root, config, restore = null, permissionMo
     if (started.additionalContext.length) systemText += '\n\nSession start context from hooks:\n' + started.additionalContext.join('\n').slice(0, 10000);
     session.hookMessages.push(...started.messages);
   }
+  // InstructionsLoaded: observability only, one event per instruction file in context.
+  if (!bare && hasHooks(session.hooks, 'InstructionsLoaded')) {
+    const { memoryFiles } = await import('./memory.mjs');
+    const files = (await memoryFiles(root, { env }).catch(() => [])).filter((file) => file.exists && file.label !== 'readme');
+    for (const file of files) {
+      runHooks('InstructionsLoaded', { session_id: session.sessionId || 'new', file_path: file.path, memory_type: file.label === 'user' ? 'User' : file.label === 'local' ? 'Local' : 'Project', load_reason: restore ? 'compact' : 'session_start' }, hookOptions(session, env)).catch(() => {});
+    }
+  }
   const styleName = outputStyle || loadedSettings.outputStyle;
   if (styleName && styleName !== 'default') {
     const styles = await loadOutputStyles(root, { env }).catch(() => BUILTIN_STYLES);
@@ -965,7 +973,15 @@ function waitForProviderRetry(milliseconds, signal) {
   });
 }
 
-// Options for runHooks. Prompt hooks ask the session's model (or the hook's model) for a verdict.
+// The tool name hooks see: Claude Code's (Bash, Edit, ...) or mcp__server__tool for MCP tools.
+export function hookToolName(session, name) {
+  const mcp = session && session.mcpToolMap && session.mcpToolMap.get(name);
+  if (mcp && mcp.serverName && mcp.toolName) return 'mcp__' + mcp.serverName + '__' + mcp.toolName;
+  return CLAUDE_TOOL_NAMES[name] || name;
+}
+
+// Options for runHooks. Prompt hooks ask the session's model (or the hook's model) for a verdict;
+// agent hooks run a read-only verifier subagent; mcp_tool hooks call a connected MCP server.
 export function hookOptions(session, env) {
   return {
     hooks: session.hooks,
@@ -975,8 +991,50 @@ export function hookOptions(session, env) {
       const config = model ? { ...session.config, model } : session.config;
       const completion = await requestCompletion({ config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal });
       return completion.content;
-    }
+    },
+    evaluateAgent: async ({ system, prompt, model, signal }) => {
+      const context = { root: session.root, env: env || process.env, session, autoApprove: false };
+      const report = await runSubagent(session, {
+        subagent_type: 'Explore', description: 'agent hook',
+        prompt: system + '\n\nInvestigate with read-only tools as needed, then end your reply with only the JSON verdict.\n\n' + prompt,
+        ...(model ? { model } : {})
+      }, context, { env: env || process.env, signal });
+      return report.report;
+    },
+    callMcpTool: async ({ server, tool, input }) => {
+      const clients = session.mcpClients;
+      const wanted = String(server || '');
+      // Plugin servers may be named plugin:NAME:server; OASIS registers them as "server".
+      const client = clients && typeof clients.get === 'function' ? (clients.get(wanted) || clients.get(wanted.split(':').pop())) : null;
+      if (!client) throw new Error('MCP server "' + wanted + '" is not connected.');
+      const result = await client.callTool(tool, input || {});
+      const text = Array.isArray(result && result.content) ? result.content.filter((item) => item && item.type === 'text').map((item) => item.text).join('\n') : typeof result === 'string' ? result : JSON.stringify(result);
+      return { text, isError: Boolean(result && result.isError) };
+    },
+    onAsyncResult: (feedback) => { (session.asyncHookFeedback ||= []).push(feedback); }
   };
+}
+
+export function stopFailureType(error) {
+  const status = Number(error && (error.status || error.statusCode));
+  const text = String(error && error.message || '').toLowerCase();
+  if (status === 429 || /rate.?limit/.test(text)) return 'rate_limit';
+  if (status === 529 || /overloaded/.test(text)) return 'overloaded';
+  if (status === 401 || status === 403 || /unauthori[sz]ed|invalid api key|authentication/.test(text)) return 'authentication_failed';
+  if (status === 402 || /billing|credit balance|insufficient_quota/.test(text)) return 'billing_error';
+  if (status === 404 || /model.*not.?found|unknown model/.test(text)) return 'model_not_found';
+  if (/max.?(output|tokens)/.test(text)) return 'max_output_tokens';
+  if (status === 400) return 'invalid_request';
+  if (status >= 500) return 'server_error';
+  return 'unknown';
+}
+
+// Delivers finished background-hook results to the model before its next request.
+function flushAsyncHookFeedback(session) {
+  const items = session.asyncHookFeedback;
+  if (!items || !items.length) return;
+  session.asyncHookFeedback = [];
+  session.messages.push({ role: 'user', content: '<system-reminder>\n' + items.join('\n\n').slice(0, 20000) + '\n</system-reminder>' });
 }
 
 // PreCompact before a summary (can add focus instructions; exit 2 cancels a manual /compact),
@@ -2230,7 +2288,7 @@ async function authorizeCall(session, name, args, context, options) {
   if (hasHooks(session.hooks, 'PreToolUse')) {
     const pre = await runHooks('PreToolUse', {
       session_id: session.sessionId || 'unsaved',
-      tool_name: CLAUDE_TOOL_NAMES[name] || name,
+      tool_name: hookToolName(session, name),
       oasis_tool_name: name,
       tool_name_oasis: name,
       tool_input: args
@@ -2253,7 +2311,7 @@ async function authorizeCall(session, name, args, context, options) {
     // background agents, which cannot show a prompt).
     if (hasHooks(session.hooks, 'PermissionRequest')) {
       const request = await runHooks('PermissionRequest', {
-        session_id: session.sessionId || 'unsaved', tool_name: CLAUDE_TOOL_NAMES[name] || name, oasis_tool_name: name, tool_name_oasis: name,
+        session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name,
         tool_input: args, message: String(message || '').slice(0, 4000), permission_suggestions: suggestion ? [suggestion] : []
       }, hookOptions(session, context.env));
       session.hookMessages.push(...request.messages);
@@ -2276,6 +2334,14 @@ async function authorizeCall(session, name, args, context, options) {
       if (verdict.decision === 'allow') return true;
       if (verdict.decision === 'block') {
         overlay.permissionHookDenial = 'Auto mode blocked this: ' + (verdict.reason || 'it looked risky') + ' Try a safer approach, or ask the user to run it.';
+        if (hasHooks(session.hooks, 'PermissionDenied')) {
+          const denied = await runHooks('PermissionDenied', { session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name, tool_input: args, reason: verdict.reason || '' }, hookOptions(session, context.env)).catch(() => null);
+          if (denied) {
+            session.hookMessages.push(...denied.messages);
+            if (denied.retry) overlay.permissionHookDenial += ' A PermissionDenied hook says you may retry this call.';
+            if (denied.additionalContext.length) overlay.permissionHookDenial += '\n' + denied.additionalContext.join('\n');
+          }
+        }
         return false;
       }
     }
@@ -2329,7 +2395,7 @@ export async function runForkedTurn(session, prompt, options = {}) {
 async function runToolFailureHooks(session, name, args, error, context) {
   if (!hasHooks(session.hooks, 'PostToolUseFailure')) return '';
   const failed = await runHooks('PostToolUseFailure', {
-    session_id: session.sessionId || 'unsaved', tool_name: CLAUDE_TOOL_NAMES[name] || name, oasis_tool_name: name, tool_name_oasis: name,
+    session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name,
     tool_input: args, error: String(error || '').slice(0, 8000)
   }, hookOptions(session, context.env));
   session.hookMessages.push(...failed.messages);
@@ -2395,7 +2461,27 @@ async function executeOneCallRaw(session, call, context, options) {
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
     if (SESSION_TOOL_NAMES.has(name)) {
+      // TaskCompleted hooks can refuse a completion (exit 2 / decision "block").
+      if (name === 'task_update' && args.status === 'completed' && hasHooks(session.hooks, 'TaskCompleted')) {
+        const store = session.sharedTasks && Array.isArray(session.sharedTasks.tasks) ? session.sharedTasks.tasks : [];
+        const task = store.find((item) => item.id === args.task_id);
+        const verdict = await runHooks('TaskCompleted', { session_id: session.sessionId || 'unsaved', task_id: args.task_id, task_subject: task ? task.subject : '', task_description: task ? task.description : '', ...(session.agentId ? { teammate_name: session.agentId } : {}) }, hookOptions(session, context.env));
+        session.hookMessages.push(...verdict.messages);
+        if (verdict.blocked) throw new Error('A TaskCompleted hook kept ' + args.task_id + ' open: ' + (verdict.reason || 'no reason given'));
+      }
       result = await runSessionTool(session, name, args, { signal: options.signal });
+      // TaskCreated hooks run after creation and roll it back on a block.
+      if (name === 'task_create' && result && result.task && hasHooks(session.hooks, 'TaskCreated')) {
+        const verdict = await runHooks('TaskCreated', { session_id: session.sessionId || 'unsaved', task_id: result.task.id, task_subject: result.task.subject, task_description: result.task.description || '', ...(session.agentId ? { teammate_name: session.agentId } : {}) }, hookOptions(session, context.env));
+        session.hookMessages.push(...verdict.messages);
+        if (verdict.blocked) {
+          const store = session.sharedTasks;
+          const index = store.tasks.findIndex((item) => item.id === result.task.id);
+          if (index >= 0) store.tasks.splice(index, 1);
+          throw new Error('A TaskCreated hook rejected the task: ' + (verdict.reason || 'no reason given'));
+        }
+        if (verdict.additionalContext.length) result.hookContext = verdict.additionalContext.join('\n');
+      }
       if (options.onToolResult) options.onToolResult({ name, result, call });
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
@@ -2433,13 +2519,15 @@ async function executeOneCallRaw(session, call, context, options) {
     } else if (hasHooks(session.hooks, 'PostToolUse')) {
       const post = await runHooks('PostToolUse', {
         session_id: session.sessionId || 'unsaved',
-        tool_name: CLAUDE_TOOL_NAMES[name] || name,
+        tool_name: hookToolName(session, name),
         oasis_tool_name: name,
         tool_name_oasis: name,
         tool_input: args,
         tool_response: result
       }, hookOptions(session, context.env));
       session.hookMessages.push(...post.messages);
+      // updatedToolOutput replaces what the model sees (the tool already ran).
+      if (post.updatedToolOutput !== undefined) result = post.updatedToolOutput && typeof post.updatedToolOutput === 'object' ? post.updatedToolOutput : { output: String(post.updatedToolOutput) };
       if ((post.blocked || post.additionalContext.length) && result && typeof result === 'object') {
         result.hookFeedback = [post.reason, ...post.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
       }
@@ -2541,6 +2629,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
   let userContent = request;
+  // UserPromptExpansion: a typed custom command expanded into this prompt.
+  if (options.expansion && !options.isSubagent && hasHooks(session.hooks, 'UserPromptExpansion')) {
+    const expanded = await runHooks('UserPromptExpansion', { session_id: session.sessionId || 'unsaved', expansion_type: 'slash_command', ...options.expansion }, hookOptions(session, options.env));
+    session.hookMessages.push(...expanded.messages);
+    if (expanded.blocked) return { text: 'A UserPromptExpansion hook blocked /' + options.expansion.command_name + ': ' + (expanded.reason || 'no reason given'), toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false, blockedByHook: true };
+    if (expanded.additionalContext.length) userContent += '\n\n<user-prompt-expansion-hook>\n' + expanded.additionalContext.join('\n') + '\n</user-prompt-expansion-hook>';
+  }
   if (!options.isSubagent && /^\/mcp__/.test(request)) {
     const resolved = await resolveMcpPrompt(session, request);
     if (resolved && resolved.error) return { text: resolved.error, toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false };
@@ -2639,13 +2734,23 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
     }
     let streamedText = '';
-    const assistant = await requestCompletion(session, {
-      ...(options.signal ? { signal: options.signal } : {}),
-      ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
-        streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
-        options.onDelta(streamedText);
-      } } : {})
-    });
+    flushAsyncHookFeedback(session);
+    let assistant;
+    try {
+      assistant = await requestCompletion(session, {
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
+          streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
+          options.onDelta(streamedText);
+        } } : {})
+      });
+    } catch (error) {
+      // StopFailure: the turn ended on an API error (observability only).
+      if (error && error.name !== 'AbortError' && hasHooks(session.hooks, 'StopFailure')) {
+        await runHooks('StopFailure', { session_id: session.sessionId || 'unsaved', error_type: stopFailureType(error), error: String(error.message || error).slice(0, 2000) }, hookOptions(session, options.env)).catch(() => {});
+      }
+      throw error;
+    }
     throwIfCancelled(options.signal);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
@@ -2844,6 +2949,25 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
 
     totalToolCalls += calls.length;
     session.toolCallsThisSession += calls.length;
+    // PostToolBatch: once per batch, before the next model request; can stop the loop.
+    if (hasHooks(session.hooks, 'PostToolBatch')) {
+      const batch = await runHooks('PostToolBatch', {
+        session_id: session.sessionId || 'unsaved',
+        tool_calls: calls.map((call) => {
+          const item = outputs.get(call.id);
+          const callName = call.function && call.function.name;
+          return { tool_name: hookToolName(session, callName), tool_input: safeToolArguments(call.function && call.function.arguments), tool_response: item && item.result !== undefined ? item.result : item && item.content };
+        })
+      }, hookOptions(session, options.env));
+      session.hookMessages.push(...batch.messages);
+      if (batch.blocked) {
+        pruneHistory(session);
+        const reason = batch.reason || 'A PostToolBatch hook stopped the turn.';
+        if (options.onText) options.onText(reason);
+        return { text: reason, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, stoppedByHook: true };
+      }
+      if (batch.additionalContext.length) session.messages.push({ role: 'user', content: '<system-reminder>\nPostToolBatch hook context:\n' + batch.additionalContext.join('\n').slice(0, 10000) + '\n</system-reminder>' });
+    }
     if (totalToolCalls >= maxToolCalls || session.toolCallsThisSession >= MAX_SESSION_TOOL_CALLS) {
       pruneHistory(session);
       return {

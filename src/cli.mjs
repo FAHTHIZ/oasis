@@ -1126,6 +1126,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       signal: controller.signal,
       autoApprove,
       ...(modeOptions.images ? { images: modeOptions.images } : {}),
+      ...(modeOptions.expansion ? { expansion: modeOptions.expansion } : {}),
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
@@ -1295,6 +1296,7 @@ function customRunOptions(custom) {
     ...(command.model ? { model: command.model } : {}),
     ...(command.effort ? { effort: command.effort } : {}),
     ...(custom.grantTools ? { grantTools: custom.grantTools } : {}),
+    expansion: { command_name: custom.name, command_source: command.scope || command.source || 'project', command_args: String(custom.args || ''), prompt: String(custom.prompt || '').slice(0, 20000) },
     ...(command.context === 'fork' ? { fork: { agent: command.agent, label: '/' + custom.name } } : {})
   };
 }
@@ -1513,7 +1515,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (slash && slash[1].toLowerCase() === 'init') { try { await initWorkspace(root); } catch (error) { stdout.write(error.message + '\n'); } continue; }
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
       try {
-        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
+        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {
           stdout.write(handled.output + '\n');
           if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
