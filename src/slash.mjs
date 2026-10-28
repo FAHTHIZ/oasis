@@ -49,7 +49,7 @@ export const BUILTIN_COMMANDS = {
   memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
-  review: 'Review changes for bugs (/review [PR number | git ref])',
+  review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
   tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks stop ID)',
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
@@ -81,6 +81,7 @@ export const BUILTIN_COMMANDS = {
   btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
   recap: 'One-line summary of this session',
   rename: 'Name this session (/rename NAME)',
+  ultrareview: 'Deep multi-agent code review with independent verification of every finding; alias for /code-review ultra',
   simplify: 'Review changed code for reuse, simplicity, efficiency and abstraction, then apply fixes (/simplify [target])',
   verify: 'Build and run the app to confirm a change really works (/verify [what to check])',
   batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
@@ -329,6 +330,8 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
       return { output: lines.join('\n') };
     }
+    case 'ultrareview':
+      return { output: 'Starting a deep code review of ' + describeReviewTarget('ultra ' + argument) + '.', prompt: reviewPrompt('review', 'ultra ' + argument) };
     case 'review':
     case 'security-review': {
       const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
@@ -880,30 +883,84 @@ export async function runBuiltinCommand(name, argument, state) {
   }
 }
 
-function describeReviewTarget(argument) {
-  if (/^#?\d+$/.test(argument || '')) return 'pull request #' + argument.replace('#', '');
-  if (argument) return 'changes since ' + argument;
-  return 'the current uncommitted and branch changes';
+// /code-review (alias /review) options, as in Claude Code:
+// [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings n|all|default] [pr#|branch|path]
+export function parseReviewArgs(argument = '') {
+  const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
+  const options = { effort: 'medium', fix: false, comment: false, maxFindings: null, target: '' };
+  const rest = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const lower = word.toLowerCase();
+    if (['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(lower) && !options.effortSet) { options.effort = lower; options.effortSet = true; }
+    else if (lower === '--fix') options.fix = true;
+    else if (lower === '--comment') options.comment = true;
+    else if (lower === '--max-findings' || lower.startsWith('--max-findings=')) {
+      const value = lower.includes('=') ? lower.split('=')[1] : (words[++i] || '').toLowerCase();
+      options.maxFindings = value === 'all' ? Infinity : value === 'default' || !value ? null : Math.max(1, parseInt(value, 10) || 10);
+    } else rest.push(word);
+  }
+  delete options.effortSet;
+  options.target = rest.join(' ');
+  return options;
 }
 
+function describeReviewTarget(argument) {
+  const { target, effort } = parseReviewArgs(argument);
+  const what = /^#?\d+$/.test(target) ? 'pull request #' + target.replace('#', '') : target ? target : 'the current uncommitted and branch changes';
+  return what + (effort !== 'medium' ? ' (' + effort + ' effort)' : '');
+}
+
+const REVIEW_LENSES = [
+  ['logic', 'logic and correctness: wrong conditions, off-by-one, inverted checks, broken invariants, wrong return values'],
+  ['edge cases', 'edge cases and error handling: empty/null/huge inputs, failures of I/O and network calls, partial writes, unhandled rejections'],
+  ['state and concurrency', 'state and concurrency: races, stale caches, ordering assumptions, resource leaks, cleanup on every path'],
+  ['integration', 'integration: callers and callees of the changed code, API contracts, data formats, migrations, config, backwards compatibility'],
+  ['tests', 'tests: whether the change is exercised, assertions that cannot fail, missing regression tests for the fixed behavior']
+];
+
 export function reviewPrompt(kind, argument = '') {
+  const options = parseReviewArgs(argument);
+  const target = options.target;
   let gather;
-  if (/^#?\d+$/.test(argument)) {
-    const number = argument.replace('#', '');
+  if (/^#?\d+$/.test(target)) {
+    const number = target.replace('#', '');
     gather = 'Review GitHub pull request #' + number + '. Use `gh pr view ' + number + '` and `gh pr diff ' + number + '` to read it.';
-  } else if (argument) {
-    gather = 'Review the changes between `' + argument + '` and the working tree. Use `git diff ' + argument + '` and `git log --oneline ' + argument + '..HEAD`.';
+  } else if (target && /[\/.]/.test(target) && !/\.\./.test(target) && !/^origin\//.test(target)) {
+    gather = 'Review `' + target + '` (a path: read the files there as they are now; if it is actually a branch or ref, review `git diff ' + target + '` instead).';
+  } else if (target) {
+    gather = 'Review the changes between `' + target + '` and the working tree. Use `git diff ' + target + '` and `git log --oneline ' + target + '..HEAD`.';
   } else {
-    gather = 'Review the pending changes in this repository. Use `git status`, `git diff HEAD`, and, if the branch is ahead of its upstream or main, `git diff` against the merge base.';
+    gather = 'Review the pending changes in this repository. Use `git status`, `git diff HEAD`, and, if the branch is ahead of its upstream or main, `git diff` against the merge base. Include untracked files.';
   }
-  const focus = kind === 'security-review'
-    ? ['Focus only on security: injection (SQL, shell, path traversal, template), authentication and authorization gaps, secrets in code or logs, unsafe deserialization, SSRF, XSS/CSRF, insecure crypto or randomness, and risky dependency changes.',
-       'Report only findings you are confident are exploitable or clearly dangerous; skip style and theoretical issues.',
-       'For each finding give: severity (high/medium/low), file:line, the vulnerable code, an attack scenario, and a concrete fix.']
-    : ['Look for correctness bugs, edge cases, error handling, race conditions, performance problems, missing tests, and unclear code.',
-       'Prioritize real problems over style nits. Read the surrounding code when the diff alone is not enough.',
-       'Organize the result as: Summary, Issues (each with severity, file:line, explanation, and suggested fix), and Suggestions.'];
-  return [gather, ...focus, 'Do not modify any files; this is a read-only review. If there are no changes to review, say so.'].join('\n');
+  if (kind === 'security-review') {
+    return [gather,
+      'Focus only on security: injection (SQL, shell, path traversal, template), authentication and authorization gaps, secrets in code or logs, unsafe deserialization, SSRF, XSS/CSRF, insecure crypto or randomness, and risky dependency changes.',
+      'Report only findings you are confident are exploitable or clearly dangerous; skip style and theoretical issues.',
+      'For each finding give: severity (high/medium/low), file:line, the vulnerable code, an attack scenario, and a concrete fix.',
+      'Do not modify any files; this is a read-only review. If there are no changes to review, say so.'].join('\n');
+  }
+  const lenses = { low: 0, medium: 0, high: 3, xhigh: 5, max: 5, ultra: 5 }[options.effort];
+  const limit = options.maxFindings === Infinity ? 'Report every confirmed finding.' : 'Report at most ' + (options.maxFindings || (options.effort === 'low' ? 5 : 10)) + ' findings, most severe first' + (options.maxFindings ? '.' : ', and say how many lower-severity ones you left out.');
+  const steps = [gather, 'Look for correctness bugs only: things that will break, misbehave or lose data. Skip style, naming and refactoring suggestions (that is /simplify).'];
+  if (options.effort === 'low') steps.push('Do one quick pass over the diff and flag only obvious bugs.');
+  else if (!lenses) steps.push('Read the surrounding code when the diff alone is not enough, and check each suspected bug against the code before reporting it.');
+  else {
+    steps.push('Run ' + lenses + ' read-only review subagents in parallel with the task tool (one message, several task calls). Give each the same target and one lens:');
+    for (const [name, text] of REVIEW_LENSES.slice(0, lenses)) steps.push('  - ' + name + ': ' + text);
+    steps.push('Each reviewer returns candidate findings with file:line, the failing scenario and evidence from the code.');
+    steps.push(options.effort === 'high' || options.effort === 'xhigh'
+      ? 'Then merge duplicates and verify every candidate yourself by reading the code (and running a quick test or command when that settles it). Drop anything you cannot confirm.'
+      : 'Then merge duplicates and verify every candidate with an independent verifier subagent per finding (in parallel) that tries to disprove it by reading the code and, where practical, running a test or a small script. Keep only findings the verifier confirms.');
+  }
+  steps.push(limit);
+  steps.push('Organize the result as: Summary (one or two sentences), then Findings, each with severity (critical/high/medium/low), file:line, what goes wrong and when, and the fix. If nothing is wrong, say so plainly.');
+  if (options.fix) steps.push('After the report, fix every confirmed finding with the smallest correct change, run the relevant tests, and list what you changed.');
+  else steps.push('Do not modify any files; this is a read-only review.');
+  if (options.comment) steps.push(/^#?\d+$/.test(target)
+    ? 'Then post the findings on pull request #' + target.replace('#', '') + ': inline comments on the exact lines with `gh api repos/{owner}/{repo}/pulls/' + target.replace('#', '') + '/comments` where possible, plus a summary with `gh pr review ' + target.replace('#', '') + ' --comment --body ...`. Ask before posting if you are not auto-approved.'
+    : 'Then post the findings on the pull request for the current branch (find it with `gh pr view --json number`): inline comments where possible, plus a summary with `gh pr review --comment`. If there is no pull request, say so and skip posting.');
+  return steps.join('\n');
 }
 
 function messageText(content) {

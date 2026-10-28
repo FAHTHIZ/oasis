@@ -510,7 +510,7 @@ More session commands:
 - `/skills`, `/config`, `/doctor` and `/release-notes` list skills, show effective settings and where they come from, check the workspace (tools, checkers, language servers, sandbox, context use), and show recent Oasis changes.
 
 More built-ins:
-- `/review [PR number | git ref]` runs a read-only code review of your pending changes, a branch, or a GitHub pull request (through `gh`).
+- `/code-review` (alias `/review`) `[low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all|default] [PR#|branch|path]` reviews your pending changes, a branch, a path or a GitHub pull request (through `gh`) for correctness bugs, like Claude Code's command. `low` is one quick pass; `medium` (the default) checks each suspect against the code; `high` runs three parallel reviewer subagents (logic, edge cases, state and concurrency) and `xhigh` five (plus integration and tests), with the main agent verifying every candidate; `max` and `ultra` also give each finding to an independent verifier subagent that tries to disprove it. `--fix` applies the confirmed fixes and runs the tests, `--comment` posts inline and summary comments on the pull request, and `--max-findings` caps the report (10 by default). `/ultrareview [PR|branch]` is `/code-review ultra`.
 - `/security-review` does the same with a security focus.
 - `/export [file]` saves the conversation as Markdown inside the workspace.
 - `/resume` lists saved sessions; `/resume N` or `/resume ID` switches to one.
