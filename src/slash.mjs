@@ -61,6 +61,19 @@ export const BUILTIN_COMMANDS = {
   'release-notes': 'Show recent changes to Oasis',
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
+  goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
+  recap: 'One-line summary of this session',
+  rename: 'Name this session (/rename NAME)',
+  simplify: 'Review changed code for reuse, simplicity, efficiency and abstraction, then apply fixes (/simplify [target])',
+  verify: 'Build and run the app to confirm a change really works (/verify [what to check])',
+  batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
+  schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID)',
+  'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
+  keybindings: 'Show keyboard shortcuts',
+  'terminal-setup': 'Set up Shift+Enter for newlines in your terminal',
+  'privacy-settings': 'Show what Oasis sends where and how to turn things off',
+  stop: 'Stop background agents and processes in this session',
   init: 'Create an OASIS.md project guide',
   exit: 'Leave Oasis'
 };
@@ -341,6 +354,106 @@ export async function runBuiltinCommand(name, argument, state) {
       const log = await runGitTool('git_log', appRoot, { limit: Number.parseInt(argument, 10) || 15 }, { env }).catch(() => null);
       if (!log || !log.ok || !log.commits.length) return { output: 'Release notes: https://github.com/FAHTHIZ/oasis/commits/main (this install has no Git history). Update with oasis update.' };
       return { output: ['Recent Oasis changes:', ...log.commits.map((c) => '  ' + c.date + '  ' + c.subject), 'Full history: https://github.com/FAHTHIZ/oasis/commits/main'].join('\n') };
+    }
+    case 'goal': {
+      const stopWords = ['clear', 'stop', 'off', 'reset', 'none', 'cancel'];
+      if (!argument) {
+        const goal = session && session.goal;
+        if (!goal) return { output: 'No goal set. Usage: /goal CONDITION (for example: /goal all tests pass and the README documents the new flag)' };
+        return { output: 'Goal' + (goal.achieved ? ' (achieved)' : goal.active ? ' (active)' : ' (cleared)') + ': ' + goal.condition + '\nTurns: ' + goal.turns + (goal.reason ? '\nLast check: ' + goal.reason : '') };
+      }
+      if (stopWords.includes(argument.toLowerCase())) {
+        if (session && session.goal) session.goal.active = false;
+        return { output: 'Goal cleared.' };
+      }
+      return { output: '[goal] Working until: ' + argument + '\nPress Ctrl+C to stop.', goal: { condition: argument, maxTurns: Number(env.OASIS_GOAL_MAX_TURNS) || 20 } };
+    }
+    case 'btw': {
+      if (!argument) {
+        const last = session && session.lastSideQuestion;
+        return { output: last ? 'Last side question: ' + last.question + '\n\n' + last.answer : 'Usage: /btw QUESTION. The answer does not enter the conversation.' };
+      }
+      if (!session) return { output: 'Start a conversation first; /btw asks about the current session.' };
+      const { askSideQuestion } = await import('./agent.mjs');
+      const answer = await askSideQuestion(session, argument, { onUsage: (u) => usage && recordUsage(usage, { ...u, phase: 'side' }) });
+      session.lastSideQuestion = { question: argument, answer };
+      return { output: answer };
+    }
+    case 'recap': {
+      if (!session || session.messages.length < 2) return { output: 'Nothing to recap yet.' };
+      const { askSideQuestion } = await import('./agent.mjs');
+      return { output: await askSideQuestion(session, 'Give a one-line recap of this session: what was asked, what is done, and what is next. One line only.') };
+    }
+    case 'rename': {
+      if (!session) return { output: 'Start a conversation first; /rename names the current session.' };
+      let name = argument.replace(/[\x00-\x1f\x7f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (!name) {
+        const first = session.messages.find((m) => m.role === 'user' && typeof m.content === 'string');
+        name = first ? first.content.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+        if (!name) return { output: 'Usage: /rename NAME' };
+      }
+      session.sessionName = name;
+      return { output: 'Session renamed to "' + name + '". It is saved with the session and shown in /resume.' };
+    }
+    case 'simplify':
+      return { output: '[simplify] Reviewing changed code.', prompt: 'Review the code changed in this workspace' + (argument ? ' (focus: ' + argument + ')' : ' (use git diff against HEAD; include untracked files)') + ' and simplify it. Run four read-only review subagents in parallel with the task tool, one each for: (1) reuse: code that duplicates existing helpers or libraries in this repo; (2) simplification: needless branches, indirection, dead code, over-long functions; (3) efficiency: wasted work, repeated I/O, quadratic loops; (4) abstraction: whether the change sits at the right layer and matches local patterns. Then apply the fixes that keep behavior identical, run the relevant tests, and summarize what changed. Do not change behavior or public interfaces, and do not look for bugs; that is /review.' };
+    case 'verify':
+      return { output: '[verify] Verifying the change by running it.', prompt: 'Verify that the recent change actually works by running it, not just by reading code or relying on type checks. ' + (argument ? 'Check specifically: ' + argument + '. ' : '') + 'Find how this project builds and runs (package scripts, Makefile, README). Build it, start the app or CLI (use run_command with background=true and monitor_command for servers), exercise the changed behavior with real inputs or requests, and observe the output. Run the relevant tests too. Report exactly what you ran, what you observed, and whether it works. If you cannot run it, say why instead of guessing.' };
+    case 'batch': {
+      if (!argument) return { output: 'Usage: /batch INSTRUCTION (for example: /batch migrate every route in src/api to the new error helper)' };
+      return { output: '[batch] Planning parallel work.', prompt: 'Carry out this large change in parallel: ' + argument + '\n\nSteps: (1) Call enter_plan_mode, then research the codebase read-only and split the work into 5 to 30 independent units that touch disjoint files. (2) Call exit_plan_mode with the list of units and how each will be verified, and wait for approval. (3) After approval, run one task subagent per unit with isolation "worktree" so each works on its own branch; run up to six at a time in parallel. Each unit must make its change, run the relevant tests, and commit. (4) When all finish, list each unit with its branch, result and test outcome, and tell the user to review them with /worktrees.' };
+    }
+    case 'schedule': {
+      if (!session) return { output: 'Start a conversation first; scheduled prompts run inside this session.' };
+      const tools = await import('./session-tools.mjs');
+      const [sub, ...rest] = argument.split(/\s+/);
+      if (!argument || sub === 'list') {
+        const jobs = tools.listCronJobs(session).jobs;
+        return { output: jobs.length ? jobs.map((job) => job.id + '  ' + job.cron + '  ' + (job.recurring ? 'every match' : 'once') + '  next ' + (job.next_run || '-') + '\n    ' + job.prompt).join('\n') : 'No scheduled prompts. Usage: /schedule "*/30 * * * *" check CI and fix failures' };
+      }
+      if (sub === 'delete' || sub === 'cancel') return { output: tools.deleteCronJob(session, rest[0]).deleted ? 'Deleted ' + rest[0] + '.' : 'No job ' + rest[0] + '.' };
+      const quoted = argument.match(/^["']([^"']+)["']\s+([\s\S]+)$/);
+      const parts = argument.split(/\s+/);
+      const cron = quoted ? quoted[1] : parts.slice(0, 5).join(' ');
+      const prompt = quoted ? quoted[2] : parts.slice(5).join(' ');
+      try {
+        const job = tools.createCronJob(session, { cron, prompt });
+        return { output: 'Scheduled ' + job.id + ' (' + job.cron + '), next run ' + job.next_run + '. It runs while this session stays open.' };
+      } catch (error) { return { output: error.message + '\nUsage: /schedule CRON PROMPT, for example /schedule "0 9 * * 1-5" summarize open PRs' }; }
+    }
+    case 'fewer-permission-prompts':
+      return { output: '[permissions] Looking for safe commands to allowlist.', prompt: 'Help me get fewer permission prompts. Read this project\'s saved Oasis sessions and settings (.oasis/settings.json, .oasis/settings.local.json; sessions are listed by /resume) and find commands and MCP tools I approved repeatedly. Keep only clearly read-only ones (for example git status, git diff, git log, ls, test runners, linters, read-only MCP getters). Never include anything that writes, deletes, installs, pushes, or runs arbitrary code (no rm, curl | sh, npm install, git push, bash -c). Show the prioritized list with a one-line reason each, then add them to permissions.allow in .oasis/settings.json using rules like "run_command(git status)" or "run_command(npm test:*)" after I approve.' };
+    case 'keybindings': {
+      const { SHORTCUTS_HELP } = await import('./line-editor.mjs');
+      return { output: 'Keyboard shortcuts:\n' + SHORTCUTS_HELP.join('\n') + '\n  While a turn runs: Esc interrupts it, and anything you type is queued as the next message.' };
+    }
+    case 'terminal-setup':
+      return { output: [
+        'Newlines in the prompt work everywhere with \\ then Enter, or Ctrl+J.',
+        'Shift+Enter works out of the box in terminals that report modified keys (kitty, WezTerm, foot, Ghostty, iTerm2 with CSI u).',
+        'VS Code / Cursor: add to keybindings.json:',
+        '  { "key": "shift+enter", "command": "workbench.action.terminal.sendSequence", "args": { "text": "\\u001b\\r" }, "when": "terminalFocus" }',
+        'Alacritty: [[keyboard.bindings]] key = "Return", mods = "Shift", chars = "\\u001b\\r"',
+        'Apple Terminal: Settings > Profiles > Keyboard > "Use Option as Meta key", then Option+Enter inserts a newline.',
+        'tmux: set -g extended-keys on'
+      ].join('\n') };
+    case 'privacy-settings':
+      return { output: [
+        'Oasis has no telemetry. Nothing is sent anywhere except:',
+        '  - your configured model provider (' + ((session && session.config && session.config.protocol) || 'see /status') + '): prompts, file contents you share, tool results',
+        '  - web_search / fetch_url when the model uses them (turn off with "permissions": {"deny": ["web_search", "fetch_url"]})',
+        '  - MCP servers you configured (see /mcp)',
+        'Local data: saved sessions (oasis --no-session-persistence to skip saving), prompt history in ~/.oasis/history.jsonl (OASIS_NO_HISTORY=1), auto memory (/memory).',
+        'For fully local use, point Oasis at Ollama or LM Studio with /setup.'
+      ].join('\n') };
+    case 'stop': {
+      if (!session) return { output: 'Nothing is running.' };
+      const { stopAllAgents } = await import('./agent-tasks.mjs').catch(() => ({}));
+      let agents = 0;
+      if (session.agentTasks && stopAllAgents) { agents = [...session.agentTasks.agents.values()].filter((t) => t.status === 'running').length; stopAllAgents(session); }
+      let processes = 0;
+      if (session.background) for (const entry of session.background.values()) if (entry.status === 'running' && entry.child) { try { entry.child.kill('SIGTERM'); entry.status = 'killed'; processes += 1; } catch {} }
+      return { output: 'Stopped ' + agents + ' background agent(s) and ' + processes + ' process(es).' };
     }
     case 'loop': {
       const parsed = parseLoopArgs(argument);

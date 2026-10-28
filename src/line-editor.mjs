@@ -576,6 +576,8 @@ export function readInput(options = {}) {
     output.on && output.on('resize', onResize);
     output.write('\x1b[?2004h');
     draw();
+    // Lets a scheduler submit a prompt while the editor is idle and empty.
+    if (options.onReady) options.onReady((text) => { if (done || state.text.trim()) return false; state = { ...state, text: String(text), cursor: String(text).length }; finish({ type: 'submit', text: String(text), external: true }); return true; });
   });
 }
 

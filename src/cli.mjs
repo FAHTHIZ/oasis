@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { cronState } from './session-tools.mjs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
@@ -109,6 +110,7 @@ function printHelp() {
     '  --add-dir PATH                Let tools read and edit another directory (repeatable)',
     '  --dangerously-skip-permissions  Same as --permission-mode bypassPermissions --yes',
     '  --continue, -c                Continue the most recent saved session',
+    '  --no-session-persistence      Do not save this session (sessions are saved by default)',
     '  --resume ID, -r ID            Resume a saved session (see oasis sessions list)',
     '  --model ID                    Use a different model for this run',
     '  --max-turns N                 Limit model steps for one task (1-400)',
@@ -146,6 +148,17 @@ function printHelp() {
 // While a turn runs, keystrokes are captured: Esc or Ctrl+C interrupts, and
 // typed lines are queued as the next messages (type-ahead, like Claude Code).
 const QUEUED_INPUT = [];
+let IDLE_SUBMIT = null;
+
+function attachCron(session) {
+  if (!session) return;
+  const state = cronState(session);
+  state.onFire = (prompt) => {
+    if (IDLE_SUBMIT && IDLE_SUBMIT(prompt)) return;
+    QUEUED_INPUT.push(prompt);
+  };
+  if (state.pending && state.pending.length) QUEUED_INPUT.push(...state.pending.splice(0));
+}
 let queuedDraft = '';
 let turnKeys = null;
 function startTurnKeys(onInterrupt) {
@@ -1296,6 +1309,35 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
   return session;
 }
 
+async function runGoal(goal, root, autoApprove, session, persistence) {
+  let stopped = false;
+  const onStop = () => { stopped = true; };
+  process.on('SIGINT', onStop);
+  const { evaluateGoal } = await import('./agent.mjs');
+  let state = { condition: goal.condition, active: true, achieved: false, turns: 0, reason: '' };
+  try {
+    let prompt = 'Goal: ' + goal.condition + '\nWork toward this goal now. Verify results by running checks, not by assumption. Keep going until it is fully met.';
+    while (!stopped && state.active && state.turns < goal.maxTurns) {
+      state.turns += 1;
+      stdout.write('[goal] Turn ' + state.turns + ' of up to ' + goal.maxTurns + '\n');
+      session = await runPrompt(prompt, root, autoApprove, session, persistence);
+      persistence.resumeId = null;
+      if (!session) break;
+      if (session.goal && session.goal !== state && !session.goal.active) break;
+      session.goal = state;
+      if (stopped) break;
+      const verdict = await evaluateGoal(session, goal.condition).catch((error) => ({ met: false, reason: 'Check failed: ' + error.message }));
+      state.reason = verdict.reason;
+      if (verdict.met) { state.achieved = true; state.active = false; stdout.write('[goal] Met: ' + verdict.reason + '\n'); break; }
+      stdout.write('[goal] Not met yet: ' + verdict.reason + '\n');
+      prompt = 'The goal is not met yet. A reviewer said: ' + verdict.reason + '\nContinue working toward the goal: ' + goal.condition;
+    }
+  } finally { process.removeListener('SIGINT', onStop); }
+  if (state.active) { state.active = false; stdout.write('[goal] Stopped after ' + state.turns + ' turn(s). /goal shows the last check.\n'); }
+  if (session) session.goal = state;
+  return session;
+}
+
 async function memoryCommand(args, root) {
   const { runBuiltinCommand } = await import('./slash.mjs');
   const handled = await runBuiltinCommand('memory', args.join(' '), { root, env: process.env });
@@ -1348,6 +1390,7 @@ async function readMainInput(root, session, state) {
       const mode = nextMode(currentMode(), { allowBypass: Boolean(SESSION_OPTIONS.allowBypass) });
       await runBuiltinCommand('mode', mode, { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
     },
+    onReady: (submit) => { IDLE_SUBMIT = submit; },
     onDoubleEscape: () => '/rewind',
     onPasteImage: () => pasteClipboardImage(root),
     onTodos: async () => {
@@ -1355,6 +1398,7 @@ async function readMainInput(root, session, state) {
       return handled ? String(handled.output).split('\n') : [];
     }
   });
+  IDLE_SUBMIT = null;
   if (result.type === 'eof') throw new Error('eof');
   state.history.push(result.text);
   appendHistory(root, result.text).catch(() => {});
@@ -1377,6 +1421,7 @@ async function interactive(root, autoApprove, persistence = {}) {
       const line = await renderStatusLine(statusLine, statusLinePayload({ root, session, config: await loadConfig().catch(() => ({})), usage: USAGE, outputStyle: SESSION_OPTIONS.outputStyle }), { root, env: process.env, keepColor: Boolean(stdout.isTTY) }).catch(() => null);
       if (line) stdout.write('\n' + line);
     }
+    attachCron(session);
     if (QUEUED_INPUT.length) {
       input = QUEUED_INPUT.shift();
       stdout.write('\n' + (colorEnabled(stdout) ? '\x1b[2m❯ ' + input + '\x1b[22m' : '> ' + input) + '\n');
@@ -1441,6 +1486,7 @@ async function interactive(root, autoApprove, persistence = {}) {
           if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
           if (handled.cd) { await fireCwdChanged(session, root, handled.cd); closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
           if (handled.loop) session = await runLoop(handled.loop, root, autoApprove, session, persistence);
+          if (handled.goal) session = await runGoal(handled.goal, root, autoApprove, session, persistence);
           continue;
         }
       } catch (error) { stdout.write('Command failed: ' + error.message + '\n'); continue; }
@@ -1775,7 +1821,9 @@ async function manageExternalExtensions(root, args, autoApprove) {
 async function main() {
   const rawArgs = process.argv.slice(2);
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
-  let persistSession = process.env.OASIS_PERSIST_SESSIONS === '1';
+  // Sessions are saved by default (resume with -c / -r / /resume), like Claude Code.
+  let persistSession = process.env.OASIS_PERSIST_SESSIONS !== '0';
+  let noPersist = process.env.OASIS_PERSIST_SESSIONS === '0';
   let continueSession = false;
   let resumeId = null;
   let workspace = process.cwd();
@@ -1883,6 +1931,7 @@ async function main() {
     if (arg === '--plan') { headless.planOnly = true; continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; autoApprove = true; continue; }
+    if (arg === '--no-session-persistence') { noPersist = true; continue; }
     if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume' || arg === '-r') {
       if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
@@ -1904,7 +1953,7 @@ async function main() {
   }
   const command = args[0];
   const rest = args.slice(1);
-  const persistence = { enabled: persistSession || Boolean(resumeId), resumeId };
+  const persistence = { enabled: !noPersist && (persistSession || Boolean(resumeId)), resumeId };
   if (continueSession && !resumeId) {
     const saved = await listSessions(workspace);
     persistence.resumeId = saved[0] && saved[0].id || null;
