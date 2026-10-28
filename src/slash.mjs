@@ -18,7 +18,7 @@ import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
-export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review' };
+export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -69,6 +69,7 @@ export const BUILTIN_COMMANDS = {
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
   import: 'Import MCP servers, instructions, commands and rules from Codex, Gemini CLI or Cursor (/import [codex|gemini|cursor] [--dry-run] [--yes])',
   advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
@@ -444,6 +445,10 @@ export async function runBuiltinCommand(name, argument, state) {
       const answer = await askSideQuestion(session, argument, { onUsage: (u) => usage && recordUsage(usage, { ...u, phase: 'side' }) });
       session.lastSideQuestion = { question: argument, answer };
       return { output: answer };
+    }
+    case 'background': {
+      if (!session) return { output: 'Start a conversation first; /background hands the current session to a background agent. Use oasis --bg "task" to start a new one.' };
+      return { background: { prompt: argument || 'Continue the task from where we left off. When you are done, summarize what you did.' } };
     }
     case 'insights': {
       const days = Math.min(365, Math.max(1, parseInt(argument, 10) || 30));
