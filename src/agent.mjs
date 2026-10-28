@@ -382,7 +382,13 @@ export async function createSession({ root, config, restore = null, permissionMo
   const mcp = bare && !flagServers.length ? { clients: new Map(), failures: [] }
     : await connectMcpServers({ root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
-  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
+  let visibleSkills = skillDescriptions;
+  const skillDeny = ((loadedSettings.permissions && loadedSettings.permissions.deny) || []).filter((rule) => /^(?:Skill|load_skill)\(/i.test(String(rule)));
+  if (skillDeny.length && typeof skillDescriptions === 'string') {
+    const { skillDenied } = await import('./skill-doctor.mjs');
+    visibleSkills = skillDescriptions.split('\n').filter((line) => { const m = /^- (.+?) \[/.exec(line); return !m || !skillDenied(m[1], skillDeny); }).join('\n');
+  }
+  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(root, projectContext, visibleSkills, await describeEnvironment(root, env));
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   const channelEntries = parseChannelEntries(channels);
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });

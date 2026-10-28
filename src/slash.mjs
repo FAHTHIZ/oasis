@@ -18,7 +18,7 @@ import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
-export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background' };
+export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -72,6 +72,7 @@ export const BUILTIN_COMMANDS = {
   color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
   focus: 'Show the last prompt, a one-line summary of each tool call with edit line counts, and the final response',
   background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
+  'skill-doctor': 'Show each skill\'s context cost and recent usage so you can turn off unused ones (/skill-doctor [DAYS])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
   import: 'Import MCP servers, instructions, commands and rules from Codex, Gemini CLI or Cursor (/import [codex|gemini|cursor] [--dry-run] [--yes])',
   advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
@@ -469,6 +470,12 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'background': {
       if (!session) return { output: 'Start a conversation first; /background hands the current session to a background agent. Use oasis --bg "task" to start a new one.' };
       return { background: { prompt: argument || 'Continue the task from where we left off. When you are done, summarize what you did.' } };
+    }
+    case 'skill-doctor': {
+      const { skillDoctor, skillDoctorText } = await import('./skill-doctor.mjs');
+      const settings = (session && session.settings) || state.settings || null;
+      const report = await skillDoctor((session && session.root) || state.root || process.cwd(), { env, settings, days: Math.min(365, Math.max(1, parseInt(argument, 10) || 30)) });
+      return { output: skillDoctorText(report) };
     }
     case 'insights': {
       const days = Math.min(365, Math.max(1, parseInt(argument, 10) || 30));
