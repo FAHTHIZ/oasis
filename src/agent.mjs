@@ -455,7 +455,7 @@ function toResponsesRequest(messages) {
   return { instructions: system ? String(system.content || '') : '', input };
 }
 
-function toAnthropicRequest(messages) {
+function toAnthropicRequest(messages, options = {}) {
   const system = messages.find((message) => message.role === 'system');
   const converted = [];
   const keepImages = recentImageSet(messages);
@@ -469,6 +469,8 @@ function toAnthropicRequest(messages) {
     if (message.role === 'assistant') {
       if (Array.isArray(message.tool_calls) && message.tool_calls.length) {
         const content = [];
+        // Thinking blocks must be replayed unchanged (with signatures) during a tool-use loop.
+        if (options.thinking && Array.isArray(message.thinkingBlocks)) content.push(...message.thinkingBlocks.map((block) => ({ ...block })));
         if (typeof message.content === 'string' && message.content.trim()) content.push({ type: 'text', text: message.content });
         for (const call of message.tool_calls) {
           content.push({
@@ -510,6 +512,20 @@ function toAnthropicRequest(messages) {
 
 // Anthropic prompt caching: mark the system prompt, the tool list, and the newest
 // message so each request reuses the previous prefix (cheaper and faster).
+// Extended thinking (Anthropic): Claude Code-style keywords pick a budget per turn.
+// MAX_THINKING_TOKENS / OASIS_THINKING_BUDGET or config.thinkingBudget set a default.
+export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
+  const text = String(prompt || '').toLowerCase();
+  let budget = 0;
+  if (/\bultrathink\b|\bthink (?:harder|intensely|super hard|really hard|very hard)\b/.test(text)) budget = 31999;
+  else if (/\bmegathink\b|\bthink (?:hard|deeply|a lot|more)\b/.test(text)) budget = 10000;
+  else if (/\bthink\b/.test(text) && /\b(?:think (?:about|through|carefully|step)|please think|let'?s think)\b/.test(text)) budget = 4000;
+  const configured = Number.parseInt(env.OASIS_THINKING_BUDGET || env.MAX_THINKING_TOKENS || config.thinkingBudget || 0, 10) || 0;
+  budget = Math.max(budget, configured);
+  if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return 0;
+  return budget ? Math.max(1024, Math.min(budget, 64000)) : 0;
+}
+
 export function promptCachingEnabled(config = {}, env = process.env) {
   if (['0', 'off', 'false', 'no'].includes(String(env.OASIS_PROMPT_CACHE || '').toLowerCase())) return false;
   return config.promptCache !== false;
@@ -636,6 +652,7 @@ async function readProviderStream(response, protocol, onDelta) {
       } else if (type === 'content_block_start') {
         const block = { ...(event.content_block || {}), partialJson: '' };
         if (block.type === 'text') block.text = String(block.text || '');
+        if (block.type === 'thinking') { block.thinking = String(block.thinking || ''); block.signature = String(block.signature || ''); }
         blocks.set(Number(event.index || 0), block);
       } else if (type === 'content_block_delta') {
         const block = blocks.get(Number(event.index || 0));
@@ -646,6 +663,10 @@ async function readProviderStream(response, protocol, onDelta) {
           onDelta(delta.text);
         } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
           block.partialJson += delta.partial_json;
+        } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+          block.thinking = String(block.thinking || '') + delta.thinking;
+        } else if (delta.type === 'signature_delta' && typeof delta.signature === 'string') {
+          block.signature = String(block.signature || '') + delta.signature;
         }
       } else if (type === 'message_delta') {
         if (event.delta) stopReason = event.delta.stop_reason || stopReason;
@@ -783,7 +804,7 @@ async function requestCompletion(session, options = {}) {
   let bodyObject;
   if (nativeAnthropic) {
     endpoint = anthropicEndpoint(config.baseURL);
-    const converted = toAnthropicRequest(session.messages);
+    const converted = toAnthropicRequest(session.messages, { thinking: Boolean(session.thinkingBudget) && !options.forceTool });
     const cache = promptCachingEnabled(config, options.env || process.env);
     const anthropicTools = availableTools.map((tool) => ({
       name: tool.function.name,
@@ -791,9 +812,11 @@ async function requestCompletion(session, options = {}) {
       input_schema: tool.function.parameters
     }));
     if (cache) applyAnthropicCacheBreakpoints(converted, anthropicTools);
+    const thinkingBudget = options.forceTool ? 0 : Number(session.thinkingBudget || 0);
     bodyObject = {
       model: config.model,
-      max_tokens: 8192,
+      max_tokens: 8192 + thinkingBudget,
+      ...(thinkingBudget ? { thinking: { type: 'enabled', budget_tokens: thinkingBudget } } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       system: converted.system,
       messages: converted.messages,
@@ -886,7 +909,9 @@ async function requestCompletion(session, options = {}) {
         function: { name: block.name, arguments: JSON.stringify(block.input || {}) }
       }));
       if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
-      return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage) };
+      const thinkingBlocks = data.content.filter((block) => block.type === 'thinking' || block.type === 'redacted_thinking');
+      if (thinkingBlocks.length && typeof options.onThinking === 'function') options.onThinking(thinkingBlocks.map((block) => block.thinking || '').join('\n'));
+      return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage), ...(thinkingBlocks.length ? { thinkingBlocks } : {}) };
     }
     if (nativeResponses) {
       if (!Array.isArray(data.output)) throw new Error('The Responses API returned no output items.');
@@ -1571,6 +1596,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
     if (submitted.additionalContext.length) userContent += '\n\n<hook-context>\n' + submitted.additionalContext.join('\n').slice(0, 10000) + '\n</hook-context>';
   }
   if (!options.isSubagent) repairInterruptedHistory(session);
+  session.thinkingBudget = session.config.protocol === 'anthropic' ? thinkingBudgetFor(request, session.config, options.env || process.env) : 0;
+  if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
   if (Array.isArray(options.images) && options.images.length) userMessage.images = options.images.slice(0, 4).map(({ mediaType, data }) => ({ mediaType, data }));
@@ -1632,6 +1659,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     if (options.onUsage) options.onUsage({ ...usage, step: step + 1 });
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
+    if (Array.isArray(assistant.thinkingBlocks) && assistant.thinkingBlocks.length) assistantMessage.thinkingBlocks = assistant.thinkingBlocks;
     if (Array.isArray(assistant.tool_calls) && assistant.tool_calls.length) {
       assistantMessage.tool_calls = assistant.tool_calls.map((call) => ({
         id: call.id,
@@ -1828,6 +1856,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const finalText = finalIssues.length ? baseFinalText + '\n\nVerification incomplete: ' + finalIssues.join('; ') + '.' : baseFinalText;
   const finalMessage = { role: 'assistant', content: finalText };
   if (Array.isArray(final.responseItems)) finalMessage.responseItems = final.responseItems;
+  if (Array.isArray(final.thinkingBlocks) && final.thinkingBlocks.length) finalMessage.thinkingBlocks = final.thinkingBlocks;
   session.messages.push(finalMessage);
   if (options.onText) options.onText(finalText);
   pruneHistory(session);
