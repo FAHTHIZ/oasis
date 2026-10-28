@@ -321,7 +321,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     hookMessages: []
   };
   try { session.agents = await loadAgentDefinitions(root, { env }); } catch { session.agents = { ...BUILTIN_AGENTS }; }
-  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents)]);
+  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), EXIT_PLAN_TOOL_DEFINITION]);
   const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
   if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
   if (sandbox.enabled) {
@@ -1009,7 +1009,13 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode']);
+
+const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
+  name: 'exit_plan_mode',
+  description: 'Only in plan mode: present your finished implementation plan to the user and ask to start implementing it. Use it once research is done and the plan is concrete (files, steps, verification). Do not use it for pure research questions.',
+  parameters: { type: 'object', properties: { plan: { type: 'string', description: 'The plan in concise Markdown' } }, required: ['plan'] }
+} };
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;
@@ -1290,6 +1296,26 @@ async function runSubagent(parent, args, context, options) {
   };
 }
 
+// Plan mode hand-off, like Claude Code's ExitPlanMode: show the plan, and on approval
+// leave plan mode so the same turn can start implementing.
+async function exitPlanMode(session, args, context, options) {
+  const plan = String(args.plan || '').trim().slice(0, 20000);
+  if (!plan) return { approved: false, error: 'Provide the plan to present.' };
+  if (options.planOnly) return { approved: false, message: 'This is a plan-only run. Give the plan as your final answer; the user will start implementation separately.' };
+  if (!session.permissions || session.permissions.mode !== 'plan') return { approved: true, message: 'Plan mode is not active; continue with the task.' };
+  const approval = context && context.approval;
+  let answer = false;
+  if (typeof approval === 'function') {
+    answer = await approval('Oasis has a plan and wants to start implementing it:\n\n' + plan + '\n\nLeave plan mode and implement this plan?', true, { tool: 'exit_plan_mode' });
+  }
+  if (answer === true || answer === 'always') {
+    const next = session.prePlanMode && session.prePlanMode !== 'plan' ? session.prePlanMode : 'default';
+    session.permissions.setMode(next);
+    return { approved: true, mode: next, message: 'The user approved the plan and plan mode is off (mode: ' + next + '). Implement it now: track the steps with todo_write, make the changes, and verify them.' };
+  }
+  return { approved: false, message: 'The user did not approve the plan yet. Stay in plan mode: ask what they would like changed, or refine the plan.' };
+}
+
 function permissionMode(session, options) {
   if (options.planOnly) return 'plan';
   return (session.permissions && session.permissions.mode) || 'default';
@@ -1359,6 +1385,11 @@ async function executeOneCall(session, call, context, options) {
     const readOnlyTask = name === 'task' && isReadOnlyAgent(session, args.subagent_type);
     if ((options.planOnly || permissionMode(session, options) === 'plan') && !READ_ONLY_TOOLS.has(name) && !readOnlyTask) {
       throw new Error('Plan mode blocks write, command, install, delete, and external tool calls.');
+    }
+    if (name === 'exit_plan_mode') {
+      result = await exitPlanMode(session, args, context, options);
+      if (options.onToolResult) options.onToolResult({ name, result, call });
+      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
     const auth = await authorizeCall(session, name, args, context, options);
     if (auth.deniedReason) throw new Error(auth.deniedReason);
@@ -1468,6 +1499,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
   let userContent = request;
+  if (!options.planOnly && !options.isSubagent && session.permissions && session.permissions.mode === 'plan') {
+    userContent += '\n\n<system-reminder>Plan mode is active. Research with read-only tools only; edits, commands, and installs are blocked. When your plan is ready, call exit_plan_mode with it so the user can approve implementation. For a pure question, just answer.</system-reminder>';
+  }
   if (session.hooks && hasHooks(session.hooks, 'UserPromptSubmit')) {
     const submitted = await runHooks('UserPromptSubmit', { session_id: session.sessionId || 'unsaved', prompt: request }, { hooks: session.hooks, root: session.root, env: options.env });
     session.hookMessages.push(...submitted.messages);
