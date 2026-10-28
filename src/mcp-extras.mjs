@@ -15,6 +15,7 @@ function cleanList(items, key) {
 export async function loadMcpExtras(client, init = {}) {
   const capabilities = init && init.capabilities || {};
   client.capabilities = capabilities;
+  client.instructions = init && typeof init.instructions === 'string' ? init.instructions.slice(0, 8000) : '';
   client.resources = [];
   client.resourceTemplates = [];
   client.prompts = [];

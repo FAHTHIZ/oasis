@@ -41,7 +41,7 @@ import { MarkdownStream, colorEnabled } from './markdown.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit } from './terminal-ui.mjs';
 
 // Options that shape every agent session created by this process.
-const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null };
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
 const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
@@ -127,6 +127,8 @@ function printHelp() {
     '  --tools "Read,Edit,Bash"      Only offer these tools (Claude or Oasis names; "" for none)',
     '  --plugin-dir DIR              Load a Claude Code plugin directory for this session (repeatable)',
     '  --mcp-config FILE|JSON        Load MCP servers ({"mcpServers": {...}}); --strict-mcp-config uses only these',
+    '  --channels server:NAME|plugin:NAME@MKT  Let these MCP channel servers push messages into the session (interactive)',
+    '  --dangerously-load-development-channels LIST  Same, after a local-development confirmation',
     '  --settings FILE|JSON          Extra settings on top of the usual files; --setting-sources user,project,local',
     '  --agents JSON                 Define subagents inline: {"name": {"description", "prompt", "tools"}}',
     '  --session-id UUID | --name NAME | --fork-session  Control how the session is saved or resumed',
@@ -166,7 +168,7 @@ function attachCron(session) {
 }
 // Monitor events and finished background commands wake an idle session, like
 // Claude Code interjecting when a Monitor event arrives.
-const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'agent-notice']);
+const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'agent-notice', 'channel']);
 const WAKE_PREFIX = '[background event] ';
 function pendingWake(session) {
   return session && Array.isArray(session.inbox) ? session.inbox.filter((entry) => WAKE_KINDS.has(entry.kind)) : [];
@@ -177,9 +179,11 @@ function wakeIfPending(session) {
   const labels = [...new Set(pending.map((entry) => entry.label).filter(Boolean))];
   return IDLE_SUBMIT(WAKE_PREFIX + (labels.join(', ') || pending.length + ' new event(s)').slice(0, 160));
 }
+let channelSession = null;
 function attachMonitors(session) {
   if (!session || session.monitorsAttached) return;
   session.monitorsAttached = true;
+  channelSession = session;
   let timer = null;
   session.onBackgroundEvent = (event) => {
     const last = session.inbox && session.inbox[session.inbox.length - 1];
@@ -225,17 +229,18 @@ function startTurnKeys(onInterrupt) {
   return handle;
 }
 
-async function askLine(question) {
+async function askLine(question, external = null) {
   if (!stdin.isTTY || !stdout.isTTY) throw new Error('This action needs an interactive terminal. Re-run it from a terminal session.');
   const paused = turnKeys;
   if (paused) paused.suspend();
-  try { return await askLineRaw(question); } finally { if (paused && turnKeys === paused) paused.resume(); }
+  try { return await askLineRaw(question, external); } finally { if (paused && turnKeys === paused) paused.resume(); }
 }
 
-async function askLineRaw(question) {
+async function askLineRaw(question, external = null) {
   const rl = createInterface({ input: stdin, output: stdout });
   // Readline swallows Ctrl+C; forward it so a running task can be interrupted.
   const controller = new AbortController();
+  if (external) { if (external.aborted) controller.abort(); else external.addEventListener('abort', () => controller.abort(), { once: true }); }
   rl.on('SIGINT', () => { controller.abort(); if (process.listenerCount('SIGINT')) process.emit('SIGINT'); });
   try { return await rl.question(question, { signal: controller.signal }); } finally { rl.close(); }
 }
@@ -562,13 +567,35 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
 }
 
 async function askApproval(prompt, forceInteractive, meta) {
+  // Channels that opted in to permission relay get the request too; the first answer wins.
+  let relay = null;
+  if (channelSession && channelSession.channels && channelSession.channels.length && meta && meta.tool) {
+    const { startPermissionRelay } = await import('./channels.mjs');
+    const { hookToolName } = await import('./agent.mjs');
+    relay = startPermissionRelay(channelSession, { toolName: hookToolName(channelSession, meta.tool), description: String(prompt).split('\n')[0], input: meta.input });
+  }
+  if (!relay) return askApprovalLocal(prompt, forceInteractive, meta);
+  const local = new AbortController();
+  let remote = null;
+  relay.promise.then((behavior) => { remote = behavior; local.abort(); });
+  stdout.write('\n[channels] Also sent to your channel for approval.');
+  try {
+    const answer = await askApprovalLocal(prompt, forceInteractive, meta, local.signal);
+    if (remote) { stdout.write('\n[channels] ' + (remote === 'allow' ? 'Approved' : 'Denied') + ' from ' + (relay.source || 'a channel') + '.\n'); return remote === 'allow'; }
+    return answer;
+  } finally { relay.cancel(); }
+}
+
+async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
   try {
     stdout.write('\nPermission request\n' + prompt + '\n');
     const offerAlways = meta && meta.suggestion && !forceInteractive;
-    const answer = (await askLine(offerAlways ? 'Proceed? [y]es / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Proceed? [y/N] ')).trim().toLowerCase();
+    if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
+    const answer = (await askLine(offerAlways ? 'Proceed? [y]es / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Proceed? [y/N] ', signal)).trim().toLowerCase();
     if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
     return ['y', 'yes'].includes(answer);
   } catch {
+    if (signal && signal.aborted) return false;
     stdout.write('No interactive approval was available; action denied.\n');
     return false;
   }
@@ -667,7 +694,8 @@ function sessionCreateOptions() {
     maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
     settingsOverrides: SESSION_OPTIONS.settingsOverrides,
     settingSources: SESSION_OPTIONS.settingSources || null,
-    agent: SESSION_OPTIONS.agent || null
+    agent: SESSION_OPTIONS.agent || null,
+    channels: [...SESSION_OPTIONS.channels, ...(SESSION_OPTIONS.devChannelsConfirmed ? SESSION_OPTIONS.devChannels : [])]
   };
 }
 
@@ -1282,13 +1310,14 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (!config.configured) throw new Error('No model provider is configured. Run oasis setup, or set OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the API key variable.');
+  if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   const { exitCode } = await runHeadless({
     prompt, root, config, autoApprove,
     outputFormat: headless.outputFormat,
     maxTurns: headless.maxTurns,
     planOnly: headless.planOnly,
     jsonSchema: headless.jsonSchema || null,
-    sessionOptions: sessionCreateOptions(),
+    sessionOptions: { ...sessionCreateOptions(), channels: [] },
     persistence: { ...persistence, fork: Boolean(SESSION_OPTIONS.forkSession) },
     env: process.env,
     ...(streamInput ? { inputStream: await streamInputChannel() } : {}),
@@ -1542,6 +1571,27 @@ async function interactive(root, autoApprove, persistence = {}) {
   if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || bannerConfig.model || '', provider: bannerConfig.protocol || '', mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   const startupSettings = await loadSettings(root).catch(() => null);
+  if (SESSION_OPTIONS.devChannels.length) {
+    stdout.write('\n\x1b[1mWARNING: loading development channels\x1b[22m\n  ' + SESSION_OPTIONS.devChannels.join('\n  ') + '\nAnything that can reach these servers can put text in front of the agent' + '. Only use channels you trust.\n');
+    const answer = await askLine('Type "yes" if you are using this for local development (anything else exits): ').catch(() => '');
+    if (String(answer).trim().toLowerCase() !== 'yes') { stdout.write('Exiting.\n'); return; }
+    SESSION_OPTIONS.devChannelsConfirmed = true;
+  }
+  // Channels push messages before you type anything, so start the session (and its MCP servers) now.
+  if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannelsConfirmed) {
+    const config = await loadConfig().catch(() => null);
+    if (config && config.configured) {
+      if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+      let restored = null;
+      if (persistence.resumeId) { restored = await loadSession(root, persistence.resumeId).catch(() => null); persistence.resumeId = null; }
+      session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
+      const { channelClients } = await import('./channels.mjs');
+      const live = channelClients(session).map((client) => client.config.name);
+      const requested = session.channels.map((entry) => entry.raw);
+      stdout.write('[channels] ' + (live.length ? 'Listening on ' + live.join(', ') : 'No connected MCP server declared the claude/channel capability for ' + requested.join(', ')) + '.\n');
+      if (session.settings && session.settings.channelsEnabled === false) stdout.write('[channels] channelsEnabled is false in settings, so channel messages are dropped.\n');
+    }
+  }
   const inputState = { history: await loadHistory(root).catch(() => []), completer: createCompleter({ root, commands: () => interactiveCommandList(root) }) };
   const pendingShell = [];
   while (true) {
@@ -1994,6 +2044,15 @@ async function main() {
     if (arg === '--tools') { SESSION_OPTIONS.tools = needValue(arg).split(/[\s,]+/).filter(Boolean); continue; }
     if (arg === '--mcp-config') { SESSION_OPTIONS.pendingFiles.push({ kind: 'mcp', file: needValue(arg) }); continue; }
     if (arg === '--strict-mcp-config') { SESSION_OPTIONS.strictMcpConfig = true; continue; }
+    if (arg === '--channels' || arg.startsWith('--channels=') || arg === '--dangerously-load-development-channels' || arg.startsWith('--dangerously-load-development-channels=')) {
+      const dev = arg.startsWith('--dangerously');
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!value) throw new Error(arg + ' needs a list like server:webhook or plugin:telegram@claude-plugins-official.');
+      const { parseChannelEntries } = await import('./channels.mjs');
+      const entries = parseChannelEntries(value);
+      (dev ? SESSION_OPTIONS.devChannels : SESSION_OPTIONS.channels).push(...entries.map((entry) => entry.raw));
+      continue;
+    }
     if (arg === '--settings') { SESSION_OPTIONS.pendingFiles.push({ kind: 'settings', file: needValue(arg) }); continue; }
     if (arg === '--setting-sources') {
       const list = needValue(arg).split(/[\s,]+/).filter(Boolean);

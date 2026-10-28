@@ -61,6 +61,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Editor chat panel + SDK control protocol | Claude Code VS Code panel; SDK `control_request` `can_use_tool` / `interrupt` | **Closed.** OASIS sidebar and editor-tab chat with streaming text, tool rows, permission cards, Stop, New chat and Add Selection; `oasis -p --input-format stream-json --permission-prompt-tool stdio` answers approvals and interrupts over stdin/stdout for any host. |
 | Microsoft Foundry | `CLAUDE_CODE_USE_FOUNDRY`, `ANTHROPIC_FOUNDRY_RESOURCE` / `_BASE_URL`, `_API_KEY`, `_AUTH_TOKEN`, Entra ID default credentials | **Closed.** Native `foundry` protocol with the same env vars and auth order (bearer > API key > `az` Entra token), resource-name validation, deployment-name models, streaming, setup preset. |
 | Monitor tool + background notifications + plugin monitors | `Monitor` tool (command or WebSocket, events wake Claude), background-task completion notices, plugin `monitors/monitors.json` | **Closed.** `monitor` tool (argv command under Bash rules, or `ws`), line filter, batching, deadlines/persistent, idle-session wake, headless follow-up turns; automatic exit notices for background commands; plugin monitors with `always` / `on-skill-invoke:` triggers and `plugin validate` checks. |
+| Channels + MCP server instructions | `--channels`, `notifications/claude/channel`, permission relay, `channelsEnabled`, server `instructions` in context | **Closed.** Same capability keys, notification methods, `<channel>` format, meta-key rules, five-letter relay ids, first-verdict-wins relay with sanitized/redacted previews, dev-channel confirmation, `channelsEnabled: false`, idle wake. Server `instructions` are added to the system prompt. |
 
 ## Ranked next improvements
 
@@ -86,7 +87,7 @@ Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require proces
 
 ### 5. Remaining platform and ecosystem gaps
 
-A native Gemini adapter; PowerShell and Windows sandboxing; npm plugin sources, plugin themes/channels, OS-keychain storage for sensitive plugin options.
+A native Gemini adapter; PowerShell and Windows sandboxing; npm plugin sources, plugin themes, OS-keychain storage for sensitive plugin options.
 
 ### 6. Terminal experience polish
 
