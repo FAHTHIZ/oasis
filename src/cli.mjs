@@ -72,6 +72,7 @@ function printHelp() {
     '  oasis --continue              Resume the most recent saved session and keep saving it',
     '  oasis --resume SESSION_ID     Resume one saved session',
     '  oasis mcp list                List configured Model Context Protocol servers',
+    '  oasis ide [install|package]   Connect VS Code/Cursor/Windsurf: selection context, diff review, diagnostics',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
@@ -502,9 +503,21 @@ async function runInteractiveCommand(command, args) {
 
 // Parallel subagents can request approval at the same time; ask one question at a time.
 let approvalQueue = Promise.resolve();
+// The interactive session connected to an IDE, if any: edit approvals open its diff view.
+let ideSession = null;
+const IDE_REVIEW_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file']);
 function approve(prompt, forceInteractive = false, autoApprove = false, meta = {}) {
   if (autoApprove && !forceInteractive) return Promise.resolve(true);
-  const next = approvalQueue.then(() => askApproval(prompt, forceInteractive, meta));
+  const next = approvalQueue.then(async () => {
+    if (ideSession && ideSession.ide && meta && IDE_REVIEW_TOOLS.has(meta.tool)) {
+      const { reviewEditInIde } = await import('./ide.mjs');
+      stdout.write('\n[ide] Review the proposed change in ' + ideSession.ide.ideName + ' (Accept / Reject)...\n');
+      const decision = await reviewEditInIde(ideSession, meta);
+      if (decision !== null) { stdout.write('[ide] ' + (decision ? 'Accepted' : 'Rejected') + ' in ' + ideSession.ide.ideName + '.\n'); return decision; }
+      stdout.write('[ide] The diff could not be shown in the IDE; answer here instead.\n');
+    }
+    return askApproval(prompt, forceInteractive, meta);
+  });
   approvalQueue = next.catch(() => {});
   return next;
 }
@@ -1062,6 +1075,25 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     session = await createSession({ root, config, ...sessionCreateOptions() });
   }
   session.config = config;
+  // Auto-connect to the IDE when launched from a VS Code (or fork) integrated terminal.
+  if (!session.ideChecked) {
+    session.ideChecked = true;
+    if (process.env.OASIS_IDE_PORT || process.env.TERM_PROGRAM === 'vscode' || process.env.OASIS_IDE === 'auto') {
+      try {
+        const { discoverIde, attachIde } = await import('./ide.mjs');
+        const client = await discoverIde(root, process.env);
+        if (client) { attachIde(session, client); stdout.write('[ide] Connected to ' + client.ideName + ' — selections are shared and edits open as diffs there.\n'); }
+      } catch {}
+    }
+  }
+  if (session.ide) ideSession = session;
+  if (session.ide) {
+    try {
+      const { ideSelectionContext } = await import('./ide.mjs');
+      const selection = await ideSelectionContext(session);
+      if (selection) { stdout.write('[ide] ' + selection.label + '\n'); prompt = selection.text + '\n\n' + prompt; }
+    } catch {}
+  }
   if (!session.onAgentNotice) session.onAgentNotice = (text) => stdout.write('\n[agents] ' + String(text).split('\n')[0] + ' The report will be shared with Oasis on your next message (/tasks to read it now).\n');
   reportSessionNotices(session);
   if (session.mcpFailures && session.mcpFailures.length) {
@@ -2009,6 +2041,7 @@ async function main() {
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest, workspace);
+  if (command === 'ide') { const { ideCli } = await import('./ide.mjs'); return await ideCli(workspace, rest, { env: process.env }); }
   if (command === 'extensions' || command === 'extension') return await manageExternalExtensions(workspace, rest, autoApprove);
   if (command === 'plugins' || command === 'plugin') {
     // Claude Code plugins and marketplaces; the bundled capability catalog stays under

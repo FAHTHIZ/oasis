@@ -38,6 +38,7 @@ export const BUILTIN_COMMANDS = {
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
   mcp: 'Show connected MCP servers and their tools',
+  ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
   'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
@@ -242,6 +243,15 @@ export async function runBuiltinCommand(name, argument, state) {
         if (session.messages[0] && session.messages[0].role === 'system') session.messages[0].content += note;
       }
       return { output: 'Added ' + result.accepted.at(-1) + ' for this session.' };
+    }
+    case 'ide': {
+      const { discoverIde, attachIde, listIdeLocks } = await import('./ide.mjs');
+      if (session && session.ide && argument.trim() !== 'reconnect') return { output: 'Connected to ' + session.ide.ideName + ' (port ' + session.ide.port + '). Selections are shared with each prompt; edit approvals open as diffs there.' };
+      const client = await discoverIde(root, env);
+      if (client && session) { attachIde(session, client); return { output: 'Connected to ' + client.ideName + '. Selections are now shared and edit approvals open as diffs in the IDE.' }; }
+      if (client) return { output: client.ideName + ' is available; it connects when the session starts.' };
+      const locks = await listIdeLocks(env);
+      return { output: 'No IDE bridge found for this folder.' + (locks.length ? ' Running bridges: ' + locks.map((lock) => (lock.ideName || 'IDE') + ' [' + (lock.workspaceFolders || []).join(', ') + ']').join('; ') + '.' : '') + ' Install the extension with: oasis ide install, then open this folder in VS Code.' };
     }
     case 'plugin':
     case 'plugins': {

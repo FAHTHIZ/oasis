@@ -1,0 +1,35 @@
+{
+  "name": "oasis-vscode",
+  "displayName": "OASIS",
+  "description": "Run the OASIS coding agent in VS Code: selection context, native diff review for edits, and editor diagnostics.",
+  "version": "0.1.0",
+  "publisher": "fahthiz",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/FAHTHIZ/oasis.git" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["AI", "Programming Languages", "Other"],
+  "main": "./src/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "oasis.openTerminal", "title": "OASIS: Run in Terminal", "icon": "$(sparkle)" },
+      { "command": "oasis.continueSession", "title": "OASIS: Continue Last Session" },
+      { "command": "oasis.insertReference", "title": "OASIS: Insert File Reference (@file#lines)" },
+      { "command": "oasis.rejectAllDiffs", "title": "OASIS: Close Proposed Diffs" }
+    ],
+    "keybindings": [
+      { "command": "oasis.openTerminal", "key": "ctrl+escape", "mac": "cmd+escape" },
+      { "command": "oasis.insertReference", "key": "ctrl+alt+k", "mac": "cmd+alt+k", "when": "editorTextFocus" }
+    ],
+    "menus": {
+      "editor/title": [ { "command": "oasis.openTerminal", "group": "navigation" } ]
+    },
+    "configuration": {
+      "title": "OASIS",
+      "properties": {
+        "oasis.command": { "type": "string", "default": "oasis", "description": "Command used to start OASIS in the terminal." },
+        "oasis.openInEditor": { "type": "boolean", "default": false, "description": "Open the OASIS terminal in an editor tab beside your code." }
+      }
+    }
+  }
+}
