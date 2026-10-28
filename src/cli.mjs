@@ -1564,13 +1564,22 @@ async function readMainInput(root, session, state) {
   return result.text;
 }
 
+// /theme and the "theme" setting (Claude Code's ~/.claude.json theme is honored too).
+async function applyThemeFromSettings(settings) {
+  try {
+    const { applyTheme, resolveTheme, themePreference } = await import('./themes.mjs');
+    applyTheme(resolveTheme(themePreference({ env: process.env, settings }), { env: process.env, plugins: (settings && settings.pluginThemeSources) || [] }));
+  } catch {}
+}
+
 async function interactive(root, autoApprove, persistence = {}) {
   let session = null;
   await ensureModelProviderSetup(root);
   const bannerConfig = await loadConfig().catch(() => ({}));
+  const startupSettings = await loadSettings(root).catch(() => null);
+  await applyThemeFromSettings(startupSettings);
   if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || bannerConfig.model || '', provider: bannerConfig.protocol || '', mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
-  const startupSettings = await loadSettings(root).catch(() => null);
   if (SESSION_OPTIONS.devChannels.length) {
     stdout.write('\n\x1b[1mWARNING: loading development channels\x1b[22m\n  ' + SESSION_OPTIONS.devChannels.join('\n  ') + '\nAnything that can reach these servers can put text in front of the agent' + '. Only use channels you trust.\n');
     const answer = await askLine('Type "yes" if you are using this for local development (anything else exits): ').catch(() => '');

@@ -76,6 +76,7 @@ export const BUILTIN_COMMANDS = {
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
   keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
+  theme: 'List or switch color themes (/theme NAME, custom:<slug>, plugin:<plugin>:<slug>, auto)',
   'terminal-setup': 'Set up Shift+Enter for newlines in your terminal',
   'privacy-settings': 'Show what Oasis sends where and how to turn things off',
   stop: 'Stop background agents and processes in this session',
@@ -467,6 +468,32 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'fewer-permission-prompts':
       return { output: '[permissions] Looking for safe commands to allowlist.', prompt: 'Help me get fewer permission prompts. Read this project\'s saved Oasis sessions and settings (.oasis/settings.json, .oasis/settings.local.json; sessions are listed by /resume) and find commands and MCP tools I approved repeatedly. Keep only clearly read-only ones (for example git status, git diff, git log, ls, test runners, linters, read-only MCP getters). Never include anything that writes, deletes, installs, pushes, or runs arbitrary code (no rm, curl | sh, npm install, git push, bash -c). Show the prioritized list with a one-line reason each, then add them to permissions.allow in .oasis/settings.json using rules like "run_command(git status)" or "run_command(npm test:*)" after I approve.' };
+    case 'theme': {
+      // Claude Code-compatible themes; the choice is saved as "theme" in user settings.
+      const themes = await import('./themes.mjs');
+      const { userSettingsPath } = await import('./settings.mjs');
+      const { readFile, writeFile, mkdir } = await import('node:fs/promises');
+      const settings = (session && session.settings) || state.settings || null;
+      const plugins = (settings && settings.pluginThemeSources) || [];
+      const wanted = String(argument || '').trim();
+      const list = themes.listThemes({ env, plugins });
+      const current = themes.currentTheme();
+      if (!wanted || wanted === 'list') {
+        const preference = themes.themePreference({ env, settings });
+        const lines = list.map((theme) => (theme.id === preference ? '● ' : '  ') + theme.id.padEnd(28) + (theme.name !== theme.id ? ' ' + theme.name : ''));
+        return { output: 'Themes (current: ' + current.name + '):\n' + lines.join('\n') + '\n\n' + themes.themePreview(current) + '\n\nUse /theme NAME to switch. Custom themes are JSON files in ~/.claude/themes/ ({ "name", "base", "overrides" }).' };
+      }
+      if (!list.some((theme) => theme.id === wanted)) return { output: 'Unknown theme "' + wanted + '". Run /theme to list the available themes.' };
+      const theme = themes.applyTheme(themes.resolveTheme(wanted, { env, plugins }));
+      if (settings) settings.theme = wanted;
+      const file = userSettingsPath(env);
+      let saved = {};
+      try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
+      saved.theme = wanted;
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
+      return { output: 'Theme set to ' + theme.name + (env.OASIS_THEME ? ' (OASIS_THEME is set and wins at the next start)' : '') + '.\n' + themes.themePreview(theme) };
+    }
     case 'vim': {
       // Toggle vim editing for the prompt; saved as "editorMode" in user settings.
       const { userSettingsPath } = await import('./settings.mjs');
