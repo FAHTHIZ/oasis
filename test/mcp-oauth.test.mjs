@@ -85,6 +85,62 @@ test('WWW-Authenticate parsing and discovery through protected-resource metadata
   assert.deepEqual(found.scopes, ['tools.read']);
 });
 
+test('OAuth discovery refuses redirects and bounds metadata bodies', async () => {
+  const origin = 'https://mcp.example';
+  const requests = [];
+  const authorizationMetadata = {
+    issuer: origin,
+    authorization_endpoint: origin + '/authorize',
+    token_endpoint: origin + '/token',
+    registration_endpoint: origin + '/register',
+    code_challenge_methods_supported: ['S256']
+  };
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (url === origin + '/mcp') {
+      return new Response(null, {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer resource_metadata="' + origin + '/meta"' }
+      });
+    }
+    if (url === origin + '/meta') {
+      return new Response(null, { status: 302, headers: { location: 'https://attacker.example/metadata' } });
+    }
+    if (url === origin + '/.well-known/oauth-authorization-server') {
+      return new Response(JSON.stringify(authorizationMetadata), { headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  const found = await discoverOAuth(origin + '/mcp', { fetch: fetchImpl });
+  assert.equal(found.tokenEndpoint, origin + '/token');
+  assert.equal(requests.some((request) => request.url.startsWith('https://attacker.example/')), false);
+  assert.equal(requests.find((request) => request.url === origin + '/mcp').options.redirect, 'manual');
+  assert.equal(requests.find((request) => request.url === origin + '/meta').options.redirect, 'manual');
+  assert.ok(requests.find((request) => request.url === origin + '/meta').options.signal instanceof AbortSignal);
+
+  let largeBodyRead = false;
+  const oversizedFetch = async (url) => {
+    if (url === origin + '/large') {
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"metadata":"' + 'x'.repeat(270 * 1024) + '"}'));
+          controller.close();
+        },
+        cancel() { largeBodyRead = true; }
+      });
+      return new Response(body, { headers: { 'content-type': 'application/json' } });
+    }
+    if (url === origin + '/.well-known/oauth-authorization-server') {
+      return new Response(JSON.stringify(authorizationMetadata), { headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(null, { status: 404 });
+  };
+  const large = await discoverOAuth(origin + '/mcp', { fetch: oversizedFetch, resourceMetadataUrl: origin + '/large' });
+  assert.equal(large.tokenEndpoint, origin + '/token');
+  assert.equal(large.scopes, null, 'oversized resource metadata is ignored');
+});
+
 test('a server that needs sign-in fails with clear advice, then works after oasis mcp login', async (t) => {
   const { base, state } = await fakeServer(t);
   const { root, env } = await workspace(t, base);
