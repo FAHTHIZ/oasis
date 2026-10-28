@@ -1021,6 +1021,13 @@ async function manageMcp(rest, root = process.cwd()) {
       for (const server of project.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
       for (const failure of project.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
+    const { loadClaudeCodeMcpServers } = await import('./mcp-project.mjs');
+    const claude = await loadClaudeCodeMcpServers(root, { env: process.env }).catch((error) => ({ local: [], user: [], failures: [{ name: '~/.claude.json', error: error.message }] }));
+    if (claude.local.length || claude.user.length || claude.failures.length) {
+      stdout.write('Claude Code servers from ' + (claude.file || '~/.claude.json') + ':\n');
+      for (const server of [...claude.local, ...claude.user]) stdout.write('  ' + server.name + ' — ' + (server.source === 'claude-local' ? 'local' : 'user') + ' scope, ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const failure of claude.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
+    }
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
     return;
   }

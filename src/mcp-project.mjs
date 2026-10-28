@@ -50,6 +50,38 @@ export async function loadProjectMcpServers(root, options = {}) {
   return { servers, failures, file };
 }
 
+// Claude Code keeps `claude mcp add` servers in ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json):
+// top-level "mcpServers" is the user scope and projects[<abs path>].mcpServers is the local scope.
+// Both are written by the user, so (unlike .mcp.json) they do not need workspace trust.
+export function claudeJsonPath(env = process.env) {
+  const base = env.CLAUDE_CONFIG_DIR || env.HOME || env.USERPROFILE || '';
+  return base ? path.join(base, '.claude.json') : null;
+}
+
+export async function loadClaudeCodeMcpServers(root, options = {}) {
+  const env = options.env || process.env;
+  const empty = { local: [], user: [], failures: [], file: null };
+  if (env.OASIS_IGNORE_CLAUDE_MCP === '1' || env.OASIS_IGNORE_CLAUDE_SETTINGS === '1') return empty;
+  const file = options.file || claudeJsonPath(env);
+  if (!file) return empty;
+  let parsed;
+  try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch (error) {
+    if (error.code === 'ENOENT') return empty;
+    return { ...empty, failures: [{ name: '~/.claude.json', error: 'could not be read: ' + error.message }] };
+  }
+  if (!parsed || typeof parsed !== 'object') return empty;
+  const resolved = path.resolve(root);
+  let projectEntry = null;
+  if (parsed.projects && typeof parsed.projects === 'object') {
+    for (const [key, value] of Object.entries(parsed.projects)) {
+      if (path.resolve(key) === resolved) { projectEntry = value; break; }
+    }
+  }
+  const local = projectEntry && typeof projectEntry === 'object' ? parseMcpServerEntries(projectEntry, env, 'claude-local') : { servers: [], failures: [] };
+  const user = parseMcpServerEntries(parsed, env, 'claude-user');
+  return { local: local.servers, user: user.servers, failures: [...local.failures, ...user.failures].map((f) => ({ ...f, name: 'claude:' + f.name })), file };
+}
+
 // Parses a Claude-style { mcpServers: { name: spec } } object (used by .mcp.json and --mcp-config).
 export function parseMcpServerEntries(parsed, env = process.env, source = 'project') {
   const entries = parsed && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers) ? Object.entries(parsed.mcpServers) : [];
