@@ -241,11 +241,23 @@ export async function loadSettings(root, options = {}) {
     if (settings.defaultShell === 'powershell' || settings.defaultShell === 'bash') result.defaultShell = settings.defaultShell;
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
     if (settings.autoMemory === true) result.autoMemory = true;
-    // Auto mode classifier: { "model": "cheap-model", "rules": ["Never touch infra/"] }
+    // Auto mode classifier. Claude Code's schema { environment, allow, soft_deny, hard_deny } (each
+    // replaces the defaults unless it lists "$defaults"), plus Oasis's { model, rules, classifyAllShell }.
+    // Like Claude Code, shared project settings cannot loosen the classifier: from project/local scopes
+    // only extra soft_deny/hard_deny entries and rules are used.
     if (settings.autoMode && typeof settings.autoMode === 'object') {
       result.autoMode ||= { model: null, rules: [] };
-      if (typeof settings.autoMode.model === 'string' && settings.autoMode.model.trim()) result.autoMode.model = settings.autoMode.model.trim();
+      const personal = scope === 'user' || scope === 'managed' || scope === 'flag';
+      if (personal && typeof settings.autoMode.model === 'string' && settings.autoMode.model.trim()) result.autoMode.model = settings.autoMode.model.trim();
       result.autoMode.rules.push(...stringList(settings.autoMode.rules).map((rule) => rule.slice(0, 500)));
+      if (typeof settings.autoMode.classifyAllShell === 'boolean' && (personal || settings.autoMode.classifyAllShell)) result.autoMode.classifyAllShell = settings.autoMode.classifyAllShell;
+      for (const section of ['environment', 'allow', 'soft_deny', 'hard_deny']) {
+        const list = settings.autoMode[section];
+        if (!Array.isArray(list)) continue;
+        const clean = list.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000)).slice(0, 200);
+        if (personal) { result.autoMode[section] = clean; (result.autoMode.sources ||= {})[section] = file; }
+        else if (section === 'soft_deny' || section === 'hard_deny') { result.autoMode.project ||= {}; (result.autoMode.project[section] ||= []).push(...clean.filter((item) => item !== '$defaults')); }
+      }
     }
     if (settings.lspServers && typeof settings.lspServers === 'object' && !Array.isArray(settings.lspServers)) {
       for (const [name, spec] of Object.entries(settings.lspServers)) {

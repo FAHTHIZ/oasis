@@ -122,6 +122,7 @@ Oasis separates three things that are often all called “plugins”:
   oasis plugin list | enable NAME | disable NAME | update [NAME] | uninstall NAME
   oasis plugin validate ./my-plugin                      # check a plugin or marketplace you are writing
   oasis --plugin-dir ./my-plugin                         # load a plugin for one session while developing
+  oasis --plugin-url https://example.com/my-plugin.zip   # download a plugin .zip for this session only
   ```
 
   Inside a session use `/plugin ...` with the same arguments. An enabled plugin contributes namespaced slash commands (`/feature-dev:feature-dev`), subagents (`feature-dev:code-reviewer`), Agent Skills, hooks (`hooks/hooks.json`, run with `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, and `CLAUDE_PROJECT_DIR` set) and MCP servers (`.mcp.json`, with `${CLAUDE_PLUGIN_ROOT}` expanded). Marketplace entries may use relative, `github`, `url`, or `git-subdir` sources, `metadata.pluginRoot`, and `strict: false`. Enablement uses Claude Code's `"enabledPlugins": {"name@marketplace": true}` key: user settings always apply; a project's `.claude/settings.json` can enable plugins once you `oasis trust` the workspace. Plugins you already installed and enabled in Claude Code (`~/.claude/plugins`) load automatically. Plugins run hooks and MCP servers with your permissions, just as in Claude Code, so install only plugins you trust. Set `OASIS_PLUGINS=off` to disable all plugins for a run.
@@ -233,6 +234,22 @@ In `auto` mode, a classifier model looks at every action that would normally ask
 ~~~json
 { "autoMode": { "model": "gpt-4.1-mini", "rules": ["Never touch files under infra/", "git push to feature branches is fine"] } }
 ~~~
+
+Oasis also reads Claude Code's `autoMode` schema, so the same block works in `~/.claude/settings.json`. It has four sections: `environment` (infrastructure you trust), `allow` (exceptions to soft deny), `soft_deny` (blocked unless you clearly asked) and `hard_deny` (always blocked). Each section you set replaces the built-in list unless you include the literal `"$defaults"`. Write rules as prose, optionally starting with a `Label: ` prefix:
+
+~~~json
+{ "autoMode": {
+    "environment": ["$defaults", "Trusted bucket: s3://acme-builds belongs to us."],
+    "hard_deny": ["$defaults", "Prod database: never run migrations against prod."],
+    "classifyAllShell": true } }
+~~~
+
+`classifyAllShell: true` sends shell commands through the classifier even when an allow rule matches them. Like Claude Code, shared project settings cannot loosen the classifier. From project and local settings, only extra `soft_deny` and `hard_deny` entries (and `rules`) are used, and they are added to the defaults. Inspect and manage the rules with:
+
+- `oasis auto-mode defaults [--label PREFIX]` prints the built-in rules as JSON.
+- `oasis auto-mode config` prints the rules the classifier actually uses.
+- `oasis auto-mode critique` flags rules that drop the defaults, are vague or too short, look like regexes, or allow too much.
+- `oasis auto-mode reset [--yes]` removes your user `autoMode` section.
 
 **Trust:** a cloned repository can ship any settings file. Project rules that make Oasis stricter (`deny`, `ask`) always apply. Rules that loosen it (`allow`, hooks, mode, sandbox) apply only after you run `oasis trust` in that workspace. `oasis permissions` shows the effective policy.
 

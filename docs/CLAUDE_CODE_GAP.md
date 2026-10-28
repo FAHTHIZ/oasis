@@ -85,6 +85,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Debug log, /heapdump, /team-onboarding | `--debug [categories]`, `--debug-file`, `/debug`, `/heapdump`, `/team-onboarding` | **Closed.** Category filters, secret masking, API/tools/hooks/MCP/permission events. |
 | Safe mode, restricted mode, unattended prompts | `--safe-mode` (`CLAUDE_CODE_SAFE_MODE`), `--restricted`, `--permission-prompts none\|host`, `--autocompact`, `--append-subagent-system-prompt[-file]`, `--allow-dangerously-skip-permissions` | Done |
 | Background commands, exec jobs, purge | Top-level `oasis attach\|logs\|stop\|kill\|rm\|respawn` (match by ID prefix or name), `respawn --all`, `--bg --exec CMD` shell jobs, `oasis purge [path] --dry-run -y -i --all` | Done |
+| Auto mode config, plugin URLs | Claude `autoMode` schema (`environment`/`allow`/`soft_deny`/`hard_deny`, `$defaults`, labels, `classifyAllShell`, project scopes can only add denies), `oasis auto-mode defaults\|config\|critique\|reset`, `--plugin-url` (built-in zip reader) | Done |
 
 ## Ranked next improvements
 
