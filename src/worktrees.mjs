@@ -89,6 +89,17 @@ export async function finishWorktree(root, worktree, options = {}) {
   };
 }
 
+export async function readWorktreeDiff(root, baseCommit, headCommit, options = {}) {
+  const env = options.env || process.env;
+  if (!/^[a-f0-9]{40}$/i.test(String(baseCommit || ''))) throw new Error('A full base commit SHA is required to read an isolated task diff.');
+  if (!/^[a-f0-9]{7,40}$/i.test(String(headCommit || ''))) throw new Error('A valid task commit SHA is required to read an isolated task diff.');
+  const maxChars = Math.max(1000, Math.min(250000, Number(options.maxChars) || 180000));
+  // Disable external diff drivers and text conversion hooks: a review endpoint must
+  // never execute repository-provided diff helpers.
+  const diff = await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--unified=3', baseCommit, headCommit, '--'], env, 30000);
+  return { diff: diff.slice(0, maxChars), truncated: diff.length > maxChars };
+}
+
 export async function removeWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
   await git(root, ['worktree', 'remove', '--force', worktree.path], env).catch(async () => {
