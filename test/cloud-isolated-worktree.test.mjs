@@ -117,6 +117,17 @@ test('browser coding task can run in a clean isolated worktree and leaves a revi
   assert.equal(snapshot.result.isolatedWorktree.changed, true, JSON.stringify(snapshot.result.isolatedWorktree));
   assert.equal(snapshot.result.isolatedWorktree.branch, branch);
   assert.ok(snapshot.result.isolatedWorktree.files.includes('task-output.txt'));
+
+  const anonymousDiff = await fetch(base + '/api/jobs/' + jobId + '/diff');
+  assert.equal(anonymousDiff.status, 401);
+  const diffResponse = await fetch(base + '/api/jobs/' + jobId + '/diff', { headers });
+  assert.equal(diffResponse.status, 200, await diffResponse.clone().text());
+  const artifact = await diffResponse.json();
+  assert.equal(artifact.branch, branch);
+  assert.equal(artifact.commit, snapshot.result.isolatedWorktree.commit);
+  assert.match(artifact.diff, /task-output\\.txt/);
+  assert.match(artifact.diff, /Created inside isolated worktree/);
+  assert.equal(artifact.truncated, false);
   assert.equal(git(root, 'show', branch + ':task-output.txt'), 'Created inside isolated worktree.');
   await assert.rejects(readFile(path.join(root, 'task-output.txt')));
   assert.equal(git(root, 'status', '--porcelain'), '');
