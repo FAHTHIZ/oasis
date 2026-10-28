@@ -1,7 +1,7 @@
 // Session-level tools: deferred MCP tool search, background process monitoring,
 // entering plan mode, desktop notifications, and in-session scheduled prompts.
 import { spawn } from 'node:child_process';
-import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
+import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, SHARED_TASK_READ_ONLY_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 
@@ -35,7 +35,7 @@ export const SESSION_TOOL_DEFINITIONS = [
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_TOOL_NAMES];
+export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.

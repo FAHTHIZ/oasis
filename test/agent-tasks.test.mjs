@@ -6,6 +6,7 @@ import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox } from '../src/agent-tasks.mjs';
 
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
@@ -160,6 +161,23 @@ test('background agents cannot prompt: unapproved actions are denied', async (t)
   assert.match(toolResult, /not approved|denied/i);
 });
 
+test('team messages reach running peer inboxes without enabling parent-only agent controls', () => {
+  const main = {};
+  const registry = agentRegistry(main);
+  const sender = registerAgent(main, { type: 'general-purpose', description: 'API designer', child: { inbox: [] } });
+  const receiver = registerAgent(main, { type: 'general-purpose', description: 'test specialist', child: { inbox: [] } });
+  const senderSession = { agentTasks: registry, agentId: sender.id };
+  const sent = sendTeamMessage(senderSession, { to: receiver.id, message: 'Use the same response envelope and add a regression test.' });
+  assert.equal(sent.delivered, 'queued');
+  assert.equal(sent.from, sender.id);
+  assert.equal(sent.to, receiver.id);
+  assert.match(drainInbox(receiver.child), /Direct message from teammate agent_1/);
+  assert.match(drainInbox(receiver.child), /^$/);
+  assert.throws(() => sendTeamMessage(senderSession, { to: sender.id, message: 'self' }), /itself/);
+  receiver.status = 'completed';
+  assert.throws(() => sendTeamMessage(senderSession, { to: receiver.id, message: 'too late' }), /not running/);
+});
+
 test('subagents cannot manage other agents', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -173,5 +191,6 @@ test('subagents cannot manage other agents', async (t) => {
   await runAgentTurn(session, 'delegate');
   const names = childRequests[0].tools.map((tool) => tool.function.name);
   for (const name of ['task', 'agent_status', 'send_message', 'agent_stop']) assert.ok(!names.includes(name), name);
+  assert.ok(names.includes('team_send_message'), 'subagents can message peers without managing their lifecycle');
   assert.equal(session.agentTasks.agents.get('agent_1').status, 'completed', 'foreground agents are registered too');
 });
