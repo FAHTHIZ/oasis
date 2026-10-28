@@ -204,6 +204,36 @@ export function expandPluginVariables(text, vars) {
 // ---------- userConfig ----------
 
 const secretsFile = (env) => path.join(pluginHome(env), 'plugin-secrets.json');
+const secretsAccount = (env) => 'plugin-secrets:' + pluginHome(env);
+
+// Sensitive option values live in the OS keychain (macOS Keychain, Linux Secret
+// Service) when available. plugin-secrets.json then only holds a marker
+// ({ "__storage": "keychain" }); without a keychain it holds the values (mode 0600).
+async function readPluginSecrets(env) {
+  const file = (await readJson(secretsFile(env), {})) || {};
+  if (!file.__storage) return file;
+  const { secureGet } = await import('./secure-store.mjs');
+  const raw = secureGet(secretsAccount(env), env, file.__storage);
+  if (!raw) return {};
+  try { const parsed = JSON.parse(raw); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
+}
+
+async function writePluginSecrets(env, secrets) {
+  const { secureSet, secureStoreBackend } = await import('./secure-store.mjs');
+  const backend = secureStoreBackend(env);
+  if (backend) {
+    const stored = secureSet(secretsAccount(env), JSON.stringify(secrets), env, backend);
+    if (stored.ok) { await writeJson(secretsFile(env), { __storage: backend }); return backend; }
+  }
+  await writeJson(secretsFile(env), secrets);
+  return 'file';
+}
+
+/** Where sensitive plugin options are stored: "keychain", "libsecret" or "file". */
+export async function pluginSecretsStorage(env = process.env) {
+  const file = (await readJson(secretsFile(env), {})) || {};
+  return file.__storage || 'file';
+}
 
 /** pluginConfigs from Claude Code user settings, OASIS user settings, and the 0600 secrets file. */
 export async function readPluginConfigs(env = process.env) {
@@ -218,7 +248,7 @@ export async function readPluginConfigs(env = process.env) {
   };
   merge(((await readJson(path.join(claudeHome(env), 'settings.json'), {})) || {}).pluginConfigs);
   merge(((await readJson(userSettingsPath(env), {})) || {}).pluginConfigs);
-  merge(await readJson(secretsFile(env), {}));
+  merge(await readPluginSecrets(env));
   return out;
 }
 
@@ -238,7 +268,7 @@ export function userConfigValues(manifest, saved = {}) {
   return out;
 }
 
-/** Store one userConfig value. Sensitive options go to a 0600 file, others to user settings. */
+/** Store one userConfig value. Sensitive options go to the OS keychain (or a 0600 file), others to user settings. */
 export async function setPluginOption(plugin, key, value, options = {}) {
   const env = options.env || process.env;
   const schema = userConfigSchema(plugin.manifest);
@@ -249,10 +279,11 @@ export async function setPluginOption(plugin, key, value, options = {}) {
   else if (option.type === 'boolean') parsed = /^(1|true|yes|on)$/i.test(String(value));
   else if (option.multiple) parsed = String(value).split(',').map((item) => item.trim()).filter(Boolean);
   if (option.sensitive) {
-    const secrets = (await readJson(secretsFile(env), {})) || {};
+    const secrets = await readPluginSecrets(env);
+    delete secrets.__storage;
     secrets[plugin.id] = { ...(secrets[plugin.id] || {}), [key]: parsed };
-    await writeJson(secretsFile(env), secrets);
-    return { key, sensitive: true };
+    const storage = await writePluginSecrets(env, secrets);
+    return { key, sensitive: true, storage };
   }
   const { userSettingsPath } = await import('./settings.mjs');
   const file = userSettingsPath(env);
@@ -908,7 +939,7 @@ export async function pluginCli(root, args = [], options = {}) {
       const eq = pair.indexOf('=');
       if (eq < 1) throw new Error('Expected KEY=VALUE, got "' + pair + '".');
       const result = await setPluginOption(plugin, pair.slice(0, eq), pair.slice(eq + 1), { env });
-      out('Set ' + plugin.id + ' ' + result.key + (result.sensitive ? ' (stored in a private file)' : ' = ' + JSON.stringify(result.value)) + '\n');
+      out('Set ' + plugin.id + ' ' + result.key + (result.sensitive ? (result.storage === 'file' ? ' (stored in a private 0600 file)' : ' (stored in the OS keychain)') : ' = ' + JSON.stringify(result.value)) + '\n');
     }
     out('Start a new session to apply.\n');
     return;

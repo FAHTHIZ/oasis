@@ -63,6 +63,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Monitor tool + background notifications + plugin monitors | `Monitor` tool (command or WebSocket, events wake Claude), background-task completion notices, plugin `monitors/monitors.json` | **Closed.** `monitor` tool (argv command under Bash rules, or `ws`), line filter, batching, deadlines/persistent, idle-session wake, headless follow-up turns; automatic exit notices for background commands; plugin monitors with `always` / `on-skill-invoke:` triggers and `plugin validate` checks. |
 | Channels + MCP server instructions | `--channels`, `notifications/claude/channel`, permission relay, `channelsEnabled`, server `instructions` in context | **Closed.** Same capability keys, notification methods, `<channel>` format, meta-key rules, five-letter relay ids, first-verdict-wins relay with sanitized/redacted previews, dev-channel confirmation, `channelsEnabled: false`, idle wake. Server `instructions` are added to the system prompt. |
 | npm plugin sources | Marketplace entries with `source: { source: "npm", package, version, registry }` | **Closed.** `npm pack` (scripts never run) + `tar`, version ranges, custom https registry (http only for localhost), resolved version and integrity recorded in `installed_plugins.json`. |
+| Sensitive plugin options in secure storage | `userConfig` options with `sensitive: true` kept in the system keychain | **Closed.** macOS Keychain (`security`) and Linux Secret Service (`secret-tool`, value via stdin); the plugin secrets file then holds only a backend marker. 0600 file fallback elsewhere; `OASIS_SECURE_STORAGE` override. |
 
 ## Ranked next improvements
 
@@ -88,7 +89,7 @@ Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require proces
 
 ### 5. Remaining platform and ecosystem gaps
 
-A native Gemini adapter; PowerShell and Windows sandboxing; plugin themes, OS-keychain storage for sensitive plugin options.
+A native Gemini adapter; PowerShell and Windows sandboxing; plugin themes; Windows Credential Manager for sensitive plugin options.
 
 ### 6. Terminal experience polish
 
