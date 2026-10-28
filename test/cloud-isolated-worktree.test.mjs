@@ -125,7 +125,7 @@ test('browser coding task can run in a clean isolated worktree and leaves a revi
   const artifact = await diffResponse.json();
   assert.equal(artifact.branch, branch);
   assert.equal(artifact.commit, snapshot.result.isolatedWorktree.commit);
-  assert.match(artifact.diff, /task-output\\.txt/);
+  assert.ok(artifact.diff.includes('task-output.txt'));
   assert.match(artifact.diff, /Created inside isolated worktree/);
   assert.equal(artifact.truncated, false);
   assert.equal(git(root, 'show', branch + ':task-output.txt'), 'Created inside isolated worktree.');
