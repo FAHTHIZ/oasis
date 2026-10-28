@@ -1,18 +1,23 @@
-name: Deploy Oasis to GitHub Pages
+name: Publish OASIS homepage and repository metadata
+
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 concurrency:
-  group: oasis-pages
+  group: oasis-public-launch
   cancel-in-progress: true
+
 jobs:
   validate:
-    name: Validate Oasis before deployment
+    name: Validate OASIS before launch
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -21,18 +26,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate browser app and PWA assets
-        run: node scripts/check-site.mjs
-      - name: Run CLI runtime tests
-        run: npm test
+      - name: Run app, runtime, evaluation, and public-site checks
+        run: npm run check
       - name: Verify installable CLI package contents
         run: npm pack --dry-run
-  deploy:
-    if: ${{ vars.OASIS_ENABLE_PAGES == 'true' }}
+
+  publish:
+    name: Deploy homepage and apply GitHub metadata
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: validate
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
-    runs-on: ubuntu-latest
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -40,12 +46,69 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Configure Pages
+      - name: Check the one-time repository admin secret
+        id: launch-auth
+        env:
+          OASIS_REPO_ADMIN_TOKEN: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "$OASIS_REPO_ADMIN_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Homepage deployment and About metadata were skipped because OASIS_REPO_ADMIN_TOKEN is not configured. Follow docs/PUBLIC_LAUNCH.md, then rerun this workflow on main."
+          fi
+      - name: Enable and configure GitHub Pages
+        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
         uses: actions/configure-pages@v5
-      - name: Upload static website
+        id: configure-pages
+        with:
+          token: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
+          enablement: true
+      - name: Upload public landing page
+        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
-      - name: Publish website
-        id: deployment
+          path: site
+      - name: Deploy public landing page
+        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
         uses: actions/deploy-pages@v4
+        id: deployment
+      - name: Update repository description, homepage, and topics
+        id: apply-metadata
+        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          OASIS_REPO_ADMIN_TOKEN: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
+          OASIS_PUBLIC_URL: ${{ steps.deployment.outputs.page_url }}
+        run: node .github/scripts/apply-repository-metadata.mjs
+      - name: Write launch status
+        if: always()
+        env:
+          LAUNCH_READY: ${{ steps.launch-auth.outputs.ready }}
+          DEPLOYED_URL: ${{ steps.deployment.outputs.page_url }}
+          DEPLOYMENT_OUTCOME: ${{ steps.deployment.outcome }}
+          METADATA_OUTCOME: ${{ steps.apply-metadata.outcome }}
+        run: |
+          if [ "$LAUNCH_READY" != "true" ]; then
+            {
+              echo "## OASIS public launch: setup still required"
+              echo
+              echo "Validation passed, but deployment and repository metadata were skipped."
+              echo "Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret using the instructions in [docs/PUBLIC_LAUNCH.md](https://github.com/FAHTHIZ/oasis/blob/main/docs/PUBLIC_LAUNCH.md), then run this workflow again on `main`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DEPLOYMENT_OUTCOME" = "success" ] && [ "$METADATA_OUTCOME" = "success" ]; then
+            {
+              echo "## OASIS public launch: complete"
+              echo
+              echo "Homepage deployed: $DEPLOYED_URL"
+              echo
+              echo "Repository description, homepage field, and 20 topics were updated and verified."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## OASIS public launch: incomplete"
+              echo
+              echo "Inspect deployment and metadata logs. The workflow does not claim success unless both steps complete."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
