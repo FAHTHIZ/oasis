@@ -679,7 +679,7 @@ test('public URL fetch pins validated DNS answers and rejects mixed public/priva
     requestArgs = { url: url.toString(), addresses, aborted: signal.aborted };
     return {
       status: 200,
-      headers: { get(name) { return ({ 'content-type': 'text/plain', 'content-length': '12' })[name.toLowerCase()] || null; } },
+      headers: { get(name) { return ({ 'content-type': 'text/plain', 'content-length': '13' })[name.toLowerCase()] || null; } },
       body: 'safe fixture!',
       tooLarge: false
     };
