@@ -1,0 +1,88 @@
+name: Oasis coding agent
+description: Mention @oasis on an issue or pull request and Oasis makes the change, opens a PR, and replies in the thread. Works with any model provider.
+author: gtxnrg-ship-it
+branding:
+  icon: terminal
+  color: green
+inputs:
+  api_key:
+    description: API key for the model provider (store it as a secret).
+    required: false
+  protocol:
+    description: openai-responses, openai-compatible, or anthropic.
+    required: false
+  base_url:
+    description: Provider base URL (for OpenAI-compatible providers, OpenRouter, Ollama on a self-hosted runner, ...).
+    required: false
+  model:
+    description: Model ID.
+    required: false
+  prompt:
+    description: Run this task directly instead of waiting for a mention (for workflow_dispatch or schedule).
+    required: false
+  trigger_phrase:
+    description: Phrase that triggers Oasis in comments, issues, and PRs.
+    default: '@oasis'
+  assignee_trigger:
+    description: Also respond when an issue is assigned to this user.
+    required: false
+  label_trigger:
+    description: Also respond when this label is added to an issue.
+    required: false
+  allowed_associations:
+    description: Comma-separated author associations allowed to trigger Oasis.
+    default: OWNER,MEMBER,COLLABORATOR
+  permission_mode:
+    description: Permission mode. auto lets a classifier approve routine actions and block risky ones.
+    default: auto
+  allowed_tools:
+    description: Comma-separated permission rules to allow, e.g. "Bash(npm test:*),Bash(npm run lint:*)".
+    required: false
+  disallowed_tools:
+    description: Comma-separated permission rules to deny.
+    required: false
+  max_turns:
+    description: Maximum agent steps.
+    default: '40'
+  effort:
+    description: Reasoning effort (low, medium, high, max).
+    required: false
+  append_system_prompt:
+    description: Extra instructions for every run.
+    required: false
+  github_token:
+    description: Token for comments, pushes, and pull requests.
+    default: ${{ github.token }}
+outputs:
+  result:
+    description: Oasis's final summary.
+  branch:
+    description: Branch that received the changes, if any.
+  pull_request:
+    description: URL of the pull request Oasis opened, if any.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+    - shell: bash
+      run: node "$GITHUB_ACTION_PATH/src/github-action.mjs"
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        OASIS_API_KEY: ${{ inputs.api_key }}
+        OASIS_PROTOCOL: ${{ inputs.protocol }}
+        OASIS_BASE_URL: ${{ inputs.base_url }}
+        OASIS_MODEL: ${{ inputs.model }}
+        OASIS_AUTO_MEMORY: '0'
+        INPUT_PROMPT: ${{ inputs.prompt }}
+        INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
+        INPUT_ASSIGNEE_TRIGGER: ${{ inputs.assignee_trigger }}
+        INPUT_LABEL_TRIGGER: ${{ inputs.label_trigger }}
+        INPUT_ALLOWED_ASSOCIATIONS: ${{ inputs.allowed_associations }}
+        INPUT_PERMISSION_MODE: ${{ inputs.permission_mode }}
+        INPUT_ALLOWED_TOOLS: ${{ inputs.allowed_tools }}
+        INPUT_DISALLOWED_TOOLS: ${{ inputs.disallowed_tools }}
+        INPUT_MAX_TURNS: ${{ inputs.max_turns }}
+        INPUT_EFFORT: ${{ inputs.effort }}
+        INPUT_APPEND_SYSTEM_PROMPT: ${{ inputs.append_system_prompt }}

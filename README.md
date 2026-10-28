@@ -361,6 +361,10 @@ oasis -w fix-login "fix the login redirect"
 - With nobody to answer prompts, anything that needs approval is denied and listed in `permission_denials`. Allow what the job needs with `--allowedTools`, settings rules, `--permission-mode`, or `--yes`. High-risk commands stay blocked.
 - The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` (`-c`) or `--resume ID` to keep a conversation across runs.
 
+## GitHub: mention @oasis
+
+Add [the workflow](docs/examples/oasis-github.yml) to your repository and comment `@oasis fix the flaky login test` on an issue. Oasis makes the change, runs your tests, pushes an `oasis/issue-N-*` branch, opens a pull request that closes the issue, and replies in the thread. On a pull request, it commits to the PR branch. It works with any provider and uses `auto` permission mode by default. Only owners, members, and collaborators can trigger it. Details are in [docs/github-action.md](docs/github-action.md).
+
 ## SDK: build on Oasis from Node
 
 Oasis can be imported as a library, much like the Claude Agent SDK, and it works with any model Oasis supports:
