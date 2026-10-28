@@ -1,4 +1,5 @@
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
+import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import { createWorktree, finishWorktree, removeWorktree } from './worktrees.mjs';
@@ -28,7 +29,7 @@ async function pathExists(file) { try { await access(file); return true; } catch
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, stopAgent, stopAllAgents, getAgent } from './agent-tasks.mjs';
-import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter } from './subagents.mjs';
+import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -308,14 +309,14 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
   ].join('\n\n');
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
   let loadedSettings = settings;
   let settingsError = null;
   if (!loadedSettings) {
-    try { loadedSettings = await loadSettings(root, { env }); }
+    try { loadedSettings = await loadSettings(root, { env, extraSettings: settingsOverrides, settingSources }); }
     catch (error) { settingsError = error.message; loadedSettings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } }; }
   }
   if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null };
@@ -330,9 +331,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (bare) project = { servers: [], failures: [] };
   else if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
   else if (await pathExists(path.join(root, '.mcp.json'))) project.failures.push({ name: '.mcp.json', error: 'ignored because this workspace is not trusted. Run oasis trust to enable its MCP servers.' });
-  const mcp = bare ? { clients: new Map(), failures: [] } : await connectMcpServers({ root, env, extraServers: project.servers, extraFailures: project.failures });
+  const flagServers = (mcpServers || []).map((server) => ({ ...server, source: 'flag' }));
+  const mcp = bare && !flagServers.length ? { clients: new Map(), failures: [] }
+    : await connectMcpServers({ root, env, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
-  let systemText = systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
+  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
@@ -340,7 +343,12 @@ export async function createSession({ root, config, restore = null, permissionMo
     additionalDirectories: extraDirs.accepted,
     rejectedDirectories: extraDirs.rejected,
     config,
-    sessionId: restore && restore.id || null,
+    sessionId: restore && restore.id || sessionId || null,
+    sessionName: String(sessionName || restore && restore.name || '').slice(0, 120),
+    fallbackModel: fallbackModel || loadedSettings.fallbackModel || '',
+    maxBudgetUsd: Number(maxBudgetUsd) || 0,
+    costUsd: 0,
+    pricing: pricing || loadedSettings.pricing || null,
     messages: [],
     mcpClients: mcp.clients,
     mcpFailures: mcp.failures,
@@ -358,6 +366,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     hookMessages: []
   };
   try { session.agents = await loadAgentDefinitions(root, { env }); } catch { session.agents = { ...BUILTIN_AGENTS }; }
+  if (agentsInline && typeof agentsInline === 'object') {
+    for (const [rawName, spec] of Object.entries(agentsInline)) {
+      const name = String(rawName).trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name) || !spec || typeof spec !== 'object') continue;
+      session.agents[name] = { name, description: String(spec.description || 'Agent ' + name).slice(0, 600), tools: mapToolNames(spec.tools), model: spec.model && spec.model !== 'inherit' ? String(spec.model) : null, isolation: spec.isolation === 'worktree' ? 'worktree' : null, prompt: String(spec.prompt || '').slice(0, 30000), source: 'flag:--agents' };
+    }
+  }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION]);
   if (autoMemoryEnabled(loadedSettings, env)) {
     session.autoMemory = true;
@@ -385,6 +400,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     else session.styleWarning = 'Output style "' + styleName + '" was not found; using default.';
   }
   session.outputStyle = styleName && !session.styleWarning ? styleName : 'default';
+  const allowedToolNames = mapToolNames(tools);
+  if (Array.isArray(tools) || typeof tools === 'string') {
+    const keep = new Set(allowedToolNames || []);
+    // Coordination tools stay so the agent can finish or ask; everything else must be listed.
+    for (const name of ['exit_plan_mode', 'ask_user_question']) keep.add(name);
+    session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
+  }
   const systemMessage = { role: 'system', content: systemText };
   session.messages = [systemMessage];
   if (restore && Array.isArray(restore.messages)) {
@@ -886,7 +908,24 @@ async function runPostCompactHooks(session, trigger, summary, options) {
   return started.additionalContext.join('\n').slice(0, 10000);
 }
 
+const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed/i;
+
 async function requestCompletion(session, options = {}) {
+  try {
+    return await requestCompletionTraced(session, options);
+  } catch (error) {
+    const fallback = session && session.fallbackModel;
+    if (!fallback || !session.config || session.config.model === fallback || (options.signal && options.signal.aborted) || !FALLBACK_TRIGGER.test(String(error && error.message || error))) throw error;
+    const previous = session.config.model;
+    session.config = { ...session.config, model: fallback };
+    session.fallbackActive = { from: previous, to: fallback, reason: String(error.message || error).slice(0, 200) };
+    (session.hookMessages ||= []).push('[fallback] ' + previous + ' failed (' + String(error.message || error).slice(0, 120) + '); switched to ' + fallback + '.');
+    if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
+    return requestCompletionTraced(session, options);
+  }
+}
+
+async function requestCompletionTraced(session, options = {}) {
   const tel = getTelemetry(options.env || session.providerEnv || process.env);
   if (!tel) return requestCompletionRaw(session, options);
   const model = session.config && session.config.model || '';
@@ -2126,7 +2165,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     throwIfCancelled(options.signal);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
-    if (options.onUsage) options.onUsage({ ...usage, step: step + 1 });
+    const stepCost = estimateCostUsd(session.config && session.config.model, usage, { config: session.config, overrides: session.pricing || {}, env: options.env || process.env });
+    session.costUsd = (session.costUsd || 0) + stepCost;
+    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, step: step + 1 });
+    if (session.maxBudgetUsd > 0 && session.costUsd >= session.maxBudgetUsd) throw new BudgetExceededError(session.costUsd, session.maxBudgetUsd);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
     if (Array.isArray(assistant.thinkingBlocks) && assistant.thinkingBlocks.length) assistantMessage.thinkingBlocks = assistant.thinkingBlocks;

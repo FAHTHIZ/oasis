@@ -195,16 +195,24 @@ export async function loadSettings(root, options = {}) {
         }
       }
     }
+    if (settings.pricing && typeof settings.pricing === 'object' && !Array.isArray(settings.pricing)) result.pricing = { ...(result.pricing || {}), ...settings.pricing };
+    if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
 
+  // --setting-sources user,project,local limits which files load; --settings adds a file or JSON on top.
+  const sources = Array.isArray(options.settingSources) && options.settingSources.length ? new Set(options.settingSources) : null;
   const userFile = userSettingsPath(env);
-  apply(await readJsonFile(userFile), 'user', userFile, true);
+  if (!sources || sources.has('user')) apply(await readJsonFile(userFile), 'user', userFile, true);
   result.trusted = await isWorkspaceTrusted(root, env);
   if (root) {
     for (const { scope, file } of projectSettingsPaths(root)) {
+      if (sources && !sources.has(scope)) continue;
       apply(await readJsonFile(file), scope, file, result.trusted);
     }
+  }
+  for (const extra of options.extraSettings || []) {
+    if (extra && extra.settings && typeof extra.settings === 'object') apply(extra.settings, 'flag', extra.file || '--settings', true);
   }
   if (env.OASIS_SANDBOX === '1') result.sandbox.enabled = true;
   if (env.OASIS_SANDBOX === '0') result.sandbox.enabled = false;

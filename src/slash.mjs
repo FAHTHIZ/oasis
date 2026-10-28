@@ -142,7 +142,12 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'cost': {
       const u = usage || createUsageTracker();
-      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' };
+      const spent = session && typeof session.costUsd === 'number' ? session.costUsd : (u.costUsd || 0);
+      const { formatUsd, priceFor } = await import('./pricing.mjs');
+      const model = session && session.config && session.config.model || '';
+      const priced = priceFor(model, { config: session && session.config || {}, overrides: session && session.pricing || {} });
+      const money = priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.' : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
+      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money };
     }
     case 'model': {
       if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID to switch for this session.' };

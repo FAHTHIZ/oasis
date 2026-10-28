@@ -45,6 +45,12 @@ export async function loadProjectMcpServers(root, options = {}) {
     if (error.code === 'ENOENT') return { servers: [], failures: [], file: null };
     return { servers: [], failures: [{ name: '.mcp.json', error: 'could not be read: ' + error.message }], file };
   }
+  const { servers, failures } = parseMcpServerEntries(parsed, env, 'project');
+  return { servers, failures, file };
+}
+
+// Parses a Claude-style { mcpServers: { name: spec } } object (used by .mcp.json and --mcp-config).
+export function parseMcpServerEntries(parsed, env = process.env, source = 'project') {
   const entries = parsed && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers) ? Object.entries(parsed.mcpServers) : [];
   const servers = [];
   const failures = [];
@@ -70,14 +76,14 @@ export async function loadProjectMcpServers(root, options = {}) {
           if (Array.isArray(spec.oauth.scopes) || typeof spec.oauth.scopes === 'string') oauth.scopes = spec.oauth.scopes;
           if (Number.isInteger(spec.oauth.callbackPort) && spec.oauth.callbackPort > 1023 && spec.oauth.callbackPort < 65536) oauth.callbackPort = spec.oauth.callbackPort;
         }
-        servers.push({ name, type: 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), source: 'project' });
+        servers.push({ name, type: 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), source });
       } else if (type === 'stdio') {
         const extraEnv = {};
         for (const [key, value] of Object.entries(spec.env || {})) {
           if (!/^[A-Z_][A-Z0-9_]*$/i.test(key) || /^(PATH|HOME|SHELL|NODE_OPTIONS|LD_PRELOAD|DYLD_INSERT_LIBRARIES)$/i.test(key)) throw new Error('env cannot set ' + key);
           extraEnv[key] = expandVariables(value, env);
         }
-        servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, source: 'project' });
+        servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, source });
       } else {
         throw new Error('transport "' + type + '" is not supported (use stdio or http)');
       }
@@ -85,7 +91,7 @@ export async function loadProjectMcpServers(root, options = {}) {
       failures.push({ name, error: error.message });
     }
   }
-  return { servers, failures, file };
+  return { servers, failures };
 }
 
 function compactResult(result) {
