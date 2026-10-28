@@ -11,7 +11,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
-import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
+import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
 import { microcompact, contextWindowSize, compactionThresholdChars } from './context.mjs';
@@ -357,8 +357,10 @@ export async function createSession({ root, config, restore = null, permissionMo
     } catch (error) { project.failures.push({ name: 'plugins', error: error.message }); }
   }
   const flagServers = (mcpServers || []).map((server) => ({ ...server, source: 'flag' }));
+  // Server -> client requests (elicitation, roots) reach the session through this host.
+  const mcpHost = { session: null, onToolsChanged: (target) => refreshSessionMcpTools(target) };
   const mcp = bare && !flagServers.length ? { clients: new Map(), failures: [] }
-    : await connectMcpServers({ root, env, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
+    : await connectMcpServers({ root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
   let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
@@ -376,6 +378,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     pricing: pricing || loadedSettings.pricing || null,
     messages: [],
     mcpClients: mcp.clients,
+    mcpHost,
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
     toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.function.name !== 'web_search' || webSearchEnabled(env)).concat(dynamic.definitions),
@@ -476,6 +479,8 @@ export async function createSession({ root, config, restore = null, permissionMo
     tel.add('oasis.session.count', 1, { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), resumed: Boolean(restore) }, '1', 'Sessions started');
     tel.event('oasis.session_start', { model: config && config.model || '', provider: config && config.protocol || '', resumed: Boolean(restore) });
   }
+  mcpHost.session = session;
+  session.hookOptionsFor = () => hookOptions(session, env);
   // FileChanged / ConfigChange hooks, and live settings reload in interactive sessions.
   const liveReload = Boolean(watchFiles) && !settings && !bare;
   session.settingsLoadOptions = { env, extraSettings: settingsOverrides, settingSources, cliAllow: allowedTools || [], cliDeny: disallowedTools || [] };

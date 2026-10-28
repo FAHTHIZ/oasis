@@ -252,6 +252,18 @@ Oasis reads a Claude Code-style `.mcp.json` at the workspace root, so a team can
 - Sign-in: remote HTTP servers that use OAuth (GitHub, Linear, Notion, Sentry and others) are supported. If a server needs sign-in, `/mcp` says so; run `oasis mcp login NAME` (or `/mcp login NAME` in the terminal), approve in the browser, and its tools load right away. Oasis finds the authorization server on its own, registers itself when the server allows it, uses PKCE and a loopback redirect, and refreshes tokens automatically. Tokens live in `~/.config/oasis/mcp-auth.json` (mode 600), never in the project or the conversation. If a server needs a pre-registered app, add `"oauth": {"clientId": "...", "scopes": ["..."], "callbackPort": 8765}` to its `.mcp.json` entry. `oasis mcp logout NAME` deletes the token.
 - Prompts: each server prompt becomes a command named `/mcp__server__prompt`. Pass arguments in order or as `name=value`, for example `/mcp__github__review_pr 123 focus=security`. `/mcp` lists the prompts and resources of each server.
 
+### MCP elicitation, roots and live tool lists
+
+MCP servers can ask you for input while one of their tools runs, through MCP elicitation. OASIS shows the request in the terminal. A form request asks for each field in turn (enums as numbered choices, booleans as y/n, numbers and emails validated, defaults on Enter), and you can decline or cancel. A URL request offers to open the link in your browser. Headless runs (`-p`, SDK) decline elicitations unless a hook answers them:
+
+```json
+{ "hooks": { "Elicitation": [{ "matcher": "my-server", "hooks": [{ "type": "command", "command": "./answer-elicitation.sh" }] }] } }
+```
+
+An `Elicitation` hook gets `mcp_server_name`, `message`, `mode` and `requested_schema` (or `url`). It can reply with `hookSpecificOutput.action` (`accept`, `decline` or `cancel`) plus `content`, or exit 2 to decline. `ElicitationResult` hooks see the final answer and can change or block it before it goes back to the server.
+
+Servers can also call `roots/list`, which returns the workspace and any `--add-dir` directories as `file://` roots. When a server sends `notifications/tools/list_changed`, OASIS re-reads its tools mid-session and the model sees the new list on its next request.
+
 ## Output styles
 
 `/output-style` changes how Oasis talks while it works:
@@ -333,6 +345,7 @@ More events:
 | `WorktreeRemove` | a hook-created worktree is cleaned up; input `worktree_path` | no git fallback: without this hook the directory is kept |
 | `TeammateIdle` | a team member finished its turn (`teammate_name`, `team_name`); no matcher | yes: exit 2 sends stderr back and the teammate keeps working; `continue: false` stops it |
 | `Setup` | `oasis --init`, `--init-only` or `--maintenance` (`trigger`: `init` / `maintenance`); command hooks only | no |
+| `Elicitation` / `ElicitationResult` | an MCP server asks for user input; matcher is the server name | yes: answer with `hookSpecificOutput.action`/`content`, or exit 2 to decline |
 
 Interactive sessions also pick up settings edits live: when a settings file changes (and no `ConfigChange` hook blocks it), hooks, permission rules and auto-mode settings reload without a restart. `SessionStart` and `CwdChanged` hooks can return `hookSpecificOutput.watchPaths` to start watching extra files for `FileChanged`.
 

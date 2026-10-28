@@ -134,7 +134,8 @@ function printHelp() {
     '  --replay-user-messages        Echo user messages back in stream-json output',
     '  --permission-prompt-tool NAME Ask this MCP tool to approve actions in -p mode',
     '  --from-pr N                   Start with a GitHub pull request\'s description and diff as context',
-    '  --init | --init-only          Create project instructions first (and exit with --init-only)',
+    '  --init | --init-only          Create project instructions first (and exit with --init-only); runs Setup hooks',
+    '  --maintenance                 Run Setup hooks with trigger "maintenance" before starting',
     '  --disable-slash-commands      Treat /text as a normal message (built-ins still work)',
     '  --verbose | --debug [cats]    More detail about what Oasis is doing',
     '  --help, -h                    Show this help',
@@ -1077,6 +1078,15 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   } else if (path.resolve(session.root) !== path.resolve(root)) {
     closeSession(session);
     session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
+  }
+  // MCP servers can ask the user for input mid-call (elicitation); answer in the terminal.
+  if (stdin.isTTY && stdout.isTTY && !session.elicit) {
+    session.elicit = async (request) => {
+      const { askElicitationInTerminal } = await import('./mcp-client-features.mjs');
+      const { openInBrowser } = await import('./mcp-oauth.mjs');
+      endStream();
+      return await askElicitationInTerminal(request, { ask: (question) => askLine(question), write: (text) => stdout.write(text), openUrl: (url) => openInBrowser(url) });
+    };
   }
   // watchPaths returned by a CwdChanged hook carry over to the session for the new directory.
   if (persistence.watchPaths) {
