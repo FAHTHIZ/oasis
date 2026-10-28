@@ -408,11 +408,8 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
     return ['task_1', 'task_3'].every((id) => tasks.find((task) => task.id === id)?.status === 'completed');
   });
 
-  const waveOneRequest = parentRequests.find((request) => request.messages.some((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks'));
-  const waveOneResult = waveOneRequest.messages.filter((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks').at(-1).content;
-  assert.ok(waveOneResult.includes('"launched_count": 2'));
-  assert.ok(waveOneResult.includes('"task_id": "task_1"'));
-  assert.ok(waveOneResult.includes('"task_id": "task_3"'));
+  // Assert the dispatcher's effect through task/agent registries rather than a
+  // provider-specific string serialization of the tool result.
   assert.equal(session.sharedTasks.tasks.find((task) => task.id === 'task_2').status, 'pending');
 
   const workers = [...session.agentTasks.agents.values()];
