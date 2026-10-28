@@ -188,6 +188,11 @@ export function createOasisWebServer(options = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
     taskStore.schedule(job);
+    // Make the task identity and workspace metadata durable immediately at start,
+    // rather than waiting for the normal debounced event-history write.
+    if (type === 'started' || type === 'terminal_started' || type === 'github_clone_started') {
+      void taskStore.save(job).catch(() => {});
+    }
   }
 
   // meta (from the agent) can offer "always allow <rule> this session"; that
