@@ -1,3 +1,4 @@
+import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import path from 'node:path';
 import os from 'node:os';
@@ -388,10 +389,18 @@ function parseToolInput(raw) {
 function toResponsesRequest(messages) {
   const system = messages.find((message) => message.role === 'system');
   const input = [];
-  for (const message of messages) {
+  const keepImages = recentImageSet(messages);
+  let pendingImages = [];
+  const flushImages = () => {
+    if (pendingImages.length) input.push({ role: 'user', content: [{ type: 'input_text', text: 'Images returned by the previous tool calls:' }, ...pendingImages] });
+    pendingImages = [];
+  };
+  for (const [index, message] of messages.entries()) {
+    if (message.role !== 'tool') flushImages();
     if (message.role === 'system') continue;
     if (message.role === 'user') {
-      input.push({ role: 'user', content: String(message.content || '') });
+      const images = responsesImageItems(message, index, keepImages);
+      input.push({ role: 'user', content: images.length ? [{ type: 'input_text', text: String(message.content || '') }, ...images] : String(message.content || '') });
       continue;
     }
     if (message.role === 'assistant') {
@@ -426,18 +435,22 @@ function toResponsesRequest(messages) {
         call_id: message.tool_call_id,
         output: String(message.content || '')
       });
+      pendingImages.push(...responsesImageItems(message, index, keepImages));
     }
   }
+  flushImages();
   return { instructions: system ? String(system.content || '') : '', input };
 }
 
 function toAnthropicRequest(messages) {
   const system = messages.find((message) => message.role === 'system');
   const converted = [];
-  for (const message of messages) {
+  const keepImages = recentImageSet(messages);
+  for (const [index, message] of messages.entries()) {
     if (message.role === 'system') continue;
     if (message.role === 'user') {
-      converted.push({ role: 'user', content: message.content || '' });
+      const images = anthropicImageBlocks(message, index, keepImages);
+      converted.push({ role: 'user', content: images.length ? [{ type: 'text', text: String(message.content || '') }, ...images] : message.content || '' });
       continue;
     }
     if (message.role === 'assistant') {
@@ -459,7 +472,8 @@ function toAnthropicRequest(messages) {
       continue;
     }
     if (message.role === 'tool') {
-      const block = { type: 'tool_result', tool_use_id: message.tool_call_id, content: String(message.content || '') };
+      const images = anthropicImageBlocks(message, index, keepImages);
+      const block = { type: 'tool_result', tool_use_id: message.tool_call_id, content: images.length ? [{ type: 'text', text: String(message.content || '') }, ...images] : String(message.content || '') };
       const last = converted[converted.length - 1];
       if (last && last.role === 'user' && Array.isArray(last.content) && last.content.every((item) => item.type === 'tool_result')) {
         last.content.push(block);
@@ -771,7 +785,7 @@ async function requestCompletion(session, options = {}) {
     endpoint = openAIEndpoint(config.baseURL);
     bodyObject = {
       model: config.model,
-      messages: session.messages,
+      messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
       ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {})
     };
@@ -1521,6 +1535,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   if (!options.isSubagent) repairInterruptedHistory(session);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
+  if (Array.isArray(options.images) && options.images.length) userMessage.images = options.images.slice(0, 4).map(({ mediaType, data }) => ({ mediaType, data }));
   session.messages.push(userMessage);
   if (!options.isSubagent) beginCheckpoint(session, userMessage, request);
   let stopHookContinuations = 0;
@@ -1738,7 +1753,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
         role: 'tool',
         tool_call_id: item.tool_call_id,
         name: item.name,
-        content: item.content
+        content: item.content,
+        ...(item.result && item.result.imageData ? { images: [item.result.imageData] } : {})
       });
     }
 
@@ -1790,3 +1806,6 @@ export async function runAgentTurn(session, prompt, options = {}) {
   };
 }
 
+
+// Exported for tests of provider message conversion.
+export { toAnthropicRequest, toResponsesRequest };

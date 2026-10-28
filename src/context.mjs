@@ -20,6 +20,7 @@ export function estimateTokens(messages) {
       catch { chars += String(message.content || '').length; }
       continue;
     }
+    if (Array.isArray(message.images)) chars += message.images.length * 1600 * 4;
     if (typeof message.content === 'string') chars += message.content.length;
     else if (Array.isArray(message.content)) {
       try { chars += JSON.stringify(message.content).length; }

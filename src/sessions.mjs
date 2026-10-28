@@ -56,7 +56,8 @@ export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
-  const messages = validateMessages(session.messages.slice(-MAX_MESSAGES));
+  // Image attachments are not saved; the text note in the tool result remains.
+  const messages = validateMessages(session.messages.slice(-MAX_MESSAGES).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
   const payload = {
     schemaVersion: 1,
     id,
