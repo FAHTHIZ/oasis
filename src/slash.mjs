@@ -210,6 +210,7 @@ export async function runBuiltinCommand(name, argument, state) {
         return { output: 'Permission mode: ' + current + '. Options: ' + PERMISSION_MODES.join(', ') + '.' + log };
       }
       if (!PERMISSION_MODES.includes(argument)) return { output: 'Unknown mode. Options: ' + PERMISSION_MODES.join(', ') + '.' };
+      if (argument === 'bypassPermissions' && (sessionOptions.disableBypass || (session && session.settings && session.settings.permissions && session.settings.permissions.disableBypassPermissionsMode))) return { output: 'bypassPermissions mode is disabled by settings (permissions.disableBypassPermissionsMode).' };
       sessionOptions.permissionMode = argument;
       if (session) {
         if (argument === 'plan' && session.permissions.mode !== 'plan') session.prePlanMode = session.permissions.mode;

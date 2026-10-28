@@ -91,7 +91,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
 - A curated capability-bundle installer (`oasis plugins list/install/remove`) that installs bundled workflow skills as a unit; the agent can install a bundle in natural language after approval.
 - Bounded specialist reviews for code quality, security, architecture, and test strategy. Each reviewer is a separate read-only model session with no edit, command, package-install, or MCP tools; a per-task cap prevents unbounded delegation.
-- Layered memory from user, project, and local files (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `OASIS.local.md`), plus skills from `.oasis/skills/`, Claude Code's `.claude/skills/` (project) and `~/.claude/skills/` (personal, wins over project), `.agents/skills/` and enabled plugins. `${CLAUDE_SKILL_DIR}` in a skill expands to its folder.
+- Layered memory from user, project, and local files (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `OASIS.local.md`), plus skills from `.oasis/skills/`, Claude Code's `.claude/skills/` (project) and `~/.claude/skills/` (personal, wins over project), `.agents/skills/` and enabled plugins. `${CLAUDE_SKILL_DIR}` in a skill expands to its folder. Like Claude Code, Oasis also reads `CLAUDE.md`/`AGENTS.md`/`OASIS.md`/`CLAUDE.local.md` in directories above the workspace (monorepos; `OASIS_DISABLE_PARENT_MEMORY=1` turns this off) and every Markdown file under `.claude/rules/` and `~/.claude/rules/`; a `paths:` front-matter list marks a rule as applying to matching files.
 - Claude Code-style permission rules and modes, lifecycle hooks, parallel subagents with custom agent files, custom slash commands, `@file` mentions, per-turn checkpoints with `/rewind`, and a headless `oasis -p` mode for scripts and CI.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
 - Workspace-scoped saved sessions (on by default) that can be resumed, renamed or deleted; skill descriptions load first and full skill guides load only on demand.
@@ -205,9 +205,13 @@ Oasis reads layered settings in the same format as Claude Code, so an existing `
 
 | File | Scope |
 |---|---|
-| `~/.config/oasis/settings.json` | You, every project |
+| `~/.claude/settings.json` (Claude Code; skip with `OASIS_IGNORE_CLAUDE_SETTINGS=1`) | You, every project |
+| `~/.config/oasis/settings.json` (wins over the Claude file) | You, every project |
 | `.oasis/settings.json`, `.claude/settings.json` | Project (shared) |
 | `.oasis/settings.local.json`, `.claude/settings.local.json` | Project (personal) |
+| `managed-settings.json` (`/etc/claude-code/`, `/Library/Application Support/ClaudeCode/`, `C:\Program Files\ClaudeCode\`, or the `/etc/oasis/` equivalents; `OASIS_MANAGED_SETTINGS` overrides the path) | Organization policy, loads last and wins |
+
+The `env` key sets environment variables for every session (`{ "env": { "ANTHROPIC_MODEL": "...", "NODE_ENV": "test" } }`); it is applied before the provider loads, and an untrusted project cannot set it. `permissions.disableBypassPermissionsMode: "disable"` blocks `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and `/mode bypassPermissions`.
 
 ~~~json
 {
