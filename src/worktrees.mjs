@@ -6,7 +6,9 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
-import { appendFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rm, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { runHooks, hasHooks } from './hooks.mjs';
 
 const execFileAsync = promisify(execFile);
 export const WORKTREE_DIR = path.join('.oasis', 'worktrees');
@@ -34,8 +36,26 @@ async function excludeWorktreeDir(gitCommonDir) {
   await appendFile(file, (current && !current.endsWith('\n') ? '\n' : '') + '/.oasis/worktrees/\n');
 }
 
+// WorktreeCreate / WorktreeRemove hooks replace git entirely (for other VCSs or custom
+// layouts): the create hook prints the new directory, the remove hook deletes it.
+async function createHookWorktree(root, label, options) {
+  const name = worktreeSlug(label) + '-' + randomBytes(3).toString('hex');
+  const result = await runHooks('WorktreeCreate', { session_id: options.sessionId || 'unsaved', name }, options.hookOptions);
+  const reason = result.messages.find((message) => /^WorktreeCreate hook failed/.test(message));
+  if (result.failed || !result.worktreePath) throw new Error(reason || 'WorktreeCreate hook did not print a worktree path.');
+  const raw = result.worktreePath;
+  if (path.isAbsolute(raw) && raw.split(/[\\/]/).some((part) => part === '.' || part === '..')) throw new Error('WorktreeCreate hook returned a path with . or .. segments: ' + raw);
+  const absolute = path.resolve(root, raw);
+  let info = null;
+  try { info = await stat(absolute); } catch {}
+  if (!info || !info.isDirectory()) throw new Error('WorktreeCreate hook returned ' + absolute + ', which is not a directory.');
+  const relative = path.relative(root, absolute);
+  return { name, branch: null, path: absolute, relative: (relative && !relative.startsWith('..') ? relative : absolute).split(path.sep).join('/'), base: null, hook: true };
+}
+
 export async function createWorktree(root, label, options = {}) {
   const env = options.env || process.env;
+  if (options.hookOptions && hasHooks(options.hookOptions.hooks, 'WorktreeCreate')) return createHookWorktree(root, label, options);
   let top;
   try { top = await git(root, ['rev-parse', '--show-toplevel'], env); }
   catch { throw new Error('isolation "worktree" needs a git repository. Run git init first, or launch the subagent without isolation.'); }
@@ -57,6 +77,7 @@ export async function createWorktree(root, label, options = {}) {
 // Commit the subagent's work on its branch. Unchanged worktrees are removed entirely.
 export async function finishWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
+  if (worktree.hook) return { changed: true, branch: null, path: worktree.path, hook: true, note: 'Created by a WorktreeCreate hook; OASIS leaves it in place without committing or merging.' };
   const status = await git(worktree.path, ['status', '--porcelain', '--untracked-files=all'], env).catch(() => '');
   if (!status) {
     await removeWorktree(root, worktree, { env, deleteBranch: true });
@@ -89,6 +110,13 @@ export async function finishWorktree(root, worktree, options = {}) {
 
 export async function removeWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
+  if (worktree.hook) {
+    // No git fallback: without a WorktreeRemove hook the directory stays.
+    if (!options.hookOptions || !hasHooks(options.hookOptions.hooks, 'WorktreeRemove')) return { removed: false, kept: worktree.path };
+    const result = await runHooks('WorktreeRemove', { session_id: options.sessionId || 'unsaved', worktree_path: worktree.path }, options.hookOptions);
+    if (result.failed && existsSync(worktree.path)) throw new Error('worktree removal failed, kept: ' + worktree.path + (result.messages[0] ? ' (' + result.messages[0] + ')' : ''));
+    return { removed: true };
+  }
   await git(root, ['worktree', 'remove', '--force', worktree.path], env).catch(async () => {
     await rm(worktree.path, { recursive: true, force: true });
     await git(root, ['worktree', 'prune'], env).catch(() => {});

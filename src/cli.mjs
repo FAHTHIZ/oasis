@@ -1073,10 +1073,18 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
       stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
     }
-    session = await createSession({ root, config, restore: restored, ...sessionCreateOptions() });
+    session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
   } else if (path.resolve(session.root) !== path.resolve(root)) {
     closeSession(session);
-    session = await createSession({ root, config, ...sessionCreateOptions() });
+    session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
+  }
+  // watchPaths returned by a CwdChanged hook carry over to the session for the new directory.
+  if (persistence.watchPaths) {
+    const { startHookWatchers } = await import('./file-watch.mjs');
+    const { hookOptions: hookOpts, reloadSessionSettings } = await import('./agent.mjs');
+    if (session.fileWatchers) session.fileWatchers.setDynamicPaths(persistence.watchPaths);
+    else { session.hookWatchPaths = persistence.watchPaths; try { session.fileWatchers = startHookWatchers(session, { liveReload: true, hookOptions: () => hookOpts(session), reload: reloadSessionSettings }); } catch {} }
+    persistence.watchPaths = null;
   }
   session.config = config;
   // Auto-connect to the IDE when launched from a VS Code (or fork) integrated terminal.
@@ -1247,6 +1255,15 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   process.exitCode = exitCode;
 }
 
+// Setup hooks (--init, --init-only, --maintenance): command hooks only, output discarded.
+async function runSetupHooks(root, trigger) {
+  const { runHooks, hasHooks } = await import('./hooks.mjs');
+  const settings = await loadSettings(root).catch(() => null);
+  if (!settings || !hasHooks(settings.hooks, 'Setup')) return;
+  const result = await runHooks('Setup', { session_id: 'setup', trigger }, { hooks: settings.hooks, root, env: process.env }).catch(() => null);
+  if (result) for (const message of result.messages) stderr.write('[hook] ' + message + '\n');
+}
+
 // CwdChanged hooks run when /cd switches the workspace.
 async function fireCwdChanged(session, oldRoot, newRoot) {
   const { runHooks, hasHooks } = await import('./hooks.mjs');
@@ -1256,20 +1273,29 @@ async function fireCwdChanged(session, oldRoot, newRoot) {
   const options = session ? hookOptions(session) : { hooks, root: oldRoot, env: process.env };
   const result = await runHooks('CwdChanged', { session_id: session && session.sessionId || 'unsaved', old_cwd: oldRoot, new_cwd: newRoot }, options).catch(() => null);
   if (result) for (const message of result.messages) stdout.write('[hook] ' + message + '\n');
+  return result && Array.isArray(result.watchPaths) ? result.watchPaths.filter((item) => path.isAbsolute(item)) : null;
 }
 
 // oasis -w NAME: run the whole session in a fresh git worktree on its own branch.
 async function startSessionWorktree(root, name, out) {
   const { createWorktree } = await import('./worktrees.mjs');
   let worktree;
-  try { worktree = await createWorktree(root, name); }
+  const settings = await loadSettings(root).catch(() => ({ hooks: {} }));
+  const hookOptions = { hooks: settings.hooks || {}, root, env: process.env };
+  try { worktree = await createWorktree(root, name, { hookOptions }); }
   catch (error) { throw new Error('--worktree: ' + error.message.replace(/isolation "worktree"/g, '--worktree').replace(/, or launch the subagent without isolation/, '')); }
-  out.write('[worktree] Working in ' + worktree.relative + ' on branch ' + worktree.branch + '. Your main checkout is untouched.\n');
+  worktree.hookOptions = hookOptions;
+  out.write('[worktree] Working in ' + worktree.relative + (worktree.hook ? ' (created by a WorktreeCreate hook)' : ' on branch ' + worktree.branch) + '. Your main checkout is untouched.\n');
   return worktree;
 }
 
 async function endSessionWorktree(root, worktree, out) {
   const { removeWorktree } = await import('./worktrees.mjs');
+  if (worktree.hook) {
+    // Hook-created worktrees have no git status to check, so they are always kept.
+    out.write('[worktree] Kept ' + worktree.path + ' (created by a WorktreeCreate hook). Delete it yourself when you are done.\n');
+    return;
+  }
   const { execFile } = await import('node:child_process');
   const git = (args, cwd) => new Promise((resolve) => execFile('git', args, { cwd }, (error, stdout) => resolve(error ? null : stdout.trim())));
   const status = await git(['status', '--porcelain', '--untracked-files=all'], worktree.path);
@@ -1543,7 +1569,7 @@ async function interactive(root, autoApprove, persistence = {}) {
           }
           if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
           if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
-          if (handled.cd) { await fireCwdChanged(session, root, handled.cd); closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
+          if (handled.cd) { persistence.watchPaths = await fireCwdChanged(session, root, handled.cd); closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
           if (handled.loop) session = await runLoop(handled.loop, root, autoApprove, session, persistence);
           if (handled.goal) session = await runGoal(handled.goal, root, autoApprove, session, persistence);
           continue;
@@ -1949,6 +1975,7 @@ async function main() {
     if (arg === '--replay-user-messages') { headless.replayUser = true; continue; }
     if (arg === '--permission-prompt-tool') { headless.permissionPromptTool = needValue(arg); continue; }
     if (arg === '--init' || arg === '--init-only') { SESSION_OPTIONS.runInit = arg === '--init-only' ? 'only' : 'continue'; continue; }
+    if (arg === '--maintenance') { SESSION_OPTIONS.runMaintenance = true; continue; }
     if (arg === '--from-pr') { SESSION_OPTIONS.fromPr = needValue(arg); continue; }
     if (arg === '-p' || arg === '--print') {
       headless.enabled = true;
@@ -2010,8 +2037,10 @@ async function main() {
   await resolveFlagFiles(workspace);
   if (SESSION_OPTIONS.runInit) {
     await initWorkspace(workspace);
+    await runSetupHooks(workspace, 'init');
     if (SESSION_OPTIONS.runInit === 'only') return;
   }
+  if (SESSION_OPTIONS.runMaintenance) await runSetupHooks(workspace, 'maintenance');
   const command = args[0];
   const rest = args.slice(1);
   const persistence = { enabled: !noPersist && (persistSession || Boolean(resumeId)), resumeId };
