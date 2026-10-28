@@ -370,6 +370,15 @@ export async function createSession({ root, config, restore = null, permissionMo
     background: new Map(),
     hookMessages: []
   };
+  if (restore && restore.workflowCheckpoint && restore.workflowCheckpoint.active === true) {
+    const checkpoint = restore.workflowCheckpoint;
+    agentRegistry(session).autoDispatchCheckpoint = { ...checkpoint, status: 'interrupted' };
+    systemText += '\n\nA saved OASIS task workflow was active when this session was last saved. Its worker processes did not survive restart, so the workflow is paused, not running. Inspect the persisted task board and worker branches before continuing. Do not automatically restart work; only resume dispatch when the current user request makes that appropriate. The saved workflow used max_parallel=' + checkpoint.maxParallel + (checkpoint.teamId ? ' and team_id=' + checkpoint.teamId : '') + '.';
+    recordAgentEvent(session, 'task.auto_dispatch_interrupted', {
+      description: 'Saved task workflow needs recovery',
+      detail: 'Previous auto-dispatch was active at save time; background workers were not restored.'
+    });
+  }
   try { session.agents = await loadAgentDefinitions(root, { env }); } catch { session.agents = { ...BUILTIN_AGENTS }; }
   if (agentsInline && typeof agentsInline === 'object') {
     for (const [rawName, spec] of Object.entries(agentsInline)) {
@@ -1830,6 +1839,7 @@ function pauseAutoDispatch(session, reason, record = null) {
   if (!workflow || !workflow.enabled) return false;
   workflow.enabled = false;
   workflow.pending = false;
+  session.agentTasks.autoDispatchCheckpoint = null;
   recordAgentEvent(session, 'task.auto_dispatch_paused', {
     agentId: record && record.id,
     teamId: workflow.teamId || undefined,
@@ -1987,6 +1997,7 @@ async function dispatchReadyTasksUnlocked(session, args = {}, context = {}, opti
       onDelta: undefined,
       autoDispatchContinuation: true
     };
+    registry.autoDispatchCheckpoint = null;
     registry.autoDispatch = {
       enabled: true,
       maxParallel: requested,
@@ -2118,6 +2129,7 @@ async function dispatchReadyTasksUnlocked(session, args = {}, context = {}, opti
       }
     }
   }
+  if (!continuation) registry.autoDispatchCheckpoint = null;
   return response;
 }
 

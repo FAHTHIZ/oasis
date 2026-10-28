@@ -53,6 +53,15 @@ function sanitizeTodos(value) {
   return todos;
 }
 
+function sanitizeWorkflowCheckpoint(value) {
+  if (!value || typeof value !== 'object' || value.active !== true) return null;
+  const requestedParallel = Number(value.maxParallel);
+  const maxParallel = Number.isInteger(requestedParallel) && requestedParallel >= 1 && requestedParallel <= 6 ? requestedParallel : 3;
+  const teamId = typeof value.teamId === 'string' && /^team_[1-9]\d{0,5}$/.test(value.teamId) ? value.teamId : null;
+  const savedAt = typeof value.savedAt === 'string' && Number.isFinite(Date.parse(value.savedAt)) ? value.savedAt : new Date(0).toISOString();
+  return { active: true, maxParallel, teamId, savedAt };
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
@@ -72,7 +81,17 @@ export async function saveSession(session, options = {}) {
     ...(session.sessionName ? { name: String(session.sessionName).slice(0, 120) } : {}),
     messages,
     todos: sanitizeTodos(session.todos),
-    sharedTasks: sanitizeSharedTaskStore(session.sharedTasks)
+    sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
+    workflowCheckpoint: sanitizeWorkflowCheckpoint(
+      session.agentTasks && session.agentTasks.autoDispatch && session.agentTasks.autoDispatch.enabled === true
+        ? {
+            active: true,
+            maxParallel: session.agentTasks.autoDispatch.maxParallel,
+            teamId: session.agentTasks.autoDispatch.teamId,
+            savedAt: new Date().toISOString()
+          }
+        : session.agentTasks && session.agentTasks.autoDispatchCheckpoint
+    )
   };
   const body = JSON.stringify(payload, null, 2) + '\n';
   if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) throw new Error('Session is too large to save safely. Start a fresh session or disable persistence.');
@@ -107,7 +126,8 @@ export async function loadSession(root, id, options = {}) {
     name: typeof payload.name === 'string' ? payload.name.slice(0, 120) : '',
     messages: validateMessages(payload.messages),
     todos: sanitizeTodos(payload.todos),
-    sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks)
+    sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
+    workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint)
   };
 }
 
