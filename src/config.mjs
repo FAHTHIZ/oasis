@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -8,7 +9,7 @@ export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
 const SETUP_PROVIDER_PRESETS = new Set([
-  'omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'custom'
+  'omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'custom'
 ]);
 
 // A fresh setup should work for users who do not already have a paid-provider key.
@@ -51,8 +52,8 @@ export function inferProtocol(baseURL, fallback = DEFAULT_PROTOCOL) {
 
 export function validateProtocol(raw) {
   const protocol = String(raw || DEFAULT_PROTOCOL).trim().toLowerCase();
-  if (!['openai-responses', 'openai-compatible', 'anthropic'].includes(protocol)) {
-    throw new Error('Provider protocol must be openai-responses, openai-compatible, or anthropic.');
+  if (!['openai-responses', 'openai-compatible', 'anthropic', 'bedrock', 'vertex'].includes(protocol)) {
+    throw new Error('Provider protocol must be openai-responses, openai-compatible, anthropic, bedrock, or vertex.');
   }
   return protocol;
 }
@@ -94,23 +95,24 @@ export async function loadConfig(options = {}) {
   let savedProtocol;
   try { savedProtocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL)); }
   catch { savedProtocol = inferProtocol(savedBaseURL, DEFAULT_PROTOCOL); }
-  const requestedProtocol = env.OASIS_PROTOCOL || (env.OASIS_BASE_URL && stripTrailingSlashes(env.OASIS_BASE_URL) !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
+  const requestedProtocol = env.OASIS_PROTOCOL || cloudProtocolFromEnv(env) || (env.OASIS_BASE_URL && stripTrailingSlashes(env.OASIS_BASE_URL) !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
   const protocol = validateProtocol(requestedProtocol);
-  const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+  const cloud = CLOUD_PROTOCOLS.includes(protocol);
+  const defaultBase = cloud ? defaultCloudBaseURL(protocol, env) : (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL);
   const baseURL = validateBaseUrl(env.OASIS_BASE_URL || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase);
-  const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : (savedProtocol === protocol ? saved.model : ''));
+  const defaultModel = cloud ? defaultCloudModel(protocol, env) : protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : (savedProtocol === protocol ? saved.model : ''));
   const model = String(env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
-  if (!model) throw new Error('No model is configured. Run oasis setup.');
+  if (!model) throw new Error(cloud ? 'No model is configured for ' + protocol + '. Set OASIS_MODEL (or ANTHROPIC_MODEL) to a ' + (protocol === 'bedrock' ? 'Bedrock model or inference profile ID, for example us.anthropic.claude-sonnet-4-5-20250929-v1:0' : 'Vertex model ID, for example claude-sonnet-4-5@20250929') + '.' : 'No model is configured. Run oasis setup.');
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
   const localEndpoint = isLoopbackUrl(baseURL);
-  const explicitKey = localEndpoint ? (env.OASIS_LOCAL_API_KEY || '') : (env.OASIS_API_KEY ||
+  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || '') : (env.OASIS_API_KEY ||
     (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '');
   // Never send a stored/remote credential to a different endpoint or a loopback server by accident.
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
   return {
     ...saved, protocol, baseURL, model, apiKey, configPath,
-    configured: Boolean(apiKey) || isLoopbackUrl(baseURL),
+    configured: Boolean(apiKey) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)),
     maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, 60, 1, 400),
     maxToolCalls: clampInteger(env.OASIS_MAX_TOOL_CALLS || saved.maxToolCalls, 300, 1, 2000),
     maxTokens: clampInteger(env.OASIS_MAX_TOKENS || saved.maxTokens, 2000000, 10000, 20000000),
@@ -125,7 +127,7 @@ export async function saveConfig(config, options = {}) {
   const protocol = validateProtocol(config.protocol || DEFAULT_PROTOCOL);
   const safe = {
     protocol,
-    baseURL: validateBaseUrl(config.baseURL || (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL)),
+    baseURL: validateBaseUrl(config.baseURL || (CLOUD_PROTOCOLS.includes(protocol) ? defaultCloudBaseURL(protocol, env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL)),
     model: String(config.model || (protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : ''))).trim(),
     apiKey: String(config.apiKey || ''),
     maxSteps: clampInteger(config.maxSteps, 60, 1, 400),
@@ -153,7 +155,7 @@ export function getProviderSummary(config) {
     provider: host,
     protocol: config.protocol || DEFAULT_PROTOCOL,
     model: config.model || DEFAULT_MODEL,
-    authentication: config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
+    authentication: config.protocol === 'bedrock' ? (config.apiKey ? 'Bedrock API key' : 'AWS credentials (SigV4)') : config.protocol === 'vertex' ? 'Google Cloud access token' : config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
     configPath: config.configPath || getConfigPath()
   };
 }
