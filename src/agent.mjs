@@ -1687,8 +1687,8 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
   let worktreeResult = null;
   if (worktree && !record.worktree) {
     try {
-      // Background worker completion is unattended: make the hook bypass an explicit safety policy.
-      worktreeResult = await finishWorktree(parent.root, worktree, { env: options.env || process.env, message: description, skipHooks: true });
+      // Only detached workers bypass repository-controlled hooks because no user can approve them interactively.
+      worktreeResult = await finishWorktree(parent.root, worktree, { env: options.env || process.env, message: description, skipHooks: !foreground });
     }
     catch (error) { worktreeResult = { changed: true, branch: worktree.branch, path: worktree.relative, error: 'Could not commit the worktree changes: ' + error.message }; }
     record.worktree = worktreeResult;
