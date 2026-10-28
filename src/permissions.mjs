@@ -72,12 +72,16 @@ function normalizeRelative(p) {
   return String(p || '').replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
-export function ruleMatches(rule, toolName, args = {}) {
+export function ruleMatches(rule, toolName, args = {}, options = {}) {
   if (!rule) return false;
   if (rule.isMcpPrefix) return toolName === rule.tools[0] || toolName.startsWith(rule.tools[0] + '_');
   if (!rule.tools.includes(toolName)) return false;
   if (rule.specifier === null || rule.specifier === '' || rule.specifier === '*') return true;
-  if (toolName === 'run_command') return matchCommandSpecifier(rule.specifier, commandLine(args.command, args.args));
+  if (toolName === 'run_command') {
+    if (matchCommandSpecifier(rule.specifier, commandLine(args.command, args.args))) return true;
+    // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
+    return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args));
+  }
   if (toolName === 'run_shell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim());
   if (toolName === 'fetch_url') {
     if (rule.specifier.startsWith('domain:')) {
@@ -121,8 +125,8 @@ export class PermissionPolicy {
 
   // Returns { decision: 'deny'|'ask'|'allow'|'default', rule }.
   evaluate(toolName, args = {}) {
-    for (const rule of this.deny) if (ruleMatches(rule, toolName, args)) return { decision: 'deny', rule: rule.raw };
-    for (const rule of this.ask) if (ruleMatches(rule, toolName, args)) return { decision: 'ask', rule: rule.raw };
+    for (const rule of this.deny) if (ruleMatches(rule, toolName, args, { matchBasename: true })) return { decision: 'deny', rule: rule.raw };
+    for (const rule of this.ask) if (ruleMatches(rule, toolName, args, { matchBasename: true })) return { decision: 'ask', rule: rule.raw };
     for (const rule of this.allow) if (ruleMatches(rule, toolName, args)) return { decision: 'allow', rule: rule.raw };
     for (const rule of this.sessionAllow) if (ruleMatches(rule, toolName, args)) return { decision: 'allow', rule: rule.raw, session: true };
     return { decision: 'default', rule: null };
@@ -142,7 +146,9 @@ export class PermissionPolicy {
 // Suggest a reusable "always allow" rule after an approval.
 export function suggestRule(toolName, args = {}) {
   if (toolName === 'run_command') {
-    const command = path.basename(String(args.command || ''));
+    // Keep explicit paths: allowing "node" must not also allow ./some/dir/node.
+    const raw = String(args.command || '');
+    const command = /[\\/]/.test(raw) ? raw : path.basename(raw);
     const first = Array.isArray(args.args) && args.args[0] && !String(args.args[0]).startsWith('-') ? ' ' + args.args[0] : '';
     return 'run_command(' + command + first + ':*)';
   }

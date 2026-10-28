@@ -166,3 +166,13 @@ test('OS sandbox confines writes to the workspace and blocks network when availa
   const wrapped = wrapCommand('true', [], sandbox, dir);
   assert.ok(wrapped.args.includes('--unshare-net') || wrapped.args.join(' ').includes('deny network'));
 });
+
+test('session rules for path commands keep the path; deny rules also catch path forms', () => {
+  const policy = new PermissionPolicy({ permissions: { deny: ['run_command(rm:*)'] } });
+  const rule = suggestRule('run_command', { command: '/usr/local/bin/node', args: ['--version'] });
+  assert.equal(rule, 'run_command(/usr/local/bin/node:*)');
+  policy.rememberForSession(rule);
+  assert.equal(policy.evaluate('run_command', { command: '/usr/local/bin/node', args: ['--version'] }).decision, 'allow');
+  assert.notEqual(policy.evaluate('run_command', { command: '/tmp/evil/node', args: ['--version'] }).decision, 'allow');
+  assert.equal(policy.evaluate('run_command', { command: '/bin/rm', args: ['-rf', 'x'] }).decision, 'deny');
+});

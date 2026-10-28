@@ -12,6 +12,22 @@ import { saveSession, loadSession, listSessions } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
+import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
+import { expandFileMentions } from './commands.mjs';
+import { visionEnabled } from './images.mjs';
+
+// Commands that only make sense in the terminal (the web UI has its own session picker).
+const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
+
+export function toolDetail(name, args = {}) {
+  if (!args || typeof args !== 'object') return '';
+  let detail = '';
+  if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
+  else if (name === 'run_shell') detail = String(args.command || '');
+  else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
+  else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
+  return detail.length > 160 ? detail.slice(0, 157) + '...' : detail;
+}
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
@@ -151,24 +167,33 @@ export function createOasisWebServer(options = {}) {
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
   }
 
-  function approvalFor(job, prompt) {
+  // meta (from the agent) can offer "always allow <rule> this session"; that
+  // choice resolves to 'always', which the agent turns into a session rule.
+  function approvalFor(job, prompt, forceInteractive = false, meta = {}) {
     return new Promise((resolve) => {
       const approvalId = randomUUID();
       let settled = false;
+      const suggestion = meta && meta.suggestion && !forceInteractive ? String(meta.suggestion).slice(0, 300) : null;
       const finish = (approved) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         job.pendingApprovals.delete(approvalId);
         if (job.pendingApprovals.size === 0 && job.status === 'waiting_approval') job.status = 'running';
-        emit(job, 'approval_resolved', { approvalId, approved: Boolean(approved) });
-        resolve(Boolean(approved));
+        const value = approved === 'always' && suggestion ? 'always' : Boolean(approved);
+        emit(job, 'approval_resolved', { approvalId, approved: Boolean(value), always: value === 'always' });
+        resolve(value);
       };
       const timer = setTimeout(() => finish(false), 5 * 60 * 1000);
       timer.unref?.();
-      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: String(prompt).slice(0, 5000) });
+      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: String(prompt).slice(0, 5000), suggestion });
       job.status = 'waiting_approval';
-      emit(job, 'approval_required', { approvalId, prompt: String(prompt).slice(0, 5000), expiresInSeconds: 300 });
+      emit(job, 'approval_required', {
+        approvalId, prompt: String(prompt).slice(0, 5000), expiresInSeconds: 300,
+        ...(suggestion ? { suggestion } : {}),
+        ...(meta && meta.tool ? { tool: String(meta.tool).slice(0, 100) } : {}),
+        ...(meta && meta.subagent ? { subagent: String(meta.subagent).slice(0, 100) } : {})
+      });
     });
   }
 
@@ -251,16 +276,46 @@ export function createOasisWebServer(options = {}) {
     emit(job, 'started', { sessionId: activeId });
     void (async () => {
       try {
-        const result = await runAgentTurn(session, message, {
+        let prompt = message;
+        let images = [];
+        const slash = message.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
+        if (!importedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
+          session.webOptions = session.webOptions || {};
+          session.webUsage = session.webUsage || createUsageTracker();
+          const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: activeRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
+          if (handled) {
+            emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
+            if (!handled.prompt) {
+              const saved = await saveSession(session, { env });
+              if (saved.id !== activeId) { activeSessions.delete(activeId); activeSessions.set(saved.id, session); }
+              job.result = { text: String(handled.output || ''), command: slash[1].toLowerCase(), finished: true, toolCalls: 0, sessionId: saved.id };
+              job.status = 'completed';
+              emit(job, 'completed', job.result);
+              return;
+            }
+            prompt = handled.prompt;
+          }
+        }
+        if (prompt === message) {
+          const expanded = await expandFileMentions(activeRoot, message, { images: visionEnabled(session.config, env) }).catch(() => null);
+          if (expanded && expanded.files.length) {
+            prompt = expanded.text;
+            images = expanded.images || [];
+            emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
+          }
+        }
+        const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
           env,
           signal: job.controller.signal,
-          approval: (prompt) => approvalFor(job, prompt),
+          ...(images.length ? { images } : {}),
+          approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
+          onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
+          onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
           onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
-          onToolStart: ({ name }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100) }),
+          onToolStart: ({ name, args, subagent }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100), detail: toolDetail(name, args), ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {}) }),
           onToolResult: ({ name, result: value }) => emit(job, 'tool_result', { name: String(name || 'tool').slice(0, 100), result: summarizeToolResult(value) }),
-          onUsage: (usage) => emit(job, 'usage', usage),
           onContextPruned: (info) => emit(job, 'context_pruned', info)
         });
         const saved = await saveSession(session, { env });
@@ -912,8 +967,9 @@ export function createOasisWebServer(options = {}) {
       if (typeof approved !== 'boolean') { json(res, 400, { error: 'approved must be true or false.' }); return; }
       const pending = job.pendingApprovals.get(approvalId);
       if (!pending) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
-      pending.resolve(approved);
-      json(res, 200, { resolved: true, approved });
+      const always = approved && body.always === true && Boolean(pending.suggestion);
+      pending.resolve(always ? 'always' : approved);
+      json(res, 200, { resolved: true, approved, always });
       return;
     }
 
