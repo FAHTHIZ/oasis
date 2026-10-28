@@ -35,10 +35,51 @@ export function estimateTokens(messages) {
   return Math.ceil(chars / 4);
 }
 
+// Known context windows by model-name pattern (first match wins). Names are matched
+// anywhere in the id, so router ids such as "anthropic/claude-sonnet-4" work too.
+// Unknown and local models keep the conservative 32K default; set contextWindow in
+// the provider config or OASIS_CONTEXT_WINDOW to override.
+const MODEL_WINDOWS = [
+  [/claude/, 200_000],
+  [/gpt-4\.1/, 1_000_000],
+  [/gpt-5/, 400_000],
+  [/(^|[^a-z])o[134](-|$)|o[34]-mini/, 200_000],
+  [/gpt-4o|gpt-4-turbo|chatgpt-4o/, 128_000],
+  [/gemini/, 1_000_000],
+  [/grok-[34]/, 256_000],
+  [/grok/, 128_000],
+  [/qwen3-coder|qwen3-max/, 256_000],
+  [/qwen3/, 128_000],
+  [/codestral|devstral/, 128_000],
+  [/mistral-(large|medium)/, 128_000],
+  [/deepseek/, 64_000],
+  [/kimi|moonshot/, 128_000],
+  [/glm-4\.[5-9]|glm-[5-9]/, 128_000],
+  [/llama-?3\.[1-3]|llama-?4/, 128_000]
+];
+
+export function modelContextWindow(model) {
+  const id = String(model || '').toLowerCase();
+  if (!id) return null;
+  for (const [pattern, size] of MODEL_WINDOWS) if (pattern.test(id)) return size;
+  return null;
+}
+
 export function contextWindowSize(config = {}, env = process.env) {
   return validWindow(config.contextWindow) ||
     validWindow(env && env.OASIS_CONTEXT_WINDOW) ||
+    modelContextWindow(config.model) ||
     DEFAULT_CONTEXT_WINDOW;
+}
+
+// History compaction threshold in characters. Small windows keep the original
+// 60,000-character trigger; larger windows compact at about 60% full.
+export function compactionThresholdChars(config = {}, env = process.env) {
+  const explicit = Number.parseInt(config.compactThresholdChars ?? (env && env.OASIS_COMPACT_THRESHOLD_CHARS), 10);
+  if (Number.isInteger(explicit) && explicit >= 10_000 && explicit <= 8_000_000) return explicit;
+  const windowTokens = contextWindowSize(config, env);
+  if (windowTokens <= DEFAULT_CONTEXT_WINDOW) return 60_000;
+  return Math.floor(windowTokens * 4 * 0.6);
 }
 
 function stubFor(message) {
