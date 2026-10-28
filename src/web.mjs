@@ -1150,6 +1150,14 @@ export function createOasisWebServer(options = {}) {
       }
       try {
         const canonicalRoot = await realpath(workspaceRoot);
+        const canonicalPrimaryRoot = await realpath(root);
+        if (canonicalRoot !== canonicalPrimaryRoot) {
+          const canonicalManagedWorkspaces = await realpath(path.resolve(root, '.oasis', 'workspaces'));
+          if (!canonicalRoot.startsWith(canonicalManagedWorkspaces + path.sep)) {
+            json(res, 403, { error: 'The canonical task workspace resolves outside the managed workspace directory.' });
+            return;
+          }
+        }
         const worktree = await realpath(path.resolve(canonicalRoot, relative));
         const managedWorktrees = path.resolve(canonicalRoot, '.oasis', 'worktrees') + path.sep;
         if (!worktree.startsWith(managedWorktrees)) {
