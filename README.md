@@ -195,6 +195,35 @@ Hooks run your own shell commands at points in the agent lifecycle, using Claude
 
 Events: `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`. Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `prompt`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, or makes the agent keep working after `Stop`, and stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. Matchers accept Oasis or Claude Code tool names. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
 
+## Slash commands, @mentions, and memory
+
+Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|bypassPermissions]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/init`, `/plan`, and `/clear`.
+
+Custom commands are Markdown files, compatible with Claude Code. `.oasis/commands/review.md` becomes `/review`, and `.oasis/commands/git/pr.md` becomes `/git:pr`. Oasis also reads `.claude/commands/`, `~/.config/oasis/commands/`, and `~/.claude/commands/`.
+
+~~~markdown
+---
+description: Open a pull request for the current branch
+argument-hint: [title]
+model: optional-model-id
+---
+Create a PR titled "$ARGUMENTS". Follow @CONTRIBUTING.md
+~~~
+
+Use `$ARGUMENTS` for everything after the command and `$1` to `$9` for single words. Writing `@path/to/file` in any prompt or command includes that file (or a directory listing). Secret files such as `.env` and paths outside the workspace are never included.
+
+Memory files are loaded into every session, from broadest to most specific:
+
+| Scope | Files |
+| --- | --- |
+| User (all projects) | `~/.config/oasis/OASIS.md`, `~/.claude/CLAUDE.md` |
+| Project (commit it) | `OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` |
+| Personal (gitignore it) | `OASIS.local.md`, `CLAUDE.local.md` |
+
+A line like `@docs/style.md` inside a memory file includes that file. Start a message with `#` to save a note: `# use pnpm, not npm` appends to `OASIS.md`, `# user: answer briefly` goes to your user memory, and `# local: my dev port is 4000` goes to `OASIS.local.md`.
+
+The terminal streams the model's replies as they arrive. Set `OASIS_NO_STREAM=1` to print each reply only when it is finished.
+
 ## Subagents
 
 The `task` tool lets Oasis hand self-contained work to a subagent with its own context window. Only the subagent's final report returns to the main conversation, which keeps long investigations from crowding it out. Several `task` calls in one response run in parallel (up to 6 at once). Built-in agents: `general-purpose` (all tools), `explore` (read-only search), and `plan` (read-only planning).
