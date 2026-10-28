@@ -60,14 +60,46 @@ export async function createWorktree(root, label, options = {}) {
   return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base };
 }
 
+const SENSITIVE_PATH = /^(?:\\.env(?:\\..*)?|\\.npmrc|\\.pypirc|\\.netrc|credentials?(?:[._-].*)?|secrets?(?:[._-].*)?|id_(?:rsa|ed25519|ecdsa)|.*\\.(?:pem|key|p12|pfx|keystore|jks))$/i;
+const SECRET_VALUE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\\b|\\bAKIA[0-9A-Z]{16}\\b|\\bAuthorization:\\s*Bearer\\s+\\S{16,}/i;
+
+async function inspectWorktreeSecrets(worktree, options = {}) {
+  const env = options.env || process.env;
+  const changed = await git(worktree.path, ['diff', '--name-only', '-z', worktree.base, '--'], env);
+  const untracked = await git(worktree.path, ['ls-files', '--others', '--exclude-standard', '-z'], env);
+  const files = [...new Set([...changed.split('\\0'), ...untracked.split('\\0')].filter(Boolean))];
+  if (files.length > 256) throw new Error('Automatic task commit blocked: the change contains more than 256 files, exceeding the safety scan limit. Inspect the worktree manually.');
+  const sensitivePaths = files.filter((file) => SENSITIVE_PATH.test(path.posix.basename(file.replace(/\\\\/g, '/'))));
+  if (sensitivePaths.length) {
+    throw new Error('Automatic task commit blocked because potentially sensitive file paths were changed: ' + sensitivePaths.slice(0, 20).join(', ') + '. The worktree was retained; inspect the diff and decide what to keep before committing.');
+  }
+  let scannedBytes = 0;
+  const possibleSecrets = [];
+  for (const file of files) {
+    const absolute = path.resolve(worktree.path, file);
+    if (!absolute.startsWith(path.resolve(worktree.path) + path.sep)) continue;
+    const info = await lstat(absolute).catch(() => null);
+    if (!info || !info.isFile() || info.isSymbolicLink()) continue;
+    if (info.size > 2 * 1024 * 1024) continue;
+    scannedBytes += info.size;
+    if (scannedBytes > 8 * 1024 * 1024) throw new Error('Automatic task commit blocked: the changed files exceeded the safety scan byte limit. Inspect the worktree manually.');
+    const contents = await readFile(absolute).catch(() => null);
+    if (!contents || contents.includes(0)) continue;
+    if (SECRET_VALUE.test(contents.toString('utf8'))) possibleSecrets.push(file);
+  }
+  if (possibleSecrets.length) {
+    throw new Error('Automatic task commit blocked because possible credentials were detected in: ' + possibleSecrets.slice(0, 20).join(', ') + '. The worktree was retained; review the content locally before staging or committing.');
+  }
+}
+
 // Commit the subagent's work on its branch. Unchanged worktrees are removed entirely.
-export async function finishWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
   const status = await git(worktree.path, ['status', '--porcelain', '--untracked-files=all'], env).catch(() => '');
   if (!status) {
     await removeWorktree(root, worktree, { env, deleteBranch: true });
     return { changed: false, branch: worktree.branch, removed: true };
   }
+  if (options.blockSecrets) await inspectWorktreeSecrets(worktree, { env });
   await git(worktree.path, ['add', '-A'], env);
   const identity = [];
   const email = await git(worktree.path, ['config', 'user.email'], env).catch(() => '');
