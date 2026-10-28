@@ -69,6 +69,8 @@ export const BUILTIN_COMMANDS = {
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
+  focus: 'Show the last prompt, a one-line summary of each tool call with edit line counts, and the final response',
   background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
   import: 'Import MCP servers, instructions, commands and rules from Codex, Gemini CLI or Cursor (/import [codex|gemini|cursor] [--dry-run] [--yes])',
@@ -445,6 +447,20 @@ export async function runBuiltinCommand(name, argument, state) {
       const answer = await askSideQuestion(session, argument, { onUsage: (u) => usage && recordUsage(usage, { ...u, phase: 'side' }) });
       session.lastSideQuestion = { question: argument, answer };
       return { output: answer };
+    }
+    case 'color': {
+      const { setPromptColor, getPromptColor, PROMPT_COLORS } = await import('./terminal-ui.mjs');
+      if (!argument) return { output: 'Prompt color: ' + (getPromptColor() || 'default') + '. Choose ' + Object.keys(PROMPT_COLORS).join(', ') + ', random or default.' };
+      try {
+        const chosen = setPromptColor(argument);
+        sessionOptions.promptColor = chosen === 'default' ? null : chosen;
+        if (session) session.promptColor = sessionOptions.promptColor;
+        return { output: 'Prompt color set to ' + chosen + '.' };
+      } catch (error) { return { output: error.message }; }
+    }
+    case 'focus': {
+      const { focusView } = await import('./terminal-ui.mjs');
+      return { focus: focusView(session ? session.messages : [], { color: Boolean(state.color), width: state.width || 100 }) };
     }
     case 'background': {
       if (!session) return { output: 'Start a conversation first; /background hands the current session to a background agent. Use oasis --bg "task" to start a new one.' };

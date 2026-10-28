@@ -17,6 +17,7 @@ const TOOL_ALIASES = {
   memory: ['memory_save', 'memory_search', 'memory_read', 'memory_delete'],
   readmcpresourcetool: ['read_mcp_resource'],
   shell: ['run_shell'],
+  powershell: ['powershell'],
   edit: ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'],
   multiedit: ['multi_edit'],
   notebookedit: ['notebook_edit'],
@@ -37,7 +38,7 @@ const TOOL_ALIASES = {
 };
 
 export const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);
-export const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'monitor']);
+export const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'monitor', 'powershell']);
 
 export function parseRule(raw) {
   const text = String(raw || '').trim();
@@ -92,7 +93,7 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
     return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args));
   }
-  if (toolName === 'run_shell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim());
+  if (toolName === 'run_shell' || toolName === 'powershell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim());
   if (toolName === 'fetch_url') {
     if (rule.specifier.startsWith('domain:')) {
       try {
@@ -163,9 +164,9 @@ export function suggestRule(toolName, args = {}) {
     const first = Array.isArray(args.args) && args.args[0] && !String(args.args[0]).startsWith('-') ? ' ' + args.args[0] : '';
     return 'run_command(' + command + first + ':*)';
   }
-  if (toolName === 'run_shell') {
+  if (toolName === 'run_shell' || toolName === 'powershell') {
     const words = String(args.command || '').trim().split(/\s+/).slice(0, 2).join(' ');
-    return words ? 'run_shell(' + words + ':*)' : null;
+    return words ? (toolName === 'powershell' ? 'PowerShell(' : 'run_shell(') + words + ':*)' : null;
   }
   if (toolName === 'fetch_url') {
     try { return 'fetch_url(domain:' + new URL(String(args.url)).hostname + ')'; } catch { return null; }

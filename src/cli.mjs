@@ -1724,7 +1724,13 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (!text) continue;
     if (text.startsWith('!') && text.length > 1) {
       const command = text.slice(1).trim();
-      const ran = await runShellPassthrough(command, { root });
+      let powershell = null;
+      if (((await loadSettings(root).catch(() => ({}))).defaultShell) === 'powershell') {
+        const { findPowerShell } = await import('./power-tools.mjs');
+        powershell = findPowerShell(process.env);
+        if (!powershell) stdout.write('[shell] defaultShell is powershell, but the PowerShell tool is not enabled or pwsh was not found; using the normal shell.\n');
+      }
+      const ran = await runShellPassthrough(command, { root, powershell });
       if (ran.code) stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '[exit ' + ran.code + ']' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n');
       pendingShell.push({ command, code: ran.code, output: ran.output });
       if (pendingShell.length > 10) pendingShell.shift();
@@ -1764,7 +1770,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
       try {
-        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, confirm: (question) => askApproval(question, true, {}) });
+        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {
           if (handled.output) stdout.write(handled.output + '\n');
           if (handled.reload && session) {
@@ -1778,6 +1784,14 @@ async function interactive(root, autoApprove, persistence = {}) {
             catch (error) { stdout.write('[mcp] ' + error.message + '\n'); }
           }
           if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
+          if (handled.focus) {
+            if (stdout.isTTY) {
+              stdout.write('\x1b[?1049h\x1b[H\x1b[2J' + handled.focus + '\n\n');
+              try { await askLine('Press Enter to return '); } catch {}
+              stdout.write('\x1b[?1049l');
+            } else stdout.write(handled.focus + '\n');
+            continue;
+          }
           if (handled.background) {
             try {
               if (!session) throw new Error('Start a conversation first; /background hands the current session to a background agent.');

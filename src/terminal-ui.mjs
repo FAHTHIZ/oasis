@@ -111,10 +111,63 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
 
 // Prompt and footer -------------------------------------------------------
 
+// /color: a per-session prompt color, so several Oasis terminals are easy to tell apart.
+export const PROMPT_COLORS = { red: [239, 68, 68], blue: [59, 130, 246], green: [34, 197, 94], yellow: [234, 179, 8], purple: [168, 85, 247], orange: [249, 115, 22], pink: [236, 72, 153], cyan: [6, 182, 212] };
+let promptColor = null;
+export function setPromptColor(name) {
+  let key = String(name || '').trim().toLowerCase();
+  if (!key || key === 'default' || key === 'reset') { promptColor = null; return 'default'; }
+  if (key === 'random') { const keys = Object.keys(PROMPT_COLORS).filter((k) => k !== promptColor); key = keys[Math.floor(Math.random() * keys.length)]; }
+  if (!PROMPT_COLORS[key]) throw new Error('Unknown color ' + name + '. Choose ' + Object.keys(PROMPT_COLORS).join(', ') + ', random or default.');
+  promptColor = key;
+  return key;
+}
+export function getPromptColor() { return promptColor; }
+
 export function promptFor(text, color = true) {
   const bash = String(text || '').startsWith('!');
   if (!color) return '> ';
-  return bash ? (themeFg('bashBorder') || '\x1b[33m') + '❯\x1b[39m ' : rgb(gradientAt(0.2)) + '❯' + ANSI.fg + ' ';
+  if (bash) return (themeFg('bashBorder') || '\x1b[33m') + '❯\x1b[39m ';
+  return rgb(promptColor ? PROMPT_COLORS[promptColor] : gradientAt(0.2)) + '❯' + ANSI.fg + ' ';
+}
+
+// /focus: the last prompt, one line per tool call (with +/- line counts for edits) and the final reply.
+function lineCount(text) { return text ? String(text).split('\n').length : 0; }
+function editStats(name, args) {
+  if (name === 'write_file') return '+' + lineCount(args.content);
+  const pairs = name === 'edit_file' ? [[args.old_string, args.new_string]] : name === 'multi_edit' && Array.isArray(args.edits) ? args.edits.map((e) => [e.old_string, e.new_string]) : [];
+  if (!pairs.length) return '';
+  let add = 0; let del = 0;
+  for (const [a, b] of pairs) { add += lineCount(b); del += lineCount(a); }
+  return '+' + add + ' -' + del;
+}
+export function focusView(messages, { color = true, width = 100 } = {}) {
+  const list = Array.isArray(messages) ? messages : [];
+  let start = -1;
+  for (let i = list.length - 1; i >= 0; i--) if (list[i] && list[i].role === 'user' && typeof list[i].content === 'string' && !/^<(?:system|agent|hook)/.test(list[i].content)) { start = i; break; }
+  if (start < 0) return 'Nothing to focus on yet. Send a prompt first.';
+  const dim = (t) => (color ? '\x1b[2m' + t + '\x1b[22m' : t);
+  const bold = (t) => (color ? '\x1b[1m' + t + '\x1b[22m' : t);
+  const clip = (t, n) => { const one = String(t).replace(/\s+/g, ' ').trim(); return one.length > n ? one.slice(0, n - 1) + '…' : one; };
+  const out = [bold('Prompt'), '  ' + String(list[start].content).trim().split('\n').slice(0, 12).join('\n  '), ''];
+  const tools = [];
+  let reply = '';
+  const failed = new Set();
+  for (const m of list.slice(start + 1)) if (m && m.role === 'tool' && /^\{"error"/.test(String(m.content || ''))) failed.add(m.tool_call_id);
+  for (const m of list.slice(start + 1)) {
+    if (!m || m.role !== 'assistant') continue;
+    for (const call of m.tool_calls || []) {
+      const fn = call.function || {};
+      let args = {};
+      try { args = JSON.parse(fn.arguments || '{}'); } catch {}
+      const target = args.path || args.file_path || args.command || args.pattern || args.query || args.url || args.description || '';
+      const stats = editStats(fn.name, args);
+      tools.push('  ' + (failed.has(call.id) ? '✗ ' : '• ') + fn.name + (target ? ' ' + clip(target + (Array.isArray(args.args) ? ' ' + args.args.join(' ') : ''), Math.max(20, width - 30)) : '') + (stats ? ' ' + dim(stats) : ''));
+    }
+    if (m.content) reply = String(m.content);
+  }
+  out.push(bold('Tools (' + tools.length + ')'), ...(tools.length ? tools : ['  (none)']), '', bold('Response'), reply ? '  ' + reply.trim().split('\n').join('\n  ') : '  (no reply yet)');
+  return out.join('\n');
 }
 
 const MODE_LABELS = {
@@ -148,10 +201,11 @@ export function nextMode(current, { allowBypass = false } = {}) {
 
 const MAX_CAPTURE = 30000;
 
-export function runShellPassthrough(command, { root, output = process.stdout, env = process.env } = {}) {
+export function runShellPassthrough(command, { root, output = process.stdout, env = process.env, powershell = null } = {}) {
   return new Promise((resolve) => {
-    const shell = process.platform === 'win32' ? (env.ComSpec || 'cmd.exe') : (env.SHELL || '/bin/sh');
-    const args = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
+    // "defaultShell": "powershell" routes ! commands through PowerShell.
+    const shell = powershell || (process.platform === 'win32' ? (env.ComSpec || 'cmd.exe') : (env.SHELL || '/bin/sh'));
+    const args = powershell ? ['-NoProfile', '-Command', command] : process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
     let captured = '';
     const capture = (chunk) => {
       const text = chunk.toString('utf8');

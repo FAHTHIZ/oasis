@@ -9,6 +9,7 @@ import { assertFileFresh, recordFileState } from './file-state.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFile, writeFile, lstat, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
@@ -52,7 +53,45 @@ export const POWER_TOOL_DEFINITIONS = [
 
 export const SHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'run_shell', description: 'Run a shell command line with pipes, &&, redirects, and globbing in the workspace. Only available when the user enabled shell access or the OS sandbox. Requires approval unless a permission rule or the sandbox allows it. Prefer run_command for single programs.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'Shell command line' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120' }, run_in_background: { type: 'boolean', description: 'Start without waiting; read with command_output' } }, required: ['command'] } } };
 
-export const POWER_TOOL_NAMES = new Set(['grep', 'multi_edit', 'notebook_edit', 'command_output', 'kill_command', 'list_background', 'run_shell']);
+export const POWERSHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'powershell', description: 'Run a PowerShell command in the workspace (pwsh 7+, or Windows PowerShell 5.1). Use it for Windows-native work, PowerShell scripts and cmdlets. Profiles are not loaded. Requires approval unless a PowerShell(...) permission rule allows it.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'PowerShell command' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120' }, run_in_background: { type: 'boolean', description: 'Start without waiting; read with command_output' } }, required: ['command'] } } };
+export const POWER_TOOL_NAMES = new Set(['grep', 'multi_edit', 'notebook_edit', 'command_output', 'kill_command', 'list_background', 'run_shell', 'powershell']);
+
+// Like Claude Code: on by default on Windows (CLAUDE_CODE_USE_POWERSHELL_TOOL=0 turns it off),
+// opt-in elsewhere with CLAUDE_CODE_USE_POWERSHELL_TOOL=1 (or OASIS_POWERSHELL=1) and pwsh on PATH.
+export function findPowerShell(env = process.env, platform = process.platform) {
+  const flag = env.CLAUDE_CODE_USE_POWERSHELL_TOOL ?? env.OASIS_POWERSHELL;
+  if (flag === '0' || flag === 'false') return null;
+  if (platform !== 'win32' && flag !== '1' && flag !== 'true') return null;
+  const dirs = String(env.PATH || env.Path || '').split(platform === 'win32' ? ';' : ':').filter(Boolean);
+  const names = platform === 'win32' ? ['pwsh.exe', 'powershell.exe'] : ['pwsh'];
+  for (const name of names) for (const dir of dirs) {
+    const candidate = path.join(dir, name);
+    if (existsSync(candidate)) return candidate;
+  }
+  if (platform === 'win32') {
+    const fallback = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    if (existsSync(fallback)) return fallback;
+  }
+  return null;
+}
+
+export function powerShellLaunch(exe, command, env = process.env, platform = process.platform) {
+  const args = ['-NoProfile', '-NonInteractive'];
+  if (platform === 'win32' && env.CLAUDE_CODE_POWERSHELL_RESPECT_EXECUTION_POLICY !== '1') args.push('-ExecutionPolicy', 'Bypass');
+  // UTF-8 output on Windows PowerShell 5.1 as well.
+  const prefix = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference = \'SilentlyContinue\'; ';
+  args.push('-Command', prefix + command);
+  return { command: exe, args };
+}
+
+// grep, rg, findstr, git diff and friends use exit code 1 for "no match" / "differs".
+export function benignExitNote(command, exitCode) {
+  if (exitCode !== 1) return null;
+  const first = String(command || '').trim().split(/[|;]/)[0].trim().toLowerCase();
+  if (/^(grep|egrep|fgrep|rg|findstr|select-string|git\s+grep|git\s+diff|where(\.exe)?|fc(\.exe)?|diff(\.exe)?)\b/.test(first)) return 'Exit code 1 here means no matches or files differ, not a failure.';
+  if (/^robocopy\b/.test(first)) return 'robocopy exit codes 1-7 report success.';
+  return null;
+}
 export const POWER_READ_ONLY_TOOLS = new Set(['grep', 'command_output', 'list_background']);
 
 export function commandLineText(command, args) {
@@ -282,6 +321,7 @@ function describeBackground(entry) {
 // ---------------------------------------------------------------- run_shell
 const SHELL_BLOCK_PATTERNS = [
   /\bsudo\b/, /\bdoas\b/, /\bsu\s+-?\s*\w*\s*-c\b/, /\bmkfs(\.\w+)?\b/, /\bdd\s+[^|;&]*of=\/dev\//, /\brm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(\/|~|\$HOME)(\s|$|\/\*)/i,
+  /\bRemove-Item\b[^;|]*-Recurse[^;|]*\s(['"]?)([A-Za-z]:\\?|\/|~|\$HOME|\$env:USERPROFILE)\1(\s|$)/i, /\b(Format-Volume|Clear-Disk|Stop-Computer|Restart-Computer|Initialize-Disk)\b/i,
   /:\(\)\s*\{\s*:\|:&\s*\};:/, /\bshutdown\b|\breboot\b|\bpoweroff\b/, /\bchmod\s+-R\s+777\s+\//, /\bgit\s+push\b[^;&|]*(--force|-f\b)/
 ];
 
@@ -291,7 +331,7 @@ export function shellCommandBlocked(command) {
   return null;
 }
 
-async function runShell(root, args, context) {
+async function runShell(root, args, context, flavor = 'sh') {
   const command = String(args.command || '').trim();
   if (!command) throw new Error('Provide a shell command.');
   if (command.length > 8000 || command.includes('\0')) throw new Error('Shell command is too long or invalid.');
@@ -300,10 +340,15 @@ async function runShell(root, args, context) {
   const sandbox = context.sandbox && context.sandbox.enabled && context.sandbox.available ? context.sandbox : null;
   const autoAllowed = context.ruleAllowed || (sandbox && sandbox.autoAllowCommands !== false) || (context.autoApprove && context.permissionMode === 'bypassPermissions');
   if (!autoAllowed) {
-    const ok = context.approval && await context.approval('Run this shell command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox);
+    const ok = context.approval && await context.approval('Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox);
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };
   }
-  const shell = process.platform === 'win32' ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { command: '/bin/sh', args: ['-c', command] };
+  let shell;
+  if (flavor === 'powershell') {
+    const exe = context.powershell || findPowerShell(context.env || process.env);
+    if (!exe) throw new Error('PowerShell was not found. Install PowerShell 7 (pwsh) and put it on PATH.');
+    shell = powerShellLaunch(exe, command, context.env || process.env);
+  } else shell = process.platform === 'win32' ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { command: '/bin/sh', args: ['-c', command] };
   const launch = wrapCommand(shell.command, shell.args, sandbox, root);
   const env = scrubEnvironment(context.env || process.env);
   if (args.run_in_background === true) {
@@ -327,7 +372,8 @@ async function runShell(root, args, context) {
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       if (context.signal) context.signal.removeEventListener('abort', onAbort);
-      resolve({ approved: true, command, exitCode: code, signal, stdout, stderr, timedOut, cancelled: Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}) });
+      const note = benignExitNote(command, code);
+      resolve({ approved: true, command, exitCode: code, ...(note ? { note } : {}), signal, stdout, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}) });
     });
   });
 }
@@ -342,6 +388,8 @@ export async function executePowerTool(name, args, context, root) {
       return await editNotebook(root, args);
     case 'run_shell':
       return await runShell(root, args, context);
+    case 'powershell':
+      return await runShell(root, args, context, 'powershell');
     case 'list_background': {
       const registry = context.session && context.session.background;
       return { processes: registry ? [...registry.values()].map(describeBackground) : [] };

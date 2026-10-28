@@ -40,7 +40,7 @@ export function toolDetail(name, args = {}) {
   if (!args || typeof args !== 'object') return '';
   let detail = '';
   if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
-  else if (name === 'run_shell') detail = String(args.command || '');
+  else if (name === 'run_shell' || name === 'powershell') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
   return detail.length > 160 ? detail.slice(0, 157) + '...' : detail;
