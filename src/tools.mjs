@@ -1381,6 +1381,21 @@ export async function listAvailableSkills(root, options = {}) {
   }
   await scan(BUNDLED_SKILLS_DIR, 'built-in');
   await scanImportedExtensions(path.join(getConfigDirectory(env), 'extensions'), 'global-extension');
+  // Skills from enabled Claude Code plugins (oasis plugin install NAME@MARKETPLACE).
+  try {
+    const { loadEnabledPlugins, pluginSkills } = await import('./claude-plugins.mjs');
+    for (const item of await pluginSkills(await loadEnabledPlugins(root, { env }))) {
+      try {
+        const info = await lstat(item.file);
+        if (!info.isFile() || info.size > 96 * 1024) continue;
+        const content = await readFile(item.file, 'utf8');
+        if (content.includes('\0')) continue;
+        const meta = parseSkillMetadata(content, item.name);
+        if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(meta.name)) continue;
+        byName.set(meta.name.toLowerCase(), { name: meta.name, description: meta.description, source: 'plugin', plugin: item.plugin, relativePath: item.name, absolutePath: item.file, absoluteSkillDirectory: item.dir });
+      } catch { /* Ignore malformed plugin skills. */ }
+    }
+  } catch { /* Plugins are optional. */ }
   await scan(getUniversalGlobalSkillsDirectory(env), 'global-portable');
   await scan(path.join(root, '.agents', 'skills'), 'portable-workspace', '.agents/skills');
   await scan(path.join(root, '.oasis', 'skills'), 'workspace', '.oasis/skills');
@@ -1407,6 +1422,14 @@ export async function loadSkillText(root, rawName, options = {}) {
     const targetReal = await realpath(target);
     if (!inside(rootReal, targetReal)) throw new Error('Portable global skill resolves outside the universal skills directory.');
     content = await readFile(targetReal, 'utf8');
+  } else if (skill.source === 'plugin') {
+    const dirReal = await realpath(path.resolve(skill.absoluteSkillDirectory || ''));
+    const targetReal = await realpath(path.resolve(skill.absolutePath || ''));
+    if (!inside(dirReal, targetReal)) throw new Error('Plugin skill resolves outside its plugin directory.');
+    const { expandPluginVariables } = await import('./claude-plugins.mjs');
+    const pluginRoot = path.resolve(skill.absoluteSkillDirectory, '..', '..');
+    content = expandPluginVariables(await readFile(targetReal, 'utf8'), { CLAUDE_PLUGIN_ROOT: pluginRoot, CLAUDE_SKILL_DIR: dirReal });
+    content = content.replace(/\$\{CLAUDE_SKILL_DIR\}/g, dirReal);
   } else if (skill.source === 'global-extension') {
     const globalExtensionsRoot = path.resolve(getConfigDirectory(options.env || process.env), 'extensions');
     const rootReal = await realpath(globalExtensionsRoot);

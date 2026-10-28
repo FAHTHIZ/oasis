@@ -38,6 +38,7 @@ export const BUILTIN_COMMANDS = {
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
   mcp: 'Show connected MCP servers and their tools',
+  plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
   'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
   todos: 'Show the current todo list',
@@ -241,6 +242,14 @@ export async function runBuiltinCommand(name, argument, state) {
         if (session.messages[0] && session.messages[0].role === 'system') session.messages[0].content += note;
       }
       return { output: 'Added ' + result.accepted.at(-1) + ' for this session.' };
+    }
+    case 'plugin':
+    case 'plugins': {
+      const { pluginCli } = await import('./claude-plugins.mjs');
+      let text = '';
+      const args = argument.trim() ? argument.trim().split(/\s+/) : ['list'];
+      await pluginCli(root, args, { env, write: (chunk) => { text += chunk; } });
+      return { output: text.trim() + (/^(install|i|uninstall|remove|enable|disable|update)$/.test(args[0]) ? '\nRun /clear or start a new session to load the change.' : '') };
     }
     case 'mcp': {
       const login = argument.match(/^(login|logout)\s+([A-Za-z0-9_-]+)$/i);

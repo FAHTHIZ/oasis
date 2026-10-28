@@ -147,3 +147,9 @@ export async function managePlugins(root, args = [], options = {}) {
   }
   throw new Error('Unknown plugins action "' + action + '". Use list, install, or remove.');
 }
+
+/** True when NAME is a bundled OASIS capability bundle (not a Claude Code plugin). */
+export async function isBuiltInPlugin(name) {
+  const catalog = await readCatalog();
+  return catalog.some((plugin) => plugin.name === String(name || '').toLowerCase());
+}

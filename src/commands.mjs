@@ -81,6 +81,27 @@ export async function loadCustomCommands(root, options = {}) {
       });
     }
   }
+  // Commands from enabled Claude Code plugins: /plugin-name:command (project commands win on clashes).
+  try {
+    const { loadEnabledPlugins, pluginCommands } = await import('./claude-plugins.mjs');
+    const env = options.env || process.env;
+    for (const item of await pluginCommands(await loadEnabledPlugins(root, { env }), { env, root })) {
+      if (commands.has(item.name) || !/^[a-z0-9][a-z0-9:_.-]{0,100}$/.test(item.name) || item.body.includes('\0')) continue;
+      const { data: meta, body } = parseFrontMatter(item.body);
+      const firstLine = body.split('\n').find((line) => line.trim()) || '';
+      commands.set(item.name, {
+        name: item.name,
+        description: String((Array.isArray(meta.description) ? meta.description.join(', ') : meta.description) || firstLine.replace(/^#+\s*/, '')).slice(0, 200) + ' (plugin ' + item.plugin + ')',
+        argumentHint: Array.isArray(meta['argument-hint']) ? '[' + meta['argument-hint'].join(', ') + ']' : String(meta['argument-hint'] || ''),
+        model: meta.model && meta.model !== 'inherit' ? String(meta.model) : null,
+        ...commandOptions(meta),
+        body: body.trim(),
+        file: item.file,
+        scope: 'user',
+        plugin: item.plugin
+      });
+    }
+  } catch { /* Plugins are optional. */ }
   return commands;
 }
 

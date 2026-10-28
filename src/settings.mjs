@@ -214,6 +214,19 @@ export async function loadSettings(root, options = {}) {
   for (const extra of options.extraSettings || []) {
     if (extra && extra.settings && typeof extra.settings === 'object') apply(extra.settings, 'flag', extra.file || '--settings', true);
   }
+  // Hooks from enabled Claude Code plugins run with CLAUDE_PLUGIN_ROOT in their environment.
+  if (!options.skipPlugins) {
+    try {
+      const { loadEnabledPlugins, pluginHooks } = await import('./claude-plugins.mjs');
+      const plugins = await loadEnabledPlugins(root, { env });
+      result.plugins = plugins.map((plugin) => ({ id: plugin.id, name: plugin.name, root: plugin.root, origin: plugin.origin }));
+      for (const item of await pluginHooks(plugins, { env, root })) {
+        const normalized = normalizeHooks(item.hooks);
+        for (const groups of Object.values(normalized)) for (const group of groups) for (const hook of group.hooks) if (hook.type === 'command' || hook.command) hook.pluginEnv = item.env;
+        mergeHooks(result.hooks, normalized, 'plugin:' + item.plugin);
+      }
+    } catch { /* Plugins are optional; `oasis plugin list` reports problems. */ }
+  }
   if (env.OASIS_SANDBOX === '1') result.sandbox.enabled = true;
   if (env.OASIS_SANDBOX === '0') result.sandbox.enabled = false;
   return result;

@@ -122,6 +122,7 @@ function printHelp() {
     '  --fallback-model ID           Switch to this model when the main one is overloaded or failing',
     '  --max-budget-usd N            Stop once the estimated model cost reaches N dollars',
     '  --tools "Read,Edit,Bash"      Only offer these tools (Claude or Oasis names; "" for none)',
+    '  --plugin-dir DIR              Load a Claude Code plugin directory for this session (repeatable)',
     '  --mcp-config FILE|JSON        Load MCP servers ({"mcpServers": {...}}); --strict-mcp-config uses only these',
     '  --settings FILE|JSON          Extra settings on top of the usual files; --setting-sources user,project,local',
     '  --agents JSON                 Define subagents inline: {"name": {"description", "prompt", "tools"}}',
@@ -1932,6 +1933,7 @@ async function main() {
       continue;
     }
     if (arg === '--plan') { headless.planOnly = true; continue; }
+    if (arg === '--plugin-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; autoApprove = true; continue; }
     if (arg === '--no-session-persistence') { noPersist = true; continue; }
@@ -2008,7 +2010,20 @@ async function main() {
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest, workspace);
   if (command === 'extensions' || command === 'extension') return await manageExternalExtensions(workspace, rest, autoApprove);
-  if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
+  if (command === 'plugins' || command === 'plugin') {
+    // Claude Code plugins and marketplaces; the bundled capability catalog stays under
+    // `oasis plugins list|install|remove NAME` for its built-in names.
+    const sub = String(rest[0] || 'list').toLowerCase();
+    const builtIn = ['install', 'remove'].includes(sub) && rest[1] && !String(rest[1]).includes('@') && await (await import('./plugins.mjs')).isBuiltInPlugin(rest[1]);
+    if (sub === 'catalog' || sub === 'browse' || builtIn) return await managePlugins(workspace, sub === 'catalog' ? ['list', ...rest.slice(1)] : rest);
+    const { pluginCli } = await import('./claude-plugins.mjs');
+    if (sub === 'list' || sub === 'ls') {
+      await managePlugins(workspace, ['list']);
+      stdout.write('\nClaude Code plugins (oasis plugin marketplace add OWNER/REPO, then oasis plugin install NAME@MARKETPLACE)\n\n');
+    }
+    await pluginCli(workspace, rest, { env: process.env });
+    return;
+  }
   if (command === 'sessions') return await manageSessions(workspace, rest);
   if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
   if (command === 'permissions') return await managePermissions(workspace, rest);

@@ -22,7 +22,7 @@ It is **not** a drop-in Claude Code replacement across all workflows, and it is 
 | Subagents | Built-in/custom subagents, up to six parallel child runs, background status/steering/cancel, optional worktree isolation | Subagents, agent view, agent teams, dynamic workflows and longer-running project sessions | Useful delegation exists; no visual agent manager or cloud project orchestration |
 | Multi-agent coordination | Shared dependency-aware tasks, exclusive time-limited claims/releases, peer-to-peer messages, agent status/cancel, optional isolated worktrees, named teams with roster and controlled shutdown | Subagents plus agent teams with shared tasks, teammate messaging, worktree isolation and lifecycle controls | **Partial:** core coordination is implemented; no autonomous task scheduler, cross-session team sync, or dedicated visual team monitor |
 | Code intelligence | Language-server navigation/references/hover/symbols/call hierarchy plus detected diagnostics and linters | Terminal/IDE code context and corresponding tool capabilities depending on surface | Substantial local functionality; language/platform breadth still needs validation |
-| Extensions | MCP stdio/Streamable HTTP, OAuth where supported, resources/prompts, hooks, skills, slash commands and reviewed imports | Plugins, MCP, skills, hooks, subagents and commands; full integrated setup in supported surfaces | Native ecosystem imports are partial, not drop-in plugin compatibility; no general remote marketplace |
+| Extensions | MCP stdio/Streamable HTTP, OAuth where supported, resources/prompts, hooks, skills, slash commands and reviewed imports | Plugins, MCP, skills, hooks, subagents and commands; full integrated setup in supported surfaces | Closed for the Claude Code plugin format: marketplaces, `name@marketplace` installs, commands, agents, skills, hooks and MCP servers run natively (see sprint table) |
 | Browser workspace | Local-hosted authenticated web agent with streamed events, approvals and host-GitHub-CLI repository cloning; separate local-storage dashboard | Web/desktop/IDE/mobile surfaces, Remote Control and cloud-backed projects/routines | Local web UI exists; no equivalent cloud/remote lifecycle, embedded GitHub OAuth, or dashboard/CLI data sync |
 | IDEs | No native VS Code or JetBrains extension | Official VS Code and JetBrains integrations with editor-specific context/diff workflows | **Major gap** |
 | Other surfaces | CLI + local browser runtime + GitHub Action | Desktop, web/cloud, mobile, Chrome, Slack and CI integrations | **Major gap** |
@@ -52,6 +52,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | --- | --- | --- |
 | Output-token ceiling | 32k output tokens by default on current models; `CLAUDE_CODE_MAX_OUTPUT_TOKENS` override; recovers when a reply is cut off | **Closed.** Model-aware 32k/16k/8k defaults, `maxOutputTokens` / `OASIS_MAX_OUTPUT_TOKENS` / `CLAUDE_CODE_MAX_OUTPUT_TOKENS`. A `max_tokens` / `length` / `max_output_tokens` stop on Anthropic, Chat Completions or Responses no longer fails the turn or runs a half-written tool call: the incomplete call is dropped and the model resumes in smaller steps (max 3 recoveries per turn). A provider 400 naming a smaller cap is learned for the session. |
 | Read-before-edit and stale-file protection | Edit/Write refuse files not read this session, and files modified since they were read | **Closed.** Session file-state tracking (mtime + size + SHA-256). Overwrites require a prior read; every edit/overwrite is refused if the file changed on disk since it was read (content-hash check avoids false positives from touch/format no-ops). The agent's own writes refresh state. `requireReadBeforeEdit: "strict"` matches Claude Code exactly; the default also allows exact-match edits of unread files. |
+| Plugins and marketplaces | `/plugin marketplace add`, `/plugin install name@market`, enable/disable/update/validate; plugins ship commands, agents, skills, hooks, MCP servers | **Closed.** `oasis plugin ...` and `/plugin ...` with the same verbs. Claude Code `marketplace.json` / `plugin.json` layouts, relative/github/url/git-subdir sources, `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`, `enabledPlugins` across user and trusted project settings, `--plugin-dir`, and plugins already installed by Claude Code are all honored. Verified against `anthropics/claude-code` (12 plugins). Not yet: npm sources, plugin LSP servers, output styles from plugins. |
 
 ## Ranked next improvements
 
@@ -77,7 +78,7 @@ Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require proces
 
 ### 5. Remaining platform and ecosystem gaps
 
-Native Gemini and Azure Foundry adapters; PowerShell and Windows sandboxing; a real plugin-marketplace format and safer lifecycle/secret provisioning for full external ecosystems; broader hook parity.
+Native Gemini and Azure Foundry adapters; PowerShell and Windows sandboxing; safer lifecycle/secret provisioning for plugin MCP servers; npm plugin sources and plugin LSP servers; broader hook parity.
 
 ### 6. Terminal experience polish
 

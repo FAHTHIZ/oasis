@@ -117,6 +117,26 @@ export async function loadAgentDefinitions(root, options = {}) {
       };
     }
   }
+  // Agents from enabled Claude Code plugins, named plugin-name:agent.
+  try {
+    const { loadEnabledPlugins, pluginAgents } = await import('./claude-plugins.mjs');
+    for (const item of await pluginAgents(await loadEnabledPlugins(root, { env }), { env, root })) {
+      if (Buffer.byteLength(item.body) > MAX_AGENT_FILE || agents[item.name]) continue;
+      const { data, body } = parseFrontMatter(item.body);
+      const pluginName = item.name.split(':')[0];
+      const name = data.name ? pluginName + ':' + String(data.name).trim().toLowerCase() : item.name;
+      if (!/^[a-z0-9][a-z0-9_.-]{0,63}:[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
+      agents[name] = {
+        name,
+        description: String(data.description || 'Plugin agent ' + name).slice(0, 600),
+        tools: mapToolNames(data.tools),
+        model: data.model && data.model !== 'inherit' ? String(data.model) : null,
+        isolation: String(data.isolation || '').toLowerCase() === 'worktree' ? 'worktree' : null,
+        prompt: body.trim().slice(0, 30000),
+        source: 'plugin:' + item.plugin
+      };
+    }
+  } catch { /* Plugins are optional. */ }
   return agents;
 }
 
