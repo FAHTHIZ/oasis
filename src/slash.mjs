@@ -69,6 +69,7 @@ export const BUILTIN_COMMANDS = {
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  import: 'Import MCP servers, instructions, commands and rules from Codex, Gemini CLI or Cursor (/import [codex|gemini|cursor] [--dry-run] [--yes])',
   advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
   subtask: 'Run a task in a forked background subagent that inherits this conversation and reports back (/subtask TASK)',
   btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
@@ -442,6 +443,21 @@ export async function runBuiltinCommand(name, argument, state) {
       const answer = await askSideQuestion(session, argument, { onUsage: (u) => usage && recordUsage(usage, { ...u, phase: 'side' }) });
       session.lastSideQuestion = { question: argument, answer };
       return { output: answer };
+    }
+    case 'import': {
+      const { planImport, describePlan, applyImport, parseImportArgs } = await import('./importers.mjs');
+      let parsed;
+      try { parsed = parseImportArgs(argument); } catch (error) { return { output: error.message }; }
+      const plan = await planImport(root, { sources: parsed.sources, env });
+      const description = describePlan(plan);
+      const pending = plan.items.filter((item) => item.action !== 'skip');
+      if (!pending.length || parsed.dryRun) return { output: description + (parsed.dryRun && pending.length ? '\nDry run: nothing was written.' : '') };
+      if (!parsed.yes) {
+        if (typeof state.confirm !== 'function') return { output: description + '\nRun /import ' + [...parsed.sources, '--yes'].join(' ') + ' to write these.' };
+        if (!(await state.confirm(description + '\nImport these ' + pending.length + ' items?'))) return { output: 'Import cancelled.' };
+      }
+      const done = await applyImport(plan);
+      return { output: description + '\nImported ' + done.length + ' item' + (done.length === 1 ? '' : 's') + '. Run /reload-plugins or start a new session to use new MCP servers; commands and rules apply on the next turn or session.' };
     }
     case 'advisor': {
       if (!session) return { output: 'Start a conversation first, or set "advisorModel" in settings or pass --advisor MODEL.' };

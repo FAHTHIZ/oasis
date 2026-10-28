@@ -58,6 +58,21 @@ export function claudeJsonPath(env = process.env) {
   return base ? path.join(base, '.claude.json') : null;
 }
 
+// <oasis config>/mcp.json: user-scope servers in the Claude/.mcp.json format (written by
+// `oasis import`; hand-editable). Supports http servers and stdio env values.
+export async function loadUserMcpJson(options = {}) {
+  const env = options.env || process.env;
+  const { getConfigDirectory } = await import('./config.mjs');
+  const file = options.file || path.join(getConfigDirectory(env), 'mcp.json');
+  let parsed;
+  try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch (error) {
+    if (error.code === 'ENOENT') return { servers: [], failures: [], file };
+    return { servers: [], failures: [{ name: 'mcp.json', error: 'could not be read: ' + error.message }], file };
+  }
+  const result = parseMcpServerEntries(parsed || {}, env, 'user-json');
+  return { ...result, file };
+}
+
 export async function loadClaudeCodeMcpServers(root, options = {}) {
   const env = options.env || process.env;
   const empty = { local: [], user: [], failures: [], file: null };
