@@ -17,7 +17,7 @@ import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
-import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff } from './worktrees.mjs';
+import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff } from './worktrees.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
@@ -1127,10 +1127,12 @@ export function createOasisWebServer(options = {}) {
       const artifact = task.result && task.result.isolatedWorktree;
       const branch = artifact && artifact.branch || task.worktreeBranch;
       const baseCommit = artifact && artifact.baseCommit || task.worktreeBaseCommit;
-      const commit = artifact && artifact.commit;
+      const commit = artifact && artifact.commit || null;
       const relative = artifact && artifact.path || task.worktreePath;
-      if (!artifact || !artifact.changed || !commit || !baseCommit || !relative) {
-        json(res, 409, { error: 'This task has no completed, committed isolated-worktree diff to review.' });
+      const committed = Boolean(artifact && artifact.changed && commit);
+      const recoverable = !committed && ['interrupted', 'error', 'cancelled'].includes(task.status);
+      if (!branch || !baseCommit || !relative || (!committed && !recoverable)) {
+        json(res, 409, { error: 'This task has no available isolated-worktree diff to review.' });
         return;
       }
       const workspaceRoot = typeof task.workspaceRoot === 'string' ? path.resolve(task.workspaceRoot) : '';
@@ -1144,7 +1146,7 @@ export function createOasisWebServer(options = {}) {
         json(res, 409, { error: 'The saved isolated worktree path is invalid.' });
         return;
       }
-      if (!/^[a-f0-9]{40}$/i.test(String(baseCommit)) || !/^[a-f0-9]{7,40}$/i.test(String(commit)) || !/^oasis\/[a-z0-9-]+$/i.test(String(branch || ''))) {
+      if (!/^[a-f0-9]{40}$/i.test(String(baseCommit)) || (committed && !/^[a-f0-9]{7,40}$/i.test(String(commit))) || !/^oasis\/[a-z0-9-]+$/i.test(String(branch || ''))) {
         json(res, 409, { error: 'The saved task artifact metadata is invalid.' });
         return;
       }
@@ -1164,13 +1166,19 @@ export function createOasisWebServer(options = {}) {
           json(res, 403, { error: 'The saved worktree resolves outside its managed directory.' });
           return;
         }
-        const diff = await readWorktreeDiff(canonicalRoot, baseCommit, commit, { env, maxChars: 180000 });
+        const diff = committed
+          ? await readWorktreeDiff(canonicalRoot, baseCommit, commit, { env, maxChars: 180000 })
+          : await readWorktreeWorkingDiff(worktree, baseCommit, { env, maxChars: 180000 });
         json(res, 200, {
           branch,
           baseCommit,
           commit,
-          files: Array.isArray(artifact.files) ? artifact.files.slice(0, 200) : [],
-          diffStat: String(artifact.diffStat || '').slice(0, 4000),
+          complete: committed,
+          status: task.status,
+          files: Array.isArray(artifact && artifact.files) ? artifact.files.slice(0, 200) : [],
+          untrackedFiles: Array.isArray(diff.untrackedFiles) ? diff.untrackedFiles : [],
+          omittedUntracked: Number(diff.omittedUntracked) || 0,
+          diffStat: String(artifact && artifact.diffStat || '').slice(0, 4000),
           diff: diff.diff,
           truncated: diff.truncated
         });
@@ -1193,6 +1201,11 @@ export function createOasisWebServer(options = {}) {
         events: job.events.filter((event) => event.id > after),
         nextEventId: job.nextEventId,
         result: job.result,
+        worktree: job.worktreeBranch && job.worktreePath && job.worktreeBaseCommit ? {
+          branch: job.worktreeBranch,
+          path: job.worktreePath,
+          baseCommit: job.worktreeBaseCommit
+        } : null,
         error: job.error
       });
       return;
