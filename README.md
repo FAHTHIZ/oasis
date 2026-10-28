@@ -221,6 +221,8 @@ Memory files are loaded into every session, from broadest to most specific:
 
 A line like `@docs/style.md` inside a memory file includes that file. Start a message with `#` to save a note: `# use pnpm, not npm` appends to `OASIS.md`, `# user: answer briefly` goes to your user memory, and `# local: my dev port is 4000` goes to `OASIS.local.md`.
 
+Press Ctrl+C while a task is running to stop it and return to the prompt (press it again to quit). The conversation stays usable, and `/rewind 1` undoes any file changes the stopped task made.
+
 The terminal streams the model's replies as they arrive. Set `OASIS_NO_STREAM=1` to print each reply only when it is finished.
 
 ## Headless mode for scripts and CI
