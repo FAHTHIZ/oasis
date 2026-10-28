@@ -7,7 +7,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
-import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, testProviderConnection, repairInterruptedHistory } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
@@ -104,7 +104,10 @@ function printHelp() {
 async function askLine(question) {
   if (!stdin.isTTY || !stdout.isTTY) throw new Error('This action needs an interactive terminal. Re-run it from a terminal session.');
   const rl = createInterface({ input: stdin, output: stdout });
-  try { return await rl.question(question); } finally { rl.close(); }
+  // Readline swallows Ctrl+C; forward it so a running task can be interrupted.
+  const controller = new AbortController();
+  rl.on('SIGINT', () => { controller.abort(); if (process.listenerCount('SIGINT')) process.emit('SIGINT'); });
+  try { return await rl.question(question, { signal: controller.signal }); } finally { rl.close(); }
 }
 
 async function askSecret(question) {
@@ -783,9 +786,19 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     for (const failure of session.mcpFailures) stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + '\n');
     session.mcpFailures = [];
   }
+  // Ctrl+C stops the current task and returns to the prompt; a second Ctrl+C exits.
+  const controller = new AbortController();
+  const onInterrupt = () => {
+    if (controller.signal.aborted) { stdout.write('\nExiting Oasis.\n'); closeSession(session); process.exit(130); }
+    endStream();
+    stdout.write('\n[interrupted] Stopping the current task. Press Ctrl+C again to quit.\n');
+    controller.abort();
+  };
+  if (stdin.isTTY) process.on('SIGINT', onInterrupt);
   try {
     const runner = modeOptions.planOnly ? runAgentPlan : runAgentTurn;
     const result = await runner(session, prompt, {
+      signal: controller.signal,
       autoApprove,
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
@@ -805,7 +818,13 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
     }
   } catch (error) {
-    stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
+    endStream();
+    if (controller.signal.aborted || error.name === 'AbortError') {
+      repairInterruptedHistory(session);
+      stdout.write('[interrupted] Task stopped. Changes made before the interruption remain; use /rewind 1 to undo them.\n');
+    } else stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
+  } finally {
+    process.removeListener('SIGINT', onInterrupt);
   }
   reportSessionNotices(session);
   if (persistence.enabled) {

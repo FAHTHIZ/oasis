@@ -1404,6 +1404,39 @@ async function executeOneCall(session, call, context, options) {
   };
 }
 
+// After an interrupted turn (Ctrl+C, cancel, or crash) the history can end with
+// tool calls that never got results, or with a user message and no reply. Providers
+// reject that, so add explicit "interrupted" results and a short assistant note.
+export function repairInterruptedHistory(session) {
+  const messages = session.messages || [];
+  let repaired = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (message.role !== 'assistant' || !Array.isArray(message.tool_calls) || !message.tool_calls.length) continue;
+    let end = i + 1;
+    const answered = new Set();
+    while (end < messages.length && messages[end].role === 'tool') { answered.add(messages[end].tool_call_id); end++; }
+    const missing = message.tool_calls.filter((call) => call && call.id && !answered.has(call.id));
+    if (!missing.length) continue;
+    const fillers = missing.map((call) => ({
+      role: 'tool',
+      tool_call_id: call.id,
+      name: call.function && call.function.name || 'tool',
+      content: JSON.stringify({ error: 'Interrupted by the user before this tool finished.' }),
+      result: { error: 'Interrupted by the user before this tool finished.' }
+    }));
+    messages.splice(end, 0, ...fillers);
+    repaired += fillers.length;
+    i = end + fillers.length - 1;
+  }
+  const last = messages[messages.length - 1];
+  if (last && (last.role === 'user' || last.role === 'tool') && messages.length > 1) {
+    messages.push({ role: 'assistant', content: '[The previous request was interrupted by the user before it finished.]' });
+    repaired++;
+  }
+  return repaired;
+}
+
 function throwIfCancelled(signal) {
   if (signal && signal.aborted) {
     const error = new Error('Agent task cancelled by the user.');
@@ -1442,6 +1475,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     }
     if (submitted.additionalContext.length) userContent += '\n\n<hook-context>\n' + submitted.additionalContext.join('\n').slice(0, 10000) + '\n</hook-context>';
   }
+  if (!options.isSubagent) repairInterruptedHistory(session);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
   session.messages.push(userMessage);
