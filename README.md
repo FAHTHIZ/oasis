@@ -240,6 +240,16 @@ oasis -p "list TODOs" --output-format stream-json --model gpt-4.1-mini
 - With nobody to answer prompts, anything that needs approval is denied and listed in `permission_denials`. Allow what the job needs with `--allowedTools`, settings rules, `--permission-mode`, or `--yes`. High-risk commands stay blocked.
 - The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` or `--resume ID` to keep a conversation across runs.
 
+## Checkpoints and /rewind
+
+Before Oasis edits, writes, or deletes a file, it saves that file's original content for the current turn. Type `/rewind` to see recent turns and the files each one changed, then:
+
+- `/rewind 1` undoes the last turn: files go back to how they were and the conversation returns to before that request. Files the turn created are removed.
+- `/rewind 3 code` restores files from the last three turns but keeps the conversation.
+- `/rewind 1 chat` rewinds only the conversation.
+
+Checkpoints last for the current session. Changes made by shell commands (for example `npm install` or `sed -i`) are not tracked, so use Git for those. The older `oasis backups` / `oasis restore` snapshots still work too.
+
 ## Subagents
 
 The `task` tool lets Oasis hand self-contained work to a subagent with its own context window. Only the subagent's final report returns to the main conversation, which keeps long investigations from crowding it out. Several `task` calls in one response run in parallel (up to 6 at once). Built-in agents: `general-purpose` (all tools), `explore` (read-only search), and `plan` (read-only planning).

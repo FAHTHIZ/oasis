@@ -1,3 +1,4 @@
+import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import path from 'node:path';
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions } from './tools.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
@@ -1334,6 +1335,7 @@ async function executeOneCall(session, call, context, options) {
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
       result = await callMappedMcpTool(session, name, args, callContext);
     } else {
+      if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
       result = await executeTool(name, args, callContext);
     }
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
@@ -1403,7 +1405,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
     if (submitted.additionalContext.length) userContent += '\n\n<hook-context>\n' + submitted.additionalContext.join('\n').slice(0, 10000) + '\n</hook-context>';
   }
   const activeRequestIndex = session.messages.length;
-  session.messages.push({ role: 'user', content: userContent });
+  const userMessage = { role: 'user', content: userContent };
+  session.messages.push(userMessage);
+  if (!options.isSubagent) beginCheckpoint(session, userMessage, request);
   let stopHookContinuations = 0;
   const maxSteps = Math.max(1, Math.min(400, Number.parseInt(options.maxSteps || session.config.maxSteps, 10) || 60));
   const tokenBudget = Math.max(10000, Math.min(20000000, Number.parseInt(options.maxTokens || session.config.maxTokens, 10) || 2000000));

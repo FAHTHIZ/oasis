@@ -7,6 +7,7 @@ import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES } from './settings.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
+import { listCheckpoints, rewind } from './checkpoints.mjs';
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -26,6 +27,7 @@ export const BUILTIN_COMMANDS = {
   bashes: 'List background processes',
   todos: 'Show the current todo list',
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
+  rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   init: 'Create an OASIS.md project guide',
   exit: 'Leave Oasis'
 };
@@ -143,6 +145,30 @@ export async function runBuiltinCommand(name, argument, state) {
       const files = await memoryFiles(root, { env });
       const lines = files.map((file) => (file.exists ? '[loaded] ' : '[none]   ') + file.label + ': ' + file.path);
       lines.push('Start a message with # to save a note to the project OASIS.md (for example: # always run npm test before committing).');
+      return { output: lines.join('\n') };
+    }
+    case 'rewind': {
+      const turns = session ? listCheckpoints(session) : [];
+      if (!turns.length) return { output: 'Nothing to rewind yet. Checkpoints are recorded for each task in this session.' };
+      if (!argument) {
+        const lines = ['Recent turns (1 = most recent):'];
+        for (const turn of turns.slice(0, 15)) lines.push('  ' + turn.number + '. ' + JSON.stringify(turn.prompt) + (turn.files.length ? '  files: ' + turn.files.slice(0, 6).join(', ') + (turn.files.length > 6 ? ', ...' : '') : '  (no file changes)'));
+        lines.push('Use /rewind N to undo the last N turns (files and conversation), /rewind N code for files only, or /rewind N chat for the conversation only.');
+        lines.push('Changes made by shell commands are not tracked.');
+        return { output: lines.join('\n') };
+      }
+      const [countText, modeText = ''] = argument.split(/\s+/);
+      const count = Number.parseInt(countText, 10);
+      if (!Number.isInteger(count) || count < 1) return { output: 'Usage: /rewind N [code|chat]' };
+      const mode = /^code$/i.test(modeText) ? 'code' : /^(chat|conversation)$/i.test(modeText) ? 'conversation' : 'both';
+      const result = await rewind(session, count, mode);
+      const lines = ['Rewound ' + result.turns + ' turn' + (result.turns === 1 ? '' : 's') + '.'];
+      if (mode !== 'conversation') {
+        lines.push('  Restored: ' + (result.restored.length ? result.restored.join(', ') : '(none)'));
+        if (result.deleted.length) lines.push('  Removed new files: ' + result.deleted.join(', '));
+        if (result.skipped.length) lines.push('  Could not restore (too large or unsafe): ' + result.skipped.join(', '));
+      }
+      if (mode !== 'code') lines.push(result.conversationUnavailable ? '  The conversation was compacted, so only files were restored.' : '  Removed ' + result.messagesRemoved + ' messages from the conversation.');
       return { output: lines.join('\n') };
     }
     default:
