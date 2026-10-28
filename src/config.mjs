@@ -111,7 +111,9 @@ export async function loadConfig(options = {}) {
   return {
     ...saved, protocol, baseURL, model, apiKey, configPath,
     configured: Boolean(apiKey) || isLoopbackUrl(baseURL),
-    maxSteps: clampInteger(saved.maxSteps, 12, 1, 30),
+    maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, 60, 1, 400),
+    maxToolCalls: clampInteger(env.OASIS_MAX_TOOL_CALLS || saved.maxToolCalls, 300, 1, 2000),
+    maxTokens: clampInteger(env.OASIS_MAX_TOKENS || saved.maxTokens, 2000000, 10000, 20000000),
     maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600)
   };
 }
@@ -126,7 +128,9 @@ export async function saveConfig(config, options = {}) {
     baseURL: validateBaseUrl(config.baseURL || (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL)),
     model: String(config.model || (protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : ''))).trim(),
     apiKey: String(config.apiKey || ''),
-    maxSteps: clampInteger(config.maxSteps, 12, 1, 30),
+    maxSteps: clampInteger(config.maxSteps, 60, 1, 400),
+    maxToolCalls: clampInteger(config.maxToolCalls, 300, 1, 2000),
+    maxTokens: clampInteger(config.maxTokens, 2000000, 10000, 20000000),
     maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
   };
   if (!safe.model) throw new Error('The model name cannot be empty.');

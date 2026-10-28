@@ -153,3 +153,75 @@ test('plan permission mode blocks edits; untrusted project settings cannot loose
   await runAgentTurn(session, 'change things');
   assert.match(requests[1].messages.find((m) => m.role === 'tool').content, /Plan mode blocks/);
 });
+
+test('task subagents run in parallel with their own context and return reports to the parent', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'notes.md'), 'alpha beta');
+  let inFlight = 0;
+  let peak = 0;
+  const parentRequests = [];
+  const childRequests = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const payload = JSON.parse(body);
+    const isChild = payload.messages[0].content.includes('SUBAGENT MODE');
+    let message;
+    if (isChild) {
+      childRequests.push(payload);
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 150));
+      inFlight--;
+      const userText = payload.messages.find((m) => m.role === 'user').content;
+      const sawTool = payload.messages.some((m) => m.role === 'tool');
+      message = !sawTool && userText.includes('read notes')
+        ? { content: null, tool_calls: [{ id: 'k' + childRequests.length, type: 'function', function: { name: 'read_file', arguments: JSON.stringify({ path: 'notes.md' }) } }] }
+        : { content: 'REPORT for: ' + userText.slice(0, 40) };
+    } else {
+      parentRequests.push(payload);
+      message = parentRequests.length === 1
+        ? { content: null, tool_calls: [
+          { id: 't1', type: 'function', function: { name: 'task', arguments: JSON.stringify({ description: 'read notes', prompt: 'read notes and summarize', subagent_type: 'explore' }) } },
+          { id: 't2', type: 'function', function: { name: 'task', arguments: JSON.stringify({ description: 'second', prompt: 'independent question two' }) } }
+        ] }
+        : { content: 'parent done' };
+    }
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', ...message } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 6, maxCommandSeconds: 10 };
+  const session = await createSession({ root, config, settings: settingsWith({}) });
+  assert.ok(session.toolDefinitions.some((d) => d.function.name === 'task'));
+  const events = [];
+  const result = await runAgentTurn(session, 'delegate', { onToolStart: (e) => events.push(e) });
+  assert.equal(result.text, 'parent done');
+  assert.ok(peak >= 2, 'subagents should overlap in time, peak=' + peak);
+  const tools = parentRequests[1].messages.filter((m) => m.role === 'tool');
+  assert.match(tools[0].content, /REPORT for: read notes/);
+  assert.match(tools[1].content, /REPORT for: independent question two/);
+  // The explore agent is read-only: its tool list has no write/command tools and no task tool.
+  const exploreTools = childRequests.find((p) => p.messages[0].content.includes('SUBAGENT MODE (explore)')).tools.map((tool) => tool.function.name);
+  assert.ok(exploreTools.includes('read_file'));
+  assert.ok(!exploreTools.includes('write_file') && !exploreTools.includes('run_command') && !exploreTools.includes('task'));
+  assert.ok(events.some((e) => e.subagent === 'read notes' && e.name === 'read_file'));
+  assert.ok(!parentRequests[1].messages.some((m) => typeof m.content === 'string' && m.content.includes('alpha beta')), 'child file contents stay out of the parent context');
+});
+
+test('custom agents load from .claude/agents and .oasis/agents with Claude Code tool names', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, '.claude', 'agents'), { recursive: true });
+  await mkdir(path.join(root, '.oasis', 'agents'), { recursive: true });
+  await writeFile(path.join(root, '.claude', 'agents', 'reviewer.md'), '---\nname: reviewer\ndescription: Reviews diffs\ntools: Read, Grep, Glob\n---\nYou review code carefully.\n');
+  await writeFile(path.join(root, '.oasis', 'agents', 'fixer.md'), '---\nname: fixer\ndescription: Fixes tests\ntools: [Read, Edit, Bash]\nmodel: fast-model\n---\nFix things.\n');
+  const { loadAgentDefinitions } = await import('../src/subagents.mjs');
+  const agents = await loadAgentDefinitions(root, { env: { ...process.env, HOME: root } });
+  assert.deepEqual(agents.reviewer.tools.sort(), ['glob_files', 'grep', 'read_file', 'search_files']);
+  assert.ok(agents.fixer.tools.includes('edit_file') && agents.fixer.tools.includes('run_command'));
+  assert.equal(agents.fixer.model, 'fast-model');
+  assert.match(agents.reviewer.prompt, /review code carefully/);
+  assert.ok(agents['general-purpose'] && agents.explore && agents.plan);
+});

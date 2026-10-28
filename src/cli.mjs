@@ -315,8 +315,16 @@ async function runInteractiveCommand(command, args) {
   });
 }
 
-async function approve(prompt, forceInteractive = false, autoApprove = false, meta = {}) {
-  if (autoApprove && !forceInteractive) return true;
+// Parallel subagents can request approval at the same time; ask one question at a time.
+let approvalQueue = Promise.resolve();
+function approve(prompt, forceInteractive = false, autoApprove = false, meta = {}) {
+  if (autoApprove && !forceInteractive) return Promise.resolve(true);
+  const next = approvalQueue.then(() => askApproval(prompt, forceInteractive, meta));
+  approvalQueue = next.catch(() => {});
+  return next;
+}
+
+async function askApproval(prompt, forceInteractive, meta) {
   try {
     stdout.write('\nPermission request\n' + prompt + '\n');
     const offerAlways = meta && meta.suggestion && !forceInteractive;
@@ -327,6 +335,16 @@ async function approve(prompt, forceInteractive = false, autoApprove = false, me
     stdout.write('No interactive approval was available; action denied.\n');
     return false;
   }
+}
+
+function describeToolStart({ name, args = {}, subagent }) {
+  let detail = '';
+  if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
+  else if (name === 'run_shell') detail = String(args.command || '');
+  else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
+  else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
+  if (detail.length > 140) detail = detail.slice(0, 137) + '...';
+  return (subagent ? '  [' + subagent + '] ' : '[tool] ') + name + (detail ? ' ' + detail : '');
 }
 
 function sessionCreateOptions() {
@@ -736,7 +754,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     const result = await runner(session, prompt, {
       autoApprove,
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
-      onToolStart: ({ name }) => stdout.write('\n[tool] ' + name + '\n'),
+      onToolStart: (event) => stdout.write('\n' + describeToolStart(event) + '\n'),
       onToolResult: ({ name, result }) => {
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');

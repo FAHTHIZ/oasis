@@ -195,6 +195,28 @@ Hooks run your own shell commands at points in the agent lifecycle, using Claude
 
 Events: `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`. Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `prompt`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, or makes the agent keep working after `Stop`, and stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. Matchers accept Oasis or Claude Code tool names. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
 
+## Subagents
+
+The `task` tool lets Oasis hand self-contained work to a subagent with its own context window. Only the subagent's final report returns to the main conversation, which keeps long investigations from crowding it out. Several `task` calls in one response run in parallel (up to 6 at once). Built-in agents: `general-purpose` (all tools), `explore` (read-only search), and `plan` (read-only planning).
+
+Define your own in `.oasis/agents/*.md` or `.claude/agents/*.md` (project), or `~/.config/oasis/agents/` / `~/.claude/agents/` (user). Claude Code agent files work unchanged:
+
+~~~markdown
+---
+name: test-runner
+description: Use after code changes to run the test suite and fix failures
+tools: Read, Grep, Glob, Bash, Edit
+model: inherit
+---
+You are a test specialist. Run the relevant tests, fix failures, and report results.
+~~~
+
+Subagents share the parent's permission rules, hooks (`SubagentStop`), sandbox, and approvals. They cannot start further subagents.
+
+## Longer tasks
+
+The default per-task budget is now 60 model steps and 300 tool calls (it was 12 and 30). Raise or lower them with `maxSteps`, `maxToolCalls`, and `maxTokens` in the provider config, or `OASIS_MAX_STEPS`, `OASIS_MAX_TOOL_CALLS`, and `OASIS_MAX_TOKENS`.
+
 ## Command safety and OS sandbox
 
 The general `run_command` tool runs one executable with an argument array and no shell. Beyond the executable denylist, Oasis now unwraps wrapper programs (`env`, `xargs`, `timeout`, `nice`, `nohup`, ...) and checks the program they launch, so `env rm` or `xargs rm` are blocked like `rm`. Commands that run inline code or arbitrary programs (`node -e`, `python -c`, `perl -e`, `find -exec/-delete`, `awk 'system()'`, `git -c`, `curl -o`, ...) are classified as **high risk**: they always need an interactive answer, even with `--yes`, unless an explicit permission rule allows them.
