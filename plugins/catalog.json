@@ -75,6 +75,19 @@
         "code-review",
         "testing"
       ]
+    },
+    {
+      "name": "ponytail",
+      "version": "5.3.2",
+      "description": "Lazy senior dev mode from DietrichGebert/ponytail (MIT): the smallest complete change, with tests, security and error handling kept. Adds /ponytail, /ponytail-review, /ponytail-audit, /ponytail-debt, /ponytail-gain.",
+      "skills": [
+        "ponytail",
+        "ponytail-review",
+        "ponytail-audit",
+        "ponytail-debt",
+        "ponytail-gain",
+        "ponytail-help"
+      ]
     }
   ]
 }
