@@ -64,7 +64,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Add narrow specialist agents for review/testing/research, with bounded concurrency and shared task state.
 - **Progress:** up to two independent read-only specialist reviews can execute concurrently; parent tool-call results remain ordered. Parallel code-writing agents and shared edit coordination remain future work.
 - Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.
-- Add language/toolchain diagnostics (LSP where available) and workspace-specific policy rules.
+- **Progress:** a `diagnostics` tool runs detected type checkers and linters (tsc, ESLint, Ruff, mypy, Pyright, go vet, cargo check) plus built-in JS/JSON syntax checks and returns structured problems. A long-running LSP client with push diagnostics and go-to-definition remains future work, as do workspace-specific policy rules.
 
 ## Milestone 4 — sandboxing and integrations
 
