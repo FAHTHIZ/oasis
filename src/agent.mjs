@@ -5,6 +5,8 @@ import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './outpu
 import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
+import { nestedMemoryFor } from './memory.mjs';
+const NESTED_MEMORY_TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'multi_edit', 'notebook_edit']);
 import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import path from 'node:path';
@@ -2585,6 +2587,12 @@ async function executeOneCallRaw(session, call, context, options) {
       result = await executeTool(name, args, callContext);
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
       if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext.env || process.env });
+    }
+    if (NESTED_MEMORY_TOOLS.has(name) && result && typeof result === 'object' && !result.error) {
+      const target = args && (args.path || args.file_path || args.notebook_path);
+      if (!session.nestedMemoryLoaded) session.nestedMemoryLoaded = new Set();
+      const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: callContext.env || process.env }).catch(() => []);
+      if (nested.length) result.directoryInstructions = 'Project instructions for this folder (follow them for files here):\n' + nested.map((item) => '--- ' + item.path + ' ---\n' + item.text).join('\n\n');
     }
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
     if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;

@@ -168,3 +168,41 @@ export async function appendMemoryNote(root, note, options = {}) {
   await appendFile(target, prefix + '- ' + text + '\n', 'utf8');
   return target;
 }
+
+// Claude Code loads CLAUDE.md files in subdirectories only when the agent works on files there.
+// Returns the not-yet-loaded memory files between the workspace root and filePath's folder,
+// root-most first, and records them in `loaded` so each is sent once per session.
+const NESTED_NAMES = ['CLAUDE.md', 'AGENTS.md', 'OASIS.md', 'CLAUDE.local.md', path.join('.claude', 'CLAUDE.md')];
+export async function nestedMemoryFor(root, filePath, loaded = new Set(), options = {}) {
+  const env = options.env || process.env;
+  if (env.OASIS_DISABLE_NESTED_MEMORY === '1' || typeof filePath !== 'string' || !filePath) return [];
+  const workspace = await realpath(root).catch(() => path.resolve(root));
+  const target = path.resolve(workspace, filePath);
+  const relative = path.relative(workspace, path.dirname(target));
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return [];
+  const parts = relative.split(path.sep).filter(Boolean).slice(0, 30);
+  const found = [];
+  let budget = options.maxChars || 12000;
+  for (let i = 1; i <= parts.length; i++) {
+    const dir = path.join(workspace, ...parts.slice(0, i));
+    if (/(^|\/)(node_modules|\.git)(\/|$)/.test(dir)) break;
+    for (const name of NESTED_NAMES) {
+      const file = path.join(dir, name);
+      if (loaded.has(file)) continue;
+      try {
+        const info = await lstat(file);
+        if (!info.isFile() || info.size > MAX_MEMORY_FILE) continue;
+        const real = await realpath(file);
+        const back = path.relative(workspace, real);
+        if (back.startsWith('..') || path.isAbsolute(back)) continue;
+        loaded.add(file);
+        const text = (await readImports(workspace, (await readFile(file, 'utf8')).slice(0, PER_FILE_LIMIT))).trim();
+        if (!text || budget <= 0) continue;
+        const clipped = text.slice(0, budget);
+        budget -= clipped.length;
+        found.push({ path: path.relative(workspace, file), text: clipped });
+      } catch {}
+    }
+  }
+  return found;
+}
