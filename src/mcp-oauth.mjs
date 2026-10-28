@@ -136,7 +136,7 @@ async function getJson(fetchImpl, url, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS) 
       return null;
     }
     const type = response.headers?.get?.('content-type') || '';
-    if (type && !/(?:application\\/json|application\\/[^;]+\\+json)/i.test(type)) {
+    if (type && !/(?:application\/json|application\/[^;]+\+json)/i.test(type)) {
       try { await response.body?.cancel(); } catch {}
       return null;
     }
