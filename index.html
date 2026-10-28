@@ -109,6 +109,8 @@ body.light .extension-card,body.light .integration-card{background:#fff}
 .cloud-run-event strong{display:block;font-size:11px;font-weight:700;overflow-wrap:anywhere}
 .cloud-run-event small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
 .cloud-run-empty{color:var(--muted);font-size:12px;padding:15px;border:1px dashed var(--line);border-radius:12px}
+.cloud-run-diff{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#080a0d;color:var(--text);font:10px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre;overflow:auto;max-height:540px;tab-size:2}
+.cloud-run-detail-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 @media(max-width:640px){.cloud-runs-toolbar{flex-direction:column}.cloud-run-row{align-items:flex-start;flex-wrap:wrap}.cloud-run-status{order:2}.cloud-run-row .btn{margin-left:auto}}
 
 
@@ -209,8 +211,9 @@ body.light .extension-card,body.light .integration-card{background:#fff}
     <div class="cloud-runs-toolbar"><p class="agent-help">See the latest agent and terminal runs, including tasks interrupted by a runtime restart. This is durable local history for the connected Oasis host, not hosted cloud compute yet.</p><button class="btn btn-secondary" id="cloudRunsRefreshBtn" type="button">Refresh runs</button></div>
     <div class="cloud-runs-list" id="cloudRunsList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div>
     <div class="cloud-run-detail" id="cloudRunDetail" hidden>
-      <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div>
+      <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="cloud-run-detail-actions"><button class="btn btn-secondary" id="cloudRunViewDiff" type="button" hidden>View diff</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
       <div class="cloud-run-events" id="cloudRunEvents"></div>
+      <pre id="cloudRunDiff" class="cloud-run-diff" hidden></pre>
     </div>
   </div>
 </div>
@@ -390,6 +393,10 @@ async function agentOpenCloudRun(id){
   try{
     var task=await agentApi('/api/jobs/'+encodeURIComponent(id)+'?after=0');
     title.textContent=(task.title||'Run')+' · '+String(task.status||'unknown').replace(/_/g,' ');
+    var diffButton=document.getElementById('cloudRunViewDiff'),diffNode=document.getElementById('cloudRunDiff');
+    diffNode.hidden=true;diffNode.textContent='';diffButton.disabled=false;diffButton.textContent='View diff';
+    diffButton.dataset.taskId=id;
+    diffButton.hidden=!(task.result&&task.result.isolatedWorktree&&task.result.isolatedWorktree.changed);
     events.replaceChildren();
     if(task.result&&task.result.isolatedWorktree){var wt=task.result.isolatedWorktree,summaryRow=document.createElement('div');summaryRow.className='cloud-run-empty';summaryRow.textContent=wt.changed?'Branch '+(wt.branch||'unknown')+(wt.commit?' · commit '+wt.commit:'')+(wt.files&&wt.files.length?' · '+wt.files.length+' changed files':'')+(wt.error?' · '+wt.error:''):(wt.error?'Worktree retained for recovery: '+wt.error:'No committed changes; temporary worktree cleaned up.');events.appendChild(summaryRow);}
     (task.events||[]).slice(-120).forEach(function(event){
@@ -410,7 +417,8 @@ async function agentOpenCloudRun(id){
 }
 document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
 document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId)});
-document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true});
+document.getElementById('cloudRunViewDiff').addEventListener('click',async function(){var button=this,id=button.dataset.taskId,node=document.getElementById('cloudRunDiff');if(!id)return;button.disabled=true;button.textContent='Loading…';try{var result=await agentApi('/api/jobs/'+encodeURIComponent(id)+'/diff');node.textContent=String(result.diff||'')+(result.truncated?'\n\n[Diff truncated for browser safety. Review the full branch locally.]':'');node.hidden=false;button.textContent='Refresh diff'}catch(error){notify('Could not load diff: '+error.message);button.textContent='Retry diff'}finally{button.disabled=false}});
+document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true;document.getElementById('cloudRunDiff').hidden=true});
 
 function agentApi(url,options){options=options||{};var headers=Object.assign({},options.headers||{});if(agentToken)headers.Authorization='Bearer '+agentToken;if(options.body)headers['Content-Type']='application/json';return fetch(url,Object.assign({},options,{headers:headers,cache:'no-store'})).then(function(r){return r.json().catch(function(){return {error:'Invalid response from Oasis runtime'}}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data})})}
 function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
