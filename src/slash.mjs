@@ -485,7 +485,20 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'keybindings': {
       const { SHORTCUTS_HELP } = await import('./line-editor.mjs');
-      return { output: 'Keyboard shortcuts:\n' + SHORTCUTS_HELP.join('\n') + '\n  While a turn runs: Esc interrupts it, and anything you type is queued as the next message.' };
+      const kb = await import('./keybindings.mjs');
+      const env = state.env || process.env;
+      const sub = String(argument || '').trim().toLowerCase();
+      if (sub === 'init' || sub === 'edit' || sub === 'open') {
+        const { file, created } = await kb.ensureKeybindingsFile(env);
+        return { output: (created ? 'Created ' : 'Keybindings file: ') + file + '\nEdit it to rebind keys; changes apply at the next prompt. Contexts: ' + kb.CONTEXTS.join(', ') + '.' };
+      }
+      const info = kb.describeKeybindings(env);
+      const lines = ['Keyboard shortcuts:', ...SHORTCUTS_HELP, '  While a turn runs: Esc interrupts it, and anything you type is queued as the next message.'];
+      lines.push('', info.lines.length ? 'Custom keybindings:' : 'No custom keybindings. Run /keybindings init to create ' + kb.keybindingFiles(env)[1] + '.');
+      lines.push(...info.lines);
+      if (info.warnings.length) lines.push('', 'Warnings:', ...info.warnings.map((w) => '  ' + w));
+      if (info.files.length) lines.push('', 'Loaded from: ' + info.files.join(', '));
+      return { output: lines.join('\n') };
     }
     case 'terminal-setup':
       return { output: [

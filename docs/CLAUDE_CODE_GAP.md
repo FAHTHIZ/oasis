@@ -56,6 +56,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | IDE integration | VS Code/JetBrains extensions: selection context, diff review, diagnostics (`mcp__ide__getDiagnostics`), auto-connect from IDE terminals, `/ide` | **Closed for VS Code, Cursor, Windsurf.** Token-authenticated loopback bridge + lock-file discovery, `[ide] Selected N lines` context, edit approvals as native diffs with Accept/Reject, `ide_get_diagnostics` / `ide_open_file`, Ctrl/Cmd+Esc launch, Ctrl/Cmd+Alt+K `@file#L` references, dependency-free VSIX build. JetBrains not yet. |
 | Hooks parity | 25+ events, command/http/mcp_tool/prompt/agent handlers, `if` rules, async hooks, `onFailure`, exact-vs-regex matchers, `updatedToolOutput` | **Closed for the single-session loop.** All five handler types; `if` permission-rule filters; exec-form `args`; `async`/`asyncRewake` with next-request delivery; `onFailure: "block"`; Claude Code matcher semantics with `mcp__server__tool` names; `updatedToolOutput`; `PermissionDenied` retry; `impossible` Stop verdicts. New events: `PostToolBatch`, `PermissionDenied`, `StopFailure`, `UserPromptExpansion`, `InstructionsLoaded`, `TaskCreated`, `TaskCompleted`, `PreModelSwitch`, `PostModelSwitch`, `DirectoryAdded`. Not yet: `ConfigChange`, `FileChanged`, `WorktreeCreate/Remove`, `TeammateIdle`, `Elicitation`, `Setup`. |
 | Vim mode | `/vim` / `editorMode: "vim"`: INSERT/NORMAL, motions, operators, text objects | **Closed.** Same toggle and setting (Claude Code's `~/.claude.json` honored), mode indicator, `hjkl wbe WBE 0^$ gg G fFtT;,`, `d/c/y` + motions/text objects (`iw aw i" i( i{ ...`), `dd cc yy D C Y x X s S r ~ J p P u .`, counts, history on `j`/`k`. |
+| Keybindings | `~/.claude/keybindings.json`, contexts, chords, `null` unbind, `/keybindings`, Ctrl+G external editor, Ctrl+S stash | **Closed** for the prompt contexts (Global, Chat, Autocomplete, HistorySearch). It reads Claude Code's file plus an OASIS override, hot-reloads, supports 3 s chords, `command:NAME` actions, reserved-key warnings and `/keybindings init`. Dialog contexts (Confirmation, Transcript, pickers) are parsed but not yet bindable. |
 
 ## Ranked next improvements
 
@@ -85,7 +86,7 @@ Native Gemini and Azure Foundry adapters; PowerShell and Windows sandboxing; npm
 
 ### 6. Terminal experience polish
 
-Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Remaining: full-screen transcript, themes and an editable keybinding configuration. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Remaining: full-screen transcript, themes and bindable dialog contexts. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
 
 ## What OASIS already does well
 
