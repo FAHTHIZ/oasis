@@ -126,6 +126,8 @@ Oasis separates three things that are often all called “plugins”:
 
   Inside a session use `/plugin ...` with the same arguments. An enabled plugin contributes namespaced slash commands (`/feature-dev:feature-dev`), subagents (`feature-dev:code-reviewer`), Agent Skills, hooks (`hooks/hooks.json`, run with `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, and `CLAUDE_PROJECT_DIR` set) and MCP servers (`.mcp.json`, with `${CLAUDE_PLUGIN_ROOT}` expanded). Marketplace entries may use relative, `github`, `url`, or `git-subdir` sources, `metadata.pluginRoot`, and `strict: false`. Enablement uses Claude Code's `"enabledPlugins": {"name@marketplace": true}` key: user settings always apply; a project's `.claude/settings.json` can enable plugins once you `oasis trust` the workspace. Plugins you already installed and enabled in Claude Code (`~/.claude/plugins`) load automatically. Plugins run hooks and MCP servers with your permissions, just as in Claude Code, so install only plugins you trust. Set `OASIS_PLUGINS=off` to disable all plugins for a run.
 
+  Marketplace entries may point at npm packages: `"source": { "source": "npm", "package": "@acme/plugin", "version": "^2.0.0", "registry": "https://npm.example.com" }`. Oasis runs `npm pack --ignore-scripts`, unpacks the tarball into the plugin cache and records the resolved version and integrity hash. `npm` and `tar` must be on `PATH`.
+
   Plugins can also ship the rest of Claude Code's component types, and OASIS loads them too:
 
   - **LSP servers** (`.lsp.json` or `lspServers` in `plugin.json`, Claude Code's `extensionToLanguage` format) power the `lsp` tool for those file types. Starting one still needs approval once per session, and servers in your own settings take precedence for the same extension.

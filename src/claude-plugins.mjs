@@ -26,7 +26,7 @@
 // already installed by Claude Code (~/.claude/plugins/installed_plugins.json) and enabled in
 // ~/.claude/settings.json are picked up automatically. Plugins run code (hooks, MCP servers)
 // with your permissions, exactly as in Claude Code: install only plugins you trust.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -557,6 +557,52 @@ async function readMarketplaceManifest(dir) {
   return manifest;
 }
 
+// npm plugin sources: { source: "npm", package, version?, registry? }. The package is
+// fetched with `npm pack` (scripts never run) and unpacked with tar.
+function runAsync(command, args, options) {
+  return new Promise((resolve) => {
+    let child;
+    try { child = spawn(command, args, { cwd: options.cwd, env: options.env, shell: options.shell, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (error) { resolve({ error }); return; }
+    let stdout = '', stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const timer = setTimeout(() => child.kill('SIGKILL'), options.timeout || 180000);
+    child.on('error', (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
+    child.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
+  });
+}
+
+const NPM_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+export async function fetchNpmPluginSource(source, staging, env = process.env) {
+  const pkg = String(source.package || '');
+  if (!NPM_NAME.test(pkg) || pkg.length > 214) throw new Error('npm plugin source needs a valid package name, got "' + pkg + '".');
+  const version = source.version === undefined ? '' : String(source.version);
+  if (version && !/^[\w.^~<>=| *+-]{1,100}$/.test(version)) throw new Error('npm plugin source has an invalid version: ' + version);
+  const args = ['pack', version ? pkg + '@' + version : pkg, '--pack-destination', staging, '--json', '--ignore-scripts', '--silent'];
+  if (source.registry !== undefined) {
+    let url;
+    try { url = new URL(String(source.registry)); } catch { throw new Error('npm plugin source registry is not a URL.'); }
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))) throw new Error('npm plugin source registry must use https.');
+    args.push('--registry', url.toString());
+  }
+  await mkdir(staging, { recursive: true });
+  const windows = process.platform === 'win32';
+  const packed = await runAsync(windows ? 'npm.cmd' : 'npm', args, { timeout: 180000, cwd: staging, env: { ...env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' }, shell: windows });
+  if (packed.error) throw new Error('npm is required for npm plugin sources: ' + packed.error.message);
+  if (packed.status !== 0) throw new Error('npm pack ' + pkg + ' failed: ' + String(packed.stderr || packed.stdout).trim().slice(0, 500));
+  let info;
+  try { info = JSON.parse(packed.stdout)[0]; } catch { throw new Error('npm pack returned unexpected output.'); }
+  const tarball = path.join(staging, path.basename(String(info && info.filename || '')));
+  if (!info || !info.filename || !(await exists(tarball))) throw new Error('npm pack did not produce a tarball.');
+  const unpacked = path.join(staging, 'unpacked');
+  await mkdir(unpacked, { recursive: true });
+  const untar = spawnSync('tar', ['-xzf', tarball, '-C', unpacked], { encoding: 'utf8', timeout: 120000 });
+  if (untar.error || untar.status !== 0) throw new Error('Could not unpack ' + path.basename(tarball) + ': ' + String(untar.error ? untar.error.message : untar.stderr).trim().slice(0, 300));
+  const root = path.join(unpacked, 'package');
+  if (!(await exists(root))) throw new Error('The npm tarball has no package/ directory.');
+  return { root, version: info.version || null, integrity: info.integrity || null };
+}
+
 function clone(url, dest, ref) {
   git(['clone', '--depth', '1', ...(ref ? ['--branch', ref] : []), '--', url, dest]);
 }
@@ -647,6 +693,7 @@ export async function installPlugin(spec, options = {}) {
   const source = entry.source;
   const cacheDir = path.join(pluginHome(env), 'cache', market, name);
   let installPath;
+  let npmInfo = null;
   await rm(cacheDir, { recursive: true, force: true });
   if (typeof source === 'string') {
     const base = manifest.metadata && typeof manifest.metadata.pluginRoot === 'string' ? path.resolve(record.installLocation, manifest.metadata.pluginRoot) : record.installLocation;
@@ -655,10 +702,18 @@ export async function installPlugin(spec, options = {}) {
     if (!(await exists(from))) throw new Error('Plugin source directory is missing: ' + from);
     installPath = cacheDir;
     await cp(from, installPath, { recursive: true, filter: (file) => !file.split(path.sep).includes('.git') });
+  } else if (source && typeof source === 'object' && source.source === 'npm') {
+    const staging = cacheDir + '.staging';
+    await rm(staging, { recursive: true, force: true });
+    const fetched = await fetchNpmPluginSource(source, staging, env);
+    installPath = cacheDir;
+    await cp(fetched.root, installPath, { recursive: true });
+    await rm(staging, { recursive: true, force: true });
+    npmInfo = fetched;
   } else if (source && typeof source === 'object') {
     const kind = source.source;
     const url = kind === 'github' ? 'https://github.com/' + source.repo + '.git' : source.url;
-    if (!['github', 'url', 'git-subdir'].includes(kind) || typeof url !== 'string') throw new Error('Plugin source type "' + kind + '" is not supported yet (use relative, github, url, or git-subdir).');
+    if (!['github', 'url', 'git-subdir'].includes(kind) || typeof url !== 'string') throw new Error('Plugin source type "' + kind + '" is not supported yet (use relative, github, url, git-subdir, or npm).');
     const staging = cacheDir + '.staging';
     await rm(staging, { recursive: true, force: true });
     await mkdir(path.dirname(staging), { recursive: true });
@@ -679,7 +734,7 @@ export async function installPlugin(spec, options = {}) {
   }
   const installed = await readInstalledPlugins(env);
   const pluginManifest = await readManifest(installPath);
-  installed[id] = { installPath, version: pluginManifest.version || entry.version || null, marketplace: market, installedAt: new Date().toISOString() };
+  installed[id] = { installPath, version: pluginManifest.version || (npmInfo && npmInfo.version) || entry.version || null, marketplace: market, installedAt: new Date().toISOString(), ...(npmInfo ? { npm: { package: source.package, version: npmInfo.version, integrity: npmInfo.integrity } } : {}) };
   await writeInstalledPlugins(installed, env);
   await setEnabled(id, true, { env, root: options.root, scope: options.scope || 'user' });
   const plugin = { id, name, root: installPath, manifest: pluginManifest };
