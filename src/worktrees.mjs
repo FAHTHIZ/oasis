@@ -60,16 +60,16 @@ export async function createWorktree(root, label, options = {}) {
   return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base };
 }
 
-const SENSITIVE_PATH = /^(?:\\.env(?:\\..*)?|\\.npmrc|\\.pypirc|\\.netrc|credentials?(?:[._-].*)?|secrets?(?:[._-].*)?|id_(?:rsa|ed25519|ecdsa)|.*\\.(?:pem|key|p12|pfx|keystore|jks))$/i;
-const SECRET_VALUE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\\b|\\bAKIA[0-9A-Z]{16}\\b|\\bAuthorization:\\s*Bearer\\s+\\S{16,}/i;
+const SENSITIVE_PATH = /^(?:\.env(?:\..*)?|\.npmrc|\.pypirc|\.netrc|credentials?(?:[._-].*)?|secrets?(?:[._-].*)?|id_(?:rsa|ed25519|ecdsa)|.*\.(?:pem|key|p12|pfx|keystore|jks))$/i;
+const SECRET_VALUE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b|\bAKIA[0-9A-Z]{16}\b|\bAuthorization:\s*Bearer\s+\S{16,}/i;
 
 async function inspectWorktreeSecrets(worktree, options = {}) {
   const env = options.env || process.env;
   const changed = await git(worktree.path, ['diff', '--name-only', '-z', worktree.base, '--'], env);
   const untracked = await git(worktree.path, ['ls-files', '--others', '--exclude-standard', '-z'], env);
-  const files = [...new Set([...changed.split('\\0'), ...untracked.split('\\0')].filter(Boolean))];
+  const files = [...new Set([...changed.split('\0'), ...untracked.split('\0')].filter(Boolean))];
   if (files.length > 256) throw new Error('Automatic task commit blocked: the change contains more than 256 files, exceeding the safety scan limit. Inspect the worktree manually.');
-  const sensitivePaths = files.filter((file) => SENSITIVE_PATH.test(path.posix.basename(file.replace(/\\\\/g, '/'))));
+  const sensitivePaths = files.filter((file) => SENSITIVE_PATH.test(path.posix.basename(file.replace(/\\/g, '/'))));
   if (sensitivePaths.length) {
     throw new Error('Automatic task commit blocked because potentially sensitive file paths were changed: ' + sensitivePaths.slice(0, 20).join(', ') + '. The worktree was retained; inspect the diff and decide what to keep before committing.');
   }
