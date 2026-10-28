@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { listWorktrees } from '../src/worktrees.mjs';
+import { createWorktree, finishWorktree, listWorktrees, readWorktreeWorkingDiff, removeWorktree } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 function gitRepo(root) {
@@ -68,6 +68,26 @@ test('worktree subagents edit on their own branch and leave the main checkout un
   assert.equal(listed[0].branch, branch);
   const view = await runBuiltinCommand('worktrees', '', { root, env, session, sessionOptions: {} });
   assert.match(view.output, new RegExp(branch.replace('/', '\\/')));
+});
+
+test('interrupted worktree diff includes tracked edits and safe previews of untracked text files', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-recovery-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'tracked.txt'), 'before\n');
+  run('add', '-A'); run('commit', '-qm', 'base');
+  const worktree = await createWorktree(root, 'Interrupted recovery');
+  t.after(() => removeWorktree(root, worktree, { deleteBranch: true }));
+  await writeFile(path.join(worktree.path, 'tracked.txt'), 'after\n');
+  await writeFile(path.join(worktree.path, 'new-file.txt'), 'untracked progress\n');
+
+  const result = await readWorktreeWorkingDiff(worktree.path, worktree.base);
+  assert.match(result.diff, /before/);
+  assert.match(result.diff, /after/);
+  assert.match(result.diff, /new-file\.txt/);
+  assert.match(result.diff, /untracked progress/);
+  assert.ok(result.untrackedFiles.includes('new-file.txt'));
+  assert.equal(result.truncated, false);
 });
 
 test('worktree isolation refuses non-git folders and cleans up unchanged worktrees', async (t) => {
