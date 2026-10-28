@@ -426,6 +426,8 @@ Esc in NORMAL mode keeps its usual role, so Esc Esc still clears the input or re
 
 ### Keybindings, external editor and stash
 
+Ctrl+O opens the full transcript in a full-screen pager, the way Claude Code's transcript mode does: every prompt, reply, reasoning block, tool call (with pretty-printed arguments) and tool result, expanded. Scroll with ↑/↓ or j/k, page with Space/b, jump with g/G, and return with q, Esc or Ctrl+O. Your half-typed prompt is kept. Rebind it with `app:toggleTranscript` in `keybindings.json`.
+
 Ctrl+G (or Ctrl+X Ctrl+E) opens the current prompt in `$VISUAL` / `$EDITOR` (falling back to `vi`, or `notepad` on Windows). Save and quit, and the edited text comes back as the prompt. Ctrl+S stashes a half-written prompt so you can send something else first. The stash comes back at the next prompt, or right away if you press Ctrl+S on an empty prompt.
 
 Every shortcut can be rebound in Claude Code's `keybindings.json` format. OASIS reads `~/.claude/keybindings.json` (or `$CLAUDE_CONFIG_DIR`) and then `<oasis config>/keybindings.json`, and the second file wins. Changes apply at the next prompt. `/keybindings init` creates the file with an example, and `/keybindings` lists your custom bindings, any warnings and the files that were loaded.

@@ -613,7 +613,37 @@ export function readInput(options = {}) {
       return null;
     };
 
+    // Full-screen pager for Ctrl+O: the transcript handler may return { pager: lines }.
+    let pager = null;
+    const pageRows = () => Math.max(3, (output.rows || 24) - 1);
+    const drawPager = () => {
+      const rows = pageRows();
+      const maxTop = Math.max(0, pager.lines.length - rows);
+      pager.top = Math.min(Math.max(0, pager.top), maxTop);
+      const shown = pager.lines.slice(pager.top, pager.top + rows);
+      const end = Math.min(pager.lines.length, pager.top + rows);
+      const status = DIM(' transcript ' + (pager.lines.length ? pager.top + 1 : 0) + '-' + end + ' of ' + pager.lines.length + ' · ↑↓/j k scroll · space/b page · g/G top/bottom · q, Esc or Ctrl+O to return', color);
+      output.write('\x1b[H\x1b[2J' + shown.join('\r\n') + '\r\n'.repeat(Math.max(1, rows - shown.length + 1)) + status);
+    };
+    const pagerKey = (key) => {
+      const rows = pageRows();
+      const ch = key.name === 'char' ? key.text : '';
+      if (key.name === 'escape' || key.name === 'ctrlO' || key.name === 'ctrlC' || ch === 'q') {
+        pager = null;
+        output.write('\x1b[?1049l');
+        draw();
+        return;
+      }
+      if (key.name === 'down' || ch === 'j' || key.name === 'enter') pager.top += 1;
+      else if (key.name === 'up' || ch === 'k') pager.top -= 1;
+      else if (ch === ' ' || key.name === 'pageDown' || key.name === 'ctrlF') pager.top += rows - 1;
+      else if (ch === 'b' || key.name === 'pageUp' || key.name === 'ctrlB') pager.top -= rows - 1;
+      else if (ch === 'g' || key.name === 'home') pager.top = 0;
+      else if (ch === 'G' || key.name === 'end') pager.top = pager.lines.length;
+      drawPager();
+    };
     const handle = async (rawKey) => {
+      if (pager) { pagerKey(rawKey); return; }
       const key = await bindKey(rawKey);
       if (done) return;
       if (!key) { draw(); return; }
@@ -671,7 +701,18 @@ export function readInput(options = {}) {
         case 'transcript':
         case 'todos': {
           const handler = action === 'transcript' ? options.onTranscript : options.onTodos;
-          if (handler) { try { const lines = await handler(); hints = (lines || []).map((line) => DIM(line, color)); } catch {} }
+          if (handler) {
+            try {
+              const lines = await handler();
+              if (lines && Array.isArray(lines.pager)) {
+                pager = { lines: lines.pager, top: Math.max(0, lines.pager.length - pageRows()) };
+                output.write('\x1b[?1049h');
+                drawPager();
+                return;
+              }
+              hints = (lines || []).map((line) => DIM(line, color));
+            } catch {}
+          }
           break;
         }
         case 'bell': output.write('\x07'); break;
@@ -684,7 +725,7 @@ export function readInput(options = {}) {
       const keys = decoder.feed(chunk.toString('utf8'));
       for (const key of keys) busy = busy.then(() => (done ? null : handle(key)));
     };
-    const onResize = () => { if (!done) draw(); };
+    const onResize = () => { if (!done) { if (pager) drawPager(); else draw(); } };
 
     try { input.setRawMode(true); } catch {}
     input.setEncoding && input.setEncoding('utf8');

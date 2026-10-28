@@ -1629,6 +1629,10 @@ async function readMainInput(root, session, state) {
     onReady: (submit) => { IDLE_SUBMIT = submit; setTimeout(() => wakeIfPending(session), 0); },
     onDoubleEscape: () => '/rewind',
     onPasteImage: () => pasteClipboardImage(root),
+    onTranscript: async () => {
+      const { transcriptLines } = await import('./terminal-ui.mjs');
+      return { pager: transcriptLines(session ? session.messages : [], { color: colorEnabled(stdout), width: stdout.columns || 100 }) };
+    },
     onTodos: async () => {
       const handled = await runBuiltinCommand('todos', '', { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS }).catch(() => null);
       return handled ? String(handled.output).split('\n') : [];
