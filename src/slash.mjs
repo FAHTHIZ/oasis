@@ -69,6 +69,7 @@ export const BUILTIN_COMMANDS = {
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  subtask: 'Run a task in a forked background subagent that inherits this conversation and reports back (/subtask TASK)',
   btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
   recap: 'One-line summary of this session',
   rename: 'Name this session (/rename NAME)',
@@ -435,6 +436,15 @@ export async function runBuiltinCommand(name, argument, state) {
       const answer = await askSideQuestion(session, argument, { onUsage: (u) => usage && recordUsage(usage, { ...u, phase: 'side' }) });
       session.lastSideQuestion = { question: argument, answer };
       return { output: answer };
+    }
+    case 'subtask': {
+      if (!argument) return { output: 'Usage: /subtask TASK. A background copy of this conversation works on TASK and reports back here.' };
+      if (!session) return { output: 'Start a conversation first; /subtask forks the current session.' };
+      const { startSubtask } = await import('./agent.mjs');
+      try {
+        const started = await startSubtask(session, argument, { env, autoApprove: Boolean(state.autoApprove) });
+        return { output: '[subtask] Started ' + started.id + ' with a copy of this conversation. Its report comes back here when it finishes (/tasks to check on it).' };
+      } catch (error) { return { output: 'Could not start the subtask: ' + error.message }; }
     }
     case 'recap': {
       if (!session || session.messages.length < 2) return { output: 'Nothing to recap yet.' };

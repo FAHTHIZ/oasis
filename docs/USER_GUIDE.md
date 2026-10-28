@@ -455,6 +455,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 ### Workflow commands
 
 - `/goal CONDITION` keeps working across turns until a separate check says the condition is met and verified, up to 20 turns (`OASIS_GOAL_MAX_TURNS`). `/goal` shows the status, and `/goal clear` stops it.
+- `/subtask TASK` starts a background subagent that gets a copy of the whole conversation so far, works on TASK while you keep going, and reports back to this conversation when it finishes (`/tasks` shows progress). Like other background agents it cannot ask you for approval, so tools your permission rules don't allow are refused.
 - `/btw QUESTION` asks about the session without adding to the conversation and without tools. `/recap` gives a one-line summary.
 - `/batch INSTRUCTION` plans a large change as independent units. After you approve, it runs them in parallel subagents, each in its own git worktree.
 - `/simplify [target]` runs four parallel read-only reviewers (reuse, simplification, efficiency, abstraction), then applies fixes that don't change behavior.
