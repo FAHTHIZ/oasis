@@ -76,6 +76,7 @@ function printHelp() {
     '  oasis ide [install|package]   Connect VS Code/Cursor/Windsurf: selection context, diff review, diagnostics',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
+    '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
@@ -678,6 +679,9 @@ async function resolveFlagFiles(root) {
 }
 
 function sessionCreateOptions() {
+  // --session-id names only the first session; later ones (after /clear) get fresh ids.
+  const firstSessionId = SESSION_OPTIONS.sessionId || null;
+  SESSION_OPTIONS.sessionId = null;
   return {
     permissionMode: SESSION_OPTIONS.permissionMode,
     allowedTools: SESSION_OPTIONS.allowedTools,
@@ -692,6 +696,7 @@ function sessionCreateOptions() {
     strictMcpConfig: Boolean(SESSION_OPTIONS.strictMcpConfig),
     agentsInline: SESSION_OPTIONS.agentsInline || null,
     sessionName: SESSION_OPTIONS.sessionName || '',
+    sessionId: firstSessionId,
     fallbackModel: SESSION_OPTIONS.fallbackModel || '',
     advisor: SESSION_OPTIONS.advisor || '',
     maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
@@ -746,6 +751,43 @@ async function managePermissions(root, rest) {
     return;
   }
   stdout.write('Usage: oasis permissions [list] | oasis permissions add allow|ask|deny "RULE" [--scope user|project|local]\n');
+}
+
+async function backgroundCommand(root, rest) {
+  const bg = await import('./background-sessions.mjs');
+  const [sub = 'list', id, ...more] = rest;
+  if (sub === 'list' || sub === 'ls') {
+    const entries = await bg.listBackgroundSessions(process.env);
+    stdout.write(entries.length ? entries.map(bg.describeEntry).join('\n') + '\n' : 'No background sessions. Start one with oasis --bg "task" or /background in a session.\n');
+    return;
+  }
+  if (!id) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID');
+  if (sub === 'logs') {
+    const entry = await bg.readEntry(id, process.env);
+    const follow = more.includes('--follow') || more.includes('-f');
+    let shown = 0;
+    for (;;) {
+      const text = await readFile(entry.logFile, 'utf8').catch(() => '');
+      const complete = text.slice(0, text.lastIndexOf('\n') + 1);
+      if (complete.length > shown) { const out = bg.renderLog(complete.slice(shown)); if (out) stdout.write(out + '\n'); shown = complete.length; }
+      if (!follow || (await bg.readEntry(id, process.env)).status !== 'running') break;
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+    return;
+  }
+  if (sub === 'stop') { const result = await bg.stopBackgroundSession(id, process.env); stdout.write(result.stopped ? 'Stopped ' + id + '.\n' : id + ' is not running (' + result.status + ').\n'); return; }
+  if (sub === 'rm') { await bg.removeBackgroundSession(id, process.env); stdout.write('Removed ' + id + '.\n'); return; }
+  if (sub === 'attach') {
+    const entry = await bg.readEntry(id, process.env);
+    if (entry.status === 'running') {
+      if (!(await approve(id + ' is still running. Stop it and continue the conversation here?', true, false))) { stdout.write('Left it running. oasis bg logs ' + id + ' --follow shows progress.\n'); return; }
+      await bg.stopBackgroundSession(id, process.env);
+    }
+    stdout.write('Attaching to ' + id + ' (session ' + entry.sessionId + ').\n' + (bg.renderLog(await readFile(entry.logFile, 'utf8').catch(() => '')).split('\n').slice(-12).join('\n')) + '\n');
+    try { process.chdir(entry.root); } catch {}
+    return await interactive(entry.root, false, { enabled: true, resumeId: entry.sessionId });
+  }
+  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID');
 }
 
 async function importCommand(root, rest, autoApprove) {
@@ -1357,6 +1399,10 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     permissionPromptTool: headless.permissionPromptTool || null
   });
   process.exitCode = exitCode;
+  if (process.env.OASIS_BACKGROUND_ID) {
+    const { finishBackgroundSession } = await import('./background-sessions.mjs');
+    await finishBackgroundSession(process.env.OASIS_BACKGROUND_ID, { exitCode }, process.env).catch(() => {});
+  }
 }
 
 // Setup hooks (--init, --init-only, --maintenance): command hooks only, output discarded.
@@ -1732,6 +1778,17 @@ async function interactive(root, autoApprove, persistence = {}) {
             catch (error) { stdout.write('[mcp] ' + error.message + '\n'); }
           }
           if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
+          if (handled.background) {
+            try {
+              if (!session) throw new Error('Start a conversation first; /background hands the current session to a background agent.');
+              const saved = await saveSession(session);
+              const { startBackgroundSession } = await import('./background-sessions.mjs');
+              const entry = await startBackgroundSession({ root, prompt: handled.background.prompt, resumeId: saved.id, env: process.env, permissionMode: (session.permissions && session.permissions.mode !== 'bypassPermissions' ? session.permissions.mode : SESSION_OPTIONS.permissionMode) || null, model: session.config && session.config.model || null });
+              stdout.write('Moved this conversation to background session ' + entry.id + '.\n  oasis bg logs ' + entry.id + ' --follow   watch progress\n  oasis bg attach ' + entry.id + '          continue it here later\n');
+              closeSession(session); session = null;
+              break;
+            } catch (error) { stdout.write('[background] ' + error.message + '\n'); continue; }
+          }
           if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
           if (handled.cd) { persistence.watchPaths = await fireCwdChanged(session, root, handled.cd); closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
           if (handled.loop) session = await runLoop(handled.loop, root, autoApprove, session, persistence);
@@ -2103,6 +2160,7 @@ async function main() {
     if (arg === '--append-system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'append', file: needValue(arg) }); continue; }
     if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
     if (arg === '--advisor') { SESSION_OPTIONS.advisor = needValue(arg); continue; }
+    if (arg === '--bg' || arg === '--background') { SESSION_OPTIONS.background = true; continue; }
     if (arg === '--max-budget-usd') {
       const value = Number(needValue(arg));
       if (!Number.isFinite(value) || value <= 0) throw new Error('--max-budget-usd must be a positive dollar amount, for example 2.50.');
@@ -2231,6 +2289,14 @@ async function main() {
     if (!headless.enabled) throw new Error('--json-schema works with -p (headless mode).');
   }
   await applySettingsPolicy(workspace, autoApprove);
+  if (SESSION_OPTIONS.background) {
+    const task = args.join(' ').trim();
+    if (!task) throw new Error('Usage: oasis --bg "describe the task"');
+    const { startBackgroundSession } = await import('./background-sessions.mjs');
+    const entry = await startBackgroundSession({ root: workspace, prompt: task, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null, model: SESSION_OPTIONS.model || null, name: SESSION_OPTIONS.sessionName || null });
+    stdout.write('Started background session ' + entry.id + '. It runs without approval prompts, so only tools your permission rules allow will run.\n  oasis bg logs ' + entry.id + ' --follow   watch progress\n  oasis bg attach ' + entry.id + '          continue the conversation here\n');
+    return;
+  }
   if (worktreeName && (headless.enabled || !command || command === '--interactive')) {
     const session = await startSessionWorktree(workspace, worktreeName, headless.enabled ? stderr : stdout);
     try {
@@ -2290,6 +2356,7 @@ async function main() {
   if (command === 'permissions') return await managePermissions(workspace, rest);
   if (command === 'trust') return await manageTrust(workspace, rest);
   if (command === 'import') return await importCommand(workspace, rest, autoApprove);
+  if (command === 'bg' || command === 'background') return await backgroundCommand(workspace, rest);
   if (command === 'insights') {
     const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
     const { file, stats } = await writeInsightsReport({ env: process.env, days: Math.min(365, Math.max(1, parseInt(rest[0], 10) || 30)) });
