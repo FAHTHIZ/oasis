@@ -170,6 +170,51 @@ export function focusView(messages, { color = true, width = 100 } = {}) {
   return out.join('\n');
 }
 
+// Ctrl+O transcript (Claude Code's transcript mode): every prompt, reply, tool call and tool
+// result, expanded, as wrapped lines for the full-screen pager.
+export function transcriptLines(messages, { color = true, width = 100, maxResult = 4000 } = {}) {
+  const dim = (t) => (color ? '\x1b[2m' + t + '\x1b[22m' : t);
+  const bold = (t) => (color ? '\x1b[1m' + t + '\x1b[22m' : t);
+  const tone = (code, t) => (color ? '\x1b[' + code + 'm' + t + '\x1b[39m' : t);
+  const cols = Math.max(20, width - 2);
+  const wrap = (text, indent = '  ') => {
+    const rows = [];
+    for (const raw of String(text).replace(/\r/g, '').split('\n')) {
+      let line = raw.replace(/\t/g, '  ');
+      if (!line) { rows.push(''); continue; }
+      while (line.length > cols - indent.length) { rows.push(indent + line.slice(0, cols - indent.length)); line = line.slice(cols - indent.length); }
+      rows.push(indent + line);
+    }
+    return rows;
+  };
+  const textOf = (content) => (typeof content === 'string' ? content : Array.isArray(content) ? content.map((part) => (part && part.type === 'text' ? part.text : part && part.type ? '[' + part.type + ']' : '')).join('\n') : '');
+  const out = [];
+  for (const m of Array.isArray(messages) ? messages : []) {
+    if (!m || m.role === 'system') continue;
+    if (m.role === 'user') {
+      const text = textOf(m.content);
+      const injected = /^<(?:system|agent|hook)/.test(text);
+      out.push(injected ? dim('▸ context') : bold(tone('36', '> You')), ...wrap(injected ? text.slice(0, 600) + (text.length > 600 ? '…' : '') : text), '');
+    } else if (m.role === 'assistant') {
+      const text = textOf(m.content);
+      if (m.reasoning || m.reasoning_content) out.push(dim('∴ thinking'), ...wrap(String(m.reasoning || m.reasoning_content)).map(dim), '');
+      if (text.trim()) out.push(bold('● Oasis'), ...wrap(text.trim()), '');
+      for (const call of m.tool_calls || []) {
+        const fn = call.function || {};
+        let args = fn.arguments || '{}';
+        try { args = JSON.stringify(JSON.parse(args), null, 2); } catch {}
+        out.push(tone('33', '⏺ ' + (fn.name || 'tool')), ...wrap(args, '    ').map(dim));
+      }
+    } else if (m.role === 'tool') {
+      const text = String(textOf(m.content));
+      const failed = /^\{"error"/.test(text);
+      const shown = text.length > maxResult ? text.slice(0, maxResult) + '\n… (' + (text.length - maxResult) + ' more characters)' : text;
+      out.push(tone(failed ? '31' : '32', '  ⎿ ' + (failed ? 'error' : 'result')), ...wrap(shown, '    '), '');
+    }
+  }
+  return out.length ? out : ['Nothing in the transcript yet.'];
+}
+
 const MODE_LABELS = {
   acceptEdits: '⏵⏵ accept edits on',
   plan: '⏸ plan mode on',
