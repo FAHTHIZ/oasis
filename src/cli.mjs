@@ -1696,7 +1696,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
       try {
-        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, confirm: (question) => askApproval(question, true, {}) });
+        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {
           if (handled.output) stdout.write(handled.output + '\n');
           if (handled.reload && session) {

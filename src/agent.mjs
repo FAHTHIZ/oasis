@@ -1839,7 +1839,7 @@ async function runSubagent(parent, args, context, options) {
     root: worktree ? worktree.path : parent.root,
     config: agent.model ? { ...parent.config, model: agent.model } : parent.config,
     sessionId: parent.sessionId,
-    messages: [{ role: 'system', content: systemText + isolationNote }],
+    messages: [{ role: 'system', content: systemText + isolationNote }, ...(args.fork_context === true ? forkedConversation(parent) : [])],
     baseSystemPrompt: systemText + isolationNote,
     mcpClients: parent.mcpClients || new Map(),
     mcpToolMap: parent.mcpToolMap || new Map(),
@@ -2468,6 +2468,34 @@ async function maybeForkSkill(session, skill, args, context, options) {
 
 // Runs a prompt in a forked subagent (custom commands and skills with context: fork)
 // and records the exchange in the main conversation.
+// A forked subagent (/subtask) starts from a copy of the parent conversation so it
+// knows everything discussed so far. Unanswered tool calls are dropped so the copy is valid.
+function forkedConversation(parent) {
+  const source = (parent.messages || []).slice(1);
+  const out = [];
+  for (let i = 0; i < source.length; i++) {
+    const message = source[i];
+    if (message.role === 'system') continue;
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length) {
+      const answered = new Set();
+      for (let j = i + 1; j < source.length && source[j].role === 'tool'; j++) answered.add(source[j].tool_call_id);
+      if (!message.tool_calls.every((call) => answered.has(call.id))) { if (message.content) out.push({ role: 'assistant', content: message.content }); continue; }
+    }
+    out.push(message);
+  }
+  return out;
+}
+
+// /subtask TASK: a background general-purpose subagent that inherits the full conversation
+// and reports back to this conversation when it finishes.
+export async function startSubtask(session, task, options = {}) {
+  const prompt = String(task || '').trim();
+  if (!prompt) throw new Error('Usage: /subtask TASK');
+  const context = { root: session.root, env: options.env || process.env, session, approval: async () => false, autoApprove: Boolean(options.autoApprove) };
+  const description = prompt.replace(/\s+/g, ' ').slice(0, 60);
+  return runSubagent(session, { subagent_type: options.agent || 'general-purpose', description, prompt: 'You are a fork of the conversation above. Do this task on your own and report the result:\n\n' + prompt, run_in_background: true, fork_context: true }, context, { ...options, env: context.env });
+}
+
 export async function runForkedTurn(session, prompt, options = {}) {
   const context = { root: session.root, env: options.env || process.env, session, approval: options.approval, autoApprove: Boolean(options.autoApprove) };
   const label = options.label || 'a forked task';
