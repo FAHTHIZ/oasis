@@ -100,6 +100,47 @@ export async function readWorktreeDiff(root, baseCommit, headCommit, options = {
   return { diff: diff.slice(0, maxChars), truncated: diff.length > maxChars };
 }
 
+export async function readWorktreeWorkingDiff(worktreeRoot, baseCommit, options = {}) {
+  const env = options.env || process.env;
+  if (!/^[a-f0-9]{40}$/i.test(String(baseCommit || ''))) throw new Error('A full base commit SHA is required to inspect an interrupted task.');
+  const root = path.resolve(worktreeRoot);
+  const top = await git(root, ['rev-parse', '--show-toplevel'], env);
+  if (path.resolve(top) !== root) throw new Error('The task directory is no longer a Git worktree root.');
+  const maxChars = Math.max(1000, Math.min(250000, Number(options.maxChars) || 180000));
+  let diff = await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--unified=3', baseCommit, '--'], env, 30000);
+  const listed = await git(root, ['ls-files', '--others', '--exclude-standard', '-z'], env, 15000).catch(() => '');
+  const untrackedFiles = [];
+  let omitted = 0;
+  for (const candidate of listed.split('\0').filter(Boolean).slice(0, 100)) {
+    const absolute = path.resolve(root, candidate);
+    if (path.isAbsolute(candidate) || absolute === root || !absolute.startsWith(root + path.sep)) continue;
+    const info = await (await import('node:fs/promises')).lstat(absolute).catch(() => null);
+    if (!info || !info.isFile() || info.isSymbolicLink()) continue;
+    const label = candidate.split(path.sep).join('/');
+    untrackedFiles.push(label);
+    if (info.size > 30000) {
+      diff += '\n\n# Untracked file omitted from preview (over 30 KB): ' + label;
+      omitted++;
+      continue;
+    }
+    const bytes = await (await import('node:fs/promises')).readFile(absolute).catch(() => null);
+    if (!bytes) continue;
+    if (bytes.includes(0)) {
+      diff += '\n\n# Binary untracked file omitted from text preview: ' + label;
+      omitted++;
+      continue;
+    }
+    const text = bytes.toString('utf8').replace(/\r\n/g, '\n');
+    const lines = text.split('\n');
+    diff += '\n\ndiff --git a/' + label + ' b/' + label +
+      '\nnew file mode 100644\n--- /dev/null\n+++ b/' + label +
+      '\n' + lines.map((line) => '+' + line).join('\n');
+  }
+  const truncated = diff.length > maxChars;
+  if (truncated) diff = diff.slice(0, maxChars);
+  return { diff, truncated, untrackedFiles: untrackedFiles.slice(0, 100), omittedUntracked: omitted };
+}
+
 export async function removeWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
   await git(root, ['worktree', 'remove', '--force', worktree.path], env).catch(async () => {
