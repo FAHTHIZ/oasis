@@ -42,7 +42,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 6. **Hooks breadth.** Done: PostToolUseFailure, PermissionRequest (answers prompts, including for background agents), SubagentStart, PostCompact, PreCompact and Notification are wired in, along with SessionStart `compact` and CwdChanged. The `http` and `prompt` hook types are done too. Still missing: FileChanged, WorktreeCreate/Remove, and the `mcp_tool` type.
 7. **Auto memory.** Done: `memory_save`/`memory_search`/`memory_read`/`memory_delete`, an index of abstracts in every session, BM25 recall per prompt, secret redaction, duplicate merging, Markdown files per project and per user, `/memory`, `/remember`, and `oasis memory`. The design draws on [OpenViking](https://github.com/volcengine/OpenViking) and [agentmemory](https://github.com/rohitg00/agentmemory). Still missing: optional embedding search.
 8. **PDF reading.** Done: `read_file` extracts text from PDFs with a `pages` range (up to 50 pages per call). It uses poppler's `pdftotext` when installed, with a built-in fallback extractor.
-9. **Headless extras.** Done: `--json-schema` structured output (validated, with up to 2 retries) and `-w/--worktree` for the main session. Still missing: `--permission-prompts none` and `--bare`.
+9. **Headless extras.** Done: `--json-schema` structured output (validated, with up to 2 retries) and `-w/--worktree` for the main session. `--bare` is done too. Headless mode already denies anything that would need a prompt, which covers `--permission-prompts none`.
 
 ### P2 — everyday UX
 
@@ -55,7 +55,8 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 - Bedrock, Vertex AI, and Azure Foundry provider adapters, plus native Gemini (Gemini currently runs through the OpenAI-compatible endpoint).
 - VS Code and JetBrains extensions (inline diffs, selection context, IDE diagnostics).
 - GitHub Actions workflow (`@oasis` on issues and PRs), similar to Claude Code's GitHub app.
-- OpenTelemetry metrics and traces, and an importable SDK (`package.json` `exports`) for building agents on Oasis.
+- ~~Importable SDK~~ (done): `import { query, tool } from 'oasis-oss'` provides streaming events, in-process tools, `canUseTool`, and structured output.
+- OpenTelemetry metrics and traces.
 - Browser control (Playwright) for debugging live web apps.
 
 ### P4 — platform features (out of scope for a local tool)
@@ -69,7 +70,7 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 3. ~~Background subagents with `/tasks` and `send_message`~~ (done)
 4. ~~Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`, `/sandbox`, `/fork`, `/release-notes`)~~ (done)
 5. ~~MCP resources, prompts, and OAuth~~ (done)
-6. ~~PDF reading, `--json-schema`, `--worktree`~~ (done); `--permission-prompts none` still open
+6. ~~PDF reading, `--json-schema`, `--worktree`, `--bare`~~ (done)
 7. ~~Hook events and types, skill `context: fork`, inline `` !`cmd` ``~~ (done)
 8. ~~Auto memory~~ and ~~auto mode classifier~~ (done)
 9. Bedrock/Vertex adapters, VS Code extension, GitHub Action

@@ -13,7 +13,7 @@ import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
 
-export const OUTPUT_FORMATS = ['text', 'json', 'stream-json'];
+export const OUTPUT_FORMATS = ['text', 'json', 'stream-json', 'none'];
 
 function truncateValue(value, limit = 4000) {
   let text;
@@ -34,11 +34,20 @@ export async function runHeadless(options) {
     sessionOptions = {},
     persistence = {},
     env = process.env,
-    write = (text) => process.stdout.write(text)
+    write = (text) => process.stdout.write(text),
+    // SDK hooks: onEvent gets every event object, onSession can add tools,
+    // canUseTool answers approvals, signal cancels the run.
+    onEvent = null,
+    onSession = null,
+    canUseTool = null,
+    signal = null
   } = options;
   if (!OUTPUT_FORMATS.includes(outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
   const started = Date.now();
-  const emit = (event) => { if (outputFormat === 'stream-json') write(JSON.stringify(event) + '\n'); };
+  const emit = (event) => {
+    if (onEvent) onEvent(event);
+    if (outputFormat === 'stream-json') write(JSON.stringify(event) + '\n');
+  };
   const denied = [];
   let session = null;
   let result = null;
@@ -51,6 +60,7 @@ export async function runHeadless(options) {
     let restored = null;
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions });
+    if (onSession) await onSession(session);
     emit({ type: 'system', subtype: 'init', session_id: session.sessionId || null, cwd: root, model: config.model, permission_mode: session.permissions.mode, tools: session.toolDefinitions.map((tool) => tool.function.name) });
     const expanded = await expandFileMentions(root, rawPrompt, { images: visionEnabled(config, env) }).catch(() => ({ text: rawPrompt, files: [] }));
     const runner = planOnly ? runAgentPlan : runAgentTurn;
@@ -60,8 +70,15 @@ export async function runHeadless(options) {
       ...(expanded.images && expanded.images.length ? { images: expanded.images } : {}),
       env,
       ...(maxTurns ? { maxSteps: maxTurns } : {}),
+      ...(signal ? { signal } : {}),
       approval: async (message, forceInteractive = false, meta = {}) => {
         if (autoApprove && !forceInteractive) return true;
+        if (canUseTool) {
+          const answer = await canUseTool(meta && meta.tool || null, meta && meta.input || {}, { message: String(message), suggestion: meta && meta.suggestion || null });
+          const allowed = answer === true || (answer && answer.behavior === 'allow');
+          emit({ type: 'system', subtype: 'permission', tool: meta && meta.tool || null, allowed });
+          if (allowed) return true;
+        }
         denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
         return false;
       },
@@ -111,7 +128,9 @@ export async function runHeadless(options) {
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
     ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {})
   };
-  if (outputFormat === 'text') write(structured !== undefined ? JSON.stringify(structured) + '\n' : summary.result + (summary.result.endsWith('\n') ? '' : '\n'));
-  else write(JSON.stringify(summary) + '\n');
+  if (outputFormat === 'none') {}
+  else if (outputFormat === 'text') write(structured !== undefined ? JSON.stringify(structured) + '\n' : summary.result + (summary.result.endsWith('\n') ? '' : '\n'));
+  else if (outputFormat !== 'none') write(JSON.stringify(summary) + '\n');
+  if (onEvent) onEvent(summary);
   return { exitCode: isError ? 1 : 0, summary };
 }

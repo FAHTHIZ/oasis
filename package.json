@@ -3,6 +3,11 @@
   "version": "0.2.0",
   "description": "A plain-English, local-first coding agent and developer workspace.",
   "type": "module",
+  "main": "./src/sdk.mjs",
+  "exports": {
+    ".": "./src/sdk.mjs",
+    "./package.json": "./package.json"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=22"

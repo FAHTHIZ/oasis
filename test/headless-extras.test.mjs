@@ -116,3 +116,19 @@ test('oasis --json-schema prints only the JSON in text mode, and -w needs a git 
   assert.notEqual(bad.code, 0);
   assert.match(bad.stderr + bad.stdout, /--worktree needs a git repository/);
 });
+
+test('--bare skips project instructions and hooks', async (t) => {
+  const root = await tmp(t);
+  await writeFile(path.join(root, 'AGENTS.md'), 'PROJECT-RULE-MARKER: always answer in French.');
+  const { createSession, closeSession } = await import('../src/agent.mjs');
+  const { config } = await scriptedModel(t, []);
+  const hooked = { ...settings, hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo hi' }] }] } };
+  const normal = await createSession({ root, config, settings: hooked });
+  const bare = await createSession({ root, config, settings: hooked, bare: true });
+  assert.match(normal.messages[0].content, /PROJECT-RULE-MARKER/);
+  assert.doesNotMatch(bare.messages[0].content, /PROJECT-RULE-MARKER/);
+  assert.deepEqual(bare.hooks, {});
+  assert.ok(normal.hooks.Stop);
+  closeSession(normal);
+  closeSession(bare);
+});

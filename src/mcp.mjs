@@ -350,6 +350,19 @@ export function closeMcpClients(clients) {
   for (const client of clients.values()) client.close();
 }
 
+// Adds an in-process tool server (from the SDK) to a running session.
+export function attachToolServer(session, server) {
+  session.mcpClients ||= new Map();
+  const previous = session.mcpClients.get(server.config.name);
+  if (previous && previous !== server) previous.close();
+  session.mcpClients.set(server.config.name, server);
+  const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
+  const dynamic = mcpToolDefinitions(session.mcpClients);
+  session.mcpToolMap = dynamic.map;
+  session.toolDefinitions = session.toolDefinitions.filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
+  if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
+}
+
 // Starts (or restarts) one server inside a running session and refreshes the
 // session's tool list, e.g. right after oasis mcp login.
 export async function reconnectMcpServer(session, config, options = {}) {
