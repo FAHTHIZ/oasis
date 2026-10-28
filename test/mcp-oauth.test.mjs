@@ -85,6 +85,82 @@ test('WWW-Authenticate parsing and discovery through protected-resource metadata
   assert.deepEqual(found.scopes, ['tools.read']);
 });
 
+test('OAuth discovery rejects redirects instead of following them', async () => {
+  const serverUrl = 'https://mcp.example/mcp';
+  const metadataUrl = 'https://metadata.example/protected-resource';
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), redirect: init.redirect, signal: init.signal });
+    if (init.method === 'POST') {
+      return new Response('', {
+        status: 401,
+        headers: { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}"` }
+      });
+    }
+    return new Response('redirect body', {
+      status: 302,
+      headers: { location: 'http://127.0.0.1:1234/private' }
+    });
+  };
+
+  const found = await discoverOAuth(serverUrl, { fetch: fetchImpl, fetchTimeoutMs: 20 });
+  assert.ok(calls.length > 1);
+  assert.ok(calls.every((call) => call.redirect === 'error'), 'every fetch must disable automatic redirects');
+  assert.ok(calls.every((call) => call.signal instanceof AbortSignal), 'every fetch must have a timeout signal');
+  assert.equal(calls.some((call) => call.url.startsWith('http://127.0.0.1:1234/')), false, 'redirect targets must never be fetched automatically');
+  assert.equal(found.issuer, 'https://mcp.example');
+});
+
+test('OAuth discovery ignores oversized metadata without a Content-Length header', async () => {
+  const serverUrl = 'https://mcp.example/mcp';
+  const metadataUrl = 'https://metadata.example/protected-resource';
+  const oversized = JSON.stringify({
+    resource: serverUrl,
+    authorization_servers: ['https://attacker.example'],
+    scopes_supported: ['tools.read']
+  }) + ' '.repeat(256 * 1024 + 32);
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const target = String(url);
+    calls.push(target);
+    if (init.method === 'POST') {
+      return new Response('', {
+        status: 401,
+        headers: { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}"` }
+      });
+    }
+    if (target === metadataUrl) {
+      return new Response(oversized, { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (target === 'https://mcp.example/.well-known/oauth-authorization-server') {
+      return new Response(JSON.stringify({
+        issuer: 'https://mcp.example',
+        authorization_endpoint: 'https://mcp.example/authorize',
+        token_endpoint: 'https://mcp.example/token',
+        registration_endpoint: 'https://mcp.example/register'
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response('', { status: 404 });
+  };
+
+  const found = await discoverOAuth(serverUrl, { fetch: fetchImpl });
+  assert.equal(calls.includes(metadataUrl), true);
+  assert.equal(found.issuer, 'https://mcp.example', 'oversized untrusted metadata must not select an issuer');
+  assert.equal(found.authorizationEndpoint, 'https://mcp.example/authorize');
+});
+
+test('OAuth discovery bounds time spent waiting for stalled metadata endpoints', async () => {
+  const fetchImpl = (_url, init = {}) => new Promise((_resolve, reject) => {
+    const fail = () => reject(init.signal.reason || new Error('request aborted'));
+    if (init.signal.aborted) { fail(); return; }
+    init.signal.addEventListener('abort', fail, { once: true });
+  });
+  const started = Date.now();
+  const found = await discoverOAuth('https://mcp.example/mcp', { fetch: fetchImpl, fetchTimeoutMs: 20 });
+  assert.ok(Date.now() - started < 1000, 'discovery should return promptly when each request times out');
+  assert.equal(found.issuer, 'https://mcp.example');
+});
+
 test('a server that needs sign-in fails with clear advice, then works after oasis mcp login', async (t) => {
   const { base, state } = await fakeServer(t);
   const { root, env } = await workspace(t, base);
