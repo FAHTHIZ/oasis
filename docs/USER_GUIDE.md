@@ -364,6 +364,33 @@ Run `oasis` in a project to open the interactive prompt. Press `?` on an empty l
 
 Esc in NORMAL mode keeps its usual role, so Esc Esc still clears the input or rewinds. Ctrl shortcuts, Tab, and Shift+Tab work the same in both modes.
 
+### Keybindings, external editor and stash
+
+Ctrl+G (or Ctrl+X Ctrl+E) opens the current prompt in `$VISUAL` / `$EDITOR` (falling back to `vi`, or `notepad` on Windows). Save and quit, and the edited text comes back as the prompt. Ctrl+S stashes a half-written prompt so you can send something else first. The stash comes back at the next prompt, or right away if you press Ctrl+S on an empty prompt.
+
+Every shortcut can be rebound in Claude Code's `keybindings.json` format. OASIS reads `~/.claude/keybindings.json` (or `$CLAUDE_CONFIG_DIR`) and then `<oasis config>/keybindings.json`, and the second file wins. Changes apply at the next prompt. `/keybindings init` creates the file with an example, and `/keybindings` lists your custom bindings, any warnings and the files that were loaded.
+
+```json
+{
+  "bindings": [
+    { "context": "Chat", "bindings": {
+      "ctrl+e": "chat:externalEditor",
+      "ctrl+x ctrl+c": "command:compact",
+      "ctrl+s": null
+    } },
+    { "context": "HistorySearch", "bindings": { "enter": "historySearch:execute" } }
+  ]
+}
+```
+
+- Contexts: `Global`, `Chat`, `Autocomplete`, `HistorySearch`. Other Claude Code contexts are accepted but have no effect yet.
+- Keystrokes: `ctrl`, `shift`, `alt`/`opt`/`meta` and `cmd`/`super` modifiers with letters, `enter`, `escape`, `tab`, `space`, arrows, `home`/`end`, `pageup`/`pagedown`, `backspace` and `delete`. A bare uppercase letter such as `K` means Shift+K.
+- Chords are space-separated (`ctrl+k ctrl+s`), and you have 3 seconds between keys.
+- `null` unbinds a key. `command:NAME` runs `/NAME`.
+- Actions: `app:interrupt`, `app:exit`, `app:toggleTodos`, `app:toggleTranscript`, `app:redraw`, `chat:submit`, `chat:newline`, `chat:cancel`, `chat:clearInput`, `chat:cycleMode`, `chat:undo`, `chat:externalEditor`, `chat:stash`, `chat:imagePaste`, `chat:modelPicker`, `history:search`, `history:previous`, `history:next`, `autocomplete:accept`, `autocomplete:dismiss`, `historySearch:next`, `historySearch:accept`, `historySearch:cancel` and `historySearch:execute`.
+- Ctrl+C, Ctrl+D, Ctrl+M, Ctrl+[, Ctrl+I and Ctrl+H are reserved and cannot be rebound.
+- In history search, Enter accepts the match into the prompt by default. Bind `enter` to `historySearch:execute` to send it right away, as Claude Code does.
+
 Replies render as Markdown with syntax-highlighted code, and edits show as colored diffs. Settings: `OASIS_NO_ANIMATION=1` skips the startup animation, `OASIS_SIMPLE_INPUT=1` uses a plain line reader, `OASIS_PLAIN_OUTPUT=1` prints raw text, and `NO_COLOR` turns off colors.
 
 ### Workflow commands

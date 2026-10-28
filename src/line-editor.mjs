@@ -7,6 +7,11 @@
 // without a terminal; `readInput` wires it to a TTY.
 
 import { applyVimKey, createVimState, trackInsert, vimModeLabel } from './vim-mode.mjs';
+import { loadKeybindings, resolveBinding, actionEffect, CHORD_TIMEOUT_MS, DEFAULT_BINDINGS } from './keybindings.mjs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join as joinPath } from 'node:path';
 
 const ANSI_PATTERN = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 
@@ -60,6 +65,30 @@ const CONTROL_KEYS = {
   '\x19': 'yank', '\x1f': 'undo'
 };
 
+// Keystroke names (Claude Code keybindings syntax) for control bytes.
+function controlStroke(ch) {
+  if (ch === '\r') return 'enter';
+  if (ch === '\t') return 'tab';
+  if (ch === '\x7f' || ch === '\b') return 'backspace';
+  const code = ch.charCodeAt(0);
+  if (code >= 1 && code <= 26) return 'ctrl+' + String.fromCharCode(code + 96);
+  if (code === 0x1f) return 'ctrl+_';
+  if (code === 0x1c) return 'ctrl+\\';
+  if (code === 0x1d) return 'ctrl+]';
+  if (code === 0x1e) return 'ctrl+^';
+  return null;
+}
+function modifierPrefix(mod) {
+  const bits = Math.max(0, Number(mod || 1) - 1);
+  return (bits & 4 ? 'ctrl+' : '') + (bits & 2 ? 'meta+' : '') + (bits & 1 ? 'shift+' : '') + (bits & 8 ? 'super+' : '');
+}
+const SPECIAL_STROKES = { up: 'up', down: 'down', left: 'left', right: 'right', home: 'home', end: 'end', delete: 'delete', pageUp: 'pageup', pageDown: 'pagedown', insert: 'insert' };
+function charStroke(ch) {
+  if (ch === ' ') return 'space';
+  if (/^[A-Z]$/.test(ch)) return 'shift+' + ch.toLowerCase();
+  return ch;
+}
+
 // Stateful decoder: turns raw terminal input into key events. Bracketed paste
 // (ESC[200~ … ESC[201~) is collected into one `paste` event, even across chunks.
 export class KeyDecoder {
@@ -100,7 +129,7 @@ export class KeyDecoder {
       const ch = data[i];
       if (ch === '\x1b') {
         const next = data[i + 1];
-        if (next === undefined) { keys.push({ name: 'escape' }); i += 1; continue; }
+        if (next === undefined) { keys.push({ name: 'escape', stroke: 'escape' }); i += 1; continue; }
         if (next === '[' || next === 'O') {
           let j = i + 2;
           while (j < data.length && !/[@-~]/.test(data[j])) j += 1;
@@ -116,29 +145,35 @@ export class KeyDecoder {
             // Kitty / modifyOtherKeys: ESC[13;2u or ESC[27;2;13~ for Shift+Enter.
             const code = final === 'u' ? Number(parts[0]) : Number(parts[2]);
             const mod = final === 'u' ? modifier : Number(parts[1] || 1);
-            if (code === 13 && mod > 1) keys.push({ name: 'newline' });
-            else if (code === 13) keys.push({ name: 'enter' });
-            else if (code === 9 && mod === 2) keys.push({ name: 'shiftTab' });
-            else if (code === 27) keys.push({ name: 'escape' });
-            else if (code >= 32) keys.push({ name: 'char', text: String.fromCodePoint(code) });
+            const prefix = modifierPrefix(mod);
+            if (code === 13 && mod > 1) keys.push({ name: 'newline', stroke: prefix + 'enter' });
+            else if (code === 13) keys.push({ name: 'enter', stroke: 'enter' });
+            else if (code === 9 && mod === 2) keys.push({ name: 'shiftTab', stroke: 'shift+tab' });
+            else if (code === 27) keys.push({ name: 'escape', stroke: prefix + 'escape' });
+            else if (code >= 32) {
+              const text = String.fromCodePoint(code);
+              const ctrlLetter = mod > 1 && (Math.max(0, mod - 1) & 4) && /[a-z]/i.test(text);
+              keys.push(ctrlLetter ? { name: CONTROL_KEYS[String.fromCharCode(text.toLowerCase().charCodeAt(0) - 96)] || 'ctrlKey', stroke: prefix + text.toLowerCase() } : { name: 'char', text, stroke: prefix + charStroke(text) });
+            }
             continue;
           }
-          if (final === '~') { const name = TILDE_KEYS[parts[0]]; if (name) keys.push({ name }); continue; }
+          if (final === '~') { const name = TILDE_KEYS[parts[0]]; if (name) keys.push({ name, stroke: modifierPrefix(modifier) + (SPECIAL_STROKES[name] || name) }); continue; }
           const name = CSI_FINAL[final];
           if (!name) continue;
-          if ((name === 'left' || name === 'right') && (modifier === 3 || modifier === 5 || modifier === 9)) keys.push({ name: name === 'left' ? 'wordLeft' : 'wordRight' });
-          else keys.push({ name });
+          const stroke = name === 'shiftTab' ? 'shift+tab' : modifierPrefix(modifier) + (SPECIAL_STROKES[name] || name);
+          if ((name === 'left' || name === 'right') && (modifier === 3 || modifier === 5 || modifier === 9)) keys.push({ name: name === 'left' ? 'wordLeft' : 'wordRight', stroke });
+          else keys.push({ name, stroke });
           continue;
         }
         // Alt/Meta + key.
         i += 2;
-        if (next === '\r' || next === '\n') keys.push({ name: 'newline' });
-        else if (next === 'b' || next === 'B') keys.push({ name: 'wordLeft' });
-        else if (next === 'f' || next === 'F') keys.push({ name: 'wordRight' });
-        else if (next === 'd') keys.push({ name: 'deleteWord' });
-        else if (next === '\x7f' || next === '\b') keys.push({ name: 'killWord' });
-        else if (next === '\x1b') { keys.push({ name: 'escape' }); i -= 1; }
-        else keys.push({ name: 'meta', text: next });
+        if (next === '\r' || next === '\n') keys.push({ name: 'newline', stroke: 'meta+enter' });
+        else if (next === 'b' || next === 'B') keys.push({ name: 'wordLeft', stroke: 'meta+' + charStroke(next) });
+        else if (next === 'f' || next === 'F') keys.push({ name: 'wordRight', stroke: 'meta+' + charStroke(next) });
+        else if (next === 'd') keys.push({ name: 'deleteWord', stroke: 'meta+d' });
+        else if (next === '\x7f' || next === '\b') keys.push({ name: 'killWord', stroke: 'meta+backspace' });
+        else if (next === '\x1b') { keys.push({ name: 'escape', stroke: 'escape' }); i -= 1; }
+        else keys.push({ name: 'meta', text: next, stroke: 'meta+' + (controlStroke(next) || charStroke(next)) });
         continue;
       }
       const control = CONTROL_KEYS[ch];
@@ -150,13 +185,13 @@ export class KeyDecoder {
           keys.push({ name: 'paste', text: text.replace(/\r\n?/g, '\n') });
           continue;
         }
-        keys.push({ name: control });
+        keys.push({ name: control, stroke: controlStroke(ch) });
         i += 1;
         continue;
       }
-      if (ch < ' ') { i += 1; continue; }
+      if (ch < ' ') { const stroke = controlStroke(ch); if (stroke) keys.push({ name: 'ctrlKey', stroke }); i += 1; continue; }
       const text = plainRun();
-      if (text) keys.push({ name: 'char', text });
+      if (text) keys.push({ name: 'char', text, ...([...text].length === 1 ? { stroke: charStroke(text) } : {}) });
     }
     return keys;
   }
@@ -340,7 +375,9 @@ function applySearchKey(state, key) {
     case 'escape':
     case 'ctrlG':
     case 'ctrlC': return { state: finish(false), action: null };
-    case 'enter': return { state: finish(true), action: null };
+    case 'enter':
+    case 'searchAccept': return { state: finish(true), action: null };
+    case 'searchExecute': return { state: finish(true), action: 'submit' };
     default: {
       const accepted = finish(true);
       return applyKey(accepted, key);
@@ -408,11 +445,15 @@ export function layoutFrame({ prompt, continuation, text, cursor, hints = [], co
 
 const DIM = (text, color) => (color ? '\x1b[2m' + text + '\x1b[22m' : text);
 
+// Prompt stash shared across readInput calls (Ctrl+S, chat:stash).
+export const stash = { text: '', pendingRestore: false };
+
 export const SHORTCUTS_HELP = [
   '  Enter send · Shift+Enter, Alt+Enter, Ctrl+J or a trailing \\ add a line · Tab complete /commands and @files',
   '  ↑/↓ history · Ctrl+R search history · Shift+Tab cycle permission mode · Esc Esc clear input (empty: rewind)',
   '  ! run a shell command · # save a memory note · Ctrl+V paste an image · Ctrl+L clear screen · Ctrl+D exit',
-  '  /vim toggles vim editing (Esc for NORMAL, i/a/o for INSERT)'
+  '  Ctrl+G or Ctrl+X Ctrl+E edit the prompt in $EDITOR · Ctrl+S stash the prompt · /vim toggles vim editing',
+  '  Rebind keys in ~/.claude/keybindings.json or ~/.oasis/keybindings.json (/keybindings)'
 ];
 
 // Reads one message from a TTY. Resolves to { type: 'submit', text } or
@@ -424,7 +465,10 @@ export function readInput(options = {}) {
   const history = options.history || [];
   const columns = () => output.columns || 80;
   return new Promise((resolve) => {
-    let state = createEditorState({ history, text: options.initialText || '' });
+    // A stashed prompt (Ctrl+S) comes back at the next prompt after a message is sent.
+    const restored = !options.initialText && stash.text && stash.pendingRestore ? stash.text : '';
+    if (restored) { stash.text = ''; stash.pendingRestore = false; }
+    let state = createEditorState({ history, text: options.initialText || restored });
     if (options.vim) state.vim = createVimState(options.vim === 'normal' ? 'normal' : 'insert');
     let hints = [];
     let previousCursorRow = 0;
@@ -509,7 +553,70 @@ export function readInput(options = {}) {
       hints = renderCandidates(candidates, -1, color);
     };
 
-    const handle = async (key) => {
+    const bindings = options.keybindings === false ? null : (() => { try { return loadKeybindings(options.env || process.env); } catch { return null; } })();
+    let chord = null; // { sequence, at }
+
+    const openExternalEditor = () => {
+      const editor = (options.env || process.env).VISUAL || (options.env || process.env).EDITOR || (process.platform === 'win32' ? 'notepad' : 'vi');
+      const dir = mkdtempSync(joinPath(tmpdir(), 'oasis-prompt-'));
+      const file = joinPath(dir, 'prompt.md');
+      try {
+        writeFileSync(file, state.text, 'utf8');
+        input.off('data', onData);
+        try { input.setRawMode(false); } catch {}
+        output.write('\r\n\x1b[?2004l');
+        const run = spawnSync(editor + ' ' + JSON.stringify(file), { stdio: 'inherit', shell: true });
+        try { input.setRawMode(true); } catch {}
+        output.write('\x1b[?2004h');
+        input.on('data', onData);
+        previousCursorRow = 0;
+        if (run.status !== 0 && run.status !== null) { hints = [DIM('Editor exited with status ' + run.status + '; draft unchanged.', color)]; return; }
+        const text = readFileSync(file, 'utf8').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+        state = { ...state, text, cursor: text.length, undo: [...state.undo.slice(-49), { text: state.text, cursor: state.cursor }] };
+        hints = [];
+      } catch (error) {
+        hints = [DIM('Could not open ' + editor + ': ' + error.message, color)];
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    };
+
+    // Maps a key through keybindings.json. Returns the key to apply, or null when consumed.
+    const bindKey = async (key) => {
+      if (!bindings || !key.stroke) { chord = null; return key; }
+      if (state.vim && state.vim.mode === 'normal' && (key.name === 'char' || key.name === 'escape') && !chord) return key;
+      const now = Date.now();
+      const sequence = chord && now - chord.at <= CHORD_TIMEOUT_MS ? chord.sequence + ' ' + key.stroke : key.stroke;
+      const inChord = Boolean(chord && now - chord.at <= CHORD_TIMEOUT_MS);
+      chord = null;
+      const context = state.search ? 'HistorySearch' : completion && hints.length ? 'Autocomplete' : 'Chat';
+      const hit = resolveBinding(bindings, context, sequence);
+      if (hit && hit.prefix) { chord = { sequence, at: now }; hints = [DIM(sequence + ' …', color)]; return null; }
+      if (inChord && (!hit || hit.unbound)) { hints = []; output.write('\x07'); return null; }
+      if (inChord) hints = [];
+      if (!hit) return key;
+      if (hit.unbound) return null;
+      const effect = actionEffect(hit.action);
+      if (!effect) return null;
+      if (effect.key) {
+        // Default bindings keep the editor's own handling of the key (e.g. Esc in vim, Ctrl+R in search).
+        if (!inChord && [context, 'Chat', 'Global'].some((name) => DEFAULT_BINDINGS[name] && DEFAULT_BINDINGS[name][sequence] === hit.action)) return key;
+        return { name: effect.key, stroke: key.stroke, text: key.text };
+      }
+      if (effect.command) { finish({ type: 'submit', text: '/' + effect.command }); return null; }
+      if (effect.action === 'externalEditor') { openExternalEditor(); return null; }
+      if (effect.action === 'stash') {
+        if (state.text.trim()) { stash.text = state.text; state = { ...state, text: '', cursor: 0, undo: [...state.undo, { text: state.text, cursor: state.cursor }] }; hints = [DIM('Prompt stashed; it comes back after your next message (Ctrl+S on an empty prompt restores it now).', color)]; }
+        else if (stash.text) { state = { ...state, text: stash.text, cursor: stash.text.length }; stash.text = ''; hints = []; }
+        else output.write('\x07');
+        return null;
+      }
+      if (effect.action === 'redraw') { output.write('\x1b[2J\x1b[H'); previousCursorRow = 0; return null; }
+      return null;
+    };
+
+    const handle = async (rawKey) => {
+      const key = await bindKey(rawKey);
+      if (done) return;
+      if (!key) { draw(); return; }
       if (key.name !== 'tab') completion = null;
       if (key.name !== 'ctrlC') lastCtrlC = 0;
       const wasHinting = hints.length > 0;
@@ -524,6 +631,7 @@ export function readInput(options = {}) {
       switch (action) {
         case 'submit': {
           if (state.text.trim() === '?' && !options.allowQuestionMark) { state = { ...state, text: '', cursor: 0 }; hints = SHORTCUTS_HELP.map((line) => DIM(line, color)); break; }
+          if (stash.text) stash.pendingRestore = true;
           finish({ type: 'submit', text: state.text });
           return;
         }
