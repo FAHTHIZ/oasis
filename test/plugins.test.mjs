@@ -87,5 +87,6 @@ test('unknown plugin names fail without modifying workspace files', async (t) =>
   t.after(() => rm(root, { recursive: true, force: true }));
   const result = await runCli(root, ['plugins', 'install', 'not-a-real-plugin']);
   assert.notEqual(result.code, 0);
-  assert.match(result.stdout, /No built-in plugin named/);
+  assert.match(result.stdout + result.stderr, /not found in any added marketplace/);
+  assert.deepEqual(await (await import('node:fs/promises')).readdir(root), []);
 });

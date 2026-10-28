@@ -335,6 +335,18 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (bare) project = { servers: [], failures: [] };
   else if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
   else if (await pathExists(path.join(root, '.mcp.json'))) project.failures.push({ name: '.mcp.json', error: 'ignored because this workspace is not trusted. Run oasis trust to enable its MCP servers.' });
+  // MCP servers bundled with enabled Claude Code plugins (user-installed, so no workspace trust needed).
+  if (!bare && !strictMcpConfig && Array.isArray(loadedSettings.plugins) && loadedSettings.plugins.length) {
+    try {
+      const { loadEnabledPlugins, pluginMcpServers } = await import('./claude-plugins.mjs');
+      const { parseMcpServerEntries } = await import('./mcp-project.mjs');
+      for (const item of await pluginMcpServers(await loadEnabledPlugins(root, { env }), { env, root })) {
+        const parsed = parseMcpServerEntries({ mcpServers: item.mcpServers }, { ...env, ...item.env }, 'plugin');
+        project.servers.push(...parsed.servers.map((server) => ({ ...server, plugin: item.plugin })));
+        project.failures.push(...parsed.failures.map((failure) => ({ ...failure, name: item.plugin + ':' + failure.name })));
+      }
+    } catch (error) { project.failures.push({ name: 'plugins', error: error.message }); }
+  }
   const flagServers = (mcpServers || []).map((server) => ({ ...server, source: 'flag' }));
   const mcp = bare && !flagServers.length ? { clients: new Map(), failures: [] }
     : await connectMcpServers({ root, env, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });

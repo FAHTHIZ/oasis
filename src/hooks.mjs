@@ -142,7 +142,8 @@ export async function runPromptHook(hook, payload, options = {}) {
 function runOneHook(hook, payload, options) {
   if (hook.type === 'http') return runHttpHook(hook, payload, options);
   if (hook.type === 'prompt') return runPromptHook(hook, payload, options);
-  return runHookCommand(hook.command, payload, { root: options.root, env: options.env, timeout: hook.timeout });
+  const env = hook.pluginEnv ? { ...(options.env || process.env), ...hook.pluginEnv } : options.env;
+  return runHookCommand(hook.command, payload, { root: options.root, env, timeout: hook.timeout });
 }
 
 export function describeHook(hook) {
