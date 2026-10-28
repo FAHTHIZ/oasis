@@ -2448,6 +2448,8 @@ async function authorizeCall(session, name, args, context, options) {
   if (debugEnabled('permissions')) debugLog('permissions', name + ' -> ' + verdict.decision + (verdict.rule ? ' (rule ' + verdict.rule + ')' : '') + ' mode=' + (session.permissionMode || 'default'));
   if (verdict.decision === 'deny') return { deniedReason: 'Denied by permission rule ' + verdict.rule + '.' };
   let decision = verdict.decision;
+  // autoMode.classifyAllShell: in auto mode, shell allow rules do not skip the classifier.
+  if (decision === 'allow' && mode === 'auto' && session.autoModeSettings && session.autoModeSettings.classifyAllShell && (name === 'run_command' || name === 'powershell')) decision = 'default';
   let hookContext = [];
   if (hasHooks(session.hooks, 'PreToolUse')) {
     const pre = await runHooks('PreToolUse', {
@@ -2491,8 +2493,8 @@ async function authorizeCall(session, name, args, context, options) {
     if (mode === 'auto' && !force) {
       session.autoMode ||= newAutoModeState();
       const autoSettings = session.autoModeSettings || {};
-      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model });
-      session.autoMode.log.push({ tool: name, decision: verdict.decision, reason: verdict.reason, at: Date.now() });
+      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model, config: autoSettings });
+      session.autoMode.log.push({ tool: name, decision: verdict.decision, reason: verdict.reason, ...(verdict.rule ? { rule: verdict.rule } : {}), at: Date.now() });
       if (session.autoMode.log.length > 100) session.autoMode.log.shift();
       if (options.onAutoMode) options.onAutoMode({ tool: name, ...verdict });
       if (verdict.decision === 'allow') return true;

@@ -65,6 +65,7 @@ function printHelp() {
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
     '  oasis -p PROMPT --bare        Skip project instructions, skills, hooks, MCP, and memory',
+    '  oasis --plugin-url URL        Load a plugin .zip from a URL for this session (repeatable)',
     '  oasis --safe-mode             Start with customizations off (CLAUDE.md, skills, hooks, MCP, plugins, commands, themes, keybindings)',
     '  oasis --restricted            No command/network tools, only managed + --settings settings, no bypassPermissions',
     '  oasis -p PROMPT --permission-prompts none   Deny anything not pre-approved instead of asking',
@@ -85,6 +86,7 @@ function printHelp() {
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
+    '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
     '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
     '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
@@ -839,9 +841,46 @@ async function backgroundCommand(root, rest) {
   throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID | respawn ID|--all');
 }
 
+// oasis auto-mode defaults [--label PREFIX] | config | critique | reset [--yes]  (claude auto-mode ...)
+async function autoModeCommand(root, rest, autoApprove = false) {
+  const { DEFAULT_AUTO_MODE, AUTO_MODE_SECTIONS, effectiveAutoModeConfig, critiqueAutoMode, ruleLabel } = await import('./auto-mode.mjs');
+  const [sub = 'config', ...more] = rest;
+  const labelAt = more.indexOf('--label');
+  const label = labelAt >= 0 ? String(more[labelAt + 1] || '').toLowerCase() : '';
+  const filter = (config) => {
+    if (!label) return config;
+    const out = {};
+    for (const section of AUTO_MODE_SECTIONS) out[section] = (config[section] || []).filter((rule) => ruleLabel(rule).toLowerCase().startsWith(label));
+    return out;
+  };
+  const settings = await loadSettings(root);
+  if (sub === 'defaults') { stdout.write(JSON.stringify(filter(DEFAULT_AUTO_MODE), null, 2) + '\n'); return; }
+  if (sub === 'config') {
+    const config = effectiveAutoModeConfig(settings.autoMode);
+    if (settings.autoMode && settings.autoMode.rules && settings.autoMode.rules.length) config.rules = settings.autoMode.rules;
+    if (settings.autoMode && settings.autoMode.classifyAllShell) config.classifyAllShell = true;
+    stdout.write(JSON.stringify(filter(config), null, 2) + '\n');
+    return;
+  }
+  if (sub === 'critique') { stdout.write(critiqueAutoMode(settings.autoMode).map((note) => '- ' + note).join('\n') + '\n'); return; }
+  if (sub === 'reset') {
+    const file = userSettingsPath(process.env);
+    const current = JSON.parse(await readFile(file, 'utf8').catch(() => '{}') || '{}');
+    if (!current.autoMode) { stdout.write('No autoMode section in ' + file + '; the defaults already apply.\n'); return; }
+    stdout.write('This removes the autoMode section from ' + file + ': ' + Object.keys(current.autoMode).join(', ') + '. Rules from managed settings or --settings still apply.\n');
+    if (!autoApprove && !more.includes('--yes') && !more.includes('-y') && !(await approve('Reset auto mode configuration to defaults?', true, false))) { stdout.write('Kept your auto mode rules.\n'); return; }
+    const { updateUserSettings } = await import('./settings.mjs');
+    await updateUserSettings((data) => { delete data.autoMode; return data; }, process.env);
+    stdout.write('Auto mode configuration reset to defaults.\n');
+    return;
+  }
+  throw new Error('Usage: oasis auto-mode defaults [--label PREFIX] | config [--label PREFIX] | critique | reset [--yes]');
+}
+
 async function purgeCommand(root, rest, autoApprove) {
   const { parsePurgeArgs, planPurge, applyPurge, describePurge, knownProjects } = await import('./purge.mjs');
   const options = parsePurgeArgs(rest);
+  if (autoApprove) options.yes = true;
   let targets = [];
   if (options.all) targets = (await knownProjects(process.env)).map((item) => item.root);
   else if (options.path) targets = [path.resolve(options.path)];
@@ -2394,6 +2433,7 @@ async function main() {
       continue;
     }
     if (arg === '--plan') { headless.planOnly = true; continue; }
+    if (arg === '--plugin-url') { const url = rawArgs[++i]; if (!url) throw new Error('--plugin-url needs a URL.'); (SESSION_OPTIONS.pluginUrls ||= []).push(url); continue; }
     if (arg === '--plugin-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; autoApprove = true; continue; }
@@ -2413,6 +2453,13 @@ async function main() {
   }
   await access(workspace);
   await resolveFlagFiles(workspace);
+  if (SESSION_OPTIONS.pluginUrls && SESSION_OPTIONS.pluginUrls.length) {
+    const { fetchPluginArchive } = await import('./zip.mjs');
+    for (const url of SESSION_OPTIONS.pluginUrls) {
+      const dir = await fetchPluginArchive(url);
+      process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, dir].filter(Boolean).join(path.delimiter);
+    }
+  }
   if (SESSION_OPTIONS.restricted && (SESSION_OPTIONS.permissionMode === 'bypassPermissions' || SESSION_OPTIONS.allowBypass)) throw new Error('--restricted cannot be combined with --dangerously-skip-permissions, --allow-dangerously-skip-permissions, or --permission-mode bypassPermissions.');
   if (SESSION_OPTIONS.restricted) { autoApprove = false; SESSION_OPTIONS.allowBypass = false; }
   if (SESSION_OPTIONS.runInit) {
@@ -2516,6 +2563,7 @@ async function main() {
   // Claude Code's top-level background commands: claude attach|logs|stop|kill|rm|respawn ID.
   if (['attach', 'logs', 'stop', 'kill', 'rm', 'respawn'].includes(command)) return await backgroundCommand(workspace, [command, ...rest]);
   if (command === 'purge') return await purgeCommand(workspace, rest, autoApprove);
+  if (command === 'auto-mode') return await autoModeCommand(workspace, rest, autoApprove);
   if (command === 'insights') {
     const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
     const { file, stats } = await writeInsightsReport({ env: process.env, days: Math.min(365, Math.max(1, parseInt(rest[0], 10) || 30)) });
