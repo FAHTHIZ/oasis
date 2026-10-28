@@ -38,7 +38,7 @@ test('main session and subagent mutate the same dependency-aware task board', as
   const { config, parentRequests, childRequests } = await modelServer(t, {
     parent: (payload, last) => {
       if (last.role === 'user') return { content: null, tool_calls: [call('p1', 'task_create', { subject: 'Verify shared board', description: 'A child agent must be able to see and complete this task.' })] };
-      if (last.role === 'tool' && last.name === 'task_create') return { content: null, tool_calls: [call('p2', 'task', { description: 'shared task check', prompt: 'Use task_list to inspect the shared board. Then mark task_1 completed after verifying that it exists.', subagent_type: 'general-purpose' })] };
+      if (last.role === 'tool' && last.name === 'task_create') return { content: null, tool_calls: [call('p2', 'task', { description: 'shared task check', prompt: 'Use task_list to inspect the shared board. Claim task_1 with task_claim, then mark it completed after verifying that it exists.', subagent_type: 'general-purpose' })] };
       if (last.role === 'tool' && last.name === 'task') return { content: 'Shared task coordination verified.' };
       return { content: 'Unexpected parent step.' };
     },
@@ -46,8 +46,9 @@ test('main session and subagent mutate the same dependency-aware task board', as
       if (last.role === 'user') return { content: null, tool_calls: [call('c1', 'task_list', {})] };
       if (last.role === 'tool' && last.name === 'task_list') {
         assert.match(last.content, /Verify shared board/);
-        return { content: null, tool_calls: [call('c2', 'task_update', { task_id: 'task_1', status: 'completed' })] };
+        return { content: null, tool_calls: [call('c2', 'task_claim', { task_id: 'task_1' })] };
       }
+      if (last.role === 'tool' && last.name === 'task_claim') return { content: null, tool_calls: [call('c3', 'task_update', { task_id: 'task_1', status: 'completed' })] };
       if (last.role === 'tool' && last.name === 'task_update') return { content: 'Marked the shared task completed.' };
       return { content: 'Unexpected child step.' };
     }
@@ -60,5 +61,6 @@ test('main session and subagent mutate the same dependency-aware task board', as
   assert.equal(session.sharedTasks.tasks[0].status, 'completed');
   assert.equal(session.sharedTasks.tasks[0].createdBy, 'main');
   assert.ok(childRequests.some((request) => request.messages.some((message) => message.name === 'task_list')));
+  assert.ok(childRequests.some((request) => request.messages.some((message) => message.name === 'task_claim')));
   assert.ok(parentRequests.some((request) => request.messages.some((message) => message.name === 'task')));
 });

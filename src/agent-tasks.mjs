@@ -19,6 +19,10 @@ export const AGENT_TOOL_DEFINITIONS = [
     id: { type: 'string', description: 'Agent id such as agent_1; omit to list all' },
     wait_seconds: { type: 'integer', description: 'Wait up to this many seconds for the agent to finish' }
   }, required: [] } } },
+  { type: 'function', function: { name: 'team_send_message', description: 'Send a direct coordination message to another running agent in this task team. Messages are delivered at the recipient\'s next model step. Use this to share findings, ask for an interface decision, or warn about overlapping work. This cannot resume a finished agent or grant it extra permissions.', parameters: { type: 'object', properties: {
+    to: { type: 'string', description: 'Target agent ID from agent_status, such as agent_2' },
+    message: { type: 'string', description: 'Coordination message, maximum 20,000 characters' }
+  }, required: ['to', 'message'] } } },
   { type: 'function', function: { name: 'send_message', description: 'Send a message to a subagent by id. A running agent sees it at its next step (use this to steer or add requirements). A finished agent resumes in the background with its full previous context, so follow-up work does not start from scratch.', parameters: { type: 'object', properties: {
     id: { type: 'string', description: 'Agent id from task or agent_status' },
     message: { type: 'string', description: 'Instructions or information for the agent' }
@@ -74,7 +78,8 @@ function elapsed(record) {
 export function summarizeAgent(record, { full = false } = {}) {
   const out = { id: record.id, agent: record.type, description: record.description, status: record.status, background: Boolean(record.background), elapsed: elapsed(record), runs: record.runs, toolCalls: record.toolCalls };
   if (record.status === 'running' && record.recentTools.length) out.recentTools = record.recentTools.slice(-5);
-  if (record.queued && record.queued.length) out.queuedMessages = record.queued.length;
+  const queuedMessages = Array.isArray(record.child && record.child.inbox) ? record.child.inbox.length : 0;
+  if (queuedMessages) out.queuedMessages = queuedMessages;
   if (record.worktree) out.worktree = record.worktree;
   if (record.error) out.error = record.error;
   if (full && record.status !== 'running') out.report = record.report;
@@ -114,6 +119,25 @@ export async function agentStatus(session, args = {}, signal) {
   // The parent has now read this result, so drop its pending finish notice.
   if (record.status !== 'running') record.noticeRead = true;
   return summarizeAgent(record, { full: true });
+}
+
+export function sendTeamMessage(session, args = {}) {
+  const senderId = String(session.agentId || 'main');
+  const targetId = String(args.to || '').trim();
+  if (!targetId) throw new Error('team_send_message needs a target agent ID.');
+  if (targetId === senderId) throw new Error('An agent cannot send a teammate message to itself.');
+  const message = String(args.message || '').trim();
+  if (!message) throw new Error('team_send_message needs a message.');
+  if (message.length > 20000) throw new Error('Messages must be 20,000 characters or fewer.');
+  const record = getAgent(session, targetId);
+  if (record.status !== 'running') throw new Error('Agent ' + targetId + ' is not running. Direct teammate messages do not resume finished agents.');
+  if (!record.child) throw new Error('Agent ' + targetId + ' has no active conversation to receive a message.');
+  const inbox = record.child.inbox || (record.child.inbox = []);
+  if (inbox.length >= 100) throw new Error('Agent ' + targetId + ' has too many queued messages; wait for it to catch up.');
+  const senderRecord = senderId === 'main' ? null : getAgent(session, senderId);
+  const senderLabel = senderRecord ? senderRecord.description : 'main coordinator';
+  inbox.push({ text: 'Direct message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message, senderId, kind: 'peer-message' });
+  return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
 }
 
 export function stopAgent(session, args = {}) {

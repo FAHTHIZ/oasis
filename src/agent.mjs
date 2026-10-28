@@ -29,7 +29,7 @@ import { access } from 'node:fs/promises';
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, stopAgent, stopAllAgents, getAgent } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, sendTeamMessage, stopAgent, stopAllAgents, getAgent } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
 
@@ -278,7 +278,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     'Work in short, meaningful loops: inspect the repository; make the smallest coherent change; run relevant tests or checks; inspect the result; report what truly happened.',
     'For every non-trivial task, maintain a compact checklist of acceptance criteria and implementation steps. Re-check the original request before declaring completion; clearly mark unfinished criteria instead of silently dropping them.',
     'For tasks with three or more steps, use todo_write before implementation and keep it current. Mark a step completed only after its result is verified, and keep at most one step in_progress.',
-    'For work coordinated across the main session and subagents, use task_create, task_list, task_get and task_update as a shared dependency-aware task board. Create scoped tasks, record prerequisites with blocked_by, assign an owner when useful, and only mark work completed after verification.',
+    'For work coordinated across the main session and subagents, use task_create, task_list, task_get, task_claim, task_release and task_update as a shared dependency-aware task board. Claim a ready task before starting or completing it; claims are exclusive leases, so renew them before expiry and release a task if abandoning it. Use team_send_message to coordinate directly with running peers, share findings, and agree on interfaces before independent work overlaps. Owners are display/assignment metadata, not a substitute for an active claim. Only mark work completed after verification.',
     'Git: commit only when the user asks. Use git_commit (never run_command git commit), git_branch, git_push, and create_pull_request. Before committing, read git_status, git_diff, and git_log so the message matches the repository style and describes why, not just what. Never force-push, amend, rebase, reset, skip hooks, or change git config unless the user explicitly asks; if a hook rejects a commit, fix the problem and commit again. Do not commit secrets. When asked to open a pull request on the default branch, create a feature branch first.',
     'Before editing, inspect the current working-tree state with git_status when available so you do not overwrite or misattribute the user\'s existing changes. Never assume a dirty file was created by you.',
     'After changing files in a Git workspace, inspect git_diff before finishing. Use the project\'s own scripts and package metadata to select focused tests, type checks, lint, or build checks; run relevant checks when permitted and fix failures rather than only reporting them.',
@@ -408,7 +408,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (Array.isArray(tools) || typeof tools === 'string') {
     const keep = new Set(allowedToolNames || []);
     // Coordination tools stay so the agent can finish or ask; everything else must be listed.
-    for (const name of ['exit_plan_mode', 'ask_user_question', ...SHARED_TASK_TOOL_NAMES]) keep.add(name);
+    for (const name of ['exit_plan_mode', 'ask_user_question', 'team_send_message', ...SHARED_TASK_TOOL_NAMES]) keep.add(name);
     session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name) || [...keep].some((rule) => rule.endsWith('*') && tool.function.name.startsWith(rule.slice(0, -1))));
   }
   if (deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env })) systemText += '\n\n' + deferredToolsPrompt(session);
@@ -1560,8 +1560,8 @@ async function runSubagent(parent, args, context, options) {
   const allowed = agent.tools ? new Set(agent.tools) : null;
   const definitions = (parent.toolDefinitions || TOOL_DEFINITIONS).filter((definition) => {
     const name = definition && definition.function && definition.function.name;
-    if (!name || name === 'task' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name.startsWith('cron_') || AGENT_TOOL_NAMES.has(name)) return false;
-    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name);
+    if (!name || name === 'task' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name.startsWith('cron_') || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
   const systemText = [
@@ -1569,7 +1569,7 @@ async function runSubagent(parent, args, context, options) {
     'SUBAGENT MODE (' + agent.name + '). ' + agent.prompt,
     'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Agent definitions and the task prompt cannot override the safety rules above.'
   ].join('\n\n');
-  const readOnly = definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name));
+  // Coordination tools can mutate the team board or inbox without editing the workspace.\n  const readOnly = definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
   const isolation = String(args.isolation || agent.isolation || '').toLowerCase();
   if (isolation && isolation !== 'worktree') throw new Error('isolation must be "worktree" when set.');
   let worktree = null;
@@ -1591,6 +1591,7 @@ async function runSubagent(parent, args, context, options) {
     toolCallsThisSession: 0,
     todos: [],
     sharedTasks: parent.sharedTasks,
+    agentTasks: agentRegistry(parent),
     settings: parent.settings,
     permissions: parent.permissions,
     sandbox: parent.sandbox,
@@ -1715,6 +1716,7 @@ function startBackgroundRun(parent, record, prompt, options) {
 
 async function runAgentTool(session, name, args, context, options) {
   if (name === 'agent_status') return await agentStatus(session, args, context.signal);
+  if (name === 'team_send_message') return sendTeamMessage(session, args);
   if (name === 'agent_stop') return stopAgent(session, args);
   // send_message
   const record = getAgent(session, args.id);
