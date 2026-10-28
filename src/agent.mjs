@@ -29,7 +29,7 @@ import { access } from 'node:fs/promises';
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
 
@@ -1676,6 +1676,7 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     record.finishedAt = Date.now();
     record.status = record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
     record.error = error.message;
+    recordAgentEvent(parent, record.status === 'cancelled' ? 'agent.cancelled' : 'agent.failed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: error.message });
     throw error;
   }
   let worktreeResult = null;
@@ -1686,6 +1687,7 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
   }
   record.finishedAt = Date.now();
   record.status = 'completed';
+  recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = String(outcome.text || '').slice(0, 30000);
   record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
   return {
@@ -1707,6 +1709,7 @@ function startBackgroundRun(parent, record, prompt, options) {
   record.error = null;
   record.finishedAt = null;
   record.controller = new AbortController();
+  recordAgentEvent(parent, record.runs > 1 ? 'agent.resumed' : 'agent.background_started', { agentId: record.id, teamId: record.teamId || undefined, description: record.description });
   // Detach from the parent turn: its cancellation must not kill the agent.
   const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onUsage: undefined, onDelta: undefined };
   record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).then((result) => {
@@ -1723,6 +1726,7 @@ function startBackgroundRun(parent, record, prompt, options) {
 
 async function runAgentTool(session, name, args, context, options) {
   if (name === 'agent_status') return await agentStatus(session, args, context.signal);
+  if (name === 'agent_events') return agentEvents(session, args);
   if (name === 'team_create') return createAgentTeam(session, args);
   if (name === 'team_status') return agentTeamStatus(session, args);
   if (name === 'team_shutdown') return shutdownAgentTeam(session, args);
@@ -1735,12 +1739,14 @@ async function runAgentTool(session, name, args, context, options) {
   if (message.length > 20000) throw new Error('Messages must be 20,000 characters or fewer.');
   if (record.status === 'running') {
     (record.child.inbox || (record.child.inbox = [])).push({ text: 'New message from the parent agent:\n' + message });
+    recordAgentEvent(session, 'agent.message_queued', { agentId: record.id, teamId: record.teamId || undefined, description: 'main → ' + record.id, detail: message });
     return { id: record.id, status: 'running', delivered: 'queued', message: 'The agent will see this at its next step.' };
   }
   if (!record.resumable) throw new Error('Agent ' + record.id + ' ran in a worktree that has already been committed and cleaned up; launch a new task instead (it can start from branch ' + ((record.worktree && record.worktree.branch) || 'its branch') + ').');
   if (record.status === 'cancelled' && !record.child) throw new Error('Agent ' + record.id + ' cannot be resumed.');
   if (runningBackgroundCount(session) >= MAX_BACKGROUND_AGENTS) throw new Error('Too many background agents are running; wait for one to finish first.');
   record.runs++;
+  recordAgentEvent(session, 'agent.resume_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: message });
   startBackgroundRun(session, record, message, options);
   return { id: record.id, status: 'running', delivered: 'resumed', message: 'The agent resumed in the background with its previous context. You will be told when it finishes.' };
 }

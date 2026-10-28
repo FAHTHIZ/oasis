@@ -21,6 +21,11 @@ export const AGENT_TOOL_DEFINITIONS = [
     id: { type: 'string', description: 'Agent id such as agent_1; omit to list all' },
     wait_seconds: { type: 'integer', description: 'Wait up to this many seconds for the agent to finish' }
   }, required: [] } } },
+  { type: 'function', function: { name: 'agent_events', description: 'Read the recent agent/team activity timeline for this session: worker starts, finishes, failures, cancellations, team lifecycle, and teammate messages. Filter by agent_id or team_id and limit the number of events.', parameters: { type: 'object', properties: {
+    agent_id: { type: 'string', description: 'Optional agent ID such as agent_2' },
+    team_id: { type: 'string', description: 'Optional team ID such as team_1' },
+    limit: { type: 'integer', description: 'Maximum events to return, 1 to 100; defaults to 30' }
+  }, required: [] } } },
   { type: 'function', function: { name: 'team_create', description: 'Create a named agent team before launching coordinated workers. Then use the task tool with team_id so members share a named roster and can coordinate directly.', parameters: { type: 'object', properties: {
     name: { type: 'string', description: 'Short unique team name, maximum 100 characters' },
     description: { type: 'string', description: 'Goal or scope for this team, maximum 1,000 characters' }
@@ -47,16 +52,46 @@ export const AGENT_TOOL_DEFINITIONS = [
 export const AGENT_TOOL_NAMES = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.function.name));
 
 export function agentRegistry(session) {
-  if (!session.agentTasks) session.agentTasks = { next: 1, agents: new Map(), nextTeam: 1, teams: new Map() };
+  if (!session.agentTasks) session.agentTasks = { next: 1, agents: new Map(), nextTeam: 1, teams: new Map(), events: [], nextEventId: 1 };
   const registry = session.agentTasks;
   if (!(registry.agents instanceof Map)) registry.agents = new Map();
   if (!(registry.teams instanceof Map)) registry.teams = new Map();
+  if (!Array.isArray(registry.events)) registry.events = [];
+  if (!Number.isSafeInteger(registry.nextEventId) || registry.nextEventId < 1) registry.nextEventId = registry.events.reduce((max, event) => Math.max(max, Number(event.id) || 0), 0) + 1;
   if (!Number.isSafeInteger(registry.nextTeam) || registry.nextTeam < 1) registry.nextTeam = 1;
   return registry;
 }
 
 function isMainCoordinator(session) {
   return !session.agentId || session.agentId === 'main';
+}
+
+export function recordAgentEvent(session, type, fields = {}) {
+  const registry = agentRegistry(session);
+  const event = {
+    id: registry.nextEventId++,
+    at: new Date().toISOString(),
+    type: String(type || 'agent.event').slice(0, 80),
+    actor: String(session.agentId || 'main').slice(0, 100),
+    ...(fields.agentId ? { agent_id: String(fields.agentId).slice(0, 100) } : {}),
+    ...(fields.teamId ? { team_id: String(fields.teamId).slice(0, 100) } : {}),
+    ...(fields.description ? { description: String(fields.description).slice(0, 200) } : {}),
+    ...(fields.detail ? { detail: String(fields.detail).slice(0, 500) } : {})
+  };
+  registry.events.push(event);
+  if (registry.events.length > 500) registry.events.splice(0, registry.events.length - 500);
+  return event;
+}
+
+export function agentEvents(session, args = {}) {
+  if (!isMainCoordinator(session)) throw new Error('Only the main coordinator can inspect the full agent activity timeline.');
+  const registry = agentRegistry(session);
+  const agentId = String(args.agent_id || '').trim();
+  const teamId = String(args.team_id || '').trim();
+  const limit = Math.max(1, Math.min(100, Number.parseInt(args.limit, 10) || 30));
+  const filtered = registry.events.filter((event) => (!agentId || event.agent_id === agentId) && (!teamId || event.team_id === teamId));
+  const events = filtered.slice(-limit);
+  return { events, total: filtered.length, returned: events.length, truncated: filtered.length > events.length };
 }
 
 export function getAgentTeam(session, idValue) {
@@ -118,6 +153,7 @@ export function createAgentTeam(session, args = {}) {
   const id = 'team_' + registry.nextTeam++;
   const team = { id, name, description, status: 'active', createdBy: 'main', createdAt: new Date().toISOString(), closedAt: null, members: [] };
   registry.teams.set(id, team);
+  recordAgentEvent(session, 'team.created', { teamId: id, description: name, detail: description });
   return { team: summarizeTeam(session, team), message: 'Created ' + id + '. Launch coordinated workers with the task tool and team_id: ' + id + '.' };
 }
 
@@ -132,6 +168,7 @@ export function shutdownAgentTeam(session, args = {}) {
   const team = getAgentTeam(session, args.team_id);
   if (team.status === 'closed') return { team: summarizeTeam(session, team), stop_requested: 0, message: team.name + ' is already closed.' };
   team.status = 'shutting_down';
+  recordAgentEvent(session, 'team.shutdown_requested', { teamId: team.id, description: team.name });
   let stopRequested = 0;
   for (const memberId of team.members) {
     const member = agentRegistry(session).agents.get(memberId);
@@ -153,6 +190,7 @@ export function registerAgent(session, fields) {
   const record = { id, status: 'running', startedAt: Date.now(), finishedAt: null, runs: 1, toolCalls: 0, tokensUsed: 0, recentTools: [], report: '', error: null, ...fields, teamId: teamId || null };
   registry.agents.set(id, record);
   if (team) team.members.push(id);
+  recordAgentEvent(session, 'agent.started', { agentId: id, teamId: teamId || undefined, description: record.description || record.type || id });
   return record;
 }
 
@@ -250,6 +288,7 @@ export function sendTeamMessage(session, args = {}) {
   if (inbox.length >= 100) throw new Error('Agent ' + targetId + ' has too many queued messages; wait for it to catch up.');
   const senderLabel = senderRecord ? senderRecord.description : 'main coordinator';
   inbox.push({ text: 'Direct message from teammate ' + senderId + ' (' + senderLabel + '):\n' + message, senderId, kind: 'peer-message' });
+  recordAgentEvent(session, 'agent.message_queued', { agentId: targetId, teamId: record.teamId || undefined, description: senderId + ' → ' + targetId, detail: message });
   return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
 }
 
@@ -258,6 +297,7 @@ export function stopAgent(session, args = {}) {
   if (record.status !== 'running') return { id: record.id, status: record.status, message: 'The agent is not running.' };
   record.cancelRequested = true;
   if (record.controller) record.controller.abort();
+  recordAgentEvent(session, 'agent.stop_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description });
   return { id: record.id, status: 'stopping', message: 'Stop requested; the agent will end at its next step.' };
 }
 
