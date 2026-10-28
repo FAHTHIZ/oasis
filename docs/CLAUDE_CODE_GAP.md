@@ -41,8 +41,8 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 5. **Skill and command frontmatter.** Missing: `context: fork` (run a skill in a subagent), inline `` !`cmd` `` shell output in commands, `model`/`effort` per command, and hot reload.
 6. **Hooks breadth.** Missing events: PostToolUseFailure, SubagentStart, PostCompact, PermissionRequest, CwdChanged, FileChanged, WorktreeCreate/Remove, and others. Missing hook types: `http`, `prompt` (model-evaluated), and `mcp_tool`.
 7. **Auto memory.** Done: `memory_save`/`memory_search`/`memory_read`/`memory_delete`, an index of abstracts in every session, BM25 recall per prompt, secret redaction, duplicate merging, Markdown files per project and per user, `/memory`, `/remember`, and `oasis memory`. The design draws on [OpenViking](https://github.com/volcengine/OpenViking) and [agentmemory](https://github.com/rohitg00/agentmemory). Still missing: optional embedding search.
-8. **PDF reading.** `read_file` should extract text from PDF page ranges.
-9. **Headless extras.** Missing: `--json-schema` structured output, `--permission-prompts none`, `--bare`, and `-w/--worktree` for the main session.
+8. **PDF reading.** Done: `read_file` extracts text from PDFs with a `pages` range (up to 50 pages per call). It uses poppler's `pdftotext` when installed, with a built-in fallback extractor.
+9. **Headless extras.** Done: `--json-schema` structured output (validated, with up to 2 retries) and `-w/--worktree` for the main session. Still missing: `--permission-prompts none` and `--bare`.
 
 ### P2 — everyday UX
 
@@ -68,8 +68,8 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 2. ~~Git commit/branch/PR tools and `/pr`~~ (done)
 3. ~~Background subagents with `/tasks` and `send_message`~~ (done)
 4. ~~Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`, `/sandbox`, `/fork`, `/release-notes`)~~ (done)
-5. MCP resources, prompts, and OAuth
-6. PDF reading, `--json-schema`, `--worktree`, `--permission-prompts none`
+5. ~~MCP resources, prompts, and OAuth~~ (done)
+6. ~~PDF reading, `--json-schema`, `--worktree`~~ (done); `--permission-prompts none` still open
 7. Hook events and types, skill `context: fork`, and inline `` !`cmd` ``
 8. ~~Auto memory~~ (done) and auto mode classifier
 9. Bedrock/Vertex adapters, VS Code extension, GitHub Action

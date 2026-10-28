@@ -31,6 +31,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Package installation routing for npm/Python/system/Cargo/Go ecosystems with an explicit command summary and approval.
 - Public documentation fetch with URL checks, redirect handling, and size limits.
 - User-level provider configuration, environment setup diagnostics, built-in skills, project instructions, file snapshots, and snapshot restore.
+- PDF text extraction in `read_file` (page ranges), headless `--json-schema` structured output with validation and retries, and `-w/--worktree` sessions on their own branch.
 - CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
 
 ## Milestone 1 — make the CLI release-quality

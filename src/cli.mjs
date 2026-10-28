@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
-import { stdin, stdout } from 'node:process';
+import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -55,6 +55,8 @@ function printHelp() {
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
+    '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
+    '  oasis -w [NAME]               Work in a new git worktree on its own branch',
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
@@ -1006,11 +1008,36 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     outputFormat: headless.outputFormat,
     maxTurns: headless.maxTurns,
     planOnly: headless.planOnly,
+    jsonSchema: headless.jsonSchema || null,
     sessionOptions: sessionCreateOptions(),
     persistence,
     env: process.env
   });
   process.exitCode = exitCode;
+}
+
+// oasis -w NAME: run the whole session in a fresh git worktree on its own branch.
+async function startSessionWorktree(root, name, out) {
+  const { createWorktree } = await import('./worktrees.mjs');
+  let worktree;
+  try { worktree = await createWorktree(root, name); }
+  catch (error) { throw new Error('--worktree: ' + error.message.replace(/isolation "worktree"/g, '--worktree').replace(/, or launch the subagent without isolation/, '')); }
+  out.write('[worktree] Working in ' + worktree.relative + ' on branch ' + worktree.branch + '. Your main checkout is untouched.\n');
+  return worktree;
+}
+
+async function endSessionWorktree(root, worktree, out) {
+  const { removeWorktree } = await import('./worktrees.mjs');
+  const { execFile } = await import('node:child_process');
+  const git = (args, cwd) => new Promise((resolve) => execFile('git', args, { cwd }, (error, stdout) => resolve(error ? null : stdout.trim())));
+  const status = await git(['status', '--porcelain', '--untracked-files=all'], worktree.path);
+  const head = await git(['rev-parse', 'HEAD'], worktree.path);
+  if (status === '' && head === worktree.base) {
+    await removeWorktree(root, worktree, { deleteBranch: true });
+    out.write('[worktree] No changes, so the worktree and branch ' + worktree.branch + ' were removed.\n');
+    return;
+  }
+  out.write('[worktree] Kept ' + worktree.relative + ' (branch ' + worktree.branch + ')' + (status ? ' with uncommitted changes' : '') + '. Review with: git -C ' + worktree.relative + ' diff, merge with: git merge ' + worktree.branch + ', remove with: git worktree remove ' + worktree.relative + '\n');
 }
 
 // /loop: run the prompt, wait, repeat. Ctrl+C stops the current run and the loop.
@@ -1433,6 +1460,7 @@ async function main() {
   let continueSession = false;
   let resumeId = null;
   let workspace = process.cwd();
+  let worktreeName = null;
   const args = [];
   const headless = { enabled: false, prompt: '', outputFormat: 'text', maxTurns: null, planOnly: false };
   for (let i = 0; i < rawArgs.length; i++) {
@@ -1480,6 +1508,16 @@ async function main() {
       SESSION_OPTIONS.effort = level === 'auto' ? null : level;
       continue;
     }
+    if (arg === '--json-schema') {
+      const value = rawArgs[++i];
+      if (!value) throw new Error('--json-schema needs a JSON Schema (inline JSON or @path/to/schema.json).');
+      headless.jsonSchemaSource = value;
+      continue;
+    }
+    if (arg === '-w' || arg === '--worktree') {
+      worktreeName = rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-') ? rawArgs[++i] : 'session';
+      continue;
+    }
     if (arg === '--plan') { headless.planOnly = true; continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; autoApprove = true; continue; }
@@ -1506,6 +1544,19 @@ async function main() {
     if (!persistence.resumeId) (headless.enabled ? stderr : stdout).write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
   }
 
+  if (headless.jsonSchemaSource) {
+    const source = headless.jsonSchemaSource.startsWith('@') ? await readFile(path.resolve(headless.jsonSchemaSource.slice(1)), 'utf8') : headless.jsonSchemaSource;
+    try { headless.jsonSchema = JSON.parse(source); } catch (error) { throw new Error('--json-schema is not valid JSON: ' + error.message); }
+    if (!headless.jsonSchema || typeof headless.jsonSchema !== 'object') throw new Error('--json-schema must be a JSON object.');
+    if (!headless.enabled) throw new Error('--json-schema works with -p (headless mode).');
+  }
+  if (worktreeName && (headless.enabled || !command || command === '--interactive')) {
+    const session = await startSessionWorktree(workspace, worktreeName, headless.enabled ? stderr : stdout);
+    try {
+      if (headless.enabled) return await printMode(session.path, headless, args, autoApprove, persistence);
+      return await interactive(session.path, autoApprove, persistence);
+    } finally { await endSessionWorktree(workspace, session, headless.enabled ? stderr : stdout); }
+  }
   if (headless.enabled) return await printMode(workspace, headless, args, autoApprove, persistence);
   if (!command || command === '--interactive') return await interactive(workspace, autoApprove, persistence);
   if (command === '--help' || command === '-h' || command === 'help') return printHelp();
