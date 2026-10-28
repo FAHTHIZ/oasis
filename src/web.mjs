@@ -178,6 +178,9 @@ export function createOasisWebServer(options = {}) {
   const taskStore = createCloudTaskStore(root, { env });
   const busySessions = new Set();
   const startingSessions = new Set();
+  // One mutating task per active workspace until isolated task workspaces exist.
+  const busyWorkspaces = new Set();
+  const startingWorkspaces = new Set();
   let reservedJobSlots = 0;
 
   function emit(job, type, data = {}) {
@@ -274,9 +277,14 @@ export function createOasisWebServer(options = {}) {
     if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
     let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId).toLowerCase();
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
+    const workspaceKey = activeRoot;
+    if (busyWorkspaces.has(workspaceKey) || startingWorkspaces.has(workspaceKey)) {
+      throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before starting another task in the same workspace.'), { statusCode: 409 });
+    }
     if (sessionId && (busySessions.has(sessionId) || startingSessions.has(sessionId))) {
       throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
     }
+    startingWorkspaces.add(workspaceKey);
     if (sessionId) startingSessions.add(sessionId);
 
     let releaseJobReservation = null;
@@ -317,7 +325,9 @@ export function createOasisWebServer(options = {}) {
     releaseJobReservation();
     releaseJobReservation = null;
     if (sessionId) startingSessions.delete(sessionId);
+    startingWorkspaces.delete(workspaceKey);
     busySessions.add(activeId);
+    busyWorkspaces.add(workspaceKey);
     emit(job, 'started', { sessionId: activeId });
     void (async () => {
       try {
@@ -407,11 +417,13 @@ export function createOasisWebServer(options = {}) {
         }
       } finally {
         busySessions.delete(activeId);
+        busyWorkspaces.delete(workspaceKey);
       }
     })();
     return { jobId: job.id, sessionId: activeId };
     } catch (error) {
       if (sessionId) startingSessions.delete(sessionId);
+      startingWorkspaces.delete(workspaceKey);
       if (releaseJobReservation) releaseJobReservation();
       throw error;
     }
@@ -470,7 +482,7 @@ export function createOasisWebServer(options = {}) {
     }
     const status = await getGithubStatus();
     if (!status.cliAvailable || !status.authenticated) throw Object.assign(new Error(status.hint), { statusCode: 412 });
-    if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
+    if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size || busyWorkspaces.size || startingWorkspaces.size) {
       throw Object.assign(new Error('Wait until the current agent or terminal task finishes before switching workspaces.'), { statusCode: 409 });
     }
 
@@ -576,47 +588,64 @@ export function createOasisWebServer(options = {}) {
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
       throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
     }
-    const releaseJobReservation = reserveJobSlot();
-    const job = newJob();
-    job.type = 'terminal';
-    job.title = [command, ...args].join(' ').replace(/\s+/g, ' ').slice(0, 160);
-    job.workspaceName = path.basename(activeRoot);
-    jobs.set(job.id, job);
-    releaseJobReservation();
-    emit(job, 'terminal_started', { command, args });
-    void (async () => {
-      try {
-        const result = await executeTool('run_command', { command, args, timeoutSeconds }, {
-          root: activeRoot,
-          env,
-          autoApprove: false,
-          maxCommandSeconds: timeoutSeconds,
-          approval: (prompt) => approvalFor(job, prompt),
-          signal: job.controller.signal
-        });
-        job.result = { ...result, jobType: 'terminal' };
-        const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
-        emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), cancelled: Boolean(result.cancelled), message: result.message || '' });
-        if (job.cancelRequested || result.cancelled) {
-          job.status = 'cancelled';
-          emit(job, 'cancelled', { message: 'Command stopped. Any side effects completed before cancellation remain.', jobType: 'terminal' });
-        } else {
-          job.status = 'completed';
-          emit(job, 'completed', job.result);
+    const workspaceKey = activeRoot;
+    if (busyWorkspaces.has(workspaceKey) || startingWorkspaces.has(workspaceKey)) {
+      throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before running another command.'), { statusCode: 409 });
+    }
+    startingWorkspaces.add(workspaceKey);
+    let releaseJobReservation = null;
+    try {
+      releaseJobReservation = reserveJobSlot();
+      const job = newJob();
+      job.type = 'terminal';
+      job.title = [command, ...args].join(' ').replace(/\s+/g, ' ').slice(0, 160);
+      job.workspaceName = path.basename(workspaceKey);
+      jobs.set(job.id, job);
+      releaseJobReservation();
+      releaseJobReservation = null;
+      startingWorkspaces.delete(workspaceKey);
+      busyWorkspaces.add(workspaceKey);
+      emit(job, 'terminal_started', { command, args });
+      void (async () => {
+        try {
+          const result = await executeTool('run_command', { command, args, timeoutSeconds }, {
+            root: workspaceKey,
+            env,
+            autoApprove: false,
+            maxCommandSeconds: timeoutSeconds,
+            approval: (prompt) => approvalFor(job, prompt),
+            signal: job.controller.signal
+          });
+          job.result = { ...result, jobType: 'terminal' };
+          const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
+          emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), cancelled: Boolean(result.cancelled), message: result.message || '' });
+          if (job.cancelRequested || result.cancelled) {
+            job.status = 'cancelled';
+            emit(job, 'cancelled', { message: 'Command stopped. Any side effects completed before cancellation remain.', jobType: 'terminal' });
+          } else {
+            job.status = 'completed';
+            emit(job, 'completed', job.result);
+          }
+        } catch (error) {
+          if (job.cancelRequested || error.name === 'AbortError') {
+            job.status = 'cancelled';
+            job.error = null;
+            emit(job, 'cancelled', { message: 'Command stopped by request.', jobType: 'terminal' });
+          } else {
+            job.error = String(error && error.message || error || 'Command failed').slice(0, 4000);
+            job.status = 'error';
+            emit(job, 'failed', { jobType: 'terminal', message: job.error });
+          }
+        } finally {
+          busyWorkspaces.delete(workspaceKey);
         }
-      } catch (error) {
-        if (job.cancelRequested || error.name === 'AbortError') {
-          job.status = 'cancelled';
-          job.error = null;
-          emit(job, 'cancelled', { message: 'Command stopped by request.', jobType: 'terminal' });
-        } else {
-          job.error = String(error && error.message || error || 'Command failed').slice(0, 4000);
-          job.status = 'error';
-          emit(job, 'failed', { jobType: 'terminal', message: job.error });
-        }
-      }
-    })();
-    return { jobId: job.id, jobType: 'terminal' };
+      })();
+      return { jobId: job.id, jobType: 'terminal' };
+    } catch (error) {
+      startingWorkspaces.delete(workspaceKey);
+      if (releaseJobReservation) releaseJobReservation();
+      throw error;
+    }
   }
 
   async function handle(req, res) {
@@ -942,7 +971,7 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'POST' && pathname === '/api/workspace/reset') {
-      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
+      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size || busyWorkspaces.size || startingWorkspaces.size || startingSessions.size) {
         json(res, 409, { error: 'Wait until the current agent or terminal task finishes before switching workspaces.' });
         return;
       }
