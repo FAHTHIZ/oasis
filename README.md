@@ -284,6 +284,28 @@ Create a PR titled "$ARGUMENTS". Follow @CONTRIBUTING.md
 
 Use `$ARGUMENTS` for everything after the command and `$1` to `$9` for single words. Writing `@path/to/file` in any prompt or command includes that file (or a directory listing). Secret files such as `.env` and paths outside the workspace are never included.
 
+More front matter, also compatible with Claude Code:
+
+~~~markdown
+---
+description: Review what changed
+allowed-tools: Bash(git diff:*), Bash(git status:*)
+effort: high
+context: fork
+agent: Explore
+---
+Changed files:
+!`git status --short`
+
+Review these changes for bugs: $ARGUMENTS
+~~~
+
+- `` !`cmd` `` runs the shell command and puts its output into the prompt before it is sent. This works for your own commands (`~/.config/oasis/commands`, `~/.claude/commands`). Project commands can only do it in trusted workspaces. If `allowed-tools` lists `Bash(...)` rules, each command must match one, and your deny rules always apply. Secrets are removed from the command's environment.
+- `allowed-tools` grants those tools without asking, but only while the command runs. `effort` sets the reasoning effort for that run.
+- `context: fork` runs the command in a subagent (`agent:` picks which one, by default `general-purpose`). The main conversation only gets the report.
+- Skills work the same way. Type `/skill-name args` to run a skill directly. A skill whose `SKILL.md` has `context: fork` always runs in a subagent, even when the model loads it itself, so its instructions don't fill the main context.
+- `oasis -p "/review src"` expands custom commands and skills in headless mode too.
+
 Memory files are loaded into every session, from broadest to most specific:
 
 | Scope | Files |
