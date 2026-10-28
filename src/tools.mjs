@@ -12,17 +12,15 @@ import { managePlugins } from './plugins.mjs';
 import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
+import { analyzeCommand } from './permissions.mjs';
+import { wrapCommand } from './sandbox.mjs';
+import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES, executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
 const BUNDLED_SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills');
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target']);
-const SHELLS_AND_DANGEROUS = new Set([
-  'sh', 'bash', 'zsh', 'fish', 'dash', 'ash', 'cmd', 'powershell', 'pwsh',
-  'sudo', 'su', 'rm', 'rmdir', 'del', 'format', 'mkfs', 'dd', 'shutdown',
-  'reboot', 'poweroff', 'diskpart', 'mount', 'umount', 'chmod', 'chown'
-]);
 
 export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'git_status', description: 'Read the current Git branch and working-tree status without modifying the repository. This is a read-only local Git operation.', parameters: { type: 'object', properties: {} }, required: [] } },
@@ -34,7 +32,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
-  { type: 'function', function: { name: 'run_command', description: 'Run a single executable with an argv array in the workspace, with no shell expansion. Requires approval unless the user explicitly enabled --yes. Destructive executables and shell interpreters are blocked.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120' } }, required: ['command', 'args'] } } },
+  { type: 'function', function: { name: 'run_command', description: 'Run a single executable with an argv array in the workspace, with no shell expansion. Requires approval unless the user explicitly enabled --yes. Destructive executables and shell interpreters are blocked.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120' }, run_in_background: { type: 'boolean', description: 'Start a long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' } }, required: ['command', 'args'] } } },
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
   { type: 'function', function: { name: 'fetch_url', description: 'Fetch public HTTP or HTTPS documentation as text. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public documentation URL using HTTP or HTTPS' } }, required: ['url'] } } },
 
@@ -57,7 +55,7 @@ function inside(base, candidate) {
   return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
 }
 
-function sensitivePath(relative) {
+export function sensitivePath(relative) {
   const parts = relative.split(/[\\/]+/).filter(Boolean);
   for (const part of parts) {
     const name = part.toLowerCase();
@@ -108,7 +106,7 @@ function shouldSkip(entry, includeHidden) {
   return false;
 }
 
-async function walkFiles(root, options = {}) {
+export async function walkFiles(root, options = {}) {
   const includeHidden = Boolean(options.includeHidden);
   const maxFiles = options.maxFiles || 1200;
   const maxDepth = options.maxDepth || 9;
@@ -223,7 +221,7 @@ export async function searchWorkspaceFiles(root, query, limit = 25) {
   return { query: needle, matches, truncated: false };
 }
 
-function scrubEnvironment(source = process.env) {
+export function scrubEnvironment(source = process.env) {
   const allow = new Set(String(source.OASIS_COMMAND_ENV_ALLOWLIST || '').split(',').map((item) => item.trim()).filter(Boolean));
   const env = {};
   for (const [key, value] of Object.entries(source)) {
@@ -235,35 +233,38 @@ function scrubEnvironment(source = process.env) {
 }
 
 function commandSafety(command, args) {
-  const base = path.basename(String(command)).toLowerCase().replace(/\.exe$/, '').replace(/\.cmd$/, '');
-  if (!/^[a-zA-Z0-9_./:\\-]+$/.test(String(command))) return 'Command must be one executable path; shell syntax is not accepted.';
-  if (SHELLS_AND_DANGEROUS.has(base)) return 'This executable is blocked by Oasis safety policy: ' + base + '. Use a narrow supported tool instead.';
-  const joined = args.join(' ').toLowerCase();
-  const destructiveGit = base === 'git' && ((args[0] === 'reset' && args.includes('--hard')) || (args[0] === 'clean' && args.some((a) => a.startsWith('-') && a.includes('f'))) || (args[0] === 'push' && args.some((a) => a.includes('force'))));
-  if (destructiveGit) return 'This destructive Git command is blocked by default.';
-  if ((base === 'npm' && args[0] === 'publish') || (base === 'gh' && args[0] === 'repo' && args[1] === 'delete')) return 'Publishing or deleting a remote repository is blocked by default.';
-  if (joined.includes('rm -rf') || joined.includes('format c:')) return 'The command contains a destructive operation and is blocked.';
-  if (base === 'apt' || base === 'apt-get' || base === 'dnf' || base === 'pacman' || base === 'brew' || base === 'winget') {
-    if (/\b(remove|purge|uninstall)\b/.test(joined)) return 'Package removal through the general command tool is blocked. Use an explicit package-manager action and review it first.';
-  }
-  return null;
+  return analyzeCommand(command, args).blocked || null;
 }
 
 export async function runWorkspaceCommand(root, command, args = [], options = {}) {
   if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\0'))) {
     throw new Error('Command arguments must be an array of short strings.');
   }
-  const denied = commandSafety(command, args);
-  if (denied) throw new Error(denied);
+  const analysis = analyzeCommand(command, args);
+  if (analysis.blocked) throw new Error(analysis.blocked);
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before approval or execution.' };
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(options.timeoutSeconds, 10) || 120));
   const approval = options.approval;
-  if (!options.autoApprove) {
-    const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') + '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.');
+  const sandbox = options.sandbox && options.sandbox.enabled ? options.sandbox : null;
+  // An explicit allow rule is the user's own decision. Otherwise high-risk commands
+  // (inline code, wrappers, find -exec, ...) always need an interactive answer.
+  const highRisk = analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null;
+  const sandboxAutoAllowed = sandbox && sandbox.available && sandbox.autoAllowCommands !== false && !highRisk;
+  const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed);
+  if (needsApproval) {
+    const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') +
+      (highRisk ? '\nHIGH RISK: this command ' + highRisk + '. Auto-approval does not apply.' : '') +
+      '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.' +
+      (sandbox && sandbox.available ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : ''), Boolean(highRisk));
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
   const env = scrubEnvironment(options.env || process.env);
+  if (options.background) {
+    if (!options.backgroundRegistry) throw new Error('Background commands are not available in this session.');
+    const launch = wrapCommand(command, args, sandbox, root);
+    return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null });
+  }
   return await new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -271,7 +272,8 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let cancelled = false;
     let settled = false;
     let killTimer = null;
-    const child = spawn(command, args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const launch = wrapCommand(command, args, sandbox, root);
+    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const append = (target, chunk) => {
       if (target === 'stdout') stdout = (stdout + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
       else stderr = (stderr + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
@@ -303,7 +305,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true; cleanup();
-      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut, cancelled });
+      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut, cancelled, ...(sandbox && sandbox.available ? { sandboxed: sandbox.kind } : {}) });
     });
   });
 }
@@ -1386,7 +1388,7 @@ async function runReadOnlyGit(root, args) {
         ...result,
         stdout,
         stderr,
-        output: (stdout + (stderr ? '\\n' + stderr : '')).slice(-MAX_TOOL_OUTPUT),
+        output: (stdout + (stderr ? '\n' + stderr : '')).slice(-MAX_TOOL_OUTPUT),
         truncated
       });
     };
@@ -1582,7 +1584,11 @@ export async function executeTool(name, args = {}, context = {}) {
         autoApprove: Boolean(context.autoApprove),
         timeoutSeconds: Math.min(args.timeoutSeconds || context.maxCommandSeconds || 120, context.maxCommandSeconds || 600),
         env: context.env || process.env,
-        signal: context.signal
+        signal: context.signal,
+        sandbox: context.sandbox,
+        ruleAllowed: Boolean(context.ruleAllowed),
+        background: args.run_in_background === true,
+        backgroundRegistry: context.session && (context.session.background ||= new Map())
       });
     case 'install_package': {
       const name = normalizePackageName(args.packageName);
@@ -1592,6 +1598,7 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'fetch_url':
       return await fetchPublicUrl(args.url);
     default:
+      if (POWER_TOOL_NAMES.has(name)) return await executePowerTool(name, args, context, root);
       throw new Error('Unknown or unavailable tool: ' + name);
   }
 }
@@ -1609,6 +1616,8 @@ export async function loadProjectInstructions(root) {
   // compact name/description catalogue and calls load_skill when one is relevant.
   return parts.join('\n\n').slice(0, 26000);
 }
+
+TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
 
 export function toolCount() {
   return TOOL_DEFINITIONS.length;

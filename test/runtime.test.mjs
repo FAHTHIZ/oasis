@@ -642,6 +642,7 @@ test('command tool blocks destructive executable names and strips API keys from 
   await assert.rejects(runWorkspaceCommand(tmp, 'rm', ['-rf', '.'], { autoApprove: true }), /blocked by Oasis safety policy/);
   const result = await runWorkspaceCommand(tmp, process.execPath, ['-e', 'process.stdout.write(process.env.OASIS_API_KEY || "not-present")'], {
     autoApprove: true,
+    approval: async () => true,
     env: { ...process.env, OASIS_API_KEY: 'do-not-leak-this' }
   });
   assert.equal(result.exitCode, 0);
@@ -1929,6 +1930,7 @@ test('workspace commands stop their child process when the parent signal is abor
   const controller = new AbortController();
   const running = runWorkspaceCommand(tmp, process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], {
     autoApprove: true,
+    approval: async () => true,
     timeoutSeconds: 30,
     signal: controller.signal
   });
