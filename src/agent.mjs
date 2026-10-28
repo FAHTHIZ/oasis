@@ -1924,12 +1924,12 @@ async function dispatchReadyTasks(session, args = {}, context = {}, options = {}
     }
     const prompt = [
       'You have been assigned shared task ' + task.id + ': ' + task.subject + '.',
-      'Task description and acceptance criteria:\\n' + (task.description || '(No additional criteria were supplied; inspect the repository and derive a narrow, verifiable scope from the task title.)'),
+      'Task description and acceptance criteria:\n' + (task.description || '(No additional criteria were supplied; inspect the repository and derive a narrow, verifiable scope from the task title.)'),
       'First, call task_claim for exactly ' + task.id + ' before inspecting or changing project files. If the claim is denied or the task is no longer ready, do not edit anything; report the blocker.',
       'Work only in your isolated Git worktree. Do not switch branches, commit, merge, or edit the parent checkout. Implement only this task and avoid unrelated work.',
       'Verify the result: inspect the relevant diff, run the narrowest meaningful test/check and report the command and actual outcome. Only call task_update with status completed after the acceptance criteria have actually been verified. If blocked or unsuccessful, release the task with task_release when your claim is active and explain what remains.',
       'Your final report must name the files changed, checks actually run, results, and any unresolved issues. A successful tool call alone is not proof that the task is complete.'
-    ].join('\\n\\n');
+    ].join('\n\n');
     try {
       const result = await runSubagent(session, {
         subagent_type: 'general-purpose',

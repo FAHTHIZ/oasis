@@ -437,7 +437,7 @@ test('opt-in auto-dispatch advances dependency waves and pauses with the lease r
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'auto-dispatch@example.com');
   git('config', 'user.name', 'OASIS test');
-  await writeFile(path.join(root, 'fixture.txt'), 'workflow fixture\\n');
+  await writeFile(path.join(root, 'fixture.txt'), 'workflow fixture\n');
   git('add', '-A');
   git('commit', '-qm', 'fixture baseline');
 
