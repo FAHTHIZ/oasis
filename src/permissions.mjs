@@ -13,8 +13,9 @@ import path from 'node:path';
 const TOOL_ALIASES = {
   bash: ['run_command', 'run_shell'],
   shell: ['run_shell'],
-  edit: ['edit_file', 'multi_edit', 'write_file'],
+  edit: ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'],
   multiedit: ['multi_edit'],
+  notebookedit: ['notebook_edit'],
   write: ['write_file'],
   read: ['read_file'],
   webfetch: ['fetch_url'],
@@ -26,7 +27,7 @@ const TOOL_ALIASES = {
   todowrite: ['todo_write']
 };
 
-export const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file']);
+export const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);
 export const COMMAND_TOOLS = new Set(['run_command', 'run_shell']);
 
 export function parseRule(raw) {

@@ -21,7 +21,7 @@ const MAX_AGENT_FILE = 64 * 1024;
 export const MAX_PARALLEL_SUBAGENTS = 6;
 
 const CLAUDE_TO_OASIS = {
-  read: ['read_file'], write: ['write_file'], edit: ['edit_file'], multiedit: ['multi_edit'],
+  read: ['read_file'], write: ['write_file'], edit: ['edit_file'], multiedit: ['multi_edit'], notebookedit: ['notebook_edit'],
   bash: ['run_command', 'run_shell', 'command_output', 'kill_command', 'list_background'],
   grep: ['grep', 'search_files'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'], websearch: ['web_search'],
   todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command']
