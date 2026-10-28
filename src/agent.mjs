@@ -495,6 +495,28 @@ function toAnthropicRequest(messages) {
   return { system: system ? String(system.content || '') : '', messages: merged };
 }
 
+// Anthropic prompt caching: mark the system prompt, the tool list, and the newest
+// message so each request reuses the previous prefix (cheaper and faster).
+export function promptCachingEnabled(config = {}, env = process.env) {
+  if (['0', 'off', 'false', 'no'].includes(String(env.OASIS_PROMPT_CACHE || '').toLowerCase())) return false;
+  return config.promptCache !== false;
+}
+
+export function applyAnthropicCacheBreakpoints(request, tools = []) {
+  const mark = { type: 'ephemeral' };
+  if (request.system) request.system = [{ type: 'text', text: request.system, cache_control: mark }];
+  if (tools.length) tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: mark };
+  const last = request.messages[request.messages.length - 1];
+  if (last) {
+    if (typeof last.content === 'string') last.content = last.content ? [{ type: 'text', text: last.content, cache_control: mark }] : last.content;
+    else if (Array.isArray(last.content) && last.content.length) {
+      const block = last.content[last.content.length - 1];
+      last.content[last.content.length - 1] = { ...block, cache_control: mark };
+    }
+  }
+  return request;
+}
+
 function formatApiError(status, body, protocol) {
   let detail = '';
   try {
@@ -749,17 +771,20 @@ async function requestCompletion(session, options = {}) {
   if (nativeAnthropic) {
     endpoint = anthropicEndpoint(config.baseURL);
     const converted = toAnthropicRequest(session.messages);
+    const cache = promptCachingEnabled(config, options.env || process.env);
+    const anthropicTools = availableTools.map((tool) => ({
+      name: tool.function.name,
+      description: tool.function.description,
+      input_schema: tool.function.parameters
+    }));
+    if (cache) applyAnthropicCacheBreakpoints(converted, anthropicTools);
     bodyObject = {
       model: config.model,
       max_tokens: 8192,
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       system: converted.system,
       messages: converted.messages,
-      ...(availableTools.length ? { tools: availableTools.map((tool) => ({
-        name: tool.function.name,
-        description: tool.function.description,
-        input_schema: tool.function.parameters
-      })), tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {})
+      ...(availableTools.length ? { tools: anthropicTools, tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {})
     };
   } else if (nativeResponses) {
     endpoint = responsesEndpoint(config.baseURL);

@@ -87,6 +87,9 @@ function printHelp() {
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
     '  --permission-mode MODE        default | acceptEdits | plan | bypassPermissions',
+    '  --dangerously-skip-permissions  Same as --permission-mode bypassPermissions --yes',
+    '  --continue, -c                Continue the most recent saved session',
+    '  --resume ID, -r ID            Resume a saved session (see oasis sessions list)',
     '  --model ID                    Use a different model for this run',
     '  --max-turns N                 Limit model steps for one task (1-400)',
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
@@ -1295,8 +1298,9 @@ async function main() {
       continue;
     }
     if (arg === '--plan') { headless.planOnly = true; continue; }
-    if (arg === '--continue') { persistSession = true; continueSession = true; continue; }
-    if (arg === '--resume') {
+    if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; autoApprove = true; continue; }
+    if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
+    if (arg === '--resume' || arg === '-r') {
       if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
       resumeId = rawArgs[++i]; persistSession = true; continue;
     }

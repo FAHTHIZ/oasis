@@ -94,3 +94,23 @@ test('@image mentions attach images unless vision is off', async (t) => {
   const off = await expandFileMentions(root, 'see @shot.png', { images: false });
   assert.equal(off.images.length, 0);
 });
+
+test('Anthropic requests get prompt-cache breakpoints on system, tools, and the newest message', async () => {
+  const { applyAnthropicCacheBreakpoints, promptCachingEnabled } = await import('../src/agent.mjs');
+  const request = toAnthropicRequest([
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 't1', name: 'read_file', content: 'data' }
+  ]);
+  const tools = [{ name: 'a', input_schema: {} }, { name: 'b', input_schema: {} }];
+  applyAnthropicCacheBreakpoints(request, tools);
+  assert.deepEqual(request.system, [{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
+  assert.equal(tools[0].cache_control, undefined);
+  assert.deepEqual(tools[1].cache_control, { type: 'ephemeral' });
+  assert.equal(request.messages[0].content, 'hi');
+  assert.deepEqual(request.messages.at(-1).content.at(-1).cache_control, { type: 'ephemeral' });
+  assert.equal(promptCachingEnabled({}, {}), true);
+  assert.equal(promptCachingEnabled({}, { OASIS_PROMPT_CACHE: 'off' }), false);
+  assert.equal(promptCachingEnabled({ promptCache: false }, {}), false);
+});

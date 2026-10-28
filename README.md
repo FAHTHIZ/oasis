@@ -267,7 +267,7 @@ oasis -p "list TODOs" --output-format stream-json --model gpt-4.1-mini
 - `--output-format text` (default) prints the final answer. `json` prints one object with `result`, `subtype` (`success`, `error_max_turns`, `error_during_execution`), `is_error`, `num_turns`, `usage`, `tool_calls`, `session_id`, and `permission_denials`. `stream-json` prints one JSON event per line (`system`, `tool_use`, `tool_result`, `assistant`, then `result`).
 - Piped input is added to the prompt inside `<stdin>` tags.
 - With nobody to answer prompts, anything that needs approval is denied and listed in `permission_denials`. Allow what the job needs with `--allowedTools`, settings rules, `--permission-mode`, or `--yes`. High-risk commands stay blocked.
-- The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` or `--resume ID` to keep a conversation across runs.
+- The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` (`-c`) or `--resume ID` to keep a conversation across runs.
 
 ## Checkpoints and /rewind
 
@@ -321,6 +321,7 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 - `grep`: regex search backed by ripgrep (JS fallback) with globs, context lines, and `content` / `files_with_matches` / `count` modes. Secret files are never returned.
 - `multi_edit`: several exact-string edits to one file, applied atomically.
 - Images: `read_file` on a PNG, JPEG, GIF, or WebP file (up to about 3.7 MB) shows it to vision-capable models, and `@screenshot.png` in a prompt attaches it. This works with OpenAI-compatible, Responses, and Anthropic providers. Only the four most recent images are sent with each request, and images are not written to saved sessions. If your model is text-only, set `OASIS_VISION=off` or `"vision": false` in the provider config.
+- Prompt caching: with the Anthropic protocol, Oasis marks the system prompt, tool list, and newest message as cacheable, so long sessions reuse the cached prefix and cost less. Turn it off with `OASIS_PROMPT_CACHE=off` or `"promptCache": false`.
 - Jupyter notebooks: `read_file` on a `.ipynb` shows each cell with its id, type, and text outputs (images are summarized). `notebook_edit` replaces, inserts, or deletes cells and clears stale outputs. Permission rules can target it as `NotebookEdit`, and it is covered by checkpoints and `/rewind`.
 - `web_search`: searches the web for current docs, error messages, and release notes, then `fetch_url` reads a result. It works without a key through DuckDuckGo. For more dependable results set `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, or `OASIS_SEARXNG_URL` (a self-hosted SearXNG). Queries go to that search service; set `OASIS_WEB_SEARCH=off` to remove the tool.
 - Background processes: `run_command` with `run_in_background: true` starts dev servers or watchers; `command_output`, `kill_command`, and `list_background` manage them.
