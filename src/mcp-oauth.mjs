@@ -73,38 +73,58 @@ export function parseWwwAuthenticate(header) {
   return out;
 }
 
-async function getJson(fetchImpl, url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
+async function readJsonBody(response, maxBytes = MAX_OAUTH_METADATA_BYTES) {
+  if (!response.body) return null;
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    await response.body.cancel().catch(() => {});
+    return null;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
   try {
-    const response = await fetchImpl(url, {
-      headers: { accept: 'application/json' },
-      redirect: 'manual',
-      signal: controller.signal
-    });
-    // Do not let discovery silently move to a different host via an HTTP redirect.
-    if (!response.ok || (response.status >= 300 && response.status < 400) || !response.body) return null;
-    const declaredLength = Number(response.headers.get('content-length'));
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_OAUTH_METADATA_BYTES) {
-      await response.body.cancel().catch(() => {});
-      return null;
-    }
-    const reader = response.body.getReader();
-    const chunks = [];
-    let total = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > MAX_OAUTH_METADATA_BYTES) {
+      if (total > maxBytes) {
         await reader.cancel().catch(() => {});
         return null;
       }
       chunks.push(Buffer.from(value));
     }
-    return JSON.parse(Buffer.concat(chunks, total).toString('utf8'));
+  } catch {
+    await reader.cancel().catch(() => {});
+    return null;
+  }
+  try { return JSON.parse(Buffer.concat(chunks, total).toString('utf8')); }
+  catch { return null; }
+}
+
+async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAUTH_METADATA_BYTES) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(url, { ...options, redirect: 'manual', signal: controller.signal });
+    // Do not let discovery, registration or token exchange silently cross hosts via redirects.
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel().catch(() => {});
+      return { response, body: null };
+    }
+    return { response, body: await readJsonBody(response, maxBytes) };
+  } catch (error) {
+    if (error && error.name === 'AbortError') throw new Error('OAuth request timed out.');
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
+async function getJson(fetchImpl, url) {
+  try {
+    const { response, body } = await fetchBoundedJson(fetchImpl, url, { headers: { accept: 'application/json' } });
+    if (!response.ok) return null;
+    return body;
   } catch { return null; }
-  finally { clearTimeout(timer); }
 }
 
 function wellKnownUrls(base, suffix) {
@@ -164,10 +184,15 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
 const b64url = (buffer) => Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 async function postForm(fetchImpl, url, form) {
-  const response = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams(form).toString() });
-  let body = null;
-  try { body = await response.json(); } catch {}
-  if (!response.ok || !body || !body.access_token) throw new Error('Token request failed (HTTP ' + response.status + ')' + (body && body.error ? ': ' + body.error + (body.error_description ? ' - ' + body.error_description : '') : '') + '.');
+  const { response, body } = await fetchBoundedJson(fetchImpl, url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+    body: new URLSearchParams(form).toString()
+  });
+  const oauthError = body && body.error
+    ? ': ' + String(body.error).slice(0, 100) + (body.error_description ? ' - ' + String(body.error_description).slice(0, 300) : '')
+    : '';
+  if (!response.ok || !body || !body.access_token) throw new Error('Token request failed (HTTP ' + response.status + ')' + oauthError + '.');
   return body;
 }
 
@@ -224,12 +249,11 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
     let clientSecret = oauth.clientSecret || null;
     if (!clientId) {
       if (!discovered.registrationEndpoint) throw new Error('This server does not support automatic client registration. Add "oauth": {"clientId": "..."} to its .mcp.json entry.');
-      const response = await fetchImpl(discovered.registrationEndpoint, {
+      const { response, body: registered } = await fetchBoundedJson(fetchImpl, discovered.registrationEndpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ client_name: 'Oasis', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' })
       });
-      const registered = await response.json().catch(() => null);
       if (!response.ok || !registered || !registered.client_id) throw new Error('Client registration failed (HTTP ' + response.status + ').');
       clientId = registered.client_id;
       clientSecret = registered.client_secret || null;
