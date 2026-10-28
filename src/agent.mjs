@@ -38,7 +38,7 @@ import { loadProjectMcpServers } from './mcp-project.mjs';
 import { access } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
-import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
+import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
@@ -451,6 +451,12 @@ export async function createSession({ root, config, restore = null, permissionMo
     systemText += '\n\n' + (sandbox.available
       ? 'Commands run inside an OS sandbox (' + sandbox.kind + '): only the workspace is writable' + (sandbox.network ? '' : ' and network access is blocked') + '. If a command fails with a read-only or network error, explain that the sandbox blocked it instead of retrying the same way.'
       : 'The user asked for an OS sandbox but it is unavailable: ' + sandbox.reason + ' Commands still require approval.');
+  }
+  const powershellExe = findPowerShell(env);
+  if (powershellExe) {
+    session.powershell = powershellExe;
+    session.toolDefinitions = session.toolDefinitions.concat([POWERSHELL_TOOL_DEFINITION]);
+    systemText += '\n\nThe powershell tool runs PowerShell (' + path.basename(powershellExe) + ')' + (process.platform === 'win32' ? '; it is the primary shell on this Windows machine, so prefer it for shell work.' : ' for PowerShell scripts and cmdlets.');
   }
   if (shellEnabled) systemText += '\n\nrun_shell is available for command lines that genuinely need pipes, &&, redirects, or globbing. Prefer run_command for single programs.';
   if (hasHooks(session.hooks, 'SessionStart')) {

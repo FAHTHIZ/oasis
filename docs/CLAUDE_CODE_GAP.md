@@ -74,6 +74,8 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | /import | Import config from Codex, Gemini CLI, Cursor | **Closed.** `oasis import` / `/import [codex\|gemini\|cursor] [--dry-run] [--yes]` converts MCP servers, instructions, commands and rules; it previews first and never overwrites. Adds a Claude-format user `mcp.json`. |
 | /insights | HTML report analyzing recent sessions | **Closed.** `/insights [DAYS]` / `oasis insights` computes project areas, tool use, friction (errors, denials, corrections) and suggestions locally; the in-session model adds a short narrative from the aggregate stats only. |
 | Background sessions | `--bg`, `/background`, `/bg`, attach/logs/stop | **Closed.** Detached headless runs with a registry in `<oasis config>/background/`, readable logs, attach (resume interactively) and stop. Also fixed `-p --session-id` not naming the saved session. |
+| PowerShell tool | `PowerShell` tool, `CLAUDE_CODE_USE_POWERSHELL_TOOL`, `PowerShell(...)` rules, `defaultShell` | **Closed.** Default on Windows, opt-in elsewhere; shares run_shell's approval, sandbox and background paths; benign exit-code notes; execution policy bypass at process scope. |
+| /color, /focus | Prompt color per session; focus view of the last turn | **Closed.** |
 
 ## Ranked next improvements
 
@@ -99,7 +101,7 @@ Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require proces
 
 ### 5. Remaining platform and ecosystem gaps
 
-A native Gemini adapter; PowerShell and Windows sandboxing; Windows Credential Manager for sensitive plugin options.
+A native Gemini adapter; Windows sandboxing; Windows Credential Manager for sensitive plugin options.
 
 ### 6. Terminal experience polish
 
