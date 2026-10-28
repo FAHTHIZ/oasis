@@ -68,6 +68,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Claude skill folders + more commands | `.claude/skills`, `~/.claude/skills`; `/diff`, `/autocompact`, `/reload-plugins`, `/reload-skills`, `/list-agents`, `/statusline`, `/update-config`, command aliases | **Closed.** Both skill folders load (personal wins, `${CLAUDE_SKILL_DIR}`, references/assets); the commands and aliases above, `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`. |
 | Claude settings + memory discovery | `~/.claude/settings.json`, managed settings, `env`, `disableBypassPermissionsMode`, parent-directory `CLAUDE.md`, `.claude/rules/` | **Closed.** All load in Claude Code's order (Oasis user settings win over Claude's; managed last). Untrusted projects cannot set `env`. Rules honor `paths:` as scoped guidance. Nested subdirectory `CLAUDE.md` files load on demand when the agent reads or edits a file in that folder. |
 | Claude Code MCP servers | `claude mcp add` servers in `~/.claude.json` (user and local scope) | **Closed.** Loaded with Claude Code's precedence (local, project, user), shown in `oasis mcp list`; opt out with `OASIS_IGNORE_CLAUDE_MCP=1`. |
+| apiKeyHelper | Settings command that prints the API key, with TTL refresh | **Closed.** Used when no key is configured; cached for `CLAUDE_CODE_API_KEY_HELPER_TTL_MS` (5 min default) and refreshed once after a 401/403. Untrusted projects cannot set it. |
 
 ## Ranked next improvements
 
