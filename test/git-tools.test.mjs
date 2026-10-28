@@ -28,7 +28,7 @@ async function repo() {
 const yes = { autoApprove: true };
 
 test('git tools are registered', () => {
-  for (const name of ['git_log', 'git_commit', 'git_branch', 'git_push', 'create_pull_request']) assert.ok(TOOL_DEFINITIONS.some((tool) => tool.function.name === name), name);
+  for (const name of ['git_log', 'git_commit', 'git_branch', 'git_push', 'create_pull_request', 'worktree_inspect', 'worktree_merge']) assert.ok(TOOL_DEFINITIONS.some((tool) => tool.function.name === name), name);
 });
 
 test('git_log lists commits', async () => {
@@ -154,4 +154,28 @@ test('/commit and /pr send workflow prompts', async () => {
   const pr = await runBuiltinCommand('pr', 'develop', { root: '.' });
   assert.match(pr.prompt, /create_pull_request/);
   assert.match(pr.prompt, /develop/);
+});
+
+
+test('worktree_merge requires approval and preserves HEAD when denied', async (t) => {
+  const { base, root } = await repo();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(base, { recursive: true, force: true })));
+  const { createWorktree, finishWorktree } = await import('../src/worktrees.mjs');
+  const wt = await createWorktree(root, 'approval check');
+  await writeFile(path.join(wt.path, 'agent.txt'), 'agent contribution\n');
+  await finishWorktree(root, wt, { message: 'agent contribution' });
+  await writeFile(path.join(root, 'main.txt'), 'main contribution\n');
+  sh(root, 'add', '-A'); sh(root, 'commit', '-qm', 'main contribution');
+  const before = sh(root, 'rev-parse', 'HEAD');
+  const preview = await runGitTool('worktree_inspect', root, { branch: wt.branch }, {});
+  assert.equal(preview.can_merge, true);
+  const denied = await runGitTool('worktree_merge', root, { branch: wt.branch }, { approval: async () => false });
+  assert.equal(denied.ok, false);
+  assert.match(denied.message, /not approved/);
+  assert.equal(sh(root, 'rev-parse', 'HEAD'), before);
+  const prompts = [];
+  const merged = await runGitTool('worktree_merge', root, { branch: wt.branch }, { approval: async (message) => { prompts.push(message); return true; } });
+  assert.equal(merged.merged, true);
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0], /creates a merge commit/);
 });

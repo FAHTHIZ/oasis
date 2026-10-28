@@ -141,7 +141,7 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'worktrees': {
       const items = await listWorktrees(root, { env });
       if (!items.length) return { output: 'No subagent worktrees. Ask for parallel work with isolation "worktree" to get one branch per agent.' };
-      return { output: ['Subagent worktrees:', ...items.map((item) => '  ' + (item.branch || '(detached)').padEnd(36) + ' ' + item.relative), 'Review: git diff HEAD...BRANCH   Merge: git merge BRANCH   Remove: git worktree remove PATH && git branch -D BRANCH'].join('\n') };
+      return { output: ['Subagent worktrees:', ...items.map((item) => '  ' + (item.branch || '(detached)').padEnd(36) + ' ' + item.relative), 'Review: use worktree_inspect with { branch: "BRANCH" } to preview changes and conflicts. Integrate: use worktree_merge after review (approval required; predicted conflicts are blocked). Remove: git worktree remove PATH && git branch -D BRANCH'].join('\n') };
     }
     case 'commit': {
       return { prompt: 'Commit my current changes. First read git_status, git_diff, and git_log (limit 10) to understand the changes and the message style. Leave out files that should not be committed (build output, secrets, unrelated scratch files) and tell me about them. Then call git_commit with a concise message: a summary line under 72 characters, then a short body explaining why.' + (argument ? ' Extra guidance for the message: ' + argument : '') + ' If a hook rejects the commit, fix the problem and try again; do not skip hooks.' };
