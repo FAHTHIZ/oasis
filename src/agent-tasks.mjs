@@ -14,7 +14,7 @@
 export const MAX_BACKGROUND_AGENTS = 8;
 const MAX_WAIT_SECONDS = 600;
 const MAX_TEAMS = 20;
-const TEAM_ID = /^team_[1-9]\\d{0,5}$/;
+const TEAM_ID = /^team_[1-9]\d{0,5}$/;
 
 export const AGENT_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'agent_status', description: 'List subagents started with task (id, type, status, elapsed time), or read one agent\'s status and final report. Set wait_seconds to block until a running agent finishes (up to 600). Background agents report back automatically when they finish, so only wait when the next step needs their result.', parameters: { type: 'object', properties: {
@@ -107,7 +107,7 @@ export function listAgentTeams(session) {
 
 export function createAgentTeam(session, args = {}) {
   if (!isMainCoordinator(session)) throw new Error('Only the main coordinator can create agent teams.');
-  const name = String(args.name || '').replace(/\\s+/g, ' ').trim().slice(0, 100);
+  const name = String(args.name || '').replace(/\s+/g, ' ').trim().slice(0, 100);
   const description = String(args.description || '').trim().slice(0, 1000);
   if (!name) throw new Error('team_create needs a non-empty name.');
   const registry = agentRegistry(session);
