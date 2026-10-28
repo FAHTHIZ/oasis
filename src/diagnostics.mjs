@@ -53,7 +53,7 @@ function onPath(command, env) {
 }
 
 // Prefer the project-local binary (node_modules/.bin, .venv/bin) over a global one.
-async function findBinary(root, name, env, { node = false, python = false } = {}) {
+export async function findBinary(root, name, env, { node = false, python = false } = {}) {
   const candidates = [];
   if (node) candidates.push(path.join('node_modules', '.bin', name + (process.platform === 'win32' ? '.cmd' : '')));
   if (python) candidates.push(path.join('.venv', process.platform === 'win32' ? 'Scripts' : 'bin', name + (process.platform === 'win32' ? '.exe' : '')));

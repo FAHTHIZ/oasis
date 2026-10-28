@@ -21,7 +21,7 @@ const TOOL_ALIASES = {
   webfetch: ['fetch_url'],
   websearch: ['web_search'],
   diagnostics: ['diagnostics'],
-  lsp: ['diagnostics'],
+  lsp: ['lsp'],
   grep: ['grep', 'search_files'],
   glob: ['glob_files'],
   ls: ['list_files'],
