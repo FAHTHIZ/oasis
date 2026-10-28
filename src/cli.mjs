@@ -1135,7 +1135,10 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (persistence.enabled) {
     try {
       const saved = await saveSession(session);
-      stdout.write('[session] Saved locally as ' + saved.id + '. Use oasis --resume ' + saved.id + ' to resume it later.\n');
+      if (!session.announcedSave || session.announcedSave !== saved.id) {
+        session.announcedSave = saved.id;
+        if (process.env.OASIS_QUIET_SESSIONS !== '1') stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '[session] Saved as ' + saved.id.slice(0, 8) + ' · resume with oasis -c or oasis -r ' + saved.id + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n');
+      }
     } catch (error) {
       stdout.write('[session] Could not save history: ' + error.message + '\n');
     }
