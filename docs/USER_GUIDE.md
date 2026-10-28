@@ -93,7 +93,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Layered memory from user, project, and local files (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `OASIS.local.md`), plus installed `.oasis/skills/*/SKILL.md` files.
 - Claude Code-style permission rules and modes, lifecycle hooks, parallel subagents with custom agent files, custom slash commands, `@file` mentions, per-turn checkpoints with `/rewind`, and a headless `oasis -p` mode for scripts and CI.
 - Automatic snapshots before edits and overwrites, plus snapshot listing and restore commands.
-- Optional workspace-scoped saved sessions that can be resumed or deleted; skill descriptions load first and full skill guides load only on demand.
+- Workspace-scoped saved sessions (on by default) that can be resumed, renamed or deleted; skill descriptions load first and full skill guides load only on demand.
 - Environment diagnosis, workspace initialization, provider configuration, and self-update.
 
 ### Browser workspace
@@ -255,6 +255,50 @@ Besides `command`, there are two more hook types:
 ~~~
 
 An `http` hook POSTs the payload as JSON, and its response body is read like a command's stdout. A failed request or a non-2xx status is a non-blocking error; only a JSON decision can block. Headers can use only the environment variables listed in `allowedEnvVars`. A `prompt` hook asks the model (optionally a cheaper `model`) whether the payload meets your policy. `$ARGUMENTS` is replaced with the payload, and a reply of `{"ok": false, "reason": "..."}` blocks like exit code 2.
+
+## The interactive terminal
+
+Run `oasis` in a project to open the interactive prompt. Press `?` on an empty line for shortcuts, or run `/keybindings`.
+
+| Keys | What they do |
+| --- | --- |
+| Enter | Send |
+| Shift+Enter, Alt+Enter, Ctrl+J, or `\` then Enter | New line (`/terminal-setup` explains Shift+Enter for VS Code, Alacritty, Apple Terminal and tmux) |
+| ↑ / ↓, Ctrl+R | History for this workspace (saved in `~/.oasis/history.jsonl`; `OASIS_NO_HISTORY=1` turns it off), reverse search |
+| Tab | Complete `/commands`, skills and `@files` (fuzzy; secret files are skipped) |
+| Shift+Tab | Cycle permission modes: default → acceptEdits → plan → auto |
+| `!command` | Run a shell command yourself; its output goes into your next message as context |
+| `#note` | Save a memory note |
+| Ctrl+V | Paste an image from the clipboard |
+| Esc | While a turn runs: interrupt it. Anything you type meanwhile is queued as the next message |
+| Esc Esc | Clear the input, or rewind when it is empty |
+| Ctrl+L, Ctrl+D | Clear the screen, exit |
+
+Replies render as Markdown with syntax-highlighted code, and edits show as colored diffs. Settings: `OASIS_NO_ANIMATION=1` skips the startup animation, `OASIS_SIMPLE_INPUT=1` uses a plain line reader, `OASIS_PLAIN_OUTPUT=1` prints raw text, and `NO_COLOR` turns off colors.
+
+### Workflow commands
+
+- `/goal CONDITION` keeps working across turns until a separate check says the condition is met and verified, up to 20 turns (`OASIS_GOAL_MAX_TURNS`). `/goal` shows the status, and `/goal clear` stops it.
+- `/btw QUESTION` asks about the session without adding to the conversation and without tools. `/recap` gives a one-line summary.
+- `/batch INSTRUCTION` plans a large change as independent units. After you approve, it runs them in parallel subagents, each in its own git worktree.
+- `/simplify [target]` runs four parallel read-only reviewers (reuse, simplification, efficiency, abstraction), then applies fixes that don't change behavior.
+- `/verify [what]` builds and runs the app to confirm a change works, instead of relying only on tests.
+- `/schedule "*/30 * * * *" check CI and fix failures` schedules a prompt in this session. `/schedule list` and `/schedule delete ID` manage them. The agent can also schedule prompts itself with `cron_create`. Scheduled prompts run when the prompt is idle and stop when you exit.
+- `/rename NAME` names the session for `/resume`. `/stop` stops background agents and processes.
+- `/fewer-permission-prompts` finds read-only commands you approve often and proposes adding them to your allowlist.
+- `/privacy-settings` shows what is sent where.
+- `/ponytail [lite|full|ultra|off]` turns on the bundled [Ponytail](https://github.com/DietrichGebert/ponytail) lean mode: the smallest complete change, keeping tests, validation and security. `/ponytail-review`, `/ponytail-audit` and `/ponytail-debt` find over-engineering.
+
+### Agent tools for long tasks
+
+- `monitor_command` waits on a background command until its output matches a pattern, it exits, or a timeout passes. Use it for dev servers and builds.
+- `enter_plan_mode` lets the agent switch itself to plan mode for risky work.
+- `notify` sends a terminal or desktop notification.
+- `tool_search` applies when MCP servers expose more than 25 tools: they are deferred, and the agent loads the ones it needs. Use `OASIS_TOOL_SEARCH=on` to always defer, `off` to never defer, or `OASIS_TOOL_SEARCH_THRESHOLD=N` to change the limit.
+
+### Sessions and cost
+
+Sessions are saved by default. `oasis -c` continues the latest one, `oasis -r ID` resumes one, and `--no-session-persistence` (or `OASIS_PERSIST_SESSIONS=0`) skips saving. `/cost` shows tokens and an estimated USD cost. `--max-budget-usd 2` stops a run at that spend. Local models count as free. Set `OASIS_PRICE_INPUT` and `OASIS_PRICE_OUTPUT` (USD per million tokens) to override pricing.
 
 ## Slash commands, @mentions, and memory
 
@@ -548,7 +592,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 - The built-in capability catalog contains reviewed workflow-skill bundles only. Oasis can install supported external Agent Skills through the pinned Vercel Skills CLI and import reviewed Markdown prompts from GitHub extensions, but that is not a general remote plugin marketplace. Signed publisher manifests and fully native lifecycle compatibility are not implemented.
 - The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default, and there is no Windows sandbox or container isolation yet.
 - Checkpoints only track changes made through Oasis's file tools, and they live in memory for the current session; they are not saved with resumed sessions.
-- Saved conversations are opt-in and workspace-scoped. Oasis provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
+- Saved conversations are on by default and workspace-scoped. Oasis provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions. Parallel subagents (the `task` tool) run in separate contexts, but they share one workspace, so Oasis does not resolve conflicting edits between them; give parallel agents separate files, read-only work, or `"isolation": "worktree"` so each one gets its own branch.
 - The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
