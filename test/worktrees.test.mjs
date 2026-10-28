@@ -90,6 +90,35 @@ test('interrupted worktree diff includes tracked edits and safe previews of untr
   assert.equal(result.truncated, false);
 });
 
+test('cloud task auto-commit blocks sensitive paths and keeps changes available for manual review', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-secret-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'README.md'), 'base\n');
+  run('add', '-A'); run('commit', '-qm', 'base');
+  const worktree = await createWorktree(root, 'Secret scan');
+  t.after(() => removeWorktree(root, worktree, { deleteBranch: true }));
+  await writeFile(path.join(worktree.path, '.env.local'), 'OPENAI_API_KEY=not-for-commit\n');
+  await assert.rejects(finishWorktree(root, worktree, { blockSecrets: true }), /sensitive file paths were changed/i);
+  assert.equal(await readFile(path.join(worktree.path, '.env.local'), 'utf8'), 'OPENAI_API_KEY=not-for-commit\n');
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree.path }).toString().trim(), worktree.base);
+  assert.match(execFileSync('git', ['status', '--porcelain'], { cwd: worktree.path }).toString(), /\.env\.local/);
+});
+
+test('cloud task auto-commit blocks common credential patterns inside changed text', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-secret-value-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'README.md'), 'base\n');
+  run('add', '-A'); run('commit', '-qm', 'base');
+  const worktree = await createWorktree(root, 'Token scan');
+  t.after(() => removeWorktree(root, worktree, { deleteBranch: true }));
+  await writeFile(path.join(worktree.path, 'config.txt'), 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345\n');
+  await assert.rejects(finishWorktree(root, worktree, { blockSecrets: true }), /possible credentials were detected/i);
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree.path }).toString().trim(), worktree.base);
+  assert.match(execFileSync('git', ['status', '--porcelain'], { cwd: worktree.path }).toString(), /config\.txt/);
+});
+
 test('worktree isolation refuses non-git folders and cleans up unchanged worktrees', async (t) => {
   const { createWorktree, finishWorktree } = await import('../src/worktrees.mjs');
   const plain = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-plain-'));
