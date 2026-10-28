@@ -87,7 +87,7 @@ export async function runBuiltinCommand(name, argument, state) {
         '  System prompt and project memory: ~' + formatNumber(system),
         '  Tool definitions (' + (session.toolDefinitions || []).length + '): ~' + formatNumber(tools),
         '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, used - system)),
-        'Use /compact to summarize older turns.'
+        'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
       ].join('\n') };
     }
     case 'cost': {

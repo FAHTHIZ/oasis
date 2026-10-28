@@ -133,6 +133,8 @@ export async function saveConfig(config, options = {}) {
     maxTokens: clampInteger(config.maxTokens, 2000000, 10000, 20000000),
     maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
   };
+  const contextWindow = Number.parseInt(config.contextWindow, 10);
+  if (Number.isInteger(contextWindow) && contextWindow >= 4000 && contextWindow <= 2000000) safe.contextWindow = contextWindow;
   if (!safe.model) throw new Error('The model name cannot be empty.');
   await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
   try { await chmod(configPath, 0o600); } catch { /* POSIX mode bits are unavailable on some filesystems. */ }
