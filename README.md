@@ -8,8 +8,11 @@
 <p align="center">An open-source AI coding agent and local-first developer workspace.</p>
 <p align="center">CLI · Browser workspace · Multi-provider tools · MCP · Skills · Subagents</p>
 
+<p align="center"><a href="https://fahthiz.github.io/oasis/">Public homepage ↗</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a></p>
+
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
+  <a href="https://fahthiz.github.io/oasis/"><img src="https://img.shields.io/badge/homepage-OASIS-9BFF55?style=flat" alt="OASIS public homepage" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22 or newer" /></a>
 </p>
@@ -74,7 +77,7 @@ cd oasis
 npm run check
 ```
 
-The check runs the site validator, test suite, and evaluation-fixture validation. It is useful feedback, not a full security audit or a substitute for testing on each target platform and with real providers.
+The check runs the browser-app and public-landing-page validators, test suite, and evaluation-fixture validation. It is useful feedback, not a full security audit or a substitute for testing on each target platform and with real providers.
 
 ## License
 
