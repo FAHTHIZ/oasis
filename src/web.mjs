@@ -2,7 +2,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
@@ -17,7 +17,7 @@ import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
-import { createWorktree, finishWorktree, removeWorktree } from './worktrees.mjs';
+import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff } from './worktrees.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
@@ -300,15 +300,18 @@ export function createOasisWebServer(options = {}) {
       if (!taskWorktree || worktreeFinalized) return null;
       worktreeFinalized = true;
       try {
-        return await finishWorktree(workspaceKey, taskWorktree, {
+        const finalized = await finishWorktree(workspaceKey, taskWorktree, {
           env,
           message: 'Oasis cloud task: ' + incomingMessage.replace(/\\s+/g, ' ').slice(0, 160)
         });
+        return { ...finalized, isolation: 'worktree', baseCommit: taskWorktree.base };
       } catch (error) {
         return {
           changed: false,
           branch: taskWorktree.branch,
           path: taskWorktree.relative,
+          isolation: 'worktree',
+          baseCommit: taskWorktree.base,
           error: String(error && error.message || error || 'Could not finalize the isolated worktree').slice(0, 1200),
           note: 'The isolated worktree was retained for recovery; inspect it before cleanup.'
         };
@@ -358,7 +361,14 @@ export function createOasisWebServer(options = {}) {
     job.title = incomingMessage.replace(/\s+/g, ' ').slice(0, 160) || 'Coding task';
     job.sessionId = activeId;
     job.workspaceName = taskWorktree ? taskWorktree.branch : path.basename(taskRoot);
-    if (taskWorktree) job.isolation = 'worktree';
+    job.workspaceRoot = workspaceKey;
+    job.executionRoot = taskRoot;
+    if (taskWorktree) {
+      job.isolation = 'worktree';
+      job.worktreePath = taskWorktree.relative;
+      job.worktreeBranch = taskWorktree.branch;
+      job.worktreeBaseCommit = taskWorktree.base;
+    }
     jobs.set(job.id, job);
     releaseJobReservation();
     releaseJobReservation = null;
@@ -1106,6 +1116,59 @@ export function createOasisWebServer(options = {}) {
       // Include durable task history so clients can reconnect after a runtime restart.
       await taskStore.flush([...jobs.values()]);
       json(res, 200, { tasks: await taskStore.list({ limit: 100 }) });
+      return;
+    }
+
+    const diffMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/diff$/i);
+    if (req.method === 'GET' && diffMatch) {
+      const liveJob = jobs.get(diffMatch[1]);
+      const task = liveJob ? await taskStore.save(liveJob) : await taskStore.get(diffMatch[1]);
+      if (!task) { json(res, 404, { error: 'Task not found or expired.' }); return; }
+      const artifact = task.result && task.result.isolatedWorktree;
+      const branch = artifact && artifact.branch || task.worktreeBranch;
+      const baseCommit = artifact && artifact.baseCommit || task.worktreeBaseCommit;
+      const commit = artifact && artifact.commit;
+      const relative = artifact && artifact.path || task.worktreePath;
+      if (!artifact || !artifact.changed || !commit || !baseCommit || !relative) {
+        json(res, 409, { error: 'This task has no completed, committed isolated-worktree diff to review.' });
+        return;
+      }
+      const workspaceRoot = typeof task.workspaceRoot === 'string' ? path.resolve(task.workspaceRoot) : '';
+      const primaryRoot = path.resolve(root);
+      const managedWorkspaces = path.resolve(root, '.oasis', 'workspaces') + path.sep;
+      if (!workspaceRoot || (workspaceRoot !== primaryRoot && !workspaceRoot.startsWith(managedWorkspaces))) {
+        json(res, 403, { error: 'The task workspace is outside the runtime’s permitted workspace roots.' });
+        return;
+      }
+      if (!/^\.oasis\/worktrees\/[a-z0-9-]+$/i.test(String(relative))) {
+        json(res, 409, { error: 'The saved isolated worktree path is invalid.' });
+        return;
+      }
+      if (!/^[a-f0-9]{40}$/i.test(String(baseCommit)) || !/^[a-f0-9]{7,40}$/i.test(String(commit)) || !/^oasis\/[a-z0-9-]+$/i.test(String(branch || ''))) {
+        json(res, 409, { error: 'The saved task artifact metadata is invalid.' });
+        return;
+      }
+      try {
+        const canonicalRoot = await realpath(workspaceRoot);
+        const worktree = await realpath(path.resolve(canonicalRoot, relative));
+        const managedWorktrees = path.resolve(canonicalRoot, '.oasis', 'worktrees') + path.sep;
+        if (!worktree.startsWith(managedWorktrees)) {
+          json(res, 403, { error: 'The saved worktree resolves outside its managed directory.' });
+          return;
+        }
+        const diff = await readWorktreeDiff(canonicalRoot, baseCommit, commit, { env, maxChars: 180000 });
+        json(res, 200, {
+          branch,
+          baseCommit,
+          commit,
+          files: Array.isArray(artifact.files) ? artifact.files.slice(0, 200) : [],
+          diffStat: String(artifact.diffStat || '').slice(0, 4000),
+          diff: diff.diff,
+          truncated: diff.truncated
+        });
+      } catch (error) {
+        json(res, 410, { error: 'The task diff is no longer available. The worktree may have been removed or its Git history changed.' });
+      }
       return;
     }
 
