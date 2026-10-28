@@ -68,6 +68,7 @@ export async function runHeadless(options) {
       onToolStart: ({ name, args, subagent }) => emit({ type: 'tool_use', name, input: args, ...(subagent ? { subagent } : {}) }),
       onToolResult: ({ name, result: toolResult, subagent }) => emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }),
       onText: (text) => emit({ type: 'assistant', text }),
+      onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       onUsage: (step) => {
         usage.input_tokens += Number(step.inputTokens || 0);
         usage.output_tokens += Number(step.outputTokens || 0);

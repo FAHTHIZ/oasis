@@ -176,7 +176,13 @@ Oasis reads layered settings in the same format as Claude Code, so an existing `
 
 Precedence is deny > ask > allow. `name(prefix:*)` matches a command prefix, file rules take globs, `fetch_url(domain:x)` matches a domain and its subdomains, and `mcp_server` matches every tool of one MCP server. Claude Code names (`Bash`, `Edit`, `Write`, `Read`, `WebFetch`, `Grep`, `Glob`) are accepted as aliases. At a command prompt you can answer `a` to always allow that command prefix for the rest of the session.
 
-Modes: `default`, `acceptEdits`, `plan` (read-only), and `bypassPermissions` (same as `--yes`). Set one per run with `--permission-mode`, or add rules for one run with `--allowedTools` / `--disallowedTools`.
+Modes: `default`, `acceptEdits`, `plan` (read-only), `auto`, and `bypassPermissions` (same as `--yes`). Set one per run with `--permission-mode`, or add rules for one run with `--allowedTools` / `--disallowedTools`.
+
+In `auto` mode, a classifier model looks at every action that would normally ask you. Routine steps toward your request (tests, builds, linters, read-only git) run on their own. Risky ones (`rm -rf`, force pushes, uploads, reading secrets, `curl | sh`, CI or infrastructure changes) are blocked, and the agent is told why so it can find a safer way. Anything unclear still comes to you. The classifier only sees your own messages and the pending action, never tool output, so instructions planted in files or web pages can't talk it into approving something. Deny rules, ask rules, hooks, and high-risk command checks still come first. After 3 blocks in a row (or 20 in a session), auto mode pauses and asks you. Use `/mode log` to see its recent decisions. It also works unattended: `oasis -p "fix the build" --permission-mode auto` reports each decision as an `auto_mode` event in `stream-json`. Choose a cheaper classifier and add your own rules in user settings:
+
+~~~json
+{ "autoMode": { "model": "gpt-4.1-mini", "rules": ["Never touch files under infra/", "git push to feature branches is fine"] } }
+~~~
 
 **Trust:** a cloned repository can ship any settings file. Project rules that make Oasis stricter (`deny`, `ask`) always apply. Rules that loosen it (`allow`, hooks, mode, sandbox) apply only after you run `oasis trust` in that workspace. `oasis permissions` shows the effective policy.
 
@@ -251,7 +257,7 @@ An `http` hook POSTs the payload as JSON, and its response body is read like a c
 
 ## Slash commands, @mentions, and memory
 
-Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|bypassPermissions]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
+Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|auto|bypassPermissions|log]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
 
 More session commands:
 

@@ -16,7 +16,7 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
 const MAX_SETTINGS_BYTES = 256 * 1024;
-export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
+export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'];
 
 export function userSettingsPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'settings.json');
@@ -166,7 +166,7 @@ export async function loadSettings(root, options = {}) {
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
@@ -182,6 +182,12 @@ export async function loadSettings(root, options = {}) {
     if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') result.shell.enabled = settings.shell.enabled;
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
     if (settings.autoMemory === true) result.autoMemory = true;
+    // Auto mode classifier: { "model": "cheap-model", "rules": ["Never touch infra/"] }
+    if (settings.autoMode && typeof settings.autoMode === 'object') {
+      result.autoMode ||= { model: null, rules: [] };
+      if (typeof settings.autoMode.model === 'string' && settings.autoMode.model.trim()) result.autoMode.model = settings.autoMode.model.trim();
+      result.autoMode.rules.push(...stringList(settings.autoMode.rules).map((rule) => rule.slice(0, 500)));
+    }
     if (settings.lspServers && typeof settings.lspServers === 'object' && !Array.isArray(settings.lspServers)) {
       for (const [name, spec] of Object.entries(settings.lspServers)) {
         if (/^[\w.-]{1,40}$/.test(name) && spec && typeof spec.command === 'string' && spec.command.trim() && Array.isArray(spec.extensions)) {

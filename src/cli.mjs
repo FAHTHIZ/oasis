@@ -98,7 +98,7 @@ function printHelp() {
     '  --workspace PATH              Choose the workspace root',
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
-    '  --permission-mode MODE        default | acceptEdits | plan | bypassPermissions',
+    '  --permission-mode MODE        default | acceptEdits | plan | auto | bypassPermissions',
     '  --add-dir PATH                Let tools read and edit another directory (repeatable)',
     '  --dangerously-skip-permissions  Same as --permission-mode bypassPermissions --yes',
     '  --continue, -c                Continue the most recent saved session',
@@ -950,6 +950,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => { endStream(); stdout.write('\n' + describeToolStart(event) + '\n'); },
+      onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' ? { onDelta: streamDelta } : {}),
       onToolResult: ({ name, result }) => {

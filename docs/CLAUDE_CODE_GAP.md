@@ -19,7 +19,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 | Planning | plan mode, `exit_plan_mode`, `todo_write` checklists persisted with sessions |
 | Questions | `ask_user_question` with multiple choice in the terminal and browser |
 | Subagents | background agents (`run_in_background`, `agent_status`, `send_message` steering and resume, `agent_stop`, `/tasks`), `task` tool, custom agents from `.claude/agents` and `.oasis/agents`, per-agent tools and model, worktree isolation |
-| Permissions | default / acceptEdits / plan / bypassPermissions modes, Claude Code rule syntax (`Bash(npm test:*)`, `Edit(src/**)`), deny > ask > allow |
+| Permissions | default / acceptEdits / plan / auto (classifier) / bypassPermissions modes, Claude Code rule syntax (`Bash(npm test:*)`, `Edit(src/**)`), deny > ask > allow |
 | Sandbox | bubblewrap (Linux), sandbox-exec (macOS), secret env scrubbing |
 | Hooks | PreToolUse, PostToolUse, UserPromptSubmit, Stop, SubagentStop, SessionStart, SessionEnd, PreCompact, Notification (command hooks, exit-code 2 blocking, JSON decisions) |
 | MCP | stdio and Streamable HTTP, `.mcp.json`, per-call approval, `/mcp` |
@@ -48,7 +48,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 
 - ~~Slash commands: `/copy`, `/loop`, `/cd`, `/doctor`, `/effort`, `/branch` (`/fork`), `/usage`, `/config`, `/skills`, `/sandbox`, `/tasks`, `/undo`, `/release-notes`~~ (done; `--effort` also works on the command line).
 - Terminal: Vim mode, configurable keybindings, image paste from the clipboard, fullscreen/transcript view.
-- Auto mode: a permission mode where a cheap model classifies each action as safe or needing approval.
+- ~~Auto mode~~ (done): a classifier model allows, blocks, or escalates each action. It sees only user messages and the action (not tool output), pauses after repeated blocks, and works headless.
 
 ### P3 — providers and integrations
 
@@ -71,5 +71,5 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 5. ~~MCP resources, prompts, and OAuth~~ (done)
 6. ~~PDF reading, `--json-schema`, `--worktree`~~ (done); `--permission-prompts none` still open
 7. ~~Hook events and types, skill `context: fork`, inline `` !`cmd` ``~~ (done)
-8. ~~Auto memory~~ (done) and auto mode classifier
+8. ~~Auto memory~~ and ~~auto mode classifier~~ (done)
 9. Bedrock/Vertex adapters, VS Code extension, GitHub Action

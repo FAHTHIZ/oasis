@@ -152,14 +152,19 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'mode': {
       const current = session ? session.permissions.mode : (sessionOptions.permissionMode || 'default');
-      if (!argument) return { output: 'Permission mode: ' + current + '. Options: ' + PERMISSION_MODES.join(', ') + '.' };
+      if (!argument || argument === 'log') {
+        const state = session && session.autoMode;
+        const log = state && state.log.length ? '\nRecent auto mode decisions:\n' + state.log.slice(-10).map((item) => '  ' + item.decision + ' ' + item.tool + (item.reason ? ': ' + item.reason : '')).join('\n') : '';
+        return { output: 'Permission mode: ' + current + '. Options: ' + PERMISSION_MODES.join(', ') + '.' + log };
+      }
       if (!PERMISSION_MODES.includes(argument)) return { output: 'Unknown mode. Options: ' + PERMISSION_MODES.join(', ') + '.' };
       sessionOptions.permissionMode = argument;
       if (session) {
         if (argument === 'plan' && session.permissions.mode !== 'plan') session.prePlanMode = session.permissions.mode;
         session.permissions.setMode(argument);
       }
-      return { output: 'Permission mode set to ' + argument + '.' };
+      if (argument === 'auto' && session && session.autoMode) { session.autoMode.blockedInRow = 0; session.autoMode.blockedTotal = 0; }
+      return { output: 'Permission mode set to ' + argument + '.' + (argument === 'auto' ? ' A classifier model now approves routine actions and blocks risky ones; anything unclear still comes to you. /mode log shows its decisions.' : '') };
     }
     case 'permissions': {
       const described = session ? session.permissions.describe() : null;
