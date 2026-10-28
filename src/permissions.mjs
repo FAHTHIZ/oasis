@@ -18,6 +18,7 @@ const TOOL_ALIASES = {
   readmcpresourcetool: ['read_mcp_resource'],
   shell: ['run_shell'],
   powershell: ['powershell'],
+  skill: ['load_skill'],
   edit: ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'],
   multiedit: ['multi_edit'],
   notebookedit: ['notebook_edit'],
@@ -93,6 +94,7 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
     return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args));
   }
+  if (toolName === 'load_skill') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
   if (toolName === 'run_shell' || toolName === 'powershell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim());
   if (toolName === 'fetch_url') {
     if (rule.specifier.startsWith('domain:')) {

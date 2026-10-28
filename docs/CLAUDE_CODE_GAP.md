@@ -79,6 +79,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | availableModels | Restrict selectable models via settings | **Closed.** Applies to /model, startup model, advisor and subagent models. |
 | Transcript mode | Ctrl+O full-screen transcript with expanded tool calls | **Closed.** Pager with scroll, paging and jump keys; prompt draft preserved. |
 | Permission dialog | Arrow-select approval dialog; Confirmation/Select keybinding contexts | **Closed.** Arrows/j/k, digits, y/n/a hotkeys, Esc; rebindable; channel relay still races the dialog. |
+| /skill-doctor, Skill() rules | Skill context cost and usage; `Skill(name)` permission rules | **Closed.** Denied skills are dropped from the prompt listing. `/new`, `/reset`, `/proactive` aliases added. |
 
 ## Ranked next improvements
 
