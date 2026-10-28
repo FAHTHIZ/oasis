@@ -7,6 +7,10 @@ import { createServer } from 'node:http';
 import { saveConfig } from '../src/config.mjs';
 import { runEvalCommand, validateEvaluationSuite } from '../src/eval.mjs';
 
+// These scripted fixtures overwrite files without reading them first; read-before-edit
+// enforcement is covered by test/file-state.test.mjs.
+process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
+
 async function temporaryDirectory(prefix = 'oasis-eval-test-') {
   return await mkdtemp(path.join(os.tmpdir(), prefix));
 }

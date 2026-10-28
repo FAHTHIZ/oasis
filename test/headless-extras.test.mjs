@@ -10,6 +10,10 @@ import { runHeadless } from '../src/headless.mjs';
 import { validateJsonSchema, extractJson } from '../src/json-schema.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
+// These scripted fixtures overwrite files without reading them first; read-before-edit
+// enforcement is covered by test/file-state.test.mjs.
+process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
+
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const SCHEMA = { type: 'object', properties: { bugs: { type: 'array', items: { type: 'object', properties: { file: { type: 'string' }, severity: { enum: ['low', 'high'] } }, required: ['file', 'severity'], additionalProperties: false } }, count: { type: 'integer', minimum: 0 } }, required: ['bugs', 'count'] };

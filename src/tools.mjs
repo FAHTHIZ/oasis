@@ -1,3 +1,4 @@
+import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
 import { loadMemory } from './memory.mjs';
 import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
 import { createHash } from 'node:crypto';
@@ -1643,7 +1644,11 @@ export async function executeTool(name, args = {}, context = {}) {
         return await readPdf(target.absolute, target.relative.split(path.sep).join('/'), { pages: args.pages, env: context.env || process.env });
       }
       if (isNotebookPath(args.path) && args.offset === undefined && args.limit === undefined) return await readNotebook(root, args.path);
-      return await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit });
+      {
+        const read = await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit });
+        await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute);
+        return read;
+      }
     case 'glob_files':
       return await globWorkspaceFiles(root, args.pattern, args.limit);
     case 'search_files':
@@ -1703,6 +1708,7 @@ export async function executeTool(name, args = {}, context = {}) {
       }
       if (!info.isFile() || info.isSymbolicLink()) throw new Error('That path is not a regular file.');
       if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit for edits.');
+      await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
       const current = await readFile(target.absolute, 'utf8');
       if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
       let matches = 0, offset = 0;
@@ -1714,6 +1720,7 @@ export async function executeTool(name, args = {}, context = {}) {
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
       await snapshotFile(target.root, target.absolute, 'before-agent-edit');
       await writeFile(target.absolute, next, { encoding: 'utf8' });
+      await recordFileState(context, target.absolute);
       return { path: target.relative.split(path.sep).join('/'), changed: true, replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true };
     }
     case 'write_file': {
@@ -1724,11 +1731,13 @@ export async function executeTool(name, args = {}, context = {}) {
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
+        await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'));
         await snapshotFile(target.root, target.absolute, 'before-agent-write');
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       await mkdir(path.dirname(target.absolute), { recursive: true });
       await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: 0o600 });
+      await recordFileState(context, target.absolute);
       return { path: target.relative.split(path.sep).join('/'), writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile };
     }
     case 'delete_file': {
@@ -1740,6 +1749,7 @@ export async function executeTool(name, args = {}, context = {}) {
       }
       await snapshotFile(target.root, target.absolute, 'before-agent-delete');
       await unlink(target.absolute);
+      forgetFileState(context, target.absolute);
       return { path: target.relative, deleted: true, backupCreated: true };
     }
     case 'run_command':

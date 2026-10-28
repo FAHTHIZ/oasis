@@ -5,6 +5,7 @@
 //   kill_command   stop a background process
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+import { assertFileFresh, recordFileState } from './file-state.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFile, writeFile, lstat, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -175,7 +176,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
 }
 
 // ---------------------------------------------------------------- multi_edit
-export async function multiEditFile(root, args = {}) {
+export async function multiEditFile(root, args = {}, context = {}) {
   if (!Array.isArray(args.edits) || !args.edits.length) throw new Error('Provide a non-empty edits array.');
   if (args.edits.length > 50) throw new Error('Use at most 50 edits per call.');
   const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
@@ -186,6 +187,7 @@ export async function multiEditFile(root, args = {}) {
   }
   if (!info.isFile()) throw new Error('That path is not a regular file.');
   if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB edit limit.');
+  await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
   const original = await readFile(target.absolute, 'utf8');
   if (original.includes('\0')) throw new Error('This looks like a binary file.');
   let next = original;
@@ -206,6 +208,7 @@ export async function multiEditFile(root, args = {}) {
   if (next === original) return { path: relative, changed: false };
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
   await writeFile(target.absolute, next, 'utf8');
+  await recordFileState(context, target.absolute);
   return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true };
 }
 
@@ -314,7 +317,7 @@ export async function executePowerTool(name, args, context, root) {
     case 'grep':
       return await grepWorkspace(root, args, { signal: context.signal });
     case 'multi_edit':
-      return await multiEditFile(root, args);
+      return await multiEditFile(root, args, context);
     case 'notebook_edit':
       return await editNotebook(root, args);
     case 'run_shell':

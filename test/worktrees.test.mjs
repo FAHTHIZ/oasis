@@ -9,6 +9,10 @@ import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { listWorktrees, inspectWorktree, mergeWorktree, isCommitIntegrated } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
+// These scripted fixtures overwrite files without reading them first; read-before-edit
+// enforcement is covered by test/file-state.test.mjs.
+process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
+
 function gitRepo(root) {
   const run = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
   run('init', '-q', '-b', 'main');

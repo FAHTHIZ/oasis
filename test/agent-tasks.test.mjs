@@ -11,6 +11,10 @@ import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentT
 import { runSharedTaskTool } from '../src/shared-tasks.mjs';
 import { isCommitIntegrated } from '../src/worktrees.mjs';
 
+// These scripted fixtures overwrite files without reading them first; read-before-edit
+// enforcement is covered by test/file-state.test.mjs.
+process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
+
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
 const text = (messages) => messages.map((m) => typeof m.content === 'string' ? m.content : '').join('\n');
