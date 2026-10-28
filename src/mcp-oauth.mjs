@@ -22,8 +22,10 @@ function boundedTimeoutMs(value = OAUTH_FETCH_TIMEOUT_MS) {
     : OAUTH_FETCH_TIMEOUT_MS;
 }
 
-function requestTimeoutSignal(value = OAUTH_FETCH_TIMEOUT_MS) {
-  return AbortSignal.timeout(boundedTimeoutMs(value));
+function createRequestTimeout(value = OAUTH_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('OAuth request timed out.')), boundedTimeoutMs(value));
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
 }
 
 // Parse protocol JSON from a bounded stream rather than letting response.json()
@@ -125,11 +127,12 @@ export function parseWwwAuthenticate(header) {
 }
 
 async function getJson(fetchImpl, url, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS) {
+  const timeout = createRequestTimeout(fetchTimeoutMs);
   try {
     const response = await fetchImpl(url, {
       headers: { accept: 'application/json' },
       redirect: 'error',
-      signal: requestTimeoutSignal(fetchTimeoutMs)
+      signal: timeout.signal
     });
     if (!response.ok) {
       try { await response.body?.cancel(); } catch {}
@@ -142,6 +145,7 @@ async function getJson(fetchImpl, url, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS) 
     }
     return await readBoundedJson(response);
   } catch { return null; }
+  finally { timeout.clear(); }
 }
 
 function wellKnownUrls(base, suffix) {
@@ -157,16 +161,18 @@ function wellKnownUrls(base, suffix) {
 export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS } = {}) {
   let resourceMetadata = null;
   if (!resourceMetadataUrl) {
+    const timeout = createRequestTimeout(fetchTimeoutMs);
     try {
       const probe = await fetchImpl(serverUrl, {
         method: 'POST',
         redirect: 'error',
-        signal: requestTimeoutSignal(fetchTimeoutMs),
+        signal: timeout.signal,
         headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' })
       });
       if (probe.status === 401) resourceMetadataUrl = parseWwwAuthenticate(probe.headers.get('www-authenticate')).resource_metadata || null;
     } catch {}
+    finally { timeout.clear(); }
   }
   for (const candidate of resourceMetadataUrl ? [resourceMetadataUrl] : wellKnownUrls(serverUrl, 'oauth-protected-resource')) {
     resourceMetadata = await getJson(fetchImpl, candidate, fetchTimeoutMs);
@@ -197,14 +203,19 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
 const b64url = (buffer) => Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 async function postForm(fetchImpl, url, form, fetchTimeoutMs = OAUTH_FETCH_TIMEOUT_MS) {
-  const response = await fetchImpl(url, {
-    method: 'POST',
-    redirect: 'error',
-    signal: requestTimeoutSignal(fetchTimeoutMs),
-    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-    body: new URLSearchParams(form).toString()
-  });
-  const body = await readBoundedJson(response);
+  const timeout = createRequestTimeout(fetchTimeoutMs);
+  let response;
+  let body = null;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      redirect: 'error',
+      signal: timeout.signal,
+      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+      body: new URLSearchParams(form).toString()
+    });
+    body = await readBoundedJson(response);
+  } finally { timeout.clear(); }
   if (!response.ok || !body || !body.access_token) throw new Error('Token request failed (HTTP ' + response.status + ')' + (body && body.error ? ': ' + body.error + (body.error_description ? ' - ' + body.error_description : '') : '') + '.');
   return body;
 }
@@ -262,14 +273,19 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
     let clientSecret = oauth.clientSecret || null;
     if (!clientId) {
       if (!discovered.registrationEndpoint) throw new Error('This server does not support automatic client registration. Add "oauth": {"clientId": "..."} to its .mcp.json entry.');
-      const response = await fetchImpl(discovered.registrationEndpoint, {
-        method: 'POST',
-        redirect: 'error',
-        signal: requestTimeoutSignal(),
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ client_name: 'Oasis', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' })
-      });
-      const registered = await readBoundedJson(response);
+      const registrationTimeout = createRequestTimeout();
+      let response;
+      let registered = null;
+      try {
+        response = await fetchImpl(discovered.registrationEndpoint, {
+          method: 'POST',
+          redirect: 'error',
+          signal: registrationTimeout.signal,
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({ client_name: 'Oasis', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' })
+        });
+        registered = await readBoundedJson(response);
+      } finally { registrationTimeout.clear(); }
       if (!response.ok || !registered || !registered.client_id) throw new Error('Client registration failed (HTTP ' + response.status + ').');
       clientId = registered.client_id;
       clientSecret = registered.client_secret || null;
