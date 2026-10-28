@@ -124,6 +124,16 @@ Oasis separates three things that are often all called “plugins”:
   ```
 
   Inside a session use `/plugin ...` with the same arguments. An enabled plugin contributes namespaced slash commands (`/feature-dev:feature-dev`), subagents (`feature-dev:code-reviewer`), Agent Skills, hooks (`hooks/hooks.json`, run with `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, and `CLAUDE_PROJECT_DIR` set) and MCP servers (`.mcp.json`, with `${CLAUDE_PLUGIN_ROOT}` expanded). Marketplace entries may use relative, `github`, `url`, or `git-subdir` sources, `metadata.pluginRoot`, and `strict: false`. Enablement uses Claude Code's `"enabledPlugins": {"name@marketplace": true}` key: user settings always apply; a project's `.claude/settings.json` can enable plugins once you `oasis trust` the workspace. Plugins you already installed and enabled in Claude Code (`~/.claude/plugins`) load automatically. Plugins run hooks and MCP servers with your permissions, just as in Claude Code, so install only plugins you trust. Set `OASIS_PLUGINS=off` to disable all plugins for a run.
+
+  Plugins can also ship the rest of Claude Code's component types, and OASIS loads them too:
+
+  - **LSP servers** (`.lsp.json` or `lspServers` in `plugin.json`, Claude Code's `extensionToLanguage` format) power the `lsp` tool for those file types. Starting one still needs approval once per session, and servers in your own settings take precedence for the same extension.
+  - **Output styles** (`output-styles/*.md`) appear as `plugin-name:style` in `/output-style`, `--output-style`, and the `outputStyle` setting.
+  - **Executables** in `bin/` are on `PATH` for `run_command` and `run_shell` while the plugin is enabled.
+  - **A default agent**: `"agent"` in the plugin's `settings.json` runs the main session as that agent (its instructions and tool list). Override it with `--agent NAME`, or set `"agent"` in your own settings. `--bare` ignores it.
+  - **userConfig options**: `oasis plugin config NAME` lists them; `oasis plugin config NAME KEY=VALUE` sets one. Values substitute into `${user_config.KEY}` in MCP and LSP configs and are exported to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`. Non-sensitive values go to `pluginConfigs` in user settings (Claude Code's `pluginConfigs` are read too). Sensitive options are stored in a separate 0600 file under the OASIS config directory and never written to `settings.json`.
+
+  `oasis plugin show NAME` lists everything one plugin provides, plus any missing required options.
 - **MCP integrations** connect Oasis to external tools and services. List them with `oasis mcp list`; configure an approved stdio server with `oasis mcp add NAME -- EXECUTABLE ARG...`, or describe the exact executable and argument list to Oasis in chat. Chat configuration always asks for manual approval—even when `--yes` is active—starts the server only after approval, and makes its discovered tools available in that session. External integrations may execute code or access data, so inspect their source, requested environment variables, and permissions before enabling them.
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.

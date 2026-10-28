@@ -251,7 +251,7 @@ export function serverForFile(file, settings = {}) {
   for (const [name, spec] of Object.entries(custom)) {
     if (!spec || typeof spec.command !== 'string' || !Array.isArray(spec.extensions)) continue;
     if (spec.extensions.map((item) => String(item).toLowerCase()).includes(ext)) {
-      return { name, extensions: spec.extensions, languageId: spec.languageId, candidates: [{ command: spec.command, args: Array.isArray(spec.args) ? spec.args.map(String) : [], custom: true }] };
+      return { name, extensions: spec.extensions, languageId: spec.languageId, languageIds: spec.languageIds || {}, env: spec.env, plugin: spec.plugin, candidates: [{ command: spec.command, args: Array.isArray(spec.args) ? spec.args.map(String) : [], custom: true, initializationOptions: spec.initializationOptions, settings: spec.settings }] };
     }
   }
   return BUILTIN_SERVERS.find((server) => server.extensions.includes(ext)) || null;
@@ -297,7 +297,7 @@ async function resolveTypescript(root, env) {
 async function resolveServer(root, server, env) {
   if (server.name === 'typescript' && !server.candidates[0].custom) return await resolveTypescript(root, env);
   for (const candidate of server.candidates) {
-    if (candidate.custom) return { command: candidate.command, args: candidate.args };
+    if (candidate.custom) return { command: candidate.command, args: candidate.args, initializationOptions: candidate.initializationOptions, settings: candidate.settings };
     const bin = await findBinary(root, candidate.command, env, { node: candidate.node, python: candidate.python });
     if (bin) return { command: bin, args: candidate.args };
   }
@@ -328,14 +328,15 @@ async function clientFor(root, server, options) {
     if (!resolved) throw new Error('No ' + server.name + ' language server found. Install one with: ' + (server.install || 'your package manager') + '. Meanwhile, use grep or the diagnostics tool.');
     const key = resolved.command + ' ' + resolved.args.join(' ');
     if (!approved.has(key) && !options.autoApprove && !options.ruleAllowed) {
-      const ok = options.approval && await options.approval('Start the ' + server.name + ' language server for code navigation?\n  ' + key + '\nIt runs locally in the workspace, reads project files, and stays running until this session ends.');
+      const ok = options.approval && await options.approval('Start the ' + server.name + (server.plugin ? ' language server from plugin ' + server.plugin : ' language server') + ' for code navigation?\n  ' + key + '\nIt runs locally in the workspace, reads project files, and stays running until this session ends.');
       if (!ok) throw new Error('Starting the ' + server.name + ' language server was not approved. Use grep or read_file instead.');
     }
     approved.add(key);
     const { scrubEnvironment } = await workspaceTools();
-    const client = new LspClient({ name: server.name, command: resolved.command, args: resolved.args, initializationOptions: resolved.initializationOptions || {}, cwd: root, env: scrubEnvironment(options.env || process.env) });
+    const client = new LspClient({ name: server.name, command: resolved.command, args: resolved.args, initializationOptions: resolved.initializationOptions || {}, cwd: root, env: scrubEnvironment({ ...(options.env || process.env), ...(server.env || {}) }) });
     client.start();
     await client.initialize();
+    if (resolved.settings) client.notify('workspace/didChangeConfiguration', { settings: resolved.settings });
     return client;
   })();
   clients.set(server.name, starting);
@@ -436,7 +437,7 @@ export async function runLsp(root, args = {}, options = {}) {
   if (!info || !info.isFile()) throw new Error('lsp needs an existing source file; ' + relative + ' is not a file.');
   const server = serverForFile(relative, options.settings);
   if (!server) throw new Error('No language server is known for ' + (path.extname(relative) || 'files without an extension') + '. Add one under "lspServers" in trusted settings, or use grep.');
-  const languageId = server.languageId || LANGUAGE_IDS[path.extname(relative).toLowerCase()] || server.name;
+  const languageId = (server.languageIds && server.languageIds[path.extname(relative).toLowerCase()]) || server.languageId || LANGUAGE_IDS[path.extname(relative).toLowerCase()] || server.name;
   const client = await clientFor(target.root, server, options);
   await client.resyncOpenDocuments();
   const { uri, text } = await client.sync(target.absolute, languageId);

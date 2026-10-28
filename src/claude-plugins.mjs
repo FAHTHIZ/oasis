@@ -12,6 +12,12 @@
 //   - Agent Skills (SKILL.md)
 //   - hooks (run with CLAUDE_PLUGIN_ROOT / CLAUDE_PLUGIN_DATA in their environment)
 //   - MCP servers (with ${CLAUDE_PLUGIN_ROOT} expanded)
+//   - LSP servers (.lsp.json / lspServers) for the `lsp` code-intelligence tool
+//   - output styles (output-styles/*.md, named plugin:style)
+//   - executables in bin/, added to PATH for run_command / run_shell
+//   - a default main-thread agent from the plugin's settings.json ("agent")
+//   - userConfig options, substituted as ${user_config.KEY} and exported as
+//     CLAUDE_PLUGIN_OPTION_<KEY> (set with `oasis plugin config ID KEY=VALUE`)
 //
 // Enablement uses Claude Code's settings format: "enabledPlugins": { "name@marketplace": true }
 // in user settings, or project .claude/settings.json once the workspace is trusted. Plugins
@@ -154,6 +160,7 @@ export async function loadEnabledPlugins(root, options = {}) {
   const registries = { ...(await readClaudeCodeInstalled(env)), ...(await readInstalledPlugins(env)) };
   const out = [];
   const seen = new Set();
+  const configs = await readPluginConfigs(env);
   const add = async (id, pluginRoot, origin) => {
     try {
       const real = await realpath(pluginRoot);
@@ -162,7 +169,8 @@ export async function loadEnabledPlugins(root, options = {}) {
       const name = String(manifest.name || id.split('@')[0] || path.basename(real)).toLowerCase();
       if (!NAME.test(name)) return;
       seen.add(real);
-      out.push({ id: id || name, name, root: real, manifest, origin });
+      const pluginId = id || name;
+      out.push({ id: pluginId, name, root: real, manifest, origin, options: userConfigValues(manifest, configs[pluginId] || configs[name] || {}) });
     } catch { /* missing plugin directories are reported by `oasis plugin list` */ }
   };
   for (const dir of String(env.OASIS_PLUGIN_DIRS || '').split(path.delimiter).filter(Boolean)) await add('', path.resolve(dir), 'plugin-dir');
@@ -180,11 +188,84 @@ export async function readManifest(pluginRoot) {
 
 export function pluginVariables(plugin, env = process.env, root = '') {
   const data = path.join(pluginHome(env), 'data', plugin.id.replace(/[^a-zA-Z0-9._-]/g, '-') || plugin.name);
-  return { CLAUDE_PLUGIN_ROOT: plugin.root, CLAUDE_PLUGIN_DATA: data, ...(root ? { CLAUDE_PROJECT_DIR: root } : {}) };
+  const options = {};
+  for (const [key, value] of Object.entries(plugin.options || {})) options['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] = Array.isArray(value) ? value.join(',') : String(value);
+  return { CLAUDE_PLUGIN_ROOT: plugin.root, CLAUDE_PLUGIN_DATA: data, ...(root ? { CLAUDE_PROJECT_DIR: root } : {}), ...options };
 }
 
 export function expandPluginVariables(text, vars) {
-  return String(text).replace(/\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR)\}/g, (match, name) => vars[name] ?? match);
+  return String(text)
+    .replace(/\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR)\}/g, (match, name) => vars[name] ?? match)
+    .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? '');
+}
+
+// ---------- userConfig ----------
+
+const secretsFile = (env) => path.join(pluginHome(env), 'plugin-secrets.json');
+
+/** pluginConfigs from Claude Code user settings, OASIS user settings, and the 0600 secrets file. */
+export async function readPluginConfigs(env = process.env) {
+  const { userSettingsPath } = await import('./settings.mjs');
+  const out = {};
+  const merge = (map) => {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return;
+    for (const [id, entry] of Object.entries(map)) {
+      const options = entry && typeof entry === 'object' ? (entry.options && typeof entry.options === 'object' ? entry.options : entry) : null;
+      if (options) out[id] = { ...(out[id] || {}), ...options };
+    }
+  };
+  merge(((await readJson(path.join(claudeHome(env), 'settings.json'), {})) || {}).pluginConfigs);
+  merge(((await readJson(userSettingsPath(env), {})) || {}).pluginConfigs);
+  merge(await readJson(secretsFile(env), {}));
+  return out;
+}
+
+function userConfigSchema(manifest) {
+  const schema = manifest && manifest.userConfig;
+  return schema && typeof schema === 'object' && !Array.isArray(schema) ? schema : {};
+}
+
+/** Saved values, falling back to each option's default. Unknown keys are ignored. */
+export function userConfigValues(manifest, saved = {}) {
+  const out = {};
+  for (const [key, option] of Object.entries(userConfigSchema(manifest))) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    if (saved[key] !== undefined && saved[key] !== null) out[key] = saved[key];
+    else if (option && option.default !== undefined) out[key] = option.default;
+  }
+  return out;
+}
+
+/** Store one userConfig value. Sensitive options go to a 0600 file, others to user settings. */
+export async function setPluginOption(plugin, key, value, options = {}) {
+  const env = options.env || process.env;
+  const schema = userConfigSchema(plugin.manifest);
+  const option = schema[key];
+  if (!option) throw new Error(plugin.id + ' has no option "' + key + '". Options: ' + (Object.keys(schema).join(', ') || 'none'));
+  let parsed = value;
+  if (option.type === 'number') { parsed = Number(value); if (!Number.isFinite(parsed)) throw new Error(key + ' must be a number.'); }
+  else if (option.type === 'boolean') parsed = /^(1|true|yes|on)$/i.test(String(value));
+  else if (option.multiple) parsed = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  if (option.sensitive) {
+    const secrets = (await readJson(secretsFile(env), {})) || {};
+    secrets[plugin.id] = { ...(secrets[plugin.id] || {}), [key]: parsed };
+    await writeJson(secretsFile(env), secrets);
+    return { key, sensitive: true };
+  }
+  const { userSettingsPath } = await import('./settings.mjs');
+  const file = userSettingsPath(env);
+  const settings = (await readJson(file, {})) || {};
+  settings.pluginConfigs = settings.pluginConfigs && typeof settings.pluginConfigs === 'object' ? settings.pluginConfigs : {};
+  const entry = settings.pluginConfigs[plugin.id] && typeof settings.pluginConfigs[plugin.id] === 'object' ? settings.pluginConfigs[plugin.id] : {};
+  entry.options = { ...(entry.options || {}), [key]: parsed };
+  settings.pluginConfigs[plugin.id] = entry;
+  await writeJson(file, settings);
+  return { key, sensitive: false, value: parsed };
+}
+
+/** Required options that have no saved value or default. */
+export function missingPluginOptions(plugin) {
+  return Object.entries(userConfigSchema(plugin.manifest)).filter(([key, option]) => option && option.required && (plugin.options || {})[key] === undefined).map(([key]) => key);
 }
 
 function asList(value) {
@@ -329,6 +410,97 @@ export async function pluginMcpServers(plugins, options = {}) {
     }
   }
   return out;
+}
+
+/**
+ * LSP servers in the shape OASIS settings use: { name: { command, args, extensions,
+ * languageIds, env, initializationOptions, settings, plugin } }. Accepts Claude Code's
+ * .lsp.json format (extensionToLanguage) and OASIS's own (extensions/languageId).
+ */
+export async function pluginLspServers(plugins, options = {}) {
+  const out = {};
+  for (const plugin of plugins) {
+    const vars = pluginVariables(plugin, options.env, options.root);
+    for (const map of await jsonComponent(plugin, plugin.manifest.lspServers, '.lsp.json', 'lspServers')) {
+      for (const [name, raw] of Object.entries(map)) {
+        if (!raw || typeof raw !== 'object' || typeof raw.command !== 'string' || !raw.command.trim()) continue;
+        const spec = JSON.parse(JSON.stringify(raw), (key, value) => typeof value === 'string' ? expandPluginVariables(value, vars) : value);
+        const languageIds = {};
+        if (spec.extensionToLanguage && typeof spec.extensionToLanguage === 'object') {
+          for (const [ext, lang] of Object.entries(spec.extensionToLanguage)) languageIds[(ext.startsWith('.') ? ext : '.' + ext).toLowerCase()] = String(lang);
+        }
+        const extensions = [...new Set([...Object.keys(languageIds), ...asList(spec.extensions).map((ext) => (ext.startsWith('.') ? ext : '.' + ext).toLowerCase())])];
+        if (!extensions.length) continue;
+        out[plugin.name + ':' + name] = {
+          command: spec.command.trim(), args: asList(spec.args), extensions, languageIds,
+          ...(typeof spec.languageId === 'string' ? { languageId: spec.languageId } : {}),
+          env: { ...vars, ...(spec.env && typeof spec.env === 'object' ? Object.fromEntries(Object.entries(spec.env).map(([k, v]) => [k, String(v)])) : {}) },
+          ...(spec.initializationOptions && typeof spec.initializationOptions === 'object' ? { initializationOptions: spec.initializationOptions } : {}),
+          ...(spec.settings && typeof spec.settings === 'object' ? { settings: spec.settings } : {}),
+          plugin: plugin.id
+        };
+      }
+    }
+  }
+  return out;
+}
+
+/** Output styles: [{ name: 'plugin:style', description, prompt, file, plugin }]. */
+export async function pluginOutputStyles(plugins) {
+  const { parseFrontMatter } = await import('./subagents.mjs');
+  const out = [];
+  for (const plugin of plugins) {
+    const declared = asList(plugin.manifest.outputStyles);
+    const roots = declared.length ? declared.map((rel) => resolveInPlugin(plugin, rel)).filter(Boolean) : [path.join(plugin.root, 'output-styles')];
+    for (const target of roots) {
+      let info;
+      try { info = await stat(target); } catch { continue; }
+      const files = info.isFile() ? (target.endsWith('.md') ? [{ file: target, parts: [path.basename(target, '.md')] }] : []) : await markdownFiles(target);
+      for (const item of files) {
+        const text = await readText(item.file).catch(() => null);
+        if (text === null) continue;
+        const { data, body } = parseFrontMatter(text);
+        if (!body.trim()) continue;
+        const local = String(data.name || item.parts[item.parts.length - 1]).trim().toLowerCase().replace(/\s+/g, '-');
+        if (!/^[a-z0-9][a-z0-9_-]{0,60}$/.test(local)) continue;
+        const name = plugin.name + ':' + local;
+        out.push({ name, description: String(data.description || body.trim().split('\n')[0]).slice(0, 200), source: 'plugin', file: item.file, plugin: plugin.id, keepCodingInstructions: data['keep-coding-instructions'], prompt: 'Output style: ' + name + '.\n' + expandPluginVariables(body.trim(), pluginVariables(plugin)) });
+      }
+    }
+  }
+  return out;
+}
+
+/** bin/ directories of enabled plugins (added to PATH for shell commands). */
+export async function pluginBinDirs(plugins) {
+  const out = [];
+  for (const plugin of plugins) {
+    const dir = path.join(plugin.root, 'bin');
+    try { if ((await stat(dir)).isDirectory()) out.push(dir); } catch {}
+  }
+  return out;
+}
+
+/** Plugin settings defaults ({ agent }) from settings.json, else the manifest "settings" key. */
+export async function pluginDefaultSettings(plugins) {
+  const out = {};
+  for (const plugin of plugins) {
+    const file = await readJson(path.join(plugin.root, 'settings.json'), null);
+    const settings = file && typeof file === 'object' ? file : plugin.manifest.settings && typeof plugin.manifest.settings === 'object' ? plugin.manifest.settings : {};
+    if (typeof settings.agent === 'string' && settings.agent.trim() && !out.agent) {
+      const agent = settings.agent.trim();
+      out.agent = agent.includes(':') ? agent : plugin.name + ':' + agent;
+      out.agentPlugin = plugin.id;
+    }
+  }
+  return out;
+}
+
+/** Prepend plugin bin/ directories to PATH in a command environment. */
+export function withPluginPath(env, dirs) {
+  if (!Array.isArray(dirs) || !dirs.length) return env;
+  const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') || 'PATH';
+  return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
 // ---------- marketplaces ----------
@@ -511,8 +683,9 @@ export async function setPluginEnabled(spec, value, options = {}) {
 }
 
 export async function summarizePlugin(plugin, options = {}) {
-  const [commands, agents, skills, hooks, mcp] = await Promise.all([
-    pluginCommands([plugin], options), pluginAgents([plugin], options), pluginSkills([plugin]), pluginHooks([plugin], options), pluginMcpServers([plugin], options)
+  const [commands, agents, skills, hooks, mcp, lsp, styles, bins, defaults] = await Promise.all([
+    pluginCommands([plugin], options), pluginAgents([plugin], options), pluginSkills([plugin]), pluginHooks([plugin], options), pluginMcpServers([plugin], options),
+    pluginLspServers([plugin], options), pluginOutputStyles([plugin]), pluginBinDirs([plugin]), pluginDefaultSettings([plugin])
   ]);
   const hookCount = hooks.reduce((sum, item) => sum + Object.values(item.hooks || {}).reduce((n, groups) => n + (Array.isArray(groups) ? groups.length : 0), 0), 0);
   return {
@@ -520,7 +693,12 @@ export async function summarizePlugin(plugin, options = {}) {
     agents: agents.map((a) => a.name),
     skills: skills.map((s) => s.name),
     hooks: hookCount,
-    mcpServers: mcp.flatMap((item) => Object.keys(item.mcpServers || {}))
+    mcpServers: mcp.flatMap((item) => Object.keys(item.mcpServers || {})),
+    lspServers: Object.keys(lsp),
+    outputStyles: styles.map((style) => style.name),
+    bin: bins.length > 0,
+    ...(defaults.agent ? { agent: defaults.agent } : {}),
+    options: Object.keys(userConfigSchema(plugin.manifest))
   };
 }
 
@@ -548,7 +726,27 @@ export async function validatePath(target) {
       if (manifest.name && !NAME.test(String(manifest.name))) problems.push('plugin.json "name" must be kebab-case.');
       const plugin = { id: String(manifest.name || path.basename(dir)), name: String(manifest.name || path.basename(dir)).toLowerCase(), root: dir, manifest };
       const summary = await summarizePlugin(plugin);
-      report.push('Plugin "' + plugin.name + '"' + (manifest.version ? ' v' + manifest.version : '') + ': ' + summary.commands.length + ' command(s), ' + summary.agents.length + ' agent(s), ' + summary.skills.length + ' skill(s), ' + summary.hooks + ' hook group(s), ' + summary.mcpServers.length + ' MCP server(s).');
+      report.push('Plugin "' + plugin.name + '"' + (manifest.version ? ' v' + manifest.version : '') + ': ' + summary.commands.length + ' command(s), ' + summary.agents.length + ' agent(s), ' + summary.skills.length + ' skill(s), ' + summary.hooks + ' hook group(s), ' + summary.mcpServers.length + ' MCP server(s), ' + summary.lspServers.length + ' LSP server(s), ' + summary.outputStyles.length + ' output style(s)' + (summary.bin ? ', bin/ executables' : '') + (summary.agent ? ', default agent ' + summary.agent : '') + '.');
+      for (const [key, option] of Object.entries(userConfigSchema(manifest))) {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) problems.push('userConfig key "' + key + '" must use letters, digits and underscores and not start with a digit.');
+        else if (!option || typeof option !== 'object') problems.push('userConfig "' + key + '" must be an object.');
+        else if (option.type && !['string', 'number', 'boolean', 'directory', 'file'].includes(option.type)) problems.push('userConfig "' + key + '" has unknown type "' + option.type + '".');
+      }
+      const lspFile = path.join(dir, '.lsp.json');
+      if (await exists(lspFile)) {
+        const lsp = await readJson(lspFile, null);
+        if (!lsp || typeof lsp !== 'object') problems.push('.lsp.json is not valid JSON.');
+        else for (const [name, spec] of Object.entries(lsp.lspServers || lsp)) {
+          if (!spec || typeof spec.command !== 'string') problems.push('LSP server "' + name + '" needs a "command".');
+          else if (!spec.extensionToLanguage && !spec.extensions) problems.push('LSP server "' + name + '" needs "extensionToLanguage" (for example { ".go": "go" }).');
+        }
+      }
+      for (const key of ['commands', 'agents', 'skills', 'outputStyles', 'hooks', 'mcpServers', 'lspServers']) {
+        for (const rel of asList(manifest[key])) {
+          if (rel.includes('..')) problems.push(key + ' path contains "..": ' + rel);
+          else if (!(await exists(path.resolve(dir, rel)))) problems.push(key + ' path not found: ' + rel);
+        }
+      }
       const hooksFile = path.join(dir, 'hooks', 'hooks.json');
       if (await exists(hooksFile)) {
         const hooks = await readJson(hooksFile, null);
@@ -594,7 +792,45 @@ export async function pluginCli(root, args = [], options = {}) {
   if (action === 'install' || action === 'i') {
     const result = await installPlugin(params[0], { env, root, scope });
     const s = result.summary;
-    out('Installed and enabled ' + result.id + '\n  commands: ' + (s.commands.join(', ') || 'none') + '\n  agents: ' + (s.agents.join(', ') || 'none') + '\n  skills: ' + (s.skills.join(', ') || 'none') + '\n  hook groups: ' + s.hooks + '\n  MCP servers: ' + (s.mcpServers.join(', ') || 'none') + '\nStart a new session to load it. Plugins run hooks and MCP servers with your permissions.\n');
+    out('Installed and enabled ' + result.id + '\n  commands: ' + (s.commands.join(', ') || 'none') + '\n  agents: ' + (s.agents.join(', ') || 'none') + '\n  skills: ' + (s.skills.join(', ') || 'none') + '\n  hook groups: ' + s.hooks + '\n  MCP servers: ' + (s.mcpServers.join(', ') || 'none') + (s.lspServers.length ? '\n  LSP servers: ' + s.lspServers.join(', ') : '') + (s.outputStyles.length ? '\n  output styles: ' + s.outputStyles.join(', ') : '') + (s.options.length ? '\n  options: ' + s.options.join(', ') + ' (set with oasis plugin config ' + result.id + ' KEY=VALUE)' : '') + '\nStart a new session to load it. Plugins run hooks and MCP servers with your permissions.\n');
+    return;
+  }
+  if (action === 'config' || action === 'configure') {
+    const active = await loadEnabledPlugins(root, { env });
+    const wanted = String(params[0] || '').toLowerCase();
+    const plugin = active.find((item) => item.id.toLowerCase() === wanted || item.name === wanted.split('@')[0]);
+    if (!plugin) throw new Error('Usage: oasis plugin config NAME[@MARKET] [KEY=VALUE ...] (the plugin must be installed and enabled)');
+    const schema = userConfigSchema(plugin.manifest);
+    const pairs = params.slice(1);
+    if (!pairs.length) {
+      if (!Object.keys(schema).length) { out(plugin.id + ' has no configurable options.\n'); return; }
+      for (const [key, option] of Object.entries(schema)) {
+        const value = (plugin.options || {})[key];
+        const shown = value === undefined ? '(not set)' : option.sensitive ? '(set, hidden)' : JSON.stringify(value);
+        out(key.padEnd(20) + ' ' + shown + (option.required ? '  required' : '') + (option.description ? '  — ' + option.description : '') + '\n');
+      }
+      return;
+    }
+    for (const pair of pairs) {
+      const eq = pair.indexOf('=');
+      if (eq < 1) throw new Error('Expected KEY=VALUE, got "' + pair + '".');
+      const result = await setPluginOption(plugin, pair.slice(0, eq), pair.slice(eq + 1), { env });
+      out('Set ' + plugin.id + ' ' + result.key + (result.sensitive ? ' (stored in a private file)' : ' = ' + JSON.stringify(result.value)) + '\n');
+    }
+    out('Start a new session to apply.\n');
+    return;
+  }
+  if (action === 'show' || action === 'info') {
+    const active = await loadEnabledPlugins(root, { env });
+    const wanted = String(params[0] || '').toLowerCase();
+    const plugin = active.find((item) => item.id.toLowerCase() === wanted || item.name === wanted.split('@')[0]);
+    if (!plugin) throw new Error('Usage: oasis plugin show NAME (installed and enabled)');
+    const s = await summarizePlugin(plugin, { env, root });
+    out(plugin.id + (plugin.manifest.version ? ' v' + plugin.manifest.version : '') + '  ' + plugin.root + '\n' + (plugin.manifest.description ? '  ' + plugin.manifest.description + '\n' : '')
+      + '  commands: ' + (s.commands.join(', ') || 'none') + '\n  agents: ' + (s.agents.join(', ') || 'none') + '\n  skills: ' + (s.skills.join(', ') || 'none')
+      + '\n  hook groups: ' + s.hooks + '\n  MCP servers: ' + (s.mcpServers.join(', ') || 'none') + '\n  LSP servers: ' + (s.lspServers.join(', ') || 'none')
+      + '\n  output styles: ' + (s.outputStyles.join(', ') || 'none') + '\n  bin/ on PATH: ' + (s.bin ? 'yes' : 'no') + (s.agent ? '\n  default agent: ' + s.agent : '')
+      + '\n  options: ' + (s.options.join(', ') || 'none') + (missingPluginOptions(plugin).length ? '  (missing required: ' + missingPluginOptions(plugin).join(', ') + ' — oasis plugin config ' + plugin.id + ' KEY=VALUE)' : '') + '\n');
     return;
   }
   if (action === 'uninstall' || action === 'remove') { out('Uninstalled ' + (await uninstallPlugin(params[0], { env })) + '\n'); return; }
@@ -629,5 +865,5 @@ export async function pluginCli(root, args = [], options = {}) {
     for (const id of declaredUntrusted) out('[untrusted] ' + id + ' is enabled by this project; run oasis trust to allow project plugins\n');
     return;
   }
-  throw new Error('Usage: oasis plugin [list | install NAME@MARKET | uninstall NAME | enable NAME | disable NAME | update [NAME] | validate [PATH] | marketplace add|list|update|remove] [--scope user|project|local]');
+  throw new Error('Usage: oasis plugin [list | install NAME@MARKET | show NAME | config NAME [KEY=VALUE] | uninstall NAME | enable NAME | disable NAME | update [NAME] | validate [PATH] | marketplace add|list|update|remove] [--scope user|project|local]');
 }

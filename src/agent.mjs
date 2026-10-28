@@ -313,7 +313,15 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
   ].join('\n\n');
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null }) {
+// Enabled plugins' bin/ directories are on PATH for commands the agent runs.
+export function commandEnvironment(env, settings) {
+  const dirs = settings && Array.isArray(settings.pluginBinDirs) ? settings.pluginBinDirs : [];
+  if (!dirs.length) return env;
+  const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') || 'PATH';
+  return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
+}
+
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
@@ -426,6 +434,19 @@ export async function createSession({ root, config, restore = null, permissionMo
     else session.styleWarning = 'Output style "' + styleName + '" was not found; using default.';
   }
   session.outputStyle = styleName && !session.styleWarning ? styleName : 'default';
+  // Main-thread agent (--agent, "agent" setting, or a plugin's settings.json default):
+  // the session runs with that agent's instructions and tool list, like Claude Code.
+  const mainAgentName = bare ? null : (agent || loadedSettings.agent || null);
+  if (mainAgentName) {
+    const definitions = await loadAgentDefinitions(root, { env }).catch(() => ({}));
+    const definition = definitions[String(mainAgentName).toLowerCase()];
+    if (!definition) session.agentWarning = 'Agent "' + mainAgentName + '" was not found; running as the default agent.';
+    else {
+      session.mainAgent = definition.name;
+      if (definition.prompt) systemText += '\n\n<main-agent name="' + definition.name + '">\nYou are running as the ' + definition.name + ' agent. Follow these instructions for this whole session:\n' + definition.prompt + '\n</main-agent>';
+      if (definition.tools && !(Array.isArray(tools) || typeof tools === 'string')) tools = definition.tools;
+    }
+  }
   const allowedToolNames = mapToolNames(tools);
   if (Array.isArray(tools) || typeof tools === 'string') {
     const keep = new Set(allowedToolNames || []);
@@ -2578,7 +2599,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     approval: options.approval,
     autoApprove: Boolean(options.autoApprove),
     maxCommandSeconds: session.config.maxCommandSeconds,
-    env: options.env || process.env,
+    env: commandEnvironment(options.env || process.env, session.settings),
     signal: options.signal,
     specialistBudget: options.specialistBudget || { used: 0 },
     todos: session.todos
