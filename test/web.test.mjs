@@ -969,3 +969,38 @@ test('browser chat supports built-in slash commands, @file mentions, tool detail
   assert.match(snapshot.events.find((e) => e.type === 'command_output').data.text, /only in the terminal/);
   assert.equal(snapshot.events.find((e) => e.type === 'session_state').data.mode, 'plan');
 });
+
+test('browser chat answers ask_user_question cards and the model sees the answer', async (t) => {
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root };
+  const ask = toolCall('q1', 'ask_user_question', { question: 'Which database?', header: 'Database', options: [{ label: 'SQLite', description: 'Simple file' }, { label: 'Postgres' }] });
+  const { config, requests } = await scriptedModel(t, [ask, (payload) => ({ content: 'Going with ' + JSON.parse(payload.messages.at(-1).content).answer })]);
+  await saveConfig(config, { env });
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const started = await (await fetch(base + '/api/chat', { method: 'POST', headers, body: JSON.stringify({ message: 'set up storage' }) })).json();
+  let snapshot;
+  for (let i = 0; i < 300; i++) {
+    snapshot = await (await fetch(base + '/api/jobs/' + started.jobId + '?after=0', { headers })).json();
+    if (snapshot.events.some((e) => e.type === 'question')) break;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  const question = snapshot.events.find((e) => e.type === 'question').data;
+  assert.equal(question.question, 'Which database?');
+  assert.deepEqual(question.options.map((o) => o.label), ['SQLite', 'Postgres']);
+  assert.equal(snapshot.status, 'waiting_approval');
+  const wrong = await fetch(base + '/api/jobs/' + started.jobId + '/approval', { method: 'POST', headers, body: JSON.stringify({ approvalId: question.questionId, approved: true }) });
+  assert.equal(wrong.status, 404, 'questions cannot be resolved through the approval endpoint');
+  const answered = await fetch(base + '/api/jobs/' + started.jobId + '/answer', { method: 'POST', headers, body: JSON.stringify({ questionId: question.questionId, answer: 'Postgres' }) });
+  assert.equal(answered.status, 200);
+  for (let i = 0; i < 300; i++) {
+    snapshot = await (await fetch(base + '/api/jobs/' + started.jobId + '?after=0', { headers })).json();
+    if (snapshot.status === 'completed') break;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  assert.equal(snapshot.result.text, 'Going with Postgres');
+  assert.equal(requests.length, 2);
+});

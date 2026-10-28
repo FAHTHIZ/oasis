@@ -213,6 +213,28 @@ export function createOasisWebServer(options = {}) {
     });
   }
 
+  function questionFor(job, question) {
+    return new Promise((resolve) => {
+      const questionId = randomUUID();
+      let settled = false;
+      const finish = (answer) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        job.pendingApprovals.delete(questionId);
+        if (job.pendingApprovals.size === 0 && job.status === 'waiting_approval') job.status = 'running';
+        emit(job, 'question_answered', { questionId, answered: Boolean(answer) });
+        resolve(answer || '');
+      };
+      const timer = setTimeout(() => finish(''), 10 * 60 * 1000);
+      timer.unref?.();
+      // Shares the approval queue so cancel and status handling cover questions too.
+      job.pendingApprovals.set(questionId, { resolve: (value) => finish(typeof value === 'string' ? value : ''), question });
+      job.status = 'waiting_approval';
+      emit(job, 'question', { questionId, ...question, expiresInSeconds: 600 });
+    });
+  }
+
   function pruneJobs(additionalReservations = 0) {
     if (jobs.size + reservedJobSlots + additionalReservations <= MAX_JOBS) return;
     for (const [id, job] of jobs) {
@@ -329,6 +351,7 @@ export function createOasisWebServer(options = {}) {
           signal: job.controller.signal,
           ...(images.length ? { images } : {}),
           approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
+          askUser: (question) => questionFor(job, question),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
@@ -979,6 +1002,19 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    const answerMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/answer$/i);
+    if (req.method === 'POST' && answerMatch) {
+      const job = jobs.get(answerMatch[1]);
+      if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
+      const body = await readJsonBody(req);
+      const pending = job.pendingApprovals.get(String(body.questionId || ''));
+      if (!pending || !pending.question) { json(res, 404, { error: 'That question is no longer waiting for an answer.' }); return; }
+      const answer = typeof body.answer === 'string' ? body.answer.trim().slice(0, 2000) : '';
+      pending.resolve(answer);
+      json(res, 200, { resolved: true, answered: Boolean(answer) });
+      return;
+    }
+
     const approvalMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/approval$/i);
     if (req.method === 'POST' && approvalMatch) {
       const job = jobs.get(approvalMatch[1]);
@@ -988,7 +1024,7 @@ export function createOasisWebServer(options = {}) {
       const approved = body.approved;
       if (typeof approved !== 'boolean') { json(res, 400, { error: 'approved must be true or false.' }); return; }
       const pending = job.pendingApprovals.get(approvalId);
-      if (!pending) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
+      if (!pending || pending.question) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
       const always = approved && body.always === true && Boolean(pending.suggestion);
       pending.resolve(always ? 'always' : approved);
       json(res, 200, { resolved: true, approved, always });
