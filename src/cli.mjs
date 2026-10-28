@@ -1679,6 +1679,9 @@ async function interactive(root, autoApprove, persistence = {}) {
   const bannerConfig = await loadConfig().catch(() => ({}));
   const startupSettings = await loadSettings(root).catch(() => null);
   await applyThemeFromSettings(startupSettings);
+  if (stdout.isTTY && process.env.OASIS_DISABLE_THEME_RELOAD !== '1') {
+    import('./themes.mjs').then(({ watchThemes }) => watchThemes({ env: process.env, plugins: (startupSettings && startupSettings.pluginThemeSources) || [], onReload: (theme) => stdout.write('\n[theme] reloaded ' + theme.name + '\n') })).catch(() => {});
+  }
   if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || bannerConfig.model || '', provider: bannerConfig.protocol || '', mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOasis OSS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   if (SESSION_OPTIONS.devChannels.length) {

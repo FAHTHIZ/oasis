@@ -106,7 +106,7 @@ A native Gemini adapter; Windows sandboxing; Windows Credential Manager for sens
 
 ### 6. Terminal experience polish
 
-Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Remaining: full-screen transcript, theme hot-reload and bindable dialog contexts. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Theme hot-reload shipped as well. Remaining: full-screen transcript and bindable dialog contexts. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
 
 ## What OASIS already does well
 
