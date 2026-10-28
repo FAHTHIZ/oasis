@@ -44,6 +44,14 @@ This still is not full Claude Code agent-team or dynamic-workflow parity:
 
 The agent lifecycle emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. Shared task claims can be renewed through `task_renew`; failed or cancelled dispatched workers now release their task lease immediately. This closes the first model-directed dispatch milestone, but not autonomous scheduling, persistent workflows, a visual monitor, or conflict repair.
 
+## Core-loop parity sprint (October 28, 2026)
+
+These changes close gaps in the everyday agent loop — the part users notice first when switching from Claude Code. Each item ships with regression tests.
+
+| Gap | Claude Code behavior | OASIS now |
+| --- | --- | --- |
+| Output-token ceiling | 32k output tokens by default on current models; `CLAUDE_CODE_MAX_OUTPUT_TOKENS` override; recovers when a reply is cut off | **Closed.** Model-aware 32k/16k/8k defaults, `maxOutputTokens` / `OASIS_MAX_OUTPUT_TOKENS` / `CLAUDE_CODE_MAX_OUTPUT_TOKENS`. A `max_tokens` / `length` / `max_output_tokens` stop on Anthropic, Chat Completions or Responses no longer fails the turn or runs a half-written tool call: the incomplete call is dropped and the model resumes in smaller steps (max 3 recoveries per turn). A provider 400 naming a smaller cap is learned for the session. |
+
 ## Ranked next improvements
 
 This order is intentionally ranked by impact and architectural leverage rather than ease.

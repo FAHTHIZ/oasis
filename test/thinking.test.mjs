@@ -50,14 +50,14 @@ test('Anthropic extended thinking: budget sent, thinking blocks replayed with si
   assert.equal(result.text, 'It says hello.');
   assert.deepEqual(budgets, [10000]);
   assert.deepEqual(requests[0].thinking, { type: 'enabled', budget_tokens: 10000 });
-  assert.equal(requests[0].max_tokens, 18192);
+  assert.equal(requests[0].max_tokens, 42000);
   const replayed = requests[1].messages.find((message) => message.role === 'assistant');
   assert.deepEqual(replayed.content[0], { type: 'thinking', thinking: 'I should read the README.', signature: 'sig-abc' });
   assert.equal(replayed.content[1].type, 'tool_use');
 
   await runAgentTurn(session, 'thanks, now summarize', { autoApprove: true, env, approval: async () => true });
   assert.equal(requests[2].thinking, undefined);
-  assert.equal(requests[2].max_tokens, 8192);
+  assert.equal(requests[2].max_tokens, 32000);
   assert.ok(requests[2].messages.every((message) => !Array.isArray(message.content) || message.content.every((block) => block.type !== 'thinking')));
 });
 
