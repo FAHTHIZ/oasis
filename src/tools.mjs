@@ -19,6 +19,7 @@ import { wrapCommand } from './sandbox.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES, executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
+import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
@@ -1643,6 +1644,15 @@ export async function executeTool(name, args = {}, context = {}) {
       return await fetchPublicUrl(args.url);
     case 'web_search':
       return await webSearch(args, { env: context.env || process.env });
+    case 'diagnostics':
+      return await runDiagnostics(root, args, {
+        approval: context.approval,
+        autoApprove: Boolean(context.autoApprove),
+        ruleAllowed: Boolean(context.ruleAllowed),
+        env: context.env || process.env,
+        signal: context.signal,
+        sandbox: context.sandbox
+      });
     default:
       if (POWER_TOOL_NAMES.has(name)) return await executePowerTool(name, args, context, root);
       throw new Error('Unknown or unavailable tool: ' + name);
@@ -1658,6 +1668,7 @@ export async function loadProjectInstructions(root, options = {}) {
 
 TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
 TOOL_DEFINITIONS.push(WEB_SEARCH_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(DIAGNOSTICS_TOOL_DEFINITION);
 
 export function toolCount() {
   return TOOL_DEFINITIONS.length;

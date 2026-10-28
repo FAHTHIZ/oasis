@@ -19,7 +19,7 @@ import { managePlugins } from './plugins.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
 import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, userSettingsPath } from './settings.mjs';
-import { detectSandbox } from './sandbox.mjs';
+import { detectSandbox, resolveSandbox } from './sandbox.mjs';
 import { resolveCustomCommand, expandFileMentions, loadCustomCommands } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { searchBackend } from './web-search.mjs';
@@ -30,6 +30,7 @@ import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } 
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
+import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, outputStyle: null, addDirs: [] };
@@ -53,6 +54,7 @@ function printHelp() {
     '  oasis update [--check] [--yes] Check GitHub main for a newer Oasis and install it',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
+    '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
     '  oasis sessions list           List locally saved sessions for this workspace',
@@ -531,6 +533,29 @@ async function selfUpdate(autoApprove = false) {
   const result = await runInteractiveCommand(command, args);
   if (result.code === 0) stdout.write('Oasis CLI update completed.\n');
   else stdout.write('Oasis CLI update failed' + (result.code === null ? ': ' + result.error : ' with exit code ' + result.code) + '.\n');
+}
+
+async function diagnosticsCommand(rest, root, autoApprove) {
+  const paths = [];
+  let checker = 'auto';
+  let json = false;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === '--json') json = true;
+    else if (arg === '--checker') checker = rest[++i] || '';
+    else if (arg.startsWith('--checker=')) checker = arg.slice('--checker='.length);
+    else if (arg.startsWith('-')) throw new Error('Usage: oasis diagnostics [PATH...] [--checker auto|' + CHECKERS.join('|') + '] [--json]');
+    else paths.push(arg);
+  }
+  const settings = await loadSettings(root).catch(() => ({}));
+  const sandbox = resolveSandbox(settings, root);
+  const result = await runDiagnostics(root, { checker, paths }, {
+    autoApprove, env: process.env, sandbox,
+    approval: (message, forceInteractive = false) => approve(message, forceInteractive, autoApprove)
+  });
+  stdout.write(json ? JSON.stringify(result, null, 2) + '\n' : formatDiagnostics(result) + '\n');
+  if (result.summary.errors) process.exitCode = 1;
+  return result;
 }
 
 async function installRequest(request, root, autoApprove) {
@@ -1424,6 +1449,7 @@ async function main() {
   }
   if (command === 'setup') return await configureProvider(workspace);
   if (command === 'doctor') return await doctor(rest, workspace);
+  if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
   if (command === 'update') return await updateOasis(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {

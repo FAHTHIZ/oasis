@@ -39,6 +39,7 @@ export const BUILTIN_COMMANDS = {
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for bugs (/review [PR number | git ref])',
+  diagnostics: 'Run type checkers and linters, then fix errors (/diagnostics [paths])',
   'security-review': 'Security review of pending changes (/security-review [PR number | git ref])',
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
@@ -108,6 +109,10 @@ export async function runBuiltinCommand(name, argument, state) {
       const items = await listWorktrees(root, { env });
       if (!items.length) return { output: 'No subagent worktrees. Ask for parallel work with isolation "worktree" to get one branch per agent.' };
       return { output: ['Subagent worktrees:', ...items.map((item) => '  ' + (item.branch || '(detached)').padEnd(36) + ' ' + item.relative), 'Review: git diff HEAD...BRANCH   Merge: git merge BRANCH   Remove: git worktree remove PATH && git branch -D BRANCH'].join('\n') };
+    }
+    case 'diagnostics': {
+      const targets = argument ? argument.split(/\s+/).filter(Boolean) : [];
+      return { prompt: 'Run the diagnostics tool' + (targets.length ? ' with paths ' + JSON.stringify(targets) : '') + '. Report the problems grouped by file. If there are errors, fix them with minimal edits, then run diagnostics again until it reports no errors or the remaining ones need my decision. Do not silence checks with ignore comments or config changes unless I ask.' };
     }
     case 'cost': {
       const u = usage || createUsageTracker();

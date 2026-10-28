@@ -20,6 +20,8 @@ const TOOL_ALIASES = {
   read: ['read_file'],
   webfetch: ['fetch_url'],
   websearch: ['web_search'],
+  diagnostics: ['diagnostics'],
+  lsp: ['diagnostics'],
   grep: ['grep', 'search_files'],
   glob: ['glob_files'],
   ls: ['list_files'],
