@@ -9,6 +9,7 @@ import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, summarizeAgent, stopAgent } from '../src/agent-tasks.mjs';
 import { runSharedTaskTool } from '../src/shared-tasks.mjs';
+import { isCommitIntegrated } from '../src/worktrees.mjs';
 
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
