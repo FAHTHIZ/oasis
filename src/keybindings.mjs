@@ -106,7 +106,8 @@ export function loadKeybindings(env = process.env) {
   for (const [context, map] of Object.entries(DEFAULT_BINDINGS)) contexts[context] = new Map(Object.entries(map));
   const warnings = [];
   const files = [];
-  for (const file of keybindingFiles(env)) {
+  // --safe-mode ignores keybindings.json.
+  for (const file of env.OASIS_SAFE_MODE === '1' ? [] : keybindingFiles(env)) {
     const data = readBindingsFile(file);
     if (!data) continue;
     files.push(file);

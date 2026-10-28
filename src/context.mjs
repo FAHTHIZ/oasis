@@ -81,7 +81,7 @@ export function compactionThresholdChars(config = {}, env = process.env) {
   const windowTokens = contextWindowSize(config, env);
   // /autocompact PCT, or Claude Code's CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (1-100).
   const pct = Number(config.autoCompactPercent ?? (env && (env.OASIS_AUTOCOMPACT_PCT || env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE)));
-  if (config.autoCompactPercent === 0) return 8_000_000;
+  if (config.autoCompactPercent === 0 || (config.autoCompactPercent === undefined && env && String(env.OASIS_AUTOCOMPACT_PCT || '') === '0')) return 8_000_000;
   if (Number.isFinite(pct) && pct >= 1 && pct <= 100) return Math.max(10_000, Math.floor(windowTokens * 4 * pct / 100));
   if (windowTokens <= DEFAULT_CONTEXT_WINDOW) return 60_000;
   return Math.floor(windowTokens * 4 * 0.6);

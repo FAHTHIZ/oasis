@@ -55,6 +55,8 @@ async function collect(dir, prefix, depth, out) {
 
 export async function loadCustomCommands(root, options = {}) {
   const commands = new Map();
+  // --safe-mode starts without custom commands.
+  if ((options.env || process.env).OASIS_SAFE_MODE === '1') return commands;
   for (const { dir, scope } of commandDirectories(root, options.env || process.env, options.home || os.homedir())) {
     const found = [];
     await collect(dir, [], 0, found);

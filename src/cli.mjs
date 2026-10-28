@@ -65,6 +65,12 @@ function printHelp() {
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
     '  oasis -p PROMPT --bare        Skip project instructions, skills, hooks, MCP, and memory',
+    '  oasis --safe-mode             Start with customizations off (CLAUDE.md, skills, hooks, MCP, plugins, commands, themes, keybindings)',
+    '  oasis --restricted            No command/network tools, only managed + --settings settings, no bypassPermissions',
+    '  oasis -p PROMPT --permission-prompts none   Deny anything not pre-approved instead of asking',
+    '  oasis --autocompact 70|500k|off             Auto-compact threshold for this session',
+    '  oasis --append-subagent-system-prompt TEXT  Extra system text for every subagent (also -file PATH)',
+    '  oasis --allow-dangerously-skip-permissions  Add bypassPermissions to the Shift+Tab mode cycle',
     '  oasis -w [NAME]               Work in a new git worktree on its own branch',
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
@@ -77,6 +83,9 @@ function printHelp() {
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
+    '  oasis --bg --exec "CMD"        Run a shell command as a background job',
+    '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
+    '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
     '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
@@ -592,6 +601,7 @@ async function askApproval(prompt, forceInteractive, meta) {
 }
 
 async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
+  if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + String(prompt).split('\n')[0] + '\n'); return false; }
   try {
     stdout.write('\nPermission request\n' + prompt + '\n');
     const offerAlways = meta && meta.suggestion && !forceInteractive;
@@ -661,6 +671,11 @@ async function readFlagValue(value, root) {
 
 async function resolveFlagFiles(root) {
   for (const item of SESSION_OPTIONS.pendingFiles.splice(0)) {
+    if (item.kind === 'subagent-append') {
+      const text = await readFile(path.resolve(root, item.file), 'utf8').catch((error) => { throw new Error('Could not read ' + item.file + ': ' + error.message); });
+      SESSION_OPTIONS.subagentSystemAppend = [SESSION_OPTIONS.subagentSystemAppend, text].filter(Boolean).join('\n\n');
+      continue;
+    }
     if (item.kind === 'system' || item.kind === 'append') {
       const text = await readFile(path.resolve(root, item.file), 'utf8').catch((error) => { throw new Error('Could not read ' + item.file + ': ' + error.message); });
       if (item.kind === 'system') SESSION_OPTIONS.systemPromptOverride = text;
@@ -703,7 +718,9 @@ function sessionCreateOptions() {
     appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt,
     outputStyle: SESSION_OPTIONS.outputStyle || null,
     addDirs: SESSION_OPTIONS.addDirs,
-    bare: Boolean(SESSION_OPTIONS.bare),
+    bare: Boolean(SESSION_OPTIONS.bare || SESSION_OPTIONS.safeMode),
+    restricted: Boolean(SESSION_OPTIONS.restricted),
+    subagentSystemAppend: SESSION_OPTIONS.subagentSystemAppend || '',
     systemPromptOverride: SESSION_OPTIONS.systemPromptOverride || '',
     tools: SESSION_OPTIONS.tools,
     mcpServers: SESSION_OPTIONS.mcpServers,
@@ -771,13 +788,25 @@ async function managePermissions(root, rest) {
 
 async function backgroundCommand(root, rest) {
   const bg = await import('./background-sessions.mjs');
-  const [sub = 'list', id, ...more] = rest;
+  const [sub = 'list', query, ...more] = rest;
   if (sub === 'list' || sub === 'ls') {
     const entries = await bg.listBackgroundSessions(process.env);
     stdout.write(entries.length ? entries.map(bg.describeEntry).join('\n') + '\n' : 'No background sessions. Start one with oasis --bg "task" or /background in a session.\n');
     return;
   }
-  if (!id) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID');
+  if (sub === 'respawn' && (query === '--all' || more.includes('--all'))) {
+    const running = (await bg.listBackgroundSessions(process.env)).filter((entry) => entry.status === 'running');
+    for (const entry of running) { await bg.respawnBackgroundSession(entry.id, process.env); stdout.write('Respawned ' + entry.id + '.\n'); }
+    if (!running.length) stdout.write('No running background sessions to respawn.\n');
+    return;
+  }
+  if (!query) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID | respawn ID|--all');
+  const id = await bg.resolveBackgroundId(query, process.env);
+  if (sub === 'respawn') {
+    const entry = await bg.respawnBackgroundSession(id, process.env);
+    stdout.write('Respawned ' + entry.id + (entry.kind === 'exec' ? ' (re-running ' + entry.command + ')' : ' with its conversation intact') + '.\n  oasis logs ' + entry.id + ' --follow   watch progress\n');
+    return;
+  }
   if (sub === 'logs') {
     const entry = await bg.readEntry(id, process.env);
     const follow = more.includes('--follow') || more.includes('-f');
@@ -791,10 +820,14 @@ async function backgroundCommand(root, rest) {
     }
     return;
   }
-  if (sub === 'stop') { const result = await bg.stopBackgroundSession(id, process.env); stdout.write(result.stopped ? 'Stopped ' + id + '.\n' : id + ' is not running (' + result.status + ').\n'); return; }
+  if (sub === 'stop' || sub === 'kill') { const result = await bg.stopBackgroundSession(id, process.env); stdout.write(result.stopped ? 'Stopped ' + id + '.\n' : id + ' is not running (' + result.status + ').\n'); return; }
   if (sub === 'rm') { await bg.removeBackgroundSession(id, process.env); stdout.write('Removed ' + id + '.\n'); return; }
   if (sub === 'attach') {
     const entry = await bg.readEntry(id, process.env);
+    if (entry.kind === 'exec') {
+      stdout.write('Attaching to ' + id + ' (' + entry.command + '). Ctrl+C detaches; the job keeps running.\n');
+      return await backgroundCommand(root, ['logs', id, '--follow']);
+    }
     if (entry.status === 'running') {
       if (!(await approve(id + ' is still running. Stop it and continue the conversation here?', true, false))) { stdout.write('Left it running. oasis bg logs ' + id + ' --follow shows progress.\n'); return; }
       await bg.stopBackgroundSession(id, process.env);
@@ -803,7 +836,34 @@ async function backgroundCommand(root, rest) {
     try { process.chdir(entry.root); } catch {}
     return await interactive(entry.root, false, { enabled: true, resumeId: entry.sessionId });
   }
-  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID');
+  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID | respawn ID|--all');
+}
+
+async function purgeCommand(root, rest, autoApprove) {
+  const { parsePurgeArgs, planPurge, applyPurge, describePurge, knownProjects } = await import('./purge.mjs');
+  const options = parsePurgeArgs(rest);
+  let targets = [];
+  if (options.all) targets = (await knownProjects(process.env)).map((item) => item.root);
+  else if (options.path) targets = [path.resolve(options.path)];
+  else {
+    const projects = await knownProjects(process.env);
+    if (!projects.length) { stdout.write('No projects have saved Oasis state.\n'); return; }
+    if (!(stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function')) throw new Error('Usage: oasis purge PATH | --all. Projects with saved state:\n' + projects.map((item) => '  ' + item.root + ' (' + item.sessions + ' sessions)').join('\n'));
+    const { selectDialog } = await import('./select-dialog.mjs');
+    stdout.write('Select a project to purge:\n');
+    const chosen = await selectDialog({ input: stdin, output: stdout, options: projects.map((item) => ({ label: item.root + '  (' + item.sessions + ' session' + (item.sessions === 1 ? '' : 's') + ')', value: item.root })), context: 'Select', color: colorEnabled(stdout) });
+    if (!chosen) { stdout.write('Cancelled.\n'); return; }
+    targets = [chosen];
+  }
+  if (!targets.length) { stdout.write('No projects have saved Oasis state.\n'); return; }
+  for (const target of targets) {
+    const plan = await planPurge(target, { env: process.env, memory: options.memory });
+    stdout.write(describePurge(plan) + '\n');
+    if (!plan.items.length || options.dryRun) { if (options.dryRun && plan.items.length) stdout.write('(dry run — nothing deleted)\n'); continue; }
+    if (!options.yes && !options.interactive && !(await approve('Delete all of this? It cannot be undone.', true, false))) { stdout.write('Kept ' + target + '.\n'); continue; }
+    const done = await applyPurge(plan, { env: process.env, confirm: options.interactive && !options.yes ? (item) => approve('Delete ' + item.label + '?', true, false) : null });
+    stdout.write('Purged ' + done.length + ' item' + (done.length === 1 ? '' : 's') + ' for ' + target + '.\n');
+  }
 }
 
 async function importCommand(root, rest, autoApprove) {
@@ -1412,7 +1472,8 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     ...(streamInput ? { inputStream: await streamInputChannel() } : {}),
     includePartial: Boolean(headless.includePartial),
     replayUser: Boolean(headless.replayUser),
-    permissionPromptTool: headless.permissionPromptTool || null
+    permissionPromptTool: headless.permissionPromptTool || null,
+    permissionPrompts: headless.permissionPrompts || null
   });
   process.exitCode = exitCode;
   if (process.env.OASIS_BACKGROUND_ID) {
@@ -1686,6 +1747,7 @@ async function reloadSessionComponents(session, root, what) {
 
 // /theme and the "theme" setting (Claude Code's ~/.claude.json theme is honored too).
 async function applyThemeFromSettings(settings) {
+  if (process.env.OASIS_SAFE_MODE === '1') return;
   try {
     const { applyTheme, resolveTheme, themePreference } = await import('./themes.mjs');
     applyTheme(resolveTheme(themePreference({ env: process.env, settings }), { env: process.env, plugins: (settings && settings.pluginThemeSources) || [] }));
@@ -1747,6 +1809,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (!text) continue;
     if (text.startsWith('!') && text.length > 1) {
       const command = text.slice(1).trim();
+      if (SESSION_OPTIONS.restricted) { stdout.write('[restricted] ! shell commands are disabled in --restricted mode.\n'); continue; }
       let powershell = null;
       if (((await loadSettings(root).catch(() => ({}))).defaultShell) === 'powershell') {
         const { findPowerShell } = await import('./power-tools.mjs');
@@ -2175,6 +2238,7 @@ async function manageExternalExtensions(root, args, autoApprove) {
 async function main() {
   const rawArgs = process.argv.slice(2);
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
+  if (process.env.CLAUDE_CODE_SAFE_MODE === '1' || process.env.OASIS_SAFE_MODE === '1') { SESSION_OPTIONS.safeMode = true; process.env.OASIS_SAFE_MODE = '1'; }
   // Sessions are saved by default (resume with -c / -r / /resume), like Claude Code.
   let persistSession = process.env.OASIS_PERSIST_SESSIONS !== '0';
   let noPersist = process.env.OASIS_PERSIST_SESSIONS === '0';
@@ -2201,6 +2265,36 @@ async function main() {
       continue;
     }
     if (arg === '--bare') { SESSION_OPTIONS.bare = true; continue; }
+    // --safe-mode: troubleshooting start without customizations (CLAUDE.md, skills, hooks, MCP, plugins,
+    // custom commands, keybindings, themes, status line). Model, built-in tools and permissions stay.
+    if (arg === '--safe-mode') { SESSION_OPTIONS.safeMode = true; process.env.OASIS_SAFE_MODE = '1'; process.env.CLAUDE_CODE_SAFE_MODE = '1'; continue; }
+    // --restricted: no command execution or network tools (unless named in --tools), only managed and
+    // --settings settings, and bypassPermissions is refused.
+    if (arg === '--restricted') { SESSION_OPTIONS.restricted = true; process.env.OASIS_RESTRICTED = '1'; continue; }
+    if (arg === '--allow-dangerously-skip-permissions') { SESSION_OPTIONS.allowBypass = true; continue; }
+    if (arg === '--append-subagent-system-prompt') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(arg + ' requires a value.'); i += 1; SESSION_OPTIONS.subagentSystemAppend = [SESSION_OPTIONS.subagentSystemAppend, value].filter(Boolean).join('\n\n'); continue; }
+    if (arg === '--append-subagent-system-prompt-file') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(arg + ' requires a file.'); i += 1; SESSION_OPTIONS.pendingFiles.push({ kind: 'subagent-append', file: value }); continue; }
+    if (arg === '--permission-prompts') {
+      const value = String(rawArgs[++i] || '').toLowerCase();
+      if (!['none', 'host', 'default'].includes(value)) throw new Error('--permission-prompts must be none or host.');
+      headless.permissionPrompts = value; if (value === 'none') process.env.OASIS_PERMISSION_PROMPTS = 'none'; continue;
+    }
+    if (arg === '--autocompact') {
+      // auto | off | PERCENT% (1-100) | a token window such as 500k or 1m (this session only).
+      const value = String(rawArgs[++i] || '').trim().toLowerCase();
+      const tokens = /^(\d+(?:\.\d+)?)\s*([km])$/.exec(value);
+      if (value === 'auto') { delete process.env.OASIS_AUTOCOMPACT_PCT; continue; }
+      if (value === 'off' || value === '0') { process.env.OASIS_AUTOCOMPACT_PCT = '0'; continue; }
+      if (tokens || /^\d{5,}$/.test(value)) {
+        const count = tokens ? Number(tokens[1]) * (tokens[2] === 'm' ? 1_000_000 : 1_000) : Number(value);
+        process.env.OASIS_COMPACT_THRESHOLD_CHARS = String(Math.min(8_000_000, Math.max(10_000, Math.round(count * 4))));
+        continue;
+      }
+      const pct = Number(value.replace(/%$/, ''));
+      if (!(Number.isInteger(pct) && pct >= 1 && pct <= 100)) throw new Error('--autocompact takes auto, off, a percentage (70 or 70%), or a token count (500k, 1m).');
+      process.env.OASIS_AUTOCOMPACT_PCT = String(pct);
+      continue;
+    }
     if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, rawArgs[++i] || ''].filter(Boolean).join('\n\n'); continue; }
     const needValue = (flag) => { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(flag + ' requires a value.'); i += 1; return value; };
     if (arg === '--system-prompt') { SESSION_OPTIONS.systemPromptOverride = needValue(arg); continue; }
@@ -2211,6 +2305,7 @@ async function main() {
     if (arg === '--chrome') { SESSION_OPTIONS.chrome = true; continue; }
     if (arg === '--no-chrome') { SESSION_OPTIONS.chrome = false; continue; }
     if (arg === '--bg' || arg === '--background') { SESSION_OPTIONS.background = true; continue; }
+    if (arg === '--exec') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error('--exec requires a shell command.'); i += 1; SESSION_OPTIONS.exec = value; continue; }
     if (arg === '--max-budget-usd') {
       const value = Number(needValue(arg));
       if (!Number.isFinite(value) || value <= 0) throw new Error('--max-budget-usd must be a positive dollar amount, for example 2.50.');
@@ -2301,7 +2396,7 @@ async function main() {
     if (arg === '--plan') { headless.planOnly = true; continue; }
     if (arg === '--plugin-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
-    if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; autoApprove = true; continue; }
+    if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; autoApprove = true; continue; }
     if (arg === '--no-session-persistence') { noPersist = true; continue; }
     if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume' || arg === '-r') {
@@ -2318,6 +2413,8 @@ async function main() {
   }
   await access(workspace);
   await resolveFlagFiles(workspace);
+  if (SESSION_OPTIONS.restricted && (SESSION_OPTIONS.permissionMode === 'bypassPermissions' || SESSION_OPTIONS.allowBypass)) throw new Error('--restricted cannot be combined with --dangerously-skip-permissions, --allow-dangerously-skip-permissions, or --permission-mode bypassPermissions.');
+  if (SESSION_OPTIONS.restricted) { autoApprove = false; SESSION_OPTIONS.allowBypass = false; }
   if (SESSION_OPTIONS.runInit) {
     await initWorkspace(workspace);
     await runSetupHooks(workspace, 'init');
@@ -2340,6 +2437,14 @@ async function main() {
     if (!headless.enabled) throw new Error('--json-schema works with -p (headless mode).');
   }
   await applySettingsPolicy(workspace, autoApprove);
+  if (SESSION_OPTIONS.exec !== undefined) {
+    if (SESSION_OPTIONS.restricted) throw new Error('--exec is not available in --restricted mode.');
+    const { startExecJob } = await import('./background-sessions.mjs');
+    const entry = await startExecJob({ root: workspace, command: [SESSION_OPTIONS.exec, ...args].join(' '), env: process.env, name: SESSION_OPTIONS.sessionName || null });
+    stdout.write('Started background job ' + entry.id + ': ' + entry.command + '\n  oasis logs ' + entry.id + ' --follow   watch output\n  oasis stop ' + entry.id + '             stop it\n');
+    if (!SESSION_OPTIONS.background && stdout.isTTY) return await backgroundCommand(workspace, ['logs', entry.id, '--follow']);
+    return;
+  }
   if (SESSION_OPTIONS.background) {
     const task = args.join(' ').trim();
     if (!task) throw new Error('Usage: oasis --bg "describe the task"');
@@ -2408,6 +2513,9 @@ async function main() {
   if (command === 'trust') return await manageTrust(workspace, rest);
   if (command === 'import') return await importCommand(workspace, rest, autoApprove);
   if (command === 'bg' || command === 'background') return await backgroundCommand(workspace, rest);
+  // Claude Code's top-level background commands: claude attach|logs|stop|kill|rm|respawn ID.
+  if (['attach', 'logs', 'stop', 'kill', 'rm', 'respawn'].includes(command)) return await backgroundCommand(workspace, [command, ...rest]);
+  if (command === 'purge') return await purgeCommand(workspace, rest, autoApprove);
   if (command === 'insights') {
     const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
     const { file, stats } = await writeInsightsReport({ env: process.env, days: Math.min(365, Math.max(1, parseInt(rest[0], 10) || 30)) });
