@@ -886,3 +886,17 @@ The native `node-pty` component is an optional dependency. See [Install OASIS](I
 - `--memory` also deletes the project's auto memory, which is kept by default.
 
 Running background sessions are skipped.
+
+## Settings pane
+
+`/config` opens a settings pane in the terminal, like Claude Code's. Pick a setting with the arrow keys and Enter, choose a value, and press Esc when you are done. Changes are saved to your user settings and take effect in the current session where possible. The pane covers theme, default model, default permission mode, editor mode (vim), output style, verbose output, auto-compact, auto memory, the Chrome browser tool, the shell for `!` commands, and channels.
+
+Outside a terminal, or in scripts, use these forms:
+
+- `/config list` shows every value.
+- `/config get KEY` shows one value.
+- `/config set KEY VALUE` changes one, for example `/config set verbose on` or `/config set permissions.defaultMode plan`.
+
+The keys match `settings.json`.
+
+Verbose output (`--verbose`, `"verbose": true`, or `/config set verbose on`) prints each tool's output, dimmed, under its call: command stdout and stderr, file reads, and search results. It is capped at 400 lines per call; Ctrl+O still shows the full transcript. `"autoCompactEnabled": false` (Claude Code's key) turns automatic compaction off for new sessions.

@@ -86,6 +86,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Safe mode, restricted mode, unattended prompts | `--safe-mode` (`CLAUDE_CODE_SAFE_MODE`), `--restricted`, `--permission-prompts none\|host`, `--autocompact`, `--append-subagent-system-prompt[-file]`, `--allow-dangerously-skip-permissions` | Done |
 | Background commands, exec jobs, purge | Top-level `oasis attach\|logs\|stop\|kill\|rm\|respawn` (match by ID prefix or name), `respawn --all`, `--bg --exec CMD` shell jobs, `oasis purge [path] --dry-run -y -i --all` | Done |
 | Auto mode config, plugin URLs | Claude `autoMode` schema (`environment`/`allow`/`soft_deny`/`hard_deny`, `$defaults`, labels, `classifyAllShell`, project scopes can only add denies), `oasis auto-mode defaults\|config\|critique\|reset`, `--plugin-url` (built-in zip reader) | Done |
+| /config settings pane, verbose | Interactive `/config` pane (theme, model, default mode, editor, output style, verbose, auto-compact, memory, chrome, shell, channels) plus `/config list\|get\|set`; `--verbose`/`verbose` shows tool output; `autoCompactEnabled` | Done |
 
 ## Ranked next improvements
 
@@ -115,7 +116,7 @@ A native Gemini adapter; Windows sandboxing; Windows Credential Manager for sens
 
 ### 6. Terminal experience polish
 
-Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Theme hot-reload shipped as well. The Ctrl+O full-screen transcript pager shipped too, and permission prompts are now select dialogs bound through the `Confirmation`/`Select` keybinding contexts. Model, theme and color pickers shipped on the same dialog (`ModelPicker`/`ThemePicker` contexts). Remaining: a `/config` settings pane. These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Theme hot-reload shipped as well. The Ctrl+O full-screen transcript pager shipped too, and permission prompts are now select dialogs bound through the `Confirmation`/`Select` keybinding contexts. Model, theme and color pickers shipped on the same dialog (`ModelPicker`/`ThemePicker` contexts). The `/config` settings pane is done (see the table). These matter, but do not close the PTY, agent coordination or surface-access gaps above.
 
 ## What OASIS already does well
 

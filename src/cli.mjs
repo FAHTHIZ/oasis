@@ -38,7 +38,7 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
-import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit } from './terminal-ui.mjs';
+import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -877,6 +877,12 @@ async function autoModeCommand(root, rest, autoApprove = false) {
   throw new Error('Usage: oasis auto-mode defaults [--label PREFIX] | config [--label PREFIX] | critique | reset [--yes]');
 }
 
+// --verbose / "verbose": true / /config verbose: show tool output in the transcript.
+function verboseEnabled(session) {
+  if (typeof SESSION_OPTIONS.verbose === 'boolean') return SESSION_OPTIONS.verbose;
+  return Boolean(session && session.settings && session.settings.verbose);
+}
+
 async function purgeCommand(root, rest, autoApprove) {
   const { parsePurgeArgs, planPurge, applyPurge, describePurge, knownProjects } = await import('./purge.mjs');
   const options = parsePurgeArgs(rest);
@@ -1417,6 +1423,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
+        if (verboseEnabled(session)) { const shown = verboseToolOutput(name, result, { color: colorEnabled(stdout) }); if (shown) stdout.write(shown + '\n'); }
       },
       onText: (text) => {
         if (endStream()) return;
@@ -1894,6 +1901,32 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (slash && slash[1].toLowerCase() === 'init') { try { await initWorkspace(root); } catch (error) { stdout.write(error.message + '\n'); } continue; }
     if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
+      // /config without an argument opens the settings pane in a terminal.
+      if (slash[1].toLowerCase() === 'config' && !String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
+        try {
+          const pane = await import('./config-pane.mjs');
+          const { selectDialog } = await import('./select-dialog.mjs');
+          const state = { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100 };
+          const run = (command, value) => runBuiltinCommand(command, value, state);
+          let last = 0;
+          for (;;) {
+            const rows = await pane.configRows(state);
+            const width = Math.max(...rows.map((row) => row.item.label.length));
+            stdout.write('\nSettings — Enter to change, Esc when done:\n');
+            const picked = await selectDialog({ input: stdin, output: stdout, options: [...rows.map((row, index) => ({ label: row.item.label.padEnd(width) + '  ' + row.value, value: String(index) })), { label: 'Done', value: null, hotkey: 'no' }], initial: last, context: 'Select', color: colorEnabled(stdout) });
+            if (!picked) break;
+            last = Number(picked);
+            const row = rows[last];
+            const choices = await row.item.choices(state);
+            stdout.write(row.item.label + ' — ' + row.item.description + ':\n');
+            const value = await selectDialog({ input: stdin, output: stdout, options: [...choices.map((choice) => ({ label: choice + (choice === row.value ? ' (current)' : ''), value: choice })), { label: 'Cancel', value: null, hotkey: 'no' }], initial: Math.max(0, choices.indexOf(row.value)), context: 'Select', color: colorEnabled(stdout) });
+            if (!value || value === row.value) continue;
+            try { stdout.write(String(await pane.setConfigValue(row.item.key, value, state, run)) + '\n'); } catch (error) { stdout.write('[config] ' + error.message + '\n'); }
+          }
+          session = state.session || session;
+        } catch (error) { stdout.write('[config] ' + error.message + '\n'); }
+        continue;
+      }
       // /model, /theme and /color without an argument open a picker in a terminal.
       if (!String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && ['model', 'theme', 'color'].includes(slash[1].toLowerCase())) {
         try {

@@ -334,3 +334,28 @@ export function describeEdit({ name, args = {}, result = {} }, { color = true } 
 }
 
 export function visibleWidth(text) { return stringWidth(stripAnsi(text)); }
+
+// --verbose: the tool's output under its call line, dimmed and indented (Claude Code's verbose
+// transcript). Long output is capped; Ctrl+O still shows the whole transcript.
+export function verboseToolOutput(name, result, { color = false, maxLines = 400 } = {}) {
+  if (result === undefined || result === null) return '';
+  let text = '';
+  if (typeof result === 'string') text = result;
+  else if (typeof result === 'object') {
+    const parts = [];
+    for (const key of ['stdout', 'output', 'content', 'text', 'diff', 'matches', 'files', 'results']) {
+      const value = result[key];
+      if (value === undefined || value === null || value === '') continue;
+      parts.push(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+    }
+    if (result.stderr) parts.push('[stderr]\n' + result.stderr);
+    text = parts.length ? parts.join('\n') : JSON.stringify(result, null, 2);
+  } else text = String(result);
+  text = text.replace(/\s+$/, '');
+  if (!text) return '';
+  const lines = text.split('\n');
+  const shown = lines.slice(0, maxLines).map((line) => '  ⎿ ' + line.slice(0, 2000));
+  if (lines.length > maxLines) shown.push('  ⎿ … ' + (lines.length - maxLines) + ' more lines (Ctrl+O shows the full transcript)');
+  const body = shown.join('\n');
+  return color ? '\x1b[2m' + body + '\x1b[22m' : body;
+}
