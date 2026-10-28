@@ -8,6 +8,9 @@ import { loadSettings, PERMISSION_MODES } from './settings.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
+import { listSessions } from './sessions.mjs';
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -29,6 +32,10 @@ export const BUILTIN_COMMANDS = {
   todos: 'Show the current todo list',
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
+  review: 'Review changes for bugs (/review [PR number | git ref])',
+  'security-review': 'Security review of pending changes (/security-review [PR number | git ref])',
+  export: 'Save this conversation as Markdown (/export [file])',
+  resume: 'List saved sessions or resume one (/resume [ID])',
   init: 'Create an OASIS.md project guide',
   exit: 'Leave Oasis'
 };
@@ -142,6 +149,33 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
       return { output: lines.join('\n') };
     }
+    case 'review':
+    case 'security-review': {
+      const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
+      if (custom.has(name)) return null; // A project or user command with this name wins.
+      return { output: 'Starting ' + (name === 'review' ? 'a code review' : 'a security review') + ' of ' + describeReviewTarget(argument) + '.', prompt: reviewPrompt(name, argument) };
+    }
+    case 'export': {
+      if (!session || session.messages.length <= 1) return { output: 'Nothing to export yet.' };
+      const target = path.resolve(root, argument || 'oasis-conversation-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.md');
+      const relative = path.relative(root, target);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) return { output: 'Export path must be inside the workspace.' };
+      await writeFile(target, conversationMarkdown(session), { flag: 'wx' }).catch((error) => {
+        if (error.code === 'EEXIST') throw new Error(relative + ' already exists; choose another file name.');
+        throw error;
+      });
+      return { output: 'Exported ' + (session.messages.length - 1) + ' messages to ' + relative + '.' };
+    }
+    case 'resume': {
+      const saved = await listSessions(root, { env });
+      if (!argument) {
+        if (!saved.length) return { output: 'No saved sessions for this workspace. Start Oasis with --save (or --continue) to keep conversations.' };
+        return { output: ['Saved sessions (newest first):', ...saved.slice(0, 15).map((item, index) => '  ' + (index + 1) + '. ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages' + (item.model ? '  ' + item.model : '')), 'Resume with /resume ID or /resume NUMBER.'].join('\n') };
+      }
+      const pick = /^\d+$/.test(argument) ? saved[Number(argument) - 1] : saved.find((item) => item.id === argument || item.id.startsWith(argument));
+      if (!pick) return { output: 'No saved session matches ' + argument + '. Run /resume to list them.' };
+      return { output: 'Resuming session ' + pick.id + ' on your next message.', resume: pick.id };
+    }
     case 'bashes': {
       const list = session && session.background ? [...session.background.values()] : [];
       if (!list.length) return { output: 'No background processes.' };
@@ -186,4 +220,52 @@ export async function runBuiltinCommand(name, argument, state) {
     default:
       return null;
   }
+}
+
+function describeReviewTarget(argument) {
+  if (/^#?\d+$/.test(argument || '')) return 'pull request #' + argument.replace('#', '');
+  if (argument) return 'changes since ' + argument;
+  return 'the current uncommitted and branch changes';
+}
+
+export function reviewPrompt(kind, argument = '') {
+  let gather;
+  if (/^#?\d+$/.test(argument)) {
+    const number = argument.replace('#', '');
+    gather = 'Review GitHub pull request #' + number + '. Use `gh pr view ' + number + '` and `gh pr diff ' + number + '` to read it.';
+  } else if (argument) {
+    gather = 'Review the changes between `' + argument + '` and the working tree. Use `git diff ' + argument + '` and `git log --oneline ' + argument + '..HEAD`.';
+  } else {
+    gather = 'Review the pending changes in this repository. Use `git status`, `git diff HEAD`, and, if the branch is ahead of its upstream or main, `git diff` against the merge base.';
+  }
+  const focus = kind === 'security-review'
+    ? ['Focus only on security: injection (SQL, shell, path traversal, template), authentication and authorization gaps, secrets in code or logs, unsafe deserialization, SSRF, XSS/CSRF, insecure crypto or randomness, and risky dependency changes.',
+       'Report only findings you are confident are exploitable or clearly dangerous; skip style and theoretical issues.',
+       'For each finding give: severity (high/medium/low), file:line, the vulnerable code, an attack scenario, and a concrete fix.']
+    : ['Look for correctness bugs, edge cases, error handling, race conditions, performance problems, missing tests, and unclear code.',
+       'Prioritize real problems over style nits. Read the surrounding code when the diff alone is not enough.',
+       'Organize the result as: Summary, Issues (each with severity, file:line, explanation, and suggested fix), and Suggestions.'];
+  return [gather, ...focus, 'Do not modify any files; this is a read-only review. If there are no changes to review, say so.'].join('\n');
+}
+
+function messageText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map((part) => part && (part.text || (part.type === 'image_url' ? '[image]' : ''))).filter(Boolean).join('\n');
+  return content ? JSON.stringify(content) : '';
+}
+
+export function conversationMarkdown(session) {
+  const lines = ['# Oasis conversation', '', 'Workspace: ' + session.root, 'Model: ' + (session.config && session.config.model || 'unknown'), 'Exported: ' + new Date().toISOString(), ''];
+  for (const message of session.messages.slice(1)) {
+    if (message.role === 'user') lines.push('## User', '', messageText(message.content), '');
+    else if (message.role === 'assistant') {
+      const text = messageText(message.content);
+      if (text) lines.push('## Oasis', '', text, '');
+      for (const call of message.tool_calls || []) lines.push('> Tool call: `' + (call.function && call.function.name) + '` ' + String(call.function && call.function.arguments || '').slice(0, 300), '');
+    } else if (message.role === 'tool') {
+      const text = messageText(message.content);
+      lines.push('<details><summary>Tool result</summary>', '', '```', text.length > 2000 ? text.slice(0, 2000) + '\n... (truncated)' : text, '```', '', '</details>', '');
+    }
+  }
+  return lines.join('\n');
 }

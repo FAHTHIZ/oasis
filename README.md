@@ -217,7 +217,14 @@ Events: `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`,
 
 ## Slash commands, @mentions, and memory
 
-Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|bypassPermissions]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/init`, `/plan`, and `/clear`.
+Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|bypassPermissions]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
+
+More built-ins:
+- `/review [PR number | git ref]` runs a read-only code review of your pending changes, a branch, or a GitHub pull request (through `gh`).
+- `/security-review` does the same with a security focus.
+- `/export [file]` saves the conversation as Markdown inside the workspace.
+- `/resume` lists saved sessions; `/resume N` or `/resume ID` switches to one.
+- A custom command with the same name, such as `.oasis/commands/review.md`, replaces the built-in review prompt.
 
 Custom commands are Markdown files, compatible with Claude Code. `.oasis/commands/review.md` becomes `/review`, and `.oasis/commands/git/pr.md` becomes `/git:pr`. Oasis also reads `.claude/commands/`, `~/.config/oasis/commands/`, and `~/.claude/commands/`.
 
