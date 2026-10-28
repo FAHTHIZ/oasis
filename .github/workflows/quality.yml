@@ -24,6 +24,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+      - name: Install production dependencies and vendor terminal assets
+        run: npm install --omit=dev --no-audit --no-fund
       - name: Run full quality gate and validate eval fixtures
         run: npm run check
       - name: Verify installable CLI package contents
@@ -55,6 +57,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install production dependencies and vendor terminal assets
+        run: npm install --omit=dev --no-audit --no-fund
       - name: Install pinned Playwright and Chromium for CI only
         run: |
           npm install --no-save --package-lock=false playwright@1.64.1
