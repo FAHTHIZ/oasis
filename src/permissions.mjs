@@ -11,7 +11,8 @@
 import path from 'node:path';
 
 const TOOL_ALIASES = {
-  bash: ['run_command', 'run_shell'],
+  bash: ['run_command', 'run_shell', 'monitor'],
+  monitor: ['monitor'],
   listmcpresourcestool: ['list_mcp_resources'],
   memory: ['memory_save', 'memory_search', 'memory_read', 'memory_delete'],
   readmcpresourcetool: ['read_mcp_resource'],
@@ -36,7 +37,7 @@ const TOOL_ALIASES = {
 };
 
 export const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);
-export const COMMAND_TOOLS = new Set(['run_command', 'run_shell']);
+export const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'monitor']);
 
 export function parseRule(raw) {
   const text = String(raw || '').trim();
@@ -85,7 +86,8 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
   if (rule.isMcpPrefix) return toolName === rule.tools[0] || toolName.startsWith(rule.tools[0] + '_');
   if (!rule.tools.includes(toolName)) return false;
   if (rule.specifier === null || rule.specifier === '' || rule.specifier === '*') return true;
-  if (toolName === 'run_command') {
+  if (toolName === 'run_command' || toolName === 'monitor') {
+    if (toolName === 'monitor' && !args.command) return false;
     if (matchCommandSpecifier(rule.specifier, commandLine(args.command, args.args))) return true;
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
     return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args));
@@ -153,6 +155,7 @@ export class PermissionPolicy {
 
 // Suggest a reusable "always allow" rule after an approval.
 export function suggestRule(toolName, args = {}) {
+  if (toolName === 'monitor') return args.command ? suggestRule('run_command', args).replace(/^run_command\(/, 'Bash(') : null;
   if (toolName === 'run_command') {
     // Keep explicit paths: allowing "node" must not also allow ./some/dir/node.
     const raw = String(args.command || '');

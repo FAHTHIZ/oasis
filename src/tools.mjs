@@ -24,6 +24,8 @@ import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES, executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
+import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
+import { startCommandMonitor, startWsMonitor, backgroundExitNotifier } from './monitors.mjs';
 import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
 import { isPdfPath, readPdf } from './pdf.mjs';
 import { GIT_TOOL_DEFINITIONS, GIT_TOOL_NAMES, runGitTool } from './git-tools.mjs';
@@ -323,7 +325,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.background) {
     if (!options.backgroundRegistry) throw new Error('Background commands are not available in this session.');
     const launch = wrapCommand(command, args, sandbox, root);
-    return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null });
+    return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onLine: options.onLine, onExit: options.onExit, monitor: options.monitor });
   }
   return await new Promise((resolve) => {
     let stdout = '';
@@ -1787,8 +1789,22 @@ export async function executeTool(name, args = {}, context = {}) {
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),
-        backgroundRegistry: context.session && (context.session.background ||= new Map())
+        backgroundRegistry: context.session && (context.session.background ||= new Map()),
+        onExit: args.run_in_background === true && context.session ? backgroundExitNotifier(context.session) : undefined
       });
+    case 'monitor': {
+      const session = context.session;
+      if (!session) throw new Error('monitor is only available in an agent session.');
+      const headless = Boolean(session.headless);
+      if (args.ws) return await startWsMonitor(session, args, { approval: context.approval, autoApprove: Boolean(context.autoApprove), ruleAllowed: Boolean(context.ruleAllowed), headless });
+      return await startCommandMonitor(session, args, {
+        run: runWorkspaceCommand, root, headless,
+        runOptions: {
+          approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env, signal: context.signal,
+          sandbox: context.sandbox, ruleAllowed: Boolean(context.ruleAllowed), backgroundRegistry: session.background ||= new Map()
+        }
+      });
+    }
     case 'install_package': {
       const name = normalizePackageName(args.packageName);
       const plan = planPackageInstall({ packageName: name, ecosystem: args.ecosystem || 'auto', workspaceRoot: root, env: context.env || process.env });
@@ -1854,6 +1870,7 @@ TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
 TOOL_DEFINITIONS.push(WEB_SEARCH_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(DIAGNOSTICS_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(LSP_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(MONITOR_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);
 
 export function toolCount() {

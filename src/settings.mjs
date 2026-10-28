@@ -242,12 +242,14 @@ export async function loadSettings(root, options = {}) {
   // Hooks from enabled Claude Code plugins run with CLAUDE_PLUGIN_ROOT in their environment.
   if (!options.skipPlugins) {
     try {
-      const { loadEnabledPlugins, pluginHooks, pluginLspServers, pluginBinDirs, pluginDefaultSettings } = await import('./claude-plugins.mjs');
+      const { loadEnabledPlugins, pluginHooks, pluginLspServers, pluginBinDirs, pluginDefaultSettings, pluginMonitors } = await import('./claude-plugins.mjs');
       const plugins = await loadEnabledPlugins(root, { env });
       result.plugins = plugins.map((plugin) => ({ id: plugin.id, name: plugin.name, root: plugin.root, origin: plugin.origin }));
       // Plugin LSP servers come after user/project ones, so explicit settings win for an extension.
       for (const [name, spec] of Object.entries(await pluginLspServers(plugins, { env, root }))) if (!result.lspServers[name]) result.lspServers[name] = spec;
       result.pluginBinDirs = await pluginBinDirs(plugins);
+      result.pluginMonitorErrors = [];
+      result.pluginMonitors = await pluginMonitors(plugins, { env, root, errors: result.pluginMonitorErrors });
       const defaults = await pluginDefaultSettings(plugins);
       if (defaults.agent && !result.agent) { result.agent = defaults.agent; result.agentSource = 'plugin:' + defaults.agentPlugin; }
       for (const item of await pluginHooks(plugins, { env, root })) {
