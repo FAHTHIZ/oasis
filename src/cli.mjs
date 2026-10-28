@@ -28,7 +28,7 @@ import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
 import { fstatSync } from 'node:fs';
 
 // Options that shape every agent session created by this process.
-const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null };
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, outputStyle: null };
 const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
@@ -385,7 +385,8 @@ function sessionCreateOptions() {
     permissionMode: SESSION_OPTIONS.permissionMode,
     allowedTools: SESSION_OPTIONS.allowedTools,
     disallowedTools: SESSION_OPTIONS.disallowedTools,
-    appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt
+    appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt,
+    outputStyle: SESSION_OPTIONS.outputStyle || null
   };
 }
 
@@ -394,6 +395,7 @@ function reportSessionNotices(session) {
   if (!settingsWarningShown) {
     settingsWarningShown = true;
     if (session.settingsError) stdout.write('[settings] ' + session.settingsError + '\n');
+    if (session.styleWarning) stdout.write('[settings] ' + session.styleWarning + '\n');
     const ignored = session.settings && session.settings.ignoredUntrusted || [];
     if (ignored.length) stdout.write('[settings] This workspace is not trusted, so allow rules, hooks, and mode/sandbox changes in ' + ignored.map((file) => path.relative(session.root, file)).join(', ') + ' were ignored. Deny/ask rules still apply. Run oasis trust after reviewing them.\n');
     if (session.sandbox && session.sandbox.enabled) stdout.write(session.sandbox.available ? '[sandbox] Commands run inside ' + session.sandbox.kind + (session.sandbox.network ? '' : ' with network disabled') + '.\n' : '[sandbox] Requested but unavailable: ' + session.sandbox.reason + '\n');

@@ -9,6 +9,7 @@ import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
 import { listSessions } from './sessions.mjs';
+import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -29,6 +30,7 @@ export const BUILTIN_COMMANDS = {
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
   mcp: 'Show connected MCP servers and their tools',
+  'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
   todos: 'Show the current todo list',
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
@@ -140,6 +142,16 @@ export async function runBuiltinCommand(name, argument, state) {
       const lines = [];
       for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + hook.command);
       return { output: lines.join('\n') };
+    }
+    case 'output-style': {
+      const styles = await loadOutputStyles(root, { env });
+      const current = session && session.outputStyle || sessionOptions.outputStyle || 'default';
+      if (!argument) return { output: ['Output styles (current: ' + current + '):', ...Object.values(styles).map((style) => (style.name === current ? '* ' : '  ') + style.name.padEnd(14) + ' ' + style.description + ' [' + style.source + ']'), 'Switch with /output-style NAME. Make it the default with "outputStyle" in .oasis/settings.json. Add your own in .oasis/output-styles/NAME.md.'].join('\n') };
+      const style = styles[argument.toLowerCase()];
+      if (!style) return { output: 'Unknown output style ' + argument + '. Run /output-style to list them.' };
+      sessionOptions.outputStyle = style.name;
+      if (session) applyOutputStyle(session, style);
+      return { output: 'Output style set to ' + style.name + '.' };
     }
     case 'mcp': {
       const clients = session && session.mcpClients ? [...session.mcpClients.entries()] : [];

@@ -199,6 +199,15 @@ Oasis reads a Claude Code-style `.mcp.json` at the workspace root, so a team can
 - Project servers start only after you run `oasis trust` for the workspace. A user-level server with the same name wins.
 - `oasis mcp list` and `/mcp` show both user and project servers. Every MCP tool call still asks for approval unless your permission rules allow it.
 
+## Output styles
+
+`/output-style` changes how Oasis talks while it works:
+- `default`: concise engineering answers.
+- `explanatory`: adds short insight notes about the codebase and the choices it makes.
+- `learning`: leaves small `TODO(human)` pieces for you to write, then explains them.
+
+Add your own as Markdown in `.oasis/output-styles/NAME.md` (or `.claude/output-styles/`, `~/.config/oasis/output-styles/`, `~/.claude/output-styles/`). Use front matter with `name` and `description`; the body is the instruction. Set a default with `"outputStyle": "explanatory"` in `.oasis/settings.json` or your user settings.
+
 ## Hooks
 
 Hooks run your own shell commands at points in the agent lifecycle, using Claude Code's format:
