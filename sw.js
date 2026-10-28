@@ -1,5 +1,5 @@
-const CACHE_NAME = 'oasis-shell-v2';
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './assets/oasis-icon.svg'];
+const CACHE_NAME = 'oasis-shell-v3';
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './assets/oasis-icon.svg', './assets/oasis-mark.svg', './assets/oasis-logo.svg', './assets/oasis-readme-banner.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
