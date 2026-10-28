@@ -64,6 +64,7 @@ function printHelp() {
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp remove NAME         Remove a configured server',
+    '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -791,6 +792,11 @@ async function manageMcp(rest, root = process.cwd()) {
       for (const failure of project.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
+    return;
+  }
+  if (action === 'serve') {
+    const { serveMcp } = await import('./mcp-serve.mjs');
+    await serveMcp({ root, args: rest.slice(1), env: process.env });
     return;
   }
   if (action === 'login' || action === 'logout') {
