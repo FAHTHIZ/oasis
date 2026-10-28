@@ -203,3 +203,38 @@ test('custom agents load from .claude/agents and .oasis/agents with Claude Code 
   assert.match(agents.reviewer.prompt, /review code carefully/);
   assert.ok(agents['general-purpose'] && agents.explore && agents.plan);
 });
+
+test('exit_plan_mode asks for approval and leaves plan mode so the turn can implement', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-exitplan-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('p1', 'write_file', { path: 'a.txt', content: 'too early' }),
+    toolCall('p2', 'exit_plan_mode', { plan: '1. Create a.txt' }),
+    toolCall('p3', 'write_file', { path: 'a.txt', content: 'done' }),
+    { content: 'Implemented.' }
+  ]);
+  const session = await createSession({ root, config, settings: settingsWith({}), permissionMode: 'plan' });
+  t.after(() => closeSession(session));
+  const prompts = [];
+  const result = await runAgentTurn(session, 'add a.txt', { approval: async (message, force, meta) => { prompts.push({ message, force, meta }); return true; } });
+  assert.equal(result.text, 'Implemented.');
+  assert.match(requests[0].messages.find((m) => m.role === 'user').content, /Plan mode is active/);
+  const blocked = requests[1].messages.find((m) => m.role === 'tool' && m.tool_call_id === 'p1');
+  assert.match(blocked.content, /Plan mode blocks/);
+  assert.equal(prompts[0].meta.tool, 'exit_plan_mode');
+  assert.equal(prompts[0].force, true);
+  assert.match(prompts[0].message, /1\. Create a\.txt/);
+  assert.equal(session.permissions.mode, 'default');
+  assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'done');
+});
+
+test('declining exit_plan_mode keeps plan mode on', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-exitplan-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [toolCall('p1', 'exit_plan_mode', { plan: 'x' }), { content: 'What should change?' }]);
+  const session = await createSession({ root, config, settings: settingsWith({}), permissionMode: 'plan' });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'plan it', { approval: async () => false });
+  assert.equal(session.permissions.mode, 'plan');
+  assert.match(requests[1].messages.find((m) => m.role === 'tool').content, /did not approve/);
+});

@@ -105,7 +105,10 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!argument) return { output: 'Permission mode: ' + current + '. Options: ' + PERMISSION_MODES.join(', ') + '.' };
       if (!PERMISSION_MODES.includes(argument)) return { output: 'Unknown mode. Options: ' + PERMISSION_MODES.join(', ') + '.' };
       sessionOptions.permissionMode = argument;
-      if (session) session.permissions.setMode(argument);
+      if (session) {
+        if (argument === 'plan' && session.permissions.mode !== 'plan') session.prePlanMode = session.permissions.mode;
+        session.permissions.setMode(argument);
+      }
       return { output: 'Permission mode set to ' + argument + '.' };
     }
     case 'permissions': {

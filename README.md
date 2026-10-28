@@ -178,6 +178,8 @@ Modes: `default`, `acceptEdits`, `plan` (read-only), and `bypassPermissions` (sa
 
 **Trust:** a cloned repository can ship any settings file. Project rules that make Oasis stricter (`deny`, `ask`) always apply. Rules that loosen it (`allow`, hooks, mode, sandbox) apply only after you run `oasis trust` in that workspace. `oasis permissions` shows the effective policy.
 
+
+In `plan` mode (`--permission-mode plan` or `/mode plan`), Oasis researches with read-only tools, then presents its plan and asks whether to start. Say yes and it leaves plan mode and implements the plan in the same turn; say no and it stays in plan mode so you can ask for changes.
 ## Hooks
 
 Hooks run your own shell commands at points in the agent lifecycle, using Claude Code's format:
