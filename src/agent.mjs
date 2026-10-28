@@ -526,6 +526,21 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
   return budget ? Math.max(1024, Math.min(budget, 64000)) : 0;
 }
 
+// OpenAI reasoning models (o-series, gpt-5): the same think keywords map to
+// reasoning effort. Sent only for reasoning models or when configured explicitly,
+// because other chat-completions providers reject the field.
+export function reasoningEffortFor(prompt, config = {}, env = process.env) {
+  if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return '';
+  const valid = ['minimal', 'low', 'medium', 'high'];
+  const configured = String(env.OASIS_REASONING_EFFORT || config.reasoningEffort || '').toLowerCase();
+  const explicit = valid.includes(configured);
+  if (!explicit && !/^(?:[\w.-]+\/)?(?:o\d|gpt-5)/i.test(String(config.model || ''))) return '';
+  const budget = thinkingBudgetFor(prompt, { ...config, thinkingBudget: 0 }, { ...env, OASIS_THINKING_BUDGET: '', MAX_THINKING_TOKENS: '' });
+  const fromPrompt = budget >= 31999 ? 'high' : budget >= 10000 ? 'medium' : budget ? 'low' : '';
+  if (!fromPrompt) return explicit ? configured : '';
+  return explicit && valid.indexOf(configured) > valid.indexOf(fromPrompt) ? configured : fromPrompt;
+}
+
 export function promptCachingEnabled(config = {}, env = process.env) {
   if (['0', 'off', 'false', 'no'].includes(String(env.OASIS_PROMPT_CACHE || '').toLowerCase())) return false;
   return config.promptCache !== false;
@@ -838,6 +853,7 @@ async function requestCompletion(session, options = {}) {
       })), tool_choice: options.forceTool ? { type: 'function', name: options.forceTool } : 'auto' } : {}),
       parallel_tool_calls: false,
       max_output_tokens: 8192,
+      ...(session.reasoningEffort && !options.forceTool ? { reasoning: { effort: session.reasoningEffort } } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // The runtime owns state and replays response items locally, including reasoning items.
       store: false
@@ -847,6 +863,7 @@ async function requestCompletion(session, options = {}) {
     bodyObject = {
       model: config.model,
       messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
+      ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {})
     };
@@ -1598,6 +1615,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
   if (!options.isSubagent) repairInterruptedHistory(session);
   session.thinkingBudget = session.config.protocol === 'anthropic' ? thinkingBudgetFor(request, session.config, options.env || process.env) : 0;
   if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
+  session.reasoningEffort = session.config.protocol === 'anthropic' ? '' : reasoningEffortFor(request, session.config, options.env || process.env);
+  if (session.reasoningEffort && typeof options.onReasoningEffort === 'function') options.onReasoningEffort(session.reasoningEffort);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
   if (Array.isArray(options.images) && options.images.length) userMessage.images = options.images.slice(0, 4).map(({ mediaType, data }) => ({ mediaType, data }));

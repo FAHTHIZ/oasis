@@ -312,6 +312,7 @@ export function createOasisWebServer(options = {}) {
           approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
+          onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
           onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
           onToolStart: ({ name, args, subagent }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100), detail: toolDetail(name, args), ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {}) }),
