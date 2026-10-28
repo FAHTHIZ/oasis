@@ -48,7 +48,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 Recommended order is based on capability impact, not ease of implementation:
 
-1. **Real PTY and terminal lifecycle** — support interactive programs, full terminal sessions, streaming output, resize, stdin, cancellation and process cleanup. The current browser runner is argv-only and not a PTY.
+1. **Finish the real PTY and terminal lifecycle** — the CLI agent now supports `run_command interactive=true` plus `terminal_read/input/resize/interrupt/stop/list` over a real `node-pty` session manager, with bounded output, incremental reads and session-close cleanup. The native package remains optional, and the initial native smoke test is Linux/Node 22 only. Still open: Windows/macOS integration and process-tree cleanup, browser terminal transport and rendered terminal UI, and beginner-first signed OS installers.
 2. **Complete multi-agent coordination** — task claiming/locking, peer-to-peer messages, lifecycle controls, visible agent monitoring and worktree conflict/merge handling on top of the shared dependency-aware board already shipped.
 3. **IDE integrations** — start with a VS Code extension that can review diffs, expose task/session state and hand off to the same runtime.
 4. **Remote and cross-surface workflows** — cloud/remote sessions, mobile steering, Chrome, desktop and chat integrations; this requires an explicit server trust/auth model rather than merely exposing `oasis web`.

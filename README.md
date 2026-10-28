@@ -8,7 +8,7 @@
 <p align="center">An open-source AI coding agent and local-first developer workspace.</p>
 <p align="center">CLI · Browser workspace · Multi-provider tools · MCP · Skills · Subagents</p>
 
-<p align="center"><a href="https://fahthiz.github.io/oasis/">Public homepage ↗</a> · <a href="docs/CURRENT_STATUS.md">Current status</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/CLAUDE_CODE_GAP.md">Claude Code gap analysis</a></p>
+<p align="center"><a href="https://fahthiz.github.io/oasis/">Public homepage ↗</a> · <a href="docs/INSTALL.md">Install OASIS</a> · <a href="docs/CURRENT_STATUS.md">Current status</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/CLAUDE_CODE_GAP.md">Claude Code gap analysis</a></p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
@@ -21,10 +21,10 @@ OASIS is an open-source AI coding agent and local-first developer workspace for 
 
 ## Get started
 
-**Requirements:** Node.js 22 or newer and Git.
+**Requirements:** Node.js 22 or newer. Git is not required by the archive-based install; see [the install guide](docs/INSTALL.md) for native PTY prerequisites and current platform caveats.
 
 ```bash
-npm install -g git+https://github.com/FAHTHIZ/oasis.git#main
+npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.tar.gz
 oasis
 ```
 
@@ -51,7 +51,7 @@ To use the browser interface, run `oasis web` in that project and open the local
 
 | Area | What it does |
 | --- | --- |
-| **Terminal** | A fast interactive editor with history search, Tab completion for commands and `@files`, Shift+Tab permission modes, `!` shell mode, image paste, streaming Markdown and diffs, type-ahead, and Esc to interrupt. Press `?` for shortcuts. |
+| **Terminal** | A fast interactive editor with history search, Tab completion for commands and `@files`, Shift+Tab permission modes, `!` shell mode, image paste, streaming Markdown and diffs, type-ahead, and Esc to interrupt. Interactive agent commands can use persistent PTY sessions with streamed output, input, resize, Ctrl+C and stop controls when the native `node-pty` component is available. Press `?` for shortcuts. |
 | **Workflows** | `/goal` keeps working until a condition is met, `/batch` runs parallel worktree subagents, `/simplify`, `/verify`, `/btw` side questions, `/schedule` in-session cron, and the bundled [Ponytail](https://github.com/DietrichGebert/ponytail) lean mode (`/ponytail`). |
 | **Coding agent** | Multi-step model/tool loops, workspace file operations, command approvals, file snapshots, checkpoints, rewind, sessions saved by default, and USD cost tracking with budget limits. |
 | **Model choice** | OpenAI Responses, Anthropic Messages, compatible endpoints, and supported cloud or local providers such as OpenRouter, Gemini, Ollama, Bedrock, Vertex, and compatible gateways. |
@@ -67,7 +67,7 @@ Some boundaries are intentional and documented: full native compatibility with t
 
 ## Documentation
 
-[**Detailed user guide**](docs/USER_GUIDE.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Compared with Claude Code](docs/CLAUDE_CODE_GAP.md) · [GitHub Action](docs/github-action.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
+[**Detailed user guide**](docs/USER_GUIDE.md) · [Install guide](docs/INSTALL.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Compared with Claude Code](docs/CLAUDE_CODE_GAP.md) · [GitHub Action](docs/github-action.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 
 ## Development
 
