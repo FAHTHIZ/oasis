@@ -64,6 +64,7 @@ function printHelp() {
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp remove NAME         Remove a configured server',
+    '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
     '  oasis skills inspect SOURCE    List skills available from a source',
@@ -792,6 +793,14 @@ async function manageMcp(rest, root = process.cwd()) {
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
     return;
   }
+  if (action === 'login' || action === 'logout') {
+    if (!rest[1]) throw new Error('Usage: oasis mcp ' + action + ' NAME');
+    const commands = await import('./mcp-auth-commands.mjs');
+    stdout.write((action === 'login'
+      ? await commands.mcpLogin(root, rest[1], { env: process.env, print: (text) => stdout.write(text + '\n') })
+      : await commands.mcpLogout(root, rest[1], { env: process.env })) + '\n');
+    return;
+  }
   if (action === 'add') {
     const name = rest[1];
     const separator = rest.indexOf('--');
@@ -1080,6 +1089,10 @@ async function interactive(root, autoApprove, persistence = {}) {
           stdout.write(handled.output + '\n');
           if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
           if (handled.forked) persistence.enabled = true;
+          if (handled.mcpLogin) {
+            try { stdout.write((await (await import('./mcp-auth-commands.mjs')).mcpLogin(root, handled.mcpLogin, { env: process.env, session, print: (text) => stdout.write(text + '\n') })) + '\n'); }
+            catch (error) { stdout.write('[mcp] ' + error.message + '\n'); }
+          }
           if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
           if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
           if (handled.cd) { closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }

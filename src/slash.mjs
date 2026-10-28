@@ -210,6 +210,12 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: 'Added ' + result.accepted.at(-1) + ' for this session.' };
     }
     case 'mcp': {
+      const login = argument.match(/^(login|logout)\s+([A-Za-z0-9_-]+)$/i);
+      if (login && login[1].toLowerCase() === 'login') return { output: 'Starting sign-in for ' + login[2] + '.', mcpLogin: login[2] };
+      if (login) {
+        const { mcpLogout } = await import('./mcp-auth-commands.mjs');
+        return { output: await mcpLogout(root, login[2], { env }) };
+      }
       const clients = session && session.mcpClients ? [...session.mcpClients.entries()] : [];
       const failures = session && session.mcpFailures || [];
       const lines = [];

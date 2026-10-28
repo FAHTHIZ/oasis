@@ -15,6 +15,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
+import { oauthHeader, refreshStoredToken } from './mcp-oauth.mjs';
 
 const PROTOCOL_VERSION = '2025-03-26';
 const MAX_RESPONSE = 4 * 1024 * 1024;
@@ -61,7 +62,15 @@ export async function loadProjectMcpServers(root, options = {}) {
           if (!/^[A-Za-z0-9-]{1,100}$/.test(key)) throw new Error('invalid header name ' + key);
           headers[key] = expandVariables(value, env);
         }
-        servers.push({ name, type: 'http', url: url.toString(), headers, source: 'project' });
+        let oauth = null;
+        if (spec.oauth && typeof spec.oauth === 'object') {
+          oauth = {};
+          if (typeof spec.oauth.clientId === 'string') oauth.clientId = expandVariables(spec.oauth.clientId, env);
+          if (typeof spec.oauth.clientSecret === 'string') oauth.clientSecret = expandVariables(spec.oauth.clientSecret, env);
+          if (Array.isArray(spec.oauth.scopes) || typeof spec.oauth.scopes === 'string') oauth.scopes = spec.oauth.scopes;
+          if (Number.isInteger(spec.oauth.callbackPort) && spec.oauth.callbackPort > 1023 && spec.oauth.callbackPort < 65536) oauth.callbackPort = spec.oauth.callbackPort;
+        }
+        servers.push({ name, type: 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), source: 'project' });
       } else if (type === 'stdio') {
         const extraEnv = {};
         for (const [key, value] of Object.entries(spec.env || {})) {
@@ -123,15 +132,18 @@ async function readSseResponse(response, id) {
 // Minimal Streamable HTTP MCP client with the same surface as McpServerClient.
 export class McpHttpClient {
   constructor(config, options = {}) {
-    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: 'http' };
+    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: 'http', ...(config.oauth ? { oauth: config.oauth } : {}) };
     this.fetch = options.fetch || fetch;
+    this.env = options.env || process.env;
+    this.explicitAuth = Object.keys(this.config.headers).some((key) => key.toLowerCase() === 'authorization');
     this.tools = [];
     this.sessionId = null;
     this.nextId = 1;
     this.closed = false;
   }
 
-  async _post(message, timeoutMs = 30000) {
+  async _post(message, timeoutMs = 30000, retried = false) {
+    const authorization = this.explicitAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -141,6 +153,7 @@ export class McpHttpClient {
         signal: controller.signal,
         headers: {
           ...this.config.headers,
+          ...(authorization ? { authorization } : {}),
           'content-type': 'application/json',
           accept: 'application/json, text/event-stream',
           ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}),
@@ -150,6 +163,15 @@ export class McpHttpClient {
       });
       const session = response.headers.get('mcp-session-id');
       if (session) this.sessionId = session;
+      if (response.status === 401 && authorization && !retried) {
+        const refreshed = await refreshStoredToken(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
+        if (refreshed) { clearTimeout(timer); return await this._post(message, timeoutMs, true); }
+      }
+      if (response.status === 401 && !this.explicitAuth) {
+        const error = new Error('MCP server ' + this.config.name + ' needs sign-in. Run oasis mcp login ' + this.config.name + ' (or /mcp login ' + this.config.name + ' in the terminal).');
+        error.code = 'MCP_AUTH_REQUIRED';
+        throw error;
+      }
       if (response.status === 401 || response.status === 403) throw new Error('MCP server ' + this.config.name + ' rejected the credentials (HTTP ' + response.status + '). Check the headers in .mcp.json.');
       if (!response.ok && response.status !== 202) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + '.');
       if (message.id === undefined || response.status === 202 || response.status === 204) return null;
