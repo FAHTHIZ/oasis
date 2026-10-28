@@ -292,6 +292,7 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 - `grep`: regex search backed by ripgrep (JS fallback) with globs, context lines, and `content` / `files_with_matches` / `count` modes. Secret files are never returned.
 - `multi_edit`: several exact-string edits to one file, applied atomically.
+- `web_search`: searches the web for current docs, error messages, and release notes, then `fetch_url` reads a result. It works without a key through DuckDuckGo. For more dependable results set `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY`, or `OASIS_SEARXNG_URL` (a self-hosted SearXNG). Queries go to that search service; set `OASIS_WEB_SEARCH=off` to remove the tool.
 - Background processes: `run_command` with `run_in_background: true` starts dev servers or watchers; `command_output`, `kill_command`, and `list_background` manage them.
 
 ## Useful commands

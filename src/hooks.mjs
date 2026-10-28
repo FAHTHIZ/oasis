@@ -17,7 +17,7 @@ export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'St
 export const CLAUDE_TOOL_NAMES = {
   run_command: 'Bash', run_shell: 'Bash', edit_file: 'Edit', multi_edit: 'MultiEdit', write_file: 'Write',
   read_file: 'Read', glob_files: 'Glob', grep: 'Grep', search_files: 'Grep', list_files: 'LS',
-  fetch_url: 'WebFetch', task: 'Task', todo_write: 'TodoWrite', delete_file: 'Delete',
+  fetch_url: 'WebFetch', web_search: 'WebSearch', task: 'Task', todo_write: 'TodoWrite', delete_file: 'Delete',
   command_output: 'BashOutput', kill_command: 'KillShell'
 };
 

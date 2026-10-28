@@ -1302,7 +1302,7 @@ async function main() {
   if (continueSession && !resumeId) {
     const saved = await listSessions(workspace);
     persistence.resumeId = saved[0] && saved[0].id || null;
-    if (!persistence.resumeId) stdout.write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
+    if (!persistence.resumeId) (headless.enabled ? stderr : stdout).write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
   }
 
   if (headless.enabled) return await printMode(workspace, headless, args, autoApprove, persistence);
