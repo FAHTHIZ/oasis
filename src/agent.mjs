@@ -1872,6 +1872,21 @@ async function advanceAutoDispatch(session, record = null) {
 }
 
 async function dispatchReadyTasks(session, args = {}, context = {}, options = {}) {
+  const registry = agentRegistry(session);
+  if (registry.dispatchInFlight) {
+    throw new Error('A shared task dispatch is already in progress in this session. Wait for it to finish before starting another wave.');
+  }
+  // Set the guard before the first await so concurrent tool calls cannot select
+  // the same ready tasks while integration checks are in flight.
+  registry.dispatchInFlight = true;
+  try {
+    return await dispatchReadyTasksUnlocked(session, args, context, options);
+  } finally {
+    registry.dispatchInFlight = false;
+  }
+}
+
+async function dispatchReadyTasksUnlocked(session, args = {}, context = {}, options = {}) {
   if (options.isSubagent || (session.agentId && session.agentId !== 'main')) {
     throw new Error('Only the main coordinator can dispatch a shared task wave.');
   }

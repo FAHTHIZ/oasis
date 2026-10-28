@@ -404,6 +404,7 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
 
   const first = await runAgentTurn(session, 'Create the shared dependency tasks and start wave one.', { autoApprove: true, env, approval: async () => true });
   assert.equal(first.text, 'dispatch wave finished');
+  assert.equal(session.agentTasks.dispatchInFlight, false, 'dispatch guard is released after a successful wave');
   await until(() => {
     const tasks = session.sharedTasks.tasks;
     return ['task_1', 'task_3'].every((id) => tasks.find((task) => task.id === id)?.status === 'completed');
@@ -423,6 +424,7 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
 
   const second = await runAgentTurn(session, 'dispatch the next wave', { autoApprove: true, env, approval: async () => true });
   assert.equal(second.text, 'dispatch wave finished');
+  assert.equal(session.agentTasks.dispatchInFlight, false, 'dispatch guard is released before the next wave');
   await until(() => session.sharedTasks.tasks.find((task) => task.id === 'task_2')?.status === 'completed');
   assert.equal(session.agentTasks.agents.size, 3);
   assert.equal(session.agentTasks.agents.get('agent_3').sharedTaskId, 'task_2');
