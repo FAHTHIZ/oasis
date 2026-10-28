@@ -75,6 +75,7 @@ function printHelp() {
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis ide [install|package]   Connect VS Code/Cursor/Windsurf: selection context, diff review, diagnostics',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
+    '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
@@ -746,6 +747,18 @@ async function managePermissions(root, rest) {
   stdout.write('Usage: oasis permissions [list] | oasis permissions add allow|ask|deny "RULE" [--scope user|project|local]\n');
 }
 
+async function importCommand(root, rest, autoApprove) {
+  const { planImport, describePlan, applyImport, parseImportArgs } = await import('./importers.mjs');
+  const { sources, dryRun, yes } = parseImportArgs(rest);
+  const plan = await planImport(root, { sources, env: process.env });
+  stdout.write(describePlan(plan) + '\n');
+  const pending = plan.items.filter((item) => item.action !== 'skip');
+  if (!pending.length || dryRun) { if (dryRun && pending.length) stdout.write('Dry run: nothing was written.\n'); return; }
+  if (!yes && !(await approve('Import these ' + pending.length + ' item' + (pending.length === 1 ? '' : 's') + '?', true, autoApprove))) { stdout.write('Import cancelled.\n'); return; }
+  const done = await applyImport(plan);
+  stdout.write('Imported ' + done.length + ' item' + (done.length === 1 ? '' : 's') + '. New MCP servers, commands and rules apply to new sessions.\n');
+}
+
 async function manageTrust(root, rest) {
   const revoke = rest.includes('--revoke');
   const id = await setWorkspaceTrust(root, !revoke);
@@ -1024,6 +1037,13 @@ async function manageMcp(rest, root = process.cwd()) {
     }
     const { loadClaudeCodeMcpServers } = await import('./mcp-project.mjs');
     const claude = await loadClaudeCodeMcpServers(root, { env: process.env }).catch((error) => ({ local: [], user: [], failures: [{ name: '~/.claude.json', error: error.message }] }));
+    const { loadUserMcpJson } = await import('./mcp-project.mjs');
+    const userJson = await loadUserMcpJson({ env: process.env }).catch(() => ({ servers: [], failures: [] }));
+    if (userJson.servers.length || userJson.failures.length) {
+      stdout.write('User servers from ' + userJson.file + ':\n');
+      for (const server of userJson.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const failure of userJson.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
+    }
     if (claude.local.length || claude.user.length || claude.failures.length) {
       stdout.write('Claude Code servers from ' + (claude.file || '~/.claude.json') + ':\n');
       for (const server of [...claude.local, ...claude.user]) stdout.write('  ' + server.name + ' — ' + (server.source === 'claude-local' ? 'local' : 'user') + ' scope, ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
@@ -2268,6 +2288,7 @@ async function main() {
   if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
   if (command === 'permissions') return await managePermissions(workspace, rest);
   if (command === 'trust') return await manageTrust(workspace, rest);
+  if (command === 'import') return await importCommand(workspace, rest, autoApprove);
   if (command === 'backups') return await showBackups(workspace);
   if (command === 'restore') return await restoreOne(workspace, rest[0]);
   if (command === 'install') {

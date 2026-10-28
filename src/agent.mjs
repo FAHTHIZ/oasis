@@ -370,10 +370,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   // Servers added with Claude Code's `claude mcp add` (local scope beats project, user scope comes last).
   if (!bare && !strictMcpConfig) {
     try {
-      const { loadClaudeCodeMcpServers } = await import('./mcp-project.mjs');
+      const { loadClaudeCodeMcpServers, loadUserMcpJson } = await import('./mcp-project.mjs');
       const claude = await loadClaudeCodeMcpServers(root, { env });
-      project.servers = [...claude.local, ...project.servers, ...claude.user];
-      project.failures.push(...claude.failures);
+      const userJson = await loadUserMcpJson({ env });
+      project.servers = [...claude.local, ...project.servers, ...userJson.servers, ...claude.user];
+      project.failures.push(...claude.failures, ...userJson.failures.map((f) => ({ ...f, name: 'mcp.json:' + f.name })));
     } catch (error) { project.failures.push({ name: '~/.claude.json', error: error.message }); }
   }
   // Server -> client requests (elicitation, roots) reach the session through this host.
