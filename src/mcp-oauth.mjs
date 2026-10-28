@@ -12,6 +12,8 @@ import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+const OAUTH_METADATA_TIMEOUT_MS = 10 * 1000;
+const MAX_OAUTH_METADATA_BYTES = 256 * 1024;
 
 function authFile(env = process.env) {
   return path.join(getConfigDirectory(env), 'mcp-auth.json');
@@ -72,11 +74,37 @@ export function parseWwwAuthenticate(header) {
 }
 
 async function getJson(fetchImpl, url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(url, { headers: { accept: 'application/json' }, redirect: 'follow' });
-    if (!response.ok) return null;
-    return await response.json();
+    const response = await fetchImpl(url, {
+      headers: { accept: 'application/json' },
+      redirect: 'manual',
+      signal: controller.signal
+    });
+    // Never follow a metadata redirect: it could move discovery to an unreviewed host.
+    if (!response.ok || (response.status >= 300 && response.status < 400) || !response.body) return null;
+    const declaredLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_OAUTH_METADATA_BYTES) {
+      await response.body.cancel().catch(() => {});
+      return null;
+    }
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_OAUTH_METADATA_BYTES) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return JSON.parse(Buffer.concat(chunks, total).toString('utf8'));
   } catch { return null; }
+  finally { clearTimeout(timer); }
 }
 
 function wellKnownUrls(base, suffix) {
