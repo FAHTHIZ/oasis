@@ -131,5 +131,9 @@
       ],
       "category": "Development"
     }
+  },
+  "author": {
+    "name": "OASIS Contributors",
+    "email": "noreply@github.com"
   }
 }
