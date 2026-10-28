@@ -10,30 +10,15 @@ Paste this into **Repository → About → Description**:
 
 This is intentionally product-specific: it says what OASIS is, identifies the CLI and browser workspace, and names the integration surface without making performance or maturity claims.
 
-## GitHub topics
+## GitHub Topics
 
-Add the following topics to **Repository → About → Topics**. They are limited to features that the project currently describes or supports; do not add unrelated or aspirational topics just to chase search traffic.
+The screenshot-style blue chips under the repository's About section are **GitHub Topics**. Add these 20 relevant topics in **Repository → About → Topics**:
 
 ```text
-ai-coding-agent coding-agent ai-agent coding-assistant developer-tools developer-workspace cli terminal-agent llm multi-provider mcp model-context-protocol agentic-workflows local-first open-source javascript nodejs automation subagents ollama
+ai-coding-agent coding-agent ai-agents developer-tools developer-workspace cli terminal-agent llm mcp model-context-protocol agent-skills agentic-workflows local-first open-source javascript nodejs automation subagents ollama multi-provider
 ```
 
-GitHub allows up to 20 topics per repository. The list above uses 20. If the project changes, remove topics that are no longer accurate before adding new ones.
-
-## Search-facing identity
-
-- **Repository name:** `FAHTHIZ/oasis`
-- **Product name:** OASIS
-- **Short tagline:** Code. Automate. Flourish.
-- **Descriptive phrase:** Open-source AI coding agent and local-first developer workspace
-- **License:** MIT
-- **Install command:**
-
-  ```bash
-  npm install -g git+https://github.com/FAHTHIZ/oasis.git#main
-  ```
-
-Use the descriptive phrase in the README and future landing page. Keep the tagline as brand voice rather than relying on it to explain the product on its own.
+Keep the tags focused on capabilities that exist today. OASIS supports agent skills, MCP, multiple providers, local-provider options including Ollama, a CLI, automation workflows, and bounded subagents. It is not a Claude Code plugin, so do not copy Claude-specific tags from other repositories.
 
 ## Homepage field and GitHub Pages
 
@@ -46,11 +31,36 @@ Use the descriptive phrase in the README and future landing page. Keep the tagli
 
 Leave the homepage blank until that is done. Do not publish the workspace dashboard as a landing page by accident.
 
+## Search-facing identity
+
+- **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)
+- **Product name:** OASIS
+- **Short tagline:** Code. Automate. Flourish.
+- **Descriptive phrase:** Open-source AI coding agent and local-first developer workspace
+- **License:** MIT
+- **Install command:**
+
+  ```bash
+  npm install -g git+https://github.com/FAHTHIZ/oasis.git#main
+  ```
+
+Use the descriptive phrase in the README and any future landing page. Keep the tagline as brand voice rather than relying on it to explain the product by itself.
+
+## README badges and proof
+
+Keep the badges at the top factual and maintainable:
+
+- Quality-check badge: reflects the actual GitHub Actions workflow.
+- MIT license badge: reflects `LICENSE`.
+- Node.js badge: reflects the documented Node.js 22+ runtime requirement.
+
+Only add npm version or release badges after a package is published or a GitHub release exists. Do not add fabricated trending awards, performance percentages, benchmark results, usage counts, or compatibility claims. Add a real screenshot or short demo when one is available.
+
 ## What helps discovery—and what does not
 
 - A clear description and relevant topics help people classify and find the project on GitHub.
-- A focused README, working installation instructions, visible capabilities and limitations, licensing, and a repeatable quality check help a visitor decide whether to try it.
-- A real demo, screenshots, tagged releases and an easy upgrade path give visitors evidence that they can evaluate.
+- A focused README, working installation instructions, visible capabilities and limitations, licensing, and repeatable quality checks help a visitor decide whether to try it.
+- A real demo, tagged releases and an easy upgrade path give visitors evidence that they can evaluate.
 - Search engines decide when to crawl pages and what snippets to display. Metadata and topics are useful foundations, not a promise of ranking, traffic, stars, or instant indexing.
 - Avoid keyword stuffing, fake badges, unverified download counts, and unsupported maturity claims.
 
@@ -65,6 +75,6 @@ Leave the homepage blank until that is done. Do not publish the workspace dashbo
 
 ## Reference examples
 
-Well-established coding-agent repositories use a compact description that immediately says what the tool is, and a small, relevant set of topics. For example, the [OpenCode repository](https://github.com/anomalyco/opencode) describes itself as an open-source coding agent, while [Cline](https://github.com/cline/cline) describes its agent across SDK, IDE extension, and CLI. OASIS should follow the same clarity-first pattern without copying another project's identity.
+Well-established coding-agent repositories use a compact description that immediately says what the tool is, and a focused set of relevant topics. See [Ponytail](https://github.com/DietrichGebert/ponytail) for the repository-header pattern from your screenshot, plus [OpenCode](https://github.com/anomalyco/opencode) and [Cline](https://github.com/cline/cline) for concise product descriptions. OASIS should follow the same clarity-first pattern without copying another project's identity or claiming awards or benchmark results it has not earned.
 
-*Metadata note: updating files in this repository does not automatically update GitHub's separate About description, topics, or homepage settings. Those must be changed in the repository's About panel.*
+*Metadata note: changing files in this repository does not automatically change GitHub's separate About description, topics, or homepage. Those must be changed in the repository settings.*
