@@ -211,7 +211,7 @@ Oasis reads layered settings in the same format as Claude Code, so an existing `
 | `.oasis/settings.local.json`, `.claude/settings.local.json` | Project (personal) |
 | `managed-settings.json` (`/etc/claude-code/`, `/Library/Application Support/ClaudeCode/`, `C:\Program Files\ClaudeCode\`, or the `/etc/oasis/` equivalents; `OASIS_MANAGED_SETTINGS` overrides the path) | Organization policy, loads last and wins |
 
-The `env` key sets environment variables for every session (`{ "env": { "ANTHROPIC_MODEL": "...", "NODE_ENV": "test" } }`); it is applied before the provider loads, and an untrusted project cannot set it. `permissions.disableBypassPermissionsMode: "disable"` blocks `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and `/mode bypassPermissions`.
+The `env` key sets environment variables for every session (`{ "env": { "ANTHROPIC_MODEL": "...", "NODE_ENV": "test" } }`); it is applied before the provider loads, and an untrusted project cannot set it. `"apiKeyHelper": "/path/to/get-key.sh"` runs a command whose output is the model API key, as in Claude Code: it is used when no key is set, cached for 5 minutes (`CLAUDE_CODE_API_KEY_HELPER_TTL_MS`), and re-run when the provider rejects the key; project files can set it only after `oasis trust`. `permissions.disableBypassPermissionsMode: "disable"` blocks `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and `/mode bypassPermissions`.
 
 ~~~json
 {

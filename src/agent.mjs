@@ -1151,6 +1151,14 @@ async function requestCompletion(session, options = {}) {
 }
 
 async function requestCompletionTraced(session, options = {}) {
+  if (!session.config || !session.config.apiKeyHelper || options.refreshApiKey) return requestCompletionTracedOnce(session, options);
+  try { return await requestCompletionTracedOnce(session, options); } catch (error) {
+    if (stopFailureType(error) !== 'authentication_failed') throw error;
+    return requestCompletionTracedOnce(session, { ...options, refreshApiKey: true });
+  }
+}
+
+async function requestCompletionTracedOnce(session, options = {}) {
   const tel = getTelemetry(options.env || session.providerEnv || process.env);
   if (!tel) return requestCompletionRaw(session, options);
   const model = session.config && session.config.model || '';
@@ -1185,11 +1193,16 @@ async function requestCompletionRaw(session, options = {}) {
   const nativeResponses = config.protocol === 'openai-responses';
   const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS);
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
+  let apiKey = config.apiKey;
+  if (!apiKey && config.apiKeyHelper) {
+    const { apiKeyFromHelper } = await import('./api-key-helper.mjs');
+    apiKey = await apiKeyFromHelper(config.apiKeyHelper, { env: providerEnv, cwd: session.root, refresh: Boolean(options.refreshApiKey) });
+  }
   if (nativeAnthropic) {
-    if (config.apiKey && !cloudAnthropic) headers['x-api-key'] = config.apiKey;
+    if (apiKey && !cloudAnthropic) headers['x-api-key'] = apiKey;
     if (!cloudAnthropic) headers['anthropic-version'] = '2023-06-01';
-  } else if (config.apiKey) {
-    headers.authorization = 'Bearer ' + config.apiKey;
+  } else if (apiKey) {
+    headers.authorization = 'Bearer ' + apiKey;
   }
 
   let endpoint;
@@ -1299,7 +1312,7 @@ async function requestCompletionRaw(session, options = {}) {
         if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
         return requestCompletionRaw(session, { ...options, outputCapRetried: true });
       }
-      throw new Error(formatApiError(status, errorBody, config.protocol));
+      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol)), { status });
     }
     if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
     const contentType = response.headers.get('content-type') || '';

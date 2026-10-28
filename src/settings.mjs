@@ -210,12 +210,14 @@ export async function loadSettings(root, options = {}) {
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || settings.env;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || settings.env || settings.apiKeyHelper;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
     // "disableBypassPermissionsMode": "disable" only tightens; honor it from any trusted scope.
     if (permissions.disableBypassPermissionsMode === 'disable') result.permissions.disableBypassPermissionsMode = true;
+    // "apiKeyHelper": a command that prints the model API key (runs a command, so trusted scopes only).
+    if (typeof settings.apiKeyHelper === 'string' && settings.apiKeyHelper.trim()) result.apiKeyHelper = settings.apiKeyHelper.trim().slice(0, 4000);
     // "env": variables applied to every session (Claude Code settings key).
     if (settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)) {
       result.env ||= {};

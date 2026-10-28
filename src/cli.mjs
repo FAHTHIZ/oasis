@@ -1579,6 +1579,7 @@ async function applySettingsPolicy(root, autoApprove) {
   const settings = await loadSettings(root).catch(() => null);
   if (!settings) return;
   for (const [key, value] of Object.entries(settings.env || {})) process.env[key] = value;
+  if (settings.apiKeyHelper && !process.env.OASIS_API_KEY_HELPER) process.env.OASIS_API_KEY_HELPER = settings.apiKeyHelper;
   if (settings.permissions && settings.permissions.disableBypassPermissionsMode) {
     if (SESSION_OPTIONS.permissionMode === 'bypassPermissions') throw new Error('bypassPermissions mode is disabled by settings (permissions.disableBypassPermissionsMode).');
     SESSION_OPTIONS.disableBypass = true;

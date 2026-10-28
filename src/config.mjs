@@ -112,9 +112,11 @@ export async function loadConfig(options = {}) {
     (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '');
   // Never send a stored/remote credential to a different endpoint or a loopback server by accident.
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
+  // apiKeyHelper (settings or OASIS_API_KEY_HELPER) supplies the key at request time when none is set.
+  const apiKeyHelper = !apiKey && !cloud && !localEndpoint && env.OASIS_API_KEY_HELPER ? String(env.OASIS_API_KEY_HELPER) : '';
   return {
-    ...saved, protocol, baseURL, model, apiKey, configPath,
-    configured: Boolean(apiKey) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)),
+    ...saved, protocol, baseURL, model, apiKey, configPath, ...(apiKeyHelper ? { apiKeyHelper } : {}),
+    configured: Boolean(apiKey) || Boolean(apiKeyHelper) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)),
     maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, 60, 1, 400),
     maxToolCalls: clampInteger(env.OASIS_MAX_TOOL_CALLS || saved.maxToolCalls, 300, 1, 2000),
     maxTokens: clampInteger(env.OASIS_MAX_TOKENS || saved.maxTokens, 2000000, 10000, 20000000),
