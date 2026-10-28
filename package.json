@@ -1,6 +1,6 @@
 {
   "name": "oasis-oss",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Open-source AI coding agent and local-first developer workspace with a CLI, browser UI, multi-provider LLMs, MCP integrations, skills, hooks, memory, and subagents.",
   "type": "module",
   "main": "./src/sdk.mjs",
@@ -32,11 +32,17 @@
     "SECURITY.md",
     "CONTRIBUTING.md",
     "docs/",
-    "evals/"
+    "evals/",
+    "desktop/"
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node --test && node src/cli.mjs eval --validate"
+    "check": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node --test && node src/cli.mjs eval --validate",
+    "postinstall": "node scripts/vendor-terminal.mjs",
+    "prepack": "node scripts/vendor-terminal.mjs",
+    "desktop:dev": "electron desktop/main.mjs",
+    "desktop:dir": "electron-builder --dir --publish never",
+    "desktop:dist": "electron-builder --publish never"
   },
   "repository": {
     "type": "git",
@@ -63,5 +69,67 @@
     "subagents",
     "ollama",
     "multi-provider"
-  ]
+  ],
+  "dependencies": {
+    "@xterm/xterm": "6.0.0",
+    "@xterm/addon-fit": "0.11.0"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.4.0"
+  },
+  "build": {
+    "appId": "org.oasis.oss",
+    "productName": "OASIS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "desktop/**/*",
+      "index.html",
+      "manifest.webmanifest",
+      "sw.js",
+      "assets/**/*",
+      "skills/**/*",
+      "plugins/**/*",
+      "docs/**/*",
+      "package.json",
+      "LICENSE",
+      "SECURITY.md",
+      "CONTRIBUTING.md"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.mjs"
+    },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "asar": true,
+    "npmRebuild": true,
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OASIS"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
+  }
 }

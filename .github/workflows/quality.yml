@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: 22
       - name: Install optional native PTY dependency
-        run: npm install --no-audit --no-fund
+        run: npm install --omit=dev --no-audit --no-fund
       - name: Exercise a real interactive process
         run: node --test test/pty-sessions.test.mjs
 

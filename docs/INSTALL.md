@@ -1,42 +1,41 @@
 # Installing OASIS
 
-OASIS is currently shipped as a CLI and local browser workspace. A signed desktop installer that installs everything without opening a terminal is **not released yet**; we are not presenting a terminal command as a one-click graphical installer.
+## Desktop app — no terminal required
 
-## Quick install (Node.js 22 or newer)
+The desktop app is packaged by CI for Windows, macOS, and Linux. Open the [latest OASIS release](https://github.com/FAHTHIZ/oasis/releases/latest) and download the installer for your computer. It includes its application runtime, opens a project-folder picker, starts the OASIS backend on localhost, and connects the workspace automatically. You do not need to install Node.js or Git.
 
-Open a terminal in your operating system, paste this single command, and press Enter:
+| Operating system | Download | First launch |
+| --- | --- | --- |
+| Windows 10/11, x64 | OASIS installer (.exe) | Double-click the installer. It installs for your user and adds Start Menu/Desktop shortcuts. |
+| macOS | OASIS disk image (.dmg) | Open the disk image and drag OASIS into Applications. |
+| Linux, x64 | OASIS .deb or AppImage | Open the .deb with your software installer, or run the AppImage from your desktop environment. |
+
+**Release signing note:** builds are currently unsigned because signing certificates are not configured. Windows may show SmartScreen; macOS may require you to explicitly open an unverified application. Verify that the download came from the official OASIS GitHub release before proceeding.
+
+On first launch, choose the folder for your project. Then open model settings in the workspace to configure a hosted provider, or use a compatible local model service. OASIS does not include an AI model or an API subscription.
+
+## Command-line installation (optional)
+
+For users who prefer the CLI, Node.js 22 or newer is required. Git is not required for the archive-based install.
 
 ```sh
 npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.tar.gz
-```
-
-Then start OASIS:
-
-```sh
 oasis
 ```
 
-This archive-based install does not require Git. The first launch guides you through model-provider setup. OASIS does not include an AI model or paid API subscription.
+## Interactive terminal sessions (PTY)
 
-## Real terminal sessions (PTY)
+Interactive sessions use Microsoft's `node-pty` native component. The desktop build recompiles native dependencies for Electron; the command-line install keeps the component optional so a native build problem cannot prevent the normal CLI from starting.
 
-Interactive sessions use Microsoft's `node-pty` native component. It is an optional dependency so OASIS's normal CLI continues to run if native compilation is unavailable. Standard non-interactive commands still work in that case, but `run_command` with `interactive=true` will report that the PTY component could not be loaded.
+For manual CLI installation, native build prerequisites may be required:
 
-The upstream component supports Linux, macOS and Windows, but its build may require native tools:
-
-- **Debian/Ubuntu:** `sudo apt install python3 make g++` (and a supported Node.js 22+ installation).
+- **Debian/Ubuntu:** `sudo apt install python3 make g++`.
 - **macOS:** install Apple's Command Line Tools with `xcode-select --install`.
 - **Windows:** install Visual Studio Build Tools with the C++ desktop build tools and Windows SDK, plus Python.
-- **Android/Termux:** the native PTY component is not a guaranteed supported install target yet; the standard argv command runner remains the fallback.
+- **Android/Termux:** the desktop app is unavailable; the optional native PTY component is not a guaranteed supported install target yet.
 
-After the native prerequisites are available, rebuild it with:
-
-```sh
-npm rebuild node-pty
-```
-
-If OASIS was installed globally, run the rebuild from its global package directory or reinstall OASIS after installing the prerequisites. We are working toward signed OS-specific installers so new users will not need to handle Node.js, compilers, or terminal commands themselves.
+To retry a native CLI build after installing the prerequisites, run `npm rebuild node-pty`.
 
 ## If installation fails
 
-Run `oasis doctor` to check the Node.js runtime and configuration. For PTY-specific build problems, include the complete `npm rebuild node-pty` error when reporting an issue. Never paste API keys or other secrets into public issues.
+For the desktop app, report the exact operating system and installer filename. For manual CLI installation, run `oasis doctor` and include relevant error output. Never paste API keys or other secrets into public issues.

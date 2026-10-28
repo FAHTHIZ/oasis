@@ -16,12 +16,12 @@ const required = [
   '<!doctype html>', '<html lang="en">', '<meta name="description"',
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
   'id="features"', 'id="providers"', 'id="safety"', 'id="docs"',
-  'npm install -g git+https://github.com/FAHTHIZ/oasis.git#main',
+  'https://github.com/FAHTHIZ/oasis/releases/latest', 'no terminal required',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'MIT licensed'
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
 assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the Pages URL.');
-assert.ok(html.includes('Node.js 22+'), 'Homepage must state the runtime requirement.');
+assert.ok(html.includes('No Node.js or Git installation required for the desktop app.'), 'Homepage must state that desktop setup needs no runtime installation.');
 assert.ok(!html.includes('Just for fun'), 'Homepage must not contain the old repository description.');
 assert.ok(!html.includes('award-winning') && !html.includes('100% success'), 'Homepage must not make unsupported credibility claims.');
 assert.ok(robots.includes('User-agent: *') && robots.includes('Allow: /'));

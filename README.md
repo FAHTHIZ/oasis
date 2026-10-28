@@ -63,7 +63,7 @@ To use the browser interface, run `oasis web` in that project and open the local
 
 OASIS uses workspace-bound file tools, secret-file exclusions, snapshots, and approval gates to reduce risk. Commands normally run with your operating-system permissions; the optional OS sandbox is disabled by default and currently targets Linux and macOS. These safeguards are not a guarantee that untrusted code is safe—review operations and use an isolated workspace for unfamiliar projects.
 
-Some boundaries are intentional and documented: full native compatibility with third-party coding-agent plugin systems and a general remote plugin marketplace are not implemented; Windows sandbox/container isolation is not available; the browser command runner is not a full interactive terminal; and the browser dashboard’s projects/tasks/notes do not sync with the CLI workspace. The browser’s GitHub connection currently uses the host’s GitHub CLI login.
+Some boundaries are intentional and documented: full native compatibility with third-party coding-agent plugin systems and a general remote plugin marketplace are not implemented; Windows sandbox/container isolation is not available; the browser now has a PTY-backed xterm.js terminal but cross-platform process cleanup still needs verification; and the browser dashboard’s projects/tasks/notes do not sync with the CLI workspace. The browser’s GitHub connection currently uses the host’s GitHub CLI login.
 
 ## Documentation
 

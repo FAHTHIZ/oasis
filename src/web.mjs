@@ -56,7 +56,10 @@ const STATIC_FILES = new Map([
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
-  ['/assets/oasis-icon.svg', ['assets/oasis-icon.svg', 'image/svg+xml']]
+  ['/assets/oasis-icon.svg', ['assets/oasis-icon.svg', 'image/svg+xml']],
+  ['/assets/vendor/xterm.js', ['assets/vendor/xterm.js', 'text/javascript; charset=utf-8']],
+  ['/assets/vendor/xterm.css', ['assets/vendor/xterm.css', 'text/css; charset=utf-8']],
+  ['/assets/vendor/xterm-addon-fit.js', ['assets/vendor/xterm-addon-fit.js', 'text/javascript; charset=utf-8']]
 ]);
 
 function json(res, status, value) {
