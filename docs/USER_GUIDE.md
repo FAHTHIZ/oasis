@@ -395,7 +395,7 @@ Run `oasis` in a project to open the interactive prompt. Press `?` on an empty l
 
 `/vim` turns on vim editing for the prompt (`/vim off` turns it off). The choice is saved as `"editorMode": "vim"` in your user settings, and Claude Code's `editorMode` in `~/.claude.json` is honored too. The input starts in INSERT mode. Esc switches to NORMAL, and the current mode shows under the prompt. Enter sends from either mode.
 
-`/theme` lists and switches color themes, Claude Code style: `dark` (default), `light`, `dark-daltonized`, `light-daltonized` (color-blind friendly), `dark-ansi`, `light-ansi` (16-color terminals) and `auto`, which picks light or dark from `COLORFGBG` (override with `OASIS_TERMINAL_BACKGROUND=light|dark`). The choice is saved as `"theme"` in your user settings; `OASIS_THEME` overrides it and Claude Code's `~/.claude.json` `theme` is honored. Custom themes are the same JSON files Claude Code reads from `~/.claude/themes/` (or `<OASIS config>/themes/`), selected as `custom:<slug>`:
+`/theme` lists and switches color themes, Claude Code style: `dark` (default), `light`, `dark-daltonized`, `light-daltonized` (color-blind friendly), `dark-ansi`, `light-ansi` (16-color terminals) and `auto`, which picks light or dark from `COLORFGBG` (override with `OASIS_TERMINAL_BACKGROUND=light|dark`). The choice is saved as `"theme"` in your user settings; `OASIS_THEME` overrides it and Claude Code's `~/.claude.json` `theme` is honored. Custom themes are the same JSON files Claude Code reads from `~/.claude/themes/` (or `<OASIS config>/themes/`), selected as `custom:<slug>`. Saving the file while Oasis runs reloads the theme in place (plugin themes too; `OASIS_DISABLE_THEME_RELOAD=1` turns this off):
 
 More Claude Code commands:
 

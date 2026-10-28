@@ -8,7 +8,7 @@
 // Colors: #rrggbb, #rgb, rgb(r,g,b), ansi256(n) or ansi:<name>; invalid values
 // and unknown tokens are ignored so a typo cannot break rendering.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, watch } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { ANSI } from './markdown.mjs';
@@ -227,4 +227,38 @@ export function themePreview(theme) {
     '    ' + b('diffRemoved') + f('error') + '- const answer = 41;' + '\x1b[39m\x1b[49m',
     '    ' + f('keyword') + 'return' + '\x1b[39m ' + f('code') + '`code`' + '\x1b[39m ' + f('link') + 'link' + '\x1b[39m ' + f('inactive') + '// hint' + '\x1b[39m'
   ].join('\n');
+}
+
+/**
+ * Hot reload (Claude Code reloads custom themes when the file changes): watches the theme
+ * directories and plugin theme folders, and re-applies the active custom or plugin theme
+ * after an edit. Built-in themes never change, so nothing is watched for them.
+ * Returns a function that stops watching.
+ */
+export function watchThemes({ env = process.env, plugins = [], onReload = null, debounceMs = 150 } = {}) {
+  const watchers = [];
+  let timer = null;
+  const reload = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const id = active.id;
+      if (!id.startsWith('custom:') && !id.startsWith('plugin:')) return;
+      const next = resolveTheme(id, { env, plugins });
+      if (next.id !== id) return; // the file was removed or broken; keep the current colors
+      if (JSON.stringify(next.colors) === JSON.stringify(active.colors) && next.name === active.name) return;
+      applyTheme(next);
+      if (onReload) onReload(next);
+    }, debounceMs);
+    if (timer.unref) timer.unref();
+  };
+  const targets = new Set(themeDirs(env));
+  for (const plugin of plugins || []) targets.add(path.join(plugin.root, 'themes'));
+  for (const dir of targets) {
+    try {
+      const watcher = watch(dir, { persistent: false }, reload);
+      watcher.on('error', () => {});
+      watchers.push(watcher);
+    } catch {}
+  }
+  return () => { clearTimeout(timer); for (const watcher of watchers) { try { watcher.close(); } catch {} } };
 }
