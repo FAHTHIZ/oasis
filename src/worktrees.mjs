@@ -42,6 +42,12 @@ export async function createWorktree(root, label, options = {}) {
   if (path.resolve(top) !== path.resolve(root)) throw new Error('isolation "worktree" works only from the repository root (' + top + ').');
   try { await git(root, ['rev-parse', '--verify', 'HEAD'], env); }
   catch { throw new Error('isolation "worktree" needs at least one commit to branch from.'); }
+  // Cloud coding tasks need a reproducible base. Never silently omit dirty user
+  // changes when branching from HEAD; callers can explicitly commit or stash first.
+  if (options.requireClean) {
+    const changes = await git(root, ['status', '--porcelain', '--untracked-files=all'], env);
+    if (changes) throw new Error('Isolated task mode requires a clean Git workspace. Commit or stash your existing changes first; Oasis did not create a worktree.');
+  }
   const commonDir = path.resolve(root, await git(root, ['rev-parse', '--git-common-dir'], env));
   await excludeWorktreeDir(commonDir);
   const name = worktreeSlug(label) + '-' + randomBytes(3).toString('hex');
