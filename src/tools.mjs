@@ -16,6 +16,7 @@ import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
 import { wrapCommand } from './sandbox.mjs';
+import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES, executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
 
@@ -1481,6 +1482,7 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'list_files':
       return await listWorkspaceFiles(root, { path: args.path || '.', includeHidden: Boolean(args.includeHidden) });
     case 'read_file':
+      if (isNotebookPath(args.path) && args.offset === undefined && args.limit === undefined) return await readNotebook(root, args.path);
       return await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit });
     case 'glob_files':
       return await globWorkspaceFiles(root, args.pattern, args.limit);

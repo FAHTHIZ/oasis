@@ -266,7 +266,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     ...(environment ? ['Environment:\n' + environment] : []),
     'Workspace paths are relative to that root. Secret files and paths outside the workspace are intentionally inaccessible through file tools.',
     'You may make and revise source files in the workspace. Prefer edit_file with exact old_string/new_string patches for existing files, use glob_files to locate files, and read_file with offset/limit to inspect large files in sections. Existing files are snapshotted before edits/overwrites; deleted files require interactive approval and are snapshotted.',
-    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. Use web_search for current library documentation, unfamiliar errors, or recent releases, then fetch_url to read the best result; prefer official documentation. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
+    'Tool usage: use grep (regex, ripgrep-backed) to search file contents and glob_files to find files by name instead of running grep/find through run_command. Use multi_edit for several changes to one file. For Jupyter notebooks, read_file shows cells with ids and notebook_edit changes them; never rewrite .ipynb JSON by hand. Use web_search for current library documentation, unfamiliar errors, or recent releases, then fetch_url to read the best result; prefer official documentation. When several independent read-only lookups are needed, request them together in one response so they run in parallel.',
     'Use the task tool to delegate self-contained work to a subagent: broad codebase exploration (subagent_type "explore"), independent research, or a separate implementation slice. Launch several task calls in one response to run them in parallel when the pieces are independent. Subagents start with no memory of this conversation, so give each a complete, specific prompt and say exactly what to report back. Parallel subagents share the workspace, so do not give two of them edits to the same files.',
     'For dev servers, watchers, and other long-running processes, use run_command with run_in_background: true, then check command_output and stop them with kill_command when finished. Never start a server in the foreground and wait for it to exit.',
     'Code quality: follow the existing style, structure, libraries, and naming of the codebase. Check that a library is already used before relying on it. Prefer editing existing files to creating new ones, never create documentation files unless asked, and keep comments for non-obvious reasoning. Never commit, push, or publish unless the user asks.',
@@ -1725,7 +1725,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
         }
       }
       if (result && result.path && (
-        (name === 'edit_file' || name === 'multi_edit') && result.changed === true ||
+        (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
         name === 'write_file' && typeof result.writtenBytes === 'number' ||
         name === 'delete_file' && result.deleted === true
       )) {
