@@ -1,4 +1,5 @@
 import { startPluginMonitorsFor } from './monitors.mjs';
+import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
@@ -323,7 +324,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [] }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
@@ -365,8 +366,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   const dynamic = mcpToolDefinitions(mcp.clients);
   let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(root, projectContext, skillDescriptions, await describeEnvironment(root, env));
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
+  const channelEntries = parseChannelEntries(channels);
+  if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
+    channels: channelEntries,
     root,
     additionalDirectories: extraDirs.accepted,
     rejectedDirectories: extraDirs.rejected,
@@ -481,6 +485,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     tel.event('oasis.session_start', { model: config && config.model || '', provider: config && config.protocol || '', resumed: Boolean(restore) });
   }
   mcpHost.session = session;
+  flushPendingChannels(mcpHost);
   session.hookOptionsFor = () => hookOptions(session, env);
   // FileChanged / ConfigChange hooks, and live settings reload in interactive sessions.
   const liveReload = Boolean(watchFiles) && !settings && !bare;

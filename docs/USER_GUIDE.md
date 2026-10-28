@@ -267,6 +267,17 @@ An `Elicitation` hook gets `mcp_server_name`, `message`, `mode` and `requested_s
 
 Servers can also call `roots/list`, which returns the workspace and any `--add-dir` directories as `file://` roots. When a server sends `notifications/tools/list_changed`, OASIS re-reads its tools mid-session and the model sees the new list on its next request.
 
+### Channels: messages pushed into your session
+
+Like Claude Code's channels, an MCP server can push chat messages, webhooks or alerts into a running interactive session. Start OASIS with `--channels server:NAME` (a server from `.mcp.json`, `--mcp-config` or user config) or `--channels plugin:telegram@claude-plugins-official` (every channel server in that plugin). `--dangerously-load-development-channels LIST` does the same after you confirm a local-development warning. Channels are ignored with `-p`.
+
+- The server declares `capabilities.experimental["claude/channel"] = {}` and sends `notifications/claude/channel` with `{ content, meta }`. The agent sees `<channel source="NAME" key="value">content</channel>`; `meta` keys that aren't letters, digits or `_` are dropped. If you're idle at the prompt, OASIS starts a turn so the agent reacts right away; otherwise the message joins the current turn at its next step.
+- Replies use the server's ordinary MCP tools (for example `reply` with a `chat_id`).
+- Permission relay: if the server also declares `"claude/channel/permission": {}`, each approval prompt is sent to it as `notifications/claude/channel/permission_request` (`request_id` of five letters a–z without `l`, `tool_name`, a sanitized `description` and `input_preview` with known token formats masked). The first answer wins: the terminal prompt, or `notifications/claude/channel/permission` with `{ request_id, behavior: "allow" | "deny" }`. Unknown or reused ids are ignored.
+- Messages from servers you didn't opt in are dropped silently, and `"channelsEnabled": false` in any settings file turns channels off. Anyone who can reach a channel can put text in front of the agent, so only enable channels that check who the sender is.
+
+Every connected MCP server's `instructions` (from its `initialize` reply) are now added to the system prompt under "MCP server instructions", as Claude Code does.
+
 ## Output styles
 
 `/output-style` changes how Oasis talks while it works:

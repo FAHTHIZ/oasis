@@ -6,6 +6,7 @@
 //                                        then ElicitationResult hooks; declined when nobody can answer
 //   notifications/tools/list_changed  -> re-fetches tools/list and refreshes the session's tools
 //   notifications/message             -> kept in the server's log tail
+//   notifications/claude/channel[/permission] -> channels (see channels.mjs)
 //
 // A client gets `host` (a mutable object) at construction; createSession sets host.session.
 import { pathToFileURL } from 'node:url';
@@ -49,6 +50,16 @@ export async function handleServerRequest(client, message) {
 
 /** Handles one server -> client notification. */
 export async function handleServerNotification(client, message) {
+  if (message.method === 'notifications/claude/channel') {
+    const { deliverChannelNotification } = await import('./channels.mjs');
+    deliverChannelNotification(client, message.params);
+    return;
+  }
+  if (message.method === 'notifications/claude/channel/permission') {
+    const { handleChannelPermissionVerdict } = await import('./channels.mjs');
+    handleChannelPermissionVerdict(client, message.params);
+    return;
+  }
   if (message.method === 'notifications/tools/list_changed') {
     if (typeof client.refreshTools === 'function') {
       try {
