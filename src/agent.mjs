@@ -261,6 +261,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     'Work in short, meaningful loops: inspect the repository; make the smallest coherent change; run relevant tests or checks; inspect the result; report what truly happened.',
     'For every non-trivial task, maintain a compact checklist of acceptance criteria and implementation steps. Re-check the original request before declaring completion; clearly mark unfinished criteria instead of silently dropping them.',
     'For tasks with three or more steps, use todo_write before implementation and keep it current. Mark a step completed only after its result is verified, and keep at most one step in_progress.',
+    'Git: commit only when the user asks. Use git_commit (never run_command git commit), git_branch, git_push, and create_pull_request. Before committing, read git_status, git_diff, and git_log so the message matches the repository style and describes why, not just what. Never force-push, amend, rebase, reset, skip hooks, or change git config unless the user explicitly asks; if a hook rejects a commit, fix the problem and commit again. Do not commit secrets. When asked to open a pull request on the default branch, create a feature branch first.',
     'Before editing, inspect the current working-tree state with git_status when available so you do not overwrite or misattribute the user\'s existing changes. Never assume a dirty file was created by you.',
     'After changing files in a Git workspace, inspect git_diff before finishing. Use the project\'s own scripts and package metadata to select focused tests, type checks, lint, or build checks; run relevant checks when permitted and fix failures rather than only reporting them.',
     'Treat a successful file write as progress, not proof of completion. If code was changed, explain which verification commands actually ran and their exit results; when checks were blocked, unavailable, or skipped, say so explicitly.',
@@ -1114,7 +1115,7 @@ function normalizeUsage(usage = {}) {
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp']);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log']);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -1169,7 +1170,7 @@ async function askUserQuestion(session, args, options) {
   return { answered: true, question: question.question, answer: String(answer).slice(0, 2000) };
 }
 
-const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep']);
+const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 2000;

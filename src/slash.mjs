@@ -39,6 +39,8 @@ export const BUILTIN_COMMANDS = {
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for bugs (/review [PR number | git ref])',
+  commit: 'Commit the current changes with a well-written message (/commit [hint])',
+  pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
   diagnostics: 'Run type checkers and linters, then fix errors (/diagnostics [paths])',
   'security-review': 'Security review of pending changes (/security-review [PR number | git ref])',
   export: 'Save this conversation as Markdown (/export [file])',
@@ -109,6 +111,12 @@ export async function runBuiltinCommand(name, argument, state) {
       const items = await listWorktrees(root, { env });
       if (!items.length) return { output: 'No subagent worktrees. Ask for parallel work with isolation "worktree" to get one branch per agent.' };
       return { output: ['Subagent worktrees:', ...items.map((item) => '  ' + (item.branch || '(detached)').padEnd(36) + ' ' + item.relative), 'Review: git diff HEAD...BRANCH   Merge: git merge BRANCH   Remove: git worktree remove PATH && git branch -D BRANCH'].join('\n') };
+    }
+    case 'commit': {
+      return { prompt: 'Commit my current changes. First read git_status, git_diff, and git_log (limit 10) to understand the changes and the message style. Leave out files that should not be committed (build output, secrets, unrelated scratch files) and tell me about them. Then call git_commit with a concise message: a summary line under 72 characters, then a short body explaining why.' + (argument ? ' Extra guidance for the message: ' + argument : '') + ' If a hook rejects the commit, fix the problem and try again; do not skip hooks.' };
+    }
+    case 'pr': {
+      return { prompt: 'Open a pull request for my work' + (argument ? ' into ' + argument : '') + '. Steps: 1) read git_status, git_diff, and git_log; 2) if I am on the default branch, create a descriptive feature branch with git_branch; 3) if there are uncommitted changes that belong in this PR, commit them with git_commit; 4) call create_pull_request' + (argument ? ' with base ' + JSON.stringify(argument) : '') + ' with a short title and a body containing "## Summary" (bullet points) and "## Test plan" (what was run or should be checked). Reply with the PR URL.' };
     }
     case 'diagnostics': {
       const targets = argument ? argument.split(/\s+/).filter(Boolean) : [];
