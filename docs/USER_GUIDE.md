@@ -132,6 +132,25 @@ The initial Oasis plugin catalog is intentionally small and reviewed. Its bundle
 
 The `main` installation contains both the terminal agent and the connected browser workspace. Opening `index.html` directly still provides only the static projects/tasks/notes dashboard; local agent execution requires the `oasis web` runtime to be running.
 
+## VS Code, Cursor, and Windsurf
+
+OASIS connects to VS Code (and forks) the way Claude Code does:
+
+```bash
+oasis ide install      # builds the extension and installs it with code / cursor / windsurf
+oasis ide package      # or just build oasis-vscode.vsix ("Extensions: Install from VSIX...")
+oasis ide              # show whether an IDE bridge is available for this folder
+```
+
+Reload the editor, then run `oasis` in its integrated terminal or press Ctrl/Cmd+Esc ("OASIS: Run in Terminal"). It connects automatically; from an outside terminal use `/ide`. Once connected:
+
+- **Selection context**: the code you have selected (or the file you are in) is attached to each prompt, shown as `[ide] Selected 12 lines from src/app.ts`.
+- **Diff review**: edit approvals for `edit_file`, `multi_edit`, and `write_file` open in VS Code's diff view; choose **Accept** or **Reject** in the editor. Auto-approved edits (`acceptEdits`, allow rules, `--yes`) are not interrupted.
+- **Diagnostics**: the agent can call `ide_get_diagnostics` to read the editor's language-server errors after editing, and `ide_open_file` to show you code at a line.
+- **File references**: Ctrl/Cmd+Alt+K inserts `@path#L10-20` for the current selection into the OASIS terminal.
+
+The bridge listens only on 127.0.0.1, requires a random bearer token stored in a 0600 lock file under the OASIS config directory (`ide/<port>.lock`), and rejects browser origins. Set `OASIS_IDE=off` to never connect.
+
 ## Optional OpenHands delegation
 
 Oasis can delegate a bounded task to an already-running OpenHands Agent Server. This is an optional bridge, not an OpenHands installation wizard or a replacement for Oasis's own runtime. Set the connection details in the environment used to start Oasis:

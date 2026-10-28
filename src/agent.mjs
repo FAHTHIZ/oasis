@@ -1361,7 +1361,7 @@ function normalizeUsage(usage = {}) {
   return out;
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', ...SESSION_READ_ONLY_TOOLS]);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -2364,6 +2364,12 @@ async function executeOneCallRaw(session, call, context, options) {
     }
     if (name === 'ask_user_question') {
       result = await askUserQuestion(session, args, options);
+      if (options.onToolResult) options.onToolResult({ name, result, call });
+      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
+    }
+    if (name === 'ide_get_diagnostics' || name === 'ide_open_file') {
+      const { runIdeTool } = await import('./ide.mjs');
+      result = await runIdeTool(session, name, args);
       if (options.onToolResult) options.onToolResult({ name, result, call });
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
