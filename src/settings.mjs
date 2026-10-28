@@ -134,6 +134,7 @@ export async function loadSettings(root, options = {}) {
     sandbox: { enabled: false, network: false, autoAllowCommands: true },
     shell: { enabled: false },
     model: null,
+    outputStyle: null,
     trusted: false,
     sources: [],
     ignoredUntrusted: []
@@ -144,6 +145,7 @@ export async function loadSettings(root, options = {}) {
     const permissions = settings.permissions && typeof settings.permissions === 'object' ? settings.permissions : {};
     result.permissions.deny.push(...stringList(permissions.deny));
     result.permissions.ask.push(...stringList(permissions.ask));
+    if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (!trusted) {
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell;
       if (loosening) result.ignoredUntrusted.push(file);

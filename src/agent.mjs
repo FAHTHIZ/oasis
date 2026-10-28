@@ -1,3 +1,4 @@
+import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import path from 'node:path';
@@ -290,7 +291,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
   ].join('\n\n');
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '' }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null }) {
   const [projectContext, skillDescriptions] = await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root)]);
   let loadedSettings = settings;
   let settingsError = null;
@@ -344,6 +345,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     if (started.additionalContext.length) systemText += '\n\nSession start context from hooks:\n' + started.additionalContext.join('\n').slice(0, 10000);
     session.hookMessages.push(...started.messages);
   }
+  const styleName = outputStyle || loadedSettings.outputStyle;
+  if (styleName && styleName !== 'default') {
+    const styles = await loadOutputStyles(root, { env }).catch(() => BUILTIN_STYLES);
+    if (styles[styleName]) systemText = systemPromptWithStyle(systemText, styles[styleName]);
+    else session.styleWarning = 'Output style "' + styleName + '" was not found; using default.';
+  }
+  session.outputStyle = styleName && !session.styleWarning ? styleName : 'default';
   const systemMessage = { role: 'system', content: systemText };
   session.messages = [systemMessage];
   if (restore && Array.isArray(restore.messages)) {
