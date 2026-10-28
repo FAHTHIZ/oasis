@@ -3,6 +3,11 @@ import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescri
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients } from './mcp.mjs';
 import { microcompact, contextWindowSize } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
+import { loadSettings } from './settings.mjs';
+import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
+import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
+import { resolveSandbox } from './sandbox.mjs';
+import { SHELL_TOOL_DEFINITION, killAllBackground } from './power-tools.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -237,31 +242,68 @@ function systemPrompt(root, projectContext, skillDescriptions = '') {
   ].join('\n\n');
 }
 
-export async function createSession({ root, config, restore = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '' }) {
   const [projectContext, skillDescriptions] = await Promise.all([loadProjectInstructions(root), loadSkillDescriptions(root)]);
+  let loadedSettings = settings;
+  let settingsError = null;
+  if (!loadedSettings) {
+    try { loadedSettings = await loadSettings(root, { env }); }
+    catch (error) { settingsError = error.message; loadedSettings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } }; }
+  }
+  const permissions = new PermissionPolicy(loadedSettings, { mode: permissionMode || undefined });
+  for (const rule of allowedTools || []) permissions.addRule('allow', rule);
+  for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
+  const sandbox = resolveSandbox(loadedSettings, root);
   const mcp = await connectMcpServers({ root });
   const dynamic = mcpToolDefinitions(mcp.clients);
-  const systemMessage = { role: 'system', content: systemPrompt(root, projectContext, skillDescriptions) };
-  let messages = [systemMessage];
-  if (restore && Array.isArray(restore.messages)) {
-    messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
-  }
-  return {
+  let systemText = systemPrompt(root, projectContext, skillDescriptions);
+  if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
+  const session = {
     root,
     config,
     sessionId: restore && restore.id || null,
-    messages,
+    messages: [],
     mcpClients: mcp.clients,
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
     toolDefinitions: TOOL_DEFINITIONS.concat(dynamic.definitions),
     toolCallsThisSession: 0,
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
-    baseSystemPrompt: systemMessage.content
+    settings: loadedSettings,
+    settingsError,
+    permissions,
+    sandbox,
+    hooks: loadedSettings.hooks || {},
+    background: new Map(),
+    hookMessages: []
   };
+  const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
+  if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
+  if (sandbox.enabled) {
+    systemText += '\n\n' + (sandbox.available
+      ? 'Commands run inside an OS sandbox (' + sandbox.kind + '): only the workspace is writable' + (sandbox.network ? '' : ' and network access is blocked') + '. If a command fails with a read-only or network error, explain that the sandbox blocked it instead of retrying the same way.'
+      : 'The user asked for an OS sandbox but it is unavailable: ' + sandbox.reason + ' Commands still require approval.');
+  }
+  if (shellEnabled) systemText += '\n\nrun_shell is available for command lines that genuinely need pipes, &&, redirects, or globbing. Prefer run_command for single programs.';
+  if (hasHooks(session.hooks, 'SessionStart')) {
+    const started = await runHooks('SessionStart', { session_id: session.sessionId || 'new', source: restore ? 'resume' : 'startup' }, { hooks: session.hooks, root, env });
+    if (started.additionalContext.length) systemText += '\n\nSession start context from hooks:\n' + started.additionalContext.join('\n').slice(0, 10000);
+    session.hookMessages.push(...started.messages);
+  }
+  const systemMessage = { role: 'system', content: systemText };
+  session.messages = [systemMessage];
+  if (restore && Array.isArray(restore.messages)) {
+    session.messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
+  }
+  session.baseSystemPrompt = systemMessage.content;
+  return session;
 }
 
 export function closeSession(session) {
+  if (session && session.background) killAllBackground(session.background);
+  if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
+    runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, { hooks: session.hooks, root: session.root }).catch(() => {});
+  }
   if (session && session.mcpClients) closeMcpClients(session.mcpClients);
   if (session && session.mcpClients) session.mcpClients.clear();
 }
@@ -1130,29 +1172,102 @@ async function runSpecialistReview(parentSession, args, context, options, budget
   };
 }
 
+function permissionMode(session, options) {
+  if (options.planOnly) return 'plan';
+  return (session.permissions && session.permissions.mode) || 'default';
+}
+
+// Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
+async function authorizeCall(session, name, args, context, options) {
+  const policy = session.permissions;
+  const mode = permissionMode(session, options);
+  const verdict = policy ? policy.evaluate(name, args) : { decision: 'default' };
+  if (verdict.decision === 'deny') return { deniedReason: 'Denied by permission rule ' + verdict.rule + '.' };
+  let decision = verdict.decision;
+  let hookContext = [];
+  if (hasHooks(session.hooks, 'PreToolUse')) {
+    const pre = await runHooks('PreToolUse', {
+      session_id: session.sessionId || 'unsaved',
+      tool_name: CLAUDE_TOOL_NAMES[name] || name,
+      oasis_tool_name: name,
+      tool_name_oasis: name,
+      tool_input: args
+    }, { hooks: session.hooks, root: session.root, env: context.env });
+    session.hookMessages.push(...pre.messages);
+    if (pre.blocked || pre.permissionDecision === 'deny') return { deniedReason: 'Blocked by PreToolUse hook: ' + (pre.reason || 'no reason given') };
+    if (pre.updatedInput) args = { ...args, ...pre.updatedInput };
+    if (pre.permissionDecision === 'ask') decision = 'ask';
+    else if (pre.permissionDecision === 'allow' && decision !== 'ask') decision = 'allow';
+    hookContext = pre.additionalContext;
+  }
+  const overlay = Object.create(context);
+  overlay.permissionMode = mode;
+  if (mode === 'bypassPermissions') overlay.autoApprove = true;
+  const baseApproval = context.approval;
+  // Approval wrapper: an answer of "always" remembers a reusable rule for this session.
+  overlay.approval = async (message, force = false) => {
+    if (!baseApproval) return false;
+    const suggestion = suggestRule(name, args);
+    const answer = await baseApproval(message, force, { tool: name, suggestion });
+    if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
+    return Boolean(answer);
+  };
+  if (decision === 'ask') {
+    const ok = await overlay.approval('Permission rule ' + (verdict.rule || 'from a PreToolUse hook') + ' requires approval for ' + name + ':\n  ' + JSON.stringify(args).slice(0, 1500), true);
+    if (!ok) return { deniedReason: 'The user did not approve this ' + name + ' call.' };
+    overlay.ruleAllowed = true;
+    overlay.autoApprove = true;
+  } else if (decision === 'allow') {
+    overlay.ruleAllowed = true;
+    overlay.autoApprove = true;
+  }
+  return { context: overlay, args, hookContext };
+}
+
 async function executeOneCall(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
-  if (options.onToolStart) options.onToolStart({ name, call });
+  if (options.onToolStart) options.onToolStart({ name, call, args: safeToolArguments(call.function && call.function.arguments) });
   try {
     if (options.signal && options.signal.aborted) {
       const cancelled = new Error('Task cancelled before the tool started.');
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    if (options.planOnly && !READ_ONLY_TOOLS.has(name)) {
+    if ((options.planOnly || permissionMode(session, options) === 'plan') && !READ_ONLY_TOOLS.has(name)) {
       throw new Error('Plan mode blocks write, command, install, delete, and external tool calls.');
     }
-    const args = safeToolArguments(call.function && call.function.arguments);
+    let args = safeToolArguments(call.function && call.function.arguments);
+    const auth = await authorizeCall(session, name, args, context, options);
+    if (auth.deniedReason) throw new Error(auth.deniedReason);
+    args = auth.args;
+    const callContext = auth.context;
     if (name === 'run_specialist_review') {
       const budget = context.specialistBudget || (context.specialistBudget = { used: 0 });
       if (budget.used >= MAX_SPECIALIST_REVIEWS_PER_TASK) throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
       budget.used += 1;
-      result = await runSpecialistReview(session, args, context, options, budget);
+      result = await runSpecialistReview(session, args, callContext, options, budget);
+    } else if (name === 'task' && typeof options.runSubagent === 'function') {
+      result = await options.runSubagent(session, args, callContext, options);
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
-      result = await callMappedMcpTool(session, name, args, context);
+      result = await callMappedMcpTool(session, name, args, callContext);
     } else {
-      result = await executeTool(name, args, context);
+      result = await executeTool(name, args, callContext);
+    }
+    if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
+    if (hasHooks(session.hooks, 'PostToolUse')) {
+      const post = await runHooks('PostToolUse', {
+        session_id: session.sessionId || 'unsaved',
+        tool_name: CLAUDE_TOOL_NAMES[name] || name,
+        oasis_tool_name: name,
+        tool_name_oasis: name,
+        tool_input: args,
+        tool_response: result
+      }, { hooks: session.hooks, root: session.root, env: context.env });
+      session.hookMessages.push(...post.messages);
+      if ((post.blocked || post.additionalContext.length) && result && typeof result === 'object') {
+        result.hookFeedback = [post.reason, ...post.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
+      }
     }
   } catch (error) {
     result = { error: error.message || String(error) };
@@ -1196,8 +1311,18 @@ export async function runAgentTurn(session, prompt, options = {}) {
   throwIfCancelled(options.signal);
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
+  let userContent = request;
+  if (session.hooks && hasHooks(session.hooks, 'UserPromptSubmit')) {
+    const submitted = await runHooks('UserPromptSubmit', { session_id: session.sessionId || 'unsaved', prompt: request }, { hooks: session.hooks, root: session.root, env: options.env });
+    session.hookMessages.push(...submitted.messages);
+    if (submitted.blocked) {
+      return { text: 'Prompt blocked by a UserPromptSubmit hook: ' + submitted.reason, toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false, blockedByHook: true };
+    }
+    if (submitted.additionalContext.length) userContent += '\n\n<hook-context>\n' + submitted.additionalContext.join('\n').slice(0, 10000) + '\n</hook-context>';
+  }
   const activeRequestIndex = session.messages.length;
-  session.messages.push({ role: 'user', content: request });
+  session.messages.push({ role: 'user', content: userContent });
+  let stopHookContinuations = 0;
   const maxSteps = Math.max(1, Math.min(30, Number.parseInt(options.maxSteps || session.config.maxSteps, 10) || 12));
   const tokenBudget = Math.max(10000, Math.min(1000000, Number.parseInt(options.maxTokens || session.config.maxTokens, 10) || 200000));
   const maxToolCalls = Math.max(1, Math.min(MAX_TURN_TOOL_CALLS, Number.parseInt(options.maxToolCalls, 10) || MAX_TURN_TOOL_CALLS));
@@ -1278,6 +1403,17 @@ export async function runAgentTurn(session, prompt, options = {}) {
           ].join('\n')
         });
         continue;
+      }
+      const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';
+      if (session.hooks && hasHooks(session.hooks, stopEvent) && stopHookContinuations < 3) {
+        const stop = await runHooks(stopEvent, { session_id: session.sessionId || 'unsaved', stop_hook_active: stopHookContinuations > 0, last_assistant_message: text.slice(0, 4000) }, { hooks: session.hooks, root: session.root, env: options.env });
+        session.hookMessages.push(...stop.messages);
+        if (stop.blocked && !stop.stopContinuation) {
+          stopHookContinuations++;
+          if (text && options.onText) options.onText(text);
+          session.messages.push({ role: 'user', content: 'A ' + stopEvent + ' hook asked you to continue before finishing:\n' + stop.reason.slice(0, 4000) });
+          continue;
+        }
       }
       if (text && options.onText) options.onText(text);
       pruneHistory(session);

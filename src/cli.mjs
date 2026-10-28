@@ -17,6 +17,12 @@ import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
+import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, userSettingsPath } from './settings.mjs';
+import { detectSandbox } from './sandbox.mjs';
+
+// Options that shape every agent session created by this process.
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '' };
+let settingsWarningShown = false;
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL_URL = 'git+https://github.com/gtxnrg-ship-it/Oasis.git#main';
@@ -56,6 +62,9 @@ function printHelp() {
     '  oasis extensions update URL --scope project  Update a verified install and keep rollback history',
     '  oasis extensions rollback NAME --commit SHA --scope project  Restore a verified extension backup',
     '  oasis extensions remove NAME --scope project Remove an unmodified import',
+    '  oasis permissions [list]      Show permission rules, hooks, trust, and sandbox status',
+    '  oasis permissions add allow "run_command(npm test:*)" [--scope user|project|local]',
+    '  oasis trust [--revoke]        Trust this workspace so its allow rules and hooks apply',
     '  oasis backups                 List snapshots made before file changes',
     '  oasis restore BACKUP_ID       Restore one file snapshot after confirmation',
     '  oasis eval --validate         Validate evaluation tasks and reference patches',
@@ -67,13 +76,17 @@ function printHelp() {
     '  --workspace PATH              Choose the workspace root',
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
+    '  --permission-mode MODE        default | acceptEdits | plan | bypassPermissions',
+    '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
+    '  --disallowedTools RULES       Extra deny rules for this run',
+    '  --append-system-prompt TEXT   Add instructions to the system prompt',
     '  --help, -h                    Show this help',
     '  --version                     Show the installed version',
     '',
     'Setup: npm install -g ' + INSTALL_URL,
     'Then:  oasis setup',
     'MCP:   oasis mcp add docs -- npx -y @modelcontextprotocol/server-filesystem /path/to/share',
-    'Safety: command execution is not a sandbox. Review approvals; --yes increases risk.',
+    'Safety: enable { "sandbox": { "enabled": true } } in settings for OS isolation. Review approvals; --yes increases risk.',
     ''
   ].join('\n'));
 }
@@ -302,16 +315,74 @@ async function runInteractiveCommand(command, args) {
   });
 }
 
-async function approve(prompt, forceInteractive = false, autoApprove = false) {
+async function approve(prompt, forceInteractive = false, autoApprove = false, meta = {}) {
   if (autoApprove && !forceInteractive) return true;
   try {
     stdout.write('\nPermission request\n' + prompt + '\n');
-    const answer = (await askLine('Proceed? [y/N] ')).trim().toLowerCase();
+    const offerAlways = meta && meta.suggestion && !forceInteractive;
+    const answer = (await askLine(offerAlways ? 'Proceed? [y]es / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Proceed? [y/N] ')).trim().toLowerCase();
+    if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
     return ['y', 'yes'].includes(answer);
   } catch {
     stdout.write('No interactive approval was available; action denied.\n');
     return false;
   }
+}
+
+function sessionCreateOptions() {
+  return {
+    permissionMode: SESSION_OPTIONS.permissionMode,
+    allowedTools: SESSION_OPTIONS.allowedTools,
+    disallowedTools: SESSION_OPTIONS.disallowedTools,
+    appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt
+  };
+}
+
+function reportSessionNotices(session) {
+  if (!session) return;
+  if (!settingsWarningShown) {
+    settingsWarningShown = true;
+    if (session.settingsError) stdout.write('[settings] ' + session.settingsError + '\n');
+    const ignored = session.settings && session.settings.ignoredUntrusted || [];
+    if (ignored.length) stdout.write('[settings] This workspace is not trusted, so allow rules, hooks, and mode/sandbox changes in ' + ignored.map((file) => path.relative(session.root, file)).join(', ') + ' were ignored. Deny/ask rules still apply. Run oasis trust after reviewing them.\n');
+    if (session.sandbox && session.sandbox.enabled) stdout.write(session.sandbox.available ? '[sandbox] Commands run inside ' + session.sandbox.kind + (session.sandbox.network ? '' : ' with network disabled') + '.\n' : '[sandbox] Requested but unavailable: ' + session.sandbox.reason + '\n');
+  }
+  if (Array.isArray(session.hookMessages) && session.hookMessages.length) {
+    for (const message of session.hookMessages.splice(0)) stdout.write('[hook] ' + String(message).slice(0, 800) + '\n');
+  }
+}
+
+async function managePermissions(root, rest) {
+  const sub = rest[0] || 'list';
+  if (sub === 'list') {
+    const settings = await loadSettings(root);
+    stdout.write('Permission mode: ' + settings.permissions.defaultMode + (SESSION_OPTIONS.permissionMode ? ' (overridden: ' + SESSION_OPTIONS.permissionMode + ')' : '') + '\n');
+    stdout.write('Workspace trusted: ' + (settings.trusted ? 'yes' : 'no') + '\n');
+    for (const kind of ['allow', 'ask', 'deny']) stdout.write(kind + ': ' + (settings.permissions[kind].length ? settings.permissions[kind].join(', ') : '(none)') + '\n');
+    const hookEvents = Object.entries(settings.hooks).map(([event, groups]) => event + ' x' + groups.reduce((n, g) => n + g.hooks.length, 0));
+    stdout.write('hooks: ' + (hookEvents.length ? hookEvents.join(', ') : '(none)') + '\n');
+    const probe = detectSandbox();
+    stdout.write('sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'disabled') + ' (' + (probe.available ? probe.kind + ' available' : probe.reason) + ')\n');
+    stdout.write('Settings files: ' + (settings.sources.map((item) => item.file).join(', ') || userSettingsPath() + ' (not created yet)') + '\n');
+    if (settings.ignoredUntrusted.length) stdout.write('Ignored until trusted: ' + settings.ignoredUntrusted.join(', ') + '\n');
+    return;
+  }
+  if (sub === 'add') {
+    const kind = rest[1];
+    const rule = rest[2];
+    const scopeIndex = rest.indexOf('--scope');
+    const scope = scopeIndex >= 0 ? rest[scopeIndex + 1] : 'local';
+    const file = await addPermissionRule(scope, kind, rule, root);
+    stdout.write('Added ' + kind + ' rule ' + rule + ' to ' + file + '\n');
+    return;
+  }
+  stdout.write('Usage: oasis permissions [list] | oasis permissions add allow|ask|deny "RULE" [--scope user|project|local]\n');
+}
+
+async function manageTrust(root, rest) {
+  const revoke = rest.includes('--revoke');
+  const id = await setWorkspaceTrust(root, !revoke);
+  stdout.write((revoke ? 'Revoked trust for ' : 'Trusted ') + id + '. ' + (revoke ? 'Project allow rules and hooks are ignored again.' : 'Project allow rules, hooks, and sandbox/mode settings now apply. Review .oasis/ and .claude/ settings files before trusting a repository you did not write.') + '\n');
 }
 
 async function selfUpdate(autoApprove = false) {
@@ -649,12 +720,13 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       restored = await loadSession(root, persistence.resumeId);
       stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
     }
-    session = await createSession({ root, config, restore: restored });
+    session = await createSession({ root, config, restore: restored, ...sessionCreateOptions() });
   } else if (path.resolve(session.root) !== path.resolve(root)) {
     closeSession(session);
-    session = await createSession({ root, config });
+    session = await createSession({ root, config, ...sessionCreateOptions() });
   }
   session.config = config;
+  reportSessionNotices(session);
   if (session.mcpFailures && session.mcpFailures.length) {
     for (const failure of session.mcpFailures) stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + '\n');
     session.mcpFailures = [];
@@ -663,7 +735,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     const runner = modeOptions.planOnly ? runAgentPlan : runAgentTurn;
     const result = await runner(session, prompt, {
       autoApprove,
-      approval: (message, forceInteractive = false) => approve(message, forceInteractive, autoApprove),
+      approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       onToolStart: ({ name }) => stdout.write('\n[tool] ' + name + '\n'),
       onToolResult: ({ name, result }) => {
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
@@ -680,6 +752,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   } catch (error) {
     stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
   }
+  reportSessionNotices(session);
   if (persistence.enabled) {
     try {
       const saved = await saveSession(session);
@@ -1030,6 +1103,20 @@ async function main() {
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; continue; }
+    if (arg === '--permission-mode') {
+      const mode = rawArgs[++i];
+      if (!PERMISSION_MODES.includes(mode)) throw new Error('--permission-mode must be one of ' + PERMISSION_MODES.join(', ') + '.');
+      SESSION_OPTIONS.permissionMode = mode;
+      if (mode === 'bypassPermissions') autoApprove = true;
+      continue;
+    }
+    if (arg === '--allowedTools' || arg === '--allowed-tools' || arg === '--disallowedTools' || arg === '--disallowed-tools') {
+      if (!rawArgs[i + 1]) throw new Error(arg + ' requires a comma- or space-separated rule list.');
+      const rules = rawArgs[++i].split(/,(?![^(]*\))/).map((rule) => rule.trim()).filter(Boolean);
+      (arg.toLowerCase().includes('disallowed') ? SESSION_OPTIONS.disallowedTools : SESSION_OPTIONS.allowedTools).push(...rules);
+      continue;
+    }
+    if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = rawArgs[++i] || ''; continue; }
     if (arg === '--continue') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume') {
       if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
@@ -1084,6 +1171,8 @@ async function main() {
   if (command === 'plugins' || command === 'plugin') return await managePlugins(workspace, rest);
   if (command === 'sessions') return await manageSessions(workspace, rest);
   if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
+  if (command === 'permissions') return await managePermissions(workspace, rest);
+  if (command === 'trust') return await manageTrust(workspace, rest);
   if (command === 'backups') return await showBackups(workspace);
   if (command === 'restore') return await restoreOne(workspace, rest[0]);
   if (command === 'install') {
