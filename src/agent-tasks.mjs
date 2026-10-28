@@ -207,9 +207,13 @@ export function runningBackgroundCount(session) {
 
 // Notices reach the model through the session inbox and the UI through onAgentNotice.
 export function notifyParent(session, text, record = null) {
-  (session.inbox || (session.inbox = [])).push({ text, record });
+  (session.inbox || (session.inbox = [])).push({ text, record, kind: record ? 'agent-notice' : 'agent-dispatch' });
   if (typeof session.onAgentNotice === 'function') {
     try { session.onAgentNotice(text); } catch {}
+  }
+  // A finished background agent wakes an idle interactive session (Claude Code behavior).
+  if (record && typeof session.onBackgroundEvent === 'function') {
+    try { session.onBackgroundEvent({ kind: 'agent-notice', id: record.id, description: 'agent "' + record.description + '" ' + record.status }); } catch {}
   }
 }
 
