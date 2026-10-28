@@ -8,21 +8,26 @@
 // Vertex   protocol "vertex": project from ANTHROPIC_VERTEX_PROJECT_ID or GOOGLE_CLOUD_PROJECT,
 //          region from CLOUD_ML_REGION (default us-east5; "global" works too). Token from
 //          OASIS_VERTEX_ACCESS_TOKEN / GOOGLE_OAUTH_ACCESS_TOKEN, else `gcloud auth print-access-token`.
-// Claude Code's CLAUDE_CODE_USE_BEDROCK=1 / CLAUDE_CODE_USE_VERTEX=1 also select these.
+// Foundry  protocol "foundry": Claude on Microsoft Foundry (Azure). Base URL from
+//          ANTHROPIC_FOUNDRY_BASE_URL or https://{ANTHROPIC_FOUNDRY_RESOURCE}.services.ai.azure.com/anthropic.
+//          Auth: ANTHROPIC_FOUNDRY_AUTH_TOKEN (Entra bearer) > ANTHROPIC_FOUNDRY_API_KEY (x-api-key)
+//          > `az account get-access-token --resource https://ai.azure.com`.
+// Claude Code's CLAUDE_CODE_USE_BEDROCK=1 / CLAUDE_CODE_USE_VERTEX=1 / CLAUDE_CODE_USE_FOUNDRY=1 also select these.
 import { createHash, createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 
-export const CLOUD_PROTOCOLS = ['bedrock', 'vertex'];
-export const ANTHROPIC_FAMILY = new Set(['anthropic', 'bedrock', 'vertex']);
+export const CLOUD_PROTOCOLS = ['bedrock', 'vertex', 'foundry'];
+export const ANTHROPIC_FAMILY = new Set(['anthropic', 'bedrock', 'vertex', 'foundry']);
 
 export function isAnthropicFamily(protocol) { return ANTHROPIC_FAMILY.has(protocol); }
 
 export function cloudProtocolFromEnv(env) {
   if (/^(1|true)$/i.test(env.OASIS_USE_BEDROCK || env.CLAUDE_CODE_USE_BEDROCK || '')) return 'bedrock';
   if (/^(1|true)$/i.test(env.OASIS_USE_VERTEX || env.CLAUDE_CODE_USE_VERTEX || '')) return 'vertex';
+  if (/^(1|true)$/i.test(env.OASIS_USE_FOUNDRY || env.CLAUDE_CODE_USE_FOUNDRY || '')) return 'foundry';
   return null;
 }
 
@@ -30,18 +35,30 @@ export function awsRegion(env) { return env.AWS_REGION || env.AWS_DEFAULT_REGION
 export function vertexRegion(env) { return env.CLOUD_ML_REGION || env.GOOGLE_CLOUD_REGION || 'us-east5'; }
 export function vertexProject(env) { return env.ANTHROPIC_VERTEX_PROJECT_ID || env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT || ''; }
 
+export function foundryBaseURL(env) {
+  if (env.ANTHROPIC_FOUNDRY_BASE_URL) return String(env.ANTHROPIC_FOUNDRY_BASE_URL).replace(/\/+$/, '');
+  const resource = String(env.ANTHROPIC_FOUNDRY_RESOURCE || '').trim();
+  if (!resource) return '';
+  // Like Claude Code: the resource is a bare name, not a URL or host.
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(resource)) throw new Error('ANTHROPIC_FOUNDRY_RESOURCE must be the Azure resource name only (for example my-resource). Put a full URL in ANTHROPIC_FOUNDRY_BASE_URL instead.');
+  return 'https://' + resource + '.services.ai.azure.com/anthropic';
+}
+
 export function defaultCloudBaseURL(protocol, env) {
+  if (protocol === 'foundry') return foundryBaseURL(env);
   if (protocol === 'bedrock') return 'https://bedrock-runtime.' + awsRegion(env) + '.amazonaws.com';
   const region = vertexRegion(env);
   return region === 'global' ? 'https://aiplatform.googleapis.com' : 'https://' + region + '-aiplatform.googleapis.com';
 }
 
 export function defaultCloudModel(protocol, env) {
+  if (protocol === 'foundry') return env.ANTHROPIC_MODEL || env.ANTHROPIC_DEFAULT_SONNET_MODEL || env.ANTHROPIC_DEFAULT_OPUS_MODEL || '';
   return env.ANTHROPIC_MODEL || '';
 }
 
 export function cloudCredentialsPresent(protocol, env) {
   if (protocol === 'bedrock') return Boolean(env.AWS_BEARER_TOKEN_BEDROCK || (env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY) || env.AWS_PROFILE);
+  if (protocol === 'foundry') return Boolean(env.ANTHROPIC_FOUNDRY_AUTH_TOKEN || env.ANTHROPIC_FOUNDRY_API_KEY || env.ANTHROPIC_FOUNDRY_RESOURCE || env.ANTHROPIC_FOUNDRY_BASE_URL);
   return Boolean(env.OASIS_VERTEX_ACCESS_TOKEN || env.GOOGLE_OAUTH_ACCESS_TOKEN || vertexProject(env));
 }
 
@@ -50,6 +67,10 @@ export function cloudCredentialsPresent(protocol, env) {
 export function cloudEndpoint(config, env, stream) {
   const base = String(config.baseURL || defaultCloudBaseURL(config.protocol, env)).replace(/\/+$/, '');
   if (config.protocol === 'bedrock') return base + '/model/' + encodeURIComponent(config.model) + '/invoke';
+  if (config.protocol === 'foundry') {
+    if (!base) throw new Error('Microsoft Foundry needs a resource: set ANTHROPIC_FOUNDRY_RESOURCE (or ANTHROPIC_FOUNDRY_BASE_URL).');
+    return base + '/v1/messages';
+  }
   const project = vertexProject(env);
   if (!project) throw new Error('Vertex AI needs a project: set ANTHROPIC_VERTEX_PROJECT_ID or GOOGLE_CLOUD_PROJECT.');
   return base + '/v1/projects/' + encodeURIComponent(project) + '/locations/' + encodeURIComponent(vertexRegion(env)) + '/publishers/anthropic/models/' + encodeURIComponent(config.model) + ':' + (stream ? 'streamRawPredict' : 'rawPredict');
@@ -57,12 +78,13 @@ export function cloudEndpoint(config, env, stream) {
 
 // Turns an Anthropic Messages body into the platform's variant.
 export function cloudBody(protocol, body) {
+  if (protocol === 'foundry') return body; // standard Messages body; model is the deployment name
   const { model, ...rest } = body;
   if (protocol === 'bedrock') { delete rest.stream; return { anthropic_version: 'bedrock-2023-05-31', ...rest }; }
   return { anthropic_version: 'vertex-2023-10-16', ...rest };
 }
 
-export function cloudStreams(protocol) { return protocol === 'vertex'; }
+export function cloudStreams(protocol) { return protocol === 'vertex' || protocol === 'foundry'; }
 
 // ---------- AWS SigV4 ----------
 
@@ -132,9 +154,37 @@ function defaultGcloud(env) {
   }));
 }
 
+// ---------- Microsoft Entra ID token (Foundry) ----------
+
+let cachedAzureToken = null;
+
+export async function azureAccessToken(env, runAz = defaultAz) {
+  if (env.ANTHROPIC_FOUNDRY_AUTH_TOKEN) return env.ANTHROPIC_FOUNDRY_AUTH_TOKEN;
+  if (cachedAzureToken && cachedAzureToken.expires > Date.now()) return cachedAzureToken.token;
+  const token = (await runAz(env)).trim();
+  if (!token) throw new Error('az returned no access token. Run az login, or set ANTHROPIC_FOUNDRY_API_KEY or ANTHROPIC_FOUNDRY_AUTH_TOKEN.');
+  cachedAzureToken = { token, expires: Date.now() + 45 * 60 * 1000 };
+  return token;
+}
+
+function defaultAz(env) {
+  return new Promise((resolve, reject) => execFile('az', ['account', 'get-access-token', '--resource', 'https://ai.azure.com', '--query', 'accessToken', '-o', 'tsv'], { env, timeout: 20000, shell: process.platform === 'win32' }, (error, stdout) => {
+    if (error) reject(new Error('Microsoft Foundry needs credentials: set ANTHROPIC_FOUNDRY_API_KEY or ANTHROPIC_FOUNDRY_AUTH_TOKEN, or install the Azure CLI and run az login. (' + error.message + ')'));
+    else resolve(stdout);
+  }));
+}
+
 // Final headers for a request; bodyText must be the exact bytes that will be sent.
 export async function cloudHeaders(config, env, url, bodyText, base = {}) {
   const headers = { ...base };
+  if (config.protocol === 'foundry') {
+    headers['anthropic-version'] = '2023-06-01';
+    delete headers['x-api-key'];
+    const key = env.ANTHROPIC_FOUNDRY_API_KEY || config.apiKey;
+    if (!env.ANTHROPIC_FOUNDRY_AUTH_TOKEN && key) headers['x-api-key'] = key;
+    else headers.authorization = 'Bearer ' + await azureAccessToken(env);
+    return headers;
+  }
   delete headers['x-api-key'];
   delete headers['anthropic-version'];
   if (config.protocol === 'vertex') {

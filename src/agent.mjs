@@ -764,7 +764,7 @@ function formatApiError(status, body, protocol) {
     detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type)
       ? String(parsed.error.message || parsed.error.code || parsed.error.type) : (typeof parsed.message === 'string' ? parsed.message : '');
   } catch { detail = String(body || '').slice(0, 500); }
-  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' :
+  const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' : protocol === 'foundry' ? 'Microsoft Foundry (Claude)' :
     protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
   return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') +
     '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
@@ -1136,7 +1136,7 @@ async function requestCompletionTraced(session, options = {}) {
 async function requestCompletionRaw(session, options = {}) {
   const config = session.config;
   const nativeAnthropic = isAnthropicFamily(config.protocol);
-  const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex';
+  const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex' || config.protocol === 'foundry';
   const providerEnv = options.env || session.providerEnv || process.env;
   const nativeResponses = config.protocol === 'openai-responses';
   const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS);

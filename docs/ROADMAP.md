@@ -52,7 +52,7 @@ Recommended order is based on capability impact, not ease of implementation:
 2. **Complete multi-agent coordination** — a bounded ready-task dispatcher now starts task-linked background workers in isolated worktrees and frees claims on cancellation/failure. Next: persistent workflow scheduling, visual agent monitoring, cross-session coordination, and richer conflict-aware review/merge handling.
 3. **IDE integrations** — start with a VS Code extension that can review diffs, expose task/session state and hand off to the same runtime.
 4. **Remote and cross-surface workflows** — cloud/remote sessions, mobile steering, Chrome, desktop and chat integrations; this requires an explicit server trust/auth model rather than merely exposing `oasis web`.
-5. **Platform and extension parity** — native Gemini and Azure adapters, PowerShell/Windows sandboxing, broader plugin compatibility and a remote marketplace.
+5. **Platform and extension parity** — a native Gemini adapter, PowerShell/Windows sandboxing, broader plugin compatibility and a remote marketplace.
 6. **Terminal polish** — full-screen transcript, vim mode, themes and an editable keybinding file.
 
 See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CURRENT_STATUS.md](CURRENT_STATUS.md) for the current verification baseline.
@@ -76,7 +76,7 @@ See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CUR
 - **Progress:** verified extension updates stage the new revision, refuse edited/missing/unexpected owned files, and preserve up to three prior verified revisions per scope. Rollback re-verifies the selected backup and swaps it in transactionally; the formerly active revision is retained as another backup.
 - **Next extension runtime work:** add richer native agent metadata adapters, permissioned lifecycle management, and encrypted secret/environment provisioning. Keep hooks and executable lifecycle actions inactive until sandboxing and audit logging are in place.
 
-- Add and test additional native provider adapters. **Progress:** Claude on AWS Bedrock (SigV4 signing, checked against the AWS test vector) and Google Vertex AI (streaming) is implemented and tested against local fake endpoints. These adapters still need checking against live cloud accounts. Azure Foundry and native Gemini are still to do.
+- Add and test additional native provider adapters. **Progress:** Claude on AWS Bedrock (SigV4 signing, checked against the AWS test vector) Google Vertex AI (streaming) and Microsoft Foundry (x-api-key, Entra bearer or `az login`, streaming) are implemented and tested against local fake endpoints. These adapters still need checking against live cloud accounts. A native Gemini adapter is still to do.
 - Harden MCP lifecycle recovery, notifications, pagination, and end-to-end cross-platform tests.
 - **Implemented, needs broader evaluation:** mid-turn compaction summarizes completed tool rounds while retaining the active user request and the latest complete tool-call/result batch. It uses a tool-free summary request with a deterministic fallback; it is a bounded heuristic, not a guarantee that every provider/task retains perfect continuity. Incremental model streaming is implemented in the CLI/browser runtime with a non-streaming JSON fallback for compatible gateways.
 - Extend the initial bundled capability catalog with remote marketplace discovery, version pinning, integrity checks, update/rollback, and supply-chain review.

@@ -9,7 +9,7 @@ export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
 const SETUP_PROVIDER_PRESETS = new Set([
-  'omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'custom'
+  'omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'
 ]);
 
 // A fresh setup should work for users who do not already have a paid-provider key.
@@ -52,8 +52,8 @@ export function inferProtocol(baseURL, fallback = DEFAULT_PROTOCOL) {
 
 export function validateProtocol(raw) {
   const protocol = String(raw || DEFAULT_PROTOCOL).trim().toLowerCase();
-  if (!['openai-responses', 'openai-compatible', 'anthropic', 'bedrock', 'vertex'].includes(protocol)) {
-    throw new Error('Provider protocol must be openai-responses, openai-compatible, anthropic, bedrock, or vertex.');
+  if (!['openai-responses', 'openai-compatible', 'anthropic', 'bedrock', 'vertex', 'foundry'].includes(protocol)) {
+    throw new Error('Provider protocol must be openai-responses, openai-compatible, anthropic, bedrock, vertex, or foundry.');
   }
   return protocol;
 }
@@ -99,14 +99,16 @@ export async function loadConfig(options = {}) {
   const protocol = validateProtocol(requestedProtocol);
   const cloud = CLOUD_PROTOCOLS.includes(protocol);
   const defaultBase = cloud ? defaultCloudBaseURL(protocol, env) : (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL);
-  const baseURL = validateBaseUrl(env.OASIS_BASE_URL || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase);
+  const chosenBase = env.OASIS_BASE_URL || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase;
+  if (!chosenBase && protocol === 'foundry') throw new Error('Microsoft Foundry needs a resource: set ANTHROPIC_FOUNDRY_RESOURCE to your Azure resource name, or ANTHROPIC_FOUNDRY_BASE_URL to https://RESOURCE.services.ai.azure.com/anthropic.');
+  const baseURL = validateBaseUrl(chosenBase);
   const defaultModel = cloud ? defaultCloudModel(protocol, env) : protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : (savedProtocol === protocol ? saved.model : ''));
   const model = String(env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
-  if (!model) throw new Error(cloud ? 'No model is configured for ' + protocol + '. Set OASIS_MODEL (or ANTHROPIC_MODEL) to a ' + (protocol === 'bedrock' ? 'Bedrock model or inference profile ID, for example us.anthropic.claude-sonnet-4-5-20250929-v1:0' : 'Vertex model ID, for example claude-sonnet-4-5@20250929') + '.' : 'No model is configured. Run oasis setup.');
+  if (!model) throw new Error(cloud ? 'No model is configured for ' + protocol + '. Set OASIS_MODEL (or ANTHROPIC_MODEL) to a ' + (protocol === 'bedrock' ? 'Bedrock model or inference profile ID, for example us.anthropic.claude-sonnet-4-5-20250929-v1:0' : protocol === 'foundry' ? 'Foundry deployment name (or ANTHROPIC_DEFAULT_SONNET_MODEL), for example claude-sonnet-5' : 'Vertex model ID, for example claude-sonnet-4-5@20250929') + '.' : 'No model is configured. Run oasis setup.');
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
   const localEndpoint = isLoopbackUrl(baseURL);
-  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || '') : (env.OASIS_API_KEY ||
+  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : protocol === 'foundry' ? env.ANTHROPIC_FOUNDRY_API_KEY || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || '') : (env.OASIS_API_KEY ||
     (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '');
   // Never send a stored/remote credential to a different endpoint or a loopback server by accident.
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
@@ -158,7 +160,7 @@ export function getProviderSummary(config) {
     provider: host,
     protocol: config.protocol || DEFAULT_PROTOCOL,
     model: config.model || DEFAULT_MODEL,
-    authentication: config.protocol === 'bedrock' ? (config.apiKey ? 'Bedrock API key' : 'AWS credentials (SigV4)') : config.protocol === 'vertex' ? 'Google Cloud access token' : config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
+    authentication: config.protocol === 'bedrock' ? (config.apiKey ? 'Bedrock API key' : 'AWS credentials (SigV4)') : config.protocol === 'vertex' ? 'Google Cloud access token' : config.protocol === 'foundry' ? (process.env.ANTHROPIC_FOUNDRY_AUTH_TOKEN ? 'Microsoft Entra ID token' : config.apiKey ? 'Foundry API key' : 'Microsoft Entra ID (az login)') : config.apiKey ? 'API key configured' : (isLoopbackUrl(config.baseURL) ? 'local endpoint; no API key required' : 'not configured'),
     configPath: config.configPath || getConfigPath()
   };
 }

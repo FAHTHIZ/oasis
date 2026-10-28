@@ -116,3 +116,57 @@ test('a Vertex turn streams Anthropic SSE with a bearer token', async (t) => {
   assert.equal(request.body.stream, true);
   assert.equal(request.body.model, undefined);
 });
+
+test('Microsoft Foundry: env switch, resource validation, config and auth sources', async () => {
+  const { foundryBaseURL, azureAccessToken } = await import('../src/cloud-providers.mjs');
+  assert.equal(validateProtocol('foundry'), 'foundry');
+  assert.equal(cloudProtocolFromEnv({ CLAUDE_CODE_USE_FOUNDRY: '1' }), 'foundry');
+  assert.equal(foundryBaseURL({ ANTHROPIC_FOUNDRY_RESOURCE: 'my-res' }), 'https://my-res.services.ai.azure.com/anthropic');
+  assert.equal(foundryBaseURL({ ANTHROPIC_FOUNDRY_BASE_URL: 'https://gw.example.com/anthropic/', ANTHROPIC_FOUNDRY_RESOURCE: 'x' }), 'https://gw.example.com/anthropic');
+  assert.throws(() => foundryBaseURL({ ANTHROPIC_FOUNDRY_RESOURCE: 'my-res.services.ai.azure.com' }), /resource name only/);
+  assert.equal(cloudEndpoint({ protocol: 'foundry', model: 'claude-sonnet-5', baseURL: '' }, { ANTHROPIC_FOUNDRY_RESOURCE: 'r' }, true), 'https://r.services.ai.azure.com/anthropic/v1/messages');
+  assert.deepEqual(cloudBody('foundry', { model: 'dep', stream: true }), { model: 'dep', stream: true });
+  assert.equal(await azureAccessToken({ ANTHROPIC_FOUNDRY_AUTH_TOKEN: 't' }), 't');
+  assert.equal(await azureAccessToken({}, async () => 'from-az\n'), 'from-az');
+  const configPath = path.join(await mkdtemp(path.join(os.tmpdir(), 'oasis-cfg-')), 'config.json');
+  const config = await loadConfig({ configPath, env: { CLAUDE_CODE_USE_FOUNDRY: '1', ANTHROPIC_FOUNDRY_RESOURCE: 'acme', ANTHROPIC_FOUNDRY_API_KEY: 'k', ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-5' } });
+  assert.equal(config.protocol, 'foundry');
+  assert.equal(config.baseURL, 'https://acme.services.ai.azure.com/anthropic');
+  assert.equal(config.model, 'claude-sonnet-5');
+  assert.equal(config.apiKey, 'k');
+  assert.equal(config.configured, true);
+  await assert.rejects(loadConfig({ configPath, env: { CLAUDE_CODE_USE_FOUNDRY: '1', OASIS_MODEL: 'x' } }), /ANTHROPIC_FOUNDRY_RESOURCE/);
+});
+
+test('a Foundry turn streams the standard Messages API with x-api-key or an Entra bearer', async (t) => {
+  const { base, requests } = await fakeServer(t, (req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    const events = [
+      { type: 'message_start', message: { id: 'm', model: 'claude', usage: { input_tokens: 2, output_tokens: 0 } } },
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello from foundry' } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 3 } },
+      { type: 'message_stop' }
+    ];
+    res.end(events.map((e) => 'event: ' + e.type + '\ndata: ' + JSON.stringify(e) + '\n\n').join(''));
+  });
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-foundry-'));
+  const config = { protocol: 'foundry', baseURL: base + '/anthropic', model: 'my-sonnet-deployment', apiKey: '', configured: true, maxSteps: 3, maxToolCalls: 3, maxTokens: 100000 };
+  let streamed = '';
+  const onDelta = (d) => { streamed += typeof d === 'string' ? d : (d && d.text) || ''; };
+  const keyed = await createSession({ root, config, settings, bare: true });
+  await runAgentTurn(keyed, 'hi', { env: { ...process.env, ANTHROPIC_FOUNDRY_API_KEY: 'azkey', ANTHROPIC_FOUNDRY_AUTH_TOKEN: '' }, onDelta });
+  assert.match(streamed, /hello from foundry/);
+  assert.equal(requests[0].url, '/anthropic/v1/messages');
+  assert.equal(requests[0].headers['x-api-key'], 'azkey');
+  assert.equal(requests[0].headers['anthropic-version'], '2023-06-01');
+  assert.equal(requests[0].headers.authorization, undefined);
+  assert.equal(requests[0].body.model, 'my-sonnet-deployment');
+  assert.equal(requests[0].body.stream, true);
+  assert.equal(requests[0].body.anthropic_version, undefined);
+  const bearer = await createSession({ root, config, settings, bare: true });
+  await runAgentTurn(bearer, 'hi', { env: { ...process.env, ANTHROPIC_FOUNDRY_API_KEY: 'azkey', ANTHROPIC_FOUNDRY_AUTH_TOKEN: 'entra' }, onDelta });
+  assert.equal(requests[1].headers.authorization, 'Bearer entra');
+  assert.equal(requests[1].headers['x-api-key'], undefined);
+});
