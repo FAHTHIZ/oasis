@@ -238,7 +238,16 @@ Hooks run your own shell commands at points in the agent lifecycle, using Claude
 }
 ~~~
 
-Events: `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, `SessionEnd`. Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `prompt`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, or makes the agent keep working after `Stop`, and stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. Matchers accept Oasis or Claude Code tool names. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
+Events: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `UserPromptSubmit`, `Stop`, `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`, `compact`), `SessionEnd`, `PreCompact`, `PostCompact`, `Notification` (`permission_prompt`), and `CwdChanged` (after `/cd`). Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `error`, `prompt`, `agent_type`, `trigger`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, makes the agent keep working after `Stop`, or cancels a manual `/compact` from `PreCompact`. stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. A `PermissionRequest` hook answers an approval prompt before you see it with `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}` or `"deny"` plus a `message`. This works for background agents too. `PreCompact` context is kept in the summary, and `SessionStart` with matcher `compact` can re-add context after compaction. Matchers compare against the tool name (Oasis or Claude Code names), the session source, the compaction trigger, the notification type, or the subagent type. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
+
+Besides `command`, there are two more hook types:
+
+~~~json
+{ "type": "http", "url": "https://policy.internal/hook", "headers": { "Authorization": "Bearer $POLICY_TOKEN" }, "allowedEnvVars": ["POLICY_TOKEN"], "timeout": 30 }
+{ "type": "prompt", "prompt": "Block edits to migrations unless the user asked for them. $ARGUMENTS", "model": "gpt-4.1-mini" }
+~~~
+
+An `http` hook POSTs the payload as JSON, and its response body is read like a command's stdout. A failed request or a non-2xx status is a non-blocking error; only a JSON decision can block. Headers can use only the environment variables listed in `allowedEnvVars`. A `prompt` hook asks the model (optionally a cheaper `model`) whether the payload meets your policy. `$ARGUMENTS` is replaced with the payload, and a reply of `{"ok": false, "reason": "..."}` blocks like exit code 2.
 
 ## Slash commands, @mentions, and memory
 

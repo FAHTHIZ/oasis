@@ -39,7 +39,7 @@ For the core terminal loop (read, search, edit, run, plan, subagents, permission
 3. ~~**Git and PR workflow.**~~ Done: `git_log`, `git_commit`, `git_branch`, `git_push`, `create_pull_request`, `/commit`, `/pr`.
 4. **MCP depth.** Done: resources (`list_mcp_resources`, `read_mcp_resource`, `@server:uri` mentions) and prompts as slash commands (`/mcp__server__prompt`). OAuth sign-in for remote servers is done too (`oasis mcp login`, with discovery, dynamic registration, PKCE and refresh). `oasis mcp serve` exposes Oasis tools to other clients (read-only by default; `--allow-edits`, `--allow-commands`). MCP depth is now at parity.
 5. **Skill and command frontmatter.** Missing: `context: fork` (run a skill in a subagent), inline `` !`cmd` `` shell output in commands, `model`/`effort` per command, and hot reload.
-6. **Hooks breadth.** Missing events: PostToolUseFailure, SubagentStart, PostCompact, PermissionRequest, CwdChanged, FileChanged, WorktreeCreate/Remove, and others. Missing hook types: `http`, `prompt` (model-evaluated), and `mcp_tool`.
+6. **Hooks breadth.** Done: PostToolUseFailure, PermissionRequest (answers prompts, including for background agents), SubagentStart, PostCompact, PreCompact and Notification are wired in, along with SessionStart `compact` and CwdChanged. The `http` and `prompt` hook types are done too. Still missing: FileChanged, WorktreeCreate/Remove, and the `mcp_tool` type.
 7. **Auto memory.** Done: `memory_save`/`memory_search`/`memory_read`/`memory_delete`, an index of abstracts in every session, BM25 recall per prompt, secret redaction, duplicate merging, Markdown files per project and per user, `/memory`, `/remember`, and `oasis memory`. The design draws on [OpenViking](https://github.com/volcengine/OpenViking) and [agentmemory](https://github.com/rohitg00/agentmemory). Still missing: optional embedding search.
 8. **PDF reading.** Done: `read_file` extracts text from PDFs with a `pages` range (up to 50 pages per call). It uses poppler's `pdftotext` when installed, with a built-in fallback extractor.
 9. **Headless extras.** Done: `--json-schema` structured output (validated, with up to 2 retries) and `-w/--worktree` for the main session. Still missing: `--permission-prompts none` and `--bare`.
@@ -70,6 +70,6 @@ Cloud sessions, Remote Control, Slack, the mobile app, and cloud scheduled tasks
 4. ~~Missing slash commands (`/copy`, `/doctor`, `/effort`, `/usage`, `/undo`, `/loop`, `/cd`, `/skills`, `/config`, `/sandbox`, `/fork`, `/release-notes`)~~ (done)
 5. ~~MCP resources, prompts, and OAuth~~ (done)
 6. ~~PDF reading, `--json-schema`, `--worktree`~~ (done); `--permission-prompts none` still open
-7. Hook events and types, skill `context: fork`, and inline `` !`cmd` ``
+7. ~~Hook events and types~~ (done); skill `context: fork` and inline `` !`cmd` `` still open
 8. ~~Auto memory~~ (done) and auto mode classifier
 9. Bedrock/Vertex adapters, VS Code extension, GitHub Action

@@ -1,6 +1,7 @@
 // Built-in interactive slash commands (Claude Code style). Each handler returns
 // { output } text, and optionally { prompt } to send to the agent, or
 // { resetSession: true } when the caller should drop the current session.
+import { describeHook } from './hooks.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
@@ -105,6 +106,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const result = await compactHistoryIfNeeded(session, { force: true, instructions: argument });
       const after = estimateTokens(session.messages);
       if (usage && result.tokensUsed) recordUsage(usage, { totalTokens: result.tokensUsed, phase: 'compaction' });
+      if (result.blockedByHook) return { output: 'A PreCompact hook cancelled /compact: ' + (result.reason || 'no reason given') };
       return { output: result.compacted ? 'Conversation compacted: about ' + formatNumber(before) + ' -> ' + formatNumber(after) + ' tokens.' : 'Nothing to compact yet.' };
     }
     case 'context': {
@@ -178,7 +180,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const entries = Object.entries(hooks || {});
       if (!entries.length) return { output: 'No hooks configured. Add them under "hooks" in .oasis/settings.json or .claude/settings.json.' };
       const lines = [];
-      for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + hook.command);
+      for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + describeHook(hook));
       return { output: lines.join('\n') };
     }
     case 'output-style': {
