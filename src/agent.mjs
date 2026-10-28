@@ -532,6 +532,20 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
   return budget ? Math.max(1024, Math.min(budget, 64000)) : 0;
 }
 
+// /effort: a session-wide override. low/medium/high/max map to a thinking budget
+// (Anthropic) and a reasoning effort (OpenAI reasoning models); prompt keywords
+// such as "ultrathink" can still raise it for one turn. auto (null) restores base.
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max', 'auto'];
+const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
+export function applyEffort(config = {}, level, base = {}) {
+  const next = { ...config };
+  const chosen = level && EFFORT_SETTINGS[level];
+  const [reasoningEffort, thinkingBudget] = chosen || [base.reasoningEffort, base.thinkingBudget];
+  if (reasoningEffort) next.reasoningEffort = reasoningEffort; else delete next.reasoningEffort;
+  if (thinkingBudget) next.thinkingBudget = thinkingBudget; else delete next.thinkingBudget;
+  return next;
+}
+
 // OpenAI reasoning models (o-series, gpt-5): the same think keywords map to
 // reasoning effort. Sent only for reasoning models or when configured explicitly,
 // because other chat-completions providers reject the field.

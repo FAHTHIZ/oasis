@@ -240,6 +240,17 @@ Events: `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`,
 
 Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|bypassPermissions]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
 
+More session commands:
+
+- `/effort [low|medium|high|max|auto]` sets how hard the model thinks for the rest of the session (also `oasis --effort high`). Prompt words like "ultrathink" can still raise a single turn.
+- `/copy [N]` copies the last reply (or the Nth most recent) to the clipboard using pbcopy, wl-copy, xclip, xsel or clip, and falls back to the OSC 52 terminal escape over SSH.
+- `/undo [N]` is shorthand for `/rewind N`. `/usage` is the same as `/cost`.
+- `/fork` (or `/branch`) saves the conversation so far and continues in a copy, so you can try another approach and `/resume` the original later.
+- `/loop [30s|5m|1h] [x5] PROMPT` runs a prompt now and again on an interval (for example `/loop 5m check whether CI passed`). Ctrl+C stops it.
+- `/cd PATH` switches the workspace and starts a fresh conversation there.
+- `/sandbox [on|off|network on|network off]` changes the OS sandbox for the current session.
+- `/skills`, `/config`, `/doctor` and `/release-notes` list skills, show effective settings and where they come from, check the workspace (tools, checkers, language servers, sandbox, context use), and show recent Oasis changes.
+
 More built-ins:
 - `/review [PR number | git ref]` runs a read-only code review of your pending changes, a branch, or a GitHub pull request (through `gh`).
 - `/security-review` does the same with a security focus.

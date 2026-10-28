@@ -24,6 +24,8 @@ export const BUILTIN_COMMANDS = {
   compact: 'Summarize the conversation to free context (/compact [focus])',
   context: 'Show how much of the context window is in use',
   cost: 'Show token usage for this session',
+  usage: 'Show token usage for this session (same as /cost)',
+  effort: 'Show or set reasoning effort for this session (/effort [low|medium|high|max|auto])',
   model: 'Show or switch the model for this session (/model [id])',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + ')',
   permissions: 'Show permission rules, mode, and sandbox',
@@ -37,6 +39,7 @@ export const BUILTIN_COMMANDS = {
   'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
   todos: 'Show the current todo list',
   memory: 'Show which memory files are loaded (use "# note" to add a project memory)',
+  undo: 'Undo the last turn: restore files and conversation (/undo [N])',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for bugs (/review [PR number | git ref])',
   tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks stop ID)',
@@ -44,6 +47,16 @@ export const BUILTIN_COMMANDS = {
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
   diagnostics: 'Run type checkers and linters, then fix errors (/diagnostics [paths])',
   'security-review': 'Security review of pending changes (/security-review [PR number | git ref])',
+  copy: 'Copy the last reply (or the Nth most recent) to the clipboard (/copy [N])',
+  fork: 'Fork the conversation: keep the original saved and continue in a copy (alias /branch)',
+  branch: 'Fork the conversation (same as /fork)',
+  skills: 'List available skills',
+  loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT)',
+  cd: 'Switch the workspace to another directory and start a fresh conversation (/cd PATH)',
+  sandbox: 'Show or change the OS sandbox for this session (/sandbox [on|off|network on|network off])',
+  config: 'Show effective settings and where they come from',
+  doctor: 'Check this workspace: tools, language servers, sandbox, settings, provider',
+  'release-notes': 'Show recent changes to Oasis',
   export: 'Save this conversation as Markdown (/export [file])',
   resume: 'List saved sessions or resume one (/resume [ID])',
   init: 'Create an OASIS.md project guide',
@@ -67,6 +80,7 @@ export function recordUsage(tracker, usage = {}) {
 
 export async function runBuiltinCommand(name, argument, state) {
   const { root, session, env = process.env, usage, sessionOptions = {} } = state;
+  if (!state.sessionOptions) state.sessionOptions = sessionOptions;
   switch (name) {
     case 'help': {
       const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
@@ -230,6 +244,115 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!pick) return { output: 'No saved session matches ' + argument + '. Run /resume to list them.' };
       return { output: 'Resuming session ' + pick.id + ' on your next message.', resume: pick.id };
     }
+    case 'usage':
+      return await runBuiltinCommand('cost', argument, state);
+    case 'undo':
+      return await runBuiltinCommand('rewind', argument || '1', state);
+    case 'branch':
+      return await runBuiltinCommand('fork', argument, state);
+    case 'effort': {
+      const { EFFORT_LEVELS, applyEffort } = await import('./agent.mjs');
+      const current = sessionOptions.effort || 'auto';
+      if (!argument) return { output: 'Reasoning effort: ' + current + '. Options: ' + EFFORT_LEVELS.join(', ') + '. auto picks from your prompt ("think hard", "ultrathink").' };
+      const level = argument.toLowerCase();
+      if (!EFFORT_LEVELS.includes(level)) return { output: 'Unknown effort level. Options: ' + EFFORT_LEVELS.join(', ') + '.' };
+      sessionOptions.effort = level === 'auto' ? null : level;
+      if (session) session.config = applyEffort(session.config, sessionOptions.effort, session.baseEffortConfig || (session.baseEffortConfig = { reasoningEffort: session.config.reasoningEffort, thinkingBudget: session.config.thinkingBudget }));
+      return { output: 'Reasoning effort set to ' + level + ' for this session.' };
+    }
+    case 'copy': {
+      const replies = session ? session.messages.filter((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()) : [];
+      const n = Math.max(1, Number.parseInt(argument, 10) || 1);
+      const reply = replies[replies.length - n];
+      if (!reply) return { output: 'There is no reply to copy yet.' };
+      const text = reply.content.trim();
+      const { copyToClipboard } = await import('./clipboard.mjs');
+      const result = await copyToClipboard(text, { env });
+      return { output: result.ok ? 'Copied ' + text.length + ' characters to the clipboard' + (result.method ? ' (' + result.method + ')' : '') + '.' : 'No clipboard program found (pbcopy, wl-copy, xclip, xsel, clip). Sent it through the terminal (OSC 52) instead.', ...(result.ok ? {} : { osc52: Buffer.from(text, 'utf8').toString('base64') }) };
+    }
+    case 'fork': {
+      if (!session || session.messages.length <= 1) return { output: 'Nothing to fork yet.' };
+      const { saveSession } = await import('./sessions.mjs');
+      const { randomUUID } = await import('node:crypto');
+      const original = await saveSession(session, { env });
+      session.sessionId = randomUUID();
+      const copy = await saveSession(session, { env });
+      return { output: 'Forked the conversation. The original is saved as ' + original.id + ' (/resume ' + original.id + ' to go back); you are now in ' + copy.id + '.', forked: { from: original.id, to: copy.id } };
+    }
+    case 'skills': {
+      const { listAvailableSkills } = await import('./tools.mjs');
+      const skills = await listAvailableSkills(root, { env }).catch(() => []);
+      if (!skills.length) return { output: 'No skills found. Add one at .oasis/skills/NAME/SKILL.md (or .claude/skills/NAME/SKILL.md) with name and description front matter.' };
+      return { output: skills.map((skill) => skill.name + ' [' + skill.source + ']\n    ' + String(skill.description || '').slice(0, 200)).join('\n') };
+    }
+    case 'config': {
+      const settings = await loadSettings(root, { env });
+      const lines = ['Settings files (later ones win):'];
+      for (const source of settings.sources) lines.push('  ' + source.scope.padEnd(13) + ' ' + source.file);
+      if (!settings.sources.length) lines.push('  (none yet)');
+      if (settings.ignoredUntrusted.length) lines.push('  Ignored until you run oasis trust: ' + settings.ignoredUntrusted.join(', '));
+      lines.push('Effective:');
+      lines.push('  model          ' + (session ? session.config.model : settings.model || '(provider default)'));
+      lines.push('  effort         ' + (sessionOptions.effort || 'auto'));
+      lines.push('  permission     ' + (session ? session.permissions.mode : sessionOptions.permissionMode || settings.permissions.defaultMode) + ' (' + settings.permissions.allow.length + ' allow, ' + settings.permissions.ask.length + ' ask, ' + settings.permissions.deny.length + ' deny rules)');
+      lines.push('  sandbox        ' + (settings.sandbox.enabled ? 'on' + (settings.sandbox.network ? ', network on' : ', network off') : 'off'));
+      lines.push('  shell tool     ' + (settings.shell.enabled ? 'on' : 'off'));
+      lines.push('  output style   ' + (sessionOptions.outputStyle || settings.outputStyle || 'default'));
+      lines.push('  status line    ' + (settings.statusLine ? settings.statusLine.command : 'off'));
+      lines.push('  hooks          ' + (Object.keys(settings.hooks).length ? Object.entries(settings.hooks).map(([event, groups]) => event + '×' + groups.length).join(', ') : 'none'));
+      lines.push('  lsp servers    ' + (Object.keys(settings.lspServers || {}).length ? Object.keys(settings.lspServers).join(', ') : 'built-in only'));
+      lines.push('  trusted        ' + (settings.trusted ? 'yes' : 'no'));
+      lines.push('Edit .oasis/settings.json (project), .oasis/settings.local.json (personal), or your user settings; /permissions, /hooks, /mcp show details.');
+      return { output: lines.join('\n') };
+    }
+    case 'doctor': {
+      const { workspaceDoctor } = await import('./doctor.mjs');
+      return { output: await workspaceDoctor(root, { env, session }) };
+    }
+    case 'release-notes': {
+      const { runGitTool } = await import('./git-tools.mjs');
+      const { fileURLToPath } = await import('node:url');
+      const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+      const log = await runGitTool('git_log', appRoot, { limit: Number.parseInt(argument, 10) || 15 }, { env }).catch(() => null);
+      if (!log || !log.ok || !log.commits.length) return { output: 'Release notes: https://github.com/gtxnrg-ship-it/Oasis/commits/main (this install has no Git history). Update with oasis update.' };
+      return { output: ['Recent Oasis changes:', ...log.commits.map((c) => '  ' + c.date + '  ' + c.subject), 'Full history: https://github.com/gtxnrg-ship-it/Oasis/commits/main'].join('\n') };
+    }
+    case 'loop': {
+      const parsed = parseLoopArgs(argument);
+      if (parsed.error) return { output: parsed.error };
+      return { output: '[loop] Running every ' + formatInterval(parsed.intervalMs) + (parsed.times ? ', ' + parsed.times + ' times' : '') + '. Press Ctrl+C to stop.', loop: parsed };
+    }
+    case 'cd': {
+      if (!argument) return { output: 'Workspace: ' + root + '\nUsage: /cd PATH' };
+      const { stat } = await import('node:fs/promises');
+      const os = await import('node:os');
+      const target = path.resolve(root, argument.replace(/^~(?=$|[\\/])/, os.homedir()));
+      const info = await stat(target).catch(() => null);
+      if (!info || !info.isDirectory()) return { output: 'Not a directory: ' + target };
+      if (target === path.resolve(root)) return { output: 'Already in ' + target + '.' };
+      return { output: 'Switched workspace to ' + target + '. The next message starts a fresh conversation there.', cd: target };
+    }
+    case 'sandbox': {
+      const { resolveSandbox, detectSandbox } = await import('./sandbox.mjs');
+      const current = session && session.sandbox || null;
+      const describe = (box) => box && box.enabled ? (box.available ? 'on (' + box.kind + (box.network ? ', network on' : ', network off') + ')' : 'on but unavailable - ' + box.reason) : 'off';
+      if (!argument) {
+        const probe = detectSandbox();
+        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.\nUsage: /sandbox on | off | network on | network off. Make it permanent with "sandbox": {"enabled": true} in settings.' };
+      }
+      if (!session) return { output: 'Start a task first; /sandbox changes the running session.' };
+      const words = argument.toLowerCase().split(/\s+/);
+      let enabled = Boolean(current && current.enabled);
+      let network = Boolean(current && current.network);
+      if (words[0] === 'on') enabled = true;
+      else if (words[0] === 'off') enabled = false;
+      else if (words[0] === 'network' && ['on', 'off'].includes(words[1])) { enabled = true; network = words[1] === 'on'; }
+      else return { output: 'Usage: /sandbox on | off | network on | network off' };
+      const writable = current && current.writable || [root];
+      session.sandbox = resolveSandbox({ sandbox: { enabled, network, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
+      if (session.sandbox.enabled) session.sandbox.writable = writable;
+      return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
+    }
     case 'tasks': {
       const { listAgents, getAgent, stopAgent, summarizeAgent } = await import('./agent-tasks.mjs');
       const words = argument ? argument.split(/\s+/) : [];
@@ -354,4 +477,28 @@ export function conversationMarkdown(session) {
     }
   }
   return lines.join('\n');
+}
+
+const UNIT_MS = { s: 1000, m: 60000, h: 3600000 };
+// /loop [INTERVAL] [xN] PROMPT. Interval like 30s, 5m, 2h (default 10m, minimum 10s).
+export function parseLoopArgs(argument) {
+  const parts = String(argument || '').trim().split(/\s+/).filter(Boolean);
+  let intervalMs = 10 * 60000;
+  let times = null;
+  const interval = parts[0] && parts[0].match(/^(\d+(?:\.\d+)?)([smh])$/i);
+  if (interval) { intervalMs = Math.round(Number(interval[1]) * UNIT_MS[interval[2].toLowerCase()]); parts.shift(); }
+  const count = parts[0] && parts[0].match(/^x(\d{1,3})$/i);
+  if (count) { times = Number(count[1]); parts.shift(); }
+  const prompt = parts.join(' ');
+  if (!prompt) return { error: 'Usage: /loop [30s|5m|1h] [x5] PROMPT, for example /loop 5m check whether the deploy finished' };
+  if (intervalMs < 10000) return { error: 'The shortest loop interval is 10s.' };
+  if (intervalMs > 24 * 3600000) return { error: 'The longest loop interval is 24h.' };
+  if (times !== null && times < 1) return { error: 'The run count must be at least 1.' };
+  return { intervalMs, times, prompt };
+}
+
+export function formatInterval(ms) {
+  if (ms % 3600000 === 0) return ms / 3600000 + 'h';
+  if (ms % 60000 === 0) return ms / 60000 + 'm';
+  return Math.round(ms / 1000) + 's';
 }
