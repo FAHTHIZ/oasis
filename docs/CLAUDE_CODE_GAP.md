@@ -72,6 +72,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | /subtask | Forked background subagent that inherits the conversation | **Closed.** `/subtask TASK` copies the conversation (dropping unanswered tool calls) into a background general-purpose agent; its report returns through the normal agent notice and wakes idle sessions. |
 | Model aliases + advisor | `opus`/`sonnet`/`haiku`/`fable`/`best`/`opusplan`/`[1m]`, `ANTHROPIC_DEFAULT_*_MODEL`, `advisorModel`, `--advisor`, `/advisor` | **Closed.** Aliases resolve at request time per provider (opusplan follows plan mode). The advisor is a client-side tool, so it works with any provider; subagents do not get it. |
 | /import | Import config from Codex, Gemini CLI, Cursor | **Closed.** `oasis import` / `/import [codex\|gemini\|cursor] [--dry-run] [--yes]` converts MCP servers, instructions, commands and rules; it previews first and never overwrites. Adds a Claude-format user `mcp.json`. |
+| /insights | HTML report analyzing recent sessions | **Closed.** `/insights [DAYS]` / `oasis insights` computes project areas, tool use, friction (errors, denials, corrections) and suggestions locally; the in-session model adds a short narrative from the aggregate stats only. |
 
 ## Ranked next improvements
 
