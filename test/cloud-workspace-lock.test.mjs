@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { saveConfig } from '../src/config.mjs';
 import { startOasisWebServer } from '../src/web.mjs';
@@ -11,6 +11,7 @@ test('browser runtime prevents two mutating jobs from running in one workspace a
   const temp = await mkdtemp(path.join(os.tmpdir(), 'oasis-workspace-lock-'));
   const root = path.join(temp, 'workspace');
   const env = { ...process.env, OASIS_CONFIG_DIR: path.join(temp, 'config') };
+  await mkdir(root, { recursive: true });
   let providerResolve;
   let providerRelease;
   const providerStarted = new Promise((resolve) => { providerResolve = resolve; });
