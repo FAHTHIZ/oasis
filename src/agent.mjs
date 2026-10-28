@@ -575,6 +575,42 @@ function toAnthropicRequest(messages, options = {}) {
   return { system: system ? String(system.content || '') : '', messages: merged };
 }
 
+// Output-token limits. Claude Code defaults to a 32k output window on current
+// Claude models (CLAUDE_CODE_MAX_OUTPUT_TOKENS overrides it). Older models with
+// smaller caps get a conservative default; a provider 400 that names the real
+// cap lowers it for the rest of the session instead of failing the turn.
+const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
+const MODERN_32K_MODELS = /claude|gpt-5|\bo[1-9](-|$)|gpt-4\.1|gemini-(2|3)|deepseek|qwen3|kimi|glm-4\.[5-9]|grok-[3-9]/i;
+export function maxOutputTokensFor(config = {}, env = process.env) {
+  const configured = Number.parseInt(env.OASIS_MAX_OUTPUT_TOKENS || env.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0, 10) || 0;
+  if (configured > 0) return Math.max(1024, Math.min(128000, configured));
+  const model = String(config.model || '');
+  if (LEGACY_8K_MODELS.test(model) && !/claude-3-7|claude-3\.7/i.test(model)) return 8192;
+  if (MODERN_32K_MODELS.test(model)) return 32000;
+  if (/gpt-4o|gpt-4-turbo/i.test(model)) return 16384;
+  return 8192;
+}
+
+/** Parse the real maximum out of a provider "max_tokens too large" error, if any. */
+export function outputCapFromError(status, body) {
+  if (status !== 400) return 0;
+  const text = String(body || '');
+  if (!/max_tokens|max_output_tokens|max_completion_tokens|maximum (allowed )?(number of )?output tokens/i.test(text)) return 0;
+  const explicit = text.match(/>\s*(\d{3,6})\b/) || text.match(/(?:maximum|max|up to|at most|limit(?: is)?)[^\d]{0,60}(\d{3,6})/i);
+  const parsed = explicit ? Number.parseInt(explicit[1], 10) : 0;
+  return parsed >= 1024 ? parsed : 8192;
+}
+
+const MAX_OUTPUT_RECOVERIES = 3;
+function truncationRecoveryPrompt(limit, droppedCall) {
+  return [
+    'Your previous response hit the ' + limit + '-token output limit and was cut off.',
+    droppedCall ? 'The `' + droppedCall + '` tool call was incomplete and was NOT executed; nothing changed from it.' : '',
+    'Resume directly from where you stopped — no apology and no recap of earlier text.',
+    droppedCall ? 'Break the work into smaller pieces: e.g. write a large file as a short first part with write_file, then add the rest with several edit_file/multi_edit calls, or split long commands.' : ''
+  ].filter(Boolean).join(' ');
+}
+
 // Anthropic prompt caching: mark the system prompt, the tool list, and the newest
 // message so each request reuses the previous prefix (cheaper and faster).
 // Extended thinking (Anthropic): Claude Code-style keywords pick a budget per turn.
@@ -773,7 +809,11 @@ async function readProviderStream(response, protocol, onDelta) {
       if (block.type === 'tool_use') {
         if (block.partialJson) {
           try { normalized.input = JSON.parse(block.partialJson); }
-          catch { throw new Error('The Anthropic stream returned incomplete JSON for a tool call.'); }
+          catch {
+            if (stopReason !== 'max_tokens') throw new Error('The Anthropic stream returned incomplete JSON for a tool call.');
+            normalized.input = {};
+            normalized.incomplete = true;
+          }
         } else if (!normalized.input || typeof normalized.input !== 'object') normalized.input = {};
       }
       return normalized;
@@ -803,6 +843,7 @@ async function readProviderStream(response, protocol, onDelta) {
   let content = '';
   const calls = new Map();
   let usage = {};
+  let finishReason = null;
   await consumeServerSentEvents(response, ({ data }) => {
     if (data === '[DONE]') return;
     const event = parseProviderEvent(data);
@@ -810,6 +851,7 @@ async function readProviderStream(response, protocol, onDelta) {
     if (event.usage) usage = event.usage;
     for (const choice of Array.isArray(event.choices) ? event.choices : []) {
       const delta = choice.delta || {};
+      if (choice.finish_reason) finishReason = choice.finish_reason;
       if (typeof delta.content === 'string') {
         content += delta.content;
         onDelta(delta.content);
@@ -826,7 +868,7 @@ async function readProviderStream(response, protocol, onDelta) {
     }
   });
   const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call);
-  return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) } }], usage };
+  return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }
 
 const MAX_PROVIDER_RETRIES = 2;
@@ -977,6 +1019,7 @@ async function requestCompletionRaw(session, options = {}) {
 
   let endpoint;
   let bodyObject;
+  let outputLimit = 0;
   if (nativeAnthropic) {
     endpoint = cloudAnthropic ? cloudEndpoint(config, providerEnv, typeof options.onDelta === 'function' && cloudStreams(config.protocol)) : anthropicEndpoint(config.baseURL);
     const converted = toAnthropicRequest(session.messages, { thinking: Boolean(session.thinkingBudget) && !options.forceTool });
@@ -987,10 +1030,12 @@ async function requestCompletionRaw(session, options = {}) {
       input_schema: tool.function.parameters
     }));
     if (cache) applyAnthropicCacheBreakpoints(converted, anthropicTools);
-    const thinkingBudget = options.forceTool ? 0 : Number(session.thinkingBudget || 0);
+    const cappedThinking = options.forceTool ? 0 : Math.min(Number(session.thinkingBudget || 0), session.outputTokenCap ? Math.max(0, session.outputTokenCap - 2048) : Infinity);
+    const thinkingBudget = cappedThinking >= 1024 ? cappedThinking : 0;
+    outputLimit = session.outputTokenCap || maxOutputTokensFor(config, providerEnv);
     bodyObject = {
       model: config.model,
-      max_tokens: 8192 + thinkingBudget,
+      max_tokens: session.outputTokenCap ? outputLimit : outputLimit + thinkingBudget,
       ...(thinkingBudget ? { thinking: { type: 'enabled', budget_tokens: thinkingBudget } } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       system: converted.system,
@@ -1013,7 +1058,7 @@ async function requestCompletionRaw(session, options = {}) {
         strict: false
       })), tool_choice: options.forceTool ? { type: 'function', name: options.forceTool } : 'auto' } : {}),
       parallel_tool_calls: false,
-      max_output_tokens: 8192,
+      max_output_tokens: (outputLimit = session.outputTokenCap || maxOutputTokensFor(config, providerEnv)),
       ...(session.reasoningEffort && !options.forceTool ? { reasoning: { effort: session.reasoningEffort } } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // The runtime owns state and replays response items locally, including reasoning items.
@@ -1021,8 +1066,12 @@ async function requestCompletionRaw(session, options = {}) {
     };
   } else {
     endpoint = openAIEndpoint(config.baseURL);
+    // Compatible gateways differ on max_tokens support, so only send it when configured.
+    const explicitChatLimit = session.outputTokenCap || Number.parseInt(providerEnv.OASIS_MAX_OUTPUT_TOKENS || providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0, 10) || 0;
+    if (explicitChatLimit) outputLimit = explicitChatLimit;
     bodyObject = {
       model: config.model,
+      ...(explicitChatLimit ? { max_tokens: explicitChatLimit } : {}),
       messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
@@ -1067,6 +1116,14 @@ async function requestCompletionRaw(session, options = {}) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
         continue;
       }
+      const cap = outputLimit && !options.outputCapRetried ? outputCapFromError(status, errorBody) : 0;
+      if (cap && cap < outputLimit + Number(session.thinkingBudget || 0)) {
+        session.outputTokenCap = cap;
+        if (session.thinkingBudget && session.thinkingBudget >= cap) session.thinkingBudget = Math.max(1024, cap - 2048);
+        clearTimeout(timer);
+        if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
+        return requestCompletionRaw(session, { ...options, outputCapRetried: true });
+      }
       throw new Error(formatApiError(status, errorBody, config.protocol));
     }
     if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
@@ -1091,12 +1148,16 @@ async function requestCompletionRaw(session, options = {}) {
       if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
       const thinkingBlocks = data.content.filter((block) => block.type === 'thinking' || block.type === 'redacted_thinking');
       if (thinkingBlocks.length && typeof options.onThinking === 'function') options.onThinking(thinkingBlocks.map((block) => block.thinking || '').join('\n'));
-      return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage), ...(thinkingBlocks.length ? { thinkingBlocks } : {}) };
+      const truncated = data.stop_reason === 'max_tokens';
+      const incompleteIds = data.content.filter((block) => block.type === 'tool_use' && block.incomplete).map((block) => block.id);
+      return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage), ...(thinkingBlocks.length ? { thinkingBlocks } : {}), ...(truncated ? { truncated: true, outputLimit, incompleteToolCallIds: incompleteIds } : {}) };
     }
     if (nativeResponses) {
       if (!Array.isArray(data.output)) throw new Error('The Responses API returned no output items.');
-      if (data.status && data.status !== 'completed') {
-        const reason = data.incomplete_details && data.incomplete_details.reason;
+      const incompleteReason = data.incomplete_details && data.incomplete_details.reason;
+      const responsesTruncated = data.status === 'incomplete' && incompleteReason === 'max_output_tokens';
+      if (data.status && data.status !== 'completed' && !responsesTruncated) {
+        const reason = incompleteReason;
         throw new Error('The Responses API ended with status "' + data.status + '"' + (reason ? ' (' + reason + ')' : '') + '. Increase the output limit or adjust the request.');
       }
       const toolCalls = data.output.filter((item) => item && item.type === 'function_call').map((item) => ({
@@ -1106,12 +1167,13 @@ async function requestCompletionRaw(session, options = {}) {
       }));
       const text = responseText(data.output);
       if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
-      return { role: 'assistant', content: text, tool_calls: toolCalls, responseItems: data.output, usage: normalizeUsage(data.usage) };
+      return { role: 'assistant', content: text, tool_calls: toolCalls, responseItems: data.output, usage: normalizeUsage(data.usage), ...(responsesTruncated ? { truncated: true, outputLimit } : {}) };
     }
     const message = data.choices && data.choices[0] && data.choices[0].message;
     if (!message) throw new Error('The model provider returned no assistant message.');
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
-    return { ...message, usage: normalizeUsage(data.usage) };
+    const chatTruncated = data.choices[0].finish_reason === 'length';
+    return { ...message, usage: normalizeUsage(data.usage), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
   } catch (error) {
     if (options.signal && options.signal.aborted) {
       const cancelled = new Error('Agent task cancelled by the user.');
@@ -2474,6 +2536,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   session.messages.push(userMessage);
   if (!options.isSubagent) beginCheckpoint(session, userMessage, request);
   let stopHookContinuations = 0;
+  let outputRecoveries = 0;
+  let pendingTruncationNotice = '';
   const maxSteps = Math.max(1, Math.min(400, Number.parseInt(options.maxSteps || session.config.maxSteps, 10) || 60));
   const tokenBudget = Math.max(10000, Math.min(20000000, Number.parseInt(options.maxTokens || session.config.maxTokens, 10) || 2000000));
   const maxToolCalls = Math.max(1, Math.min(MAX_TURN_TOOL_CALLS, Number.parseInt(options.maxToolCalls || session.config.maxToolCalls, 10) || DEFAULT_TURN_TOOL_CALLS));
@@ -2497,7 +2561,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     throwIfCancelled(options.signal);
     refreshTodoPrompt(session);
     // Background-agent notices and messages sent to this agent arrive between steps.
-    const notice = step > 0 ? drainInbox(session) : '';
+    const notice = [step > 0 ? drainInbox(session) : '', pendingTruncationNotice].filter(Boolean).join('\n\n');
+    pendingTruncationNotice = '';
     if (notice) {
       const last = session.messages[session.messages.length - 1];
       if (last && last.role === 'tool' && typeof last.content === 'string') last.content += '\n\n' + notice;
@@ -2537,6 +2602,21 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     session.costUsd = (session.costUsd || 0) + stepCost;
     if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, step: step + 1 });
     if (session.maxBudgetUsd > 0 && session.costUsd >= session.maxBudgetUsd) throw new BudgetExceededError(session.costUsd, session.maxBudgetUsd);
+    let truncationNotice = '';
+    if (assistant.truncated) {
+      outputRecoveries++;
+      const pending = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
+      // The call being generated when output stopped is the last one; never execute it.
+      const dropped = pending.length ? pending[pending.length - 1] : null;
+      if (dropped) {
+        assistant.tool_calls = pending.slice(0, -1);
+        if (Array.isArray(assistant.responseItems)) assistant.responseItems = assistant.responseItems.filter((item) => !(item && item.type === 'function_call' && (item.call_id || item.id) === dropped.id));
+      }
+      if (outputRecoveries <= MAX_OUTPUT_RECOVERIES) {
+        truncationNotice = truncationRecoveryPrompt(assistant.outputLimit || maxOutputTokensFor(session.config, options.env || process.env), dropped && dropped.function && dropped.function.name);
+        if (typeof options.onOutputTruncated === 'function') options.onOutputTruncated({ limit: assistant.outputLimit || 0, droppedTool: dropped && dropped.function && dropped.function.name || null, attempt: outputRecoveries });
+      }
+    }
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
     if (Array.isArray(assistant.thinkingBlocks) && assistant.thinkingBlocks.length) assistantMessage.thinkingBlocks = assistant.thinkingBlocks;
@@ -2551,6 +2631,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
 
     const text = typeof assistant.content === 'string' ? assistant.content.trim() : '';
     const calls = assistantMessage.tool_calls || [];
+    if (truncationNotice && !calls.length) {
+      if (text && options.onText) options.onText(text);
+      session.messages.push({ role: 'user', content: truncationNotice });
+      continue;
+    }
+    if (truncationNotice) pendingTruncationNotice = truncationNotice;
     if (!calls.length) {
       const issues = verificationIssues(verification);
       if (issues.length && !verification.nudgeUsed) {
