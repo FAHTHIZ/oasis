@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, writeFile, chmod, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_MESSAGES = 120;
@@ -70,7 +71,8 @@ export async function saveSession(session, options = {}) {
     },
     ...(session.sessionName ? { name: String(session.sessionName).slice(0, 120) } : {}),
     messages,
-    todos: sanitizeTodos(session.todos)
+    todos: sanitizeTodos(session.todos),
+    sharedTasks: sanitizeSharedTaskStore(session.sharedTasks)
   };
   const body = JSON.stringify(payload, null, 2) + '\n';
   if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) throw new Error('Session is too large to save safely. Start a fresh session or disable persistence.');
@@ -104,7 +106,8 @@ export async function loadSession(root, id, options = {}) {
     provider: payload.provider || {},
     name: typeof payload.name === 'string' ? payload.name.slice(0, 120) : '',
     messages: validateMessages(payload.messages),
-    todos: sanitizeTodos(payload.todos)
+    todos: sanitizeTodos(payload.todos),
+    sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks)
   };
 }
 
