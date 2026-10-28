@@ -486,9 +486,17 @@ export function createOasisWebServer(options = {}) {
       throw Object.assign(new Error('Wait until the current agent or terminal task finishes before switching workspaces.'), { statusCode: 409 });
     }
 
+    const workspaceSwitchKey = activeRoot;
+    startingWorkspaces.add(workspaceSwitchKey);
     const [owner, name] = repository.split('/');
     const relative = '.oasis/workspaces/' + owner + '--' + name;
-    const resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true });
+    let resolved;
+    try {
+      resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true });
+    } catch (error) {
+      startingWorkspaces.delete(workspaceSwitchKey);
+      throw error;
+    }
     try {
       await access(resolved.absolute);
       const check = await executeTool('run_command', {
@@ -503,19 +511,34 @@ export function createOasisWebServer(options = {}) {
         throw Object.assign(new Error('The destination workspace already exists but its GitHub origin does not match ' + repository + '. No files were changed.'), { statusCode: 409 });
       }
       activeRoot = resolved.absolute;
+      startingWorkspaces.delete(workspaceSwitchKey);
       return { reused: true, workspaceName: path.basename(activeRoot), workspacePath: activeRoot };
     } catch (error) {
-      if (error.statusCode) throw error;
-      if (error.code !== 'ENOENT') throw error;
+      if (error.statusCode) {
+        startingWorkspaces.delete(workspaceSwitchKey);
+        throw error;
+      }
+      if (error.code !== 'ENOENT') {
+        startingWorkspaces.delete(workspaceSwitchKey);
+        throw error;
+      }
     }
 
-    const releaseJobReservation = reserveJobSlot();
+    let releaseJobReservation;
+    try {
+      releaseJobReservation = reserveJobSlot();
+    } catch (error) {
+      startingWorkspaces.delete(workspaceSwitchKey);
+      throw error;
+    }
     const job = newJob();
     job.type = 'github-clone';
     job.title = 'Clone ' + repository;
     job.workspaceName = path.basename(root);
     jobs.set(job.id, job);
     releaseJobReservation();
+    startingWorkspaces.delete(workspaceSwitchKey);
+    busyWorkspaces.add(workspaceSwitchKey);
     emit(job, 'github_clone_started', { repository });
     void (async () => {
       try {
@@ -570,6 +593,8 @@ export function createOasisWebServer(options = {}) {
         job.error = String(error && error.message || error || 'GitHub clone failed').slice(0, 4000);
         job.status = 'error';
         emit(job, 'failed', { jobType: 'github-clone', message: job.error });
+      } finally {
+        busyWorkspaces.delete(workspaceSwitchKey);
       }
     })();
     return { jobId: job.id, jobType: 'github-clone' };
