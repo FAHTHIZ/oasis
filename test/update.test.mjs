@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { latestMainCommit, installedVersion, updatePlan, describeUpdate, INSTALL_SPEC } from '../src/update.mjs';
+
+const SHA_A = 'a'.repeat(40);
+const SHA_B = 'b'.repeat(40);
+
+test('latestMainCommit reads the GitHub commit API', async () => {
+  const latest = await latestMainCommit({ fetch: async (url) => {
+    assert.match(url, /repos\/gtxnrg-ship-it\/oasis\/commits\/main$/);
+    return { ok: true, json: async () => ({ sha: SHA_B, commit: { message: 'Add worktrees\n\nbody', committer: { date: '2026-10-28T00:00:00Z' } } }) };
+  } });
+  assert.deepEqual(latest, { sha: SHA_B, message: 'Add worktrees', date: '2026-10-28T00:00:00Z' });
+  await assert.rejects(latestMainCommit({ fetch: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
+});
+
+test('npm installs read the commit npm recorded; plans pick npm or git', async () => {
+  const exec = async (cmd) => {
+    if (cmd === 'npm') return JSON.stringify({ dependencies: { 'oasis-oss': { resolved: 'git+ssh://git@github.com/gtxnrg-ship-it/Oasis.git#' + SHA_A } } });
+    throw new Error('no');
+  };
+  const installed = await installedVersion('/nonexistent-oasis-root', { exec });
+  assert.deepEqual(installed, { kind: 'npm', commit: SHA_A, root: '/nonexistent-oasis-root' });
+  const plan = updatePlan(installed, { sha: SHA_B });
+  assert.deepEqual(plan, { upToDate: false, command: 'npm', args: ['install', '-g', INSTALL_SPEC] });
+  assert.match(describeUpdate(installed, { sha: SHA_B, message: 'm' }, plan), /aaaaaaa[\s\S]*bbbbbbb - m[\s\S]*npm install -g/);
+  assert.equal(updatePlan(installed, { sha: SHA_A }).upToDate, true);
+  assert.deepEqual(updatePlan({ kind: 'git', commit: SHA_A, root: '/r' }, { sha: SHA_B }).args, ['-C', '/r', 'pull', '--ff-only', 'origin', 'main']);
+  assert.match(updatePlan({ kind: 'git', commit: SHA_A, dirty: true, root: '/r' }, { sha: SHA_B }).blocked, /uncommitted/);
+});
