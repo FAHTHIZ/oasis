@@ -56,6 +56,34 @@ test('.mcp.json stdio servers start with expanded env; bad entries are reported'
   assert.equal(mcpToolDefinitions(mcp.clients).definitions[0].function.name, 'mcp_my-server_whoami');
 });
 
+test('Streamable HTTP client rejects oversized JSON responses, including misleading lengths', async (t) => {
+  const home = await tmp(t);
+  const oversizedJson = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    result: { payload: 'x'.repeat(4 * 1024 * 1024 + 32) }
+  });
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(oversizedJson, { headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ jsonrpc: '2.0', id: 2, result: { ok: true } }), {
+      headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024 + 1) }
+    });
+  };
+  const client = new McpHttpClient(
+    { name: 'remote', url: 'https://mcp.example/mcp' },
+    { fetch: fetchImpl, env: { ...process.env, OASIS_CONFIG_DIR: home } }
+  );
+
+  await assert.rejects(client._request('tools/list'), /MCP response exceeded 4 MiB/);
+  await assert.rejects(client._request('tools/list'), /MCP response exceeded 4 MiB/);
+  assert.equal(calls, 2);
+  client.close();
+});
+
 test('Streamable HTTP client handles JSON and SSE replies, session ids, and approvals', async (t) => {
   const seen = [];
   const server = createServer(async (req, res) => {
