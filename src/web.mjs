@@ -16,6 +16,7 @@ import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } 
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
+import { PtySessionManager } from './pty-sessions.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
@@ -173,6 +174,8 @@ export function createOasisWebServer(options = {}) {
   const env = options.env || process.env;
   const token = options.token || randomBytes(32).toString('base64url');
   const activeSessions = new Map();
+  const ptyManager = options.ptyManager || new PtySessionManager();
+  const ptySession = { ptyManager, background: new Map() };
   const jobs = new Map();
   const busySessions = new Set();
   const startingSessions = new Set();
@@ -563,27 +566,35 @@ export function createOasisWebServer(options = {}) {
     if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\0'))) {
       throw Object.assign(new Error('Arguments must be an array of up to 80 strings; each argument is limited to 5,000 characters.'), { statusCode: 400 });
     }
+    const interactive = input.interactive === true;
     const timeoutSeconds = input.timeoutSeconds === undefined ? 120 : Number(input.timeoutSeconds);
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
       throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
     }
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
-    job.type = 'terminal';
+    job.type = interactive ? 'terminal-pty' : 'terminal';
     jobs.set(job.id, job);
     releaseJobReservation();
-    emit(job, 'terminal_started', { command, args });
+    emit(job, 'terminal_started', { command, args, interactive });
     void (async () => {
       try {
-        const result = await executeTool('run_command', { command, args, timeoutSeconds }, {
+        const result = await executeTool('run_command', { command, args, timeoutSeconds, ...(interactive ? { interactive: true } : {}) }, {
           root: activeRoot,
           env,
           autoApprove: false,
           maxCommandSeconds: timeoutSeconds,
           approval: (prompt) => approvalFor(job, prompt),
-          signal: job.controller.signal
+          signal: job.controller.signal,
+          ...(interactive ? { session: ptySession } : {})
         });
-        job.result = { ...result, jobType: 'terminal' };
+        job.result = { ...result, jobType: interactive ? 'terminal-pty' : 'terminal' };
+        if (interactive && result && result.id && result.state) {
+          emit(job, 'terminal_pty_started', result);
+          job.status = 'completed';
+          emit(job, 'completed', job.result);
+          return;
+        }
         const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
         emit(job, 'terminal_output', { command, exitCode: result.exitCode, approved: result.approved, output, timedOut: Boolean(result.timedOut), cancelled: Boolean(result.cancelled), message: result.message || '' });
         if (job.cancelRequested || result.cancelled) {
@@ -955,6 +966,55 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/terminal/pty/list') {
+      json(res, 200, ptyManager.list());
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/terminal/pty/read') {
+      try {
+        const id = parsedUrl.searchParams.get('id') || '';
+        const numberParam = (key, fallback) => {
+          const raw = parsedUrl.searchParams.get(key);
+          if (raw === null || raw === '') return fallback;
+          const value = Number(raw);
+          return Number.isFinite(value) ? Math.floor(value) : fallback;
+        };
+        const result = await ptyManager.read(id, {
+          offset: numberParam('offset', 0),
+          maxChars: numberParam('max_chars', 12000),
+          waitMs: numberParam('wait_seconds', 0) * 1000
+        });
+        json(res, 200, result);
+      } catch (error) {
+        const message = String(error && error.message || error);
+        json(res, /No terminal session exists/.test(message) ? 404 : 400, { error: message.slice(0, 2000) });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && pathname.startsWith('/api/terminal/pty/')) {
+      const body = await readJsonBody(req);
+      try {
+        let result;
+        if (pathname === '/api/terminal/pty/input') {
+          if (typeof body.data !== 'string') { json(res, 400, { error: 'data must be a string.' }); return; }
+          result = ptyManager.write(body.id, body.data);
+        } else if (pathname === '/api/terminal/pty/resize') {
+          if (!Number.isInteger(body.cols) || !Number.isInteger(body.rows)) { json(res, 400, { error: 'cols and rows must be integers.' }); return; }
+          result = ptyManager.resize(body.id, body.cols, body.rows);
+        } else if (pathname === '/api/terminal/pty/interrupt') result = ptyManager.interrupt(body.id);
+        else if (pathname === '/api/terminal/pty/stop') result = ptyManager.stop(body.id);
+        else { json(res, 404, { error: 'Unknown PTY terminal action.' }); return; }
+        json(res, 200, result);
+      } catch (error) {
+        const message = String(error && error.message || error);
+        const status = /No terminal session exists/.test(message) ? 404 : (/too large|only accepted|Only a running/.test(message) ? 400 : 409);
+        json(res, status, { error: message.slice(0, 2000) });
+      }
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/api/terminal/command') {
       const body = await readJsonBody(req);
       const result = await startTerminalJob(body);
@@ -1056,6 +1116,7 @@ export function createOasisWebServer(options = {}) {
       }
       for (const session of activeSessions.values()) closeSession(session);
       activeSessions.clear();
+      try { ptyManager.closeAll(); } catch {}
       if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
   };
