@@ -623,3 +623,23 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md), and [t
 ## License
 
 MIT. See [LICENSE](../LICENSE).
+
+
+## Interactive PTY terminal sessions
+
+For commands that need a real terminal (for example, an interactive REPL or an installer prompt), OASIS can start a persistent PTY rather than a one-shot pipe process. The agent uses `run_command` with `interactive: true`; it must still pass normal command safety analysis and approval rules.
+
+The resulting terminal id can be used with:
+
+| Tool | Purpose |
+| --- | --- |
+| `terminal_read` | Read streamed output by cursor; optionally wait up to 30 seconds for new output. |
+| `terminal_input` | Send text/keystrokes to the already-approved process. |
+| `terminal_resize` | Change terminal columns/rows. |
+| `terminal_interrupt` | Send Ctrl+C. |
+| `terminal_stop` | Terminate the terminal process. |
+| `terminal_list` | List terminal ids, state and exit status. |
+
+Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
+
+The native `node-pty` component is an optional dependency. See [Install OASIS](INSTALL.md) for supported platforms and native build prerequisites. The CLI session API does not yet mean the browser workspace has a full terminal emulator.

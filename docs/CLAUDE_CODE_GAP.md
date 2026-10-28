@@ -47,11 +47,11 @@ Claude Code documents agent teams as **experimental and disabled by default**. I
 
 This order is intentionally ranked by impact and architectural leverage rather than ease.
 
-### 1. Real PTY and terminal lifecycle — next foundational target
+### 1. Real PTY and terminal lifecycle — implementation started, not closed
 
-The current command runner intentionally launches argv processes without a real terminal. That prevents reliable interactive stdin, TUI applications, terminal dimensions/resizing, and full interactive process control. Implementing a PTY behind a clear lifecycle API (start, stream, write input, resize, interrupt/kill, exit status, cleanup) would improve the CLI and browser runtime rather than adding one isolated feature.
+The CLI agent now supports a persistent PTY session API over the optional `node-pty` component. An approved `run_command` call can set `interactive=true`, then `terminal_read`, `terminal_input`, `terminal_resize`, `terminal_interrupt`, `terminal_stop`, and `terminal_list` manage the session. The manager bounds captured output and input, retains incremental offsets, tracks exit codes, caps active sessions, and closes sessions when OASIS closes.
 
-Acceptance gates should include deterministic process cleanup, cancellation, bounded output, permission/sandbox enforcement, interactive fixture tests, and platform-specific tests before claiming the PTY is complete.
+The gap is not closed yet. The first native integration smoke test targets Linux/Node 22; Windows/macOS compatibility, child-process-tree cleanup, robust reconnection semantics, browser terminal transport and UI, and a beginner-friendly signed installer are still missing. The native dependency is optional to preserve CLI usability when local compilation fails. Closure requires native PTY tests on supported operating systems, deterministic cancellation and cleanup tests, permission/sandbox enforcement tests, interactive fixtures, bounded output verification and browser/CLI end-to-end behavior.
 
 ### 2. Complete multi-agent coordination
 

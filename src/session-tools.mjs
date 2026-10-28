@@ -10,6 +10,17 @@ export const TOOL_SEARCH_DEFINITION = fn('tool_search',
   { query: { type: 'string', description: 'Keywords, or select:<comma-separated tool names>.' }, max_results: { type: 'integer', minimum: 1, maximum: 20 } }, ['query']);
 
 export const SESSION_TOOL_DEFINITIONS = [
+  fn('terminal_read', 'Read new output from a real PTY terminal session. Use wait_seconds to wait briefly for more data. Keep the returned nextOffset and pass it as offset to avoid repeating old output.',
+    { id: { type: 'string' }, offset: { type: 'integer', minimum: 0 }, max_chars: { type: 'integer', minimum: 1, maximum: 48000 }, wait_seconds: { type: 'integer', minimum: 0, maximum: 30 } }, ['id']),
+  fn('terminal_list', 'List current-session PTY terminal sessions and their running/exited state. No command arguments or environment values are exposed.', {}),
+  fn('terminal_input', 'Send input bytes/text to an existing, already-approved PTY process. Use newline or carriage return when the program needs Enter. The underlying process retains its original permission boundary.',
+    { id: { type: 'string' }, data: { type: 'string', maxLength: 16384 } }, ['id', 'data']),
+  fn('terminal_resize', 'Resize an active PTY terminal. Columns are clamped to 20–300 and rows to 5–120.',
+    { id: { type: 'string' }, cols: { type: 'integer', minimum: 20, maximum: 300 }, rows: { type: 'integer', minimum: 5, maximum: 120 } }, ['id', 'cols', 'rows']),
+  fn('terminal_interrupt', 'Send Ctrl+C to an active PTY process. The program may handle or ignore it; use terminal_stop to terminate the process.',
+    { id: { type: 'string' } }, ['id']),
+  fn('terminal_stop', 'Terminate an active PTY terminal process. Use this when a process should not continue running.',
+    { id: { type: 'string' } }, ['id']),
   fn('monitor_command', 'Wait for a background command (started with run_command background=true) until its output matches a pattern, it exits, or the timeout passes. Returns the new output.',
     { id: { type: 'string' }, pattern: { type: 'string', description: 'Optional JavaScript regular expression to wait for.' }, timeout_seconds: { type: 'integer', minimum: 1, maximum: 600 } }, ['id']),
   fn('enter_plan_mode', 'Switch to plan mode for complex or risky work: research read-only, then call exit_plan_mode with a plan for the user to approve.',
@@ -24,7 +35,7 @@ export const SESSION_TOOL_DEFINITIONS = [
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_TOOL_NAMES];
+export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
@@ -224,6 +235,27 @@ export function stopCron(session) {
 export async function runSessionTool(session, name, args, options = {}) {
   switch (name) {
     case 'tool_search': return searchTools(session, args);
+    case 'terminal_read': {
+      if (!session.ptyManager) throw new Error('No PTY terminal sessions have been started in this OASIS session. Use run_command with interactive=true first.');
+      return await session.ptyManager.read(args.id, { offset: args.offset, maxChars: args.max_chars, waitMs: Math.max(0, Math.min(30, Number(args.wait_seconds) || 0)) * 1000 });
+    }
+    case 'terminal_list': return session.ptyManager ? session.ptyManager.list() : { sessions: [] };
+    case 'terminal_input': {
+      if (!session.ptyManager) throw new Error('No PTY terminal sessions have been started in this OASIS session.');
+      return session.ptyManager.write(args.id, args.data);
+    }
+    case 'terminal_resize': {
+      if (!session.ptyManager) throw new Error('No PTY terminal sessions have been started in this OASIS session.');
+      return session.ptyManager.resize(args.id, args.cols, args.rows);
+    }
+    case 'terminal_interrupt': {
+      if (!session.ptyManager) throw new Error('No PTY terminal sessions have been started in this OASIS session.');
+      return session.ptyManager.interrupt(args.id);
+    }
+    case 'terminal_stop': {
+      if (!session.ptyManager) throw new Error('No PTY terminal sessions have been started in this OASIS session.');
+      return session.ptyManager.stop(args.id);
+    }
     case 'monitor_command': return monitorCommand(session, args, options);
     case 'enter_plan_mode': return enterPlanMode(session, args);
     case 'notify': return notifyUser(args, options.notify || {});

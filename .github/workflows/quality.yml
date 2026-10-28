@@ -29,6 +29,21 @@ jobs:
       - name: Verify installable CLI package contents
         run: npm pack --dry-run
 
+  pty-runtime:
+    name: Native PTY integration (Linux / Node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install optional native PTY dependency
+        run: npm install --no-audit --no-fund
+      - name: Exercise a real interactive process
+        run: node --test test/pty-sessions.test.mjs
+
   browser-e2e:
     name: Browser end-to-end smoke test
     runs-on: ubuntu-latest

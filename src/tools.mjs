@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { PtySessionManager } from './pty-sessions.mjs';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
@@ -42,7 +43,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
-  { type: 'function', function: { name: 'run_command', description: 'Run a single executable with an argv array in the workspace, with no shell expansion. Requires approval unless the user explicitly enabled --yes. Destructive executables and shell interpreters are blocked.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120' }, run_in_background: { type: 'boolean', description: 'Start a long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' } }, required: ['command', 'args'] } } },
+  { type: 'function', function: { name: 'run_command', description: 'Run one executable with argv arguments in the workspace, without shell expansion. Requires approval unless the user explicitly enabled --yes. Set interactive=true to start a persistent real PTY terminal session for REPLs, prompts, and terminal-aware tools; use terminal_read/input/resize/interrupt/stop to control it. Interactive sessions end when stopped or when OASIS closes the session. Destructive executables and shell interpreters remain blocked unless explicitly allowed.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120 for non-interactive commands' }, run_in_background: { type: 'boolean', description: 'Start a piped long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' }, interactive: { type: 'boolean', description: 'Run inside a real pseudo-terminal and keep the session open for terminal_input, terminal_read, terminal_resize, terminal_interrupt, and terminal_stop. Cannot be combined with run_in_background.' } }, required: ['command', 'args'] } } },
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
   { type: 'function', function: { name: 'fetch_url', description: 'Fetch public HTTP or HTTPS documentation as text. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public documentation URL using HTTP or HTTPS' } }, required: ['url'] } } },
 
@@ -308,6 +309,16 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
   const env = scrubEnvironment(options.env || process.env);
+  if (options.interactive) {
+    if (options.background) throw new Error('Choose either interactive=true or run_in_background=true, not both.');
+    if (!options.ptyManager) throw new Error('Interactive terminal sessions are not available in this context.');
+    const launch = wrapCommand(command, args, sandbox, root);
+    return await options.ptyManager.start(launch.command, launch.args, {
+      cwd: root, env, cols: options.cols, rows: options.rows,
+      display: String(command).split(/[\\/]/).pop(),
+      sandboxed: sandbox && sandbox.available ? sandbox.kind : null
+    });
+  }
   if (options.background) {
     if (!options.backgroundRegistry) throw new Error('Background commands are not available in this session.');
     const launch = wrapCommand(command, args, sandbox, root);
@@ -1741,6 +1752,8 @@ export async function executeTool(name, args = {}, context = {}) {
         sandbox: context.sandbox,
         ruleAllowed: Boolean(context.ruleAllowed),
         background: args.run_in_background === true,
+        interactive: args.interactive === true,
+        ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),
         backgroundRegistry: context.session && (context.session.background ||= new Map())
       });
     case 'install_package': {

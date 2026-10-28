@@ -429,6 +429,7 @@ export async function createSession({ root, config, restore = null, permissionMo
 export function closeSession(session) {
   try { stopCron(session); } catch {}
   if (session && session.background) killAllBackground(session.background);
+  if (session && session.ptyManager) { try { session.ptyManager.closeAll(); } catch {} }
   if (session && session.lspClients) stopLspClients(session).catch(() => {});
   if (session && session.agentTasks) stopAllAgents(session);
   if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {

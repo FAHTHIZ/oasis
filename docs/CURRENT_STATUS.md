@@ -124,3 +124,10 @@ This ranking considers how much each gap constrains real work and what it unlock
 - [Claude Code platforms and integrations](https://code.claude.com/docs/en/platforms)
 - [Claude Code commands](https://code.claude.com/docs/en/commands)
 - [Claude Code release changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) — implementation/release changes should be re-checked before each future parity audit.
+
+
+## PTY milestone update (October 28, 2026)
+
+The agent runtime now has a real PTY session manager wired into the approved `run_command` path. Set `interactive=true` to start a persistent interactive session; `terminal_read`, `terminal_input`, `terminal_resize`, `terminal_interrupt`, `terminal_stop`, and `terminal_list` control it. The manager bounds captured output and input, limits active sessions, tracks exit status, supports incremental reads and stops sessions when the parent OASIS session closes. The native `node-pty` binding is optional and lazy-loaded; ordinary commands keep working if it is unavailable.
+
+This is **partial PTY groundwork, not completion of the whole terminal gap**. Native integration currently has a Linux/Node 22 CI smoke test. The browser command API still does not provide a rendered interactive terminal surface, the current CLI is not a full-screen terminal emulator, native build prerequisites can complicate first-time installation, and a signed no-terminal desktop installer has not shipped. Cross-platform PTY tests (especially Windows and macOS), child-process tree cleanup, browser terminal transport/UI and beginner-first installers remain open.
