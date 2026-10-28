@@ -1,7 +1,7 @@
 {
   "name": "oasis-oss",
   "version": "0.2.0",
-  "description": "A plain-English, local-first coding agent and developer workspace.",
+  "description": "Open-source AI coding agent with a CLI, local browser workspace, multi-provider tools, MCP, skills, and subagents.",
   "type": "module",
   "main": "./src/sdk.mjs",
   "exports": {
@@ -40,10 +40,17 @@
     "url": "https://github.com/gtxnrg-ship-it/Oasis.git"
   },
   "keywords": [
+    "ai-coding-agent",
     "coding-agent",
     "developer-tools",
-    "agentic",
+    "cli",
+    "llm",
+    "mcp",
+    "model-context-protocol",
     "local-first",
-    "terminal"
+    "agentic-workflows",
+    "open-source",
+    "javascript",
+    "nodejs"
   ]
 }
