@@ -70,6 +70,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Claude Code MCP servers | `claude mcp add` servers in `~/.claude.json` (user and local scope) | **Closed.** Loaded with Claude Code's precedence (local, project, user), shown in `oasis mcp list`; opt out with `OASIS_IGNORE_CLAUDE_MCP=1`. |
 | apiKeyHelper | Settings command that prints the API key, with TTL refresh | **Closed.** Used when no key is configured; cached for `CLAUDE_CODE_API_KEY_HELPER_TTL_MS` (5 min default) and refreshed once after a 401/403. Untrusted projects cannot set it. |
 | /subtask | Forked background subagent that inherits the conversation | **Closed.** `/subtask TASK` copies the conversation (dropping unanswered tool calls) into a background general-purpose agent; its report returns through the normal agent notice and wakes idle sessions. |
+| Model aliases + advisor | `opus`/`sonnet`/`haiku`/`fable`/`best`/`opusplan`/`[1m]`, `ANTHROPIC_DEFAULT_*_MODEL`, `advisorModel`, `--advisor`, `/advisor` | **Closed.** Aliases resolve at request time per provider (opusplan follows plan mode). The advisor is a client-side tool, so it works with any provider; subagents do not get it. |
 
 ## Ranked next improvements
 

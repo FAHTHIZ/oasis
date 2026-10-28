@@ -691,6 +691,7 @@ function sessionCreateOptions() {
     agentsInline: SESSION_OPTIONS.agentsInline || null,
     sessionName: SESSION_OPTIONS.sessionName || '',
     fallbackModel: SESSION_OPTIONS.fallbackModel || '',
+    advisor: SESSION_OPTIONS.advisor || '',
     maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
     settingsOverrides: SESSION_OPTIONS.settingsOverrides,
     settingSources: SESSION_OPTIONS.settingSources || null,
@@ -2080,6 +2081,7 @@ async function main() {
     if (arg === '--system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'system', file: needValue(arg) }); continue; }
     if (arg === '--append-system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'append', file: needValue(arg) }); continue; }
     if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
+    if (arg === '--advisor') { SESSION_OPTIONS.advisor = needValue(arg); continue; }
     if (arg === '--max-budget-usd') {
       const value = Number(needValue(arg));
       if (!Number.isFinite(value) || value <= 0) throw new Error('--max-budget-usd must be a positive dollar amount, for example 2.50.');
