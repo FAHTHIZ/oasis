@@ -42,16 +42,15 @@
   "keywords": [
     "ai-coding-agent",
     "coding-agent",
-    "ai-agent",
-    "coding-assistant",
+    "ai-agents",
     "developer-tools",
     "developer-workspace",
     "cli",
     "terminal-agent",
     "llm",
-    "multi-provider",
     "mcp",
     "model-context-protocol",
+    "agent-skills",
     "agentic-workflows",
     "local-first",
     "open-source",
@@ -59,6 +58,7 @@
     "nodejs",
     "automation",
     "subagents",
-    "ollama"
+    "ollama",
+    "multi-provider"
   ]
 }
