@@ -40,7 +40,7 @@ This still is not full Claude Code agent-team parity:
 - Team shutdown requests cancellation; a team becomes closed after its active workers exit. It does not promise instantaneous process termination.
 - Agent teams are a capability comparison, not a claim of equal coding quality. The 21-fixture suite is not an apples-to-apples benchmark.
 
-The agent lifecycle now emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. The next team milestone is a model-directed ready-task dispatcher with cancellation, lease renewal, conflict reports, and regression tests; the timeline is observability, not proof of autonomous coordination.
+The agent lifecycle now emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. Shared task claims can now be renewed by their current owner before expiry through `task_renew`; renewal is bounded and cannot extend another agent's lease. This closes one reliability prerequisite, but it is not yet an autonomous dispatcher. The next team milestone remains a model-directed ready-task dispatcher with cancellation, conflict reports, and regression tests; the timeline is observability, not proof of autonomous coordination.
 
 ## Ranked next improvements
 
