@@ -280,7 +280,7 @@ export class McpServerClient {
 // Starts user-level servers plus any extra (project .mcp.json) servers in parallel.
 // Project servers with the same name as a user server are skipped.
 export async function connectMcpServers(options = {}) {
-  const { servers } = await loadMcpServers(options);
+  const { servers } = options.skipUser ? { servers: [] } : await loadMcpServers(options);
   const clients = new Map();
   const failures = [...(options.extraFailures || [])];
   const names = new Set(servers.map((server) => server.name));

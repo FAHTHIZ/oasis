@@ -39,7 +39,7 @@ import { MarkdownStream, colorEnabled } from './markdown.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit } from './terminal-ui.mjs';
 
 // Options that shape every agent session created by this process.
-const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [] };
+const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null };
 const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
@@ -115,6 +115,23 @@ function printHelp() {
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
     '  --disallowedTools RULES       Extra deny rules for this run',
     '  --append-system-prompt TEXT   Add instructions to the system prompt',
+    '  --append-system-prompt-file F Add instructions from a file',
+    '  --system-prompt TEXT | --system-prompt-file F  Replace the default system prompt',
+    '  --fallback-model ID           Switch to this model when the main one is overloaded or failing',
+    '  --max-budget-usd N            Stop once the estimated model cost reaches N dollars',
+    '  --tools "Read,Edit,Bash"      Only offer these tools (Claude or Oasis names; "" for none)',
+    '  --mcp-config FILE|JSON        Load MCP servers ({"mcpServers": {...}}); --strict-mcp-config uses only these',
+    '  --settings FILE|JSON          Extra settings on top of the usual files; --setting-sources user,project,local',
+    '  --agents JSON                 Define subagents inline: {"name": {"description", "prompt", "tools"}}',
+    '  --session-id UUID | --name NAME | --fork-session  Control how the session is saved or resumed',
+    '  --input-format stream-json    Read user messages as JSON lines on stdin (with -p)',
+    '  --include-partial-messages    Stream text deltas as stream_event lines (with stream-json)',
+    '  --replay-user-messages        Echo user messages back in stream-json output',
+    '  --permission-prompt-tool NAME Ask this MCP tool to approve actions in -p mode',
+    '  --from-pr N                   Start with a GitHub pull request\'s description and diff as context',
+    '  --init | --init-only          Create project instructions first (and exit with --init-only)',
+    '  --disable-slash-commands      Treat /text as a normal message (built-ins still work)',
+    '  --verbose | --debug [cats]    More detail about what Oasis is doing',
     '  --help, -h                    Show this help',
     '  --version                     Show the installed version',
     '',
@@ -525,6 +542,46 @@ function describeToolStart({ name, args = {}, subagent }) {
   return (subagent ? '  [' + subagent + '] ' : '[tool] ') + name + (detail ? ' ' + detail : '');
 }
 
+// Loads values for flags that accept a file path or inline JSON.
+async function readFlagValue(value, root) {
+  const text = String(value || '').trim();
+  if (text.startsWith('{') || text.startsWith('[')) return text;
+  return readFile(path.resolve(root, text.startsWith('@') ? text.slice(1) : text), 'utf8');
+}
+
+async function resolveFlagFiles(root) {
+  for (const item of SESSION_OPTIONS.pendingFiles.splice(0)) {
+    if (item.kind === 'system' || item.kind === 'append') {
+      const text = await readFile(path.resolve(root, item.file), 'utf8').catch((error) => { throw new Error('Could not read ' + item.file + ': ' + error.message); });
+      if (item.kind === 'system') SESSION_OPTIONS.systemPromptOverride = text;
+      else SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, text].filter(Boolean).join('\n\n');
+      continue;
+    }
+    let parsed;
+    try { parsed = JSON.parse(await readFlagValue(item.file, root)); }
+    catch (error) { throw new Error('--' + (item.kind === 'mcp' ? 'mcp-config' : item.kind) + ' is not valid JSON or a readable JSON file: ' + error.message); }
+    if (item.kind === 'mcp') {
+      const { parseMcpServerEntries } = await import('./mcp-project.mjs');
+      const { servers, failures } = parseMcpServerEntries(parsed, process.env, 'flag');
+      for (const failure of failures) stderr.write('[mcp] ' + failure.name + ': ' + failure.error + '\n');
+      SESSION_OPTIONS.mcpServers.push(...servers);
+    } else if (item.kind === 'settings') {
+      SESSION_OPTIONS.settingsOverrides.push({ settings: parsed, file: item.file.trim().startsWith('{') ? '--settings' : path.resolve(root, item.file) });
+      if (parsed && typeof parsed.model === 'string' && !SESSION_OPTIONS.model) SESSION_OPTIONS.model = parsed.model;
+    } else if (item.kind === 'agents') {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('--agents must be a JSON object like {"reviewer": {"description": "...", "prompt": "..."}}.');
+      SESSION_OPTIONS.agentsInline = { ...(SESSION_OPTIONS.agentsInline || {}), ...parsed };
+    }
+  }
+  if (SESSION_OPTIONS.fromPr) {
+    const pr = spawnSync('gh', ['pr', 'view', String(SESSION_OPTIONS.fromPr), '--json', 'number,title,body,headRefName,baseRefName,url,files'], { cwd: root, encoding: 'utf8', timeout: 20000 });
+    if (pr.status !== 0) throw new Error('--from-pr: could not read the pull request with the GitHub CLI: ' + (pr.stderr || pr.error && pr.error.message || 'unknown error').trim());
+    const info = JSON.parse(pr.stdout);
+    const diff = spawnSync('gh', ['pr', 'diff', String(SESSION_OPTIONS.fromPr)], { cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
+    SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, 'This session is linked to pull request #' + info.number + ' (' + info.url + '): ' + info.title + '\nBranch: ' + info.headRefName + ' → ' + info.baseRefName + '\nDescription:\n' + String(info.body || '').slice(0, 6000) + '\n\nChanged files: ' + (info.files || []).map((file) => file.path).join(', ').slice(0, 4000) + (diff.status === 0 ? '\n\nDiff (truncated):\n' + String(diff.stdout).slice(0, 40000) : '')].filter(Boolean).join('\n\n');
+  }
+}
+
 function sessionCreateOptions() {
   return {
     permissionMode: SESSION_OPTIONS.permissionMode,
@@ -533,7 +590,17 @@ function sessionCreateOptions() {
     appendSystemPrompt: SESSION_OPTIONS.appendSystemPrompt,
     outputStyle: SESSION_OPTIONS.outputStyle || null,
     addDirs: SESSION_OPTIONS.addDirs,
-    bare: Boolean(SESSION_OPTIONS.bare)
+    bare: Boolean(SESSION_OPTIONS.bare),
+    systemPromptOverride: SESSION_OPTIONS.systemPromptOverride || '',
+    tools: SESSION_OPTIONS.tools,
+    mcpServers: SESSION_OPTIONS.mcpServers,
+    strictMcpConfig: Boolean(SESSION_OPTIONS.strictMcpConfig),
+    agentsInline: SESSION_OPTIONS.agentsInline || null,
+    sessionName: SESSION_OPTIONS.sessionName || '',
+    fallbackModel: SESSION_OPTIONS.fallbackModel || '',
+    maxBudgetUsd: SESSION_OPTIONS.maxBudgetUsd || 0,
+    settingsOverrides: SESSION_OPTIONS.settingsOverrides,
+    settingSources: SESSION_OPTIONS.settingSources || null
   };
 }
 
@@ -972,6 +1039,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     let restored = null;
     if (persistence.resumeId) {
       restored = await loadSession(root, persistence.resumeId);
+      if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
       stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
     }
     session = await createSession({ root, config, restore: restored, ...sessionCreateOptions() });
@@ -1062,6 +1130,15 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   return session;
 }
 
+async function* streamInputLines() {
+  const { parseStreamInputLine } = await import('./headless.mjs');
+  const lines = createInterface({ input: stdin, crlfDelay: Infinity, terminal: false });
+  for await (const line of lines) {
+    const prompt = parseStreamInputLine(line);
+    if (prompt !== null && prompt.trim()) yield prompt;
+  }
+}
+
 async function readPipedStdin() {
   // Only read stdin when it is a pipe, socket, or redirected file (not a terminal or
   // /dev/null). Use `< /dev/null` if a job inherits an open stdin it never closes.
@@ -1078,7 +1155,8 @@ async function readPipedStdin() {
 
 async function printMode(root, headless, args, autoApprove, persistence) {
   let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
-  const piped = await readPipedStdin();
+  const streamInput = headless.inputFormat === 'stream-json';
+  const piped = streamInput ? '' : await readPipedStdin();
   if (piped.trim()) prompt = prompt ? prompt + '\n\n<stdin>\n' + piped + '\n</stdin>' : piped;
   if (prompt.trim().startsWith('/')) {
     // oasis -p "/review src" runs a custom command or skill, like the interactive prompt.
@@ -1093,7 +1171,7 @@ async function printMode(root, headless, args, autoApprove, persistence) {
       if (skillCommand) prompt = skillCommand.options.fork ? 'Use the task tool with subagent_type "' + (skillCommand.options.fork.agent || 'general-purpose') + '" to run this, then report its result:\n\n' + skillCommand.prompt : skillCommand.prompt;
     }
   }
-  if (!prompt.trim()) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--model ID]');
+  if (!prompt.trim() && !streamInput) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--model ID]');
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
@@ -1105,8 +1183,12 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     planOnly: headless.planOnly,
     jsonSchema: headless.jsonSchema || null,
     sessionOptions: sessionCreateOptions(),
-    persistence,
-    env: process.env
+    persistence: { ...persistence, fork: Boolean(SESSION_OPTIONS.forkSession) },
+    env: process.env,
+    ...(streamInput ? { inputStream: streamInputLines() } : {}),
+    includePartial: Boolean(headless.includePartial),
+    replayUser: Boolean(headless.replayUser),
+    permissionPromptTool: headless.permissionPromptTool || null
   });
   process.exitCode = exitCode;
 }
@@ -1363,7 +1445,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         }
       } catch (error) { stdout.write('Command failed: ' + error.message + '\n'); continue; }
     }
-    if (text.startsWith('/')) {
+    if (text.startsWith('/') && !SESSION_OPTIONS.disableSlashCommands) {
       try {
         const custom = await resolveCustomCommand(root, text, await customCommandContext(root));
         if (custom) {
@@ -1717,7 +1799,49 @@ async function main() {
       continue;
     }
     if (arg === '--bare') { SESSION_OPTIONS.bare = true; continue; }
-    if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = rawArgs[++i] || ''; continue; }
+    if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, rawArgs[++i] || ''].filter(Boolean).join('\n\n'); continue; }
+    const needValue = (flag) => { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(flag + ' requires a value.'); i += 1; return value; };
+    if (arg === '--system-prompt') { SESSION_OPTIONS.systemPromptOverride = needValue(arg); continue; }
+    if (arg === '--system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'system', file: needValue(arg) }); continue; }
+    if (arg === '--append-system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'append', file: needValue(arg) }); continue; }
+    if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
+    if (arg === '--max-budget-usd') {
+      const value = Number(needValue(arg));
+      if (!Number.isFinite(value) || value <= 0) throw new Error('--max-budget-usd must be a positive dollar amount, for example 2.50.');
+      SESSION_OPTIONS.maxBudgetUsd = value;
+      continue;
+    }
+    if (arg === '--tools') { SESSION_OPTIONS.tools = needValue(arg).split(/[\s,]+/).filter(Boolean); continue; }
+    if (arg === '--mcp-config') { SESSION_OPTIONS.pendingFiles.push({ kind: 'mcp', file: needValue(arg) }); continue; }
+    if (arg === '--strict-mcp-config') { SESSION_OPTIONS.strictMcpConfig = true; continue; }
+    if (arg === '--settings') { SESSION_OPTIONS.pendingFiles.push({ kind: 'settings', file: needValue(arg) }); continue; }
+    if (arg === '--setting-sources') {
+      const list = needValue(arg).split(/[\s,]+/).filter(Boolean);
+      if (list.some((item) => !['user', 'project', 'local'].includes(item))) throw new Error('--setting-sources accepts user, project and local.');
+      SESSION_OPTIONS.settingSources = list;
+      continue;
+    }
+    if (arg === '--agents') { SESSION_OPTIONS.pendingFiles.push({ kind: 'agents', file: needValue(arg) }); continue; }
+    if (arg === '--session-id') {
+      const value = needValue(arg);
+      if (!/^[a-f0-9-]{20,80}$/i.test(value)) throw new Error('--session-id must be a UUID.');
+      SESSION_OPTIONS.sessionId = value.toLowerCase(); persistSession = true; continue;
+    }
+    if (arg === '--fork-session') { SESSION_OPTIONS.forkSession = true; continue; }
+    if (arg === '--name' || arg === '-n') { SESSION_OPTIONS.sessionName = needValue(arg); persistSession = true; continue; }
+    if (arg === '--verbose') { SESSION_OPTIONS.verbose = true; continue; }
+    if (arg === '--debug') { SESSION_OPTIONS.debug = rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-') && !/\s/.test(rawArgs[i + 1]) && /^[a-z,!]+$/i.test(rawArgs[i + 1]) ? rawArgs[++i] : 'all'; process.env.OASIS_DEBUG = SESSION_OPTIONS.debug; continue; }
+    if (arg === '--disable-slash-commands') { SESSION_OPTIONS.disableSlashCommands = true; continue; }
+    if (arg === '--input-format') {
+      headless.inputFormat = needValue(arg);
+      if (!['text', 'stream-json'].includes(headless.inputFormat)) throw new Error('--input-format must be text or stream-json.');
+      continue;
+    }
+    if (arg === '--include-partial-messages') { headless.includePartial = true; continue; }
+    if (arg === '--replay-user-messages') { headless.replayUser = true; continue; }
+    if (arg === '--permission-prompt-tool') { headless.permissionPromptTool = needValue(arg); continue; }
+    if (arg === '--init' || arg === '--init-only') { SESSION_OPTIONS.runInit = arg === '--init-only' ? 'only' : 'continue'; continue; }
+    if (arg === '--from-pr') { SESSION_OPTIONS.fromPr = needValue(arg); continue; }
     if (arg === '-p' || arg === '--print') {
       headless.enabled = true;
       if (rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-')) headless.prompt = rawArgs[++i];
@@ -1773,6 +1897,11 @@ async function main() {
     args.push(arg);
   }
   await access(workspace);
+  await resolveFlagFiles(workspace);
+  if (SESSION_OPTIONS.runInit) {
+    await initWorkspace(workspace);
+    if (SESSION_OPTIONS.runInit === 'only') return;
+  }
   const command = args[0];
   const rest = args.slice(1);
   const persistence = { enabled: persistSession || Boolean(resumeId), resumeId };

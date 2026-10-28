@@ -12,6 +12,33 @@ import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
+import { callMappedMcpTool } from './mcp.mjs';
+
+// Finds an MCP tool by Claude-style name (mcp__server__tool) or Oasis safe name.
+export function resolvePermissionTool(session, name) {
+  if (!session || !session.mcpToolMap || !name) return null;
+  if (session.mcpToolMap.has(name)) return name;
+  const match = String(name).match(/^mcp__([^_]+(?:_[^_]+)*)__(.+)$/);
+  for (const [safeName, mapped] of session.mcpToolMap) {
+    if (mapped.resourceTool) continue;
+    if (match && mapped.serverName === match[1].toLowerCase() && mapped.toolName === match[2]) return safeName;
+    if (mapped.toolName === name) return safeName;
+  }
+  return null;
+}
+
+// Parses one line of --input-format stream-json into a prompt string.
+export function parseStreamInputLine(line) {
+  const text = String(line || '').trim();
+  if (!text) return null;
+  let event;
+  try { event = JSON.parse(text); } catch { throw new Error('--input-format stream-json: each line must be a JSON object.'); }
+  if (!event || event.type !== 'user') return null;
+  const content = event.message ? event.message.content : event.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter((block) => block && block.type === 'text').map((block) => block.text).join('\n');
+  return null;
+}
 
 export const OUTPUT_FORMATS = ['text', 'json', 'stream-json', 'none'];
 
@@ -40,7 +67,11 @@ export async function runHeadless(options) {
     onEvent = null,
     onSession = null,
     canUseTool = null,
-    signal = null
+    signal = null,
+    inputStream = null,
+    includePartial = false,
+    replayUser = false,
+    permissionPromptTool = null
   } = options;
   if (!OUTPUT_FORMATS.includes(outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
   const started = Date.now();
@@ -53,12 +84,14 @@ export async function runHeadless(options) {
   let result = null;
   let error = null;
   const usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+  let costUsd = 0;
   let requests = 0;
   let structured;
   let schemaErrors = null;
   try {
     let restored = null;
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
+    if (restored && persistence.fork) restored = { ...restored, id: null };
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions });
     if (onSession) await onSession(session);
     emit({ type: 'system', subtype: 'init', session_id: session.sessionId || null, cwd: root, model: config.model, permission_mode: session.permissions.mode, tools: session.toolDefinitions.map((tool) => tool.function.name) });
@@ -73,6 +106,19 @@ export async function runHeadless(options) {
       ...(signal ? { signal } : {}),
       approval: async (message, forceInteractive = false, meta = {}) => {
         if (autoApprove && !forceInteractive) return true;
+        if (permissionPromptTool) {
+          const tool = resolvePermissionTool(session, permissionPromptTool);
+          if (tool) {
+            try {
+              const reply = await callMappedMcpTool(session, tool, { tool_name: meta && meta.tool || null, input: meta && meta.input || {}, message: String(message) });
+              const text = typeof reply === 'string' ? reply : Array.isArray(reply && reply.content) ? reply.content.map((block) => block.text || '').join('') : JSON.stringify(reply);
+              const decision = extractJson(text);
+              const allowed = decision.ok && decision.value && decision.value.behavior === 'allow';
+              emit({ type: 'system', subtype: 'permission', tool: meta && meta.tool || null, allowed, via: permissionPromptTool });
+              if (allowed) return true;
+            } catch (caught) { emit({ type: 'system', subtype: 'permission_tool_error', error: String(caught.message || caught).slice(0, 300) }); }
+          } else emit({ type: 'system', subtype: 'permission_tool_error', error: 'permission prompt tool ' + permissionPromptTool + ' was not found among connected MCP tools' });
+        }
         if (canUseTool) {
           const answer = await canUseTool(meta && meta.tool || null, meta && meta.input || {}, { message: String(message), suggestion: meta && meta.suggestion || null });
           const allowed = answer === true || (answer && answer.behavior === 'allow');
@@ -86,14 +132,41 @@ export async function runHeadless(options) {
       onToolResult: ({ name, result: toolResult, subagent }) => emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }),
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
+      ...(includePartial && outputFormat === 'stream-json' ? { onDelta: (accumulated) => {
+        const text = String(accumulated || '');
+        const delta = text.startsWith(partialSoFar) ? text.slice(partialSoFar.length) : text;
+        partialSoFar = text;
+        if (delta) emit({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: delta } } });
+      } } : {}),
       onUsage: (step) => {
+        costUsd += Number(step.costUsd || 0);
         usage.input_tokens += Number(step.inputTokens || 0);
         usage.output_tokens += Number(step.outputTokens || 0);
         usage.total_tokens += Number(step.totalTokens || 0);
         if (step.phase === undefined) requests += 1;
       }
     };
-    result = await runner(session, expanded.text + schemaInstruction, turnOptions);
+    let partialSoFar = '';
+    const runOne = async (text) => {
+      partialSoFar = '';
+      if (replayUser) emit({ type: 'user', message: { role: 'user', content: text } });
+      const prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
+      return runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
+    };
+    if (inputStream) {
+      // --input-format stream-json: each user message is one turn in the same session.
+      let turns = 0;
+      if (String(rawPrompt || '').trim()) { result = await runOne(rawPrompt); turns += 1; emit({ type: 'result', subtype: 'turn', result: String(result.text || ''), num_turns: turns }); }
+      for await (const item of inputStream) {
+        if (item === null || item === undefined) continue;
+        result = await runOne(String(item));
+        turns += 1;
+        emit({ type: 'result', subtype: 'turn', result: String(result.text || ''), num_turns: turns, total_cost_usd: Number(costUsd.toFixed(6)) });
+      }
+      if (!result) result = { text: '', finished: true, toolCalls: 0 };
+    } else {
+      result = await runOne(rawPrompt);
+    }
     // Structured output: validate, and give the model two chances to fix it.
     for (let attempt = 0; jsonSchema && result && !result.limitReached; attempt += 1) {
       const parsed = extractJson(result.text);
@@ -112,7 +185,7 @@ export async function runHeadless(options) {
   }
   if (session) closeSession(session);
   const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors);
-  const subtype = error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
+  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
   const summary = {
     type: 'result',
     subtype,
@@ -123,6 +196,8 @@ export async function runHeadless(options) {
     duration_ms: Date.now() - started,
     tool_calls: result ? Number(result.toolCalls || 0) : 0,
     usage,
+    total_cost_usd: Number(costUsd.toFixed(6)),
+    ...(session && session.fallbackActive ? { fallback_model: session.fallbackActive.to } : {}),
     permission_denials: denied,
     ...(structured !== undefined ? { structured_output: structured } : {}),
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),

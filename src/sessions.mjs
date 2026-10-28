@@ -68,6 +68,7 @@ export async function saveSession(session, options = {}) {
       baseURL: session.config && session.config.baseURL || '',
       model: session.config && session.config.model || ''
     },
+    ...(session.sessionName ? { name: String(session.sessionName).slice(0, 120) } : {}),
     messages,
     todos: sanitizeTodos(session.todos)
   };
@@ -101,6 +102,7 @@ export async function loadSession(root, id, options = {}) {
     id: validateId(payload.id),
     updatedAt: String(payload.updatedAt || ''),
     provider: payload.provider || {},
+    name: typeof payload.name === 'string' ? payload.name.slice(0, 120) : '',
     messages: validateMessages(payload.messages),
     todos: sanitizeTodos(payload.todos)
   };
@@ -122,7 +124,7 @@ export async function listSessions(root, options = {}) {
       if (data && data.schemaVersion === 1 && path.resolve(data.workspaceRoot || '') === path.resolve(root)) {
         const firstUser = Array.isArray(data.messages) ? data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string') : null;
         const title = firstUser ? firstUser.content.replace(/<[a-z-]+>[\s\S]*?<\/[a-z-]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
-        sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0, title });
+        sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0, title: typeof data.name === 'string' && data.name ? data.name : title, ...(typeof data.name === 'string' && data.name ? { name: data.name } : {}) });
       }
     } catch { /* Ignore corrupt session files in listings. */ }
   }
