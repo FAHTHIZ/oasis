@@ -2,7 +2,8 @@
 //
 // Files (later ones win): ~/.claude/keybindings.json, then <oasis config>/keybindings.json.
 //   { "bindings": [ { "context": "Chat", "bindings": { "ctrl+e": "chat:externalEditor", "ctrl+s": null } } ] }
-// Contexts used by the OASIS prompt: Global, Chat, Autocomplete, HistorySearch.
+// Contexts used by OASIS: Global, Chat, Autocomplete, HistorySearch, and Confirmation/Select
+// for permission dialogs.
 // Keystrokes: modifiers ctrl/control, shift, alt/opt/option/meta, cmd/command/super/win;
 // special keys escape/esc, enter/return, tab, space, up/down/left/right, pageup/pagedown,
 // home/end, backspace/delete. Chords are space separated ("ctrl+x ctrl+e", 3 s between keys).
@@ -30,7 +31,10 @@ export const DEFAULT_BINDINGS = {
   },
   Autocomplete: { tab: 'autocomplete:accept', escape: 'autocomplete:dismiss' },
   // OASIS keeps Enter = accept into the prompt and Esc = cancel; bind historySearch:execute to Enter for Claude Code's behavior.
-  HistorySearch: { 'ctrl+r': 'historySearch:next', tab: 'historySearch:accept', 'ctrl+c': 'historySearch:cancel' }
+  HistorySearch: { 'ctrl+r': 'historySearch:next', tab: 'historySearch:accept', 'ctrl+c': 'historySearch:cancel' },
+  // Permission dialogs (Claude Code's Confirmation context, falling back to Select).
+  Confirmation: { y: 'confirm:yes', n: 'confirm:no', escape: 'confirm:no', a: 'confirm:always', up: 'confirm:previous', down: 'confirm:next' },
+  Select: { down: 'select:next', j: 'select:next', 'ctrl+n': 'select:next', up: 'select:previous', k: 'select:previous', 'ctrl+p': 'select:previous', enter: 'select:accept', escape: 'select:cancel' }
 };
 
 // What each action does in the OASIS editor: a key name for applyKey, or an editor action.
@@ -42,6 +46,8 @@ export const ACTIONS = {
   'chat:externalEditor': { action: 'externalEditor' }, 'chat:stash': { action: 'stash' }, 'chat:imagePaste': { key: 'ctrlV' },
   'chat:modelPicker': { command: 'model' },
   'autocomplete:accept': { key: 'tab' }, 'autocomplete:dismiss': { key: 'escape' },
+  'confirm:yes': { dialog: 'yes' }, 'confirm:no': { dialog: 'no' }, 'confirm:always': { dialog: 'always' }, 'confirm:previous': { dialog: 'previous' }, 'confirm:next': { dialog: 'next' },
+  'select:next': { dialog: 'next' }, 'select:previous': { dialog: 'previous' }, 'select:accept': { dialog: 'accept' }, 'select:cancel': { dialog: 'no' },
   'historySearch:next': { key: 'search' }, 'historySearch:accept': { key: 'searchAccept' }, 'historySearch:cancel': { key: 'ctrlG' }, 'historySearch:execute': { key: 'searchExecute' }
 };
 
@@ -127,6 +133,8 @@ export function loadKeybindings(env = process.env) {
 function chain(context) {
   if (context === 'HistorySearch') return ['HistorySearch', 'Global'];
   if (context === 'Autocomplete') return ['Autocomplete', 'Chat', 'Global'];
+  if (context === 'Confirmation') return ['Confirmation', 'Select', 'Global'];
+  if (context === 'Select') return ['Select', 'Global'];
   return ['Chat', 'Global'];
 }
 
