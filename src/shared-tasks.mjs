@@ -172,6 +172,7 @@ export const SHARED_TASK_TOOL_DEFINITIONS = [
     task_id: { type: 'string', description: 'Task ID such as task_1' }
   }, required: ['task_id'] } } },
   { type: 'function', function: { name: 'task_claim', description: 'Atomically claim a ready shared task, or claim a specific task_id. A successful claim starts the task and gives you an exclusive time-limited lease. Renew it by claiming the same task again before it expires. Expired leases can be reclaimed; use task_release when abandoning work.', parameters: { type: 'object', properties: { task_id: { type: 'string', description: 'Optional specific task to claim; omit to claim the next ready task' }, lease_seconds: { type: 'integer', minimum: 30, maximum: 3600, description: 'Lease duration, 30–3600 seconds; defaults to 900 seconds' } }, required: [] } } },
+  { type: 'function', function: { name: 'task_renew', description: 'Extend your own active task claim before it expires. Cannot renew another agent\'s claim or a lease that has already expired.', parameters: { type: 'object', properties: { task_id: { type: 'string', description: 'Task ID such as task_1' }, lease_seconds: { type: 'integer', description: 'New lease duration from 30 to 3600 seconds; defaults to 900' } }, required: ['task_id'] } } },
   { type: 'function', function: { name: 'task_release', description: 'Release a task claim when you cannot finish the work. An in-progress task returns to pending. Only the claimant can release an active lease; the main coordinator can force-release another agent\'s lease explicitly.', parameters: { type: 'object', properties: { task_id: { type: 'string' }, force: { type: 'boolean', description: 'Only the main coordinator may set true to force-release an active lease' } }, required: ['task_id'] } } },
   { type: 'function', function: { name: 'task_update', description: 'Update a shared task status, owner, description, title or dependencies. Tasks cannot start or complete before prerequisites; a prerequisite cannot be reopened while downstream work is active/completed.', parameters: { type: 'object', properties: {
     task_id: { type: 'string', description: 'Task ID such as task_1' },
@@ -238,6 +239,21 @@ export function runSharedTaskTool(session, name, args = {}) {
         ? 'Claimed ' + task.id + ' after the previous lease expired.'
         : 'Claimed ' + task.id + '. Renew before the lease expires, or use task_release if abandoning it.'
     };
+  }
+
+  if (name === 'task_renew') {
+    const task = getTask(store, args.task_id);
+    const leaseSeconds = args.lease_seconds === undefined ? DEFAULT_CLAIM_LEASE_SECONDS : Number(args.lease_seconds);
+    if (!Number.isInteger(leaseSeconds) || leaseSeconds < MIN_CLAIM_LEASE_SECONDS || leaseSeconds > MAX_CLAIM_LEASE_SECONDS) {
+      throw new Error('lease_seconds must be an integer from ' + MIN_CLAIM_LEASE_SECONDS + ' to ' + MAX_CLAIM_LEASE_SECONDS + '.');
+    }
+    const at = nowMs();
+    if (!claimIsActive(task, at)) throw new Error(task.id + ' has no active claim to renew; claim it again if it is still available.');
+    if (task.claimedBy !== actor) throw new Error(task.id + ' is claimed by ' + task.claimedBy + '; only that agent can renew this lease.');
+    if (task.status === 'completed') throw new Error('Completed task ' + task.id + ' does not need a lease.');
+    task.claimExpiresAt = new Date(at + leaseSeconds * 1000).toISOString();
+    task.updatedAt = now();
+    return { task: taskView(task, store, actor, at), lease_seconds: leaseSeconds, renewed: true, message: 'Renewed ' + task.id + ' for ' + leaseSeconds + ' seconds.' };
   }
 
   if (name === 'task_release') {
