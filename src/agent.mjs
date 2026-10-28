@@ -336,7 +336,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '' }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   // --restricted: only managed settings and --settings load; bypassPermissions is refused.
@@ -398,7 +398,12 @@ export async function createSession({ root, config, restore = null, permissionMo
     const { skillDenied } = await import('./skill-doctor.mjs');
     visibleSkills = skillDescriptions.split('\n').filter((line) => { const m = /^- (.+?) \[/.exec(line); return !m || !skillDenied(m[1], skillDeny); }).join('\n');
   }
-  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(root, projectContext, visibleSkills, await describeEnvironment(root, env));
+  // --exclude-dynamic-system-prompt-sections: per-machine context (workspace path, date, git state,
+  // memory location) moves to the first user message so the system prompt caches across machines.
+  const dynamicOut = Boolean(excludeDynamicSections) && !systemPromptOverride;
+  const environmentText = await describeEnvironment(root, env);
+  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : systemPrompt(dynamicOut ? '(given in the first user message)' : root, projectContext, visibleSkills, dynamicOut ? '' : environmentText);
+  const dynamicSections = dynamicOut ? ['The current workspace root is: ' + root, 'Environment:\n' + environmentText] : null;
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   const channelEntries = parseChannelEntries(channels);
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });
@@ -432,7 +437,8 @@ export async function createSession({ root, config, restore = null, permissionMo
     autoModeSettings: loadedSettings.autoMode || null,
     background: new Map(),
     hookMessages: []
-  };
+  };  if (typeof onHookEvent === 'function') session.onHookEvent = onHookEvent;
+
   if (restore && restore.workflowCheckpoint && restore.workflowCheckpoint.active === true) {
     const checkpoint = restore.workflowCheckpoint;
     agentRegistry(session).autoDispatchCheckpoint = { ...checkpoint, status: 'interrupted' };
@@ -473,7 +479,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.autoMemory = true;
     session.recalledMemoryIds = new Set();
     session.toolDefinitions = session.toolDefinitions.concat(MEMORY_TOOL_DEFINITIONS);
-    try { systemText += '\n\n' + await memoryIndexPrompt(root, { env }); } catch {}
+    try { const memoryText = await memoryIndexPrompt(root, { env }); if (dynamicSections) dynamicSections.push(memoryText); else systemText += '\n\n' + memoryText; } catch {}
   }
   const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
   if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
@@ -532,6 +538,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
   session.ultracode = loadedSettings.ultracode === true;
+  if (dynamicSections && !restore) session.pendingDynamicContext = dynamicSections.join('\n\n');
   if (loadedSettings.autoCompactEnabled === false && config && config.autoCompactPercent === undefined) config.autoCompactPercent = 0;
   if (restricted) {
     // --restricted: command execution and network tools are removed unless --tools names them individually.
@@ -1120,6 +1127,7 @@ export function hookOptions(session, env) {
     hooks: session.hooks,
     root: session.root,
     env: env || process.env,
+    onHookEvent: session.onHookEvent || null,
     evaluatePrompt: async ({ system, prompt, model, signal }) => {
       const config = model ? { ...session.config, model } : session.config;
       const completion = await requestCompletion({ config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal });
@@ -1192,6 +1200,20 @@ async function runPostCompactHooks(session, trigger, summary, options) {
 }
 
 const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed/i;
+
+// --prompt-suggestions: one short guess at the user's next message, from the recent conversation.
+export async function suggestNextPrompt(session, options = {}) {
+  const tail = session.messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim()).slice(-6)
+    .map((m) => (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content.slice(0, 2000)).join('\n\n');
+  if (!tail) return '';
+  try {
+    const completion = await requestCompletion({ config: session.config, toolDefinitions: [], messages: [
+      { role: 'system', content: 'Predict the single most likely next message the user will type to this coding agent. Reply with only that message: under 15 words, imperative, no quotes. Reply with nothing if there is no clear next step.' },
+      { role: 'user', content: '--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + tail + '\n--- END UNTRUSTED TRANSCRIPT ---' }
+    ] }, { noTools: true, signal: options.signal });
+    return String(completion.content || '').trim().replace(/^["']|["']$/g, '').split('\n')[0].slice(0, 200);
+  } catch { return ''; }
+}
 
 async function requestCompletion(session, options = {}) {
   try {
@@ -2065,7 +2087,9 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     signal: options.signal,
     onToolStart: (event) => { track(event); if (options.onToolStart) options.onToolStart(tag(event)); },
     onToolResult: options.onToolResult ? (event) => options.onToolResult(tag(event)) : undefined,
-    onUsage: options.onUsage ? (usage) => options.onUsage({ ...usage, subagent: description }) : undefined
+    onUsage: options.onUsage ? (usage) => options.onUsage({ ...usage, subagent: description }) : undefined,
+    // --forward-subagent-text: the subagent's own messages, tagged with the spawning tool call.
+    onText: options.onSubagentText ? (text) => { try { options.onSubagentText({ text, subagent: description, agentId: record.id, agentType: type, parentToolUseId: options.parentToolUseId || null }); } catch {} } : undefined
   } : {
     // Nobody can answer a prompt while the agent works in the background.
     approval: async () => false,
@@ -2789,10 +2813,10 @@ async function executeOneCallRaw(session, call, context, options) {
       budget.used += 1;
       result = await runSpecialistReview(session, args, callContext, options, budget);
     } else if (name === 'task') {
-      result = await runSubagent(session, args, callContext, options);
+      result = await runSubagent(session, args, callContext, { ...options, parentToolUseId: call.id });
     } else if (name === 'workflow') {
       if (options.isSubagent) throw new Error('Subagents cannot start workflows.');
-      result = await runWorkflowTool(session, args, callContext, options);
+      result = await runWorkflowTool(session, args, callContext, { ...options, parentToolUseId: call.id });
     } else if (AGENT_TOOL_NAMES.has(name)) {
       result = await runAgentTool(session, name, args, callContext, options);
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
@@ -2928,6 +2952,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
   let userContent = request;
+  if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
   // UserPromptExpansion: a typed custom command expanded into this prompt.
   if (options.expansion && !options.isSubagent && hasHooks(session.hooks, 'UserPromptExpansion')) {
     const expanded = await runHooks('UserPromptExpansion', { session_id: session.sessionId || 'unsaved', expansion_type: 'slash_command', ...options.expansion }, hookOptions(session, options.env));
