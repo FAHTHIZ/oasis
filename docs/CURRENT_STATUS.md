@@ -1,7 +1,7 @@
 # OASIS current implementation status
 
 **Audit date:** October 28, 2026  
-**Implementation baseline:** [`eaa828d1fafce684737f4458e1fb3b9b1fe0a901`](https://github.com/FAHTHIZ/oasis/commit/eaa828d1fafce684737f4458e1fb3b9b1fe0a901)  
+**Implementation baseline:** [`1da39af90f36629a706e0d452c1b5d5bbaeccc44`](https://github.com/FAHTHIZ/oasis/commit/1da39af90f36629a706e0d452c1b5d5bbaeccc44)  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It distinguishes working code, CI evidence, and incomplete work. A planned feature, detected extension, README statement, or successful unit test is not by itself evidence of production readiness or competitive parity.
@@ -18,18 +18,18 @@ The implementation audit enumerated the source tree, module imports/exports, pro
 
 | Evidence | Verified result |
 | --- | --- |
-| Runtime modules | 59 `.mjs` modules under `src/` |
-| Test suite | 44 `*.test.mjs` specifications, plus a shared test helper |
-| Node tests | **328 passed, 0 failed** in the latest verified run |
+| Runtime modules | 60 `.mjs` modules under `src/` |
+| Test suite | 47 `*.test.mjs` specifications, plus a shared test helper |
+| Node tests | Prior green baseline: **328 passed, 0 failed**; dispatcher/hook regression additions are awaiting this commit's CI result |
 | Coding-agent evaluation fixtures | **21/21 validated**; this is a small smoke suite, not a coding-quality benchmark |
 | Runtime matrix | Node.js 22, 24, and 26 passed |
 | Browser E2E | Authenticated browser chat smoke test passed, including a workspace write/read cycle |
 | Package integrity | `npm pack --dry-run` passed; installable package content was checked |
 | CI status | Quality Checks and public-site publishing completed successfully for the implementation baseline |
 | Package entry points | CLI executable `oasis`, ESM SDK, Node.js 22+ |
-| Release maturity | Version `0.2.0`, installed from Git; CI success is not a claim of a mature cross-platform release |
+| Release maturity | Version `0.3.0`, installed from Git; CI success is not a claim of a mature cross-platform release |
 
-CI details: [Quality Checks run](https://github.com/FAHTHIZ/oasis/actions/runs/40679100237). The test count is regression coverage, **not** 328 independent end-to-end product workflows. The browser test runs in Linux Chromium; it does not prove Android/Termux, Windows, macOS, live provider, or real-device TLS behavior. The CI log also emitted a GitHub Actions runtime-deprecation warning for `actions/checkout@v4` and `actions/setup-node@v4`; upgrade those action versions as a separate maintenance item.
+CI details: [Quality Checks run](https://github.com/FAHTHIZ/oasis/actions/runs/40707129933) is running for the dispatcher baseline; the prior verified run was [40679100237](https://github.com/FAHTHIZ/oasis/actions/runs/40679100237). Test counts are regression coverage, **not** independent end-to-end product workflows. The browser test runs in Linux Chromium; it does not prove Android/Termux, Windows, macOS, live provider, or real-device TLS behavior. The CI log also emitted a GitHub Actions runtime-deprecation warning for `actions/checkout@v4` and `actions/setup-node@v4`; upgrade those action versions as a separate maintenance item.
 
 ## What the code currently provides
 
@@ -62,7 +62,8 @@ CI details: [Quality Checks run](https://github.com/FAHTHIZ/oasis/actions/runs/4
 - Built-in/custom subagents with separate context, bounded parallel execution, background status, steering/resume/cancel tools, and optional worktree isolation.
 - Separate specialist reviews for code, security, architecture, and test strategy are bounded and read-only.
 - A shared **session-local** dependency-aware task board is available to the main agent and child agents through `task_create`, `task_list`, `task_get`, and `task_update`. It validates task IDs, prerequisite existence, cycles, and blocked status transitions. Its task data is included in saved sessions.
-- The board supports exclusive lease-based `task_claim`/`task_release`, dependency gates, and shared status. Running agents can message peers directly; `team_create`, `team_status`, and `team_shutdown` provide named session-local teams, a member roster, membership-aware messaging, and controlled shutdown. These mechanisms do not provide an autonomous task dispatcher, cross-session synchronization, a visual team manager, or an edit-conflict resolver.
+- The board supports exclusive lease-based `task_claim`/`task_renew`/`task_release`, dependency gates, and shared status. `dispatch_ready_tasks` starts a bounded wave of ready tasks as background agents in isolated worktrees, skips active claims and already-running assignments, tags each agent with its task ID, and releases the lease immediately when a worker fails or is cancelled. The main coordinator can dispatch another wave when prerequisites complete.
+- Running agents can message peers directly; `team_create`, `team_status`, and `team_shutdown` provide named session-local teams, a member roster, membership-aware messaging, and controlled shutdown. This is model-directed wave dispatch, not an autonomous persistent scheduler: there is no cross-session synchronization, dedicated visual team manager, automatic conflict repair, or dynamic-workflow script runner.
 - Worktree isolation can keep independent edits apart, but it is an explicit execution choice, not an automatic coordination guarantee.
 
 ### 5. Integrations, skills, and extensions
@@ -99,8 +100,8 @@ Repository-level verification also covers `index.html`, `manifest.webmanifest`, 
 
 This ranking considers how much each gap constrains real work and what it unlocks downstream. It is a proposed engineering order, not a promise that later work is trivial.
 
-1. **A real PTY and terminal process lifecycle.** The current argv runner does not provide the terminal semantics needed by interactive REPLs, TUI programs, stdin-driven tools, terminal resizing, and dependable long-running interactive sessions. This is the recommended next foundational engineering target.
-2. **Complete multi-agent coordination.** Lease-based task claiming, peer messages, named team membership/shutdown, and approval-gated worktree merge are implemented. Remaining work: team event visibility, cross-session coordination, autonomous dispatch, and conflict-aware review workflows.
+1. **Finish PTY reliability and portability.** OASIS has a persistent PTY session API and browser xterm.js renderer. The native integration check currently targets Linux/Node 22; Windows/macOS process-tree cleanup, reconnect behavior, and broader end-to-end validation remain open.
+2. **Complete multi-agent coordination.** A bounded `dispatch_ready_tasks` wave is now implemented with task-linked workers, isolated worktrees, dependency gating, and lease cleanup on cancellation/failure. Remaining work: autonomous/persistent workflow scheduling, visual monitoring, cross-session coordination, and richer conflict-aware review.
 3. **IDE integration.** A VS Code extension would put reviewable diffs, task/session status and the same agent runtime inside the main coding surface.
 4. **Remote and cross-surface workflows.** Cloud/remote sessions, mobile steering, desktop, Chrome and chat integrations require a stronger authentication, execution-isolation and lifecycle design than the current local browser bridge.
 5. **Platform and extension parity.** Native Gemini/Azure adapters, PowerShell/Windows sandboxing, broad extension runtime compatibility and a remote plugin marketplace.

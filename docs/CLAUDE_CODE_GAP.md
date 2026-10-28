@@ -1,8 +1,8 @@
 # OASIS vs Claude Code — current gap analysis
 
 **Comparison audited:** October 28, 2026  
-**OASIS implementation baseline:** [`eaa828d1fafce684737f4458e1fb3b9b1fe0a901`](https://github.com/FAHTHIZ/oasis/commit/eaa828d1fafce684737f4458e1fb3b9b1fe0a901)  
-**Verification:** 328 passing Node tests; 21/21 evaluation fixtures; Node.js 22/24/26 CI checks; authenticated browser chat E2E passed. Details: [Current status](CURRENT_STATUS.md).
+**OASIS implementation baseline:** [`1da39af90f36629a706e0d452c1b5d5bbaeccc44`](https://github.com/FAHTHIZ/oasis/commit/1da39af90f36629a706e0d452c1b5d5bbaeccc44)  
+**Verification:** the new dispatcher and hook-policy regression tests are included in this baseline; its CI run was pending when this note was updated. The prior green baseline passed 328 Node tests, 21/21 evaluation fixtures, the Node.js 22/24/26 matrix, and authenticated browser chat E2E. Do not treat prior results as validation of the new dispatcher. See [Current status](CURRENT_STATUS.md).
 
 This comparison is based on the current OASIS source tree and the current official Claude Code documentation linked at the end. Feature similarity does not prove equivalent coding quality, speed, reliability, or safety.
 
@@ -33,14 +33,16 @@ It is **not** a drop-in Claude Code replacement across all workflows, and it is 
 
 OASIS now has several core coordination mechanisms: an exclusive lease-based task board, peer-to-peer messages between running agents, per-agent status and cancellation, named teams, team rosters, membership-aware messaging, and a shutdown operation that blocks new members and requests cancellation of running workers. Team membership is selected when the main coordinator launches a worker with the `team_id` returned by `team_create`. The CLI `/teams` command shows the roster.
 
-This still is not full Claude Code agent-team parity:
-- Task scheduling is model-directed rather than an autonomous queue dispatcher; a task owner is metadata and a lease is the actual work reservation.
-- Teams are scoped to one OASIS session. They do not coordinate across separate sessions or machines.
-- There is no dedicated visual agent/team monitor, live team event timeline, or automatic resolution of overlapping file edits. Use worktree isolation and inspect/approval-gated merges for separate editing work.
+This still is not full Claude Code agent-team or dynamic-workflow parity:
+- `dispatch_ready_tasks` now launches a bounded wave of dependency-ready tasks as background general-purpose agents in separate Git worktrees. It skips active leases and tasks already assigned to running workers; each task ID appears in agent status/events. Repeated model-directed calls can launch later waves as prerequisites complete.
+- The dispatcher is **not an autonomous queue scheduler**: it does not continuously wake when a dependency completes, write a repeatable workflow script, or survive across sessions/machines.
+- Teams are scoped to one OASIS session. They do not coordinate across independent sessions or machines.
+- There is no dedicated visual agent/team monitor or automatic resolution of overlapping file edits. Worktree merge preflight reports overlap/conflicts; integration remains reviewable and approval-gated.
+- Background workers cannot prompt for per-tool approval. Their edits and commands remain subject to the inherited permission mode and explicit allow rules.
 - Team shutdown requests cancellation; a team becomes closed after its active workers exit. It does not promise instantaneous process termination.
-- Agent teams are a capability comparison, not a claim of equal coding quality. The 21-fixture suite is not an apples-to-apples benchmark.
+- Agent teams and dynamic workflows remain a capability comparison, not a claim of equal coding quality. The 21-fixture suite is not an apples-to-apples benchmark.
 
-The agent lifecycle now emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. Shared task claims can now be renewed by their current owner before expiry through `task_renew`; renewal is bounded and cannot extend another agent's lease. This closes one reliability prerequisite, but it is not yet an autonomous dispatcher. The next team milestone remains a model-directed ready-task dispatcher with cancellation, conflict reports, and regression tests; the timeline is observability, not proof of autonomous coordination.
+The agent lifecycle emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. Shared task claims can be renewed through `task_renew`; failed or cancelled dispatched workers now release their task lease immediately. This closes the first model-directed dispatch milestone, but not autonomous scheduling, persistent workflows, a visual monitor, or conflict repair.
 
 ## Ranked next improvements
 
@@ -54,7 +56,7 @@ The gap is not closed yet. The first native integration smoke test targets Linux
 
 ### 2. Automated team dispatch and visibility
 
-Lease-based task claiming, peer messaging, named team membership and shutdown, and approval-gated worktree merge are implemented. The next step is an event timeline and optional model-directed queue dispatcher that can launch workers against ready tasks, with cancellation, lease renewal, conflict reports, and regression tests before claiming that the agents self-coordinate autonomously.
+Lease-based claiming/renewal, peer messaging, named teams, lifecycle events, and approval-gated worktree merge are implemented. `dispatch_ready_tasks` now launches a bounded wave from the dependency-ready board, associates each worker with its task, runs it in a separate worktree, and frees the lease if the worker fails or is cancelled. Repeated model-directed dispatch calls can start subsequent dependency waves. Remaining work is a persistent workflow/scheduler, visual monitoring, cross-session coordination, and richer conflict-aware review; this is not a claim that agents self-coordinate autonomously.
 
 ### 3. IDE integration
 
