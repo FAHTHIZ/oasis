@@ -1789,6 +1789,17 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (slash && slash[1].toLowerCase() === 'init') { try { await initWorkspace(root); } catch (error) { stdout.write(error.message + '\n'); } continue; }
     if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
+      // /model, /theme and /color without an argument open a picker in a terminal.
+      if (!String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && ['model', 'theme', 'color'].includes(slash[1].toLowerCase())) {
+        try {
+          const { pickerFor, selectDialog } = await import('./select-dialog.mjs');
+          const picker = await pickerFor(slash[1].toLowerCase(), { session, env: process.env, settings: (session && session.settings) || await loadSettings(root).catch(() => null) });
+          stdout.write('Select ' + slash[1].toLowerCase() + ':\n');
+          const chosen = await selectDialog({ input: stdin, output: stdout, options: picker.options, initial: picker.initial, context: picker.context, color: colorEnabled(stdout) });
+          if (!chosen) { stdout.write('Cancelled.\n'); continue; }
+          slash[2] = chosen;
+        } catch (error) { stdout.write('[picker] ' + error.message + '\n'); continue; }
+      }
       try {
         const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {

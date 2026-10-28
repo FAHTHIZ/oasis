@@ -60,3 +60,20 @@ test('the Confirmation context can be rebound and aborts decline', async () => {
   controller.abort();
   assert.equal(await done, false);
 });
+
+test('pickers list models (respecting availableModels), themes and colors', async () => {
+  const { pickerFor } = await import('../src/select-dialog.mjs');
+  const session = { config: { model: 'sonnet', protocol: 'anthropic' }, availableModels: ['sonnet', 'haiku'] };
+  const model = await pickerFor('model', { session, env: {} });
+  assert.equal(model.context, 'ModelPicker');
+  const values = model.options.map((o) => o.value);
+  assert.ok(values.includes('sonnet') && values.includes('haiku') && values.includes('default'));
+  assert.ok(!values.includes('opus'));
+  assert.equal(model.options[model.initial].value, 'sonnet');
+  assert.equal(values.at(-1), null);
+  const theme = await pickerFor('theme', { env: envWith() });
+  assert.ok(theme.options.some((o) => o.value === 'light-daltonized'));
+  const color = await pickerFor('color', {});
+  assert.ok(color.options.some((o) => o.value === 'purple'));
+  assert.equal(await pickerFor('cost', {}), null);
+});

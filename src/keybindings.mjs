@@ -134,6 +134,7 @@ function chain(context) {
   if (context === 'HistorySearch') return ['HistorySearch', 'Global'];
   if (context === 'Autocomplete') return ['Autocomplete', 'Chat', 'Global'];
   if (context === 'Confirmation') return ['Confirmation', 'Select', 'Global'];
+  if (context === 'ModelPicker' || context === 'ThemePicker') return [context, 'Select', 'Global'];
   if (context === 'Select') return ['Select', 'Global'];
   return ['Chat', 'Global'];
 }

@@ -72,3 +72,34 @@ export function selectDialog({ input = process.stdin, output = process.stdout, o
     draw();
   });
 }
+
+/**
+ * Options for the no-argument /model, /theme and /color pickers. Returns
+ * { context, options, initial } or null when the command takes no picker.
+ */
+export async function pickerFor(command, { session = null, env = process.env, settings = null } = {}) {
+  const cancel = { label: 'Cancel', value: null, hotkey: 'no' };
+  if (command === 'model') {
+    const { MODEL_ALIASES, modelAllowed } = await import('./model-aliases.mjs');
+    const current = session && session.config ? session.config.model : '';
+    const allowed = session && session.availableModels;
+    const names = [...new Set([...(current ? [current] : []), ...MODEL_ALIASES, ...(allowed || [])])]
+      .filter((name) => modelAllowed(name, allowed, { env, protocol: session && session.config && session.config.protocol }));
+    const options = names.map((name) => ({ label: name + (name === current ? ' (current)' : ''), value: name }));
+    return { context: 'ModelPicker', options: [...options, cancel], initial: Math.max(0, names.indexOf(current)) };
+  }
+  if (command === 'theme') {
+    const themes = await import('./themes.mjs');
+    const list = themes.listThemes({ env, plugins: (settings && settings.pluginThemeSources) || [] });
+    const preference = themes.themePreference({ env, settings });
+    const options = list.map((theme) => ({ label: theme.id + (theme.name !== theme.id ? ' — ' + theme.name : '') + (theme.id === preference ? ' (current)' : ''), value: theme.id }));
+    return { context: 'ThemePicker', options: [...options, cancel], initial: Math.max(0, list.findIndex((theme) => theme.id === preference)) };
+  }
+  if (command === 'color') {
+    const { PROMPT_COLORS, getPromptColor } = await import('./terminal-ui.mjs');
+    const current = getPromptColor && getPromptColor();
+    const names = [...Object.keys(PROMPT_COLORS), 'random', 'default'];
+    return { context: 'Select', options: [...names.map((name) => ({ label: name + (name === current ? ' (current)' : ''), value: name })), cancel], initial: Math.max(0, names.indexOf(current)) };
+  }
+  return null;
+}
