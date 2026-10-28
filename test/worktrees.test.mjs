@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { listWorktrees } from '../src/worktrees.mjs';
+import { listWorktrees, inspectWorktree, mergeWorktree } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 function gitRepo(root) {
@@ -84,4 +84,53 @@ test('worktree isolation refuses non-git folders and cleans up unchanged worktre
   assert.equal(done.changed, false);
   await assert.rejects(access(wt.path));
   assert.equal(execFileSync('git', ['branch', '--list', wt.branch], { cwd: plain }).toString().trim(), '');
+});
+
+
+test('worktree merge preflight integrates disjoint changes and preserves the source worktree', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-merge-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-merge-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'agent.txt'), 'before\n');
+  await writeFile(path.join(root, 'main.txt'), 'before\n');
+  run('add', '-A'); run('commit', '-qm', 'init');
+  const env = { ...process.env, HOME: home };
+  const wt = await (await import('../src/worktrees.mjs')).createWorktree(root, 'disjoint change', { env });
+  await writeFile(path.join(wt.path, 'agent.txt'), 'from agent\n');
+  await (await import('../src/worktrees.mjs')).finishWorktree(root, wt, { env });
+  await writeFile(path.join(root, 'main.txt'), 'from main\n');
+  run('add', '-A'); run('commit', '-qm', 'main edit');
+  const before = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim();
+  const preview = await inspectWorktree(root, wt.branch, { env });
+  assert.equal(preview.can_merge, true);
+  assert.deepEqual(preview.overlapping_files, []);
+  assert.deepEqual(preview.merge_conflicts, []);
+  const merged = await mergeWorktree(root, wt.branch, { env, expectedHead: before });
+  assert.equal(merged.merged, true);
+  assert.equal(await readFile(path.join(root, 'agent.txt'), 'utf8'), 'from agent\n');
+  assert.equal(await readFile(path.join(root, 'main.txt'), 'utf8'), 'from main\n');
+  assert.equal((await listWorktrees(root, { env })).length, 1);
+});
+
+test('worktree merge refuses conflicting or unreviewed overlapping changes', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-conflict-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-conflict-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'shared.txt'), 'one\ntwo\nthree\n');
+  run('add', '-A'); run('commit', '-qm', 'init');
+  const env = { ...process.env, HOME: home };
+  const module = await import('../src/worktrees.mjs');
+  const wt = await module.createWorktree(root, 'conflicting edit', { env });
+  await writeFile(path.join(wt.path, 'shared.txt'), 'AGENT\ntwo\nthree\n');
+  await module.finishWorktree(root, wt, { env });
+  await writeFile(path.join(root, 'shared.txt'), 'MAIN\ntwo\nthree\n');
+  run('add', '-A'); run('commit', '-qm', 'main edit');
+  const preview = await inspectWorktree(root, wt.branch, { env });
+  assert.ok(preview.merge_conflicts.length > 0);
+  const before = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim();
+  await assert.rejects(mergeWorktree(root, wt.branch, { env, expectedHead: before, allowOverlaps: true }), /predicts conflicts/);
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root }).toString().trim(), before);
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root }).toString().trim(), '');
 });

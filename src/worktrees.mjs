@@ -104,3 +104,104 @@ export async function listWorktrees(root, options = {}) {
   const prefix = path.join(path.resolve(root), WORKTREE_DIR) + path.sep;
   return items.filter((item) => path.resolve(item.path).startsWith(prefix)).map((item) => ({ ...item, relative: path.relative(root, item.path).split(path.sep).join('/') }));
 }
+
+
+function validateOasisBranch(value) {
+  const branch = String(value || '').trim();
+  if (!/^oasis\/[a-z0-9][a-z0-9-]{0,63}$/.test(branch)) {
+    throw new Error('Expected an OASIS-managed branch, such as oasis/fix-tests-a1b2c3.');
+  }
+  return branch;
+}
+
+async function commandResult(root, args, env, timeout = 30000) {
+  const result = await execFileAsync('git', args, {
+    cwd: root, env: gitEnv(env), timeout, maxBuffer: 4 * 1024 * 1024
+  }).then(({ stdout, stderr }) => ({
+    exitCode: 0, stdout: String(stdout || '').trim(), stderr: String(stderr || '').trim()
+  })).catch((error) => ({
+    exitCode: Number.isInteger(Number(error.code)) ? Number(error.code) : 127,
+    stdout: String(error.stdout || '').trim(),
+    stderr: String(error.stderr || error.message || '').trim()
+  }));
+  return result;
+}
+
+function nameList(value) {
+  return [...new Set(String(value || '').split('\n').map((line) => line.trim()).filter(Boolean))].sort();
+}
+
+/** Inspect an attached OASIS worktree without changing either checkout. */
+export async function inspectWorktree(root, branchValue, options = {}) {
+  const env = options.env || process.env;
+  const branch = validateOasisBranch(branchValue);
+  const top = await git(root, ['rev-parse', '--show-toplevel'], env);
+  if (path.resolve(top) !== path.resolve(root)) {
+    throw new Error('Worktree inspection must run from the repository root (' + top + ').');
+  }
+  const worktrees = await listWorktrees(root, { env });
+  const attached = worktrees.find((item) => item.branch === branch);
+  if (!attached) throw new Error('No active OASIS worktree is attached to ' + branch + '.');
+  const head = await git(root, ['rev-parse', 'HEAD'], env);
+  const currentBranch = await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'], env).catch(() => '');
+  const branchHead = await git(root, ['rev-parse', '--verify', 'refs/heads/' + branch + '^{commit}'], env);
+  const mergeBase = await git(root, ['merge-base', 'HEAD', branchHead], env);
+  const branchFiles = nameList(await git(root, ['diff', '--name-only', mergeBase, branchHead], env));
+  const mainFiles = nameList(await git(root, ['diff', '--name-only', mergeBase, 'HEAD'], env));
+  const mainStatus = await git(root, ['status', '--porcelain=v1', '--untracked-files=all'], env);
+  const agentStatus = await git(attached.path, ['status', '--porcelain=v1', '--untracked-files=all'], env);
+  const overlaps = branchFiles.filter((file) => mainFiles.includes(file));
+  const preview = await commandResult(root, ['merge-tree', '--write-tree', 'HEAD', branchHead], env);
+  const previewText = [preview.stdout, preview.stderr].filter(Boolean).join('\n');
+  const previewSupported = preview.exitCode === 0 || (preview.exitCode === 1 && /\bCONFLICT\b/.test(previewText));
+  const conflictNames = [...new Set([...previewText.matchAll(/CONFLICT\s+\([^)]*\):\s+Merge conflict in (.+)/g)].map((match) => match[1].trim()))].sort();
+  const conflicts = preview.exitCode === 0 ? [] : previewSupported ? (conflictNames.length ? conflictNames : ['Git reports a merge conflict.']) : ['Git merge preview unavailable; merge is disabled.'];
+  const cleanMain = !mainStatus;
+  const cleanAgent = !agentStatus;
+  const canMerge = Boolean(currentBranch) && cleanMain && cleanAgent && previewSupported && preview.exitCode === 0 && overlaps.length === 0;
+  const blockedReasons = [];
+  if (!currentBranch) blockedReasons.push('The main checkout is detached; switch to a named branch first.');
+  if (!cleanMain) blockedReasons.push('The main checkout has uncommitted changes.');
+  if (!cleanAgent) blockedReasons.push('The agent worktree has uncommitted changes.');
+  if (!previewSupported) blockedReasons.push('Git could not safely preview the merge.');
+  else if (conflicts.length) blockedReasons.push('Git predicts conflicts: ' + conflicts.join(', '));
+  if (overlaps.length) blockedReasons.push('Both branches changed: ' + overlaps.join(', ') + '. Review these paths before explicitly allowing overlap.');
+  return {
+    ok: true, branch, worktree_path: attached.relative, current_branch: currentBranch || null,
+    head, branch_head: branchHead, merge_base: mergeBase, branch_files: branchFiles,
+    main_changed_files: mainFiles, overlapping_files: overlaps, merge_conflicts: conflicts,
+    merge_preview_supported: previewSupported, main_worktree_clean: cleanMain,
+    agent_worktree_clean: cleanAgent, can_merge: canMerge, blocked_reasons: blockedReasons,
+    preview: previewText.slice(0, 5000)
+  };
+}
+
+/** Integrate a reviewed worktree only after preflight and user approval. */
+export async function mergeWorktree(root, branchValue, options = {}) {
+  const env = options.env || process.env;
+  const branch = validateOasisBranch(branchValue);
+  const inspection = await inspectWorktree(root, branch, { env });
+  if (options.expectedHead && inspection.head !== options.expectedHead) throw new Error('The main branch changed after review; inspect again.');
+  if (!inspection.main_worktree_clean) throw new Error('Merge blocked: the main checkout has uncommitted changes.');
+  if (!inspection.agent_worktree_clean) throw new Error('Merge blocked: the agent worktree has uncommitted changes.');
+  if (!inspection.current_branch) throw new Error('Merge blocked: the main checkout is detached.');
+  if (!inspection.merge_preview_supported) throw new Error('Merge blocked: Git could not safely preview the merge.');
+  if (inspection.merge_conflicts.length) throw new Error('Merge blocked because Git predicts conflicts: ' + inspection.merge_conflicts.join(', '));
+  if (inspection.overlapping_files.length && options.allowOverlaps !== true) {
+    throw new Error('Merge blocked because both branches changed the same files: ' + inspection.overlapping_files.join(', ') + '. Review and explicitly allow overlap before retrying.');
+  }
+  const latestHead = await git(root, ['rev-parse', 'HEAD'], env);
+  const latestStatus = await git(root, ['status', '--porcelain=v1', '--untracked-files=all'], env);
+  if (latestHead !== inspection.head || latestStatus) throw new Error('The main checkout changed during merge preparation; inspect again.');
+  const result = await commandResult(root, ['merge', '--no-ff', '--no-edit', '-m', 'Merge OASIS worktree: ' + branch, branch], env, 60000);
+  if (result.exitCode !== 0) {
+    const mergeHead = await commandResult(root, ['rev-parse', '--verify', 'MERGE_HEAD'], env);
+    if (mergeHead.exitCode === 0) await commandResult(root, ['merge', '--abort'], env, 30000);
+    throw new Error('Git merge failed; any in-progress merge was aborted. ' + (result.stderr || result.stdout || 'No details available.').slice(0, 2000));
+  }
+  return {
+    ok: true, merged: true, branch, target_branch: inspection.current_branch,
+    commit: await git(root, ['rev-parse', 'HEAD'], env), files: inspection.branch_files,
+    message: 'Merged ' + branch + ' into ' + inspection.current_branch + '. The source worktree was preserved for review and cleanup.'
+  };
+}

@@ -9,11 +9,15 @@
 //   - commit messages are passed on stdin, never through a shell
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { inspectWorktree, mergeWorktree } from './worktrees.mjs';
 
 const workspaceTools = () => import('./tools.mjs');
 const MAX_OUTPUT = 24 * 1024;
 
 export const GIT_TOOL_DEFINITIONS = [
+  { type: 'function', function: { name: 'worktree_inspect', description: 'Read-only preflight for an OASIS subagent worktree. Reports changed paths, overlapping files, dirty checkouts and Git-predicted merge conflicts.', parameters: { type: 'object', properties: { branch: { type: 'string', description: 'OASIS-managed worktree branch returned by the subagent' } }, required: ['branch'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'worktree_merge', description: 'Approval-gated merge of a reviewed OASIS worktree. Requires clean checkouts and a conflict-free Git preview. If same paths changed on both sides, inspect first and set allow_overlaps=true only after deciding to accept the conflict-free merge. Predicted conflicts are never merged.', parameters: { type: 'object', properties: { branch: { type: 'string', description: 'OASIS worktree branch to merge' }, allow_overlaps: { type: 'boolean', description: 'Explicitly acknowledge conflict-free overlapping path changes; default false' } }, required: ['branch'], additionalProperties: false } } },
+
   { type: 'function', function: { name: 'git_log', description: 'Read recent Git commits (hash, author, date, subject). Read-only. Use before committing to match the repository\'s message style.', parameters: { type: 'object', properties: {
     limit: { type: 'integer', description: 'Number of commits, 1-200; default 20' },
     ref: { type: 'string', description: 'Branch, tag, or range such as main..HEAD; default HEAD' },
@@ -278,6 +282,19 @@ async function createPullRequest(root, args, options) {
 
 export async function runGitTool(name, root, args = {}, options = {}) {
   switch (name) {
+    case 'worktree_inspect': return await inspectWorktree(root, args.branch, { env: options.env || process.env });
+    case 'worktree_merge': {
+      const preview = await inspectWorktree(root, args.branch, { env: options.env || process.env });
+      if (!preview.main_worktree_clean) return fail('The main checkout has uncommitted changes.', { preview });
+      if (!preview.agent_worktree_clean) return fail('The agent worktree has uncommitted changes.', { preview });
+      if (!preview.current_branch) return fail('The main checkout is detached.', { preview });
+      if (!preview.merge_preview_supported) return fail('Git could not safely preview this merge; it is disabled.', { preview });
+      if (preview.merge_conflicts.length) return fail('Git predicts conflicts: ' + preview.merge_conflicts.join(', ') + '. Nothing was merged.', { preview });
+      if (preview.overlapping_files.length && args.allow_overlaps !== true) return fail('Both branches changed the same paths: ' + preview.overlapping_files.join(', ') + '. Review them, then retry with allow_overlaps=true only if you accept the conflict-free merge.', { preview });
+      if (!await approve(options, 'Merge reviewed OASIS worktree ' + args.branch + ' into ' + preview.current_branch + '? This creates a merge commit.')) return fail('The merge was not approved; no changes were made.', { preview });
+      try { return await mergeWorktree(root, args.branch, { env: options.env || process.env, expectedHead: preview.head, allowOverlaps: args.allow_overlaps === true }); }
+      catch (error) { return fail(error.message, { preview }); }
+    }
     case 'git_log': return await gitLog(root, args, options);
     case 'git_commit': return await gitCommit(root, args, options);
     case 'git_branch': return await gitBranch(root, args, options);

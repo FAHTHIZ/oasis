@@ -1765,6 +1765,8 @@ export async function executeTool(name, args = {}, context = {}) {
       return await fetchPublicUrl(args.url, { lookupImpl: context.lookupImpl, requestImpl: context.requestImpl });
     case 'web_search':
       return await webSearch(args, { env: context.env || process.env });
+    case 'worktree_inspect':
+    case 'worktree_merge':
     case 'git_log':
     case 'git_commit':
     case 'git_branch':
