@@ -1,8 +1,8 @@
 // Built-in interactive slash commands (Claude Code style). Each handler returns
 // { output } text, and optionally { prompt } to send to the agent, or
 // { resetSession: true } when the caller should drop the current session.
-import { describeHook } from './hooks.mjs';
-import { compactHistoryIfNeeded } from './agent.mjs';
+import { describeHook, runHooks, hasHooks } from './hooks.mjs';
+import { compactHistoryIfNeeded, hookOptions } from './agent.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES } from './settings.mjs';
@@ -174,8 +174,19 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'model': {
       if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID to switch for this session.' };
+      // PreModelSwitch hooks can allow, deny, or ask; PostModelSwitch adds context for the next request.
+      const previous = session ? session.config.model : null;
+      if (session && hasHooks(session.hooks, 'PreModelSwitch')) {
+        const pre = await runHooks('PreModelSwitch', { session_id: session.sessionId || 'unsaved', model: argument, previous_model: previous, source: 'slash_command' }, hookOptions(session, env));
+        if (pre.blocked || pre.permissionDecision === 'deny') return { output: 'A PreModelSwitch hook blocked switching to ' + argument + ': ' + (pre.reason || 'no reason given') };
+        if (pre.permissionDecision === 'ask' && typeof state.confirm === 'function' && !(await state.confirm('A hook asks you to confirm switching to ' + argument + '. Switch?'))) return { output: 'Model switch cancelled.' };
+      }
       sessionOptions.model = argument;
       if (session) session.config = { ...session.config, model: argument };
+      if (session && hasHooks(session.hooks, 'PostModelSwitch')) {
+        const post = await runHooks('PostModelSwitch', { session_id: session.sessionId || 'unsaved', model: argument, previous_model: previous, source: 'slash_command' }, hookOptions(session, env)).catch(() => null);
+        if (post && post.additionalContext.length) (session.asyncHookFeedback ||= []).push('PostModelSwitch hook: ' + post.additionalContext.join('\n'));
+      }
       return { output: 'Model for this session set to ' + argument + '.' };
     }
     case 'mode': {
@@ -241,6 +252,11 @@ export async function runBuiltinCommand(name, argument, state) {
         const note = '\n\nAdditional working directory added: ' + result.accepted.at(-1) + ' (you may read and edit files there).';
         session.baseSystemPrompt = (session.baseSystemPrompt || session.messages[0].content) + note;
         if (session.messages[0] && session.messages[0].role === 'system') session.messages[0].content += note;
+      }
+      if (session && hasHooks(session.hooks, 'DirectoryAdded')) {
+        // The directory is already added; the hook's systemMessage becomes context next turn.
+        runHooks('DirectoryAdded', { session_id: session.sessionId || 'unsaved', directory: result.accepted.at(-1), source: 'slash_command' }, hookOptions(session, env))
+          .then((added) => { const notes = [...added.messages, ...added.additionalContext]; if (notes.length) (session.asyncHookFeedback ||= []).push('DirectoryAdded hook: ' + notes.join('\n')); }).catch(() => {});
       }
       return { output: 'Added ' + result.accepted.at(-1) + ' for this session.' };
     }

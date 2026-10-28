@@ -106,14 +106,34 @@ function normalizeHook(hook) {
   if (!hook || typeof hook !== 'object') return null;
   const timeout = Number(hook.timeout) || 0;
   const type = hook.type || 'command';
-  if (type === 'command' && typeof hook.command === 'string' && hook.command.trim()) return { type, command: hook.command, timeout: timeout || 60 };
+  // Fields shared by every handler type (timeouts default per type and event in hooks.mjs).
+  const common = {
+    ...(timeout ? { timeout } : {}),
+    ...(typeof hook.if === 'string' && hook.if.trim() ? { if: hook.if.trim() } : {}),
+    ...(typeof hook.statusMessage === 'string' ? { statusMessage: hook.statusMessage.slice(0, 200) } : {}),
+    ...(hook.onFailure === 'block' || hook.onFailure === 'continue' ? { onFailure: hook.onFailure } : {})
+  };
+  if (type === 'command' && typeof hook.command === 'string' && hook.command.trim()) {
+    return {
+      type, command: hook.command, ...common,
+      ...(Array.isArray(hook.args) ? { args: hook.args.map(String) } : {}),
+      ...(hook.async === true ? { async: true } : {}),
+      ...(hook.asyncRewake === true ? { asyncRewake: true } : {}),
+      ...(hook.shell === 'powershell' || hook.shell === 'bash' ? { shell: hook.shell } : {})
+    };
+  }
   if (type === 'http' && typeof hook.url === 'string' && /^https?:\/\//i.test(hook.url)) {
     const headers = {};
     if (hook.headers && typeof hook.headers === 'object') for (const [key, value] of Object.entries(hook.headers)) if (typeof value === 'string') headers[key] = value;
     const allowedEnvVars = Array.isArray(hook.allowedEnvVars) ? hook.allowedEnvVars.filter((name) => typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) : [];
-    return { type, url: hook.url, headers, allowedEnvVars, timeout: timeout || 30 };
+    return { type, url: hook.url, headers, allowedEnvVars, ...common };
   }
-  if (type === 'prompt' && typeof hook.prompt === 'string' && hook.prompt.trim()) return { type, prompt: hook.prompt, model: typeof hook.model === 'string' ? hook.model : undefined, timeout: timeout || 30 };
+  if ((type === 'prompt' || type === 'agent') && typeof hook.prompt === 'string' && hook.prompt.trim()) {
+    return { type, prompt: hook.prompt, model: typeof hook.model === 'string' ? hook.model : undefined, ...common, ...(type === 'prompt' && hook.continueOnBlock === true ? { continueOnBlock: true } : {}) };
+  }
+  if (type === 'mcp_tool' && typeof hook.server === 'string' && hook.server.trim() && typeof hook.tool === 'string' && hook.tool.trim()) {
+    return { type, server: hook.server.trim(), tool: hook.tool.trim(), input: hook.input && typeof hook.input === 'object' && !Array.isArray(hook.input) ? hook.input : {}, ...common };
+  }
   return null;
 }
 
