@@ -37,7 +37,16 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Auto permission mode: a classifier model allows routine actions and blocks risky ones. It is resistant to prompt injection because it never sees tool output.
 - SDK (`import { query, tool } from 'oasis-oss'`) with in-process tools and `canUseTool`, plus a `--bare` headless mode.
 - GitHub Action (`action.yml`): `@oasis` mentions on issues and PRs lead to a branch, a PR, and a reply in the thread.
+- Interactive terminal rebuilt (October 2026): multiline editor, per-workspace history with Ctrl+R, Tab completion for `/commands` and `@files`, Shift+Tab modes, `!` shell mode, Ctrl+V image paste, streaming Markdown with syntax highlighting, colored diffs, type-ahead queue, Esc to interrupt, and an animated startup banner (`OASIS_NO_ANIMATION=1` to skip).
+- Claude Code-compatible CLI flags (`--system-prompt`, `--tools`, `--mcp-config`, `--agents`, `--session-id`, `--name`, `--fallback-model`, `--max-budget-usd`, `--settings`, `--setting-sources`, `--from-pr`, stream-json input and more) and USD cost tracking.
+- Session tools: `tool_search` (deferred MCP tools), `monitor_command`, `enter_plan_mode`, `notify`, and in-session cron (`cron_create`, `cron_list`, `cron_delete`, `/schedule`).
+- Workflow commands: `/goal`, `/btw`, `/recap`, `/rename`, `/simplify`, `/verify`, `/batch`, `/fewer-permission-prompts`, `/keybindings`, `/terminal-setup`, `/privacy-settings`, `/stop`. Sessions are saved by default.
+- Bundled [Ponytail](https://github.com/DietrichGebert/ponytail) skills (MIT) for a lean, smallest-complete-change mode.
 - CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
+
+## Next: Claude Code parity
+
+The remaining gaps are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md): vim mode, themes and keybindings, a full-screen transcript, EnterWorktree/ExitWorktree, a `rules/` folder, native Gemini and Azure adapters, a PTY, Windows support, a plugin marketplace, and IDE extensions.
 
 ## Milestone 1 — make the CLI release-quality
 
