@@ -787,7 +787,7 @@ async function agentLoadMonitor(silent){
       var pills=cloudRunNode('div','agent-monitor-pills');
       pills.append(agentMonitorStatus((run.runningWorkers||0)+' active workers'),agentMonitorStatus((run.workerCount||0)+' workers'),agentMonitorStatus((run.teamCount||0)+' teams'));
       if(run.approvals&&run.approvals.pending)pills.appendChild(agentMonitorStatus(run.approvals.pending+' approval pending'));
-      if(run.approvals&&Number.isFinite(run.approvals.totalTokens))pills.appendChild(agentMonitorStatus(run.approvals.totalTokens.toLocaleString()+' tokens'));
+      if(run.usage&&Number.isFinite(run.usage.totalTokens))pills.appendChild(agentMonitorStatus(run.usage.totalTokens.toLocaleString()+' tokens'));
       button.append(top,meta,pills);
       button.addEventListener('click',function(){agentMonitorSelectedId=run.id;list.querySelectorAll('[data-monitor-selected]').forEach(function(item){item.setAttribute('aria-pressed','false')});button.setAttribute('aria-pressed','true');agentRenderMonitorDetail(run)});
       button.dataset.monitorSelected=run.id;
