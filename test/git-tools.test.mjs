@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, mkdir, chmod, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, chmod, readFile, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -82,6 +82,67 @@ test('git_commit refuses secret-looking files and reports hook failures', async 
   assert.equal(rejected.ok, false);
   assert.match(rejected.output, /lint failed/);
   assert.match(rejected.message, /hook/);
+});
+
+test('git commit cancellation terminates stubborn hook descendants', { skip: process.platform !== 'linux' }, async (t) => {
+  const { base, root } = await repo();
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const pidFile = path.join(base, 'hook-descendant.pid');
+  const readyFile = path.join(base, 'hook-descendant.ready');
+  const childScript = path.join(base, 'stubborn-hook-child.cjs');
+  const hook = path.join(root, '.git', 'hooks', 'pre-commit');
+  await writeFile(childScript, [
+    "process.on('SIGTERM', () => {});",
+    "require('node:fs').writeFileSync(process.env.OASIS_TEST_READY_FILE, 'ready');",
+    "setInterval(() => {}, 1000);"
+  ].join('\n'));
+  await writeFile(hook, [
+    '#!' + process.execPath,
+    "const { spawn } = require('node:child_process');",
+    "const fs = require('node:fs');",
+    "const child = spawn(process.execPath, [process.env.OASIS_TEST_CHILD_SCRIPT], { stdio: 'ignore', env: process.env });",
+    "const publish = setInterval(() => { if (fs.existsSync(process.env.OASIS_TEST_READY_FILE)) { clearInterval(publish); fs.writeFileSync(process.env.OASIS_TEST_PID_FILE, String(child.pid)); } }, 10);",
+    "setInterval(() => {}, 1000);"
+  ].join('\n'));
+  await chmod(hook, 0o755);
+  await writeFile(path.join(root, 'README.md'), '# changed before cancellation\n');
+
+  const env = { ...process.env, OASIS_TEST_PID_FILE: pidFile, OASIS_TEST_READY_FILE: readyFile, OASIS_TEST_CHILD_SCRIPT: childScript };
+  const controller = new AbortController();
+  let pid = 0;
+  try {
+    const pending = runGitTool('git_commit', root, { message: 'Abort hook fixture', paths: ['README.md'] }, { ...yes, env, signal: controller.signal });
+    const deadline = Date.now() + 5000;
+    while (!pid && Date.now() < deadline) {
+      try { pid = Number((await readFile(pidFile, 'utf8')).trim()); } catch {}
+      if (!pid) await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(pid > 0, 'the hook child should install its SIGTERM handler before cancellation');
+    assert.equal(await readFile(readyFile, 'utf8'), 'ready');
+    controller.abort();
+    const result = await pending;
+    assert.equal(result.ok, false, 'an aborted commit must not be reported as successful');
+
+    const stillRunning = async () => {
+      try {
+        const stat = await readFile('/proc/' + pid + '/stat', 'utf8');
+        const end = stat.lastIndexOf(')');
+        return stat.slice(end + 2, end + 3) !== 'Z';
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return false;
+        try { process.kill(pid, 0); return true; }
+        catch (signalError) { return signalError && signalError.code === 'EPERM'; }
+      }
+    };
+    const stopDeadline = Date.now() + 5000;
+    while (await stillRunning() && Date.now() < stopDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(await stillRunning(), false, 'cancelling git commit must not orphan a stubborn hook descendant');
+  } finally {
+    if (!pid) { try { pid = Number((await readFile(pidFile, 'utf8')).trim()); } catch {} }
+    if (pid > 0) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+  }
 });
 
 test('git_branch creates, switches, and validates names', async () => {

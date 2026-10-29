@@ -12,6 +12,8 @@
 // "${VAR}" and "${VAR:-default}" expand from the host environment when the session
 // starts; expanded values are never written back to disk.
 import { readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
@@ -237,16 +239,47 @@ export class McpHttpClient {
   async _helperHeaders(refresh = false) {
     if (!this.config.headersHelper) return {};
     if (this.helperHeaders && !refresh) return this.helperHeaders;
-    const { spawn } = await import('node:child_process');
     const env = { ...this.env, CLAUDE_CODE_MCP_SERVER_NAME: this.config.name, CLAUDE_CODE_MCP_SERVER_URL: this.config.url, ...(this.config.pluginRoot ? { CLAUDE_PLUGIN_ROOT: this.config.pluginRoot } : {}) };
     const output = await new Promise((resolve, reject) => {
-      const child = spawn(this.config.headersHelper, { shell: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
-      let out = ''; let err = '';
-      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('headersHelper timed out after 10s')); }, 10000);
-      child.stdout.on('data', (chunk) => { out += chunk; if (out.length > 65536) child.kill('SIGKILL'); });
-      child.stderr.on('data', (chunk) => { err += chunk; });
-      child.on('error', (error) => { clearTimeout(timer); reject(error); });
-      child.on('close', (code) => { clearTimeout(timer); if (code === 0) resolve(out); else reject(new Error('headersHelper exited with ' + code + (err.trim() ? ': ' + err.trim().slice(0, 300) : ''))); });
+      const child = spawn(this.config.headersHelper, {
+        shell: true, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        ...processTreeSpawnOptions()
+      });
+      let out = '';
+      let err = '';
+      let oversized = false;
+      let settled = false;
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error); else resolve(value);
+      };
+      const timer = setTimeout(() => {
+        signalProcessTree(child, 'SIGKILL');
+        finish(new Error('headersHelper timed out after 10s'));
+      }, 10000);
+      child.stdout.on('data', (chunk) => {
+        if (oversized || settled) return;
+        const currentBytes = Buffer.byteLength(out, 'utf8');
+        if (currentBytes + chunk.length > 65536) {
+          // Do not concatenate an unbounded response chunk before checking the cap.
+          const remainingBytes = Math.max(0, 65536 - currentBytes);
+          out += chunk.subarray(0, remainingBytes).toString('utf8');
+          oversized = true;
+          signalProcessTree(child, 'SIGKILL');
+          finish(new Error('headersHelper output exceeded 64 KiB'));
+          return;
+        }
+        out += chunk.toString('utf8');
+      });
+      child.stderr.on('data', (chunk) => { err = (err + chunk).slice(-4000); });
+      child.on('error', (error) => finish(error));
+      child.on('close', (code) => {
+        if (oversized) return finish(new Error('headersHelper output exceeded 64 KiB'));
+        if (code === 0) finish(null, out);
+        else finish(new Error('headersHelper exited with ' + code + (err.trim() ? ': ' + err.trim().slice(0, 300) : '')));
+      });
     });
     let parsed;
     try { parsed = JSON.parse(output); } catch { throw new Error('MCP server ' + this.config.name + ': headersHelper must print a JSON object of headers.'); }

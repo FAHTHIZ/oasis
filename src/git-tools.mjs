@@ -2,12 +2,13 @@
 // create_pull_request (through the GitHub CLI). Every change asks for approval
 // unless commands are auto-approved or a permission rule allows the tool.
 //
-// Safety rules, matching Claude Code's git protocol:
+// OASIS Git safety policy:
 //   - never force-push, never rewrite history (no amend, rebase, or reset)
 //   - never skip hooks (no --no-verify) and never change git config
 //   - refuse to commit files that look like secrets (.env, keys, credentials)
 //   - commit messages are passed on stdin, never through a shell
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
 import { inspectWorktree, mergeWorktree } from './worktrees.mjs';
 
@@ -60,25 +61,52 @@ function run(command, args, { cwd, env, input, timeout = 60000, signal } = {}) {
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let interrupted = false;
+    let timedOut = false;
+    let killTimer = null;
     let child;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // A timed-out/cancelled leader may close its pipes before a descendant.
+      if (!interrupted) clearTimeout(killTimer);
       if (signal) signal.removeEventListener('abort', abort);
       resolve({ ...result, stdout: stdout.trim(), stderr: stderr.trim() });
     };
-    const abort = () => { try { child.kill('SIGTERM'); } catch {} };
-    const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} finish({ exitCode: 124, timedOut: true }); }, timeout);
+    const terminate = (kind) => {
+      interrupted = true;
+      if (kind === 'timeout') timedOut = true;
+      signalProcessTree(child, 'SIGTERM');
+      clearTimeout(killTimer);
+      killTimer = setTimeout(() => {
+        killTimer = null;
+        signalProcessTree(child, 'SIGKILL');
+      }, 750);
+      killTimer.unref?.();
+    };
+    const abort = () => terminate('cancel');
+    const timer = setTimeout(() => terminate('timeout'), timeout);
     timer.unref?.();
     try {
-      child = spawn(command, args, { cwd, env, shell: false, windowsHide: true, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+      child = spawn(command, args, {
+        cwd, env, shell: false, windowsHide: true,
+        stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+        ...processTreeSpawnOptions()
+      });
     } catch (error) { finish({ exitCode: 127, error: error.message }); return; }
-    if (signal) signal.addEventListener('abort', abort, { once: true });
+    if (signal) {
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    }
     child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(-MAX_OUTPUT); });
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-MAX_OUTPUT); });
-    child.on('error', (error) => finish({ exitCode: 127, error: error.code === 'ENOENT' ? command + ' is not installed or not on PATH.' : error.message }));
-    child.on('close', (code) => finish({ exitCode: code ?? 1 }));
+    child.on('error', (error) => finish({ exitCode: 127, error: error.code === 'ENOENT' ? command + ' is not installed or not on PATH.' : error.message, ...(timedOut ? { timedOut: true, exitCode: 124 } : {}), ...(signal && signal.aborted ? { cancelled: true } : {}) }));
+    child.on('close', (code) => finish({
+      exitCode: timedOut ? 124 : (code ?? 1),
+      ...(timedOut ? { timedOut: true } : {}),
+      ...(signal && signal.aborted ? { cancelled: true } : {})
+    }));
     if (input !== undefined) { child.stdin.on('error', () => {}); child.stdin.end(input); }
   });
 }
