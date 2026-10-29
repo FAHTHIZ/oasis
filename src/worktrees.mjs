@@ -6,12 +6,36 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
-import { appendFile, mkdir, readFile, rm, stat } from 'node:fs/promises';
+import { appendFile, lstat, mkdir, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { runHooks, hasHooks } from './hooks.mjs';
 
 const execFileAsync = promisify(execFile);
 export const WORKTREE_DIR = path.join('.oasis', 'worktrees');
+
+function within(base, target) {
+  const relative = path.relative(base, target);
+  return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+// The worktree destination is inside a repository that may be untrusted. Never
+// follow a pre-existing .oasis or .oasis/worktrees symlink outside the checkout.
+async function ensureWorktreeParent(root) {
+  const rootReal = await realpath(root);
+  let current = rootReal;
+  for (const segment of ['.oasis', 'worktrees']) {
+    current = path.join(current, segment);
+    try { await mkdir(current, { recursive: false, mode: 0o700 }); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    const info = await lstat(current);
+    if (info.isSymbolicLink() || !info.isDirectory()) {
+      throw new Error('Refusing to create an isolated worktree through a non-directory or symbolic-link path: ' + current);
+    }
+    const resolved = await realpath(current);
+    if (!within(rootReal, resolved)) throw new Error('Worktree destination escapes the repository through a symbolic link: ' + current);
+  }
+  return current;
+}
 
 function gitEnv(env = process.env) {
   return { PATH: env.PATH || process.env.PATH, HOME: env.HOME || process.env.HOME, GIT_TERMINAL_PROMPT: '0', LANG: 'C' };
@@ -67,8 +91,8 @@ export async function createWorktree(root, label, options = {}) {
   const name = worktreeSlug(label) + '-' + randomBytes(3).toString('hex');
   const branch = 'oasis/' + name;
   const relative = path.join(WORKTREE_DIR, name);
-  const absolute = path.join(root, relative);
-  await mkdir(path.dirname(absolute), { recursive: true });
+  const worktreeParent = await ensureWorktreeParent(root);
+  const absolute = path.join(worktreeParent, name);
   await git(root, ['worktree', 'add', '-b', branch, absolute, 'HEAD'], env, 60000);
   const base = await git(absolute, ['rev-parse', 'HEAD'], env);
   return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base };
