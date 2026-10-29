@@ -28,6 +28,8 @@ The new layer keeps the existing web_search interface and legacy provider preced
 - Fusion: URL canonicalization strips common tracking parameters and fragments; reciprocal-rank fusion rewards results found near the top of more than one source.
 - Source safety: result snippets are untrusted. Fetching is routed through OASIS's bounded public-URL fetcher, with private/reserved addresses blocked, DNS answers pinned, redirects not automatically followed, and response sizes limited.
 - Local operation: OASIS and the MCP server run locally; online search providers still require internet access. SearXNG can be hosted on the user's own machine/server, but this work does not create an independent full-web crawler or index.
+- Independent-index requirement: provider federation is only a discovery baseline. The product target still requires OASIS-owned crawling, durable document storage, an inverted index, ranking, freshness updates, and reproducible relevance evaluation.
+- Onion/Tor boundary: .onion access is not implemented by the current public-URL fetcher. See [ONION_ACCESS_DESIGN.md](ONION_ACCESS_DESIGN.md) for a fail-closed, Tor-SOCKS-only design. Tor transport is separate from search and must not leak onion URLs or content to public search providers.
 - Credentials: API keys belong in environment variables, never in project files, command-line arguments, source control, or chat messages.
 
 ## Provider configuration
