@@ -20,7 +20,7 @@ function friendlyStartError(error, command = 'oasis') {
 
 function isPotentiallyDestructiveAction(text) {
   // This is a conservative UI warning, not a replacement for the actual approval gate.
-  return /\\brm\\s+-[a-z]*r[a-z]*\\b|\\b(delete|remove|overwrite|format|truncate)\\b|\\bdrop\\s+table\\b/i.test(String(text || ''));
+  return /\brm\s+-[a-z]*r[a-z]*\b|\b(delete|remove|overwrite|format|truncate)\b|\bdrop\s+table\b/i.test(String(text || ''));
 }
 
 function splitCommand(command) {
