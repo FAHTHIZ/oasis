@@ -1949,7 +1949,12 @@ export function verificationIssues(state) {
   for (const [file, result] of state.lspVerificationByPath || []) {
     if (!changed.includes(file)) continue;
     if (result.status === 'unavailable') {
-      issues.push('LSP verification unavailable for ' + file + ': ' + String(result.reason || 'no diagnostic result'));
+      // LSP is optional editor integration, not a substitute for a real code check.
+      // When a recognized check passed after review, absence remains visible but is
+      // not independently blocking.
+      if (state.lastVerificationExitCode !== 0) {
+        issues.push('LSP verification unavailable for ' + file + ': ' + String(result.reason || 'no diagnostic result'));
+      }
     } else if (Array.isArray(result.newErrors) && result.newErrors.length) {
       issues.push('LSP reports ' + result.newErrors.length + ' new or unclassified error(s) in ' + file);
     }
@@ -2007,8 +2012,11 @@ function verificationSummary(state) {
         ? 'unavailable'
         : result && Array.isArray(result.newErrors) && result.newErrors.length
           ? 'errors'
-          : 'clean',
-      newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0
+          : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
+            ? 'warnings'
+            : 'clean',
+      newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0,
+      newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0
     }));
   const issues = verificationIssues(state);
   return {
@@ -3384,6 +3392,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           finished: false,
           verificationIncomplete: true,
           verificationIssues: issues,
+          verification: verificationSummary(verification),
           budgetExceeded: tokensUsed > tokenBudget
         };
       }
@@ -3594,7 +3603,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         pruneHistory(session);
         const reason = batch.reason || 'A PostToolBatch hook stopped the turn.';
         if (options.onText) await emitDisplayText(session, options, reason);
-        return { text: reason, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, stoppedByHook: true };
+        const issues = verificationIssues(verification);
+        return {
+          text: reason, toolCalls: totalToolCalls, tokensUsed, tokenBudget,
+          finished: false, stoppedByHook: true,
+          verificationIncomplete: issues.length > 0,
+          verificationIssues: issues,
+          verification: verificationSummary(verification)
+        };
       }
       if (batch.additionalContext.length) session.messages.push({ role: 'user', content: '<system-reminder>\nPostToolBatch hook context:\n' + batch.additionalContext.join('\n').slice(0, 10000) + '\n</system-reminder>' });
     }
@@ -3602,13 +3618,17 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       session.messages.push({ role: 'assistant', content: loopBreakMessage });
       if (options.onText) await emitDisplayText(session, options, loopBreakMessage);
       pruneHistory(session);
+      const issues = verificationIssues(verification);
       return {
         text: loopBreakMessage,
         toolCalls: totalToolCalls,
         tokensUsed,
         tokenBudget,
         finished: false,
-        stoppedByLoopBreaker: true
+        stoppedByLoopBreaker: true,
+        verificationIncomplete: issues.length > 0,
+        verificationIssues: issues,
+        verification: verificationSummary(verification)
       };
     }
     if (totalToolCalls >= maxToolCalls || session.toolCallsThisSession >= MAX_SESSION_TOOL_CALLS) {
