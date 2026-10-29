@@ -208,23 +208,28 @@ const INTERPRETER_EVAL_FLAGS = {
   osascript: ['-e'], Rscript: ['-e'], rscript: ['-e'], julia: ['-e', '--eval']
 };
 
-const CODE_EXECUTION_TOOLS = new Set([
-  ...Object.keys(INTERPRETER_EVAL_FLAGS).map((name) => name.toLowerCase()),
-  'npx', 'pnpm', 'npm', 'yarn', 'corepack', 'bunx',
-  'pytest', 'tox', 'uv', 'poetry', 'pipenv', 'pip',
-  'cargo', 'go', 'make', 'gmake', 'just', 'task',
-  'gradle', 'mvn', 'mvnw', 'dotnet', 'java', 'composer', 'phpunit',
-  'jest', 'vitest', 'mocha', 'tsx', 'ts-node', 'vite', 'next', 'astro',
-  'webpack', 'parcel', 'turbo', 'nx', 'rush', 'lerna', 'gulp', 'grunt',
-  'rollup', 'svelte-kit'
-]);
-
-const INFORMATION_ONLY_FLAGS = new Set(['--version', '-version', '-v', '--help', '-h', '-?']);
-
-function isInformationOnlyInvocation(base, args) {
+function projectRunnerRisk(base, args) {
   const values = args.map((arg) => String(arg).toLowerCase());
-  if (values.length === 1 && INFORMATION_ONLY_FLAGS.has(values[0])) return true;
-  if (base === 'go' && values.length === 1 && values[0] === 'version') return true;
+  const first = values[0] || '';
+  const second = values[1] || '';
+
+  // Remote package runners and package-manager execution helpers can execute
+  // code that is not part of the reviewed workspace.
+  if (['npx', 'bunx'].includes(base)) return true;
+  if (['npm', 'pnpm', 'yarn'].includes(base)) {
+    if (['exec', 'dlx'].includes(first)) return true;
+    if (['install', 'add', 'update', 'link', 'publish'].includes(first)) return true;
+    if (['run', 'run-script'].includes(first)) {
+      const scriptName = first === 'run' ? second : second;
+      // Preserve common, explicit test commands as normal risk. Other named
+      // package scripts can deploy, publish, or run arbitrary project code.
+      return Boolean(scriptName) && !/^test(?:$|:)/.test(scriptName) && !['check', 'lint', 'typecheck', 'format:check'].includes(scriptName);
+    }
+  }
+  if (base === 'cargo' && first === 'run') return true;
+  if (base === 'go' && ['run', 'generate'].includes(first)) return true;
+  if (['make', 'gmake', 'just', 'task'].includes(base) &&
+      ['deploy', 'release', 'publish', 'install', 'production'].includes(first)) return true;
   return false;
 }
 
@@ -317,13 +322,12 @@ export function analyzeCommand(command, args = [], depth = 0) {
     const hit = args.find((a) => evalFlags.includes(String(a).split('=')[0]) || /^-[a-zA-Z]*c$/.test(a) && evalFlags.includes('-c'));
     if (hit) return { highRisk: 'runs inline code (' + base + ' ' + hit + ')', effective: { base, args } };
   }
-  // Inline evaluation is handled above, but executing a script file or project
-  // runner can execute repository-controlled code too. Automatic approval should
-  // not silently lower this risk to an ordinary command.
-  if ((CODE_EXECUTION_TOOLS.has(base) || /^python\d+(\.\d+)?$/.test(base)) &&
-      !isInformationOnlyInvocation(base, args)) {
+  // Inline evaluation is handled above. In addition, flag explicit remote
+  // package execution and high-impact project-runner verbs. Ordinary script/test
+  // invocations retain the established interaction model.
+  if (projectRunnerRisk(base, args)) {
     return {
-      highRisk: 'executes interpreter code, repository-controlled scripts, or project-provided runners',
+      highRisk: 'executes a remote package or an explicit high-impact project runner',
       effective: { base, args }
     };
   }
