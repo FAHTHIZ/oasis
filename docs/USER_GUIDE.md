@@ -859,6 +859,7 @@ Oasis includes a reference-task harness for measuring completed work instead of 
 ~~~bash
 oasis eval --validate
 oasis eval --task config-output-token-limit --trials 3 --yes
+oasis eval --compare ./oasis-run.json ./claude-code-run.json
 ~~~
 
 Each task under `evals/tasks/<id>/` contains a pre-change repository snapshot, a plain-English request, a known-good reference patch, and a verifier kept outside the copied workspace. Validation checks that the verifier fails on the unchanged snapshot and passes after the reference patch is applied. The CI quality gate runs this validation on Node.js 22, 24, and 26.
@@ -866,6 +867,26 @@ Each task under `evals/tasks/<id>/` contains a pre-change repository snapshot, a
 Model runs require explicit `--yes` because agent-generated changes and commands run automatically inside disposable copies. **These copies are not OS sandboxes**: approved code may still access the host's user-level privileges and network. Run only trusted evaluation tasks, and do not use the harness as a security boundary.
 
 Results are written as JSON under the user-level Oasis configuration directory in `eval-results/` (or `OASIS_EVAL_RESULTS_DIR`). To estimate costs, set `OASIS_EVAL_INPUT_USD_PER_MILLION_TOKENS` and `OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS` to the rates for the selected model. These are estimates and do not separate cached-token pricing. The current 21-task suite is an initial smoke benchmark: most are standalone helper tasks, not a representative benchmark of full-project changes. Replace or expand them with real, reviewed Oasis tasks before drawing conclusions about model quality or parity.
+
+Compare two completed runs with `oasis eval --compare <run-a.json> <run-b.json>`. OASIS run files already contain per-trial task IDs, pass/fail status, elapsed time, and estimated cost. To compare an external agent, create a normalized JSON report after that agent has completed the same tasks, for example:
+
+~~~json
+{
+  "label": "Claude Code",
+  "results": [
+    {
+      "taskId": "config-output-token-limit",
+      "status": "passed",
+      "wallTimeMs": 12400,
+      "costUSD": 0.02
+    }
+  ]
+}
+~~~
+
+Use one row per trial; repeated rows with the same `taskId` represent repeated attempts. The comparator accepts `status: "passed"` or `status: "failed"` (or a boolean `passed` field). `wallTimeMs` and `costUSD` are optional. Only task IDs present in both reports contribute to the headline comparison; the headline pass rate averages each task's pass rate equally, then reports median per-task time and mean per-trial cost. Unmatched tasks are listed separately.
+
+**Important:** `--compare` only reads and compares existing JSON reports. It does not launch Claude Code, execute external verifiers, validate claims in an external report, or generate that report automatically. OASIS has not yet published a matched OASIS-vs-Claude Code benchmark. The 21-task suite remains a smoke benchmark, not representative evidence of repository-level coding quality. For a fair comparison, use the same pinned repository snapshot, task text, acceptance tests, allowed tools/permissions and time/cost budget; record model/provider differences and review the resulting diffs.
 
 ## Run the browser workspace
 

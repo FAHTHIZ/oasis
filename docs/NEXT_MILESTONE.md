@@ -1,7 +1,7 @@
 # Next milestone: Alpha confidence and end-to-end reliability
 
 **Status checked:** October 29, 2026  
-**Code baseline before this documentation update:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286)  
+**Code baseline before this documentation update:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77)  
 **Purpose:** decide what OASIS should ship next based on the current implementation and the documented Claude Code capability set.
 
 ## Decision
@@ -12,13 +12,13 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-The latest main code revision has a consistent green CI signal: Quality Checks, homepage/repository validation and the desktop build matrix all passed. The next step remains end-to-end reliability and measured coding outcomes, not another large feature.
+For comparator revision `268862c`, [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) and [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed. The desktop build matrix for this revision is [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603); its final Windows result should be checked before marking the all-workflow gate complete. The next step remains measured coding outcomes and end-to-end reliability, not another large feature.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
-| Current Quality Checks | [Run 40804769809](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809) passed: 570 tests, Node 22/24/26, 21 validated fixtures, Linux PTY smoke and Linux Chromium browser smoke | The current code revision passed the automated quality matrix. |
-| Current desktop build | [Run 40804769799](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux | Platform packaging passed; installers are still unsigned and first-run/update/uninstall behavior is not fully validated. |
-| Current publishing validation | [Run 40804769832](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832) passed | The FileChanged hook synchronization fix passed the required publishing-validation workflow. |
+| Current Quality Checks | [Run 40807290624](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) passed: 573 tests, Node 22/24/26, 21 validated fixtures, Linux PTY smoke and Linux Chromium browser smoke | The comparator code revision passed the automated quality matrix. |
+| Current desktop build | The prior complete matrix [run 40804769799](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux. The comparator revision is being rechecked in [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). | Do not treat prior-baseline packaging as proof that the current revision's full matrix passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
+| Current publishing validation | [Run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed | The repository/public-site checks passed on comparator code revision `268862c`. |
 
 
 
@@ -44,6 +44,8 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 - [ ] Acceptance: no documented feature is described as both shipped and unsupported in different sections; platform limitations are explicit.
 
 ### P2 — Prove coding ability with a reproducible benchmark
+
+- [x] Added `oasis eval --compare <run-a.json> <run-b.json>` to compare repeated-trial reports over common task IDs, including task-balanced pass rates, median per-task time, mean cost per trial, and unmatched-task lists. External reports must be normalized; the command does not run Claude Code or validate external results.
 
 The 21 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 25–30 representative tasks** across multiple repository snapshots:
 
@@ -94,13 +96,13 @@ This is the highest-leverage next feature area because OASIS already has subagen
 | Browser and terminal | Local browser workspace with approvals and a bundled xterm.js renderer; CLI PTY manager | Linux/Node 22 PTY integration is verified; broader OS lifecycle and browser PTY E2E are not yet proved. |
 | Remote and managed surfaces | Local-first browser, desktop packaging path, GitHub Action and Chrome browser tool | No equivalent complete Remote Control/cloud/mobile workflow, and desktop installers are currently unsigned. |
 | Safety | Workspace checks, approvals, secrets filtering, optional Linux/macOS sandbox and configurable TLS for non-loopback web access | No Windows sandbox; sandbox is off by default; TLS does not replace trusted-device/session security or real-device verification. |
-| Evaluation | 570 passing tests in the latest quality workflow and 21 validated smoke fixtures | No apples-to-apples OASIS-vs-Claude Code task benchmark has been produced. |
+| Evaluation | 573 passing tests, 21 validated smoke fixtures, and new `oasis eval --compare` tooling | The comparison tool exists, but no apples-to-apples OASIS-vs-Claude Code task benchmark has been run or published. |
 
 Claude Code's documented surface includes subagents, Agent View, agent teams, dynamic workflows, MCP, hooks, skills, plugins/marketplaces, IDEs, Remote Control, web/desktop/mobile entry points, Chrome, and CI/code-review workflows. Agent teams are documented as experimental; OASIS should compare feature behavior, limitations and measured outcomes—not market feature names as parity. Official references: [parallel agents and workflows](https://code.claude.com/docs/en/agents), [extension overview](https://code.claude.com/docs/en/features-overview), [Remote Control](https://code.claude.com/docs/en/remote-control), [best practices](https://code.claude.com/docs/en/best-practices), and [Claude Code power-user tips](https://support.claude.com/en/articles/14554000-claude-code-power-user-tips).
 
 ## Definition of done for the Alpha-confidence milestone
 
-- [x] Quality Checks, homepage/repository validation, and desktop build workflows passed on the same code commit.
+- [ ] Quality Checks, homepage/repository validation, and desktop build workflows pass on the same final code commit.
 - [ ] The previously failing hook test passes repeatedly without fixed-delay masking or retry-only suppression.
 - [ ] Installation and first-run steps are tested on every OS claimed as supported; unsupported/experimental paths are labelled.
 - [ ] Core CLI and browser journeys have end-to-end tests for success, approval/denial, cancellation, recovery and verification.
