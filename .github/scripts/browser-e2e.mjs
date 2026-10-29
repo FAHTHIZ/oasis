@@ -135,8 +135,23 @@ try {
     'The browser request should result in a real workspace file write.'
   );
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
+  await page.locator('#agentSplitDivider').focus();
+  const splitBefore = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
+  await page.keyboard.press('ArrowRight');
+  const splitAfter = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
+  assert.notEqual(splitAfter, splitBefore, 'Keyboard arrows should resize the chat/terminal divider.');
+
+  await page.locator('#agentTerminalToggle').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false', 'The desktop terminal toggle should hide the terminal.');
+  await page.locator('#agentTerminalToggle').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true', 'The desktop terminal toggle should restore the terminal.');
+
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#agentTerminalTab').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal', 'The terminal tab should reveal the terminal on narrow screens.');
+  await page.locator('#agentChatTab').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-390px.png'), fullPage: true });
   console.log('PASS browser E2E: app loaded, token connection succeeded, write/read tools ran, workspace change verified, final reply rendered.');
 
