@@ -39,6 +39,7 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
+import { formatApprovalMessage } from './approval-language.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
 
 // Options that shape every agent session created by this process.
@@ -628,16 +629,17 @@ async function askApproval(prompt, forceInteractive, meta) {
 }
 
 async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
-  if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + String(prompt).split('\n')[0] + '\n'); return false; }
+  const approval = formatApprovalMessage(prompt, meta || {});
+  if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
   try {
-    stdout.write('\nPermission request\n' + prompt + '\n');
+    stdout.write('\n' + approval.message + '\n');
     const offerAlways = meta && meta.suggestion && !forceInteractive;
     if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
       // Claude Code-style dialog: arrows/j/k + Enter, 1-3, y/n/a, Esc; rebindable via the Confirmation context.
       const { selectDialog } = await import('./select-dialog.mjs');
-      const options = [{ label: 'Yes', value: true, hotkey: 'yes' }];
-      if (offerAlways) options.push({ label: "Yes, and don't ask again this session for " + meta.suggestion, value: 'always', hotkey: 'always' });
+      const options = [{ label: 'Allow once', value: true, hotkey: 'yes' }];
+      if (offerAlways) options.push({ label: 'Always allow this session for ' + meta.suggestion, value: 'always', hotkey: 'always' });
       options.push({ label: 'No', value: false, hotkey: 'no' });
       stdout.write('Do you want to proceed?\n');
       const paused = turnKeys;
@@ -645,7 +647,7 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal }); }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
-    const answer = (await askLine(offerAlways ? 'Proceed? [y]es / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Proceed? [y/N] ', signal)).trim().toLowerCase();
+    const answer = (await askLine(offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Allow once? [y/N] ', signal)).trim().toLowerCase();
     if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
     return ['y', 'yes'].includes(answer);
   } catch {
