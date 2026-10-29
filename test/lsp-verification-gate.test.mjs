@@ -24,7 +24,7 @@ test('new LSP errors block task completion and suppress an unverified success me
   assert.doesNotMatch(blocked, /successfully fixed|all checks passed/i);
 });
 
-test('LSP startup failure is a completion blocker rather than a success', () => {
+test('a passed code check permits completion if the optional LSP server is unavailable', () => {
   const issues = verificationIssues({
     changedPaths: new Set(['src/changed.ts']),
     diffReviewedPaths: new Set(['src/changed.ts']),
@@ -36,8 +36,21 @@ test('LSP startup failure is a completion blocker rather than a success', () => 
       reason: 'No TypeScript language server found'
     }]])
   });
-  assert.ok(issues.some((issue) => /LSP verification unavailable/.test(issue)));
-  assert.match(formatLspVerificationBlocker(issues), /No TypeScript language server found/);
+  assert.deepEqual(issues, [], 'LSP absence stays visible but does not override an independently passed check');
+
+  const stateWithoutCheck = {
+    changedPaths: new Set(['src/changed.ts']),
+    diffReviewedPaths: new Set(['src/changed.ts']),
+    diffReviewedAll: false,
+    lastVerificationExitCode: null,
+    lspVerificationByPath: new Map([['src/changed.ts', {
+      status: 'unavailable', path: 'src/changed.ts', reason: 'No TypeScript language server found'
+    }]])
+  };
+  const blocked = verificationIssues(stateWithoutCheck);
+  assert.ok(blocked.some((issue) => /LSP verification unavailable/.test(issue)));
+  assert.ok(blocked.some((issue) => /no relevant test/.test(issue)));
+  assert.match(formatLspVerificationBlocker(blocked), /No TypeScript language server found/);
 });
 
 test('/fix explicitly treats unavailable or new LSP diagnostics as a blocker', async () => {
