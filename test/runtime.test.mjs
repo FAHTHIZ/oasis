@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { loadConfig, saveConfig, validateBaseUrl, getConfigPath, isNodeVersionSupported, resolveSetupProviderPreset } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { TOOL_DEFINITIONS, executeTool, updateTodos, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
+import { analyzeCommand } from '../src/permissions.mjs';
 import { microcompact, estimateTokens, contextWindowSize } from '../src/context.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
@@ -651,6 +652,20 @@ test('command tool blocks destructive executable names and strips API keys from 
   });
   assert.equal(result.exitCode, 0);
   assert.equal(result.stdout, 'not-present');
+});
+
+test('command policy blocks env split-string forms that can hide nested executables', () => {
+  for (const args of [
+    ['-S', 'sh -c id'],
+    ['--split-string', 'sh -c id'],
+    ['-Ssh -c id'],
+    ['--split-string=sh -c id'],
+    ['-i', '-S', 'python -c print(1)']
+  ]) {
+    const result = analyzeCommand('env', args);
+    assert.match(result.blocked || '', /env -S\/--split-string hides a nested executable/);
+  }
+  assert.match(analyzeCommand('nice', ['env', '-S', 'sh -c id']).blocked || '', /blocked by Oasis safety policy|env -S/);
 });
 
 test('public URL fetch blocks loopback and private network addresses', async () => {
