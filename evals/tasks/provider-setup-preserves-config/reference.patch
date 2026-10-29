@@ -68,7 +68,7 @@ diff --git a/test/provider-setup-defaults.test.mjs b/test/provider-setup-default
 new file mode 100644
 --- /dev/null
 +++ b/test/provider-setup-defaults.test.mjs
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,52 @@
 +import test from 'node:test';
 +import assert from 'node:assert/strict';
 +import {
