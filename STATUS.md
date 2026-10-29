@@ -9,7 +9,7 @@ This file distinguishes existing code from behavior proven reliable. A module or
 ## Implemented
 
 - **Agent/runtime foundation:** CLI, headless text/JSON/stream-JSON workflows, Node SDK, multi-provider tool loops, workspace-bound file tools, command execution, approvals, snapshots/checkpoints/rewind, saved sessions, budgets and context estimation.
-- **LSP and diagnostic foundations:** src/lsp.mjs provides language-server diagnostics, definition, references, hover, symbols and call hierarchy; src/diagnostics.mjs detects configured type checkers and linters. Focused tests exist. This does not prove that every edit is automatically verified.
+- **LSP and diagnostic foundations:** src/lsp.mjs provides language-server navigation and diagnostics; src/diagnostics.mjs runs configured project checkers. The first post-edit integration now attaches an LSP verification result to successful edits of LSP-mapped files and treats missing or timed-out diagnostics as unavailable. Focused regression tests cover TS2322-style errors, timeout, startup failure and the /fix gate; full current-head checks remain pending.
 - **Agent orchestration:** dynamic JavaScript workflows, schema-checked results, parallel/pipeline/phase helpers, bounded subagents, specialist reviews, background workers, resumable workflow results and a session-local task board.
 - **Safety foundations:** configurable allow/ask/deny rules, plan/acceptEdits/default/auto-related modes, command-risk analysis, PreToolUse hooks, path protections, optional Linux/macOS sandboxing, secret redaction and process-tree cancellation.
 - **Sessions/context:** persisted sessions, /fork, /resume, /context, /compact, between-turn summarization, deterministic fallback and within-turn microcompaction.
