@@ -218,7 +218,10 @@ try {
 
   // Saved-chat recovery must reopen the parent chat without restarting workers.
   await page.locator('button[data-nav="monitor"]').click();
-  await page.locator('#agentMonitorRunList .agent-monitor-run').first().waitFor({ state: 'visible', timeout: timeoutMs });
+  const originalRun = page.locator('#agentMonitorRunList .agent-monitor-run')
+    .filter({ hasText: 'Run the browser end-to-end fixture and report its result.' });
+  await originalRun.waitFor({ state: 'visible', timeout: timeoutMs });
+  await originalRun.click();
   await page.waitForFunction(() => {
     const heading = document.querySelector('#agentMonitorDetailTitle')?.textContent || '';
     const button = document.querySelector('#agentMonitorOpenSessionBtn');
