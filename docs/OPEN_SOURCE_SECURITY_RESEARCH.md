@@ -42,3 +42,10 @@ A source review found that `PreToolUse` could return `updatedInput` after the pe
 3. Validate sandbox configuration and trust boundaries before launch.
 4. Test denied network access, secret-file isolation, PTY/background execution, cancellation, startup failure and cleanup.
 5. Keep unsupported or failed sandbox paths clearly visible; do not silently claim that an unsandboxed command was contained.
+
+## Follow-up hardening: separate argv auto-approval from free-form shell strings
+
+**Finding:** `run_command` classifies executable and argument vectors before applying the sandbox auto-approval policy. The free-form `run_shell` tool accepts shell syntax but previously inherited the same `autoAllowCommands` switch without equivalent command-risk analysis. A sandbox can contain host impact, but it does not prevent destructive changes to the writable project itself.
+
+**Fix added on main:** `sandbox.autoAllowCommands` continues to govern argv-based commands. Free-form shell commands now require approval unless the user explicitly configures `sandbox.autoAllowShellCommands: true`, adds an explicit permission rule, or uses the explicit bypass-permissions mode. The new option defaults to false. A regression test verifies that enabling argv auto-approval does not silently auto-approve shell strings.
+

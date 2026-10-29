@@ -90,6 +90,9 @@ export function resolveSandbox(settings = {}, root, force = false) {
     reason: probe.reason,
     network: Boolean(settings.sandbox.network),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
+    // Free-form shell strings have a larger attack surface than argv-based commands.
+    // Keep them approval-gated unless the user explicitly opts in.
+    autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
     maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
     writable
