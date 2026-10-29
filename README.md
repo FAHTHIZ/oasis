@@ -2,7 +2,7 @@
   <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish. A panoramic lime-green portal and reflective digital workspace for an open-source, local-first AI coding agent." width="100%" />
 </p>
 
-<p align="center"><a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download desktop app ↗</a> · <a href="docs/QUICKSTART.md">5-minute quickstart</a> · <a href="docs/INSTALL.md">Install</a> · <a href="https://fahthiz.github.io/oasis/">Homepage ↗</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/KEYS.md">Keyboard shortcuts</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
+<p align="center"><a href="docs/INSTALL.md">Install</a> · <a href="docs/QUICKSTART.md">Quick start</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download desktop app ↗</a> · <a href="https://fahthiz.github.io/oasis/">Homepage ↗</a> · <a href="docs/KEYS.md">Keyboard shortcuts</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
@@ -12,20 +12,30 @@
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22 or newer" /></a>
 </p>
 
-OASIS is an open-source AI coding agent and local-first developer workspace for multi-step software development. It inspects codebases, plans and applies focused edits, runs approved shell commands and tests, and summarizes what changed. Use the CLI in your terminal or launch the browser workspace with `oasis web`; extend it with supported model providers, Model Context Protocol (MCP) tools, reusable skills, hooks, and bounded subagents.
+OASIS is an open-source AI coding agent. Bring your own model. OASIS is a local-first developer workspace for multi-step software development: it inspects codebases, plans and applies focused edits, runs approved shell commands and tests, and summarizes what changed. Use the CLI in your terminal or launch the browser workspace with `oasis web`; extend it with supported model providers, Model Context Protocol (MCP) tools, reusable skills, hooks, and bounded subagents.
 
 For the current implementation inventory and explicit limitations, see [Current status](docs/CURRENT_STATUS.md) and [Next milestone](docs/NEXT_MILESTONE.md). For the coding-agent evaluation suite and fair-comparison plan, see the [benchmark audit](docs/BENCHMARK_AUDIT.md). For the prioritized, source-backed remaining-gap register, see the [whole-codebase gap register](docs/WHOLE_CODEBASE_GAP_REGISTER.md).
 
 ## Get started
 
-**Requirements:** Node.js 22 or newer. Git is not required by the archive-based install; see [the install guide](docs/INSTALL.md) for native PTY prerequisites and current platform caveats.
+**OASIS is alpha software.** The desktop app is the easiest path for people who do not want a terminal; the CLI is for developers and automation.
+
+**Desktop app (no terminal required)**
+
+1. Open the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest).
+2. Download and open the installer for your operating system.
+3. Choose a project folder, connect a model provider, and test the connection. The desktop app does not require a separate Node.js or Git installation. Installers are currently unsigned.
+
+**Terminal (for developers)**
+
+Requirements: Node.js 22 or newer. Git is not required for the archive-based install. For native PTY prerequisites and platform caveats, see [the install guide](docs/INSTALL.md).
 
 ```bash
 npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.tar.gz
 oasis
 ```
 
-On first launch, follow the guided setup to choose a model provider. OASIS does not include a model or API subscription; your selected provider must support tool calling.
+The first-run setup helps choose a provider. OASIS does not include a model or API subscription; your selected provider must support tool calling. Review [current status and limitations](docs/CURRENT_STATUS.md) before using OASIS on important work.
 
 ## Try it
 
@@ -68,7 +78,7 @@ VS Code, Cursor and Windsurf integrate via `oasis ide install` (in-editor chat p
 
 ## Web research engine
 
-OASIS includes configurable web search plus a local Claude Code research plugin. It can use Tavily, Brave, Exa, Firecrawl, and a self-hosted SearXNG endpoint; with multiple providers configured it can search in parallel and fuse rankings. The keyless DuckDuckGo fallback remains available when upstream access permits. See [Search and deep-research architecture](docs/SEARCH_RESEARCH.md) for provider setup, plugin installation, limits, and a reproducible baseline-vs-candidate search benchmark.
+OASIS includes configurable web search plus a local Claude Code research plugin. It can use Tavily, Brave, Exa, Firecrawl, and a self-hosted SearXNG endpoint; with multiple providers configured it can search in parallel and fuse rankings. The keyless DuckDuckGo fallback remains available when upstream access permits. Search queries go to the configured search provider; prompts and any code/context included in requests go to the model provider you configure. Add your own supported search-provider key to choose a different provider, and avoid sending secrets you do not want those providers to receive. See [Search and deep-research architecture](docs/SEARCH_RESEARCH.md) for provider setup, plugin installation, limits, and a reproducible baseline-vs-candidate search benchmark.
 
 ## Development
 
