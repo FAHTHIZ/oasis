@@ -657,6 +657,9 @@ export async function rebuildSession(session, createOptions = {}, what = 'plugin
 
 export function closeSession(session) {
   if (session) session.closing = true;
+  if (session && session.activeSessionId) {
+    import('./session-messaging.mjs').then(({ unregisterActiveSession }) => unregisterActiveSession(session).catch(() => {})).catch(() => {});
+  }
   try { stopCron(session); } catch {}
   if (session && session.fileWatchers) { try { session.fileWatchers.stop(); } catch {} session.fileWatchers = null; }
   if (session && session.background) killAllBackground(session.background);
@@ -3183,6 +3186,23 @@ function refreshTodoPrompt(session) {
 }
 
 export async function runAgentTurn(session, prompt, options = {}) {
+  const env = options.env || process.env;
+  if (!options.isSubagent && session && session.root) {
+    const messaging = await import('./session-messaging.mjs').catch(() => null);
+    if (messaging) {
+      await messaging.registerActiveSession(session, { env }).catch(() => {});
+      await messaging.updateActiveSession(session, { state: 'busy' }, { env }).catch(() => {});
+    }
+    try {
+      return await runAgentTurnWithTelemetry(session, prompt, options);
+    } finally {
+      if (messaging) await messaging.updateActiveSession(session, { state: 'active' }, { env }).catch(() => {});
+    }
+  }
+  return runAgentTurnWithTelemetry(session, prompt, options);
+}
+
+async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
   const tel = getTelemetry(options.env || process.env);
   if (!tel) return runAgentTurnRaw(session, prompt, options);
   const request = String(prompt || '');
