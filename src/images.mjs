@@ -19,6 +19,47 @@ export function visionEnabled(config = {}, env = process.env) {
   return config.vision !== false;
 }
 
+/**
+ * Best-effort, tri-state capability check. A provider name alone does not prove
+ * that the selected model accepts images. Recognized model families are hints,
+ * not a substitute for the actual provider response.
+ */
+export function imageInputCapability(config = {}, env = process.env) {
+  if (!visionEnabled(config, env)) {
+    return { status: 'unsupported', reason: 'Image input is disabled by OASIS_VISION or the provider vision setting.' };
+  }
+  const override = String(env.OASIS_MODEL_VISION || '').trim().toLowerCase();
+  if (['0', 'false', 'off', 'no'].includes(override)) {
+    return { status: 'unsupported', reason: 'OASIS_MODEL_VISION explicitly marks the active model as text-only.' };
+  }
+  if (['1', 'true', 'on', 'yes'].includes(override) || config.visionCapability === true) {
+    return { status: 'supported', reason: 'Image support was explicitly declared for the active model.' };
+  }
+
+  const model = String(config.model || env.OASIS_MODEL || '').trim().toLowerCase();
+  if (!model) return { status: 'unknown', reason: 'No active model ID is available to assess image support.' };
+  const knownVision = [
+    /(?:^|[/:_-])gpt-(?:4o(?:-mini)?|4\.1(?:-mini|-nano)?|4\.5|5(?:\.\d+)?|4-turbo|4-vision)(?:$|[/:_-])/,
+    /(?:^|[/:_-])o[134](?:-mini|-pro)?(?:$|[/:_-])/,
+    /claude-(?:3(?:\.\d+)?|4(?:\.\d+)?|sonnet|opus|haiku)(?:$|[/:_-])/,
+    /gemini-(?:1\.5|2(?:\.\d+)?|3)(?:$|[/:_-])/,
+    /(?:^|[/:_-])(?:llava|bakllava|moondream|minicpm-v|qwen2(?:\.5)?-vl|qwen3-vl|llama3\.2-vision|gemma3)(?:$|[/:_-])/
+  ];
+  if (knownVision.some((pattern) => pattern.test(model))) {
+    return { status: 'supported', reason: 'The model ID matches a recognized image-capable family; an API rejection overrides this hint.' };
+  }
+  const knownTextOnly = [
+    /gpt-3\.5(?:$|[/:_-])/,
+    /text-davinci|text-embedding|embedding-/,
+    /claude-instant|claude-2(?:$|[/:_-])/,
+    /(?:^|[/:_-])(?:llama3?\.1|gemma2)(?:$|[/:_-])/
+  ];
+  if (knownTextOnly.some((pattern) => pattern.test(model))) {
+    return { status: 'unsupported', reason: 'The model ID matches a recognized text-only family.' };
+  }
+  return { status: 'unknown', reason: 'Image support cannot be verified from the configured model ID.' };
+}
+
 function sniffType(buffer) {
   if (buffer.length >= 8 && buffer.readUInt32BE(0) === 0x89504e47) return 'image/png';
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
