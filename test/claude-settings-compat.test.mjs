@@ -101,7 +101,7 @@ test('project env needs trust; managed settings load last and can disable bypass
 });
 
 test('memory walks up to parent CLAUDE.md files and loads .claude/rules', async (t) => {
-  const { loadMemory } = await import('../src/memory.mjs');
+  const { loadMemory, nestedMemoryFor } = await import('../src/memory.mjs');
   const { base, env } = await fixture(t);
   const mono = path.join(base, 'mono');
   const pkg = path.join(mono, 'packages', 'web');
@@ -118,8 +118,12 @@ test('memory walks up to parent CLAUDE.md files and loads .claude/rules', async 
   assert.match(memory, /User-level memory/);
   const order = ['Monorepo rule', 'Packages note', 'Web package rule'].map((text) => memory.indexOf(text));
   assert.ok(order.every((index) => index >= 0) && order[0] < order[1] && order[1] < order[2], 'parents load root-most first, workspace last');
-  assert.match(memory, /Project rule: testing\.md ---\nAlways run vitest/);
-  assert.match(memory, /Project rule: frontend\/react\.md \(applies when working on files matching src\/\*\*\/\*\.tsx, src\/\*\*\/\*\.jsx\) ---\nUse function components\./);
+  assert.match(memory, /Project rule: testing\\.md ---\\nAlways run vitest/);
+  assert.doesNotMatch(memory, /frontend\\/react\\.md/, 'path-scoped rules stay out of base project memory');
+  const scopedMatch = await nestedMemoryFor(pkg, 'src/App.tsx', new Set(), { env, home: env.HOME });
+  assert.ok(scopedMatch.some((rule) => /Use function components\\./.test(rule.text)), 'a matching path loads its rule');
+  const scopedMiss = await nestedMemoryFor(pkg, 'README.md', new Set(), { env, home: env.HOME });
+  assert.ok(!scopedMiss.some((rule) => /Use function components\\./.test(rule.text)), 'a non-matching path does not load the rule');
   assert.match(memory, /User rule: style\.md/);
   const none = await loadMemory(pkg, { env: { ...env, OASIS_DISABLE_PARENT_MEMORY: '1' }, home: env.HOME });
   assert.ok(!/Monorepo rule/.test(none));
