@@ -16,6 +16,7 @@ This is a conservative evidence status, not a claim that the repository has no w
 ## Implemented but not yet verified on current HEAD
 
 - **Task history input hardening:** event-data sanitization was tightened for unusual JSON keys and a focused persistence regression test was added. Current-head CI remains pending.
+- **CI scheduling reliability:** quality, publishing, and desktop workflows now keep an in-flight main-push run alive; superseded pull-request runs remain cancellable. A focused regression test covers all three workflows. Current-head CI remains pending.
 
 
 These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:
