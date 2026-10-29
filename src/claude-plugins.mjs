@@ -27,6 +27,7 @@
 // ~/.claude/settings.json are picked up automatically. Plugins run code (hooks, MCP servers)
 // with your permissions, exactly as in Claude Code: install only plugins you trust.
 import { spawn, spawnSync } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -633,11 +634,14 @@ function runAsync(command, args, options) {
     // Never invoke a shell here: marketplace metadata controls package/version/
     // registry arguments, and shell parsing would turn metacharacters into code
     // execution on Windows (where npm is commonly exposed as npm.cmd).
-    try { child = spawn(command, args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (error) { resolve({ error }); return; }
+    try { child = spawn(command, args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() }); } catch (error) { resolve({ error }); return; }
     let stdout = '', stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    const timer = setTimeout(() => child.kill('SIGKILL'), options.timeout || 180000);
+    const maxOutput = 256 * 1024;
+    const append = (current, chunk) => (current + chunk.toString('utf8')).slice(-maxOutput);
+    child.stdout.on('data', (chunk) => { stdout = append(stdout, chunk); });
+    child.stderr.on('data', (chunk) => { stderr = append(stderr, chunk); });
+    const timer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), options.timeout || 180000);
+    timer.unref?.();
     child.on('error', (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
     child.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
   });
