@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { readTrigger, buildPrompt, runAction } from '../src/github-action.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
@@ -100,7 +101,19 @@ test('an @oasis issue comment runs the agent, pushes a branch, opens a PR, and r
   ]);
   const { calls, request } = fakeGitHub();
   const env = { ...gitEnv, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app', GITHUB_SERVER_URL: 'https://github.com', GITHUB_RUN_ID: '42', INPUT_PERMISSION_MODE: 'default' };
-  const outcome = await runAction({ env, root: work, event: comment('@oasis fix the login'), request, log: () => {}, runOptions: { provider: config, settings } });
+  const outcome = await runAction({ env, root: work, event: comment('@oasis fix the login'), request, log: () => {}, runOptions: {
+      provider: config,
+      settings: {
+        ...settings,
+        lspServers: {
+          clean: {
+            command: process.execPath,
+            args: [fileURLToPath(new URL('./helpers/clean-lsp-server.cjs', import.meta.url))],
+            extensions: ['.js']
+          }
+        }
+      }
+    } });
   assert.equal(outcome.responded, true);
   assert.equal(outcome.result.is_error, false);
   assert.match(outcome.published.branch, /^oasis\/issue-7-/);

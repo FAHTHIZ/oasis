@@ -121,3 +121,26 @@ test('must-preserve records survive session save and resume', async () => {
   const restored = await loadSession(root, id, { env });
   assert.deepEqual(restored.mustPreserve, session.mustPreserve);
 });
+
+
+test('/context all returns detailed estimated categories without claiming exact provider usage', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-context-all-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-context-all-home-'));
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis') };
+  const state = { root, env, session: {
+    root, config: { model: 'fixture' },
+    messages: [
+      { role: 'system', content: 'System and project instructions.' },
+      { role: 'user', content: 'Fix src/api.ts' },
+      { role: 'tool', name: 'run_command', content: 'npm test failed: assertion' },
+      { role: 'assistant', content: 'Need to rerun verification.' }
+    ],
+    toolDefinitions: [], mcpToolMap: new Map(),
+    mustPreserve: [{ kind: 'goal', text: 'Keep API behavior stable.' }]
+  } };
+  const result = await runBuiltinCommand('context', 'all', state);
+  assert.match(result.output, /Detailed estimated context/);
+  assert.match(result.output, /categories below can overlap/i);
+  assert.match(result.output, /Command\/build\/test output/);
+  assert.match(result.output, /unavailable to Oasis/i);
+});

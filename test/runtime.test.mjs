@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, access, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
+import { loadSettings } from '../src/settings.mjs';
 import { loadConfig, saveConfig, validateBaseUrl, getConfigPath, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset } from '../src/config.mjs';
 import { normalizePackageName, parseInstallIntent, resolveEcosystem } from '../src/installer.mjs';
 import { TOOL_DEFINITIONS, executeTool, updateTodos, readWorkspaceFile, resolveWorkspacePath, runWorkspaceCommand, toolCount, listAvailableSkills, loadSkillText, loadSkillResource } from '../src/tools.mjs';
@@ -1177,7 +1179,10 @@ test('post-edit verification gate asks for diff review and a passing check befor
     maxSteps: 8,
     maxCommandSeconds: 30
   };
-  const session = await createSession({ root: tmp, config });
+  const cleanLsp = fileURLToPath(new URL('./helpers/clean-lsp-server.cjs', import.meta.url));
+  const baseSettings = await loadSettings(tmp);
+  baseSettings.lspServers = { clean: { command: process.execPath, args: [cleanLsp], extensions: ['.mjs'] } };
+  const session = await createSession({ root: tmp, config, settings: baseSettings });
   const transcript = [];
   const result = await runAgentTurn(session, 'Change the example module value from one to two.', {
     autoApprove: true,

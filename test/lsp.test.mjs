@@ -19,12 +19,21 @@ function handle(m) {
   if (m.method === 'initialize') return send({ jsonrpc: '2.0', id: m.id, result: { capabilities: { definitionProvider: true, referencesProvider: true, hoverProvider: true, documentSymbolProvider: true, workspaceSymbolProvider: true } } });
   if (m.method === 'textDocument/didOpen' || m.method === 'textDocument/didChange') {
     const uri = p.textDocument.uri; const text = m.method === 'textDocument/didOpen' ? p.textDocument.text : p.contentChanges[0].text; docs.set(uri, text);
-    const diagnostics = []; text.split('\n').forEach((line, i) => {
-      const c = line.indexOf('BAD');
-      if (c >= 0) diagnostics.push({ range: { start: { line: i, character: c }, end: { line: i, character: c + 3 } }, severity: 1, message: 'BAD is not allowed', code: 'X1', source: 'fake' });
-      const badType = line.indexOf('"bad"');
-      if (/const value: number = "bad";/.test(line)) diagnostics.push({ range: { start: { line: i, character: badType }, end: { line: i, character: badType + 5 } }, severity: 1, message: "Type 'string' is not assignable to type 'number'.", code: 'TS2322', source: 'typescript' });
-    });
+    const diagnostics = [];
+    const badAt = text.indexOf('BAD');
+    if (badAt >= 0) {
+      const prefix = text.slice(0, badAt);
+      const line = prefix.split(String.fromCharCode(10)).length - 1;
+      const column = badAt - prefix.lastIndexOf(String.fromCharCode(10)) - 1;
+      diagnostics.push({ range: { start: { line, character: column }, end: { line, character: column + 3 } }, severity: 1, message: 'BAD is not allowed', code: 'X1', source: 'fake' });
+    }
+    const badType = text.indexOf('"bad"');
+    if (badType >= 0 && /const value: number = "bad";/.test(text)) {
+      const prefix = text.slice(0, badType);
+      const line = prefix.split(String.fromCharCode(10)).length - 1;
+      const column = badType - prefix.lastIndexOf(String.fromCharCode(10)) - 1;
+      diagnostics.push({ range: { start: { line, character: column }, end: { line, character: column + 5 } }, severity: 1, message: "Type 'string' is not assignable to type 'number'.", code: 'TS2322', source: 'typescript' });
+    }
     if (!text.includes('NO_DIAGS')) return send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics } });
   }
   if (m.method === 'textDocument/definition') return send({ jsonrpc: '2.0', id: m.id, result: decl(word(p.textDocument.uri, p.position)) || null });

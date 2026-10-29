@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Added an explicit clean protocol-level LSP fixture to the post-edit verification happy-path tests, fixed diagnostic offset calculation in the fake LSP, and added `/context all` category/caveat regression coverage. The tests are committed for current-head CI; no passing result is claimed yet.
+
 - Added `/artifact NAME` with an auto-refreshing local-only investigation page and structured event store. Active sessions record task starts, commands, changed files, test outcomes and tool errors; users can add hypotheses/rollback notes, list/open/stop/delete artifacts, and common secrets are redacted before local storage. Focused tests added; current-head CI pending.
 
 - Added a license-consistency regression test covering the full Apache-2.0 sections/application appendix, package metadata, README badge/statement, and project-license claims in public documentation.
