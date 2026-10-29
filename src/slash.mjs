@@ -18,7 +18,7 @@ import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
-export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop' };
+export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -77,6 +77,11 @@ export const BUILTIN_COMMANDS = {
   'team-onboarding': 'Write a team onboarding guide for this project from your last 30 days of Oasis usage (/team-onboarding [DAYS])',
   heapdump: 'Write a JavaScript heap snapshot and memory breakdown for diagnosing high memory use',
   chrome: 'Turn the Chrome browser tool on or off for this session (/chrome [on|off|status])',
+  bug: 'Report a bug: drafts a GitHub issue with your report and environment details (nothing is sent until you open the link) (/bug [report] [--with-transcript])',
+  'setup-bedrock': 'Configure Amazon Bedrock: detects AWS credentials, region and model pins, then saves them to user settings (/setup-bedrock [region=R] [profile=P] [model=ID] [sonnet=ID] [haiku=ID] [opus=ID] [save])',
+  'setup-vertex': 'Configure Google Vertex AI: detects gcloud project, credentials, region and model pins, then saves them to user settings (/setup-vertex [project=ID] [region=R] [model=ID] [save])',
+  login: 'Connect a model provider (runs oasis auth login / setup)',
+  logout: 'Remove the stored provider API key',
   'skill-doctor': 'Show each skill\'s context cost and recent usage so you can turn off unused ones (/skill-doctor [DAYS])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
   import: 'Import MCP servers, instructions, commands and rules from Codex, Gemini CLI or Cursor (/import [codex|gemini|cursor] [--dry-run] [--yes])',
@@ -544,6 +549,45 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!exe) return { output: 'No Chrome, Chromium or Edge found. Install one or set OASIS_CHROME_PATH.' };
       setChrome(session, true);
       return { output: 'Chrome tool on (' + exe + '). The agent can now open pages, click, type, take screenshots and read the console.' };
+    }
+    case 'bug': {
+      const { readFile } = await import('node:fs/promises');
+      const os = await import('node:os');
+      const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+      const repo = String(pkg.repository && pkg.repository.url || pkg.repository || 'https://github.com/FAHTHIZ/oasis').replace(/^git\+/, '').replace(/\.git$/, '');
+      const withTranscript = /(^|\s)--with-transcript\b/.test(argument);
+      const report = argument.replace(/(^|\s)--with-transcript\b/, '').trim();
+      const config = session && session.config || {};
+      const lines = ['## What happened', report || '(describe the bug)', '', '## Environment', '- OASIS ' + pkg.version, '- Node ' + process.version + ' on ' + process.platform + ' ' + os.release(), '- Provider protocol: ' + (config.protocol || 'unknown') + ', model: ' + (config.model || 'unknown')];
+      if (withTranscript && session) {
+        const tail = session.messages.filter((m) => m.role !== 'system' && typeof m.content === 'string').slice(-6).map((m) => '**' + m.role + ':** ' + m.content.slice(0, 600).replace(/sk-[A-Za-z0-9_-]{8,}/g, '[redacted]')).join('\n\n');
+        if (tail) lines.push('', '## Recent conversation (last 6 messages, trimmed)', tail);
+      }
+      const body = lines.join('\n').slice(0, 6000);
+      const url = repo + '/issues/new?title=' + encodeURIComponent('Bug: ' + (report.split('\n')[0] || 'describe the problem').slice(0, 80)) + '&body=' + encodeURIComponent(body);
+      return { output: 'Nothing has been sent. Review and submit the issue here:\n' + url + (withTranscript ? '' : '\nAdd --with-transcript to include the last few messages (secrets that look like API keys are redacted; check before submitting).') };
+    }
+    case 'setup-bedrock':
+    case 'setup-vertex': {
+      const setup = await import('./cloud-setup.mjs');
+      const provider = name === 'setup-bedrock' ? 'bedrock' : 'vertex';
+      const { save, values } = setup.parseSetupArgs(argument);
+      const plan = await setup.cloudSetupPlan(provider, values, env);
+      const text = setup.describePlan(plan, env);
+      let confirmed = save;
+      if (!confirmed && typeof state.confirm === 'function') confirmed = await state.confirm(text + '\nSave these settings?');
+      if (!confirmed) return { output: text + '\nNothing saved. Run /' + name + ' ' + (argument ? argument + ' ' : '') + 'save to write them.' };
+      const file = await setup.saveCloudSetup(plan, env);
+      return { output: text + '\nSaved to ' + file + '. Restart OASIS to use ' + (provider === 'bedrock' ? 'Amazon Bedrock' : 'Vertex AI') + (plan.problems.length ? ' after fixing the problems above' : '') + '.' };
+    }
+    case 'logout': {
+      const { authLogout } = await import('./auth-cli.mjs');
+      const out = await authLogout(env);
+      return { output: (out.removed ? 'Removed the stored API key from ' + out.file + '. The current session keeps working until you exit.' : 'No stored API key in ' + out.file + '.') + (out.envKeys.length ? ' Still set in your environment: ' + out.envKeys.join(', ') + '.' : '') };
+    }
+    case 'login': {
+      const { authStatus, describeAuthStatus } = await import('./auth-cli.mjs');
+      return { output: describeAuthStatus(await authStatus(env)) + '\nTo connect or switch providers, exit and run oasis auth login (or oasis auth login --api-key-stdin < keyfile). Use /model to switch models.' };
     }
     case 'skill-doctor': {
       const { skillDoctor, skillDoctorText } = await import('./skill-doctor.mjs');
