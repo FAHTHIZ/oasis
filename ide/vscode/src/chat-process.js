@@ -9,7 +9,7 @@ const BASE_ARGS = ['-p', '--input-format', 'stream-json', '--output-format', 'st
 function friendlyStartError(error, command = 'oasis') {
   const code = error && error.code;
   if (code === 'ENOENT') {
-    return 'OASIS could not be found. Install it from https://github.com/FAHTHIZ/oasis/releases or run the CLI install command in the OASIS README. If it is already installed, set the full executable path in VS Code Settings → OASIS → Command (oasis.command), then try again.';
+    return 'OASIS could not be found. With Node.js 22 or newer, install the CLI using `npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.tar.gz`. If it is already installed, set the full executable path in VS Code Settings → OASIS → Command (oasis.command), then try again.';
   }
   if (code === 'EACCES' || code === 'EPERM') {
     return 'Your computer refused to run the configured OASIS command. Check that the file exists and is executable, or set VS Code Settings → OASIS → Command (oasis.command) to a command you can run. Then try again.';
