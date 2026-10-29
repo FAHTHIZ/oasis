@@ -25,6 +25,7 @@ const required = [
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
   'aria-label="Resize chat and terminal panels"', 'oasis.agent.chatSplit', 'ArrowLeft', 'ArrowRight',
   'id="agentEmptyState"', 'data-agent-example="Explain this project"', 'data-agent-example="Find a bug"', 'data-agent-example="Write tests"',
+  "document.getElementById('agentStopBtn').disabled=!agentBusy",
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
   'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
@@ -47,11 +48,14 @@ for (const requiredAsset of ['index.html', 'manifest.webmanifest', 'sw.js', 'ass
 const desktopMain = await read('../desktop/main.mjs');
 const webRuntime = await read('../src/web.mjs');
 const secureSecrets = await read('../desktop/secure-secrets.mjs');
+const e2e = await read('../.github/scripts/browser-e2e.mjs');
 assert.ok(desktopMain.includes('onProviderConfig: persistProviderSecret'), 'Desktop provider setup must use encrypted key storage.');
 assert.ok(secureSecrets.includes('safeStorage.encryptString'), 'Desktop secret storage must encrypt API keys.');
 assert.ok(webRuntime.includes("pathname === '/api/provider/local-models'"), 'The first-run wizard needs local model discovery.');
 assert.ok(webRuntime.includes("http://127.0.0.1:11434/api/tags"), 'Ollama discovery must use a fixed local endpoint.');
 assert.ok(webRuntime.includes("if (!isLoopbackClient(req))"), 'Local model discovery must be limited to loopback clients.');
+assert.ok(e2e.includes('Denying the delete approval must leave the file intact.'), 'Browser E2E must verify destructive actions can be denied.');
+assert.ok(e2e.includes('Cancellation must abort the task before another model request.'), 'Browser E2E must verify cancellation interrupts a pending task.');
 
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'OASIS — Coding Agent Workspace');
