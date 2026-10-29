@@ -391,7 +391,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
   <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Runs loaded</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams observed</span><strong>—</strong></div></div>
   <div class="agent-monitor-grid">
     <section class="panel panel-pad"><div class="section-head"><div><h2>Recent runs</h2><div class="section-sub" id="agentMonitorRunStatus">Connect the runtime to inspect saved runs.</div></div></div><div class="agent-monitor-runs" id="agentMonitorRunList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div></section>
-    <section class="panel panel-pad"><div class="section-head"><div><h2 id="agentMonitorDetailTitle">Worker activity</h2><div class="section-sub" id="agentMonitorDetailMeta">Select a run to inspect its workers and event timeline.</div></div></div><div class="agent-monitor-workers" id="agentMonitorWorkers"><div class="cloud-run-empty">No run selected.</div></div><div class="section-head agent-monitor-timeline-heading"><div><h2>Activity timeline</h2><div class="section-sub">Lifecycle events only; private prompts and chat content are not shown.</div></div></div><div class="agent-monitor-events" id="agentMonitorEvents"><div class="cloud-run-empty">Select a run to inspect saved worker activity.</div></div></section>
+    <section class="panel panel-pad"><div class="section-head"><div><h2 id="agentMonitorDetailTitle">Worker activity</h2><div class="section-sub" id="agentMonitorDetailMeta">Select a run to inspect its workers and event timeline.</div></div><button class="btn btn-secondary" id="agentMonitorOpenSessionBtn" type="button" aria-label="Open saved parent chat without restarting workers" hidden>Open saved chat</button></div><div class="agent-monitor-workers" id="agentMonitorWorkers"><div class="cloud-run-empty">No run selected.</div></div><div class="section-head agent-monitor-timeline-heading"><div><h2>Activity timeline</h2><div class="section-sub">Lifecycle events only; private prompts and chat content are not shown.</div></div></div><div class="agent-monitor-events" id="agentMonitorEvents"><div class="cloud-run-empty">Select a run to inspect saved worker activity.</div></div></section>
   </div>
 </section>
 
@@ -699,17 +699,23 @@ function agentMonitorStatus(text){
 function agentRenderMonitorDetail(run){
   var heading=document.getElementById('agentMonitorDetailTitle');
   var meta=document.getElementById('agentMonitorDetailMeta');
+  var openSessionButton=document.getElementById('agentMonitorOpenSessionBtn');
   var workers=document.getElementById('agentMonitorWorkers');
   var events=document.getElementById('agentMonitorEvents');
   if(!run){
     heading.textContent='Worker activity';
     meta.textContent='Select a run to inspect its workers and event timeline.';
+    openSessionButton.hidden=true;openSessionButton.dataset.sessionId='';
     workers.replaceChildren(cloudRunNode('div','cloud-run-empty','No run selected.'));
     events.replaceChildren(cloudRunNode('div','cloud-run-empty','Select a run to inspect saved worker activity.'));
     return;
   }
   heading.textContent=(run.title||'Coding task')+' · '+String(run.status||'unknown').replace(/_/g,' ');
   meta.textContent=(run.workspaceName||'Workspace')+' · Started '+agentMonitorDate(run.createdAt)+' · '+Number(run.workerCount||0)+' workers · '+Number(run.teamCount||0)+' teams'+(run.isolation==='worktree'?' · isolated worktree':'')+(run.branch?' · branch '+run.branch:'');
+  var canOpenSavedChat=!!run.sessionId&&/^[a-f0-9-]{20,80}$/i.test(run.sessionId)&&run.isolation!=='worktree'&&!agentBusy&&['completed','error','cancelled','interrupted'].includes(run.status);
+  openSessionButton.hidden=!canOpenSavedChat;
+  openSessionButton.dataset.sessionId=canOpenSavedChat?run.sessionId:'';
+  openSessionButton.textContent=run.status==='interrupted'?'Review saved chat':'Open saved chat';
   workers.replaceChildren();
   if(!Array.isArray(run.workers)||!run.workers.length){
     workers.appendChild(cloudRunNode('div','cloud-run-empty','No subagent lifecycle events were recorded for this run.'));
@@ -836,6 +842,7 @@ async function agentOpenCloudRun(id,titleFromList){
 }
 document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
 document.getElementById('agentMonitorRefreshBtn').addEventListener('click',function(){void agentLoadMonitor(false)});
+document.getElementById('agentMonitorOpenSessionBtn').addEventListener('click',function(){var id=this.dataset.sessionId;if(!id||!agentToken||agentBusy)return;navigate('agent');void agentOpenSession(id)});
 window.setInterval(function(){if(currentView==='monitor'&&agentToken)void agentLoadMonitor(true)},5000);
 document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
 document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){

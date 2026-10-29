@@ -199,6 +199,7 @@ export function summarizeAgentRun(job) {
     title: monitorText(job.title || job.type || 'Coding task', 160),
     type: monitorText(job.type || 'agent', 40),
     status: monitorText(job.status || 'unknown', 40),
+    sessionId: SESSION_ID_PATTERN.test(String(job.sessionId || '')) ? String(job.sessionId) : '',
     error: monitorText(job.error, 500),
     createdAt: monitorText(job.createdAt, 40),
     updatedAt: monitorText(latestEvent && latestEvent.at || job.updatedAt || job.createdAt, 40),
