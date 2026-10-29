@@ -7,9 +7,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Every commit gets its own quality signal. A stalled Node matrix for an older
-  # SHA must not serialize verification of newer main commits behind it.
-  group: oasis-quality-${{ github.ref }}-${{ github.sha }}
+  # Keep the queue focused on the latest commit for each branch or pull request.
+  # Superseded revision matrices waste runner slots and can delay current-main
+  # verification indefinitely when many commits land close together.
+  group: oasis-quality-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   integrity:
