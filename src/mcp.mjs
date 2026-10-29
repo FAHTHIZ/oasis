@@ -22,10 +22,16 @@ export async function loadMcpServers(options = {}) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.servers)) {
       throw new Error('MCP configuration has an invalid shape.');
     }
-    return {
-      configPath,
-      servers: parsed.servers.map(validateMcpServerConfig)
-    };
+    if (parsed.servers.length > 40) {
+      throw new Error('MCP configuration supports up to 40 servers.');
+    }
+    const servers = parsed.servers.map(validateMcpServerConfig);
+    const names = new Set();
+    for (const server of servers) {
+      if (names.has(server.name)) throw new Error('MCP server names must be unique.');
+      names.add(server.name);
+    }
+    return { configPath, servers };
   } catch (error) {
     if (error.code === 'ENOENT') return { configPath, servers: [] };
     throw error;
