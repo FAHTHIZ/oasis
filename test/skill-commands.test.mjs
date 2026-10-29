@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, readFile, writeFile, readdir, stat } from 'node:fs/prom
 import { runBuiltinCommand, BUILTIN_COMMANDS, SKILL_COMMANDS, reviewPrompt } from '../src/slash.mjs';
 import { createCompleter } from '../src/completion.mjs';
 import { imageInputCapability } from '../src/images.mjs';
+import { executeTool } from '../src/tools.mjs';
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-skill-commands-'));
@@ -112,6 +113,35 @@ test('/diagnose explicitly discloses unknown screenshot capability', async () =>
   assert.match(result.output, /Image input status: unknown/i);
   assert.match(result.prompt, /never claim to have viewed a screenshot/i);
   assert.match(result.prompt, /image support is unsupported or unknown/i);
+});
+
+test('file deletion and command execution respect explicit approval denial', async () => {
+  const { root, env } = await fixture();
+  const protectedFile = path.join(root, 'protected.txt');
+  const markerFile = path.join(root, 'command-ran.txt');
+  await writeFile(protectedFile, 'keep me', 'utf8');
+
+  let deleteApprovalPrompt = '';
+  const deletion = await executeTool('delete_file', { path: 'protected.txt' }, {
+    root, env,
+    approval: async (prompt) => { deleteApprovalPrompt = prompt; return false; }
+  });
+  assert.equal(deletion.approved, false);
+  assert.match(deleteApprovalPrompt, /Delete the workspace file/);
+  assert.equal(await readFile(protectedFile, 'utf8'), 'keep me');
+
+  let commandApprovalPrompt = '';
+  const command = await executeTool('run_command', {
+    command: process.execPath,
+    args: ['-e', 'require("node:fs").writeFileSync(' + JSON.stringify(markerFile) + ', "ran")'],
+    timeoutSeconds: 5
+  }, {
+    root, env, autoApprove: false,
+    approval: async (prompt) => { commandApprovalPrompt = prompt; return false; }
+  });
+  assert.equal(command.approved, false);
+  assert.ok(commandApprovalPrompt, 'an explicit approval prompt was issued');
+  await assert.rejects(() => stat(markerFile), { code: 'ENOENT' });
 });
 
 test('/rollback preview makes no changes; confirmation backs up current files before restoring', async () => {
