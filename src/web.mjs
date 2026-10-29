@@ -190,7 +190,8 @@ export function createOasisWebServer(options = {}) {
   let reservedJobSlots = 0;
 
   function refreshPtyWorkspaceLocks() {
-    const sessions = new Map(ptyManager.list().map((session) => [session.id, session]));
+    const listed = ptyManager.list();
+    const sessions = new Map((Array.isArray(listed) ? listed : Array.isArray(listed && listed.sessions) ? listed.sessions : []).map((session) => [session.id, session]));
     for (const [id, workspaceKey] of ptyWorkspaceLocks) {
       const session = sessions.get(id);
       if (!session || session.state === 'exited' || session.state === 'error') {
