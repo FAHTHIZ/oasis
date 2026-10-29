@@ -1,0 +1,35 @@
+diff --git a/src/mcp.mjs b/src/mcp.mjs
+index 0f68f8791f5d6a05e9d3fc4e8c4101382beff271..0000000000000000000000000000000000000000 100644
+--- a/src/mcp.mjs
++++ b/src/mcp.mjs
+@@ -1,5 +1,5 @@
+ import { spawn } from 'node:child_process';
+-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
++import { mkdir, readFile, writeFile, chmod, stat } from 'node:fs/promises';
+ import path from 'node:path';
+ import { getConfigDirectory } from './config.mjs';
+ 
+@@ -14,16 +14,22 @@ export async function loadMcpServers(options = {}) {
+   const configPath = options.configPath || getMcpConfigPath(options.env || process.env);
+   try {
++    const configInfo = await stat(configPath);
++    if (configInfo.size > 1024 * 1024) throw new Error('MCP configuration is larger than 1 MiB.');
+     const parsed = JSON.parse(await readFile(configPath, 'utf8'));
+     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.servers)) {
+       throw new Error('MCP configuration has an invalid shape.');
+     }
+-    return {
+-      configPath,
+-      servers: parsed.servers.map(validateMcpServerConfig)
+-    };
++    if (parsed.servers.length > 40) throw new Error('MCP configuration supports up to 40 servers.');
++    const servers = parsed.servers.map(validateMcpServerConfig);
++    const names = new Set();
++    for (const server of servers) {
++      if (names.has(server.name)) throw new Error('MCP server names must be unique.');
++      names.add(server.name);
++    }
++    return { configPath, servers };
+   } catch (error) {
+     if (error.code === 'ENOENT') return { configPath, servers: [] };
+     throw error;
