@@ -127,10 +127,23 @@ try {
         }]
       };
     } else if (completionCalls === 8) {
+      assistantMessage = {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_browser_e2e_worktree_read',
+          type: 'function',
+          function: {
+            name: 'read_file',
+            arguments: JSON.stringify({ path: 'review-e2e-output.txt' })
+          }
+        }]
+      };
+    } else if (completionCalls === 9) {
       finishReason = 'stop';
       assistantMessage = {
         role: 'assistant',
-        content: 'Isolated worktree fixture completed successfully. The review branch is ready.'
+        content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.'
       };
     } else {
       finishReason = 'stop';
@@ -300,7 +313,7 @@ try {
     .some((element) => element.textContent.includes('Isolated worktree fixture completed successfully.')),
   null, { timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 8, 'The isolated task should write one file and then complete with one final model response.');
+  assert.equal(completionCalls, 9, 'The isolated task should write the file, read it back for verification, and then finish.');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Finishing isolated work must not advance the primary branch.');
   assert.ok(execFileSync('git', ['branch', '--list', 'oasis/*'], { cwd: root, encoding: 'utf8' }).trim(),
