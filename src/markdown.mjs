@@ -11,7 +11,7 @@ const C = {
 };
 
 export function colorEnabled(stream = process.stdout, env = process.env) {
-  if (env.NO_COLOR || env.OASIS_NO_COLOR === '1') return false;
+  if (env.NO_COLOR || env.OASIS_NO_COLOR === '1' || env.OASIS_AX_SCREEN_READER === '1' || env.CLAUDE_AX_SCREEN_READER === '1') return false;
   if (env.FORCE_COLOR && env.FORCE_COLOR !== '0') return true;
   return Boolean(stream && stream.isTTY);
 }

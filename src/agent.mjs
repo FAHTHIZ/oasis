@@ -142,6 +142,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   if (!summary) summary = deterministicHistorySummary(oldMessages);
   const restored = await runPostCompactHooks(session, trigger, summary, options);
 
+  if (session.freshSystemText) { messages[0] = { ...messages[0], content: session.freshSystemText }; session.baseSystemPrompt = session.freshSystemText; session.freshSystemText = null; }
   session.messages = [
     messages[0],
     {
@@ -336,7 +337,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, systemPromptSnapshot = null }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   // --restricted: only managed settings and --settings load; bypassPermissions is refused.
@@ -551,6 +552,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   const systemMessage = { role: 'system', content: systemText };
   session.messages = [systemMessage];
   if (restore && Array.isArray(restore.messages)) {
+    // --system-prompt-snapshot on: keep the system prompt recorded when the conversation started
+    // (stable prompt cache); the fresh one takes over at the next compaction. Default off: rebuild.
+    const snapshotMode = String(systemPromptSnapshot || env.OASIS_SYSTEM_PROMPT_SNAPSHOT || loadedSettings.systemPromptSnapshot || 'off').toLowerCase();
+    const recorded = restore.messages.find((message) => message && message.role === 'system' && typeof message.content === 'string');
+    if (snapshotMode === 'on' && recorded) { session.freshSystemText = systemMessage.content; systemMessage.content = recorded.content; }
     session.messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
   }
   session.baseSystemPrompt = systemMessage.content;
@@ -1298,6 +1304,9 @@ async function requestCompletionRaw(session, options = {}) {
   if (nativeAnthropic) {
     if (apiKey && !cloudAnthropic) headers['x-api-key'] = apiKey;
     if (!cloudAnthropic) headers['anthropic-version'] = '2023-06-01';
+    // --betas / ANTHROPIC_BETAS: extra beta headers (API key users, as in Claude Code).
+    const betas = [...(Array.isArray(config.betas) ? config.betas : []), ...String(providerEnv.ANTHROPIC_BETAS || '').split(',')].map((item) => String(item).trim()).filter(Boolean);
+    if (betas.length && !cloudAnthropic) headers['anthropic-beta'] = [...new Set(betas)].join(',');
   } else if (apiKey) {
     headers.authorization = 'Bearer ' + apiKey;
   }

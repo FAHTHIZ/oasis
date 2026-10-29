@@ -150,6 +150,11 @@ function printHelp() {
     '  --input-format stream-json    Read user messages as JSON lines on stdin (with -p)',
     '  --include-partial-messages    Stream text deltas as stream_event lines (with stream-json)',
     '  --replay-user-messages        Echo user messages back in stream-json output',
+    '  --betas NAME[,NAME]           Extra anthropic-beta headers (Anthropic API keys; also ANTHROPIC_BETAS)',
+    '  --system-prompt-snapshot on|off  On resume, reuse the recorded system prompt (on) or rebuild it (off, default)',
+    '  --ide                         Connect to a running IDE on startup',
+    '  --ax-screen-reader            Plain, screen-reader friendly output (no colors or decoration)',
+    '  --tmux                        With -w, run the session in its own tmux session or window',
     '  --include-hook-events         Stream hook_started/hook_response events for every hook (stream-json)',
     '  --forward-subagent-text       Stream subagent text as assistant messages tagged parent_tool_use_id',
     '  --prompt-suggestions          Emit a prompt_suggestion line (predicted next prompt) after each turn',
@@ -728,6 +733,7 @@ function sessionCreateOptions() {
     restricted: Boolean(SESSION_OPTIONS.restricted),
     subagentSystemAppend: SESSION_OPTIONS.subagentSystemAppend || '',
     excludeDynamicSections: Boolean(SESSION_OPTIONS.excludeDynamicSections),
+    systemPromptSnapshot: SESSION_OPTIONS.systemPromptSnapshot || null,
     systemPromptOverride: SESSION_OPTIONS.systemPromptOverride || '',
     tools: SESSION_OPTIONS.tools,
     mcpServers: SESSION_OPTIONS.mcpServers,
@@ -1653,6 +1659,31 @@ async function startSessionWorktree(root, name, out) {
   return worktree;
 }
 
+// oasis -w NAME --tmux: run the worktree session in its own tmux session (a new window when
+// already inside tmux, which keeps the worktree for you to clean up).
+async function tmuxWorktreeSession(root, name, rawArgs) {
+  const { spawnSync } = await import('node:child_process');
+  if (spawnSync('tmux', ['-V'], { stdio: 'ignore' }).status !== 0) throw new Error('--tmux needs tmux on PATH.');
+  const worktree = await startSessionWorktree(root, name, stdout);
+  const inner = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+    if (arg === '--tmux' || arg === '--tmux=classic') continue;
+    if (arg === '-w' || arg === '--worktree') { if (rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-')) i++; continue; }
+    if (arg === '-C' || arg === '--cwd') { i++; continue; }
+    inner.push(arg);
+  }
+  const command = [process.execPath, fileURLToPath(import.meta.url), '-C', worktree.path, ...inner];
+  const label = 'oasis-' + String(name).replace(/[^\w-]/g, '-').slice(0, 40);
+  if (process.env.TMUX) {
+    spawnSync('tmux', ['new-window', '-n', label, '-c', worktree.path, ...command], { stdio: 'inherit' });
+    stdout.write('[tmux] Opened window ' + label + ' in ' + worktree.relative + '. The worktree is kept; remove it with git worktree remove ' + worktree.relative + ' when done.\n');
+    return;
+  }
+  spawnSync('tmux', ['new-session', '-s', label, '-c', worktree.path, ...command], { stdio: 'inherit' });
+  await endSessionWorktree(root, worktree, stdout);
+}
+
 async function endSessionWorktree(root, worktree, out) {
   const { removeWorktree } = await import('./worktrees.mjs');
   if (worktree.hook) {
@@ -2561,6 +2592,22 @@ async function main() {
       continue;
     }
     if (arg === '--plan') { headless.planOnly = true; continue; }
+    if (arg === '--tmux' || arg === '--tmux=classic') { SESSION_OPTIONS.tmux = true; continue; }
+    if (arg === '--ide') { process.env.OASIS_IDE = 'auto'; continue; }
+    if (arg === '--ax-screen-reader') { process.env.OASIS_AX_SCREEN_READER = '1'; continue; }
+    if (arg === '--betas') {
+      const values = [];
+      while (rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-')) values.push(...rawArgs[++i].split(','));
+      if (!values.length) throw new Error('--betas needs one or more beta header names.');
+      process.env.ANTHROPIC_BETAS = [process.env.ANTHROPIC_BETAS, ...values].filter(Boolean).join(',');
+      continue;
+    }
+    if (arg === '--system-prompt-snapshot' || arg.startsWith('--system-prompt-snapshot=')) {
+      const value = (arg.includes('=') ? arg.split('=')[1] : rawArgs[++i] || '').toLowerCase();
+      if (!['on', 'off'].includes(value)) throw new Error('--system-prompt-snapshot must be on or off.');
+      SESSION_OPTIONS.systemPromptSnapshot = value;
+      continue;
+    }
     if (arg === '--plugin-url') { const url = rawArgs[++i]; if (!url) throw new Error('--plugin-url needs a URL.'); (SESSION_OPTIONS.pluginUrls ||= []).push(url); continue; }
     if (arg === '--plugin-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
@@ -2628,6 +2675,8 @@ async function main() {
     stdout.write('Started background session ' + entry.id + '. It runs without approval prompts, so only tools your permission rules allow will run.\n  oasis bg logs ' + entry.id + ' --follow   watch progress\n  oasis bg attach ' + entry.id + '          continue the conversation here\n');
     return;
   }
+  if (SESSION_OPTIONS.tmux && !worktreeName) throw new Error('--tmux requires --worktree.');
+  if (worktreeName && SESSION_OPTIONS.tmux && !headless.enabled && (!command || command === '--interactive')) return await tmuxWorktreeSession(workspace, worktreeName, rawArgs);
   if (worktreeName && (headless.enabled || !command || command === '--interactive')) {
     const session = await startSessionWorktree(workspace, worktreeName, headless.enabled ? stderr : stdout);
     try {
