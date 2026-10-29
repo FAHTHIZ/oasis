@@ -15,19 +15,35 @@ const MAX_ENTRIES = 20000;
 
 export function readZipEntries(buffer) {
   const data = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (data.length < 22) throw new Error('Not a zip archive (truncated end-of-central-directory record).');
   let eocd = -1;
   for (let i = data.length - 22; i >= Math.max(0, data.length - 22 - 65535); i--) {
-    if (data.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    if (i + 22 <= data.length && data.readUInt32LE(i) === 0x06054b50) {
+      const commentLength = data.readUInt16LE(i + 20);
+      if (i + 22 + commentLength === data.length) { eocd = i; break; }
+    }
   }
-  if (eocd < 0) throw new Error('Not a zip archive (no end-of-central-directory record).');
+  if (eocd < 0) throw new Error('Not a zip archive (no valid end-of-central-directory record).');
+  const diskNumber = data.readUInt16LE(eocd + 4);
+  const centralDisk = data.readUInt16LE(eocd + 6);
+  const diskCount = data.readUInt16LE(eocd + 8);
   const count = data.readUInt16LE(eocd + 10);
+  const centralSize = data.readUInt32LE(eocd + 12);
   let offset = data.readUInt32LE(eocd + 16);
+  if (diskNumber !== 0 || centralDisk !== 0 || diskCount !== count || count === 0xffff ||
+      centralSize === 0xffffffff || offset === 0xffffffff) {
+    throw new Error('Multi-disk and ZIP64 archives are not supported.');
+  }
   if (count > MAX_ENTRIES) throw new Error('Zip archive has too many entries.');
+  const centralEnd = offset + centralSize;
+  if (!Number.isSafeInteger(centralEnd) || offset < 0 || centralEnd > eocd) {
+    throw new Error('Corrupt zip central-directory bounds.');
+  }
   const entries = [];
   const seenPaths = new Set();
   let total = 0;
   for (let n = 0; n < count; n++) {
-    if (data.readUInt32LE(offset) !== 0x02014b50) throw new Error('Corrupt zip central directory.');
+    if (offset < 0 || offset + 46 > centralEnd || data.readUInt32LE(offset) !== 0x02014b50) throw new Error('Corrupt zip central directory.');
     const method = data.readUInt16LE(offset + 10);
     const compressed = data.readUInt32LE(offset + 20);
     const size = data.readUInt32LE(offset + 24);
@@ -36,6 +52,8 @@ export function readZipEntries(buffer) {
     const commentLength = data.readUInt16LE(offset + 32);
     const externalAttrs = data.readUInt32LE(offset + 38);
     const localOffset = data.readUInt32LE(offset + 42);
+    const recordEnd = offset + 46 + nameLength + extraLength + commentLength;
+    if (recordEnd > centralEnd) throw new Error('Truncated zip central-directory entry.');
     const rawName = data.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
     // ZIP paths must be portable: a backslash is a separator on Windows but a
     // literal character on POSIX. Normalize before checking containment.
@@ -57,9 +75,19 @@ export function readZipEntries(buffer) {
     if (name.endsWith('/')) { entries.push({ name, directory: true }); continue; }
     total += size;
     if (total > MAX_TOTAL) throw new Error('Zip archive is too large when extracted.');
-    if (data.readUInt32LE(localOffset) !== 0x04034b50) throw new Error('Corrupt zip local header for ' + name + '.');
-    const start = localOffset + 30 + data.readUInt16LE(localOffset + 26) + data.readUInt16LE(localOffset + 28);
-    if (start < 0 || compressed > data.length - start) throw new Error('Corrupt zip compressed data for ' + name + '.');
+    if (localOffset < 0 || localOffset + 30 > offset || data.readUInt32LE(localOffset) !== 0x04034b50) {
+      throw new Error('Corrupt zip local header for ' + name + '.');
+    }
+    const localMethod = data.readUInt16LE(localOffset + 8);
+    const localNameLength = data.readUInt16LE(localOffset + 26);
+    const localExtraLength = data.readUInt16LE(localOffset + 28);
+    const localNameEnd = localOffset + 30 + localNameLength;
+    const start = localNameEnd + localExtraLength;
+    if (localMethod !== method || localNameEnd > offset || start > offset ||
+        data.subarray(localOffset + 30, localNameEnd).toString('utf8') !== rawName ||
+        compressed > offset - start) {
+      throw new Error('Corrupt zip compressed data or inconsistent local header for ' + name + '.');
+    }
     const raw = data.subarray(start, start + compressed);
     let content;
     if (method === 0) content = Buffer.from(raw);
