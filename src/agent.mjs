@@ -3364,9 +3364,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const args = safeToolArguments(call.function && call.function.arguments);
         const outcome = JSON.stringify({ name, args, content: String(item.content || '') });
         if (lastToolOutcome && lastToolOutcome.signature === outcome) {
-          lastToolOutcome.count += 1;
+          // Several identical calls in one parallel batch are not repeated attempts.
+          // Only count a repeated outcome again when it recurs in a later model step.
+          if (lastToolOutcome.step !== step) {
+            lastToolOutcome.count += 1;
+            lastToolOutcome.step = step;
+          }
         } else {
-          lastToolOutcome = { signature: outcome, count: 1, name };
+          lastToolOutcome = { signature: outcome, count: 1, name, step };
         }
         if (lastToolOutcome.count >= 3) {
           loopBreakMessage = 'I’m stuck: the same ' + lastToolOutcome.name +
