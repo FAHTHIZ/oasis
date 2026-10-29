@@ -381,7 +381,7 @@ const PACKAGE_MANAGER_BOOLEAN_FLAGS = new Set([
   '--no-strict-peer-deps', '--no-verify', '--no-progress', '--frozen-lockfile',
   '--lockfile-only', '--no-lockfile', '--unsafe-perm', '--yes', '-y', '--force', '-f',
   '--verbose', '--no-emoji', '--emoji', '--ignore-engines', '--immutable',
-  '--immutable-cache', '--check-cache', '--inline-builds'
+  '--immutable-cache', '--check-cache', '--inline-builds', '--version', '-v', '--help', '-h', '--where', '--which', '--location'
 ]);
 
 function packageManagerAction(args) {
@@ -393,6 +393,7 @@ function packageManagerAction(args) {
       return verb ? { verb, rest: values.slice(index + 2) } : null;
     }
     if (PACKAGE_MANAGER_VALUE_OPTIONS.has(value)) { index += 1; continue; }
+    if (PACKAGE_MANAGER_BOOLEAN_FLAGS.has(value)) continue;
     if (value.startsWith('--') && value.includes('=')) continue;
     if (value.startsWith('-')) return { verb: null, rest: [], uncertain: true };
     return { verb: value, rest: values.slice(index + 1) };
