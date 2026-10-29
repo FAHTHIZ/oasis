@@ -21,7 +21,7 @@ The repository has 31 deterministic evaluation fixtures under **evals/tasks/**. 
 | `safe-archive-entry` | POSIX/Windows absolute paths, UNC paths, NULs, and traversal rejection |
 | `normalize-request-headers` | Case-insensitive lookup, whitespace trimming, and ambiguous record-key rejection |
 
-This is useful for checking evaluator integrity and a broader range of coding behaviors. One fixture now requires a coordinated production-code and regression-test change, but the suite is still **not** a representative real-world software-engineering benchmark: most tasks remain small and utility-level, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code.
+This is useful for checking evaluator integrity and a broader range of coding behaviors. One fixture now requires a coordinated production-code and regression-test change, but the suite is still **not** a representative real-world software-engineering benchmark: most tasks remain small and utility-level, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code. New runs record a top-level `sourceRevision` when a full Git commit SHA is available from `OASIS_SOURCE_REVISION`, `GITHUB_SHA`, or the checked-out repository's `git rev-parse HEAD`; packaged installs without repository metadata may report `null`. Comparison output surfaces revisions and labels missing revisions as unavailable.
 
 ## Run the suite validator first
 

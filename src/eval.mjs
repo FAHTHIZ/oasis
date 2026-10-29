@@ -329,7 +329,10 @@ async function readComparisonRun(filePath) {
   });
   const providerLabel = report.provider && typeof report.provider.model === 'string' ? report.provider.model : '';
   const label = String(report.label || report.name || providerLabel || path.basename(resolved)).slice(0, 100);
-  return { label, source: resolved, results };
+  const sourceRevision = typeof report.sourceRevision === 'string' && /^[a-f0-9]{40}$/i.test(report.sourceRevision)
+    ? report.sourceRevision.toLowerCase()
+    : null;
+  return { label, source: resolved, sourceRevision, results };
 }
 
 function summarizeComparisonTask(trials) {
@@ -412,7 +415,7 @@ export async function compareEvalReports(paths, options = {}) {
   const comparison = {
     schemaVersion: 1,
     comparedAt: new Date().toISOString(),
-    sources: [{ label: left.label, file: path.basename(left.source) }, { label: right.label, file: path.basename(right.source) }],
+    sources: [{ label: left.label, file: path.basename(left.source), revision: left.sourceRevision }, { label: right.label, file: path.basename(right.source), revision: right.sourceRevision }],
     commonTaskCount: commonIds.length,
     mismatchedFingerprints,
     unverifiedFingerprints,
@@ -439,8 +442,8 @@ export async function compareEvalReports(paths, options = {}) {
   const newline = String.fromCharCode(10);
   const lines = [
     'Evaluation comparison (matched tasks only)',
-    'A: ' + left.label + ' [' + path.basename(left.source) + ']',
-    'B: ' + right.label + ' [' + path.basename(right.source) + ']',
+    'A: ' + left.label + ' [' + path.basename(left.source) + ']' + (left.sourceRevision ? ' (revision ' + left.sourceRevision + ')' : ' (revision unavailable)'),
+    'B: ' + right.label + ' [' + path.basename(right.source) + ']' + (right.sourceRevision ? ' (revision ' + right.sourceRevision + ')' : ' (revision unavailable)'),
     'Common tasks: ' + commonIds.length + ' | A-only: ' + comparison.onlyInA.length + ' | B-only: ' + comparison.onlyInB.length,
     'Task fingerprints: ' + taskRows.filter((row) => row.fingerprintStatus === 'verified').length + '/' + taskRows.length + ' verified; ' + mismatchedFingerprints.length + ' mismatched task(s) excluded; ' + unverifiedFingerprints.length + ' legacy/unfingerprinted task(s) compared by ID only.',
     'Task-balanced pass rate: A ' + pct(leftMetrics.taskBalancedPassRate) + ' | B ' + pct(rightMetrics.taskBalancedPassRate) +
@@ -543,6 +546,20 @@ function readPrice(value) {
   if (value === undefined || value === null || String(value).trim() === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function detectSourceRevision(env = process.env) {
+  const explicit = String(env.OASIS_SOURCE_REVISION || env.GITHUB_SHA || '').trim();
+  if (/^[a-f0-9]{40}$/i.test(explicit)) return explicit.toLowerCase();
+
+  const result = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
+    cwd: APP_ROOT,
+    env: scrubEnvironment(env),
+    timeoutMs: 3000,
+    outputLimit: 1024
+  });
+  const revision = result.exitCode === 0 ? String(result.stdout || '').trim() : '';
+  return /^[a-f0-9]{40}$/i.test(revision) ? revision.toLowerCase() : null;
 }
 
 function costEstimate(inputTokens, outputTokens, inputRate, outputRate) {
@@ -749,6 +766,7 @@ async function runClaudeCodeEval(config, options = {}) {
   const modelLabel = config.model || (observedModels.length ? observedModels.join(', ') : 'model not reported by CLI');
   const summary = {
     label: 'Claude Code ' + cliVersion + ' (' + modelLabel + ')',
+    sourceRevision: await detectSourceRevision(env),
     runId: startedAt.replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt,
     completedAt: new Date().toISOString(),
@@ -912,6 +930,7 @@ export async function runEvalCommand(args = [], options = {}) {
     ? Math.round((totalCostUSD / passedCount) * 1000000) / 1000000
     : null;
   const summary = {
+    sourceRevision: await detectSourceRevision(env),
     runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt, completedAt: new Date().toISOString(),
     taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,

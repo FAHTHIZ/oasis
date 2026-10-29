@@ -141,6 +141,7 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
   const env = {
     ...process.env,
     OASIS_CONFIG_DIR: configDir,
+    GITHUB_SHA: 'a'.repeat(40),
     OASIS_EVAL_INPUT_USD_PER_MILLION_TOKENS: '1',
     OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS: '2'
   };
@@ -162,6 +163,7 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
   });
 
   assert.equal(result.ok, true, output.text);
+  assert.equal(result.summary.sourceRevision, 'a'.repeat(40));
   assert.equal(result.summary.passed, 1);
   assert.equal(result.summary.failed, 0);
   assert.equal(result.results[0].status, 'passed');
@@ -255,6 +257,8 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
   assert.deepEqual(result.comparison.onlyInA, ['only-a']);
   assert.deepEqual(result.comparison.onlyInB, ['only-b']);
   assert.equal(result.comparison.sources[1].label, 'Claude Code baseline');
+  assert.equal(result.comparison.sources[0].revision, 'c'.repeat(40));
+  assert.equal(result.comparison.sources[1].revision, null, 'reports without a revision remain explicitly unpinned');
   assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 0.75);
   assert.ok(Math.abs(result.comparison.metrics.b.taskBalancedPassRate - (2 / 3)) < 1e-9);
   assert.ok(Math.abs(result.comparison.metrics.deltaBMinusA.taskBalancedPassRatePercentagePoints - (-100 / 12)) < 1e-6);
@@ -274,6 +278,7 @@ test('eval comparison excludes matching task IDs with incompatible task fingerpr
   const bPath = path.join(tmp, 'claude-run.json');
   await writeFile(aPath, JSON.stringify({
     label: 'OASIS',
+    sourceRevision: 'c'.repeat(40),
     results: [
       { taskId: 'same-task', taskFingerprint: 'a'.repeat(64), status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
       { taskId: 'changed-task', taskFingerprint: 'b'.repeat(64), status: 'passed', wallTimeMs: 150, costUSD: 0.01 },
@@ -403,7 +408,7 @@ test('Claude Code eval uses restricted tools, external verification and a compar
     '--claude-code', '--task', 'fixture-task', '--trials', '1', '--model', 'claude-sonnet-fixture'
   ], {
     autoApprove: true,
-    env: { ...process.env },
+    env: { ...process.env, GITHUB_SHA: 'b'.repeat(40) },
     tasksDir,
     resultsDir,
     output,
@@ -411,6 +416,7 @@ test('Claude Code eval uses restricted tools, external verification and a compar
   });
 
   assert.equal(result.ok, true, output.text);
+  assert.equal(result.summary.sourceRevision, 'b'.repeat(40));
   assert.equal(result.summary.provider.protocol, 'claude-code-cli');
   assert.equal(result.summary.provider.model, 'claude-sonnet-fixture');
   assert.equal(result.summary.passed, 1);
@@ -445,6 +451,17 @@ test('eval rejects trial counts with partial, fractional, or exponent syntax', a
       runEvalCommand(['--trials', value], { autoApprove: false, env: { ...process.env } }),
       /--trials must be an integer from 1 to 10/,
       'should reject trial count ' + JSON.stringify(value)
+    );
+  }
+});
+
+
+test('eval trial count rejects partial, fractional, scientific and out-of-range values', async () => {
+  for (const raw of ['2abc', '2.5', '1e1', '+2', '0', '11', '']) {
+    await assert.rejects(
+      runEvalCommand(['--trials', raw], { env: { ...process.env }, tasksDir: '/not-used' }),
+      /--trials must be an integer from 1 to 10/,
+      'reject trial value ' + JSON.stringify(raw)
     );
   }
 });
