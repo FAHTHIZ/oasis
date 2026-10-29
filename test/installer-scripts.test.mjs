@@ -14,9 +14,9 @@ test('published installer checksums match the exact checked-in scripts', async (
     read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1')
   ]);
   assert.equal(readme.match(/expected=([a-f0-9]{64})/)?.[1], sha256(shell));
-  assert.equal(readme.match(/\\$expected='([a-f0-9]{64})'/)?.[1], sha256(powershell));
+  assert.equal(readme.match(/\$expected='([a-f0-9]{64})'/)?.[1], sha256(powershell));
   assert.match(readme, /mktemp.*oasis-install/);
-  assert.match(readme, /NewGuid\\(\\)\\.ToString\\('N'\\)/);
+  assert.match(readme, /NewGuid\(\)\.ToString\('N'\)/);
 });
 
 test('installers pin the immutable source revision and Termux guide', async () => {
@@ -29,5 +29,5 @@ test('installers pin the immutable source revision and Termux guide', async () =
   assert.ok(readme.includes(revision));
   assert.match(termux, /official.*Termux/i);
   assert.match(termux, /Android is not yet a fully verified support target/i);
-  assert.match(install, /TERMUX\\.md/);
+  assert.match(install, /TERMUX\.md/);
 });
