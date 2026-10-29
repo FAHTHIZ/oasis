@@ -248,10 +248,10 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
     return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args), { requireEveryCommand: options.requireEveryCommand !== false });
   }
-  if (toolName === 'workflow') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
-  if (toolName === 'load_skill') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
   if (toolName === 'run_shell' || toolName === 'powershell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim(), { requireEveryCommand: options.requireEveryCommand !== false });
   if (rule.specifier === null || rule.specifier === '' || rule.specifier === '*') return true;
+  if (toolName === 'workflow') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
+  if (toolName === 'load_skill') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
   if (toolName === 'fetch_url') {
     if (rule.specifier.startsWith('domain:')) {
       try {
