@@ -73,11 +73,16 @@ function isMainCoordinator(session) {
 
 export function recordAgentEvent(session, type, fields = {}) {
   const registry = agentRegistry(session);
+  const worker = fields.agentId ? registry.agents.get(String(fields.agentId)) : null;
+  // Pin worker lifecycle events to the run that launched the worker. The parent
+  // may start another turn before a background worker completes.
+  const runId = worker && worker.runId || session.agentRunId || '';
   const event = {
     id: registry.nextEventId++,
     at: new Date().toISOString(),
     type: String(type || 'agent.event').slice(0, 80),
     actor: String(session.agentId || 'main').slice(0, 100),
+    ...(runId ? { run_id: String(runId).slice(0, 100) } : {}),
     ...(fields.agentId ? { agent_id: String(fields.agentId).slice(0, 100) } : {}),
     ...(fields.teamId ? { team_id: String(fields.teamId).slice(0, 100) } : {}),
     ...(fields.description ? { description: String(fields.description).slice(0, 200) } : {}),
@@ -198,7 +203,7 @@ export function registerAgent(session, fields) {
   const team = teamId ? getAgentTeam(session, teamId) : null;
   if (team && team.status !== 'active') throw new Error('Cannot add an agent to team ' + team.id + ' because it is ' + team.status + '.');
   const id = 'agent_' + registry.next++;
-  const record = { id, status: 'running', startedAt: Date.now(), finishedAt: null, runs: 1, toolCalls: 0, tokensUsed: 0, recentTools: [], report: '', error: null, ...fields, teamId: teamId || null };
+  const record = { id, status: 'running', startedAt: Date.now(), finishedAt: null, runs: 1, toolCalls: 0, tokensUsed: 0, recentTools: [], report: '', error: null, ...fields, teamId: teamId || null, runId: session.agentRunId || fields.runId || null };
   registry.agents.set(id, record);
   if (team) team.members.push(id);
   recordAgentEvent(session, 'agent.started', { agentId: id, teamId: teamId || undefined, description: record.description || record.type || id });
