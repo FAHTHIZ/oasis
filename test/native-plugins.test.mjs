@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { installNativePlugin, validateNativePluginPackage, listNativePlugins, uninstallNativePlugin, parseNativePluginPackageArguments } from '../src/native-plugins.mjs';
 import { loadEnabledPlugins, pluginCommands, pluginSkills, pluginAgents, pluginHooks, pluginMcpServers } from '../src/claude-plugins.mjs';
 
@@ -69,7 +69,7 @@ test('native plugin validates and installs HTTPS-compatible Git sources from a t
   const checked=await validateNativePluginPackage(gitUrl,{env});
   assert.equal(checked.name,'review-helper');
   const cloneRoot=path.join(home,'.config','oasis','native-plugin-sources');
-  assert.deepEqual(await (await import('node:fs/promises')).readdir(cloneRoot),[],'validation removes the temporary clone');
+  assert.deepEqual(await readdir(cloneRoot),[],'validation removes the temporary clone');
   const installed=await installNativePlugin(gitUrl,{env,grantedPermissions:['commands']});
   assert.equal(installed.installed,true);
   assert.equal(installed.name,'review-helper');
@@ -77,8 +77,8 @@ test('native plugin validates and installs HTTPS-compatible Git sources from a t
   assert.ok(await readFile(path.join(installed.installPath,'commands/review.md'),'utf8'));
 });
 
-test('native plugin Git URLs reject insecure HTTP and unsafe refs', async () => {
-  const { root } = await setup({ after() {} });
+test('native plugin Git URLs reject insecure HTTP and unsafe refs', async (t) => {
+  const { root } = await setup(t);
   assert.throws(() => parseNativePluginPackageArguments('validate http://example.invalid/repo.git', root), /HTTPS, SSH, or file:\/\//i);
   assert.throws(() => parseNativePluginPackageArguments('validate https://github.com/example/plugin.git#../../etc', root), /safe branch or tag/i);
 });
