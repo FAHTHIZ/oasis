@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatLspVerificationBlocker, verificationIssues } from '../src/agent.mjs';
+import { appendLspUnavailableNotice, formatLspVerificationBlocker, verificationIssues } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 test('new LSP errors block task completion and suppress an unverified success message', () => {
@@ -51,6 +51,32 @@ test('a passed code check permits completion if the optional LSP server is unava
   assert.ok(blocked.some((issue) => /LSP verification unavailable/.test(issue)));
   assert.ok(blocked.some((issue) => /no relevant test/.test(issue)));
   assert.match(formatLspVerificationBlocker(blocked), /No TypeScript language server found/);
+});
+
+test('a completed task explicitly discloses unavailable LSP verification', () => {
+  const text = appendLspUnavailableNotice('The project tests passed.', {
+    changedPaths: new Set(['src/changed.ts']),
+    lspVerificationByPath: new Map([['src/changed.ts', {
+      status: 'unavailable',
+      reason: 'No TypeScript language server found'
+    }]])
+  });
+  assert.match(text, /The project tests passed/);
+  assert.match(text, /LSP verification unavailable/);
+  assert.match(text, /No TypeScript language server found/);
+  assert.match(text, /not verified by a language server/);
+  assert.doesNotMatch(appendLspUnavailableNotice('Checks passed.', {
+    changedPaths: new Set(['src/changed.ts']),
+    lspVerificationByPath: new Map()
+  }), /LSP verification unavailable/);
+});
+
+test('/diagnostics explicitly combines LSP navigation diagnostics with project checkers', async () => {
+  const handled = await runBuiltinCommand('diagnostics', 'src/changed.ts', { root: process.cwd() });
+  assert.match(handled.prompt, /project-checker diagnostics tool and language-server diagnostics/i);
+  assert.match(handled.prompt, /use the lsp operation "diagnostics"/i);
+  assert.match(handled.prompt, /Errors, Warnings, Information, and Verification unavailable/);
+  assert.match(handled.prompt, /rather than reporting a clean LSP result/i);
 });
 
 test('/fix explicitly treats unavailable or new LSP diagnostics as a blocker', async () => {
