@@ -370,6 +370,7 @@ export function createOasisWebServer(options = {}) {
       sessionId = temporaryId;
     }
     const activeId = sessionId || session.sessionId;
+    const taskWorkspaceKey = path.resolve(taskRoot);
     const job = newJob();
     job.type = 'agent';
     job.title = incomingMessage.replace(/\s+/g, ' ').slice(0, 160) || 'Coding task';
@@ -385,7 +386,7 @@ export function createOasisWebServer(options = {}) {
     }
     jobs.set(job.id, job);
     startingWorkspaces.delete(workspaceKey);
-    busyWorkspaces.add(workspaceKey);
+    busyWorkspaces.add(taskWorkspaceKey);
     releaseJobReservation();
     releaseJobReservation = null;
     if (sessionId) startingSessions.delete(sessionId);
@@ -503,7 +504,7 @@ export function createOasisWebServer(options = {}) {
           for (const [sessionKey, activeSession] of activeSessions) if (activeSession === session) activeSessions.delete(sessionKey);
           try { await closeSession(session); } catch {}
         }
-        busyWorkspaces.delete(workspaceKey);
+        busyWorkspaces.delete(taskWorkspaceKey);
       }
     })();
     return { jobId: job.id, sessionId: activeId, ...(taskWorktree ? { isolation: 'worktree', branch: taskWorktree.branch, worktreePath: taskWorktree.relative } : {}) };
