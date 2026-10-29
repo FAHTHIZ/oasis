@@ -390,7 +390,7 @@ test('eval comparison excludes matching task IDs with incompatible task fingerpr
   assert.equal(result.comparison.tasks.find((row) => row.taskId === 'legacy-task').fingerprintStatus, 'unverified-legacy');
   assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 0.5);
   assert.equal(result.comparison.metrics.b.taskBalancedPassRate, 1);
-  assert.match(output.text, /1\/2 verified; 1 mismatched task\(s\) excluded; 1 legacy\/unfingerprinted task\(s\) compared by ID only/);
+  assert.match(output.text, /1\/2 verified; 1 fingerprint-mismatched task\(s\) excluded; 0 metadata-mismatched task\(s\) excluded; 1 legacy\/unfingerprinted task\(s\) compared by ID only/);
 });
 
 test('eval comparison refuses unsafe files, invalid result rows and disjoint task sets', async (t) => {
