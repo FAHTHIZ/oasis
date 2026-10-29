@@ -181,7 +181,7 @@ export async function loadSettings(root, options = {}) {
   const result = {
     permissions: { allow: [], ask: [], deny: [], defaultMode: 'default', additionalDirectories: [] },
     hooks: {},
-    sandbox: { enabled: false, network: false, autoAllowCommands: true },
+    sandbox: { enabled: false, network: false, autoAllowCommands: true, maskSensitivePaths: true },
     shell: { enabled: false },
     model: null,
     outputStyle: null,
@@ -233,6 +233,7 @@ export async function loadSettings(root, options = {}) {
       if (typeof settings.sandbox.enabled === 'boolean') result.sandbox.enabled = settings.sandbox.enabled;
       if (typeof settings.sandbox.network === 'boolean') result.sandbox.network = settings.sandbox.network;
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
+      if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
     }
     if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') result.shell.enabled = settings.shell.enabled;
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
