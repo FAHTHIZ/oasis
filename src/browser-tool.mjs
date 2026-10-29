@@ -117,7 +117,7 @@ async function evaluate(page, expression, { awaitPromise = true } = {}) {
 }
 
 async function setupPage(state, page, context) {
-  const tab = { page, console: [], network: new Map(), blockedNavigations: [] };
+  const tab = { page, console: [], network: new Map(), blockedNavigations: [], pendingNavigations: new Set() };
   page.on('Runtime.consoleAPICalled', (p) => { tab.console.push({ type: p.type, text: (p.args || []).map((a) => (a.value !== undefined ? (typeof a.value === 'string' ? a.value : JSON.stringify(a.value)) : a.description || a.type)).join(' ').slice(0, 1000) }); if (tab.console.length > 200) tab.console.shift(); });
   page.on('Runtime.exceptionThrown', (p) => { const d = p.exceptionDetails || {}; tab.console.push({ type: 'exception', text: ((d.exception && d.exception.description) || d.text || 'Uncaught exception').slice(0, 1500) }); });
   page.on('Log.entryAdded', (p) => { const e = p.entry || {}; if (e.level === 'error' || e.level === 'warning') tab.console.push({ type: e.level, text: String(e.text || '').slice(0, 1000) + (e.url ? ' (' + e.url + ')' : '') }); });
@@ -134,7 +134,7 @@ async function setupPage(state, page, context) {
   // scripts too—not only explicit browser.navigate tool calls.
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] });
   page.on('Fetch.requestPaused', (request) => {
-    void (async () => {
+    const pending = (async () => {
       const resume = () => page.send('Fetch.continueRequest', { requestId: request.requestId }).catch(() => {});
       const fail = () => page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
       if (request.resourceType !== 'Document') { await resume(); return; }
@@ -167,6 +167,11 @@ async function setupPage(state, page, context) {
       tab.blockedNavigations.push({ url: String(request.request && request.request.url || '').slice(0, 1200), reason: 'Navigation approval could not be completed safely.' });
       await page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
     });
+    tab.pendingNavigations.add(pending);
+    pending.then(
+      () => tab.pendingNavigations.delete(pending),
+      () => tab.pendingNavigations.delete(pending)
+    );
   });
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }).catch(() => {});
   return tab;
@@ -231,6 +236,19 @@ async function pressKey(page, name) {
 
 const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 
+async function waitForNavigationApprovals(tab) {
+  // Drain decisions before returning from actions that may have triggered navigation.
+  // A short quiet period captures CDP requestPaused events queued by the same turn.
+  for (;;) {
+    if (tab.pendingNavigations.size) {
+      await Promise.all([...tab.pendingNavigations]);
+      continue;
+    }
+    await settle(50);
+    if (!tab.pendingNavigations.size) return;
+  }
+}
+
 export async function executeBrowserTool(args, context = {}) {
   const session = context.session || context;
   const env = context.env || process.env;
@@ -252,8 +270,14 @@ export async function executeBrowserTool(args, context = {}) {
       const loaded = page.once('Page.loadEventFired', 20000);
       const nav = await page.send('Page.navigate', { url });
       if (nav.errorText) return { error: 'Navigation failed: ' + nav.errorText, url, blockedNavigations: tab.blockedNavigations.splice(0) };
+      await waitForNavigationApprovals(tab);
+      if (tab.blockedNavigations.length) {
+        const blockedNavigations = tab.blockedNavigations.splice(0);
+        return { url: await evaluate(page, 'location.href').catch(() => url), title: await evaluate(page, 'document.title').catch(() => ''), blockedNavigations, hint: 'A page-initiated navigation was blocked pending approval.' };
+      }
       await Promise.race([loaded, settle(20000)]);
       await waitForLoad(page);
+      await waitForNavigationApprovals(tab);
       const blockedNavigations = tab.blockedNavigations.splice(0);
       return { url: await evaluate(page, 'location.href'), title: await evaluate(page, 'document.title'), ...(blockedNavigations.length ? { blockedNavigations } : {}), hint: 'Take a snapshot to read the page and get element refs.' };
     }
@@ -264,8 +288,10 @@ export async function executeBrowserTool(args, context = {}) {
     case 'click': {
       const box = await center(page, args);
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
+      await waitForNavigationApprovals(tab);
       await settle(400);
       await waitForLoad(page, 5000);
+      await waitForNavigationApprovals(tab);
       const blockedNavigations = tab.blockedNavigations.splice(0);
       return { clicked: box.tag + (box.name ? ' "' + box.name + '"' : ''), url: await evaluate(page, 'location.href'), ...(blockedNavigations.length ? { blockedNavigations } : {}) };
     }
@@ -276,13 +302,14 @@ export async function executeBrowserTool(args, context = {}) {
         if (!ok) throw new Error('No element matched' + (Number.isInteger(args.ref) ? ' ref ' + args.ref + '; take a new snapshot' : '') + '.');
       }
       await page.send('Input.insertText', { text: String(args.text || '') });
-      if (args.submit) { await pressKey(page, 'Enter'); await settle(500); await waitForLoad(page, 8000); }
+      if (args.submit) { await pressKey(page, 'Enter'); await waitForNavigationApprovals(tab); await settle(500); await waitForLoad(page, 8000); await waitForNavigationApprovals(tab); }
       const blockedNavigations = tab.blockedNavigations.splice(0);
       return { typed: String(args.text || '').length + ' characters', submitted: Boolean(args.submit), ...(blockedNavigations.length ? { blockedNavigations } : {}) };
     }
     case 'press': {
       await pressKey(page, String(args.key || 'Enter'));
       await settle(250);
+      await waitForNavigationApprovals(tab);
       const blockedNavigations = tab.blockedNavigations.splice(0);
       return { pressed: args.key || 'Enter', ...(blockedNavigations.length ? { blockedNavigations } : {}) };
     }
