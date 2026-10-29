@@ -1,8 +1,8 @@
 # Security and reliability audit
 
 **Audit date:** October 29, 2026  
-**Code baseline reviewed:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286)  
-**Verification:** [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809) passed with 570 tests on Node 22/24/26 and 21 valid evaluation fixtures; [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832) passed; [desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux. These are regression/packaging checks, not a penetration test. See [Current status](CURRENT_STATUS.md).
+**Original source-review baseline:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286).  
+**Latest fully verified implementation baseline before the current follow-up:** [`67df415fad3fc5530f1418f2ee8b44ac485fd349`](https://github.com/FAHTHIZ/oasis/commit/67df415fad3fc5530f1418f2ee8b44ac485fd349): [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224) passed 646 tests on Node 22/24/26 and the cross-platform security matrix; [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40857806325) and [Windows/macOS/Linux desktop packaging and release](https://github.com/FAHTHIZ/oasis/actions/runs/40857806335) passed on the same SHA. These are regression/packaging checks, not a penetration test. See [Current status](CURRENT_STATUS.md).
 
 This is an initial source-level security/reliability pass, not a penetration test and not a claim that every defect has been found. It focused on network boundaries, command lifecycle, workspace paths, runtime authentication, MCP/plugin trust and hook execution. Findings below distinguish direct fixes from open risks.
 
@@ -185,16 +185,16 @@ The high-impact runner guard and package-publishing block initially examined onl
 ## Required verification
 
 - [ ] Verify browser-navigation guards for same-origin navigation, cross-origin click/form/redirect behavior, opaque data/file URLs, and denied navigation with live Chrome E2E tests.
-- [x] Re-ran the full runtime test suite on Node.js 22/24/26 in [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072); all three Node versions and the browser E2E job passed on the verified `caf604d` baseline. The new process-tree/configuration follow-up still requires a fresh run.
+- [x] Re-ran the full runtime test suite on Node.js 22/24/26 in [Quality Checks run 40857806224](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224); all three Node versions and the browser E2E job passed on the verified `67df415` baseline. The new process-tree/configuration follow-up still requires a fresh run.
 
-- [x] Full Quality Checks passed with 643 tests on `caf604d`: https://github.com/FAHTHIZ/oasis/actions/runs/40854882072.
-- [x] Publishing validation passed on the same code revision: https://github.com/FAHTHIZ/oasis/actions/runs/40854882012.
-- [x] Desktop packaging and its versioned-release step passed for Windows, macOS and Linux on the same revision: https://github.com/FAHTHIZ/oasis/actions/runs/40854882048.
+- [x] Full Quality Checks passed with 646 tests on `67df415`: https://github.com/FAHTHIZ/oasis/actions/runs/40857806224.
+- [x] Publishing validation passed on the same code revision: https://github.com/FAHTHIZ/oasis/actions/runs/40857806325.
+- [x] Desktop packaging and its versioned-release step passed for Windows, macOS and Linux on the same revision: https://github.com/FAHTHIZ/oasis/actions/runs/40857806335.
 - [ ] Repeat cancellation/timeout tests and confirm descendants are stopped and inherited pipes close.
 - [ ] Run process-tree cancellation tests on Windows as well as POSIX before claiming cross-platform closure.
 - [ ] Continue adversarial URL tests for normalization, IPv4-mapped IPv6, DNS answer sets, redirects and provider/network failure cases.
 
-**Bottom line:** multiple concrete security and reliability findings have been patched on main, including network-address policy consistency, secret-safe Keychain writes, cloud-token cache isolation, command-risk parsing, and optional sandbox credential masking. The fully verified `caf604d` baseline passed Quality Checks, publishing validation and desktop packaging on one SHA. Additional process-tree and strict configuration fixes in the current follow-up remain pending same-SHA verification. This audit does not claim exhaustive coverage or zero remaining bugs.
+**Bottom line:** multiple concrete security and reliability findings have been patched on main, including network-address policy consistency, secret-safe Keychain writes, cloud-token cache isolation, command-risk parsing, and optional sandbox credential masking. The fully verified `67df415` baseline passed Quality Checks, publishing validation and desktop packaging on one SHA. Additional process-tree and strict configuration fixes in the current follow-up remain pending same-SHA verification. This audit does not claim exhaustive coverage or zero remaining bugs.
 
 ## Follow-up hardening: macOS Seatbelt profile path injection
 

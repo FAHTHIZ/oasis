@@ -1,8 +1,8 @@
 # OASIS current implementation status
 
 **Audit date:** October 29, 2026  
-**Last fully verified implementation revision before the follow-up patches in this commit:** [`caf604dde436139e98113feaa4ebfce6afd2c885`](https://github.com/FAHTHIZ/oasis/commit/caf604dde436139e98113feaa4ebfce6afd2c885). [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072) passed 643 tests with zero failures, the Node.js 22/24/26 matrix, 33 evaluation fixtures, Linux PTY, authenticated browser E2E, and Ubuntu/macOS/Windows security regressions. [Publishing validation run 40854882012](https://github.com/FAHTHIZ/oasis/actions/runs/40854882012) and [desktop packaging/release run 40854882048](https://github.com/FAHTHIZ/oasis/actions/runs/40854882048) also passed on that same SHA.
-**Verification boundary:** this commit adds strict validation for saved/runtime model budgets and process-tree cleanup for evaluation, interactive shell/background work, diagnostics and language servers. Treat those follow-up changes as pending until the required workflows pass on their new SHA. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).  
+**Last fully verified implementation revision before the follow-up patches in this commit:** [`67df415fad3fc5530f1418f2ee8b44ac485fd349`](https://github.com/FAHTHIZ/oasis/commit/67df415fad3fc5530f1418f2ee8b44ac485fd349). [Quality Checks run 40857806224](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224) passed 646 tests with zero failures, the Node.js 22/24/26 matrix, 33 evaluation fixtures, Linux PTY, authenticated browser E2E, and Ubuntu/macOS/Windows security regressions. [Publishing validation run 40857806325](https://github.com/FAHTHIZ/oasis/actions/runs/40857806325) and [desktop packaging/release run 40857806335](https://github.com/FAHTHIZ/oasis/actions/runs/40857806335) also passed on that same SHA.
+**Verification boundary:** the verified `67df415` revision includes strict saved/runtime model-budget validation and process-tree cleanup for evaluation, interactive shell/background work, diagnostics and language servers. The next follow-up changes evaluator escalation after the leader exits, strict agent-turn budgets, and read-only Git timeout cleanup; those require fresh same-SHA validation. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist and the [whole-codebase gap register](WHOLE_CODEBASE_GAP_REGISTER.md) for code-backed closure criteria.
@@ -13,17 +13,17 @@ The core mechanics are documented in [Core mechanics audit](CORE_MECHANICS_AUDIT
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-The last fully verified implementation baseline before the follow-up fixes was `caf604d`: 643 tests passed on Node.js 22/24/26, all 33 evaluation fixtures validated, and the PTY, browser E2E, cross-platform security, publishing and desktop packaging jobs passed on that same revision. The fixture suite remains a smoke/regression suite rather than a representative repository-level coding benchmark. `oasis eval --compare` compares saved reports across shared task IDs.
+The last fully verified implementation baseline before the follow-up fixes was `67df415`: 646 tests passed on Node.js 22/24/26, all 33 evaluation fixtures validated, and the PTY, browser E2E, cross-platform security, publishing and desktop packaging jobs passed on that same revision. The fixture suite remains a smoke/regression suite rather than a representative repository-level coding benchmark. `oasis eval --compare` compares saved reports across shared task IDs.
 
 ## Verified repository and CI snapshot
 
-**Last fully verified code snapshot before the follow-up patches:** `caf604dde436139e98113feaa4ebfce6afd2c885` (October 29, 2026; see [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072)). The run passed 643 tests, validated 33 fixtures, and passed Node 22/24/26, security regressions, native PTY and browser E2E.
+**Last fully verified code snapshot before the follow-up patches:** `67df415fad3fc5530f1418f2ee8b44ac485fd349` (October 29, 2026; see [Quality Checks run 40857806224](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224)). The run passed 646 tests, validated 33 fixtures, and passed Node 22/24/26, security regressions, native PTY and browser E2E.
 
 | Evidence | Latest verified result |
 | --- | --- |
 | Runtime modules | 61 `.mjs` modules under `src/` after adding the process-tree termination helper |
-| Test layout | Node.js test specifications plus shared helpers; latest verified main code run reports 643 passing tests |
-| Latest verified Node test suite | **643 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) |
+| Test layout | Node.js test specifications plus shared helpers; latest verified main code run reports 646 passing tests |
+| Latest verified Node test suite | **646 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) |
 | Latest fully verified evaluation-fixture validation | **33/33 valid**; still a smoke suite, not a representative coding benchmark |
 | Node runtime matrix | Node.js 22, 24 and 26 passed in run 40818083171 |
 | Native PTY check | Passed on Linux / Node.js 22 in run 40818083171; this is not proof of Windows/macOS/Termux support |
@@ -33,7 +33,7 @@ The last fully verified implementation baseline before the follow-up fixes was `
 | Homepage/repository validation | [Homepage/repository validation run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed on comparator code revision `268862c` |
 | Release maturity | Package version `0.3.0`; CI can build desktop installers, but the current installers are unsigned and first-run behavior is not yet proven across all supported operating systems |
 
-Quality Checks [run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072), publishing validation [run 40854882012](https://github.com/FAHTHIZ/oasis/actions/runs/40854882012), and desktop packaging/release [run 40854882048](https://github.com/FAHTHIZ/oasis/actions/runs/40854882048) passed on the same implementation revision `caf604d`. The process/configuration follow-up in the current commit requires its own full verification. Browser E2E runs in Linux Chromium and does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
+Quality Checks [run 40857806224](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224), publishing validation [run 40857806325](https://github.com/FAHTHIZ/oasis/actions/runs/40857806325), and desktop packaging/release [run 40857806335](https://github.com/FAHTHIZ/oasis/actions/runs/40857806335) passed on the same implementation revision `67df415`. The process/configuration follow-up in the current commit requires its own full verification. Browser E2E runs in Linux Chromium and does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
 
 ## What the code currently provides
 

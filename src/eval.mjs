@@ -54,13 +54,15 @@ export function runEvalProcess(command, args, options = {}) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      clearTimeout(killTimer);
+      // Once timed out, keep the escalation timer even if the leader exits. A
+      // descendant may have closed its inherited pipes while ignoring SIGTERM.
+      if (!timedOut) clearTimeout(killTimer);
       resolve({ ...result, stdout, stderr, output: (stdout + (stderr ? '\n' + stderr : '')).slice(-outputLimit) });
     };
     const timer = setTimeout(() => {
       timedOut = true;
       signalProcessTree(child, 'SIGTERM');
-      killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1000);
+      killTimer = setTimeout(() => { killTimer = null; signalProcessTree(child, 'SIGKILL'); }, 1000);
       killTimer.unref?.();
     }, timeoutMs);
     try {

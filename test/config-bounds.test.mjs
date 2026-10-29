@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { loadConfig, saveConfig } from '../src/config.mjs';
-import { maxOutputTokensFor, thinkingBudgetFor } from '../src/agent.mjs';
+import { maxOutputTokensFor, thinkingBudgetFor, resolveTurnLimits } from '../src/agent.mjs';
 
 test('configuration integer settings reject partial, fractional and exponent strings', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-config-bounds-'));
@@ -50,11 +50,25 @@ test('saved optional model budgets reject partial integer strings on write', asy
   assert.equal(Object.hasOwn(saved, 'maxOutputTokens'), false);
 });
 
-test('runtime model budgets ignore malformed optional integer values', () => {
+test('runtime model budgets reject malformed values and fall back to the next valid source', () => {
   assert.equal(maxOutputTokensFor({ model: 'custom-model', maxOutputTokens: '16000tokens' }, { OASIS_MAX_OUTPUT_TOKENS: '20000junk' }), 8192);
+  assert.equal(maxOutputTokensFor({ model: 'custom-model', maxOutputTokens: 16000 }, { OASIS_MAX_OUTPUT_TOKENS: '20000junk' }), 16000, 'a malformed env override must not hide a valid saved setting');
   assert.equal(maxOutputTokensFor({ model: 'custom-model' }, { OASIS_MAX_OUTPUT_TOKENS: '16384' }), 16384);
   assert.equal(thinkingBudgetFor('please think', { thinkingBudget: '12000budget' }, { OASIS_THINKING_BUDGET: '32000tokens' }), 4000);
+  assert.equal(thinkingBudgetFor('please think', { thinkingBudget: 12000 }, { OASIS_THINKING_BUDGET: '32000tokens' }), 12000, 'a malformed env override must fall back to a valid saved budget');
   assert.equal(thinkingBudgetFor('', { thinkingBudget: 12000 }, {}), 12000);
+});
+
+test('agent turn budgets ignore malformed integer prefixes and fall back to validated config', () => {
+  assert.deepEqual(resolveTurnLimits(
+    { maxSteps: '12junk', maxTokens: '1e6', maxToolCalls: '20calls' },
+    { maxSteps: 32, maxTokens: 120000, maxToolCalls: 80 }
+  ), { maxSteps: 32, tokenBudget: 120000, maxToolCalls: 80 });
+
+  assert.deepEqual(resolveTurnLimits(
+    { maxSteps: '999', maxTokens: '999999999', maxToolCalls: '20' },
+    { maxSteps: 8, maxTokens: 50000, maxToolCalls: 40 }
+  ), { maxSteps: 400, tokenBudget: 20000000, maxToolCalls: 20 });
 });
 
 test('configuration integer settings retain valid values and enforce bounds', async (t) => {
