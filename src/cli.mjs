@@ -43,6 +43,7 @@ import { formatApprovalMessage } from './approval-language.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
+import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -358,23 +359,6 @@ async function configureOmniRoute(root = process.cwd()) {
   return result;
 }
 
-async function discoverLocalOllamaModels() {
-  try {
-    const response = await fetch('http://127.0.0.1:11434/api/tags', {
-      method: 'GET',
-      redirect: 'error',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(1500),
-      headers: { accept: 'application/json' }
-    });
-    if (!response.ok) return { available: false, models: [] };
-    const payload = await response.json();
-    const models = Array.isArray(payload && payload.models)
-      ? payload.models.map((item) => String(item && (item.name || item.model) || '').trim()).filter(Boolean).slice(0, 100)
-      : [];
-    return { available: true, models };
-  } catch { return { available: false, models: [] }; }
-}
 
 async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
@@ -421,7 +405,8 @@ async function configureProvider(root = process.cwd(), options = {}) {
           stdout.write('Ollama is running. Installed models: ' + detected.models.join(', ') + '\n');
           model = detected.models[0];
         } else {
-          stdout.write('Ollama was not found, is not running, or has no installed models. Install it from https://ollama.com/download, start it, and install a model with: ollama pull <model-name>\n');
+          stdout.write(detected.message + '\n');
+          stdout.write('Then install a model with: ollama pull <model-name>\n');
           model = '';
         }
       }
