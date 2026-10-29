@@ -4,6 +4,11 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Added a root capability status with Implemented, Actively hardening, Experimental, and Not yet guaranteed sections.
+- Added a source-backed implementation plan and capability matrix for LSP verification, multi-agent audit, cross-session messaging, context controls, deterministic policy, session forking/steering, plugin packaging, investigation artifacts, scoped rules/styles, and remote execution.
+- Audited the root license: the current Apache-2.0 body includes sections 1–9 and the application appendix, so no unsupported rewrite was made.
+- Recorded that historical CI results do not verify the current main head. A root NOTICE is deferred until a project-wide attribution obligation is established.
+
 - Added the first-run model connection choices to the browser/desktop workspace.
 - Added fixed-localhost Ollama model discovery for the first-run flow.
 - Added Electron OS-backed encryption for API keys entered through the desktop provider form, with fail-closed behavior if encryption is unavailable.
