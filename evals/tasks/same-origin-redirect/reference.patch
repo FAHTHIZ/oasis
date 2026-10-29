@@ -1,0 +1,17 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,12 @@
++// Validate redirect destinations before making a follow-up request.
++export function resolveRedirectTarget(baseUrl, location) {
++  try {
++    const base = new URL(baseUrl);
++    const target = new URL(location, base);
++    if (!['http:', 'https:'].includes(base.protocol) || !['http:', 'https:'].includes(target.protocol)) return null;
++    if (target.origin !== base.origin || target.username || target.password) return null;
++    return target.toString();
++  } catch {
++    return null;
++  }
++}

@@ -1,0 +1,18 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,13 @@
++// Normalize untrusted request headers from Web Headers or plain records.
++export function normalizeHeaderValue(headers, name) {
++  if (!headers || typeof headers !== 'object' || typeof name !== 'string') return null;
++  if (typeof headers.get === 'function' && typeof headers.entries === 'function') {
++    const value = headers.get(name);
++    return typeof value === 'string' ? value.trim() : null;
++  }
++  const matches = Object.keys(headers).filter((key) => key.toLowerCase() === name.toLowerCase());
++  if (matches.length > 1) throw new Error('Ambiguous duplicate header names');
++  if (matches.length === 0) return null;
++  const value = headers[matches[0]];
++  return typeof value === 'string' ? value.trim() : null;
++}

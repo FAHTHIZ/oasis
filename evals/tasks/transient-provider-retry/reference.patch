@@ -1,0 +1,13 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,8 @@
++// Decide whether a provider response merits another bounded attempt.
++const TRANSIENT_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
++
++export function shouldRetryStatus(status, attempt, maxAttempts = 3) {
++  return Number.isInteger(status) && TRANSIENT_STATUSES.has(status) &&
++    Number.isInteger(attempt) && attempt >= 1 &&
++    Number.isInteger(maxAttempts) && maxAttempts >= 1 && attempt < maxAttempts;
++}

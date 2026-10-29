@@ -1,0 +1,21 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,16 @@
++// Normalize untrusted query pagination parameters.
++function parseInteger(value) {
++  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : null;
++  if (typeof value !== 'string' || !/^-?\d+$/.test(value.trim())) return null;
++  const parsed = Number(value.trim());
++  return Number.isSafeInteger(parsed) ? parsed : null;
++}
++
++export function normalizePagination(input = {}) {
++  const rawLimit = parseInteger(input && input.limit);
++  const rawOffset = parseInteger(input && input.offset);
++  return {
++    limit: rawLimit === null ? 20 : Math.min(100, Math.max(1, rawLimit)),
++    offset: rawOffset === null || rawOffset < 0 ? 0 : rawOffset
++  };
++}

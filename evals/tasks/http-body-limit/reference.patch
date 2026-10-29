@@ -1,0 +1,22 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,17 @@
++// Bounded request-body parsing for small JSON endpoints.
++export function parseJsonBody(chunks, maxBytes = 16384) {
++  const limit = Number.isSafeInteger(maxBytes) && maxBytes >= 0 ? maxBytes : 16384;
++  let size = 0;
++  const parts = [];
++  for (const chunk of chunks) {
++    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
++    size += bytes.length;
++    if (size > limit) return { statusCode: 413, error: 'Request body too large' };
++    parts.push(bytes);
++  }
++  try {
++    return { statusCode: 200, body: JSON.parse(Buffer.concat(parts).toString('utf8')) };
++  } catch {
++    return { statusCode: 400, error: 'Malformed JSON' };
++  }
++}

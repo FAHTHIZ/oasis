@@ -1,0 +1,20 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,15 @@
++// Validate archive entry names before joining them to an extraction root.
++export function normalizeArchivePath(entryName) {
++  if (typeof entryName !== 'string' || !entryName || entryName.includes('\0')) {
++    throw new Error('Invalid archive entry path');
++  }
++  const slashPath = entryName.replace(/\\/g, '/');
++  if (slashPath.startsWith('/') || /^[a-z]:/i.test(slashPath)) {
++    throw new Error('Absolute archive paths are not allowed');
++  }
++  const parts = slashPath.split('/');
++  if (parts.some((part) => part === '..')) throw new Error('Archive path traversal is not allowed');
++  const normalized = parts.filter((part) => part && part !== '.').join('/');
++  if (!normalized) throw new Error('Empty archive entry path');
++  return normalized;
++}

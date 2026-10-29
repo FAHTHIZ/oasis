@@ -1,0 +1,41 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,36 @@
++// Small in-memory TTL cache with a deterministic clock hook.
++export class TtlCache {
++  constructor({ ttlMs = 1000, maxEntries = 100, now = Date.now } = {}) {
++    this.ttlMs = Number.isFinite(ttlMs) && ttlMs >= 0 ? ttlMs : 1000;
++    this.maxEntries = Number.isInteger(maxEntries) && maxEntries >= 1 ? maxEntries : 100;
++    this.now = typeof now === 'function' ? now : Date.now;
++    this.entries = new Map();
++  }
++
++  set(key, value) {
++    this.entries.delete(key);
++    this.entries.set(key, { value, createdAt: this.now() });
++    this.pruneExpired();
++    while (this.entries.size > this.maxEntries) {
++      this.entries.delete(this.entries.keys().next().value);
++    }
++    return this;
++  }
++
++  get(key) {
++    const entry = this.entries.get(key);
++    if (!entry) return undefined;
++    if (this.now() - entry.createdAt >= this.ttlMs) {
++      this.entries.delete(key);
++      return undefined;
++    }
++    return entry.value;
++  }
++
++  pruneExpired() {
++    const current = this.now();
++    for (const [key, entry] of this.entries) {
++      if (current - entry.createdAt >= this.ttlMs) this.entries.delete(key);
++    }
++  }
++}
