@@ -3,7 +3,9 @@ name: plan
 description: Produce an implementation plan before changing files or running project commands.
 ---
 
-# Purpose
+# Plan skill
+
+## Purpose
 Turn one concrete task into a scoped, verifiable plan without implementing it.
 
 ## Inputs
