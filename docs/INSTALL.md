@@ -12,7 +12,9 @@ The desktop app is packaged by CI for Windows, macOS, and Linux. Open the [lates
 
 **Release signing note:** builds are currently unsigned because signing certificates are not configured. Windows may show SmartScreen; macOS may require you to explicitly open an unverified application. Verify that the download came from the official OASIS GitHub release before proceeding.
 
-On first launch, choose the folder for your project. Then open model settings in the workspace to configure a hosted provider, or use a compatible local model service. OASIS does not include an AI model or an API subscription.
+On first launch, choose the folder for your project. The app will guide you to connect a model with one of three paths: an API key, a locally running OmniRoute gateway, or a model installed through Ollama on this computer. The API-key field is masked; the desktop app uses Electron's OS-backed secure storage and refuses to save a new key if encryption is unavailable. Test the provider before you start a coding task. OASIS does not include an AI model or an API subscription. See the [5-minute quickstart](QUICKSTART.md) for the exact clicks.
+
+OmniRoute setup is not yet a fully automatic one-click installer; the current guide asks you to run `oasis setup` and choose OmniRoute first. That limitation will remain documented until the app can show the exact install plan and ask for approval before executing it.
 
 ## Command-line installation (optional)
 
