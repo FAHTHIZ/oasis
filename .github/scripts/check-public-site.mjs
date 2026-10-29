@@ -24,9 +24,10 @@ const required = [
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
 assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the Pages URL.');
+assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta description must match the approved concise description.');
 assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.svg"'), 'Homepage must point Open Graph at the social preview image.');
 assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.includes('<svg'), 'Social preview must be a 1200x630 SVG image.');
-assert.ok(!/\\bMIT\\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
+assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
 assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/QUICKSTART.md'), 'Homepage must link directly to Install and Quick start.');
 assert.ok(html.includes('The desktop app does not require a separate Node.js or Git installation.'), 'Homepage must state that desktop setup needs no runtime installation.');
