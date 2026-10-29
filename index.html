@@ -219,6 +219,37 @@ body.light #commandPaletteSearch{background:#fff}
 body.light .command-palette-result:hover,body.light .command-palette-result[aria-selected="true"]{background:#e9f3e1;border-color:#b8d3a6}
 @media(max-width:480px){.command-palette-card{padding:17px}.command-palette-results{max-height:52vh}.command-palette-result{padding:11px 10px;min-height:54px}.command-palette-result-category{font-size:8px}}
 
+
+/* Persistent agent run monitor: lifecycle metadata, not prompt or chat content. */
+.agent-monitor-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.agent-monitor-stat{border:1px solid var(--line);border-radius:13px;padding:13px 15px;background:#ffffff04;display:grid;gap:5px}
+.agent-monitor-stat span{font-size:10px;color:var(--muted)}
+.agent-monitor-stat strong{font-size:23px;line-height:1.2;letter-spacing:-.03em}
+.agent-monitor-grid{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.4fr);gap:16px;align-items:start}
+.agent-monitor-runs,.agent-monitor-workers,.agent-monitor-events{display:grid;gap:9px;min-width:0}
+.agent-monitor-run{display:flex;flex-direction:column;align-items:stretch;gap:7px;width:100%;text-align:left;padding:12px;border:1px solid var(--line);border-radius:12px;background:#ffffff02;color:var(--text)}
+.agent-monitor-run:hover,.agent-monitor-run[aria-pressed="true"]{background:#b9ed8210;border-color:#6c9a55}
+.agent-monitor-run-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.agent-monitor-run-title{font-size:12px;font-weight:750;overflow-wrap:anywhere}
+.agent-monitor-run-meta{font-size:10px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.agent-monitor-pills{display:flex;flex-wrap:wrap;gap:6px}
+.agent-monitor-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:7px;background:#ffffff0a;color:var(--muted);font-size:9px;font-weight:750;text-transform:uppercase;letter-spacing:.04em}
+.agent-monitor-pill[data-status="running"],.agent-monitor-pill[data-status="active"]{color:var(--accent);background:#b9ed8216}
+.agent-monitor-pill[data-status="failed"],.agent-monitor-pill[data-status="error"],.agent-monitor-pill[data-status="interrupted"]{color:var(--danger);background:#ff9c8d15}
+.agent-monitor-worker{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:7px;background:#ffffff02}
+.agent-monitor-worker-title{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:12px;font-weight:750}
+.agent-monitor-worker-detail{font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.agent-monitor-events{max-height:560px;overflow:auto;padding-right:3px}
+.agent-monitor-event{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:0 0 13px}
+.agent-monitor-event-dot{position:relative;width:8px;height:8px;border-radius:50%;margin-top:5px;background:var(--accent)}
+.agent-monitor-event:not(:last-child) .agent-monitor-event-dot:after{content:"";position:absolute;top:9px;left:3px;width:1px;height:calc(100% + 8px);min-height:22px;background:var(--line)}
+.agent-monitor-event-content{min-width:0;display:grid;gap:3px}
+.agent-monitor-event-content strong{font-size:11px;font-weight:700;overflow-wrap:anywhere}
+.agent-monitor-event-content small{font-size:10px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.agent-monitor-timeline-heading{margin-top:18px}
+@media(max-width:900px){.agent-monitor-grid{grid-template-columns:1fr}.agent-monitor-events{max-height:420px}}
+@media(max-width:480px){.agent-monitor-stats{gap:7px}.agent-monitor-stat{padding:10px}.agent-monitor-stat strong{font-size:19px}.agent-monitor-stat span{font-size:9px}}
+
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -227,7 +258,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
 <a class="brand" href="#" data-nav="home" aria-label="Oasis home"><span class="brand-mark"><img src="./assets/oasis-icon.svg" alt="" aria-hidden="true"></span><span><span class="brand-name">OASIS</span><span class="brand-sub" style="display:block">Coding Agent Workspace</span></span></a>
 <div class="switcher"><span class="dot"></span><span class="workspace-meta"><span class="workspace-label">YOUR WORKSPACE</span><br><span class="workspace-name">Personal studio</span></span><span aria-hidden="true">⌄</span></div>
 <div><div class="nav-label">Workspace</div><nav class="nav">
-<button class="nav-btn active" data-nav="home"><span class="nav-icon">⌂</span><span>Overview</span></button><button class="nav-btn" data-nav="projects"><span class="nav-icon">▦</span><span>Projects</span><span class="nav-count" id="projectCount">0</span></button><button class="nav-btn" data-nav="tasks"><span class="nav-icon">✓</span><span>Tasks</span><span class="nav-count" id="openTaskCount">0</span></button><button class="nav-btn" data-nav="notes"><span class="nav-icon">≡</span><span>Notes</span></button><button class="nav-btn" data-nav="agent"><span class="nav-icon">✦</span><span>Agent</span><span class="nav-count">LIVE</span></button><button class="nav-btn" data-nav="extensions"><span class="nav-icon">⬡</span><span>Extensions</span></button><button class="nav-btn" data-nav="integrations"><span class="nav-icon">⛓</span><span>Integrations</span></button>
+<button class="nav-btn active" data-nav="home"><span class="nav-icon">⌂</span><span>Overview</span></button><button class="nav-btn" data-nav="projects"><span class="nav-icon">▦</span><span>Projects</span><span class="nav-count" id="projectCount">0</span></button><button class="nav-btn" data-nav="tasks"><span class="nav-icon">✓</span><span>Tasks</span><span class="nav-count" id="openTaskCount">0</span></button><button class="nav-btn" data-nav="notes"><span class="nav-icon">≡</span><span>Notes</span></button><button class="nav-btn" data-nav="agent"><span class="nav-icon">✦</span><span>Agent</span><span class="nav-count">LIVE</span></button><button class="nav-btn" data-nav="monitor"><span class="nav-icon">◉</span><span>Run monitor</span></button><button class="nav-btn" data-nav="extensions"><span class="nav-icon">⬡</span><span>Extensions</span></button><button class="nav-btn" data-nav="integrations"><span class="nav-icon">⛓</span><span>Integrations</span></button>
 </nav></div>
 <div class="sidebar-bottom"><div class="local-card"><div class="local-title"><span class="dot"></span>Saved on this device</div><p>Your workspace stays in this browser. Export a backup before clearing browser data or switching devices.</p></div><div class="sidebar-foot">OASIS OSS · A little more room to think.</div></div>
 </aside>
@@ -355,6 +386,15 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
 
 </section>
  
+<section class="view" id="view-monitor">
+  <div class="intro-row"><div><div class="eyebrow">PARALLEL WORK, VISIBLE</div><h1 class="page-title">Agent run monitor</h1><p class="page-subtitle">Inspect worker activity, team coordination, run outcomes, and saved events. This view observes work; it never auto-merges branches.</p></div><button class="btn btn-secondary" id="agentMonitorRefreshBtn" type="button">↻ Refresh</button></div>
+  <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Runs loaded</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams observed</span><strong>—</strong></div></div>
+  <div class="agent-monitor-grid">
+    <section class="panel panel-pad"><div class="section-head"><div><h2>Recent runs</h2><div class="section-sub" id="agentMonitorRunStatus">Connect the runtime to inspect saved runs.</div></div></div><div class="agent-monitor-runs" id="agentMonitorRunList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div></section>
+    <section class="panel panel-pad"><div class="section-head"><div><h2 id="agentMonitorDetailTitle">Worker activity</h2><div class="section-sub" id="agentMonitorDetailMeta">Select a run to inspect its workers and event timeline.</div></div></div><div class="agent-monitor-workers" id="agentMonitorWorkers"><div class="cloud-run-empty">No run selected.</div></div><div class="section-head agent-monitor-timeline-heading"><div><h2>Activity timeline</h2><div class="section-sub">Lifecycle events only; private prompts and chat content are not shown.</div></div></div><div class="agent-monitor-events" id="agentMonitorEvents"><div class="cloud-run-empty">Select a run to inspect saved worker activity.</div></div></section>
+  </div>
+</section>
+
 <section class="view" id="view-extensions">
   <div class="intro-row"><div><div class="eyebrow">EXTEND THE AGENT</div><h1 class="page-title">Bring new specialists into Oasis.</h1><p class="page-subtitle">Inspect agent-tooling, model-CLI, and portable Agent Skills repositories. Oasis identifies reusable instructions, integrations, and components, and reports where a native adapter is still required.</p></div></div>
   <div class="extension-hero"><div><div class="section-kicker">IMPORT FROM GITHUB</div><h2>One link. A new capability.</h2><p>Paste a repository such as msitarzewski/agency-agents. Oasis inspects the pinned commit, finds Markdown agent or skill prompts, and shows what it plans to import before making changes.</p></div><div class="workspace-banner-icon" aria-hidden="true">⬡</div></div>
