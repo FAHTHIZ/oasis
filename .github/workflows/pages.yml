@@ -10,9 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  # Keep default-branch validation/deployment running to completion and keep PRs
-  # in separate concurrency groups so they cannot cancel main.
-  group: oasis-public-launch-${{ github.ref }}
+  # Verify each main SHA independently; PR updates reuse their PR-number group.
+  group: oasis-public-launch-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
