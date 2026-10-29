@@ -2,7 +2,7 @@
 
 **Status checked:** October 29, 2026  
 **Code snapshot audited before the latest main changes:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca)  
-**Last fully recorded CI baseline:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77). Later `main` commits need their own current-head checks.  
+**Latest fully verified feature baseline:** [`2636739b7867c5d160de3cab5547d0e7b152345d`](https://github.com/FAHTHIZ/oasis/commit/2636739b7867c5d160de3cab5547d0e7b152345d), [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789): 584 tests, 22 fixtures, Node 22/24/26, Linux PTY and browser E2E passed. Subsequent public-fetch/federated-search commits still need their own completed main-head checks.  
 **Purpose:** prioritize OASIS-owned reliability, coding quality, safety, and release readiness based on what is implemented and verifiable.
 
 ## Decision
@@ -13,11 +13,11 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-The last fully recorded baseline (`268862c`) passed all three required workflows: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [Windows/macOS/Linux desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). This is historical evidence. A provider-setup preservation fix and regression tests have since been committed directly to `main`; verify the current-head workflows before release. The next step remains measurable coding outcomes and end-to-end reliability, not feature-count expansion.
+The isolated-worktree and durable task-history changes passed [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789): 584 tests, 22/22 fixtures, Node 22/24/26, PTY and browser E2E. This evidence is for commit `2636739`, not the later public-fetch and federated-search commits; the latter require a new completed current-head run. Keep the priorities below focused on measurable coding outcomes and end-to-end reliability, not feature count.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
-| Current Quality Checks | [Run 40807290624](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) passed: 573 tests, Node 22/24/26, 21 validated fixtures, Linux PTY smoke and Linux Chromium browser smoke | The comparator code revision passed the automated quality matrix. |
+| Latest verified feature Quality Checks | [Run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789) passed: 584 tests, Node 22/24/26, 22 validated fixtures, Linux PTY smoke and browser E2E | The isolated-worktree feature passed; subsequent research/search commits are newer and require verification. |
 | Current desktop build | [Run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. | Platform packaging passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
 | Current publishing validation | [Run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed | The repository/public-site checks passed on comparator code revision `268862c`. |
 
