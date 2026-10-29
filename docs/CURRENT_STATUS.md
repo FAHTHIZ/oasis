@@ -106,7 +106,7 @@ Prioritized by the risk they pose to release confidence and everyday usefulnessâ
 3. **Validate product journeys across platforms.** The Linux/Node 22 PTY smoke and Linux Chromium chat smoke are useful, but they do not prove native PTY cleanup on Windows/macOS or first-run/update/uninstall behavior for every desktop installer. Termux remains experimental for PTY.
 4. **Finish multi-agent lifecycle visibility.** Teams, leases, activity events, bounded worktree dispatch, and tmux panes exist. The remaining gaps are a visual agent/run monitor, durable pause/resume across process restarts, cross-session messaging, and conflict-aware integration. Avoid claiming self-coordinating persistent teams.
 5. **Only then expand remote surfaces.** Remote/mobile/hosted sessions need authenticated identity, trusted-device management, workspace isolation, execution policy, reconnect/recovery, and audit trailsâ€”not simply a network-accessible web server.
-6. **Continue platform/safety work.** No Windows OS sandbox exists; the optional Linux/macOS sandbox is off by default. A native Gemini adapter and JetBrains plugin remain gaps. Desktop builds currently succeed but are unsigned.
+6. **Continue platform/safety work.** No Windows OS sandbox exists; the optional Linux/macOS sandbox is off by default. The macOS Keychain write path still passes a secret as a subprocess argument, Windows fallback-file ACL semantics need explicit verification, and temporary archive cleanup is not guaranteed after crashes. A native Gemini adapter and JetBrains plugin remain gaps. Desktop builds pass but are unsigned.
 
 See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and acceptance criteria.
 
