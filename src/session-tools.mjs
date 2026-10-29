@@ -35,11 +35,13 @@ export const SESSION_TOOL_DEFINITIONS = [
     { name: { type: 'string', description: 'Short label for the new worktree/branch.' }, path: { type: 'string', description: 'Existing worktree to enter instead of creating one.' } }),
   fn('exit_worktree', 'Leave the worktree entered with enter_worktree and return to the original directory. action "keep" leaves the worktree and branch; "remove" deletes them (refused when there are uncommitted changes or new commits unless discard_changes is true).',
     { action: { type: 'string', enum: ['keep', 'remove'] }, discard_changes: { type: 'boolean' } }, ['action']),
+  fn('schedule_wakeup', 'Only during a self-paced /loop: choose when the loop runs its prompt again. Pick delay_seconds from what you are waiting on (60 to 3600; short for fast-moving work like a build, long for slow external events). Set stop to true when the task is done or no longer needs checking, which ends the loop.',
+    { delay_seconds: { type: 'integer', minimum: 60, maximum: 3600 }, reason: { type: 'string', description: 'One line shown to the user, e.g. "CI usually takes ~8 minutes".' }, stop: { type: 'boolean' } }, ['reason']),
   ...SHARED_TASK_TOOL_DEFINITIONS
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
+export const SESSION_READ_ONLY_TOOLS = ['schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
@@ -262,6 +264,7 @@ export async function runSessionTool(session, name, args, options = {}) {
     }
     case 'monitor_command': return monitorCommand(session, args, options);
     case 'enter_plan_mode': return enterPlanMode(session, args);
+    case 'schedule_wakeup': return scheduleWakeup(session, args);
     case 'enter_worktree': return enterWorktree(session, args, options);
     case 'exit_worktree': return exitWorktree(session, args, options);
     case 'notify': return notifyUser(args, options.notify || {});
@@ -331,4 +334,19 @@ async function exitWorktree(session, args = {}, options = {}) {
   session.root = state.originalRoot;
   session.worktreeSession = null;
   return { returned_to: session.root, message: note + ' Working directory is back to ' + session.root + '.' };
+}
+
+// ScheduleWakeup: the model paces a self-paced /loop. The loop runner reads session.loopWakeup.
+export function scheduleWakeup(session, args) {
+  if (!session.selfPacedLoop) throw new Error('schedule_wakeup only works inside a self-paced /loop (started without an interval).');
+  const reason = String(args.reason || '').trim().slice(0, 300);
+  if (args.stop === true) {
+    session.loopWakeup = { stop: true, reason };
+    return { stopped: true, message: 'The loop will end after this run.' + (reason ? ' Reason: ' + reason : '') };
+  }
+  const seconds = Math.round(Number(args.delay_seconds));
+  if (!Number.isFinite(seconds)) throw new Error('delay_seconds is required unless stop is true.');
+  const clamped = Math.min(3600, Math.max(60, seconds));
+  session.loopWakeup = { delayMs: clamped * 1000, reason };
+  return { delay_seconds: clamped, message: 'Next run in ' + (clamped % 60 === 0 ? clamped / 60 + 'm' : clamped + 's') + '.' + (clamped !== seconds ? ' (clamped to 60-3600 seconds)' : '') };
 }

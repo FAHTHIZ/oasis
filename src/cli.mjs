@@ -1428,10 +1428,11 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
     }
     session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
-  } else if (path.resolve(session.root) !== path.resolve(root)) {
+  } else if (path.resolve(session.worktreeSession ? session.worktreeSession.originalRoot : session.root) !== path.resolve(root)) {
     closeSession(session);
     session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
   }
+  if (modeOptions.selfPacedLoop !== undefined) session.selfPacedLoop = modeOptions.selfPacedLoop;
   // MCP servers can ask the user for input mid-call (elicitation); answer in the terminal.
   if (stdin.isTTY && stdout.isTTY && !session.elicit) {
     session.elicit = async (request) => {
@@ -1760,14 +1761,24 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
         const custom = await resolveCustomCommand(root, prompt, await customCommandContext(root)).catch(() => null);
         if (custom) { reportInlineShell(custom.shell); prompt = custom.prompt; loopOptions = customRunOptions(custom); }
       }
+      if (loop.selfPaced) {
+        loopOptions = { ...loopOptions, selfPacedLoop: true };
+        if (session) session.loopWakeup = null;
+        if (run === 1) prompt += '\n\n(This is a self-paced loop. After this run, call schedule_wakeup with delay_seconds for when to check again and a short reason, or with stop: true once the task is done or no longer needs checking.)';
+      }
       session = await runPrompt(prompt, root, autoApprove, session, persistence, loopOptions);
       persistence.resumeId = null;
+      const wakeup = loop.selfPaced && session ? session.loopWakeup : null;
+      if (session && loop.selfPaced) session.loopWakeup = null;
+      if (wakeup && wakeup.stop) { stdout.write('[loop] The model ended the loop' + (wakeup.reason ? ': ' + wakeup.reason : '.') + '\n'); break; }
       if (stopped || (loop.times && run >= loop.times)) break;
-      stdout.write('[loop] Next run in ' + formatInterval(loop.intervalMs) + '. Press Ctrl+C to stop.\n');
-      await new Promise((resolve) => { const timer = setTimeout(resolve, loop.intervalMs); wake = () => { clearTimeout(timer); resolve(); }; });
+      const delayMs = wakeup && wakeup.delayMs ? wakeup.delayMs : loop.intervalMs;
+      stdout.write('[loop] Next run in ' + formatInterval(delayMs) + (wakeup && wakeup.reason ? ' (' + wakeup.reason + ')' : loop.selfPaced ? ' (no schedule_wakeup call; default)' : '') + '. Press Ctrl+C to stop.\n');
+      await new Promise((resolve) => { const timer = setTimeout(resolve, Number(process.env.OASIS_LOOP_DELAY_SCALE ? delayMs * Number(process.env.OASIS_LOOP_DELAY_SCALE) : delayMs)); wake = () => { clearTimeout(timer); resolve(); }; });
       wake = null;
     }
   } finally { process.removeListener('SIGINT', onStop); }
+  if (session) session.selfPacedLoop = false;
   stdout.write('[loop] Stopped.\n');
   return session;
 }
