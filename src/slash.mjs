@@ -692,7 +692,7 @@ export async function runBuiltinCommand(name, argument, state) {
         if (session && session.toolDefinitions) session.pluginReloadRequired = true;
         return { output: 'Uninstalled native plugin ' + result.name + '. Open sessions already running its hooks/MCP clients should be closed before continuing.' };
       }
-      return { output: 'Usage: /plugin-package [list|validate LOCAL-PATH|install LOCAL-PATH --grant CAPABILITIES|update LOCAL-PATH --grant CAPABILITIES --accept-permission-diff|uninstall NAME]' };
+      return { output: 'Usage: /plugin-package [list|validate SOURCE|install SOURCE --grant CAPABILITIES|update SOURCE --grant CAPABILITIES --accept-permission-diff|uninstall NAME]. SOURCE can be a local folder or HTTPS/SSH/file Git URL, optionally followed by #branch-or-tag.' };
     }
     case 'plugin':
     case 'plugins': {
