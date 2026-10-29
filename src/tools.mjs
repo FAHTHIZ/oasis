@@ -7,6 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
@@ -335,7 +336,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let settled = false;
     let killTimer = null;
     const launch = wrapCommand(command, args, sandbox, root);
-    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     const append = (target, chunk) => {
       if (target === 'stdout') stdout = (stdout + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
       else stderr = (stderr + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
@@ -345,16 +346,24 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
       if (killTimer) clearTimeout(killTimer);
       if (options.signal) options.signal.removeEventListener('abort', onAbort);
     };
+    const terminateTree = () => {
+      signalProcessTree(child, 'SIGTERM');
+      if (killTimer) return;
+      killTimer = setTimeout(() => { if (!settled) signalProcessTree(child, 'SIGKILL'); }, 1500);
+      killTimer.unref?.();
+    };
     const onAbort = () => {
       if (settled) return;
       cancelled = true;
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 1500);
-      killTimer.unref?.();
+      terminateTree();
     };
     child.stdout.on('data', (chunk) => append('stdout', chunk));
     child.stderr.on('data', (chunk) => append('stderr', chunk));
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, timeoutSeconds * 1000);
+    const timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      terminateTree();
+    }, timeoutSeconds * 1000);
     if (options.signal) {
       if (options.signal.aborted) onAbort();
       else options.signal.addEventListener('abort', onAbort, { once: true });
@@ -386,21 +395,30 @@ async function runInstallPlan(plan, options) {
   return await new Promise((resolve) => {
     let settled = false;
     let cancelled = false;
+    let timedOut = false;
     let killTimer = null;
-    const child = spawn(plan.command, plan.args, { cwd: options.root, env, shell: false, windowsHide: true, stdio: 'inherit' });
+    const child = spawn(plan.command, plan.args, { cwd: options.root, env, shell: false, windowsHide: true, stdio: 'inherit', ...processTreeSpawnOptions() });
     const cleanup = () => {
       clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       if (options.signal) options.signal.removeEventListener('abort', onAbort);
     };
+    const terminateTree = () => {
+      signalProcessTree(child, 'SIGTERM');
+      if (killTimer) return;
+      killTimer = setTimeout(() => { if (!settled) signalProcessTree(child, 'SIGKILL'); }, 1500);
+      killTimer.unref?.();
+    };
     const onAbort = () => {
       if (settled) return;
       cancelled = true;
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => { if (!settled) child.kill('SIGKILL'); }, 1500);
-      killTimer.unref?.();
+      terminateTree();
     };
-    const timer = setTimeout(() => { child.kill('SIGTERM'); }, 20 * 60 * 1000);
+    const timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      terminateTree();
+    }, 20 * 60 * 1000);
     if (options.signal) {
       if (options.signal.aborted) onAbort();
       else options.signal.addEventListener('abort', onAbort, { once: true });
@@ -408,12 +426,12 @@ async function runInstallPlan(plan, options) {
     child.on('error', (error) => {
       if (settled) return;
       settled = true; cleanup();
-      resolve({ approved: true, cancelled, plan, exitCode: null, error: error.message });
+      resolve({ approved: true, cancelled, timedOut, plan, exitCode: null, error: error.message });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true; cleanup();
-      resolve({ approved: true, cancelled, plan, exitCode: code, signal });
+      resolve({ approved: true, cancelled, timedOut, plan, exitCode: code, signal });
     });
   });
 }
@@ -833,8 +851,10 @@ function waitOpenHandsPoll(milliseconds, signal) {
   }
   return new Promise((resolve, reject) => {
     let settled = false;
+    let killTimer = null;
     const cleanup = () => {
       clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       if (signal) signal.removeEventListener('abort', onAbort);
     };
     const finish = () => {
@@ -1058,11 +1078,17 @@ function runExternalSkillsCommand(root, cliArgs, env, signal) {
       cleanup();
       resolve(value);
     };
+    const terminateTree = () => {
+      signalProcessTree(child, 'SIGTERM');
+      if (killTimer) return;
+      killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1500);
+      killTimer.unref?.();
+    };
     const onAbort = () => {
-      try { child?.kill('SIGTERM'); } catch {}
+      terminateTree();
     };
     try {
-      child = spawn(command, childArgs, { cwd: root, env: cleanEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(command, childArgs, { cwd: root, env: cleanEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
       child.stdout.on('data', append);
       child.stderr.on('data', append);
     } catch (error) {
@@ -1071,7 +1097,7 @@ function runExternalSkillsCommand(root, cliArgs, env, signal) {
     }
     timer = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGTERM'); } catch {}
+      terminateTree();
     }, 8 * 60 * 1000);
     timer.unref?.();
     if (signal) {
