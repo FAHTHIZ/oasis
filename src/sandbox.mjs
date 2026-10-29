@@ -25,23 +25,25 @@ function pathContains(parent, child) {
   return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
 }
 
-function pathsOverlap(left, right) {
-  return pathContains(left, right) || pathContains(right, left);
-}
-
-function collectSensitivePaths(root, writable, env = process.env) {
+function collectSensitivePaths(explicitWritable = [], env = process.env) {
   const home = path.resolve(env.HOME || os.homedir());
   const configPath = path.resolve(env.OASIS_CONFIG_DIR || env.OASIS_HOME || path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'oasis'));
   const candidates = [...SENSITIVE_HOME_PATHS.map((item) => path.join(home, item)), configPath];
-  const writablePaths = [path.resolve(root || process.cwd()), ...writable.map((item) => path.resolve(item))];
+  // Do not treat the workspace root itself as an explicit credential-access grant.
+  // A workspace can be the home directory; its broad write mount must not disable
+  // masking of ~/.ssh, ~/.aws, and other credential locations.
+  const explicitlyWritablePaths = explicitWritable.map((item) => path.resolve(item));
   const masked = [];
   for (const candidate of candidates) {
     let real;
     let info;
     try { real = realpathSync(candidate); info = statSync(real); } catch { continue; }
     const type = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null;
-    if (!type || writablePaths.some((item) => pathsOverlap(item, real))) continue;
-    if (masked.some((item) => pathsOverlap(item.path, real))) continue;
+    // Only an explicit grant that contains the sensitive path can opt it out of
+    // masking. A writable child inside a credential directory does not expose the
+    // entire credential directory.
+    if (!type || explicitlyWritablePaths.some((item) => pathContains(item, real))) continue;
+    if (masked.some((item) => pathContains(item.path, real))) continue;
     masked.push({ path: real, type });
   }
   return masked;
@@ -83,7 +85,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
   const probe = detectSandbox(force);
-  const writable = [root, ...((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir))];
+  const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
+  const writable = [root, ...additionalWritable];
   return {
     enabled: true,
     available: probe.available,
@@ -92,7 +95,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
     network: Boolean(settings.sandbox.network),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
-    maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(root, writable),
+    maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(additionalWritable),
     writable
   };
 }
@@ -125,11 +128,14 @@ export function wrapCommand(command, args, sandbox, cwd) {
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
+    // Apply writable workspace mounts first, then overlay credential masks. If the
+    // workspace is the user's home directory, the later masks must remain visible
+    // instead of being hidden underneath the broad writable bind.
+    for (const dir of sandbox.writable) wrapped.push('--bind', dir, dir);
     for (const item of sandbox.maskedPaths || []) {
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
       else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);
     }
-    for (const dir of sandbox.writable) wrapped.push('--bind', dir, dir);
     if (!sandbox.network) wrapped.push('--unshare-net');
     wrapped.push('--chdir', cwd, '--', command, ...args);
     return { command: 'bwrap', args: wrapped };
