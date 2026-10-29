@@ -2,10 +2,12 @@
   <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish. A panoramic lime-green portal and reflective digital workspace for an open-source, local-first AI coding agent." width="100%" />
 </p>
 
-<p align="center"><a href="https://fahthiz.github.io/oasis/">Homepage ↗</a> · <a href="docs/INSTALL.md">Install</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
+<p align="center"><a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download the desktop app ↗</a> · <a href="docs/QUICKSTART.md">5-minute quickstart</a> · <a href="docs/INSTALL.md">Install</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
+  <a href="https://img.shields.io/badge/status-alpha-orange"><img src="https://img.shields.io/badge/status-alpha-orange" alt="Alpha software" /></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img src="https://img.shields.io/badge/download-desktop%20app-9BFF55?style=flat" alt="Download the desktop app" /></a>
   <a href="https://fahthiz.github.io/oasis/"><img src="https://img.shields.io/badge/homepage-OASIS-9BFF55?style=flat" alt="OASIS public homepage" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22 or newer" /></a>
@@ -17,7 +19,9 @@ For the current implementation inventory and explicit limitations, see [Current 
 
 ## Get started
 
-**Requirements:** Node.js 22 or newer. Git is not required by the archive-based install; see [the install guide](docs/INSTALL.md) for native PTY prerequisites and current platform caveats.
+**Desktop (recommended for normal users):** [Download the latest app](https://github.com/FAHTHIZ/oasis/releases/latest), open it, choose your project folder, and follow the model setup screen. No Node.js or Git install is needed for the desktop app. See the [5-minute quickstart](docs/QUICKSTART.md).
+
+**Terminal (for developers):** Node.js 22 or newer. Git is not required by the archive-based install; see [the install guide](docs/INSTALL.md) for native PTY prerequisites and current platform caveats.
 
 ```bash
 npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.tar.gz
@@ -63,7 +67,7 @@ VS Code, Cursor and Windsurf integrate via `oasis ide install` (in-editor chat p
 
 ## Documentation
 
-[**Implementation audit & external capability benchmark**](docs/CLAUDE_CODE_CODE_LEVEL_COMPARISON.md) · [**Benchmark audit**](docs/BENCHMARK_AUDIT.md) · [**Next milestone**](docs/NEXT_MILESTONE.md) · [**Security/reliability audit**](docs/SECURITY_RELIABILITY_AUDIT.md) · [**Detailed user guide**](docs/USER_GUIDE.md) · [Install guide](docs/INSTALL.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Product readiness](docs/PRODUCT_READINESS.md) · [Capability gates](docs/CAPABILITY_GATES.md) · [GitHub Action](docs/github-action.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
+[**Implementation audit & external capability benchmark**](docs/CLAUDE_CODE_CODE_LEVEL_COMPARISON.md) · [**Benchmark audit**](docs/BENCHMARK_AUDIT.md) · [**Next milestone**](docs/NEXT_MILESTONE.md) · [**Security/reliability audit**](docs/SECURITY_RELIABILITY_AUDIT.md) · [**Detailed user guide**](docs/USER_GUIDE.md) · [5-minute quickstart](docs/QUICKSTART.md) · [Privacy](docs/PRIVACY.md) · [Dependency policy](docs/DEPENDENCIES.md) · [Changelog](CHANGELOG.md) · [Install guide](docs/INSTALL.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Product readiness](docs/PRODUCT_READINESS.md) · [Capability gates](docs/CAPABILITY_GATES.md) · [GitHub Action](docs/github-action.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 
 ## Web research engine
 
