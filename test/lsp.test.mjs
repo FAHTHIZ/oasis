@@ -19,7 +19,7 @@ function handle(m) {
   if (m.method === 'initialize') return send({ jsonrpc: '2.0', id: m.id, result: { capabilities: { definitionProvider: true, referencesProvider: true, hoverProvider: true, documentSymbolProvider: true, workspaceSymbolProvider: true } } });
   if (m.method === 'textDocument/didOpen' || m.method === 'textDocument/didChange') {
     const uri = p.textDocument.uri; const text = m.method === 'textDocument/didOpen' ? p.textDocument.text : p.contentChanges[0].text; docs.set(uri, text);
-    const diagnostics = []; text.split('\\n').forEach((line, i) => {
+    const diagnostics = []; text.split('\n').forEach((line, i) => {
       const c = line.indexOf('BAD');
       if (c >= 0) diagnostics.push({ range: { start: { line: i, character: c }, end: { line: i, character: c + 3 } }, severity: 1, message: 'BAD is not allowed', code: 'X1', source: 'fake' });
       const badType = line.indexOf('"bad"');
