@@ -658,6 +658,25 @@ test('public URL fetch blocks loopback and private network addresses', async () 
   await assert.rejects(executeTool('fetch_url', { url: 'http://localhost/' }, { root: process.cwd() }), /Local and metadata/);
 });
 
+test('public URL fetch rejects additional IPv4 and IPv6 special-purpose addresses', async () => {
+  for (const url of [
+    'http://192.0.0.2/',
+    'http://192.0.2.1/',
+    'http://192.88.99.1/',
+    'http://198.51.100.2/',
+    'http://203.0.113.9/',
+    'http://[fec0::1]/',
+    'http://[2001:db8::1]/',
+    'http://[2002:c000:0201::1]/'
+  ]) {
+    await assert.rejects(
+      executeTool('fetch_url', { url }, { root: process.cwd() }),
+      /Private-network addresses are blocked/,
+      'expected special-purpose address to be rejected: ' + url
+    );
+  }
+});
+
 test('public URL fetch blocks IPv4-mapped IPv6 addresses that resolve to private IPv4 ranges', async () => {
   for (const url of [
     'http://[::ffff:7f00:1]/',
