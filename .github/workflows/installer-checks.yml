@@ -6,13 +6,13 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: oasis-installers-${{ github.ref }
+  group: oasis-installers-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   unix-installer:
-    name: Unix installer (${{ matrix.os })
-    runs-on: ${{ matrix.os }
+    name: Unix installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
