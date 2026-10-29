@@ -18,6 +18,11 @@ function friendlyStartError(error, command = 'oasis') {
   return 'OASIS could not start using ' + String(command || 'oasis') + '. ' + detail + '. Check the command setting and run `oasis doctor` in a terminal for help.';
 }
 
+function isPotentiallyDestructiveAction(text) {
+  // This is a conservative UI warning, not a replacement for the actual approval gate.
+  return /\\brm\\s+-[a-z]*r[a-z]*\\b|\\b(delete|remove|overwrite|format|truncate)\\b|\\bdrop\\s+table\\b/i.test(String(text || ''));
+}
+
 function splitCommand(command) {
   // "node /path/to/cli.mjs" or "oasis": the first word is the program, the rest are arguments.
   const parts = String(command || 'oasis').match(/"[^"]*"|'[^']*'|\S+/g) || ['oasis'];
@@ -164,4 +169,4 @@ function translateEvent(event, state = {}) {
   return out;
 }
 
-module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, BASE_ARGS };
+module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, isPotentiallyDestructiveAction, BASE_ARGS };
