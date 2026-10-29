@@ -25,7 +25,7 @@ OASIS is a feature-rich, local-first coding-agent project rather than a document
 
 The Ctrl+K palette searches built-in/custom commands, skills, settings and recent saved sessions. Selecting an entry places the command into the prompt for review; it does not auto-execute. The browser E2E regression suite now exercises denial of a risky delete and cancellation before a command executes.
 
-The 33-item evaluation suite is a regression/smoke suite, not a representative repository-level coding benchmark. CI coverage is not a penetration test or proof of universal platform support. The separate phone-safety brief required by the product brief was not present in the available conversation/library files, so phone pairing remains unimplemented.
+The 33-item evaluation suite is a regression/smoke suite, not a representative repository-level coding benchmark. CI coverage is not a penetration test or proof of universal platform support. The design-only phone connection threat note is now present at [PHONE_CONNECT_SECURITY.md](PHONE_CONNECT_SECURITY.md), but phone pairing remains unimplemented and must not be started until the user has read the threat note.
 
 ## Verified repository and CI snapshot
 
