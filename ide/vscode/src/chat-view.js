@@ -3,7 +3,7 @@
 'use strict';
 const vscode = require('vscode');
 const crypto = require('node:crypto');
-const { OasisChatProcess, isPotentiallyDestructiveAction } = require('./chat-process.js');
+const { OasisChatProcess, friendlyExitError, isPotentiallyDestructiveAction } = require('./chat-process.js');
 
 class ChatController {
   constructor({ getCommand, getCwd, getEnv }) {
@@ -26,7 +26,7 @@ class ChatController {
     });
     let stderrTail = '';
     proc.on('stderr', (chunk) => { stderrTail = (stderrTail + chunk).slice(-4000); });
-    proc.on('ui', (message) => { if (message.kind === 'exit' && message.code && stderrTail.trim()) this.post({ kind: 'error', text: stderrTail.trim().split('\n').slice(-6).join('\n') }); });
+    proc.on('ui', (message) => { if (message.kind === 'exit' && message.code) this.post({ kind: 'error', text: friendlyExitError(message.code, stderrTail) }); });
     this.process = proc;
     proc.start();
     return proc;
@@ -175,7 +175,7 @@ function render(m) {
     }
     case 'turnEnd': endLive(); if (m.isError && m.text) add('error', esc(m.text)); break;
     case 'busy': stopBtn.hidden = !m.busy; if (!m.busy && statusEl.textContent === 'Working…') statusEl.textContent = 'Ready'; if (m.busy) statusEl.textContent = 'Working…'; break;
-    case 'exit': endLive(); stopBtn.hidden = true; if (m.code) add('error', 'OASIS exited with code ' + m.code + '.'); break;
+    case 'exit': endLive(); stopBtn.hidden = true; if (m.code) add('error', 'OASIS stopped with exit code ' + m.code + '. Run `oasis doctor` in a terminal for help.'); break;
     case 'reset': log.innerHTML = ''; endLive(); statusEl.textContent = 'Ready'; stopBtn.hidden = true; break;
     case 'insert': input.value += (input.value && !input.value.endsWith(' ') ? ' ' : '') + m.text; input.focus(); break;
     case 'replay': for (const item of m.items || []) render(item); break;
