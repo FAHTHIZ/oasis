@@ -59,6 +59,10 @@ The current main increment adds the requested built-in output styles and /style 
 
 Cross-session message storage is now connected to /notify and /inbox, and agent-turn lifecycle updates the active-session registry to distinguish busy from idle targets. Inbox messages render as untrusted data, never as agent prompts; message delivery does not execute commands. Focused tests are being added. These changes remain **implemented but not yet verified on current HEAD** until tests pass on the exact commit.
 
+## Implemented on main; verification pending
+
+The artifact increment adds an auto-refreshing local-only investigation page, structured event storage, secret redaction, lifecycle commands and automatic task/command/file/test/error capture for the active session. Focused tests cover creation, updates, redaction and cleanup. The artifact and command behavior remains unverified until CI passes on the exact current-main commit.
+
 ## Current-head verification plan
 
 Run the repository quality workflow on the exact candidate commit, then inspect focused results for each area below. Do not mark a capability verified if a required test is missing, skipped, or failing.

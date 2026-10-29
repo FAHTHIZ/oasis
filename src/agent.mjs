@@ -3089,6 +3089,9 @@ async function executeOneCallRaw(session, call, context, options) {
       if (result && typeof result === 'object') result = { ...result, lspVerification };
       else result = { output: String(result ?? ''), lspVerification };
     }
+    if (!options.isSubagent && session.activeArtifact) {
+      try { const { recordArtifactToolEvent } = await import('./artifacts.mjs'); await recordArtifactToolEvent(session.root, session.activeArtifact, name, args, result, { env: options.env || process.env }); } catch {}
+    }
     if (debugEnabled('tools')) debugLog('tools', name + ' ' + (result && result.error ? 'error: ' + String(result.error).slice(0, 300) : 'ok'), args);
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
     if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;
@@ -3222,6 +3225,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (!options.isSubagent) session.currentTurnId = randomUUID();
   const request = String(prompt || '').trim();
   if (!request) throw new Error('Enter a task or question.');
+  if (!options.isSubagent && session.activeArtifact) {
+    try { const { recordArtifactEvent } = await import('./artifacts.mjs'); await recordArtifactEvent(session.root, session.activeArtifact, 'timeline', 'Task started: ' + request, { env: options.env || process.env }); } catch {}
+  }
   throwIfCancelled(options.signal);
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
