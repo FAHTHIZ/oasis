@@ -39,7 +39,7 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
-import { formatApprovalMessage } from './approval-language.mjs';
+import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
@@ -1977,6 +1977,36 @@ async function readMainInput(root, session, state) {
     onReady: (submit) => { IDLE_SUBMIT = submit; setTimeout(() => wakeIfPending(session), 0); },
     onDoubleEscape: () => '/rewind',
     onPasteImage: () => pasteClipboardImage(root),
+    onCommandPalette: async () => {
+      const commands = await interactiveCommandList(root);
+      const commandItems = commands.map((item) => ({
+        label: '/' + String(item.name || '').slice(0, 100),
+        description: redactApprovalSecrets(String(item.description || '')).slice(0, 180),
+        value: '/' + String(item.name || '').slice(0, 100),
+        category: Object.hasOwn(BUILTIN_COMMANDS, item.name) ? 'Commands' : 'Custom / skill'
+      })).filter((item) => item.label.length > 1);
+      const settingsItems = [
+        { label: 'Provider setup', description: 'Connect or change your model provider', value: '/setup', category: 'Settings' },
+        { label: 'Model for this session', description: 'View or switch the current model', value: '/model', category: 'Settings' },
+        { label: 'Permission mode', description: 'Choose Ask, Plan, Auto, or edit mode', value: '/mode', category: 'Settings' },
+        { label: 'Permission rules', description: 'Review allow, ask, and deny rules', value: '/permissions', category: 'Settings' },
+        { label: 'General settings', description: 'Open the configuration panel', value: '/config', category: 'Settings' },
+        { label: 'Keyboard shortcuts', description: 'Show the shortcut cheat sheet', value: '/keys', category: 'Settings' },
+        { label: 'Appearance', description: 'Change the prompt colour', value: '/color', category: 'Settings' }
+      ];
+      const recentItems = (await listSessions(root, { env: process.env }).catch(() => []))
+        .slice(0, 12)
+        .map((item) => {
+          const date = Number.isFinite(Date.parse(item.updatedAt || '')) ? new Date(item.updatedAt).toLocaleString() : 'saved session';
+          return {
+            label: 'Resume session ' + String(item.id || '').slice(0, 8),
+            description: [item.model || 'model not recorded', date].join(' · '),
+            value: '/resume ' + String(item.id || ''),
+            category: 'Recent sessions'
+          };
+        });
+      return [...settingsItems, ...recentItems, ...commandItems];
+    },
     onTranscript: async () => {
       const { transcriptLines } = await import('./terminal-ui.mjs');
       return { pager: transcriptLines(session ? session.messages : [], { color: colorEnabled(stdout), width: stdout.columns || 100 }) };
