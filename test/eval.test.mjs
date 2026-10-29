@@ -465,3 +465,52 @@ test('eval trial count rejects partial, fractional, scientific and out-of-range 
     );
   }
 });
+
+test('OASIS eval applies a whole-turn timeout and aborts the agent session', async (t) => {
+  const tmp = await temporaryDirectory('oasis-eval-timeout-test-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configDir = path.join(tmp, 'user-config');
+  const resultsDir = path.join(tmp, 'eval-results');
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  await createFixtureTask(tasksDir);
+  const env = { ...process.env, OASIS_CONFIG_DIR: configDir };
+  await saveConfig({
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:1/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 4
+  }, { env });
+
+  let observedSignal;
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand(['--task', 'fixture-task', '--trials', '1', '--timeout-seconds', '30'], {
+    autoApprove: true,
+    env,
+    tasksDir,
+    resultsDir,
+    output,
+    taskTimeoutMs: 25,
+    agentRunner: async (_session, _prompt, options) => {
+      observedSignal = options.signal;
+      await new Promise((resolve, reject) => {
+        const abort = () => {
+          const error = new Error('mock agent observed abort');
+          error.name = 'AbortError';
+          reject(error);
+        };
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener('abort', abort, { once: true });
+      });
+      return { finished: true, toolCalls: 0 };
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.summary.failed, 1);
+  assert.equal(result.summary.timeoutSeconds, 30);
+  assert.equal(result.results[0].status, 'failed');
+  assert.match(result.results[0].error, /Task exceeded the 1-second task timeout/);
+  assert.equal(observedSignal.aborted, true);
+});

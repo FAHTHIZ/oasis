@@ -471,7 +471,7 @@ function parseArgs(args) {
   const config = {
     validate: false, task: null, trials: 3, help: false, compare: null,
     claudeCode: false, model: null, maxTurns: 30, timeoutSeconds: 600,
-    budgetUSD: null, claudeOptionsUsed: false
+    timeoutExplicit: false, budgetUSD: null, claudeOptionsUsed: false
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -500,7 +500,7 @@ function parseArgs(args) {
       const value = Number(args[++i]);
       if (!Number.isInteger(value) || value < 30 || value > 3600) throw new Error('--timeout-seconds must be an integer from 30 to 3600.');
       config.timeoutSeconds = value;
-      config.claudeOptionsUsed = true;
+      config.timeoutExplicit = true;
       continue;
     }
     if (arg === '--budget-usd') {
@@ -532,13 +532,13 @@ function parseArgs(args) {
   }
   if (config.task && !safeId(config.task)) throw new Error('Task IDs may contain lowercase letters, numbers, and hyphens.');
   if (config.claudeOptionsUsed && !config.claudeCode) {
-    throw new Error('--model, --max-turns, --timeout-seconds and --budget-usd require --claude-code.');
+    throw new Error('--model, --max-turns and --budget-usd require --claude-code.');
   }
   if (config.claudeCode && (config.validate || config.compare)) {
     throw new Error('--claude-code cannot be combined with --validate or --compare.');
   }
-  if (config.validate && (config.task || config.trials !== 3 || config.compare || config.claudeCode)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials, --compare or --claude-code.');
-  if (config.compare && (config.task || config.trials !== 3 || config.claudeCode)) throw new Error('--compare cannot be combined with --task, --trials or --claude-code.');
+  if (config.validate && (config.task || config.trials !== 3 || config.compare || config.claudeCode || config.timeoutExplicit)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials, --compare, --timeout-seconds or --claude-code.');
+  if (config.compare && (config.task || config.trials !== 3 || config.claudeCode || config.timeoutExplicit)) throw new Error('--compare cannot be combined with --task, --trials, --timeout-seconds or --claude-code.');
   return config;
 }
 
@@ -773,6 +773,7 @@ async function runClaudeCodeEval(config, options = {}) {
     taskCount: selectedDirs.length,
     taskIds: selectedDirs.map((dir) => path.basename(dir)),
     trialsPerTask: config.trials,
+    timeoutSeconds: config.timeoutSeconds,
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
     passRate: trials.length ? passedCount / trials.length : 0,
     passed: passedCount,
@@ -827,7 +828,7 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json>\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json>\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
@@ -867,23 +868,43 @@ export async function runEvalCommand(args = [], options = {}) {
         let agentResult = null;
         let errorText = null;
         let verification = { exitCode: 1, output: 'Agent did not complete.' };
+        let timeoutController = null;
+        let timeoutTimer = null;
+        const taskTimeoutMs = Number.isFinite(options.taskTimeoutMs) && options.taskTimeoutMs > 0
+          ? options.taskTimeoutMs
+          : config.timeoutSeconds * 1000;
+        const timeoutSeconds = Math.ceil(taskTimeoutMs / 1000);
+        const timeoutMessage = 'Task exceeded the ' + timeoutSeconds + '-second task timeout.';
         const trialStarted = Date.now();
 
         try {
           process.env.OASIS_CONFIG_DIR = isolatedConfigDir;
           session = await createSession({ root: workspace, config: provider });
-          agentResult = await runAgentTurn(session, task.taskText, {
+          timeoutController = new AbortController();
+          timeoutTimer = setTimeout(() => {
+            timeoutController.abort();
+            // Interrupt the session as well as the current provider request so MCP,
+            // background, and other session-owned processes are asked to stop.
+            if (session) closeSession(session);
+          }, taskTimeoutMs);
+          const agentRunner = options.agentRunner || runAgentTurn;
+          agentResult = await agentRunner(session, task.taskText, {
             autoApprove: true,
             env: process.env,
             maxSteps: provider.maxSteps,
+            signal: timeoutController.signal,
             onUsage: (entry) => {
               usage.inputTokens += Number(entry.inputTokens || 0);
               usage.outputTokens += Number(entry.outputTokens || 0);
             }
           });
+          if (timeoutController.signal.aborted) errorText = timeoutMessage;
         } catch (error) {
-          errorText = error.message || String(error);
+          errorText = timeoutController && timeoutController.signal.aborted
+            ? timeoutMessage
+            : error.message || String(error);
         } finally {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
           if (session) closeSession(session);
           if (originalConfigDir === undefined) delete process.env.OASIS_CONFIG_DIR;
           else process.env.OASIS_CONFIG_DIR = originalConfigDir;
@@ -934,6 +955,7 @@ export async function runEvalCommand(args = [], options = {}) {
     runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt, completedAt: new Date().toISOString(),
     taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
+    timeoutSeconds: config.timeoutSeconds,
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
     passRate: trials.length ? passedCount / trials.length : 0,
     passed: passedCount, failed: trials.length - passedCount,
