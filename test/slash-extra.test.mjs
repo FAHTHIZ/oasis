@@ -40,7 +40,11 @@ test('new commands are listed in /help', async () => {
   assert.match(output, /More commands:/);
   const firstGroup = output.split('Core workflows:')[1].split('Getting started:')[0].split('\n').filter((line) => /^  \/[a-z-]+\s/.test(line)).map((line) => line.trim().split(/\s+/)[0]);
   assert.deepEqual(firstGroup, ['/init', '/plan', '/fix', '/diagnose', '/review', '/rollback']);
-  const listed = output.split('\n')
+  assert.match(output, /\/audit\s+Run isolated security/);
+  // Check only built-in groups: a custom command may intentionally shadow a
+  // built-in name and is displayed separately below the Custom commands heading.
+  const builtInHelp = output.split('Custom commands:')[0];
+  const listed = builtInHelp.split('\n')
     .map((line) => line.trim().split(/\s+/)[0].replace(/^\//, ''))
     .filter((name) => Object.hasOwn(BUILTIN_COMMANDS, name));
   assert.equal(listed.length, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear in grouped help.');
