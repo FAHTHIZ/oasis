@@ -57,6 +57,44 @@ test('eval suite validation requires no-op failure and reference-patch success',
   assert.equal(report.results[0].referenceExitCode, 0);
 });
 
+test('evaluation metadata is validated and becomes part of task fingerprints', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  await createFixtureTask(tasksDir);
+
+  const manifestPath = path.join(tasksDir, 'metadata.json');
+  const manifest = {
+    schemaVersion: 1,
+    categories: { 'utility-logic': 'Deterministic helpers.', 'security-boundaries': 'Security checks.' },
+    difficulties: ['small', 'medium', 'large'],
+    tasks: {
+      'fixture-task': { category: 'security-boundaries', difficulty: 'medium', rationale: 'Fixture for metadata provenance.' }
+    }
+  };
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  const first = await validateEvaluationSuite({ tasksDir, env: { ...process.env } });
+  assert.equal(first.ok, true, JSON.stringify(first.results));
+  assert.equal(first.results[0].category, 'security-boundaries');
+  assert.equal(first.results[0].difficulty, 'medium');
+  const originalFingerprint = first.results[0].taskFingerprint;
+
+  manifest.tasks['fixture-task'] = {
+    category: 'utility-logic', difficulty: 'small', rationale: 'Reclassified after review.'
+  };
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  const second = await validateEvaluationSuite({ tasksDir, env: { ...process.env } });
+  assert.equal(second.ok, true, JSON.stringify(second.results));
+  assert.notEqual(second.results[0].taskFingerprint, originalFingerprint, 'metadata changes must invalidate task fingerprints');
+
+  manifest.tasks['fixture-task'].category = 'unknown-category';
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+  const invalid = await validateEvaluationSuite({ tasksDir, env: { ...process.env } });
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.results[0].error, /unknown category/);
+});
+
 test('eval suite rejects a task whose verifier passes unchanged', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
@@ -270,6 +308,51 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
   assert.match(output.text, /Evaluation comparison \(matched tasks only\)/);
   assert.match(output.text, /Task-level outcomes/);
   assert.match(output.text, /unmatched task IDs are excluded/);
+});
+
+test('comparison reports category-balanced rates separately from task-balanced rates', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const aPath = path.join(tmp, 'a-labelled.json');
+  const bPath = path.join(tmp, 'b-labelled.json');
+  const rowsA = [
+    { taskId: 'utility-one', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
+    { taskId: 'utility-two', taskFingerprint: 'b'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 110, costUSD: 0.01 },
+    { taskId: 'config-one', taskFingerprint: 'c'.repeat(64), category: 'configuration-integration', difficulty: 'medium', status: 'failed', wallTimeMs: 300, costUSD: 0.02 }
+  ];
+  const rowsB = [
+    { taskId: 'utility-one', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 90, costUSD: 0.01 },
+    { taskId: 'utility-two', taskFingerprint: 'b'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'failed', wallTimeMs: 150, costUSD: 0.01 },
+    { taskId: 'config-one', taskFingerprint: 'c'.repeat(64), category: 'configuration-integration', difficulty: 'medium', status: 'passed', wallTimeMs: 250, costUSD: 0.02 }
+  ];
+  await writeFile(aPath, JSON.stringify({ label: 'OASIS', sourceRevision: 'e'.repeat(40), results: rowsA }));
+  await writeFile(bPath, JSON.stringify({ label: 'Baseline', sourceRevision: 'f'.repeat(40), results: rowsB }));
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand(['--compare', aPath, bPath], { env: { ...process.env }, output });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 2 / 3);
+  assert.equal(result.comparison.metrics.b.taskBalancedPassRate, 2 / 3);
+  assert.equal(result.comparison.metrics.a.categoryBalancedPassRate, 0.5);
+  assert.equal(result.comparison.metrics.b.categoryBalancedPassRate, 0.75);
+  assert.equal(result.comparison.metrics.deltaBMinusA.categoryBalancedPassRatePercentagePoints, 25);
+  assert.deepEqual(result.comparison.categoryBreakdown.map((row) => row.category).sort(), ['configuration-integration', 'utility-logic']);
+  assert.match(output.text, /Category-balanced pass rate/);
+  assert.match(output.text, /Difficulty-balanced pass rate/);
+});
+
+test('comparison rejects a task whose category changes between reports', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const aPath = path.join(tmp, 'a.json');
+  const bPath = path.join(tmp, 'b.json');
+  const fingerprint = 'a'.repeat(64);
+  await writeFile(aPath, JSON.stringify({ results: [{ taskId: 'same-task', taskFingerprint: fingerprint, category: 'utility-logic', difficulty: 'small', status: 'passed' }] }));
+  await writeFile(bPath, JSON.stringify({ results: [{ taskId: 'same-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'small', status: 'passed' }] }));
+  await assert.rejects(
+    runEvalCommand(['--compare', aPath, bPath], { env: { ...process.env } }),
+    /no matching task IDs with compatible task fingerprints/
+  );
 });
 
 test('eval comparison excludes matching task IDs with incompatible task fingerprints', async (t) => {
