@@ -5,7 +5,7 @@ export async function showErrorWithCopy({ dialog, clipboard, window, type = 'err
   const safeDetail = redactApprovalSecrets(String(detail || ''));
   const safeTitle = redactApprovalSecrets(String(title || 'OASIS needs attention'));
   const safeMessage = redactApprovalSecrets(String(message || 'Something went wrong.'));
-  const details = [safeTitle, safeMessage, safeDetail].filter(Boolean).join('\\n\\n');
+  const details = [safeTitle, safeMessage, safeDetail].filter(Boolean).join('\n\n');
   const options = {
     type,
     title: safeTitle,
