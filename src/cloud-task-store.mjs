@@ -32,7 +32,8 @@ function safeValue(value, key = '', depth = 0) {
   if (depth >= 6) return '[depth limited]';
   if (Array.isArray(value)) return value.slice(0, 30).map((item) => safeValue(item, '', depth + 1));
   if (typeof value !== 'object') return scrubText(value);
-  const out = {};
+  // Avoid inherited setters when preserving user-controlled JSON property names.
+  const out = Object.create(null);
   for (const [childKey, childValue] of Object.entries(value).slice(0, 40)) {
     out[String(childKey).slice(0, 100)] = safeValue(childValue, childKey, depth + 1);
   }
