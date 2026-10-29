@@ -72,7 +72,7 @@ test('federated search fuses provider results and deduplicates tracking URL vari
     if (String(url).includes('api.search.brave.com')) {
       return { ok: true, status: 200, json: async () => ({ web: { results: [
         { title: 'Shared source', url: 'https://docs.example.com/guide?utm_source=two', description: 'Shared evidence.' },
-        { title: 'Brave only', url: 'https://brave.example/page', description: 'Brave result.'
+        { title: 'Brave only', url: 'https://brave.example/page', description: 'Brave result.' }
       ] } }) };
     }
     throw new Error('unexpected URL');
