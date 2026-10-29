@@ -28,7 +28,7 @@ async function setup() {
 }
 
 test('new commands are listed in /help', async () => {
-  for (const name of ['usage', 'undo', 'effort', 'copy', 'fork', 'branch', 'skills', 'config', 'doctor', 'release-notes']) assert.ok(BUILTIN_COMMANDS[name], name);
+  for (const name of ['usage', 'undo', 'effort', 'copy', 'fork', 'branch', 'skills', 'config', 'doctor', 'release-notes', 'keys', 'tips']) assert.ok(BUILTIN_COMMANDS[name], name);
   const { state } = await setup();
   const output = (await runBuiltinCommand('help', '', state)).output;
   assert.match(output, /\/effort/);
@@ -44,6 +44,20 @@ test('new commands are listed in /help', async () => {
     .filter((name) => Object.hasOwn(BUILTIN_COMMANDS, name));
   assert.equal(listed.length, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear in grouped help.');
   assert.equal(new Set(listed).size, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear once in grouped help.');
+});
+
+test('/keys opens the shortcut cheat sheet and /tips gives practical next steps', async () => {
+  const { state, env } = await setup();
+  const keys = (await runBuiltinCommand('keys', '', state)).output;
+  assert.match(keys, /Keyboard shortcuts:/);
+  assert.match(keys, /Esc/);
+
+  delete env.OASIS_TIP;
+  env.OASIS_NO_TIPS = '0';
+  const tips = (await runBuiltinCommand('tips', '', state)).output;
+  assert.match(tips, /OASIS tip:/);
+  assert.match(tips, /Useful starting points:/);
+  assert.match(tips, /\/context/);
 });
 
 test('/context separates startup tools and warns when setup is token-heavy', async () => {
