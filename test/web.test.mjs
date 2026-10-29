@@ -7,12 +7,28 @@ import { execFileSync } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { createOasisWebServer, startOasisWebServer } from '../src/web.mjs';
+import { createOasisWebServer, startOasisWebServer, toolDetail } from '../src/web.mjs';
 import { saveConfig } from '../src/config.mjs';
 
 async function tempDir() {
   return await mkdtemp(path.join(os.tmpdir(), 'oasis-web-test-'));
 }
+
+test('browser activity details redact credential flags before sending them to the UI', () => {
+  assert.equal(
+    toolDetail('run_command', { command: 'node', args: ['--token', 'super-secret-value'] }),
+    'node --token [redacted]'
+  );
+  assert.equal(
+    toolDetail('run_command', { command: 'node', args: ['--api-key=private-value'] }),
+    'node --api-key=[redacted]'
+  );
+  assert.doesNotMatch(
+    toolDetail('run_shell', { command: 'curl https://example.test/run?access_token=abc123' }),
+    /abc123/
+  );
+});
+
 
 test('network listeners require TLS unless unencrypted LAN access is explicitly acknowledged', async (t) => {
   const root = await tempDir();
