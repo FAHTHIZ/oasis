@@ -59,3 +59,12 @@ export function modelAllowed(model, list, options = {}) {
 export function modelRestrictionMessage(model, list) {
   return 'Model ' + model + ' is not in availableModels (' + list.join(', ') + '). Pick one of those, or "default".';
 }
+
+// Fast mode (Claude Code /fast): faster output on supported Opus models for a higher per-token price.
+// Opus 5.5 takes speed:"fast" directly; Opus 5 and 4.8 also need the fast-mode beta header.
+export function fastModeRequest(model) {
+  const id = String(model || '').toLowerCase();
+  if (/opus-5-5|opus-5\.5/.test(id)) return { speed: 'fast' };
+  if (/opus-5(?![-.]\d)|opus-4-8|opus-4\.8/.test(id)) return { speed: 'fast', beta: 'fast-mode-2026-02-01' };
+  return null;
+}
