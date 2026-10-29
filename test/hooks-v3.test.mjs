@@ -48,7 +48,7 @@ test('FileChanged fires for add/change/unlink of matcher files and honors watchP
   assert.equal(entries[0].hook_event_name, 'FileChanged');
   assert.equal(entries[0].event, 'add');
   assert.equal(entries[0].file_path, path.join(root, '.envrc'));
-  assert.ok(session.hookMessages.includes('env reloaded'));
+  assert.ok(await waitFor(() => session.hookMessages.includes('env reloaded')), 'hook message delivered');
   assert.ok(watchers.paths.includes(extra), 'watchPaths added');
   await new Promise((resolve) => setTimeout(resolve, 300));
   await writeFile(path.join(root, '.envrc'), 'export A=2\n');
