@@ -13,9 +13,34 @@ const SETUP_PROVIDER_PRESETS = new Set([
 ]);
 
 // A fresh setup should work for users who do not already have a paid-provider key.
-export function resolveSetupProviderPreset(raw) {
+// An explicit valid fallback lets callers choose a safe context-specific default.
+export function resolveSetupProviderPreset(raw, fallback = 'omniroute') {
   const candidate = String(raw || '').trim().toLowerCase();
-  return SETUP_PROVIDER_PRESETS.has(candidate) ? candidate : 'omniroute';
+  if (SETUP_PROVIDER_PRESETS.has(candidate)) return candidate;
+  const safeFallback = String(fallback || '').trim().toLowerCase();
+  return SETUP_PROVIDER_PRESETS.has(safeFallback) ? safeFallback : 'omniroute';
+}
+
+// Preserve a provider the user already configured when they re-open interactive setup.
+// Unknown endpoints intentionally map to "custom"; fresh/unconfigured installs still use
+// OmniRoute so first-run setup does not change its no-key starting point.
+export function inferSetupProviderPreset(config) {
+  if (!config || config.configured !== true) return 'omniroute';
+  let url;
+  try { url = new URL(String(config.baseURL || '')); }
+  catch { return 'custom'; }
+
+  const host = url.hostname.toLowerCase();
+  const protocol = String(config.protocol || '').trim().toLowerCase();
+  if (protocol === 'anthropic' && host === 'api.anthropic.com') return 'anthropic';
+  if (protocol === 'openai-responses' && host === 'api.openai.com') return 'openai';
+  if (protocol === 'openai-compatible') {
+    if (host === 'openrouter.ai') return 'openrouter';
+    if (host === 'generativelanguage.googleapis.com') return 'gemini';
+    if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) && url.port === '20128') return 'omniroute';
+    if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) && url.port === '11434') return 'ollama';
+  }
+  return 'custom';
 }
 
 export function isNodeVersionSupported(version = process.versions.node) {
