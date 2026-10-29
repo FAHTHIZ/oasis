@@ -1,0 +1,20 @@
+diff --git a/src/lib.mjs b/src/lib.mjs
+new file mode 100644
+--- /dev/null
++++ b/src/lib.mjs
+@@ -0,0 +1,15 @@
++// Scrub common credentials before text is persisted to logs.
++export function redactSecrets(text) {
++  let output = String(text ?? '');
++  output = output.replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]');
++  return output.replace(
++    /(\b(?:api[_-]?key|token|password|secret|authorization)\b\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'[^']*'|Bearer\s+\[REDACTED\]|[^\s,;&}]+)/gi,
++    (match, prefix) => {
++      const value = match.slice(prefix.length);
++      if (/^Bearer\s+\[REDACTED\]$/i.test(value)) return prefix + 'Bearer [REDACTED]';
++      if (value.startsWith('"')) return prefix + '"[REDACTED]"';
++      if (value.startsWith("'")) return prefix + "'[REDACTED]'";
++      return prefix + '[REDACTED]';
++    }
++  );
++}

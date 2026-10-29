@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const root = process.argv[2];
+const { normalizePagination } = await import(pathToFileURL(path.join(root, 'src/lib.mjs')).href);
+assert.deepEqual(normalizePagination({ limit: ' 7 ', offset: '40' }), { limit: 7, offset: 40 });
+assert.deepEqual(normalizePagination({ limit: 101, offset: -1 }), { limit: 100, offset: 0 });
+assert.deepEqual(normalizePagination({ limit: 2.2, offset: '1e2' }), { limit: 20, offset: 0 });
+assert.deepEqual(normalizePagination({ limit: Number.MAX_SAFE_INTEGER + 1, offset: '9007199254740992' }), { limit: 20, offset: 0 });
+assert.deepEqual(normalizePagination(), { limit: 20, offset: 0 });

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const root = process.argv[2];
+const { TtlCache } = await import(pathToFileURL(path.join(root, 'src/lib.mjs')).href);
+let now = 100;
+const cache = new TtlCache({ ttlMs: 20, maxEntries: 2, now: () => now });
+cache.set('a', 'A').set('b', 'B');
+now = 105; cache.set('a', 'A2').set('c', 'C');
+assert.equal(cache.get('b'), undefined);
+assert.equal(cache.get('a'), 'A2');
+assert.equal(cache.get('c'), 'C');
+now = 125;
+assert.equal(cache.get('a'), undefined, 'expiration is inclusive at TTL boundary');
