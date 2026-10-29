@@ -2,66 +2,78 @@
 
 **Audit date:** 2026-10-29  
 **Repository:** https://github.com/FAHTHIZ/oasis  
-**Default branch:** main
+**Branch audited:** main  
+**Audited commit:** 2324f5054e5db223270b8f93124848e377140e32
 
-This file distinguishes existing code from behavior proven reliable. A module or command existing is not proof that its acceptance criteria are met.
+This inventory separates code presence from verified behavior. A feature is **verified on current HEAD** only when its relevant tests or quality checks have passed against the exact audited commit. Historical CI results, existing tests, documentation, and source inspection are not substitutes for a fresh run.
 
-## Implemented
+## Implemented and verified on current HEAD
+
+**None claimed in this audit.** The previously documented passing run is from an earlier revision. Current-head verification must be recorded only after fresh checks report success for the exact commit under review.
+
+This is a conservative evidence status, not a claim that the repository has no working features.
+
+## Implemented but not yet verified on current HEAD
+
+These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:
 
 - **Agent/runtime foundation:** CLI, headless text/JSON/stream-JSON workflows, Node SDK, multi-provider tool loops, workspace-bound file tools, command execution, approvals, snapshots/checkpoints/rewind, saved sessions, budgets and context estimation.
-- **LSP and diagnostic foundations:** src/lsp.mjs provides language-server navigation and diagnostics; src/diagnostics.mjs runs configured project checkers. The first post-edit integration now attaches an LSP verification result to successful edits of LSP-mapped files and treats missing or timed-out diagnostics as unavailable. Focused regression tests cover TS2322-style errors, timeout, startup failure and the /fix gate; full current-head checks remain pending.
-- **Agent orchestration:** dynamic JavaScript workflows, schema-checked results, parallel/pipeline/phase helpers, bounded subagents, specialist reviews, background workers, resumable workflow results and a session-local task board.
-- **Safety foundations:** configurable allow/ask/deny rules, plan/acceptEdits/default/auto-related modes, command-risk analysis, PreToolUse hooks, path protections, optional Linux/macOS sandboxing, secret redaction and process-tree cancellation.
-- **Sessions/context:** persisted sessions, /fork, /resume, /context, /compact, between-turn summarization, deterministic fallback and within-turn microcompaction.
-- **Integrations/customization:** MCP clients/server mode, skills, hooks, custom commands, layered memory, output styles, reviewed skill bundles and an ecosystem plugin/marketplace adapter.
-- **Workspace/delivery:** authenticated local browser workspace, persisted browser task history, optional isolated Git worktrees with reviewable diffs, PTY-backed browser terminal where available, VS Code-family integration, GitHub Action, evaluation harness and desktop packaging.
-- **Docs/licensing:** architecture, roadmap, readiness, security, current-status, branch audit and benchmark documents; CHANGELOG.md; Apache-2.0 text with sections 1–9 and its application appendix.
+- **LSP and diagnostics:** language-server navigation and diagnostics; configured project checkers; post-edit LSP verification for mapped files; baseline-aware findings and explicit unavailable outcomes; /fix completion gating.
+- **Audit workflow:** isolated security, performance, test-coverage and dependency reviewers; structured finding validation, deduplication, bounded verification of high/critical findings, and partial-coverage reporting.
+- **Policy and permissions:** allow/ask/deny rules, permission modes, command-risk analysis, pre-tool hooks, path protections, secret redaction, process cancellation and optional Linux/macOS sandboxing.
+- **Sessions and context:** persisted sessions, /fork, /resume, /context, /compact, between-turn summarization, deterministic fallback and within-turn microcompaction.
+- **Orchestration:** dynamic workflows, schema-checked results, parallel/pipeline/phase helpers, bounded subagents, background workers, resumable workflow results and a session-local task board.
+- **Integrations:** MCP, skills, hooks, custom commands, layered memory, output styles, reviewed skill bundles and a plugin/marketplace compatibility adapter.
+- **Workspace and delivery:** authenticated local browser workspace, task history, optional isolated Git worktrees, reviewable diffs, PTY-backed browser terminal where available, editor integration, GitHub Action, evaluation harness and desktop packaging.
+- **Verification evidence and evaluation reports:** structured post-edit evidence, JSON/offline HTML comparison exports, atomic report writes and symlink-destination protections.
+- **Licensing:** root Apache-2.0 license text and matching package metadata/README badge have been inspected. A complete documentation-wide license-string audit is still required.
 
-## Actively hardening
-
-- **LSP-verified editing:** automatically collect LSP diagnostics after edits, baseline pre-existing findings, surface collection failures, and block /fix success while new errors remain.
-- **Multi-agent review:** a built-in /audit workflow now runs four isolated read-only reviewer roles, validates structured findings, deduplicates by file/line/title, verifies up to four high/critical findings, caps the final report at 25 findings, and reports failed reviewers as partial coverage. It remains under hardening until its focused and full-current-head tests pass; per-worker timeout/cancellation stress tests remain open.
-- **Policy enforcement:** define stable plan/manual/accept-edits/auto semantics, policy-source precedence and protected paths; prove denial prevents execution.
-- **Context controls:** add detailed /context all attribution, must-preserve records and a cancelable compaction preview.
-- **Session lifecycle:** test fork isolation, resume continuity, checkpoint references, queued steering and interrupt cleanup as invariants.
-- **Extension safety:** verify namespacing, requested permissions and permission-diff updates across supported plugin types.
-- **Remote/task lifecycle:** validate durable state, approval pauses, cancellation, redaction, revocation and workspace isolation across supported platforms.
-- **Release confidence:** require fresh Quality, publishing and desktop checks on the same revision before marking a milestone verified.
+The list above records implementation evidence only; it does not certify security, platform parity, production readiness or complete acceptance criteria.
 
 ## Experimental
 
-- **Dynamic workflow scripts:** orchestration through a sandboxed JavaScript runtime; resource exhaustion, cancellation semantics and model-authored plan quality remain concerns.
-- **Auto permission mode and optional OS sandboxing:** defense in depth; neither classifier quality nor OS-specific sandboxing replaces deterministic policy or security review.
-- **Third-party plugin interoperability:** compatibility is feature-by-feature; import or manifest recognition does not prove safety or full compatibility.
-- **Browser/PTY lifecycle:** useful local interface, but platform-specific process cleanup and stale-task recovery need end-to-end checks.
-- **OpenHands delegation:** an optional bridge to a separately configured remote service, not a general Oasis-managed remote runner.
+- Dynamic workflow scripts in a sandboxed JavaScript runtime; resource exhaustion, cancellation semantics and model-authored plan quality remain concerns.
+- Auto permission mode and optional OS sandboxing; neither replaces deterministic policy enforcement or security review.
+- Third-party plugin interoperability; manifest recognition or import does not prove safety or full compatibility.
+- Browser/PTY lifecycle; platform-specific process cleanup and stale-task recovery need end-to-end checks.
+- OpenHands delegation; an optional bridge to a separately configured service, not a general Oasis-managed remote runner.
+- Evaluation fixtures; regression/smoke evidence only, not a representative repository-scale coding benchmark.
 
-## Not yet guaranteed
+## Not implemented or not yet meeting the requested acceptance criteria
 
-- A diagnostic is surfaced for every edit/language; /fix cannot claim success while new errors remain; LSP startup or timeout is always treated as verification failure.
-- A built-in /audit always runs all requested reviewers and returns deduplicated, severity-sorted, evidence-backed findings in all environments.
-- Durable cross-session /notify and /inbox with busy-target queues, rate limits, loop prevention, read/dismiss state and no command-execution channel.
-- Accurate token accounting for hidden provider overhead or a preview of exactly what compaction will discard.
-- Equivalent plan/manual/accept-edits/auto modes with managed > project > user policy precedence and cross-platform enforcement.
-- Guaranteed queued user steering before the next model decision, or full checkpoint/process isolation for every fork.
-- A native Oasis plugin package with complete namespacing, install-time grants, permission-change diffs and uniform marketplace compatibility.
-- A /artifact command that creates a live local-only investigation page with redaction, access control and cleanup.
-- Guaranteed path-scoped rule loading. The requested built-in style set (default, concise, explanatory, architect, reviewer) is not complete.
+- **Durable cross-session messaging:** /notify and /inbox with structured safe messages, busy-target queues, rate limits, loop prevention, read/dismiss state and a hard guarantee that messages cannot execute commands in the receiving session.
+- **Path-scoped rules:** frontmatter path matching and conditional loading only for matching workspace paths, with conflicts handled deterministically.
+- **Complete built-in output styles:** a single active style among default, concise, explanatory, architect and reviewer, switchable/listable through /style, while preserving project rules.
+- **Native plugin package:** plugin.json, bundled skills/hooks/subagents/MCP servers/metadata, namespaced /plugin-name:command commands, explicit permission grants and visible permission diffs during updates.
+- **Local-only investigation artifacts:** /artifact <name> creating a live local investigation page with goal, timeline, commands, changed files, tests, errors, hypotheses and rollback points; local-only defaults, secret redaction and cleanup.
 - A general Oasis-owned local/self-hosted/managed runner with authenticated event streaming, approval pauses, cancellation, workspace allowlists, revocation and retention.
-- Production readiness, security certification, platform parity, signed installers or competitive coding quality. Evaluation fixtures are regression evidence, not a repository-scale benchmark.
+- Guaranteed diagnostic coverage for every edit/language, and a /fix gate that always blocks success when new diagnostics remain or verification fails.
+- Guaranteed queued user steering before the next model decision, or full checkpoint/process isolation for every fork.
+- Production readiness, security certification, platform parity, signed installers or competitive coding quality.
 
-## Verification evidence
+## Current-head verification plan
 
-Focused tests exist for LSP, diagnostics, permissions, workflows, sessions, plugins, output styles, hooks and background agents. The evaluator can export matched-task comparison data as JSON and a self-contained offline HTML report, including paired task outcomes and explicit sample/provenance caveats. The report writer refuses final-path symlinks and atomically replaces regular report files; regression tests protect the symlink target.
+Run the repository quality workflow on the exact candidate commit, then inspect focused results for each area below. Do not mark a capability verified if a required test is missing, skipped, or failing.
 
-Agent turn results also expose structured post-edit verification evidence: changed paths, diff-review state, the most recent recognized check result, LSP outcome summaries and outstanding blockers. Missing optional LSP servers remain visible and do not replace the requirement for a real test/check. The existing status docs cite an earlier passing run with 685 tests on Node 22/24/26. That historical run does not verify the current main head. Check [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), and [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml) for the exact revision.
+| Area | Required evidence |
+| --- | --- |
+| Full quality suite | npm run check and the repository's required CI matrix on the same SHA |
+| LSP and /fix | New diagnostic, pre-existing baseline, unavailable server, timeout/startup failure and completion-blocker tests |
+| /audit | Reviewer failures, deduplication, high/critical verification, cancellation and timeout behavior |
+| Permissions | Explicit policy denial prevents the underlying operation; precedence and protected-path tests |
+| /fork and /resume | Isolation, persisted continuity, checkpoint references and interruption cleanup |
+| /context and /compact | Attribution, preserved context, cancel behavior and stale-preview rejection |
+| Plugins and styles | Install/update conflicts, permissions, permission diffs, command namespacing and all built-in styles |
+| Documentation/license | Consistent Apache-2.0 declaration across LICENSE, README, package metadata, STATUS and docs |
 
-## First five files to create or modify
+The prior documented result of 685 tests on Node.js 22/24/26 belongs to an earlier commit and is historical evidence only. Check [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml) and [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml) for candidate-revision results.
 
-1. STATUS.md — capability inventory and maturity boundary.
-2. docs/IMPLEMENTATION_PLAN.md — per-capability files, risks, tests, MVP and acceptance criteria.
-3. src/lsp.mjs — LSP diagnostics lifecycle and verification contract.
-4. src/agent.mjs — deterministic post-edit verification and /fix completion gate.
-5. test/lsp.test.mjs and focused agent/slash tests — success and failure regressions.
+## License and attribution
 
-CHANGELOG.md is updated alongside completed increments. LICENSE was inspected and left unchanged because its current text contains sections 1–9 and the application appendix. A root NOTICE is deferred because no project-wide third-party NOTICE obligation was established; component-level notices must remain with their components.
+The project currently selects **Apache-2.0**. The root LICENSE contains the license terms and application appendix; package.json declares Apache-2.0; and the README badge names Apache-2.0. Keep these aligned and search the full documentation tree for conflicting license statements before declaring the audit complete.
+
+A root NOTICE is not added without an established project-wide attribution obligation. Preserve third-party notices with the components that require them and reassess when bundled dependencies or attribution requirements change.
+
+## Change discipline
+
+For each completed increment, update STATUS.md and CHANGELOG.md, add focused regression tests, run the relevant tests and full quality suite, and record the exact tested SHA. If execution is unavailable, report verification as pending rather than inferring success from source inspection.
