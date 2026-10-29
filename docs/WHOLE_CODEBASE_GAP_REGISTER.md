@@ -56,7 +56,9 @@ See [the evaluation protocol](BENCHMARKS.md) and [benchmark audit](BENCHMARK_AUD
 
 **Verified on the earlier 9ed2cc9 baseline and regression-tested on 0002f84:** the evaluator, shell/background tools, diagnostics, language servers and read-only Git use the shared process-tree helper. Regression tests cover inherited output pipes and a descendant that ignores SIGTERM after its leader exits. Saved/runtime/turn model budgets reject malformed integer prefixes.
 
-**Remaining work:** extend whole-tree shutdown to Git workflow tools and persistent background-session stops, and impose bounded output plus tree termination on HTTP MCP header helpers. The current quality matrix passes, but Windows process-tree semantics still need dedicated adversarial coverage.
+**Progress in the current implementation:** HTTP MCP header helpers cap stdout at 64 KiB, retain only a small stderr tail, use a fixed 10-second production timeout, and signal their process tree on timeout/overflow. Client shutdown now terminates an in-flight helper. Focused overflow, timeout, process-exit, and client-close regressions have been added; current-head verification is pending.
+
+**Remaining work:** extend whole-tree shutdown to Git workflow tools and persistent background-session stops. Windows process-tree semantics still need dedicated adversarial coverage.
 
 **Close it when:** additional platform-specific tests cover leader-exits-first behavior, cancellation, timeout, inherited-pipe cleanup and LSP/background process shutdown on Windows, macOS and Linux.
 

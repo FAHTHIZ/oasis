@@ -171,6 +171,7 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 ## Additional controls covered by the latest regression snapshot
 
+- **HTTP MCP credential-helper lifecycle:** helper stdout is capped at 64 KiB; stderr diagnostics are retained as a bounded tail; the production timeout is 10 seconds; and timeout, output overflow, or MCP-client shutdown signals the helper process tree. Focused cleanup regressions were added; current-head CI is pending.
 - **Desktop provider credentials:** the Electron desktop provider form uses OS-backed safeStorage encryption and fails closed when encryption is unavailable. The desktop host owns encrypted-key plus non-secret-config persistence and attempts to restore the prior secret if the config write fails. Unit and source-integrity checks cover this boundary.
 - **CLI/browser provider credentials:** outside the Electron host, provider keys remain in the local OASIS config file with restrictive permissions where supported; this is not OS-backed encryption. The UI and user guide make that distinction explicit.
 - **Approval and event redaction:** CLI and browser approval prompts share plain-language explanations; common credential formats are redacted from approval text, browser tool details/results and channel relay previews. This is best-effort pattern/field-name redaction, not a general data-loss-prevention system.

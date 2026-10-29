@@ -17,6 +17,7 @@ This is a conservative evidence status, not a claim that the repository has no w
 
 - **Task history input hardening:** event-data sanitization was tightened for unusual JSON keys and a focused persistence regression test was added. Current-head CI remains pending.
 - **CI scheduling reliability:** quality, publishing, and desktop workflows give each main commit a unique concurrency group, so later pushes cannot replace its pending verification. Pull-request updates share PR-specific groups and remain cancellable. A focused regression test covers all three workflows. Current-head CI remains pending; per-SHA validation intentionally uses more runner capacity during commit bursts.
+- **HTTP MCP credential-helper lifecycle:** the stdout cap, bounded stderr, timeout, overflow kill and client-close cleanup now have dedicated regression coverage. Verification on current HEAD is pending.
 
 
 These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:

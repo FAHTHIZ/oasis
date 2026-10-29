@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { McpHttpClient, parseMcpServerEntries } from '../src/mcp-project.mjs';
 
 test('parseMcpServerEntries keeps headersHelper and rejects bad values', () => {
@@ -39,4 +39,89 @@ test('headersHelper headers are sent and refreshed after a 401', async (t) => {
   const result = await client.callTool('echo', {}, { autoApprove: true });
   assert.match(result.content, /hi/);
   assert.equal(seen[seen.length - 1].Authorization, 'Bearer token-2');
+});
+
+function helperCommand(helper) {
+  return JSON.stringify(process.execPath) + ' ' + JSON.stringify(helper);
+}
+
+async function createHelperFixture(t, buildScript, options = {}) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-hh-bound-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const helper = path.join(dir, 'helper.mjs');
+  const pidFile = path.join(dir, 'helper.pid');
+  await writeFile(helper, buildScript(pidFile));
+  const client = new McpHttpClient({
+    name: 'api',
+    url: 'https://mcp.example.com/mcp',
+    headersHelper: helperCommand(helper)
+  }, {
+    env: { ...process.env, OASIS_CONFIG_DIR: dir },
+    ...options
+  });
+  t.after(() => client.close());
+  return { client, dir, pidFile };
+}
+
+async function waitForFile(file, timeoutMs = 2500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try { await readFile(file, 'utf8'); return; } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail('headersHelper did not create its start marker');
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error && error.code !== 'ESRCH';
+  }
+}
+
+async function waitForProcessExit(pid, timeoutMs = 2500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail('headersHelper process ' + pid + ' survived termination');
+}
+
+test('headersHelper bounds stdout by bytes and terminates the process tree on overflow', async (t) => {
+  const { client, pidFile } = await createHelperFixture(
+    t,
+    (marker) => "import fs from 'node:fs'; fs.writeFileSync(" + JSON.stringify(marker) + ", String(process.pid)); process.stdout.write('x'.repeat(70000)); setInterval(() => {}, 1000);",
+    { headersHelperTimeoutMs: 5000 }
+  );
+  await assert.rejects(client._helperHeaders(), /headersHelper output exceeded 64 KiB/);
+  await waitForFile(pidFile);
+  await waitForProcessExit(Number(await readFile(pidFile, 'utf8')));
+});
+
+test('headersHelper uses a bounded timeout and kills a looping helper process', async (t) => {
+  const { client, pidFile } = await createHelperFixture(
+    t,
+    (marker) => "import fs from 'node:fs'; fs.writeFileSync(" + JSON.stringify(marker) + ", String(process.pid)); setInterval(() => {}, 1000);",
+    { headersHelperTimeoutMs: 1000 }
+  );
+  await assert.rejects(client._helperHeaders(), /headersHelper timed out after 1s/);
+  await waitForFile(pidFile);
+  await waitForProcessExit(Number(await readFile(pidFile, 'utf8')));
+});
+
+test('closing an MCP client terminates an in-flight headersHelper', async (t) => {
+  const { client, pidFile } = await createHelperFixture(
+    t,
+    (marker) => "import fs from 'node:fs'; fs.writeFileSync(" + JSON.stringify(marker) + ", String(process.pid)); setInterval(() => {}, 1000);",
+    { headersHelperTimeoutMs: 5000 }
+  );
+  const pending = client._helperHeaders();
+  await waitForFile(pidFile);
+  const pid = Number(await readFile(pidFile, 'utf8'));
+  client.close();
+  await assert.rejects(pending, /MCP server session closed/);
+  await waitForProcessExit(pid);
 });
