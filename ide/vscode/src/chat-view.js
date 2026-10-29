@@ -115,7 +115,8 @@ function chatHtml(webview) {
   .perm .perm-guidance { color: var(--vscode-descriptionForeground); margin: 8px 0; }
   .perm pre { max-height: 160px; }
   .perm .done { color: var(--vscode-descriptionForeground); }
-  button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 3px; padding: 4px 10px; cursor: pointer; margin-right: 6px; }
+  button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 3px; padding: 6px 12px; min-height: 36px; cursor: pointer; margin-right: 6px; }
+  button:focus-visible, #input:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
   button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
   #bar { border-top: 1px solid var(--vscode-panel-border); padding: 8px; }
   #input { width: 100%; box-sizing: border-box; min-height: 56px; max-height: 240px; resize: vertical; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 4px; padding: 6px; font-family: inherit; font-size: inherit; }
