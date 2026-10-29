@@ -43,6 +43,21 @@ test('new commands are listed in /help', async () => {
   assert.equal(new Set(listed).size, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear once in the grouped help.');
 });
 
+test('/context separates startup tools and warns when setup is token-heavy', async () => {
+  const { state, session } = await setup();
+  session.toolDefinitions = [
+    { type: 'function', function: { name: 'local_fixture', description: 'x'.repeat(65000) } },
+    { type: 'function', function: { name: 'remote_fixture', description: 'remote tool description' } }
+  ];
+  session.mcpToolMap = new Map([['remote_fixture', {}]]);
+  const output = (await runBuiltinCommand('context', '', state)).output;
+  assert.match(output, /Startup before chat:/);
+  assert.match(output, /Built-in tools \(1\)/);
+  assert.match(output, /MCP tools \(1\)/);
+  assert.match(output, /over 15,000 tokens/);
+  assert.match(output, /These are estimates/);
+});
+
 test('/effort sets and restores reasoning effort and thinking budget', async () => {
   const { state, session } = await setup();
   assert.match((await runBuiltinCommand('effort', '', state)).output, /Reasoning effort: auto/);
