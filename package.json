@@ -74,7 +74,8 @@
   ],
   "dependencies": {
     "@xterm/xterm": "6.0.0",
-    "@xterm/addon-fit": "0.11.0"
+    "@xterm/addon-fit": "0.11.0",
+    "quickjs-emscripten": "0.32.0"
   },
   "devDependencies": {
     "electron": "45.1.0",

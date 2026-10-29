@@ -1,5 +1,5 @@
 // Dynamic workflows (Claude Code's Workflow tool): a JavaScript script that orchestrates many
-// subagents. The script runs in an isolated VM context with no filesystem, shell, module or clock
+// subagents. The script runs in an isolated QuickJS WebAssembly runtime with no filesystem, shell, module or clock
 // access; only these globals exist:
 //
 //   agent(prompt, { label, schema, agentType, model, isolation })  -> report text, or JSON if schema
@@ -14,7 +14,7 @@
 // and ~/.oasis/workflows/ (personal), plugin workflows/ directories (/plugin:name), and built-ins.
 // Runs are resumable: an agent call whose prompt and options match a completed call from the
 // previous run returns the saved result; failed, stopped or changed calls run again.
-import vm from 'node:vm';
+import { runWorkflowScript } from './workflow-sandbox.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -25,6 +25,8 @@ import { validateJsonSchema, extractJson } from './json-schema.mjs';
 
 export const MAX_ITEMS_PER_CALL = 4096;
 export const MAX_AGENTS_PER_RUN = 1000;
+const MAX_WORKFLOW_SOURCE_CHARS = 512 * 1024;
+const DEFAULT_WORKFLOW_TIMEOUT_MS = 30 * 60 * 1000;
 const BUILTIN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'workflows');
 
 export function defaultConcurrency(env = process.env) {
@@ -54,17 +56,47 @@ function findMeta(source) {
   return null;
 }
 
+function parseLiteralObject(source) {
+ let i = 0;
+ const fail = () => { throw new Error('Static workflow metadata only'); };
+ const skip = () => {
+  while (i < source.length) {
+   if (/\s/.test(source[i])) { i++; continue; }
+   if (source.startsWith('//',i)) { i+=2; while(i<source.length&&source[i]!=='\n')i++; continue; }
+   if (source.startsWith('/*',i)) { const end=source.indexOf('*/',i+2); if(end<0)fail(); i=end+2; continue; }
+   break;
+  }
+ };
+ const parse = () => {
+  skip(); const ch=source[i];
+  if(ch==='{' ){
+   i++; const out=Object.create(null); skip(); if(source[i]==='}'){i++;return out;}
+   while(i<source.length){
+    skip(); const q=source[i]==='"'||source[i]==="'"?source[i++]:null; let key='';
+    if(q){while(i<source.length&&source[i]!==q){if(source[i]==='\\'){i++;if(i>=source.length)fail();key+=source[i++];}else key+=source[i++];}if(source[i++]!==q)fail();}
+    else {const m=/^[A-Za-z_$][\w$]*/.exec(source.slice(i));if(!m)fail();key=m[0];i+=key.length;}
+    skip();if(source[i++]!==':')fail();out[key]=parse();skip();if(source[i]==='}'){i++;return out;}if(source[i++]!==',')fail();skip();if(source[i]==='}'){i++;return out;}
+   }return fail();
+  }
+  if(ch==='['){i++;const a=[];skip();if(source[i]===']'){i++;return a;}while(i<source.length){a.push(parse());skip();if(source[i]===']'){i++;return a;}if(source[i++]!==',')fail();skip();if(source[i]===']'){i++;return a;}}return fail();}
+  if(ch==='"'||ch==="'"){const q=source[i++];let s='';while(i<source.length&&source[i]!==q){if(source[i]==='\\'){i++;if(i>=source.length)fail();const e=source[i++];s+=({n:'\n',r:'\r',t:'\t',b:'\b',f:'\f'})[e]??e;}else s+=source[i++];}if(source[i++]!==q)fail();return s;}
+  const m=/^(true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/.exec(source.slice(i));
+  if(m){i+=m[0].length;return m[0]==='true'?true:m[0]==='false'?false:m[0]==='null'?null:Number(m[0]);}
+  return fail();
+ };
+ skip();const result=parse();skip();if(i!==source.length||!result||Array.isArray(result)||typeof result!=='object')fail();return result;
+}
+
 /** Parses a workflow script into { meta, body, literalMeta }. Throws on import(). */
 export function parseWorkflowScript(source) {
   const text = String(source || '');
+  if (text.length > MAX_WORKFLOW_SOURCE_CHARS) throw new Error('Workflow scripts must be 512 KiB or smaller.');
   if (/(^|[^\w$.])import\s*\(/.test(text) || /^\s*import\s[^(]/m.test(text)) throw new Error('Workflow scripts cannot load modules (import is unavailable); put work that needs a library in an agent\'s task.');
   const found = findMeta(text);
   let meta = {}; let literalMeta = false; let body = text;
   if (found) {
-    // Plain literals only: no identifiers outside strings, calls or spreads.
-    const stripped = found.literal.replace(/(["'`])(?:\\.|(?!\1)[\s\S])*\1/g, '""');
-    literalMeta = !/\.\.\.|\(|\b(?!true\b|false\b|null\b)[A-Za-z_$][\w$]*\s*(?=[,}\]])/.test(stripped.replace(/[A-Za-z_$][\w$]*\s*:/g, ''));
-    try { meta = vm.runInNewContext('(' + found.literal + ')', Object.create(null), { timeout: 50 }) || {}; } catch { meta = {}; }
+    try { meta = parseLiteralObject(found.literal); literalMeta = true; }
+    catch { meta = {}; literalMeta = false; }
     body = text.slice(0, found.statementStart) + 'const meta = ' + found.literal + ';' + text.slice(found.end);
   }
   return { meta: meta && typeof meta === 'object' ? meta : {}, body, literalMeta };
@@ -101,9 +133,30 @@ function schemaContradiction(schema) {
  * Runs a workflow. `runAgent({ prompt, label, agentType, model, isolation, signal })` returns the
  * subagent's report text. `cache` is the previous run's { calls: [...] } for resuming.
  */
-export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, cache = null, signal = null, concurrency = defaultConcurrency(), maxAgents = MAX_AGENTS_PER_RUN, structuredRetries = 5, filename = 'workflow.js', timeoutMs = 0 }) {
+export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, cache = null, signal = null, concurrency = defaultConcurrency(), maxAgents = MAX_AGENTS_PER_RUN, structuredRetries = 5, filename = 'workflow.js', timeoutMs = DEFAULT_WORKFLOW_TIMEOUT_MS }) {
   const { meta, body } = parseWorkflowScript(source);
   const state = { meta, phases: [], logs: [], agents: [], calls: [], status: 'running', result: undefined, error: null };
+  const executionController = new AbortController();
+  const forwardAbort = () => executionController.abort(signal && signal.reason || new Error('Workflow cancelled.'));
+  if (signal && signal.aborted) forwardAbort();
+  else if (signal) signal.addEventListener('abort', forwardAbort, { once: true });
+  const workflowSignal = executionController.signal;
+  let timedOut = false;
+  let scriptLimitExceeded = false;
+  const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? Math.min(timeoutMs, DEFAULT_WORKFLOW_TIMEOUT_MS)
+    : DEFAULT_WORKFLOW_TIMEOUT_MS;
+  let rejectAbort;
+  const abortPromise = new Promise((_, reject) => { rejectAbort = reject; });
+  void abortPromise.catch(() => {});
+  const rejectForAbort = () => rejectAbort(workflowSignal.reason instanceof Error ? workflowSignal.reason : new Error('Workflow cancelled.'));
+  if (workflowSignal.aborted) rejectForAbort();
+  else workflowSignal.addEventListener('abort', rejectForAbort, { once: true });
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    executionController.abort(new Error('Workflow timed out after ' + effectiveTimeoutMs + ' ms.'));
+  }, effectiveTimeoutMs);
+
   let currentPhase = null;
   let seq = 0;
   const limit = semaphore(concurrency);
@@ -116,7 +169,7 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
   for (const title of Array.isArray(meta.phases) ? meta.phases : []) if (typeof title === 'string') ensurePhase(title);
 
   const agent = (prompt, options = {}) => {
-    if (signal && signal.aborted) return Promise.resolve(null);
+    if (workflowSignal && workflowSignal.aborted) return Promise.resolve(null);
     if (typeof prompt !== 'string' || !prompt.trim()) return Promise.reject(new Error('agent() needs a prompt string.'));
     if (state.agents.length >= maxAgents) return Promise.reject(new Error('This workflow reached the limit of ' + maxAgents + ' agents per run.'));
     options = options && typeof options === 'object' ? JSON.parse(JSON.stringify(options)) : {};
@@ -142,7 +195,7 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
       return Promise.resolve(previous.result);
     }
     return limit(async () => {
-      if (signal && signal.aborted) { record.status = 'stopped'; state.calls[index] = { key, status: 'stopped' }; return null; }
+      if (workflowSignal && workflowSignal.aborted) { record.status = 'stopped'; state.calls[index] = { key, status: 'stopped' }; return null; }
       record.status = 'running'; record.startedAt = Date.now();
       emit({ type: 'agent_start', agent: record });
       let instructions = prompt;
@@ -151,7 +204,7 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
         let result; let lastError = '';
         for (let attempt = 0; attempt < (options.schema ? structuredRetries : 1); attempt++) {
           record.attempts = attempt + 1;
-          const text = String(await runAgent({ prompt: attempt && lastError ? instructions + '\n\nYour previous reply was invalid: ' + lastError + '. Reply again with only the JSON.' : instructions, label: record.label, agentType: options.agentType || options.subagent_type || options.agent || null, model: options.model || null, isolation: options.isolation || null, signal }) ?? '');
+          const text = String(await runAgent({ prompt: attempt && lastError ? instructions + '\n\nYour previous reply was invalid: ' + lastError + '. Reply again with only the JSON.' : instructions, label: record.label, agentType: options.agentType || options.subagent_type || options.agent || null, model: options.model || null, isolation: options.isolation || null, signal: workflowSignal }) ?? '');
           if (!options.schema) { result = text; lastError = ''; break; }
           const parsed = extractJson(text);
           const value = parsed.ok ? parsed.value : undefined;
@@ -165,7 +218,7 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
         emit({ type: 'agent_done', agent: record });
         return result;
       } catch (error) {
-        const stopped = signal && signal.aborted;
+        const stopped = workflowSignal && workflowSignal.aborted;
         record.status = stopped ? 'stopped' : 'failed'; record.error = error.message || String(error); record.finishedAt = Date.now();
         state.calls[index] = { key, status: record.status, error: record.error };
         emit({ type: stopped ? 'agent_stopped' : 'agent_failed', agent: record });
@@ -190,35 +243,25 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
   const phase = (title) => { currentPhase = String(title || '').slice(0, 120) || null; if (currentPhase) ensurePhase(currentPhase); emit({ type: 'phase', title: currentPhase }); };
   const log = (...parts) => { const message = parts.map((part) => typeof part === 'string' ? part : JSON.stringify(part)).join(' ').slice(0, 2000); state.logs.push(message); emit({ type: 'log', message }); };
 
-  // Deterministic sandbox: no clock or randomness, so a relaunch repeats the same agent() calls.
-  const SafeMath = Object.create(null);
-  for (const key of Object.getOwnPropertyNames(Math)) SafeMath[key] = Math[key];
-  SafeMath.random = () => { throw new Error('Math.random() is unavailable in workflows; pass randomness through args.'); };
-  const SafeDate = function Date(...values) {
-    if (!new.target) throw new Error('Date() is unavailable in workflows; pass a timestamp through args.');
-    if (!values.length) throw new Error('new Date() without arguments is unavailable in workflows; pass a timestamp through args.');
-    return new globalThis.Date(...values);
-  };
-  SafeDate.now = () => { throw new Error('Date.now() is unavailable in workflows; pass a timestamp through args.'); };
-  SafeDate.parse = globalThis.Date.parse; SafeDate.UTC = globalThis.Date.UTC;
-  const context = vm.createContext({
-    agent, pipeline, parallel, phase, log,
-    args: args === undefined ? undefined : JSON.parse(JSON.stringify(args)),
-    console: { log, info: log, warn: log, error: log },
-    Math: SafeMath, Date: SafeDate
-  }, { codeGeneration: { strings: false, wasm: false } });
-  let script;
-  try { script = new vm.Script('(async () => {\n' + body + '\n})()', { filename, lineOffset: -1 }); }
-  catch (error) { state.status = 'failed'; state.error = 'Syntax error in workflow script: ' + error.message; throw new Error(state.error); }
+
   try {
-    const promise = script.runInContext(context, { timeout: 2000 });
-    const raced = timeoutMs > 0 ? Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('Workflow timed out after ' + timeoutMs + ' ms.')), timeoutMs).unref?.())]) : promise;
-    const result = await raced;
-    state.result = result === undefined ? null : JSON.parse(JSON.stringify(result));
-    state.status = signal && signal.aborted ? 'stopped' : 'completed';
+    state.result = await runWorkflowScript({
+      body, args, agent, phase, log, signal: workflowSignal,
+      onLimit: (error) => {
+        scriptLimitExceeded = true;
+        executionController.abort(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    state.status = workflowSignal.aborted ? (timedOut || scriptLimitExceeded ? 'failed' : 'stopped') : 'completed';
   } catch (error) {
-    state.status = signal && signal.aborted ? 'stopped' : 'failed';
-    state.error = error && error.message ? error.message : String(error);
+    state.status = timedOut || scriptLimitExceeded ? 'failed' : workflowSignal.aborted ? 'stopped' : 'failed';
+    state.error = timedOut
+      ? 'Workflow timed out after ' + effectiveTimeoutMs + ' ms.'
+      : error && error.message ? error.message : String(error);
+  } finally {
+    clearTimeout(timeoutId);
+    if (signal) signal.removeEventListener('abort', forwardAbort);
+    workflowSignal.removeEventListener('abort', rejectForAbort);
   }
   emit({ type: 'done', status: state.status });
   return state;
