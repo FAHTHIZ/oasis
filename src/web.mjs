@@ -1057,7 +1057,7 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
-    const jobMatch = pathname.match(/^\\/api\\/jobs\\/([a-f0-9-]{36})$/i);
+    const jobMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})$/i);
     if (req.method === 'GET' && jobMatch) {
       const after = Math.max(0, Number.parseInt(parsedUrl.searchParams.get('after') || '0', 10) || 0);
       const job = jobs.get(jobMatch[1]);
