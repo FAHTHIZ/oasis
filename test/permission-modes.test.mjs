@@ -85,6 +85,22 @@ test('CLI --permission-mode accepts aliases and rejects unknown values', async (
   assert.match(invalid.output, /aliases: manual, accept-edits/);
 });
 
+test('/help documents the permission-mode aliases', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-help-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-help-home-'));
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis') };
+  const session = {
+    root,
+    config: { model: 'fixture-model', protocol: 'openai-compatible' },
+    messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'hello' }],
+    settings: { permissions: {} },
+    permissions: new PermissionPolicy({ permissions: {} }),
+    hooks: {}
+  };
+  const help = await runBuiltinCommand('help', '', { root, session, env, sessionOptions: {} });
+  assert.match(help.output, /aliases: manual, accept-edits/);
+});
+
 test('layered settings normalize defaultMode aliases in user settings', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-settings-root-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-settings-home-'));
