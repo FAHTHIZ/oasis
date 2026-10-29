@@ -15,6 +15,9 @@ This is a conservative evidence status, not a claim that the repository has no w
 
 ## Implemented but not yet verified on current HEAD
 
+- **Task history input hardening:** event-data sanitization was tightened for unusual JSON keys and a focused persistence regression test was added. Current-head CI remains pending.
+
+
 These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:
 
 - **Agent/runtime foundation:** CLI, headless text/JSON/stream-JSON workflows, Node SDK, multi-provider tool loops, workspace-bound file tools, command execution, approvals, snapshots/checkpoints/rewind, saved sessions, budgets and context estimation.
