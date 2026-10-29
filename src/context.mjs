@@ -1,4 +1,5 @@
 // Within-turn context protection for coding sessions.
+import { createHash } from 'node:crypto';
 // Estimates are deliberately cheap and deterministic; model-specific tokenizer counts are not available
 // for every provider routed through Oasis. Set OASIS_CONTEXT_WINDOW to the selected model's real limit.
 const DEFAULT_CONTEXT_WINDOW = 32_768;
@@ -182,6 +183,24 @@ function previewSafeText(value) {
     .slice(0, 220);
 }
 
+function compactionFingerprint(messages) {
+  // An in-memory freshness guard, not a storage or authenticity mechanism.
+  const stable = (Array.isArray(messages) ? messages : []).map((message) => ({
+    role: String(message && message.role || ''),
+    name: String(message && message.name || ''),
+    content: typeof (message && message.content) === 'string'
+      ? message.content
+      : message && message.content == null ? null : JSON.stringify(message.content),
+    toolCalls: Array.isArray(message && message.tool_calls) ? message.tool_calls.map((call) => ({
+      id: String(call && call.id || ''),
+      name: String(call && call.function && call.function.name || ''),
+      arguments: String(call && call.function && call.function.arguments || '')
+    })) : [],
+    responseItems: Array.isArray(message && message.responseItems) ? JSON.stringify(message.responseItems) : ''
+  }));
+  return createHash('sha256').update(JSON.stringify(stable)).digest('hex');
+}
+
 export function createCompactionPreview(session, focus = '') {
   const messages = Array.isArray(session && session.messages) ? session.messages : [];
   const history = messages.slice(1);
@@ -207,6 +226,8 @@ export function createCompactionPreview(session, focus = '') {
   const systemTokens = estimateTokens(messages.slice(0, 1));
   return {
     focus: String(focus || '').trim().slice(0, 1000),
+    messageCount: messages.length,
+    fingerprint: compactionFingerprint(messages),
     beforeTokens: estimateTokens(messages),
     systemTokens,
     historyMessages: history.length,
