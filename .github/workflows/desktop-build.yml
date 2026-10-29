@@ -9,9 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  # Keep an in-flight default-branch packaging run alive as new commits arrive.
-  # GitHub retains at most the newest pending run for this ref group.
-  group: oasis-desktop-${{ github.ref }}
+  # A later push must not replace this SHA's desktop-build evidence.
+  group: oasis-desktop-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
