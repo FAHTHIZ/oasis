@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Updated CI concurrency so rapid pushes no longer cancel an in-flight main quality check, publishing validation, or desktop build. Superseded PR runs remain cancellable; a regression test covers all three workflows. Verification of this change is pending.
+
 - Hardened task-history event data preservation for unusual input keys and added a focused persistence regression test. Current-head CI is pending.
 
 

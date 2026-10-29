@@ -9,12 +9,29 @@ test('Pages launch summary prints Markdown backticks literally', async () => {
   assert.ok(!workflow.includes('echo "Add the `OASIS_REPO_ADMIN_TOKEN`'));
 });
 
-test('quality workflow cancels superseded revisions instead of queueing every SHA', async () => {
-  const workflow = await readFile(new URL('../.github/workflows/quality.yml', import.meta.url), 'utf8');
-  assert.ok(workflow.includes('group: oasis-quality-${{ github.ref }}'));
-  assert.ok(workflow.includes('cancel-in-progress: true'));
-  assert.ok(
-    !workflow.includes('group: oasis-quality-${{ github.ref }}-${{ github.sha }}'),
-    'older same-ref matrices must not occupy runner slots after a newer commit lands'
-  );
+test('main verification workflows preserve in-flight checks while PR runs remain cancellable', async () => {
+  const cases = [
+    {
+      path: '../.github/workflows/quality.yml',
+      group: 'group: oasis-quality-${{ github.ref }}',
+      cancel: "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+    },
+    {
+      path: '../.github/workflows/pages.yml',
+      group: 'group: oasis-public-launch-${{ github.ref }}',
+      cancel: "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+    },
+    {
+      path: '../.github/workflows/desktop-build.yml',
+      group: 'group: oasis-desktop-${{ github.ref }}',
+      cancel: 'cancel-in-progress: false'
+    }
+  ];
+
+  for (const item of cases) {
+    const workflow = await readFile(new URL(item.path, import.meta.url), 'utf8');
+    assert.ok(workflow.includes(item.group), item.path + ' must isolate concurrency per ref');
+    assert.ok(workflow.includes(item.cancel), item.path + ' has incorrect cancellation policy');
+    assert.ok(!workflow.includes('cancel-in-progress: true'), item.path + ' must not cancel every main push');
+  }
 });

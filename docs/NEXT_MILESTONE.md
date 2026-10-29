@@ -41,6 +41,7 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 
 ### P0 — Make the default-branch quality signal trustworthy
 
+- [ ] Keep in-flight main-push verification alive during rapid consecutive commits while retaining cancellation for superseded pull-request runs. The quality, publishing, and desktop workflow policies and regression test are updated; acceptance remains pending fresh current-main CI.
 - [ ] Verify the newly committed provider-setup regression fix on current `main`: fresh setup must still default to OmniRoute, while re-opening setup must preserve the configured known provider or select `custom` for an unrecognized endpoint. The test has been added; do not mark this complete until current-main CI passes.
 - [x] Change the `FileChanged` test to wait for hook-message delivery using the existing bounded `waitFor` helper; the full current test matrix passes with the assertion synchronized to the hook response.
 - [x] Added process-tree termination to command, package-install, external-skill install and hook timeout/cancellation paths, plus a regression test for a descendant that inherits output pipes. Cross-platform process behavior still requires verification.

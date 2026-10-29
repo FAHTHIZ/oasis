@@ -7,11 +7,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Keep the queue focused on the latest commit for each branch or pull request.
-  # Superseded revision matrices waste runner slots and can delay current-main
-  # verification indefinitely when many commits land close together.
+  # Keep an in-flight main-push validation alive. Pending same-ref pushes coalesce
+  # to the newest revision; only superseded pull-request runs are cancelled.
   group: oasis-quality-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   integrity:
     name: Node ${{ matrix.node-version }} runtime and package integrity
