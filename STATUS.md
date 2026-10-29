@@ -114,6 +114,10 @@ A guarded cleanup workflow is now committed directly to main. It preserves the d
 
 The README shell installer command now allocates a unique mktemp file and removes it through an exit trap. The Windows command uses a GUID-qualified temporary filename and a finally cleanup block. A new test verifies the published SHA-256 hashes against the exact checked-in installer files and checks the pinned source revision and Termux guide. The installer files themselves are unchanged in this increment, so their published hashes remain stable. Test execution is pending the exact-head Quality Checks result.
 
+## Branch cleanup execution safeguard
+
+The cleanup script now checks exact merged-PR heads and SHA-pinned superseded refs before requesting a branch comparison. This prevents transient compare API failures from blocking branches whose deletion is already justified by direct evidence. The workflow favors the latest main revision so old queued runs do not block the current cleanup policy. Actual ref deletion still depends on the action log.
+
 ## Change discipline
 
 For each completed increment, update STATUS.md and CHANGELOG.md, add focused regression tests, run the relevant tests and full quality suite, and record the exact tested SHA. If execution is unavailable, report verification as pending rather than inferring success from source inspection.
