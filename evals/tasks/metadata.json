@@ -176,6 +176,11 @@
       "category": "input-validation",
       "difficulty": "small",
       "rationale": "Validation of a structured TODO-list input."
+    },
+    "provider-setup-preserves-config": {
+      "category": "configuration-integration",
+      "difficulty": "medium",
+      "rationale": "Cross-module provider setup defaults, credential-preserving CLI flow, and regression tests for reopening configuration."
     }
   }
 }
