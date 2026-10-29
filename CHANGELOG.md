@@ -4,6 +4,9 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Removed a case-colliding duplicate pull-request template, retained the richer lowercase canonical template, added a repository-wide case-only path collision regression test, and documented intentional exact-content copies used by static-site deployment and frozen evaluation snapshots. Audited all 37 non-main refs against main; six behind-only refs are confirmed cleanup candidates pending an authenticated branch-delete operation. No branch is claimed deleted.
+
+
 - Fixed native plugin capability exposure so explicitly granted agent definitions are included in the compatibility manifest; added semantic prerelease ordering and validation tests, and removed duplicate MCP coverage. Current-main CI is pending.
 
 - Added native local plugin packages using root `plugin.json`, allowlisted bundled commands/skills/agents/hooks/MCP server files, explicit permissions, namespaced commands, conflict checks, versioned updates and permission-diff previews/confirmation. Tests cover installation, permission isolation, unrequested grants, conflicts, updates, MCP paths and uninstall; current-head CI pending.
