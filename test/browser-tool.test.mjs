@@ -46,6 +46,12 @@ test('browser navigation approvals scope web URLs by origin and opaque URLs by e
   assert.equal(isPrivateBrowserRequest('http://printer.local/'), true);
   assert.equal(isPrivateBrowserRequest('http://[::1]:9222/json'), true);
   assert.equal(isPrivateBrowserRequest('http://[fd00::1]/private'), true);
+  assert.equal(isPrivateBrowserRequest('http://[64:ff9b::1]/'), true);
+  assert.equal(isPrivateBrowserRequest('http://[64:ff9b:1::1]/'), true);
+  assert.equal(isPrivateBrowserRequest('http://[3fff::1]/'), true);
+  assert.equal(isPrivateBrowserRequest('http://[2001:20::1]/'), true);
+  assert.equal(isPrivateBrowserRequest('file:///etc/passwd'), true, 'page-initiated file requests require approval');
+  assert.equal(isPrivateBrowserRequest('about:srcdoc'), true, 'page-initiated about subframes require approval');
   assert.equal(isPrivateBrowserRequest('https://cdn.example.com/script.js'), false);
   assert.equal(isPrivateBrowserRequest('data:image/png;base64,AAAA'), false);
   assert.throws(() => browserNavigationPolicy('https://example.test/' + 'x'.repeat(33000)), /too long/);
