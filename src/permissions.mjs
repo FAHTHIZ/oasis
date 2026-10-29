@@ -9,6 +9,7 @@
 //   Bash(...), Edit(...), Write(...), Read(...), WebFetch(...), Grep, Glob are accepted aliases.
 // Precedence: deny > ask > allow > mode default.
 import path from 'node:path';
+import { normalizePermissionMode } from './permission-modes.mjs';
 
 const TOOL_ALIASES = {
   bash: ['run_command', 'run_shell', 'monitor'],
@@ -274,10 +275,14 @@ export class PermissionPolicy {
     this.ask = (permissions.ask || []).map(parseRule).filter(Boolean);
     this.deny = (permissions.deny || []).map(parseRule).filter(Boolean);
     this.sessionAllow = [];
-    this.mode = options.mode || permissions.defaultMode || 'default';
+    this.mode = normalizePermissionMode(options.mode) || normalizePermissionMode(permissions.defaultMode) || 'default';
   }
 
-  setMode(mode) { this.mode = mode; }
+  setMode(mode) {
+    const normalized = normalizePermissionMode(mode);
+    if (!normalized) throw new Error('Unknown permission mode: ' + String(mode));
+    this.mode = normalized;
+  }
 
   rememberForSession(rawRule) {
     const rule = parseRule(rawRule);
