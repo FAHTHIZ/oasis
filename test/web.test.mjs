@@ -66,7 +66,7 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
   assert.equal(view.branch, 'oasis/provider-setup');
   assert.equal(view.worktreePath, '.oasis/worktrees/provider-setup');
   assert.equal(view.baseCommit, 'a'.repeat(40));
-  assert.deepEqual(view.approvals, { requested: 1, resolved: 1, approved: 0, denied: 1, pending: 0 });
+  assert.deepEqual(view.approvals, { requested: 1, resolved: 1, approved: 0, denied: 1, pending: 0, interrupted: 0 });
   assert.equal(view.usage.totalTokens, 42);
   assert.ok(view.events.some((event) => event.type === 'run.approval_resolved' && event.description === 'Action denied'));
   assert.ok(view.events.some((event) => event.type === 'run.worktree_ready' && /oasis\/provider-setup/.test(event.detail)));
@@ -74,6 +74,32 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
   assert.equal(summarizeAgentRun(null), null);
 });
 
+test('agent run monitor marks workers and approvals interrupted after runtime restart', () => {
+  const job = {
+    id: '4ee8f9f0-c654-4c1d-9678-31a75eaa4403',
+    title: 'Run integration tests',
+    type: 'agent',
+    status: 'interrupted',
+    createdAt: '2026-10-29T10:20:00.000Z',
+    updatedAt: '2026-10-29T10:20:05.000Z',
+    workspaceName: 'oasis',
+    events: [
+      { id: 1, type: 'agent_activity', at: '2026-10-29T10:20:01.000Z', data: { id: 1, at: '2026-10-29T10:20:01.000Z', type: 'team.created', team_id: 'team_2', description: 'Test team' } },
+      { id: 2, type: 'agent_activity', at: '2026-10-29T10:20:02.000Z', data: { id: 2, at: '2026-10-29T10:20:02.000Z', type: 'agent.started', agent_id: 'agent_2', team_id: 'team_2', description: 'Run test suite' } },
+      { id: 3, type: 'approval_required', at: '2026-10-29T10:20:03.000Z', data: { prompt: 'Do not expose private approval prompt' } },
+      { id: 4, type: 'interrupted', at: '2026-10-29T10:20:05.000Z', data: { message: 'Runtime stopped before task completion; live processes and pending approvals were not restored.' } }
+    ]
+  };
+  const view = summarizeAgentRun(job);
+  assert.equal(view.status, 'interrupted');
+  assert.equal(view.runningWorkers, 0);
+  assert.equal(view.workers[0].status, 'interrupted');
+  assert.equal(view.workers[0].detail, 'The runtime restarted; this worker process was not restored.');
+  assert.equal(view.teams[0].status, 'interrupted');
+  assert.deepEqual(view.approvals, { requested: 1, resolved: 0, approved: 0, denied: 0, pending: 0, interrupted: 1 });
+  assert.ok(view.events.some((event) => event.type === 'run.interrupted' && event.description === 'Runtime restarted'));
+  assert.doesNotMatch(JSON.stringify(view), /Do not expose private approval prompt/);
+});
 test('network listeners require TLS unless unencrypted LAN access is explicitly acknowledged', async (t) => {
   const root = await tempDir();
   t.after(() => rm(root, { recursive: true, force: true }));
