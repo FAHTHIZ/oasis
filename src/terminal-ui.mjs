@@ -392,7 +392,12 @@ export function verboseToolOutput(name, result, { color = false, maxLines = 400 
     for (const key of ['stdout', 'output', 'content', 'text', 'diff', 'matches', 'files', 'results']) {
       const value = result[key];
       if (value === undefined || value === null || value === '') continue;
-      parts.push(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+      const rendered = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      // Tool adapters sometimes expose the same payload under both `output`
+      // and `content`. Keep verbose mode readable without hiding distinct
+      // fields such as stdout and stderr.
+      if (parts.includes(rendered)) continue;
+      parts.push(rendered);
     }
     if (result.stderr) parts.push('[stderr]\n' + result.stderr);
     text = parts.length ? parts.join('\n') : JSON.stringify(result, null, 2);
