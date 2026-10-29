@@ -39,7 +39,8 @@ test('new commands are listed in /help', async () => {
   assert.match(output, /More commands:/);
   const firstGroup = output.split('Working:')[0].split('\n').filter((line) => /^  \/[a-z-]+\s/.test(line)).map((line) => line.trim().split(/\s+/)[0]);
   assert.deepEqual(firstGroup, ['/help', '/setup', '/status', '/plan', '/doctor', '/context', '/cost', '/undo']);
-  const listed = [...output.matchAll(/^  \/([a-z-]+)\s/gm)].map((match) => match[1]);
+  const builtInSection = output.split('Custom commands:')[0];
+  const listed = [...builtInSection.matchAll(/^  \/([a-z-]+)\s/gm)].map((match) => match[1]);
   assert.equal(new Set(listed).size, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear once in the grouped help.');
 });
 
