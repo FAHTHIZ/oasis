@@ -13,12 +13,12 @@ function within(base, target) {
   return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
 }
 
-export async function snapshotFile(root, filePath, reason = 'overwrite') {
+export async function snapshotFile(root, filePath, reason = 'overwrite', options = {}) {
   const identity = await workspaceIdentity(root);
   const relativePath = path.relative(identity.realRoot, filePath);
   if (!relativePath || !within(identity.realRoot, filePath)) throw new Error('Refusing to back up a path outside the workspace.');
   const backupId = Date.now().toString(36) + '-' + randomUUID().slice(0, 8);
-  const backupRoot = path.join(getConfigDirectory(), 'backups', identity.id, backupId);
+  const backupRoot = path.join(getConfigDirectory(options.env || process.env), 'backups', identity.id, backupId);
   const target = path.join(backupRoot, relativePath);
   await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
   await copyFile(filePath, target);
