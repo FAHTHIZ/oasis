@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
@@ -1199,6 +1200,20 @@ export function stopFailureType(error) {
   if (status === 400) return 'invalid_request';
   if (status >= 500) return 'server_error';
   return 'unknown';
+}
+
+// MessageDisplay hooks rewrite assistant text on screen only (displayContent); the transcript
+// and what the model sees are unchanged. Each message is one batch (index 0, final true).
+async function emitDisplayText(session, options, text) {
+  if (!options.onText) return;
+  let shown = text;
+  if (!options.isSubagent && session.hooks && hasHooks(session.hooks, 'MessageDisplay')) {
+    try {
+      const result = await runHooks('MessageDisplay', { session_id: session.sessionId || 'unsaved', turn_id: session.currentTurnId || (session.currentTurnId = randomUUID()), message_id: randomUUID(), index: 0, final: true, delta: String(text) }, hookOptions(session, options.env));
+      if (typeof result.displayContent === 'string') shown = result.displayContent;
+    } catch {}
+  }
+  options.onText(shown);
 }
 
 // Delivers finished background-hook results to the model before its next request.
@@ -2744,7 +2759,7 @@ export async function runForkedTurn(session, prompt, options = {}) {
     { role: 'user', content: 'I ran ' + label + ' in a forked ' + result.agent + ' subagent with this request:\n' + prompt.slice(0, 4000) },
     { role: 'assistant', content: report }
   );
-  if (options.onText) options.onText(report);
+  if (options.onText) await emitDisplayText(session, options, report);
   return { text: report, finished: result.finished, toolCalls: result.toolCalls, tokensUsed: result.tokensUsed, forked: true };
 }
 
@@ -2997,6 +3012,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
 }
 
 async function runAgentTurnRaw(session, prompt, options = {}) {
+  if (!options.isSubagent) session.currentTurnId = randomUUID();
   const request = String(prompt || '').trim();
   if (!request) throw new Error('Enter a task or question.');
   throwIfCancelled(options.signal);
@@ -3169,7 +3185,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const text = typeof assistant.content === 'string' ? assistant.content.trim() : '';
     const calls = assistantMessage.tool_calls || [];
     if (truncationNotice && !calls.length) {
-      if (text && options.onText) options.onText(text);
+      if (text && options.onText) await emitDisplayText(session, options, text);
       session.messages.push({ role: 'user', content: truncationNotice });
       continue;
     }
@@ -3195,7 +3211,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         session.hookMessages.push(...stop.messages);
         if (stop.blocked && !stop.stopContinuation) {
           stopHookContinuations++;
-          if (text && options.onText) options.onText(text);
+          if (text && options.onText) await emitDisplayText(session, options, text);
           session.messages.push({ role: 'user', content: 'A ' + stopEvent + ' hook asked you to continue before finishing:\n' + stop.reason.slice(0, 4000) });
           continue;
         }
@@ -3206,12 +3222,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         session.hookMessages.push(...idle.messages);
         if (idle.blocked && !idle.stopContinuation) {
           stopHookContinuations++;
-          if (text && options.onText) options.onText(text);
+          if (text && options.onText) await emitDisplayText(session, options, text);
           session.messages.push({ role: 'user', content: 'A TeammateIdle hook asked you to keep working:\n' + idle.reason.slice(0, 4000) });
           continue;
         }
       }
-      if (text && options.onText) options.onText(text);
+      if (text && options.onText) await emitDisplayText(session, options, text);
       pruneHistory(session);
       return {
         text,
@@ -3224,7 +3240,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         budgetExceeded: tokensUsed > tokenBudget
       };
     }
-    if (text && options.onText) options.onText(text);
+    if (text && options.onText) await emitDisplayText(session, options, text);
 
     // A model response may contain several calls at once. If the budget has run out,
     // return a matching error result for every call without executing any side effects.
@@ -3355,7 +3371,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (batch.blocked) {
         pruneHistory(session);
         const reason = batch.reason || 'A PostToolBatch hook stopped the turn.';
-        if (options.onText) options.onText(reason);
+        if (options.onText) await emitDisplayText(session, options, reason);
         return { text: reason, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, stoppedByHook: true };
       }
       if (batch.additionalContext.length) session.messages.push({ role: 'user', content: '<system-reminder>\nPostToolBatch hook context:\n' + batch.additionalContext.join('\n').slice(0, 10000) + '\n</system-reminder>' });
@@ -3392,7 +3408,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (Array.isArray(final.responseItems)) finalMessage.responseItems = final.responseItems;
   if (Array.isArray(final.thinkingBlocks) && final.thinkingBlocks.length) finalMessage.thinkingBlocks = final.thinkingBlocks;
   session.messages.push(finalMessage);
-  if (options.onText) options.onText(finalText);
+  if (options.onText) await emitDisplayText(session, options, finalText);
   pruneHistory(session);
   return {
     text: finalText,

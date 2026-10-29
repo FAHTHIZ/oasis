@@ -99,6 +99,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | `WaitForMcpServers` / `MCP_CONNECTION_NONBLOCKING` | Background MCP connection; tools are added when ready; `wait_for_mcp_servers` blocks with a timeout and is shown only in non-blocking mode | Done |
 | `--teammate-mode` / `teammateMode` | `auto` (default; panes when inside tmux), `in-process`, `tmux`. Each team member's pane follows its prompts, text, tool calls and result, and closes with the session | Done (no iTerm2) |
 | `/fast`, `/install-github-app`, `/share` | Fast mode sends `speed: "fast"` (and the beta header where needed) on supported Opus models and persists; the GitHub app installer writes the Action workflow and prints the secret step (it does not install a GitHub App — Oasis uses the workflow token) | Done |
+| `MessageDisplay` hook | Display-only rewrite via `displayContent`, 10s default timeout; one batch per message (Claude batches by line interactively) | Done |
 
 ## Ranked next improvements
 

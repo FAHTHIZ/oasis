@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cronState, formatFindings } from './session-tools.mjs';
+import { hasHooks as hasConfiguredHooks } from './hooks.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
@@ -1508,7 +1509,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
-      ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' ? { onDelta: streamDelta } : {}),
+      // MessageDisplay hooks see whole messages, so streaming is off while any are configured.
+      ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' && !hasConfiguredHooks(session.hooks || {}, 'MessageDisplay') ? { onDelta: streamDelta } : {}),
       onToolResult: ({ name, result, call }) => {
         if (richOutput() && call && ['edit_file', 'multi_edit', 'write_file'].includes(name)) {
           let args = {};
