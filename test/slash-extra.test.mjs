@@ -32,13 +32,14 @@ test('new commands are listed in /help', async () => {
   const { state } = await setup();
   const output = (await runBuiltinCommand('help', '', state)).output;
   assert.match(output, /\/effort/);
+  assert.match(output, /Core workflows:/);
   assert.match(output, /Getting started:/);
   assert.match(output, /Working:/);
   assert.match(output, /Safety:/);
   assert.match(output, /Settings:/);
   assert.match(output, /More commands:/);
-  const firstGroup = output.split('Working:')[0].split('\n').filter((line) => /^  \/[a-z-]+\s/.test(line)).map((line) => line.trim().split(/\s+/)[0]);
-  assert.deepEqual(firstGroup, ['/help', '/setup', '/status', '/plan', '/doctor', '/context', '/cost', '/undo']);
+  const firstGroup = output.split('Core workflows:')[1].split('Getting started:')[0].split('\n').filter((line) => /^  \/[a-z-]+\s/.test(line)).map((line) => line.trim().split(/\s+/)[0]);
+  assert.deepEqual(firstGroup, ['/init', '/plan', '/fix', '/diagnose', '/review', '/rollback']);
   const listed = output.split('\n')
     .map((line) => line.trim().split(/\s+/)[0].replace(/^\//, ''))
     .filter((name) => Object.hasOwn(BUILTIN_COMMANDS, name));
