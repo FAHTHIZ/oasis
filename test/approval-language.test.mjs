@@ -45,4 +45,6 @@ test('approval text redacts common provider keys, bearer credentials, and key as
   for (const secret of secrets) assert.doesNotMatch(redactApprovalSecrets('token=' + secret), new RegExp(secret));
   assert.match(redactApprovalSecrets('Authorization: Bearer abc.def.ghi'), /Authorization: Bearer \[redacted\]/i);
   assert.match(redactApprovalSecrets('api_key=do-not-show-me'), /api_key=\[redacted\]/i);
+  assert.match(redactApprovalSecrets('{"apiKey":"json-secret"}'), /apiKey":"\[redacted\]/i);
+  assert.match(redactApprovalSecrets('run --token super-secret-value'), /--token \[redacted\]/i);
 });
