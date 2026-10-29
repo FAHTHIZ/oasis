@@ -30,15 +30,31 @@ const secureStorage = {
 const statePath = () => path.join(app.getPath('userData'), 'desktop-state.json');
 const secretsPath = () => path.join(app.getPath('userData'), 'secure-secrets.json');
 
-async function persistProviderSecret({ apiKey }) {
-  if (apiKey) {
-    await saveDesktopApiKey(apiKey, { filePath: secretsPath(), safeStorage: secureStorage });
-    desktopEnv.OASIS_API_KEY = apiKey;
-    return;
+async function persistDesktopProviderConfig({ protocol, baseURL, model, apiKey }) {
+  const filePath = secretsPath();
+  const previousSecret = await loadDesktopApiKey({ filePath, safeStorage: secureStorage });
+  const previousEnvKey = desktopEnv.OASIS_API_KEY;
+  let secretChangeCompleted = false;
+  try {
+    await saveDesktopApiKey(apiKey || '', { filePath, safeStorage: secureStorage });
+    secretChangeCompleted = true;
+    if (apiKey) desktopEnv.OASIS_API_KEY = apiKey;
+    else if (inheritedOasisApiKey) desktopEnv.OASIS_API_KEY = inheritedOasisApiKey;
+    else delete desktopEnv.OASIS_API_KEY;
+
+    // Commit the non-secret provider details in the same host callback. The web
+    // route does not separately write config after this returns.
+    await saveConfig({ protocol, baseURL, model, apiKey: '' }, { env: desktopEnv });
+  } catch (error) {
+    // A failed config write must not leave a newly saved key paired with the
+    // previous provider details. Restore the prior encrypted secret best-effort.
+    if (secretChangeCompleted) {
+      try { await saveDesktopApiKey(previousSecret || '', { filePath, safeStorage: secureStorage }); } catch {}
+    }
+    if (previousEnvKey !== undefined) desktopEnv.OASIS_API_KEY = previousEnvKey;
+    else delete desktopEnv.OASIS_API_KEY;
+    throw error;
   }
-  await saveDesktopApiKey('', { filePath: secretsPath(), safeStorage: secureStorage });
-  if (inheritedOasisApiKey) desktopEnv.OASIS_API_KEY = inheritedOasisApiKey;
-  else delete desktopEnv.OASIS_API_KEY;
 }
 
 async function restoreProviderSecret() {
@@ -129,7 +145,7 @@ async function openWorkspace(root) {
     activeOrigin = null;
     await previous.close();
   }
-  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistProviderSecret });
+  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistDesktopProviderConfig });
   activeOrigin = 'http://127.0.0.1:' + runtime.port;
   await saveWorkspace(resolved);
   const window = createWindow();
