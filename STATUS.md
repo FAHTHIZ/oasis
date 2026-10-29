@@ -30,6 +30,8 @@ These capabilities have implementation and/or focused regression tests in the re
 
 The list above records implementation evidence only; it does not certify security, platform parity, production readiness or complete acceptance criteria.
 
+- **Remote runner:** `docs/REMOTE_RUNNER_DESIGN.md` now documents local, self-hosted and future managed modes, authentication, workspace allowlists, approval flow, event streaming, cancellation, secrets and retention. This is design-only; no Oasis-owned remote runner is implemented yet.
+
 ## Experimental
 
 - Dynamic workflow scripts in a sandboxed JavaScript runtime; resource exhaustion, cancellation semantics and model-authored plan quality remain concerns.
