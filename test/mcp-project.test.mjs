@@ -44,6 +44,29 @@ process.stdin.on('data', (chunk) => {
   }
 });
 `;
+const CANCEL_SERVER = String.raw`
+const fs = require('node:fs');
+let buffer = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  buffer += chunk;
+  let i;
+  while ((i = buffer.indexOf(String.fromCharCode(10))) >= 0) {
+    const line = buffer.slice(0, i);
+    buffer = buffer.slice(i + 1);
+    let message;
+    try { message = JSON.parse(line); } catch { continue; }
+    if (message.method === 'notifications/cancelled') { fs.writeFileSync(process.argv[1], JSON.stringify(message)); continue; }
+    if (message.id === undefined) continue;
+    if (message.method === 'initialize' || message.method === 'tools/list') {
+      const result = message.method === 'initialize'
+        ? { protocolVersion: '2024-11-05', capabilities: { tools: {} } }
+        : { tools: [] };
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + String.fromCharCode(10));
+    }
+  }
+});
+`;
 async function processIsAlive(pid) {
   try { process.kill(pid, 0); return true; }
   catch (error) {
@@ -99,6 +122,31 @@ test('.mcp.json stdio servers start with expanded env; bad entries are reported'
 
 
 
+test('stdio MCP request timeout sends a cancellation notification', async (t) => {
+  const root = await tmp(t);
+  const notificationFile = path.join(root, 'cancelled.json');
+  const client = new McpServerClient({
+    name: 'cancel',
+    command: process.execPath,
+    args: ['-e', CANCEL_SERVER, notificationFile],
+    passEnv: [],
+    enabled: true
+  }, { root, env: process.env });
+  t.after(() => client.close());
+
+  await client.start();
+  await assert.rejects(client._request('test/stall', {}, 40), /timed out: test\/stall/);
+  let notification = null;
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline && !notification) {
+    try { notification = JSON.parse(await readFile(notificationFile, 'utf8')); }
+    catch { await new Promise((resolve) => setTimeout(resolve, 10)); }
+  }
+  assert.ok(notification, 'server should receive cancellation after timeout');
+  assert.equal(notification.method, 'notifications/cancelled');
+  assert.ok(Number.isInteger(notification.params.requestId));
+  assert.match(notification.params.reason, /timed out/i);
+});
 test('closing a stdio MCP client terminates its spawned process tree', { skip: process.platform === 'win32' }, async (t) => {
   const root = await tmp(t);
   const pidFile = path.join(root, 'grandchild.pid');
