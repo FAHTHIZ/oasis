@@ -67,7 +67,7 @@ VS Code, Cursor and Windsurf integrate via `oasis ide install` (in-editor chat p
 
 ## Documentation
 
-[**Next milestone**](docs/NEXT_MILESTONE.md) · [**Security/reliability audit**](docs/SECURITY_RELIABILITY_AUDIT.md) · [**Detailed user guide**](docs/USER_GUIDE.md) · [Install guide](docs/INSTALL.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Product readiness](docs/PRODUCT_READINESS.md) · [GitHub Action](docs/github-action.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
+[**Next milestone**](docs/NEXT_MILESTONE.md) · [**Security/reliability audit**](docs/SECURITY_RELIABILITY_AUDIT.md) · [**Detailed user guide**](docs/USER_GUIDE.md) · [Install guide](docs/INSTALL.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Product readiness](docs/PRODUCT_READINESS.md) · [Capability gates](docs/CAPABILITY_GATES.md) · [GitHub Action](docs/github-action.md) · [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
 
 ## Development
 

@@ -2,13 +2,15 @@
 
 **Audit date:** 2026-10-29  
 **Canonical destination:** `main`  
-**Scope:** the 28 non-main branch tips visible during this audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
+**Scope:** 27 non-main branch tips visible during the October 29, 2026 audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
+
+**Comparison baseline:** `main` at `beca13e4129d4649ef41f9e2c57c882531182d51` (latest observed head during this pass). The latest Quality Checks, homepage/repository validation, and desktop build workflows for this commit were still in progress at the time of this update; previous failures on earlier commits must not be treated as current-head results.
 
 ## Decisions
 
 | Branch | Decision | Evidence and next action |
 | --- | --- | --- |
-| `cloud-engine/maturity-foundation` | **Keep temporarily; port selectively** | PR #23 contains useful new durable task history, isolated worktree execution, diff review, and restart recovery. Its quality-check run passed on the branch, but the branch is 50 commits ahead and 260 behind the audited main, and GitHub reports it is not mergeable. Do not force-merge stale `web.mjs` / `index.html` changes over current runtime work. Port/rebase the feature in reviewable slices and rerun current-main checks. |
+| `cloud-engine/maturity-foundation` | **Keep temporarily; port selectively** | PR #23 contains useful new durable task history, isolated worktree execution, diff review, and restart recovery. Its quality-check run passed on the branch, but the branch is 50 commits ahead and 269 behind the audited main, and GitHub reports it is not mergeable. Do not force-merge stale `web.mjs` / `index.html` changes over current runtime work. Port/rebase the feature in reviewable slices and rerun current-main checks. |
 | `fix/preserve-current-provider-on-setup-20261027` | **Retire after CI** | The behavior was ported directly to main in commits `6459bff`, `d02f327`, and `b85f0b1`: setup now infers the selected configured provider, fresh guided setup still defaults to OmniRoute, and regression tests cover known/custom endpoints. PR #22 is stale and conflicts with current main. Wait for current-main CI before deleting the branch and closing the duplicate PR. |
 | `docs/alpha-confidence-milestone-2026-10-29` | **Retire** | PR #27 is closed and not merged. The useful status/milestone content is represented in the main docs; its old comparison-only document is intentionally not being reintroduced as product identity. |
 | `security/bound-mcp-oauth-metadata` | **Retire after security regression checks** | The current `src/mcp-oauth.mjs` contains the bounded metadata timeout/response-size handling and pinned DNS lookup logic. PR #26 is closed and its security work has been superseded in main. |
@@ -41,4 +43,10 @@
 
 Keep `main` as the sole long-lived integration branch. Remove a branch only after its useful diff is either present on main or explicitly rejected. Merged feature branches do not need to remain as permanent branches: their commits remain reachable from the default branch after deletion. The cloud-engine branch is the only identified branch with a substantial, not-yet-integrated capability set; the provider-setup change has been ported and is awaiting a green main-branch verification run.
 
-This document records the audit and decisions; it does not itself delete remote branches or establish that current-main CI is green.
+## Current comparison results and cleanup state
+
+The live comparison against the audited `main` head found these branches fully behind `main` with no unique commits to port: `chore/public-launch-metadata`, `feat/eval-harness`, `fix/guided-onboarding-entrypoints`, `fix/web-job-capacity`, `fix/web-job-capacity-guard-20261027`, and `fix/web-job-capacity-main-20261027`. These are cleanup candidates once current-main CI is green.
+
+Other branch tips have unique commits or diverged file trees. Several contain work already merged through squash/rebase or superseded by later code; use the per-branch decisions above rather than treating `ahead_by` as proof that a feature is missing. Preserve `cloud-engine/maturity-foundation` until its useful task-history and isolated-worktree pieces are either ported and tested or explicitly rejected. Do not merge its stale full tree over `main`.
+
+The comparison tool available in this session is read-only for remote refs; no remote branch deletion has been performed. This document records the audit and decisions and does not establish that current-main CI is green.
