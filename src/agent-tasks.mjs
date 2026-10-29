@@ -85,6 +85,12 @@ export function recordAgentEvent(session, type, fields = {}) {
   };
   registry.events.push(event);
   if (registry.events.length > 500) registry.events.splice(0, registry.events.length - 500);
+  // Observers (such as the authenticated browser run monitor) receive a bounded,
+  // structured copy while the in-session timeline remains the source of truth.
+  // A UI observer must never be able to interrupt agent orchestration.
+  if (typeof session.onAgentEvent === 'function') {
+    try { session.onAgentEvent(event); } catch {}
+  }
   return event;
 }
 
