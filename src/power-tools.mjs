@@ -340,7 +340,7 @@ async function runShell(root, args, context, flavor = 'sh') {
   const requestedSandbox = context.sandbox && context.sandbox.enabled ? context.sandbox : null;
   assertSandboxAvailable(requestedSandbox);
   const sandbox = requestedSandbox;
-  const autoAllowed = context.ruleAllowed || (sandbox && sandbox.autoAllowCommands !== false) || (context.autoApprove && context.permissionMode === 'bypassPermissions');
+  const autoAllowed = context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions');
   if (!autoAllowed) {
     const ok = context.approval && await context.approval('Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox);
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };

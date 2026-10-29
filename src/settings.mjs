@@ -4,7 +4,7 @@
 // reuse existing configuration:
 //   { "permissions": { "allow": [], "ask": [], "deny": [], "defaultMode": "default" },
 //     "hooks": { "PreToolUse": [ { "matcher": "edit_file", "hooks": [ { "type": "command", "command": "..." } ] } ] },
-//     "sandbox": { "enabled": false, "network": false } }
+//     "sandbox": { "enabled": false, "network": false, "autoAllowCommands": true, "autoAllowShellCommands": false } }
 //
 // Trust model: a cloned repository can contain any file, so project-scoped
 // settings are split by effect. Rules that only make Oasis stricter (deny / ask)

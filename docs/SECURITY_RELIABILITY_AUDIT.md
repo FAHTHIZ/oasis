@@ -211,3 +211,11 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Verification boundary:** regression tests have been added but must pass in GitHub Actions on the resulting main SHA. Native OS enforcement remains a separate platform-validation requirement.
 
+## Follow-up hardening: free-form shell auto-approval is a separate opt-in
+
+**Finding:** the shell tool accepted arbitrary pipelines, redirections and command chains, yet sandbox availability plus the general `autoAllowCommands` default could auto-approve it without the same argv-based risk analysis. Writable workspace isolation does not protect the user's uncommitted or untracked project files from destructive commands.
+
+**Fix added on main:** OASIS now separates `sandbox.autoAllowCommands` from `sandbox.autoAllowShellCommands`. The former continues to control single-executable argv commands; the latter defaults to false, so free-form shell commands ask for approval unless explicitly opted in, explicitly permitted by a rule, or run under the explicit bypass-permissions mode. A regression test checks that argv auto-approval does not imply shell auto-approval.
+
+**Verification boundary:** the regression must pass on the current main SHA. This is a safer default, not a complete shell parser or a guarantee that all destructive shell behavior can be recognized.
+
