@@ -17,8 +17,10 @@ async function loadQuickJSRuntime() {
     const { getQuickJS } = await import('quickjs-emscripten');
     return await getQuickJS();
   } catch (error) {
-    if (error && error.code === 'ERR_MODULE_NOT_FOUND' &&
-        String(error.message || error).includes('quickjs-emscripten')) {
+    const message = String(error && error.message || error);
+    const missingModule = error && error.code === 'ERR_MODULE_NOT_FOUND' ||
+      /cannot find (?:package|module)/i.test(message);
+    if (missingModule && message.includes('quickjs-emscripten')) {
       throw new Error('Workflows need quickjs-emscripten. Run npm install.', { cause: error });
     }
     throw error;
