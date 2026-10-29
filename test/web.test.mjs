@@ -140,7 +140,10 @@ test('browser runtime serves the app but requires a bearer token for every agent
   const base = 'http://127.0.0.1:' + app.port;
   const home = await fetch(base + '/');
   assert.equal(home.status, 200);
-  assert.match(await home.text(), /id="view-agent"/);
+  const homeHtml = await home.text();
+  assert.match(homeHtml, /id="view-agent"/);
+  assert.match(homeHtml, /id="view-monitor"/, 'the authenticated workspace includes the run monitor view');
+  assert.match(homeHtml, /id="agentMonitorRefreshBtn"/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
 
   const anonymous = await fetch(base + '/api/status');
