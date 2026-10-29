@@ -1,13 +1,13 @@
 # OASIS Implementation Audit and External Capability Benchmark
 
 **Audit date:** October 29, 2026  
-**OASIS revision inspected:** [77a5021] (full revision: [77a50213a0d1e7570be3d97db7a5d9d80c7f8d6b](https://github.com/FAHTHIZ/oasis/commit/77a50213a0d1e7570be3d97db7a5d9d80c7f8d6b))  
+**OASIS code/test revision inspected:** [45eeaeabc0cc1d6c4154960df58ebee5dcce352d](https://github.com/FAHTHIZ/oasis/commit/45eeaeabc0cc1d6c4154960df58ebee5dcce352d)  
 **Claude Code release artifact inspected:** [@anthropic-ai/claude-code 2.1.312](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/)  
 **Method:** inspect OASIS source, registered tools, tests, task fixtures and CI configuration; compare these with files shipped in Claude Code's official public release and official public repository. This is a code-evidence audit, not a claim of measured product parity.
 
-## Executive verdict: OASIS on its own merits: OASIS on its own merits
+## Executive verdict: OASIS on its own merits
 
-OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.
+OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.
 
 That establishes **broad architectural and capability overlap** with Claude Code. It does **not** establish equal success rate, patch quality, speed, reliability or security. Those are behavioral outcomes that need controlled evaluation.
 
@@ -113,11 +113,25 @@ Claude Code's official repository exposes public plugin and example material, an
 | Product-specific tools and hosted features | Some same-named tools not present in the built-in OASIS registry reviewed | SDK schema includes Projects, ClaudeDesign, Artifacts, RemoteTrigger and notification-related contracts | Potential feature-level gaps; verify user need and implement deliberately rather than adding empty stubs |
 | Proven coding performance | 33 deterministic regression/eval tasks in manifest | No comparable result inferred from tool schemas | Not established for either side by this audit |
 
+## Ranked gaps and product implications
+
+| Priority | Gap | What the evidence says | Recommended treatment |
+| --- | --- | --- | --- |
+| **1 — Measurement gate** | Representative coding outcomes | The 33 checked-in tasks are dominated by bounded helpers and validation logic; the audit has no authenticated live head-to-head results. This is the clearest unknown about comparative coding quality. | Expand to at least 50 tasks across multiple pinned repositories, then run repeated, task-level comparisons. |
+| **2 — Trust boundary** | Execution isolation and recovery evidence | OASIS has application-level approvals and optional Linux/macOS OS sandboxing, but its own audit says filesystem read isolation is incomplete and native Windows has no OS sandbox. Claude Code documents OS-enforced filesystem/network boundaries on macOS/Linux/WSL2; native Windows sandboxing is also unsupported there. | Tighten OASIS's default trust boundary and adversarially test path escapes, network access, cancellation and failed-tool recovery before increasing autonomy. |
+| **3 — Highest-value feature gap** | Durable, observable multi-agent work | OASIS has subagents, shared tasks, peer messages, named teams and worktree dispatch. The missing piece is a dependable lifecycle: a visual run monitor, durable history, safe pause/resume after restart, explicit conflict review and controlled integration. Claude Code documents centralized team management and direct teammate communication, although its agent teams are experimental and disabled by default. | Build the run lifecycle on top of existing orchestration instead of adding another agent-spawning API. |
+| **4 — Surface integration** | Remote/cloud workflows and broader IDE coverage | Claude Code documents terminal, VS Code, desktop, browser/web and JetBrains surfaces, including web/mobile access for cloud sessions. OASIS has CLI, local browser workspace, desktop packaging and VS Code-family integration, but not the same cloud/mobile/JetBrains reach. | Only pursue remote/mobile control after identity, workspace isolation, reconnect and audit requirements are designed; prioritize JetBrains only if OASIS users need it. |
+| **5 — Distribution confidence** | Signing and clean-install lifecycle | OASIS desktop builds exist, but installers are unsigned and build success does not prove first-run, update or uninstall behavior. | Improve signing/provenance and clean-machine install/update/uninstall tests before broad release claims. |
+
+The order separates **unknown performance** from **missing product capability**. Benchmarking is first because feature inventory alone cannot tell us whether the agent reliably solves real work. Once this evidence gate is in progress, the next major product investment should be the durable multi-agent run lifecycle in priority 3—not more commands or superficial compatibility stubs.
+
+Official comparison references: [Claude Code overview](https://code.claude.com/docs/en/overview), [sandboxing](https://code.claude.com/docs/en/sandboxing), [agent teams](https://code.claude.com/docs/en/agent-teams), and [public releases](https://github.com/anthropics/claude-code/releases).
+
 ## OASIS-owned gaps to close
 
 ### P0 — Prove coding performance
 
-1. Expand beyond the current 33-task set with at least 24 additional repository-level tasks, rather than more isolated helper-only tasks. Include real bug fixes and multi-file features, failing-test diagnosis, architecture-aware changes, regression recovery, large-context continuity, cancellation/resume and permission-denial scenarios.
+1. Expand beyond the current 33-task set with at least 17 additional repository-level tasks to reach the 50-task minimum, rather than more isolated helper-only tasks. Include real bug fixes and multi-file features, failing-test diagnosis, architecture-aware changes, regression recovery, large-context continuity, cancellation/resume and permission-denial scenarios.
 2. Pin OASIS's exact revision, task snapshot, model/provider, prompt/configuration, permission mode, budgets, timeout and environment. Prefer using the same model for a harness comparison, then run a separate recommended-product comparison if desired.
 3. Run at least three trials per task; publish every timeout and failure, raw machine-readable reports, task-level results, token/cost methodology and unreported values as unknown (never as zero).
 4. Separate automatic acceptance from blinded human diff review for correctness, regressions, maintainability and test quality. A reference patch that passes establishes a useful verifier; it does not alone establish task realism.
@@ -138,17 +152,17 @@ Claude Code's official repository exposes public plugin and example material, an
 - Address the documented lack of CLI/browser workspace synchronization if a unified local-first workflow is a product goal.
 - Complete cross-platform process cleanup verification and strengthen release provenance/signing. Keep plugin compatibility claims scoped to the formats and behaviors actually tested.
 
-## Verification of the audited base revision
+## Verification boundary for the inspected source revision
 
-The OASIS quality workflow on the inspected base revision [77a5021](https://github.com/FAHTHIZ/oasis/commit/77a50213a0d1e7570be3d97db7a5d9d80c7f8d6b) completed successfully: [Quality Checks run 816](https://github.com/FAHTHIZ/oasis/actions/runs/40840259970). Its reported jobs passed for Node.js 22, 24 and 26; Windows, macOS and Ubuntu security/runtime tests; Linux native PTY integration; and the browser end-to-end smoke test.
+The inspected source/test revision is [45eeaeabc0cc1d6c4154960df58ebee5dcce352d](https://github.com/FAHTHIZ/oasis/commit/45eeaeabc0cc1d6c4154960df58ebee5dcce352d). Earlier CI passes on older revisions remain useful regression evidence, but they do not verify the new named-snapshot evaluator change or its regression tests. Check the Quality Checks and publishing workflows on the updated `main` before treating this exact change as verified.
 
-That is evidence that the audited base revision passed the repository's configured CI checks. It is not proof of exhaustive security, broad real-world coding ability, or Claude Code parity. The documentation commit containing this audit should be checked by the CI run triggered for the new revision as well.
+No comparison in this document proves exhaustive security, broad real-world coding ability, or Claude Code parity. The intended acceptance evidence is the combination of a green current-main quality gate and representative, reproducible head-to-head task outcomes.
 
 ## Source register
 
 ### OASIS
 
-- [Audited main commit](https://github.com/FAHTHIZ/oasis/commit/77a50213a0d1e7570be3d97db7a5d9d80c7f8d6b)
+- [Inspected OASIS code/test commit](https://github.com/FAHTHIZ/oasis/commit/45eeaeabc0cc1d6c4154960df58ebee5dcce352d)
 - [Agent runtime](../src/agent.mjs)
 - [Tool definitions and execution](../src/tools.mjs)
 - [Permissions](../src/permissions.mjs) · [Sandbox](../src/sandbox.mjs) · [Runtime regression tests](../test/runtime.test.mjs)
@@ -161,7 +175,7 @@ That is evidence that the audited base revision passed the repository's configur
 - [Official release package listing, 2.1.312](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/)
 - [Published package manifest](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/package.json)
 - [Published SDK tool schemas](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/sdk-tools.d.ts)
-- [Official Claude Code documentation](https://code.claude.com/docs/en/overview)
+- [Official Claude Code overview](https://code.claude.com/docs/en/overview) · [Sandboxing](https://code.claude.com/docs/en/sandboxing) · [Agent teams](https://code.claude.com/docs/en/agent-teams) · [Current public releases](https://github.com/anthropics/claude-code/releases)
 
 ---
 
