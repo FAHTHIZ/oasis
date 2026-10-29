@@ -35,6 +35,7 @@ export function readZipEntries(buffer) {
     throw new Error('Multi-disk and ZIP64 archives are not supported.');
   }
   if (count > MAX_ENTRIES) throw new Error('Zip archive has too many entries.');
+  const centralStart = offset;
   const centralEnd = offset + centralSize;
   if (!Number.isSafeInteger(centralEnd) || offset < 0 || centralEnd > eocd) {
     throw new Error('Corrupt zip central-directory bounds.');
@@ -75,7 +76,7 @@ export function readZipEntries(buffer) {
     if (name.endsWith('/')) { entries.push({ name, directory: true }); continue; }
     total += size;
     if (total > MAX_TOTAL) throw new Error('Zip archive is too large when extracted.');
-    if (localOffset < 0 || localOffset + 30 > offset || data.readUInt32LE(localOffset) !== 0x04034b50) {
+    if (localOffset < 0 || localOffset + 30 > centralStart || data.readUInt32LE(localOffset) !== 0x04034b50) {
       throw new Error('Corrupt zip local header for ' + name + '.');
     }
     const localMethod = data.readUInt16LE(localOffset + 8);
@@ -83,9 +84,9 @@ export function readZipEntries(buffer) {
     const localExtraLength = data.readUInt16LE(localOffset + 28);
     const localNameEnd = localOffset + 30 + localNameLength;
     const start = localNameEnd + localExtraLength;
-    if (localMethod !== method || localNameEnd > offset || start > offset ||
+    if (localMethod !== method || localNameEnd > centralStart || start > centralStart ||
         data.subarray(localOffset + 30, localNameEnd).toString('utf8') !== rawName ||
-        compressed > offset - start) {
+        compressed > centralStart - start) {
       throw new Error('Corrupt zip compressed data or inconsistent local header for ' + name + '.');
     }
     const raw = data.subarray(start, start + compressed);
