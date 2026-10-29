@@ -333,7 +333,7 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ client_name: 'Oasis', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' })
-      });
+      }, MAX_OAUTH_METADATA_BYTES, safety);
       if (!response.ok || !registered || !registered.client_id) throw new Error('Client registration failed (HTTP ' + response.status + ').');
       clientId = registered.client_id;
       clientSecret = registered.client_secret || null;
