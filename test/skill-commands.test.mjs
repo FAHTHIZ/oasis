@@ -34,7 +34,7 @@ test('core skill command registry stays small, explicit, and discoverable', () =
 });
 
 test('every core command maps to a portable skill with the required section structure', async () => {
-  const required = ['## Purpose', '## Inputs', '## Workflow', '## Required provider capabilities', '## Permissions', '## Success criteria'];
+  const required = ['# Purpose', '## Inputs', '## Workflow', '## Required provider capabilities', '## Permissions', '## Success criteria'];
   for (const skill of new Set(Object.values(SKILL_COMMANDS).map((item) => item.skill))) {
     const content = await readFile(new URL('../skills/' + skill + '/SKILL.md', import.meta.url), 'utf8');
     assert.ok(content.startsWith('---\nname: ' + skill + '\n'), skill + ' front matter');
