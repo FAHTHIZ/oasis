@@ -417,8 +417,8 @@ async function configureProvider(root = process.cwd(), options = {}) {
       } else if (answer === '1') {
         presetName = await chooseApiPreset(defaultPreset);
       } else if (answer === '4') {
-        stdout.write('\\nChoose an advanced provider:\\n');
-        stdout.write('  1. AWS Bedrock\\n  2. Google Vertex AI\\n  3. Microsoft Foundry\\n  4. Custom / compatible endpoint\\n');
+        stdout.write('\nChoose an advanced provider:\n');
+        stdout.write('  1. AWS Bedrock\n  2. Google Vertex AI\n  3. Microsoft Foundry\n  4. Custom / compatible endpoint\n');
         const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4' })[defaultPreset] || '4';
         const advancedAnswer = (await rl.question('Choose [1/2/3/4] (default ' + advancedDefault + '): ')).trim().toLowerCase() || advancedDefault;
         const advancedProviders = { '1': 'bedrock', '2': 'vertex', '3': 'foundry', '4': 'custom' };
