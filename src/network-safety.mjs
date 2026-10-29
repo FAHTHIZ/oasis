@@ -66,6 +66,15 @@ export function isNonPublicIpAddress(address) {
     return isNonPublicIPv4(octets.join('.'));
   }
 
+  // NAT64 translation can encode an IPv4 destination inside IPv6. Reject
+  // local-use NAT64 outright, and apply the IPv4 policy to the well-known
+  // translation prefix so mapped private/link-local IPv4 targets cannot bypass it.
+  if (words[0] === 0x0064 && words[1] === 0xff9b && words[2] === 0x0001) return true;
+  if (words[0] === 0x0064 && words[1] === 0xff9b &&
+      words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0) {
+    const embeddedIPv4 = [words[6] >> 8, words[6] & 255, words[7] >> 8, words[7] & 255].join('.');
+    return isNonPublicIPv4(embeddedIPv4);
+  }
   // Unspecified, loopback, and deprecated IPv4-compatible forms.
   if (words.slice(0, 6).every((word) => word === 0)) return true;
 
