@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-10-29  
 **Canonical destination:** `main`  
-**Scope:** 28 non-main branch tips visible during the October 29, 2026 audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
+**Scope:** 37 non-main branch tips visible during the October 29, 2026 audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
 
 **Comparison baseline:** branch tips were compared against `main` at `b52f36a19a8bc8512a76fe9dc9c99299f41dadec`. The completed Quality Checks and homepage/repository validation passed on this baseline; its desktop packaging matrix was still running. The workspace-lock and restart-persistence tests are newer work and require current-head checks.
 
@@ -54,46 +54,46 @@ The available GitHub actions do not expose remote branch deletion, so no remote 
 
 ## Latest full branch inventory (2026-10-29)
 
-**Comparison baseline:** `main` at `d4cd33911efe95d4150ae98bcb5716d5e255089f`. This table records Git ancestry counts, not a guarantee of content equivalence; squash/rebase merges can leave ahead counts even when a feature was ported.
+**Latest comparison baseline:** `main` at `bec81366d483895adfa899c6bd157a09642f93d9`. This table records Git ancestry counts, not a guarantee of content equivalence; squash/rebase merges can leave ahead counts even when a feature was ported.
 
 | Branch | Ahead | Behind | Assessment |
 | --- | ---: | ---: | --- |
-| `app/alpha-readiness-gaps` | 21 | 136 | Diverged; inspect unique app changes before retirement |
-| `app/empty-chat` | 33 | 329 | Diverged; inspect unique app changes before retirement |
-| `app/first-run` | 24 | 329 | Diverged; inspect unique app changes before retirement |
-| `app/status-activity` | 34 | 329 | Diverged; inspect unique app changes before retirement |
-| `app/workspace-layout` | 29 | 329 | Diverged; inspect unique app changes before retirement |
-| `chore/current-head-verification-status` | 2 | 53 | Stale closed-PR branch; check content overlap, then retire |
-| `chore/public-launch-metadata` | 0 | 678 | Behind-only; safe retirement candidate |
-| `cli/getting-started` | 24 | 327 | Diverged; inspect unique CLI changes before retirement |
-| `cloud-engine/maturity-foundation` | 51 | 726 | Diverged; preserve only verified missing improvements |
-| `docs/alpha-confidence-milestone-2026-10-29` | 13 | 575 | Diverged docs branch; audit relevant documentation diff |
-| `feat/context-ordering-todo` | 7 | 923 | Diverged; verify source-equivalent port before retirement |
-| `feat/eval-harness` | 0 | 793 | Behind-only; safe retirement candidate |
-| `feat/first-run-guided-onboarding` | 13 | 790 | Merged/ported feature; compare tree before retirement |
-| `feat/mid-turn-context-compaction-20261027` | 5 | 779 | Merged/ported feature; compare tree before retirement |
-| `feat/omniroute-chat-bootstrap` | 16 | 791 | Merged/ported feature; compare tree before retirement |
-| `feat/openhands-agent-server-bridge` | 8 | 786 | Closed duplicate PR lineage; verify current adapter before retirement |
-| `feat/ordered-tools-context-checklists-20261027` | 10 | 784 | Merged/ported feature; compare tree before retirement |
-| `feat/parallel-readonly-specialists-20261027` | 4 | 776 | Merged feature; compare tree before retirement |
-| `feat/provider-transient-retries` | 2 | 787 | Merged feature; compare tree before retirement |
-| `feat/workspace-extensions-integration-hub` | 77 | 793 | Merged/ported feature; do not merge stale branch wholesale |
-| `fix/browser-session-start-lock-20261027` | 4 | 780 | Merged feature; compare tree before retirement |
-| `fix/chained-command-permissions` | 3 | 401 | Closed unmerged fix; verify permission behavior before retirement |
-| `fix/guided-onboarding-entrypoints` | 0 | 789 | Behind-only; safe retirement candidate |
-| `fix/omniroute-setup-default-20261027` | 3 | 779 | Older sibling of newer OmniRoute branch |
-| `fix/omniroute-setup-default-latest` | 3 | 778 | Merged feature; compare tree before retirement |
-| `fix/preserve-current-provider-on-setup-20261027` | 3 | 774 | Ported fix; retain until current-main regression suite passes |
-| `fix/safety-part-1-completion` | 7 | 325 | Closed unmerged; verify safe runtime changes before retirement |
-| `fix/verification-command-detection` | 2 | 788 | Merged feature; compare tree before retirement |
-| `fix/verification-gate-completeness` | 2 | 789 | Merged feature; compare tree before retirement |
-| `fix/web-job-capacity` | 0 | 782 | Behind-only; safe retirement candidate |
-| `fix/web-job-capacity-guard-20261027` | 0 | 783 | Behind-only; duplicate tip with next entry |
-| `fix/web-job-capacity-main-20261027` | 0 | 783 | Behind-only; duplicate tip with previous entry |
-| `security/bound-mcp-oauth-metadata` | 2 | 677 | Closed security branch; verify equivalent hardening before retirement |
-| `security/public-fetch-ssrf-hardening` | 8 | 677 | Closed security branch; verify equivalent hardening before retirement |
-| `test/browser-chat-tool-lifecycle` | 1 | 785 | Merged feature; compare tree before retirement |
-| `test/browser-e2e-smoke-20261027` | 9 | 778 | Merged feature; compare tree before retirement |
-| `test/browser-e2e-tool-cycle-20261027` | 6 | 776 | Merged feature; compare tree before retirement |
+| `app/alpha-readiness-gaps` | 21 | 163 | Diverged; inspect unique app changes before retirement |
+| `app/empty-chat` | 33 | 356 | Diverged; inspect unique app changes before retirement |
+| `app/first-run` | 24 | 356 | Diverged; inspect unique app changes before retirement |
+| `app/status-activity` | 34 | 356 | Diverged; inspect unique app changes before retirement |
+| `app/workspace-layout` | 29 | 356 | Diverged; inspect unique app changes before retirement |
+| `chore/current-head-verification-status` | 2 | 80 | Stale closed-PR branch; check content overlap, then retire |
+| `chore/public-launch-metadata` | 0 | 705 | Behind-only; safe retirement candidate |
+| `cli/getting-started` | 24 | 354 | Diverged; inspect unique CLI changes before retirement |
+| `cloud-engine/maturity-foundation` | 51 | 753 | Diverged; preserve only verified missing improvements |
+| `docs/alpha-confidence-milestone-2026-10-29` | 13 | 602 | Diverged docs branch; audit relevant documentation diff |
+| `feat/context-ordering-todo` | 7 | 950 | Diverged; verify source-equivalent port before retirement |
+| `feat/eval-harness` | 0 | 820 | Behind-only; safe retirement candidate |
+| `feat/first-run-guided-onboarding` | 13 | 817 | Merged/ported feature; compare tree before retirement |
+| `feat/mid-turn-context-compaction-20261027` | 5 | 806 | Merged/ported feature; compare tree before retirement |
+| `feat/omniroute-chat-bootstrap` | 16 | 818 | Merged/ported feature; compare tree before retirement |
+| `feat/openhands-agent-server-bridge` | 8 | 813 | Closed duplicate PR lineage; verify current adapter before retirement |
+| `feat/ordered-tools-context-checklists-20261027` | 10 | 811 | Merged/ported feature; compare tree before retirement |
+| `feat/parallel-readonly-specialists-20261027` | 4 | 803 | Merged feature; compare tree before retirement |
+| `feat/provider-transient-retries` | 2 | 814 | Merged feature; compare tree before retirement |
+| `feat/workspace-extensions-integration-hub` | 77 | 820 | Merged/ported feature; do not merge stale branch wholesale |
+| `fix/browser-session-start-lock-20261027` | 4 | 807 | Merged feature; compare tree before retirement |
+| `fix/chained-command-permissions` | 3 | 428 | Closed unmerged fix; verify permission behavior before retirement |
+| `fix/guided-onboarding-entrypoints` | 0 | 816 | Behind-only; safe retirement candidate |
+| `fix/omniroute-setup-default-20261027` | 3 | 806 | Older sibling of newer OmniRoute branch |
+| `fix/omniroute-setup-default-latest` | 3 | 805 | Merged feature; compare tree before retirement |
+| `fix/preserve-current-provider-on-setup-20261027` | 3 | 801 | Ported fix; retain until current-main regression suite passes |
+| `fix/safety-part-1-completion` | 7 | 352 | Closed unmerged; verify safe runtime changes before retirement |
+| `fix/verification-command-detection` | 2 | 815 | Merged feature; compare tree before retirement |
+| `fix/verification-gate-completeness` | 2 | 816 | Merged feature; compare tree before retirement |
+| `fix/web-job-capacity` | 0 | 809 | Behind-only; safe retirement candidate |
+| `fix/web-job-capacity-guard-20261027` | 0 | 810 | Behind-only; duplicate tip with next entry |
+| `fix/web-job-capacity-main-20261027` | 0 | 810 | Behind-only; duplicate tip with previous entry |
+| `security/bound-mcp-oauth-metadata` | 2 | 704 | Closed security branch; verify equivalent hardening before retirement |
+| `security/public-fetch-ssrf-hardening` | 8 | 704 | Closed security branch; verify equivalent hardening before retirement |
+| `test/browser-chat-tool-lifecycle` | 1 | 812 | Merged feature; compare tree before retirement |
+| `test/browser-e2e-smoke-20261027` | 9 | 805 | Merged feature; compare tree before retirement |
+| `test/browser-e2e-tool-cycle-20261027` | 6 | 803 | Merged feature; compare tree before retirement |
 
-The six behind-only candidates are preserved in the list until an authorized deletion operation is available. Branches with nonzero ahead counts must have their file-tree differences inspected before deletion; do not merge stale branch tips over newer `main`.
+The latest comparison found 22 retirement candidates: 18 branch tips match merged PR heads, three additional branches are strictly behind `main`, and one closed-PR branch changes only `STATUS.md` and `CHANGELOG.md`. This is an audited candidate list, not a deletion receipt. The current GitHub connector can list and compare refs but does not expose a remote-ref deletion operation, so no branch is claimed deleted. Preserve divergent branches with unmerged application, permission, cloud, or security changes until their content is reviewed.
