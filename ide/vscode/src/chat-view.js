@@ -175,7 +175,7 @@ function render(m) {
     }
     case 'turnEnd': endLive(); if (m.isError && m.text) add('error', esc(m.text)); break;
     case 'busy': stopBtn.hidden = !m.busy; if (!m.busy && statusEl.textContent === 'Working…') statusEl.textContent = 'Ready'; if (m.busy) statusEl.textContent = 'Working…'; break;
-    case 'exit': endLive(); stopBtn.hidden = true; if (m.code) add('error', 'OASIS stopped with exit code ' + m.code + '. Run `oasis doctor` in a terminal for help.'); break;
+    case 'exit': endLive(); stopBtn.hidden = true; if (m.code) add('error', esc(m.friendlyError || ('OASIS stopped with exit code ' + m.code + '. Run `oasis doctor` in a terminal for help.'))); break;
     case 'reset': log.innerHTML = ''; endLive(); statusEl.textContent = 'Ready'; stopBtn.hidden = true; break;
     case 'insert': input.value += (input.value && !input.value.endsWith(' ') ? ' ' : '') + m.text; input.focus(); break;
     case 'replay': for (const item of m.items || []) render(item); break;
