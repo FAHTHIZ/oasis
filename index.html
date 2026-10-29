@@ -944,7 +944,7 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){button.ad
   document.querySelectorAll('[data-agent-example]').forEach(function(button){
     button.addEventListener('click',function(){
       input.value=button.getAttribute('data-agent-example')||'';
-      input.dispatchEvent(new Event('input',{bubbles:true}));
+  
       input.focus();
     });
   });
