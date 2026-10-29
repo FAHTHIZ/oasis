@@ -1,5 +1,6 @@
-import { copyFile, mkdir, readFile, readdir, realpath, stat, lstat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, realpath, stat, lstat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { readBoundedRegularFile } from './safe-storage.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { getConfigDirectory } from './config.mjs';
 
@@ -13,13 +14,27 @@ function within(base, target) {
   return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
 }
 
+const MAX_BACKUP_MANIFEST_BYTES = 64 * 1024;
+
+function normalizeBackupRelativePath(value) {
+  if (typeof value !== 'string' || !value || value.includes(String.fromCharCode(0))) return null;
+  const portable = value.split(String.fromCharCode(92)).join('/');
+  if (portable.startsWith('/') || path.posix.isAbsolute(portable) || path.win32.isAbsolute(value) || /^[a-z]:/i.test(portable)) return null;
+  const parts = portable.split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..')) return null;
+  return parts.join(path.sep);
+}
+
 export async function snapshotFile(root, filePath, reason = 'overwrite', options = {}) {
   const identity = await workspaceIdentity(root);
-  const relativePath = path.relative(identity.realRoot, filePath);
-  if (!relativePath || !within(identity.realRoot, filePath)) throw new Error('Refusing to back up a path outside the workspace.');
+  const nativeRelativePath = path.relative(identity.realRoot, filePath);
+  if (!nativeRelativePath || !within(identity.realRoot, filePath)) throw new Error('Refusing to back up a path outside the workspace.');
+  if (process.platform !== 'win32' && nativeRelativePath.includes(String.fromCharCode(92))) throw new Error('Refusing to back up a path with a backslash on this platform.');
+  const relativePath = nativeRelativePath.split(path.sep).join('/');
+  if (!normalizeBackupRelativePath(relativePath)) throw new Error('Refusing to back up a path with unsafe cross-platform path components.');
   const backupId = Date.now().toString(36) + '-' + randomUUID().slice(0, 8);
   const backupRoot = path.join(getConfigDirectory(options.env || process.env), 'backups', identity.id, backupId);
-  const target = path.join(backupRoot, relativePath);
+  const target = path.join(backupRoot, nativeRelativePath);
   await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
   await copyFile(filePath, target);
   const manifest = {
@@ -34,9 +49,9 @@ export async function snapshotFile(root, filePath, reason = 'overwrite', options
   return manifest;
 }
 
-export async function listBackups(root) {
+export async function listBackups(root, options = {}) {
   const identity = await workspaceIdentity(root);
-  const base = path.join(getConfigDirectory(), 'backups', identity.id);
+  const base = path.join(getConfigDirectory(options.env || process.env), 'backups', identity.id);
   let dirs;
   try { dirs = await readdir(base, { withFileTypes: true }); } catch (error) {
     if (error.code === 'ENOENT') return [];
@@ -46,23 +61,23 @@ export async function listBackups(root) {
   for (const dir of dirs) {
     if (!dir.isDirectory() || !/^[a-z0-9-]+$/i.test(dir.name)) continue;
     try {
-      const manifest = JSON.parse(await readFile(path.join(base, dir.name, 'manifest.json'), 'utf8'));
+      const manifest = JSON.parse(await readBoundedRegularFile(path.join(base, dir.name, 'manifest.json'), MAX_BACKUP_MANIFEST_BYTES, { label: 'Backup manifest', tooLargeMessage: 'Backup manifest exceeds the 64 KiB limit.' }));
       if (manifest.id === dir.name && manifest.workspaceRoot === identity.realRoot) rows.push(manifest);
     } catch { /* Ignore incomplete or invalid backup metadata. */ }
   }
   return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export async function restoreBackup(root, backupId) {
+export async function restoreBackup(root, backupId, options = {}) {
   if (!/^[a-z0-9-]{8,80}$/i.test(String(backupId))) throw new Error('Invalid backup ID.');
   const identity = await workspaceIdentity(root);
-  const backupRoot = path.join(getConfigDirectory(), 'backups', identity.id, String(backupId));
-  const manifest = JSON.parse(await readFile(path.join(backupRoot, 'manifest.json'), 'utf8'));
+  const backupRoot = path.join(getConfigDirectory(options.env || process.env), 'backups', identity.id, String(backupId));
+  const manifest = JSON.parse(await readBoundedRegularFile(path.join(backupRoot, 'manifest.json'), MAX_BACKUP_MANIFEST_BYTES, { label: 'Backup manifest', tooLargeMessage: 'Backup manifest exceeds the 64 KiB limit.' }));
   if (manifest.id !== backupId || manifest.workspaceRoot !== identity.realRoot || typeof manifest.relativePath !== 'string') {
     throw new Error('That backup does not belong to this workspace.');
   }
-  const relative = manifest.relativePath;
-  if (path.isAbsolute(relative) || relative.split(path.sep).includes('..')) throw new Error('Invalid path in backup metadata.');
+  const relative = normalizeBackupRelativePath(manifest.relativePath);
+  if (!relative) throw new Error('Invalid path in backup metadata.');
   const target = path.resolve(identity.realRoot, relative);
   if (!within(identity.realRoot, target) || target === identity.realRoot) throw new Error('Backup path escapes the workspace.');
   const source = path.resolve(backupRoot, relative);
