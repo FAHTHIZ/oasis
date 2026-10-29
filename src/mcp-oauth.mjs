@@ -8,6 +8,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 
@@ -61,9 +63,79 @@ export async function deleteStoredToken(serverUrl, env = process.env) {
   return existed;
 }
 
-function requireSafeEndpoint(url, label) {
-  const parsed = new URL(url);
-  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopbackUrl(parsed.toString()))) throw new Error(label + ' must use HTTPS: ' + url);
+function privateIPv4(address) {
+  const parts = address.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b, c] = parts;
+  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113) ||
+    (a === 100 && b >= 64 && b <= 127) || a >= 224;
+}
+
+function mappedIPv4(address) {
+  const value = String(address || '').toLowerCase();
+  if (!value.startsWith('::ffff:')) return null;
+  const tail = value.slice(7);
+  if (isIP(tail) === 4) return tail;
+  const parts = tail.split(':');
+  if (parts.length !== 2 || parts.some((part) => !/^[a-f0-9]{1,4}$/.test(part))) return null;
+  const high = Number.parseInt(parts[0], 16), low = Number.parseInt(parts[1], 16);
+  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join('.');
+}
+
+function privateAddress(address) {
+  const version = isIP(address);
+  if (version === 4) return privateIPv4(address);
+  if (version !== 6) return true;
+  const value = address.toLowerCase();
+  const mapped = mappedIPv4(value);
+  if (mapped) return privateIPv4(mapped);
+  return value === '::' || value === '::1' || /^f[cd]/.test(value) ||
+    /^fe[89ab]/.test(value) || value.startsWith('fec0:') || value.startsWith('ff') ||
+    /^2001:(?:0|1|2|3|10|20|db8):/.test(value) || value.startsWith('2001:4:112:') ||
+    value.startsWith('2002:') || value.startsWith('64:ff9b:') || value.startsWith('3fff:');
+}
+
+function oauthSafetyForServer(serverUrl, lookupImpl = lookup) {
+  let localOrigin = null;
+  try {
+    const parsed = new URL(serverUrl);
+    if (isLoopbackUrl(parsed.toString())) localOrigin = parsed.origin;
+  } catch {}
+  return { localOrigin, lookupImpl };
+}
+
+async function requireSafeEndpoint(url, label, safety = {}) {
+  let parsed;
+  try { parsed = new URL(url); } catch { throw new Error(label + ' is not a valid URL.'); }
+  if (parsed.username || parsed.password) throw new Error(label + ' must not include credentials.');
+  const local = isLoopbackUrl(parsed.toString());
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local && safety.localOrigin === parsed.origin)) {
+    throw new Error(label + ' must use HTTPS, except for the configured loopback MCP server origin.');
+  }
+  if (local) {
+    if (!safety.localOrigin || safety.localOrigin !== parsed.origin) throw new Error(label + ' cannot target a different loopback origin.');
+    return parsed.toString();
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
+      host.endsWith('.internal') || host.endsWith('.home.arpa') || host === 'metadata.google.internal') {
+    throw new Error(label + ' cannot target a local or internal hostname.');
+  }
+  if (isIP(host)) {
+    if (privateAddress(host)) throw new Error(label + ' cannot target a private or special-purpose address.');
+    return parsed.toString();
+  }
+  let records;
+  try { records = await (safety.lookupImpl || lookup)(host, { all: true, verbatim: true }); }
+  catch { throw new Error(label + ' hostname could not be safely resolved.'); }
+  if (!records.length || records.some((record) => privateAddress(record.address))) {
+    throw new Error(label + ' resolves to a private or special-purpose address.');
+  }
   return parsed.toString();
 }
 
