@@ -15,6 +15,7 @@ test('remote package execution and high-impact project runner verbs are high-ris
     ['npm', ['--prefix', './app', 'run', 'deploy']],
     ['pnpm', ['--dir', './app', 'exec', 'deploy-tool']],
     ['yarn', ['--cwd', './app', 'run', 'publish']],
+    ['npm', ['--unknown-config-flag', 'value', 'run', 'deploy']],
     ['cargo', ['run', '--release']],
     ['go', ['run', './cmd/deploy']],
     ['make', ['deploy']]
@@ -35,6 +36,7 @@ test('ordinary scripts and common test/check runners retain normal risk', () => 
     ['python3', ['tool.py']],
     ['npm', ['test']],
     ['npm', ['run', 'test']],
+    ['npm', ['--silent', 'run', 'test']],
     ['npm', ['run', 'check']],
     ['pnpm', ['run', 'typecheck']],
     ['yarn', ['test']],
@@ -46,6 +48,13 @@ test('ordinary scripts and common test/check runners retain normal risk', () => 
     assert.equal(result.blocked, undefined, command + ' ' + args.join(' '));
     assert.equal(result.highRisk, undefined, command + ' ' + args.join(' ') + ' should be normal risk');
   }
+});
+
+test('unknown package-manager option ordering fails closed', () => {
+  assert.match(
+    analyzeCommand('npm', ['--unknown-config-flag', 'value', 'publish']).blocked || '',
+    /Unrecognized package-manager option ordering/
+  );
 });
 
 test('publishing remains blocked when package-manager options precede the verb', () => {
