@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createCloudTaskStore } from '../src/cloud-task-store.mjs';
 
@@ -102,4 +102,28 @@ test('scheduled writes can be flushed before orderly shutdown', async (t) => {
   store.schedule(job, 2000);
   await store.flush([job]);
   assert.equal((await store.get(id)).status, 'running');
+});
+
+
+test('special JSON property names stay inert data in task event persistence', async (t) => {
+  const { root, env, workspace } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const id = randomUUID();
+  const specialKey = String.fromCharCode(95, 95, 112, 114, 111, 116, 111, 95, 95);
+  const nested = Object.create(null);
+  nested.marker = 'preserved';
+  const eventData = Object.create(null);
+  eventData[specialKey] = nested;
+  const store = createCloudTaskStore(workspace, { env });
+
+  await store.save({
+    id, status: 'completed', type: 'agent', title: 'Preserve event data',
+    createdAt: new Date().toISOString(),
+    events: [{ id: 1, type: 'tool_result', at: new Date().toISOString(), data: eventData }],
+    nextEventId: 2, result: null, error: null
+  });
+
+  const persisted = JSON.parse(await readFile(path.join(store.directory, id + '.json'), 'utf8'));
+  assert.equal(persisted.events[0].data[specialKey].marker, 'preserved');
 });
