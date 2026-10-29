@@ -18,6 +18,20 @@ function friendlyStartError(error, command = 'oasis') {
   return 'OASIS could not start using ' + String(command || 'oasis') + '. ' + detail + '. Check the command setting and run `oasis doctor` in a terminal for help.';
 }
 
+function friendlyExitError(code, stderr = '') {
+  const detail = String(stderr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^at\s+/.test(line) && !/^node:internal\//.test(line))
+    .slice(-3)
+    .join(' ')
+    .replace(/[\r\n\0]/g, ' ')
+    .slice(0, 240);
+  return 'OASIS stopped with exit code ' + String(Number.isInteger(code) ? code : 'unknown') + '. ' +
+    (detail ? 'Last message: ' + detail + '. ' : '') +
+    'Run `oasis doctor` in a terminal for help, then try again.';
+}
+
 function isPotentiallyDestructiveAction(text) {
   // This is a conservative UI warning, not a replacement for the actual approval gate.
   return /\brm\s+-[a-z]*r[a-z]*\b|\b(delete|remove|overwrite|format|truncate)\b|\bdrop\s+table\b/i.test(String(text || ''));
@@ -169,4 +183,4 @@ function translateEvent(event, state = {}) {
   return out;
 }
 
-module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, isPotentiallyDestructiveAction, BASE_ARGS };
+module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, friendlyExitError, isPotentiallyDestructiveAction, BASE_ARGS };
