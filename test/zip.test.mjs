@@ -68,6 +68,18 @@ test('ZIP reader rejects traversal, absolute, drive, NUL, and ambiguous backslas
   assert.throws(() => readZipEntries(makeStoredZip([{ name: 'nul' + String.fromCharCode(0) + 'name.txt', content: 'nope' }])), /unsafe or ambiguous path/);
 });
 
+test('ZIP reader rejects truncated and inconsistent directory/header metadata cleanly', () => {
+  assert.throws(() => readZipEntries(Buffer.from([0x50, 0x4b, 0x03])), /truncated end-of-central-directory/);
+  const badDirectory = makeStoredZip([{ name: 'file.txt', content: 'ok' }]);
+  const eocd = badDirectory.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  badDirectory.writeUInt32LE(0xfffffff0, eocd + 16);
+  assert.throws(() => readZipEntries(badDirectory), /central-directory bounds/);
+
+  const badLocalName = makeStoredZip([{ name: 'file.txt', content: 'ok' }]);
+  badLocalName[30] = 'X'.charCodeAt(0);
+  assert.throws(() => readZipEntries(badLocalName), /inconsistent local header/);
+});
+
 test('ZIP reader rejects duplicate, case-colliding, and size-mismatched entries', () => {
   assert.throws(
     () => readZipEntries(makeStoredZip([
