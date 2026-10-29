@@ -16,15 +16,18 @@ export async function readBoundedRegularFile(filePath, maxBytes, options = {}) {
     const info = await handle.stat();
     if (!info.isFile()) throw new Error(label + ' must be a regular file.');
     if (info.size > maxBytes) throw new Error(tooLargeMessage);
-    const buffer = Buffer.alloc(maxBytes + 1);
+    const chunkBuffer = Buffer.alloc(Math.min(64 * 1024, maxBytes + 1));
+    const chunks = [];
     let bytesRead = 0;
-    while (bytesRead < buffer.length) {
-      const result = await handle.read(buffer, bytesRead, buffer.length - bytesRead, bytesRead);
+    while (bytesRead <= maxBytes) {
+      const allowed = Math.min(chunkBuffer.length, maxBytes + 1 - bytesRead);
+      const result = await handle.read(chunkBuffer, 0, allowed, bytesRead);
       if (!result.bytesRead) break;
+      chunks.push(Buffer.from(chunkBuffer.subarray(0, result.bytesRead)));
       bytesRead += result.bytesRead;
     }
     if (bytesRead > maxBytes) throw new Error(tooLargeMessage);
-    return buffer.subarray(0, bytesRead).toString('utf8');
+    return Buffer.concat(chunks, bytesRead).toString('utf8');
   } finally {
     await handle.close();
   }

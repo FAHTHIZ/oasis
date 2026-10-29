@@ -145,7 +145,7 @@ export async function listSessions(root, options = {}) {
   const sessions = [];
   for (const entry of entries) {
     const name = entry.name;
-    if (!entry.isFile() || !/^[a-f0-9-]{20,80}\\.json$/i.test(name)) continue;
+    if (!entry.isFile() || !/^[a-f0-9-]{20,80}\.json$/i.test(name)) continue;
     try {
       const data = JSON.parse(await readBoundedRegularFile(path.join(directory, name), MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' }));
 
