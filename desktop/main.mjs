@@ -1,15 +1,19 @@
-import { app, BrowserWindow, dialog, Menu, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, safeStorage, shell } from 'electron';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { startOasisWebServer } from '../src/web.mjs';
 import { loadConfig, saveConfig } from '../src/config.mjs';
 import { loadDesktopApiKey, saveDesktopApiKey } from './secure-secrets.mjs';
+import { crashRecoveryHtml } from './crash-screen.mjs';
+import { showErrorWithCopy } from './error-dialog.mjs';
 
 let mainWindow = null;
 let runtime = null;
 let activeOrigin = null;
 let shuttingDown = false;
 let startupComplete = false;
+let recoveryScreenActive = false;
+let recoveryReloadPending = false;
 const desktopEnv = { ...process.env };
 const inheritedOasisApiKey = process.env.OASIS_API_KEY || '';
 
@@ -121,9 +125,43 @@ function createWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    try { if (new URL(url).origin === activeOrigin) return; } catch {}
+    try {
+      const parsed = new URL(url);
+      if (recoveryScreenActive && parsed.protocol === 'data:') return;
+      if (parsed.origin === activeOrigin) {
+        if (recoveryScreenActive) {
+          recoveryScreenActive = false;
+          recoveryReloadPending = true;
+        }
+        return;
+      }
+    } catch {}
     event.preventDefault();
     try { const parsed = new URL(url); if (parsed.protocol === 'https:') void shell.openExternal(url).catch(() => {}); } catch {}
+  });
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!recoveryReloadPending) return;
+    recoveryReloadPending = false;
+    void injectRuntimeToken();
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details = {}) => {
+    if (shuttingDown || !runtime || !mainWindow || mainWindow.isDestroyed()) return;
+    recoveryScreenActive = true;
+    const html = crashRecoveryHtml({
+      reason: details.reason || 'unknown',
+      exitCode: details.exitCode,
+      restartUrl: activeOrigin + '/'
+    });
+    void mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)).catch(async () => {
+      recoveryScreenActive = false;
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      await showErrorWithCopy({
+        dialog, clipboard, window: mainWindow, type: 'error',
+        title: 'OASIS stopped',
+        message: 'The workspace window stopped unexpectedly.',
+        detail: 'Close and reopen OASIS. If this keeps happening, run oasis doctor from the terminal.'
+      });
+    });
   });
   mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow;
@@ -159,8 +197,9 @@ async function chooseAndOpenWorkspace() {
   if (!selected) return false;
   try { await openWorkspace(selected); return true; }
   catch (error) {
-    await dialog.showMessageBox(mainWindow || undefined, {
-      type: 'error', title: 'OASIS could not open that folder',
+    await showErrorWithCopy({
+      dialog, clipboard, window: mainWindow || undefined, type: 'error',
+      title: 'OASIS could not open that folder',
       message: 'OASIS could not start the local workspace.',
       detail: String(error && error.message || error)
     });
@@ -213,18 +252,33 @@ if (!app.requestSingleInstanceLock()) {
     if (await isDirectory(saved.workspace)) {
       try { await openWorkspace(saved.workspace); startupComplete = true; return; }
       catch (error) {
-        await dialog.showMessageBox({ type: 'warning', title: 'Choose another workspace', message: 'OASIS could not reopen the last project folder.', detail: String(error && error.message || error) });
+        await showErrorWithCopy({
+          dialog, clipboard, type: 'warning',
+          title: 'Choose another workspace',
+          message: 'OASIS could not reopen the last project folder.',
+          detail: String(error && error.message || error)
+        });
       }
     }
     const selected = await chooseWorkspace(saved.workspace);
     if (!selected) { app.quit(); return; }
     try { await openWorkspace(selected); startupComplete = true; }
     catch (error) {
-      await dialog.showMessageBox({ type: 'error', title: 'OASIS could not start', message: 'OASIS could not start the local workspace.', detail: String(error && error.message || error) });
+      await showErrorWithCopy({
+        dialog, clipboard, type: 'error',
+        title: 'OASIS could not start',
+        message: 'OASIS could not start the local workspace.',
+        detail: String(error && error.message || error)
+      });
       app.quit();
     }
   }).catch(async (error) => {
-    await dialog.showMessageBox({ type: 'error', title: 'OASIS startup failed', message: String(error && error.message || error) });
+    await showErrorWithCopy({
+      dialog, clipboard, type: 'error',
+      title: 'OASIS startup failed',
+      message: 'OASIS could not start. Try again, then run oasis doctor if the problem continues.',
+      detail: String(error && error.message || error)
+    });
     app.quit();
   });
 }

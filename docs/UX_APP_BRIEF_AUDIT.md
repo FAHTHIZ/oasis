@@ -13,7 +13,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Clear product description and Alpha expectations | Implemented in source | `site/index.html` describes the product and shows Alpha; README now has an Alpha badge. |
 | Separate desktop and terminal installation choices | Implemented in source | Homepage has two distinct install cards. |
 | Re-check limitations against actual code | Partially done | Homepage acknowledges the VS Code integration and unfinished platform/phone work; continue keeping it synchronized with current code. |
-| Larger/accessible muted text and WCAG AA | Partial / verify | Muted text is brighter than the earlier brief's example, but no contrast-checker result or full accessibility audit was found. |
+| Larger/accessible muted text and WCAG AA | Partial / automated selected-pair checks added on `app/alpha-readiness-gaps` | Homepage and browser-workspace integrity scripts now calculate WCAG contrast for selected small-text/background pairs; the workspace's dim section/footer labels were brightened. A full visual audit, all states/themes, keyboard/screen-reader checks, and real-device validation remain open. |
 | Install → Quick start → User guide link order | Implemented in source | Homepage docs list and README links put the install path first. |
 | Root `index.html` versus `site/index.html` | Resolved: they serve different products | Root `index.html` is the installable browser workspace; `site/index.html` is the public marketing homepage. They should not be merged or deleted as duplicates. `scripts/check-site.mjs` validates the app; `.github/scripts/check-public-site.mjs` validates the homepage. |
 | Social preview and Open Graph metadata | Implemented in source | `site/index.html` points to `site/assets/oasis-social-preview.svg`, a 1200×630 SVG. |
@@ -35,9 +35,9 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Activity timeline and empty-state starter tasks | Implemented in source | Browser workspace includes a run monitor/event list and three starter prompts. |
 | Model/mode/context/cost status and budget warnings | Implemented in source | Terminal status footer includes model, mode, context percentage, cost and budget warnings. Browser usage/status data is available, but complete visual parity needs checking. |
 | Checkpoints and one-click undo | Partial / verify | Core snapshots/checkpoints/rewind exist; the desktop UI still needs a full manual test that the last edit can be safely undone from the intended screen. |
-| Plain-language settings, help, and copy-details/doctor action | Partial / verify | CLI doctor and browser settings exist; a complete desktop-friendly error/help journey with a copy-details action was not verified. |
+| Plain-language settings, help, and copy-details/doctor action | Copy-details implemented on `app/alpha-readiness-gaps`; full journey pending | Desktop startup/workspace errors now offer Copy details / Close. Diagnostic text is redacted before display/copy and clipboard failure gives a manual-copy fallback. The full desktop error journey still needs host testing; the CLI doctor and browser settings remain separate paths. |
 | Automatic desktop updates | **Missing** | `electron-updater` is not a dependency and no updater integration was found. Do not promise automatic updates. |
-| Crash recovery screen | **Missing / unverified** | No explicit renderer/background-process crash recovery UI was found in `desktop/main.mjs`. |
+| Crash recovery screen | **Implemented on `app/alpha-readiness-gaps`; app-level verification pending** | `desktop/main.mjs` now handles Electron renderer termination and loads a recovery screen with a restart link and escaped reason/exit-code details. `test/desktop-crash-screen.test.mjs` covers the helper's output and loopback-only restart target; the full desktop crash/restart journey still needs CI and host testing. |
 | Clean-machine installer validation | Partial / verify | Packaging exists, but unsigned installers and first-run/update/uninstall journeys require actual Windows, macOS, and Linux testing. |
 
 ## Terminal
@@ -71,7 +71,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Requirement | Status | Evidence / remaining work |
 |---|---|---|
 | Chat panel, selection context, diff review | Implemented in source | `ide/vscode/src/chat-view.js` and `ide/vscode/src/extension.js`. |
-| Plain-language approvals | Improved; manual verification remains | Browser card now says “OASIS needs your permission,” “Allow once,” and “Deny”; reusable approvals explicitly say they apply for this session. VS Code cards add a cautious destructive-action warning, a clear deny instruction, keyboard-focus styling and a minimum 36px button height. The shared approval backend still enforces the actual decision; risk highlighting is only a visual heuristic. Manual review is still required. |
+| Plain-language approvals | Partial / verify | Permission cards display the CLI-provided message; verify wording, risky-action visibility and denial behavior in a real editor. |
 | Friendly missing-CLI error | Implemented in this pass | `ide/vscode/src/chat-process.js` now explains how to install OASIS or configure `oasis.command`; a focused regression test was added. |
 | Changelog | Implemented in this pass | `ide/vscode/CHANGELOG.md`. |
 | Marketplace icon and screenshots | **Partial / missing** | Activity-bar SVG exists, but a marketplace-ready PNG extension icon and real chat/diff/selection screenshots are still outstanding. |
@@ -103,13 +103,19 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 
 - Added `ide/vscode/CHANGELOG.md`.
 - Improved VS Code startup failures for missing or non-executable OASIS commands, including clear next steps and an `oasis doctor` hint for unexpected errors.
-- Clarified VS Code permission cards with “Allow once” / “Deny”, a review-before-approval reminder, and a conservative red warning for likely destructive requests; added keyboard-focus styling.
-- Added actionable guidance for nonzero VS Code CLI exits, filtered stack frames from the user-facing summary, and added focused regression tests in `test/vscode-chat-process.test.mjs`.
-- Aligned browser approval labels with the same one-time allow/deny wording and explicitly scoped reusable approvals to the current session.
+- Added focused regression tests in `test/vscode-chat-process.test.mjs`.
 - Added `docs/PHONE_CONNECT_SECURITY.md` and clarified that explicit LAN/TLS options exist today but do not constitute secure phone pairing.
 - Added an Alpha badge to the README and corrected the Apache license badge's alt text.
 - Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
+- On `app/alpha-readiness-gaps`, added a desktop renderer-crash recovery screen and focused tests. The crash-screen and error-dialog helper tests passed **7/7** in a local temporary harness; the complete repository suite and Electron crash/restart journey have not been run here.
+- Added WCAG contrast-ratio checks for selected public-homepage and browser-workspace text colors, and brightened two low-contrast workspace labels. The full public-site/app checks have not yet been run from the repository.
+- Added a reusable desktop error dialog with **Copy details** and **Close** choices. Error text is redacted before it is displayed or copied; if clipboard access fails, OASIS explains how to copy manually. Focused tests were added but have not yet been run as part of the repository suite.
 
 ## Verification limits
 
-The repository can be read and updated through GitHub, but this runtime could not clone the repository to run tests locally because it could not resolve `github.com`. GitHub Actions caught a syntax error in an earlier VS Code exit-message commit (`Unexpected identifier 'oasis'` from a nested template-literal backtick); the wording was corrected in commit `6ff224bc`. The subsequent quality run was still queued at the last status check, so the latest code is **not yet confirmed green**. Re-check [GitHub Actions](https://github.com/FAHTHIZ/oasis/actions) for the current `main` run, then do a live VS Code review. Do not treat source edits as test passes.
+The repository could be read and updated through GitHub, but this runtime could not clone the repository to execute its test suite because it could not resolve `github.com`. The newly added test has **not** been run in this environment. The next check is `npm run check` on the current main revision, followed by a real VS Code manual check. Do not mark those checks green until the results are available.
+
+
+## Follow-up branch status — `app/alpha-readiness-gaps`
+
+This branch adds the missing desktop renderer-crash recovery path. It is intentionally separate from the verified default-branch snapshot; do not treat the change as shipped until the repository checks pass and the recovery flow is exercised in a packaged or development Electron app. The isolated crash-screen and error-dialog helper tests passed **7/7** in a local temporary harness; this is not a substitute for `npm run check`, the clean-environment suite, or actual Electron crash/restart testing.
