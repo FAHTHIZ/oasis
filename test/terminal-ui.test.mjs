@@ -8,7 +8,7 @@ import { KeyDecoder, createEditorState, applyKey, layoutFrame, stringWidth, comm
 import { createCompleter, rankFuzzy } from '../src/completion.mjs';
 import { loadHistory, appendHistory } from '../src/input-history.mjs';
 import { renderMarkdown, MarkdownStream, renderDiff, highlightCode } from '../src/markdown.mjs';
-import { animationEnabled, logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
+import { animationEnabled, logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock, verboseToolOutput } from '../src/terminal-ui.mjs';
 
 const keys = (raw) => new KeyDecoder().feed(raw);
 const typeAll = (state, raw) => { for (const key of keys(raw)) state = applyKey(state, key).state; return state; };
@@ -197,4 +197,22 @@ test('! shell mode runs the command and returns output for context', async () =>
   assert.equal(ran.code, 3);
   assert.match(ran.output, /hi/);
   assert.match(shellContextBlock([{ command: 'ls', code: 0, output: 'a\n' }]), /<bash-input>ls<\/bash-input>/);
+});
+
+
+test('verbose tool output does not repeat identical payloads exposed under aliases', () => {
+  const rendered = verboseToolOutput('tool', {
+    output: 'same payload',
+    content: 'same payload'
+  });
+  assert.equal(rendered.split('same payload').length - 1, 1);
+});
+
+test('verbose tool output preserves distinct stdout and stderr', () => {
+  const rendered = verboseToolOutput('tool', {
+    stdout: 'standard output',
+    stderr: 'standard error'
+  });
+  assert.match(rendered, /standard output/);
+  assert.match(rendered, /\\[stderr\\]\\nstandard error/);
 });
