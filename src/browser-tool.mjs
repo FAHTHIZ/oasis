@@ -5,6 +5,7 @@
 // pages you are signed in to. Visiting a new site and running page JavaScript ask first
 // unless the call is auto-approved.
 import { Browser, findChrome } from './cdp.mjs';
+import { isNonPublicIpAddress } from './network-safety.mjs';
 
 export const BROWSER_TOOL_DEFINITION = {
   type: 'function',
@@ -75,20 +76,6 @@ export function browserNavigationNeedsApproval(rawUrl, approvedNavigations, { st
   return !localBypass && !approvedNavigations.has(policy.approvalKey);
 }
 
-function isPrivateOrSpecialIPv4(host) {
-  const parts = host.split('.');
-  if (parts.length !== 4 || parts.some(part => !/^\d{1,3}$/.test(part) || Number(part) > 255)) return false;
-  const [a,b,c] = parts.map(Number);
-  return a === 0 || a === 10 || a === 127 || a >= 224 ||
-    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
-    (a === 192 && b === 88 && c === 99) ||
-    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
-    (a === 203 && b === 0 && c === 113) ||
-    (a === 100 && b >= 64 && b <= 127);
-}
-
 export function isPrivateBrowserRequest(rawUrl) {
   let parsed;
   try { parsed = new URL(String(rawUrl)); } catch { return true; }
@@ -97,21 +84,11 @@ export function isPrivateBrowserRequest(rawUrl) {
   // HTTP(S)-only host checks below. Data URLs remain non-network content.
   if (parsed.protocol === 'file:' || parsed.protocol === 'about:') return true;
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  let host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') ||
       host === 'metadata' || host === 'metadata.google.internal' || !host.includes('.')) return true;
-  if (host.startsWith('::ffff:')) {
-    const mapped = host.slice('::ffff:'.length);
-    if (mapped.includes('.')) return isPrivateOrSpecialIPv4(mapped);
-    // Conservatively deny hexadecimal IPv4-mapped IPv6 so it cannot bypass the IPv4 checks.
-    return true;
-  }
-  if (isPrivateOrSpecialIPv4(host)) return true;
-  return host === '::' || host === '::1' || /^f[cd]/i.test(host) ||
-    /^fe[89ab]/i.test(host) || /^fec0/i.test(host) || /^ff/i.test(host) ||
-    /^2001:(?:0|1|2|3|10|20|db8):/i.test(host) || /^2001:4:112:/i.test(host) ||
-    /^2002:/i.test(host) || /^64:ff9b:/i.test(host) || /^3fff:/i.test(host);
+  return isNonPublicIpAddress(host);
 }
 
 const KEYS = {
