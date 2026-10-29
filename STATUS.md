@@ -20,6 +20,7 @@ This is a conservative evidence status, not a claim that the repository has no w
 - **HTTP MCP credential-helper lifecycle:** the stdout cap, bounded stderr, timeout, overflow kill and client-close cleanup now have dedicated regression coverage. Verification on current HEAD is pending.
 - **Worktree Git subprocess lifecycle:** replaced `execFile` calls in the isolated worktree manager with a no-shell runner that bounds output and kills the full process tree after timeout; added a child/grandchild regression. Current-head CI is pending.
 - **Persisted session and backup boundaries:** session files and backup manifests use size-bounded descriptor reads; symlinked sessions are rejected/omitted; backup restore blocks POSIX and Windows path traversal forms. Adversarial tests added; current-head CI is pending.
+- **Task progress checkpoint recovery:** shared tasks accept bounded, redacted checkpoints only from the active claimant; checkpoints survive task-store restoration after stale claims reset. Tests cover ownership, size bounds, redaction, and replacement-worker lookup. Current-main CI pending.
 
 
 These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:

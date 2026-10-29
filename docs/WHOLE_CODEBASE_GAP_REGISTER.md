@@ -85,6 +85,8 @@ See [the evaluation protocol](BENCHMARKS.md) and [benchmark audit](BENCHMARK_AUD
 **Close the remaining gap when:** implement and test an explicit recoverable run state machine, restart-safe task/lease reconciliation, cancellation propagation and safe worker controls. The monitor must never imply that a killed process has resumed. Interrupted partial work still needs a clearer recovery workflow; clean committed results can now be inspected and explicitly integrated without automatic merge.
 
 
+
+**Progress:** shared tasks now have a `task_checkpoint` operation with active-claim ownership checks, bounded lists/text, and basic credential redaction. Checkpoints are included in task views and survive saved-session restoration while stale worker claims are cleared, allowing a replacement worker to inspect prior progress. This is task-progress recovery, not automatic resurrection or exact continuation of the prior worker process; current-main CI is pending.
 ### P1 — Validate the browser/local-first product boundaries
 
 **Gap:** browser projects/tasks/notes do not fully sync with CLI workspace state. Dashboard data is local and unencrypted, and the runtime token stored in browser session storage is sensitive. Non-loopback HTTPS relies on operator-provided certificates; mobile trust onboarding and real-device security journeys are unfinished.
