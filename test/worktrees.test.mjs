@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, writeFile, rm, access, chmod } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, access, chmod, symlink, readdir, mkdir } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { listWorktrees, inspectWorktree, mergeWorktree, isCommitIntegrated } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
@@ -90,6 +90,24 @@ test('worktree isolation refuses non-git folders and cleans up unchanged worktre
   assert.equal(execFileSync('git', ['branch', '--list', wt.branch], { cwd: plain }).toString().trim(), '');
 });
 
+
+test('worktree isolation refuses a symlinked .oasis/worktrees destination', async (t) => {
+  const { createWorktree } = await import('../src/worktrees.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-symlink-root-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-symlink-outside-'));
+  t.after(() => Promise.all([
+    rm(root, { recursive: true, force: true }),
+    rm(outside, { recursive: true, force: true })
+  ]));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'README.md'), 'safe\n');
+  run('add', '-A'); run('commit', '-qm', 'initial');
+  await mkdir(path.join(root, '.oasis'));
+  await symlink(outside, path.join(root, '.oasis', 'worktrees'), 'dir');
+  await assert.rejects(createWorktree(root, 'escape'), /symbolic-link path|escapes the repository/);
+  assert.deepEqual(await readdir(outside), [], 'no worktree contents were written outside the repository');
+  assert.equal((await listWorktrees(root)).length, 0);
+});
 
 test('worktree merge preflight integrates disjoint changes and preserves the source worktree', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-merge-'));
