@@ -39,6 +39,101 @@ export function webSessionState(session, env = process.env) {
   };
 }
 
+function monitorText(value, max = 500) {
+  return redactApprovalSecrets(String(value == null ? '' : value)).replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+// Stable, deliberately small projection for the run monitor. It exposes lifecycle
+// metadata and redacted activity, never conversation contents or worker prompts.
+export function summarizeAgentRun(job) {
+  if (!job || typeof job !== 'object') return null;
+  const rawEvents = Array.isArray(job.events) ? job.events : [];
+  const agentEvents = rawEvents
+    .filter((event) => event && event.type === 'agent_activity' && event.data && typeof event.data === 'object')
+    .slice(-80);
+  const workers = new Map();
+  const teams = new Map();
+  const stateFor = {
+    'agent.started': 'running',
+    'agent.background_started': 'running',
+    'agent.resumed': 'running',
+    'task.dispatched': 'running',
+    'agent.stop_requested': 'stopping',
+    'agent.completed': 'completed',
+    'agent.failed': 'failed',
+    'agent.cancelled': 'cancelled'
+  };
+  const events = agentEvents.map((event) => {
+    const data = event.data;
+    const type = monitorText(data.type, 80) || 'agent.event';
+    const agentId = monitorText(data.agent_id, 100);
+    const teamId = monitorText(data.team_id, 100);
+    const description = monitorText(data.description, 200);
+    const detail = monitorText(data.detail, 500);
+    if (type.startsWith('team.')) {
+      const id = teamId || description;
+      if (id) {
+        const current = teams.get(id) || { id, name: id, status: 'active', lastActivity: event.at || data.at || '' };
+        if (type === 'team.created') {
+          current.name = description || current.name;
+          current.description = detail;
+          current.status = 'active';
+        } else if (type === 'team.shutdown_requested') current.status = 'shutting_down';
+        else if (type === 'team.closed') current.status = 'closed';
+        current.lastActivity = event.at || data.at || current.lastActivity;
+        teams.set(id, current);
+      }
+    }
+    if (agentId) {
+      const current = workers.get(agentId) || {
+        id: agentId, description: agentId, status: 'unknown', teamId: '', taskId: '',
+        lastActivity: event.at || data.at || '', detail: ''
+      };
+      if (teamId) current.teamId = teamId;
+      if (description && type !== 'task.dispatched') current.description = description;
+      if (type === 'task.dispatched') current.taskId = description;
+      if (stateFor[type]) current.status = stateFor[type];
+      current.lastActivity = event.at || data.at || current.lastActivity;
+      if (detail) current.detail = detail;
+      workers.set(agentId, current);
+    }
+    return {
+      id: Number.isSafeInteger(event.id) ? event.id : 0,
+      at: monitorText(event.at || data.at, 40),
+      type,
+      actor: monitorText(data.actor, 100) || 'main',
+      agentId,
+      teamId,
+      description,
+      detail
+    };
+  });
+  const workerList = [...workers.values()].sort((a, b) => Date.parse(b.lastActivity || 0) - Date.parse(a.lastActivity || 0));
+  for (const team of teams.values()) {
+    const members = workerList.filter((worker) => worker.teamId === team.id);
+    team.memberCount = members.length;
+    team.running = members.filter((worker) => worker.status === 'running' || worker.status === 'stopping').length;
+    if (team.status === 'shutting_down' && team.running === 0) team.status = 'closed';
+  }
+  const latestEvent = rawEvents.length ? rawEvents[rawEvents.length - 1] : null;
+  return {
+    id: monitorText(job.id, 80),
+    title: monitorText(job.title || job.type || 'Coding task', 160),
+    type: monitorText(job.type || 'agent', 40),
+    status: monitorText(job.status || 'unknown', 40),
+    createdAt: monitorText(job.createdAt, 40),
+    updatedAt: monitorText(latestEvent && latestEvent.at || job.updatedAt || job.createdAt, 40),
+    workspaceName: monitorText(job.workspaceName, 160),
+    isolation: monitorText(job.isolation || (job.worktreeBranch ? 'worktree' : 'workspace'), 40),
+    workerCount: workerList.length,
+    runningWorkers: workerList.filter((worker) => worker.status === 'running' || worker.status === 'stopping').length,
+    teamCount: teams.size,
+    teams: [...teams.values()],
+    workers: workerList,
+    events: events.slice(-60)
+  };
+}
+
 export function toolDetail(name, args = {}) {
   if (!args || typeof args !== 'object') return '';
   let detail = '';
@@ -389,6 +484,41 @@ export function createOasisWebServer(options = {}) {
       job.worktreeBaseCommit = taskWorktree.base;
     }
     jobs.set(job.id, job);
+    // Keep worker events attached to the task that launched each worker, even if
+    // the parent starts a later turn before a background worker finishes.
+    if (!(session.agentRunJobs instanceof Map)) session.agentRunJobs = new Map();
+    session.agentRunJobs.set(job.id, job);
+    while (session.agentRunJobs.size > 100) {
+      let removed = false;
+      for (const [runId, candidate] of session.agentRunJobs) {
+        const workerStillRunning = session.agentTasks && session.agentTasks.agents instanceof Map &&
+          [...session.agentTasks.agents.values()].some((worker) => worker.runId === runId && worker.status === 'running');
+        if (!workerStillRunning && !['running', 'waiting_approval'].includes(candidate.status)) {
+          session.agentRunJobs.delete(runId);
+          removed = true;
+          break;
+        }
+      }
+      if (!removed) break;
+    }
+    session.agentRunId = job.id;
+    session.onAgentEvent = (agentEvent) => {
+      const originRunId = String(agentEvent && agentEvent.run_id || session.agentRunId || '');
+      const target = session.agentRunJobs.get(originRunId);
+      if (!target) return;
+      const safeEvent = {
+        id: Number.isSafeInteger(agentEvent && agentEvent.id) ? agentEvent.id : 0,
+        at: monitorText(agentEvent && agentEvent.at, 40),
+        type: monitorText(agentEvent && agentEvent.type, 80) || 'agent.event',
+        actor: monitorText(agentEvent && agentEvent.actor, 100) || 'main',
+        ...(agentEvent && agentEvent.run_id ? { run_id: monitorText(agentEvent.run_id, 100) } : {}),
+        ...(agentEvent && agentEvent.agent_id ? { agent_id: monitorText(agentEvent.agent_id, 100) } : {}),
+        ...(agentEvent && agentEvent.team_id ? { team_id: monitorText(agentEvent.team_id, 100) } : {}),
+        ...(agentEvent && agentEvent.description ? { description: monitorText(agentEvent.description, 200) } : {}),
+        ...(agentEvent && agentEvent.detail ? { detail: monitorText(agentEvent.detail, 500) } : {})
+      };
+      emit(target, 'agent_activity', safeEvent);
+    };
     startingWorkspaces.delete(workspaceKey);
     busyWorkspaces.add(taskWorkspaceKey);
     releaseJobReservation();
@@ -1231,6 +1361,32 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+
+    if (req.method === 'GET' && pathname === '/api/agent-monitor') {
+      const stored = await taskStore.list({ limit: 100 });
+      const summaries = new Map(stored.map((item) => [item.id, item]));
+      for (const job of jobs.values()) {
+        const lastEvent = job.events.at(-1);
+        summaries.set(job.id, {
+          id: job.id, type: job.type || 'agent',
+          title: String(job.title || job.type || 'Coding task').slice(0, 160),
+          status: job.status, createdAt: job.createdAt,
+          updatedAt: lastEvent && lastEvent.at || job.createdAt,
+          sessionId: job.sessionId || null,
+          workspaceName: path.basename(activeRoot),
+          eventCount: job.events.length, error: job.error || null
+        });
+      }
+      const recent = [...summaries.values()]
+        .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))
+        .slice(0, 50);
+      const runs = await Promise.all(recent.map(async (summary) => {
+        const task = jobs.get(summary.id) || await taskStore.get(summary.id);
+        return summarizeAgentRun(task || summary);
+      }));
+      json(res, 200, { runs: runs.filter(Boolean), total: summaries.size, updatedAt: new Date().toISOString() });
+      return;
+    }
 
     const diffMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/diff$/i);
     if (req.method === 'GET' && diffMatch) {
