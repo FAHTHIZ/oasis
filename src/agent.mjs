@@ -390,7 +390,12 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   // Server -> client requests (elicitation, roots) reach the session through this host.
   const mcpHost = { session: null, onToolsChanged: (target) => refreshSessionMcpTools(target) };
-  const mcp = bare && !flagServers.length ? { clients: new Map(), failures: [] }
+  // MCP_CONNECTION_NONBLOCKING=true / OASIS_MCP_NONBLOCKING=1 / "mcpNonBlocking": servers connect in the
+  // background; their tools appear when ready and wait_for_mcp_servers blocks on them.
+  const mcpNonBlocking = !(bare && !flagServers.length) && (/^(1|true|yes)$/i.test(String(env.OASIS_MCP_NONBLOCKING || env.MCP_CONNECTION_NONBLOCKING || '')) || loadedSettings.mcpNonBlocking === true);
+  const mcpOptions = { root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures };
+  const mcpBackground = mcpNonBlocking ? connectMcpServers(mcpOptions).catch((error) => ({ clients: new Map(), failures: [{ name: 'mcp', error: error.message }] })) : null;
+  const mcp = bare && !flagServers.length || mcpNonBlocking ? { clients: new Map(), failures: [] }
     : await connectMcpServers({ root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
   const dynamic = mcpToolDefinitions(mcp.clients);
   let visibleSkills = skillDescriptions;
@@ -566,6 +571,21 @@ export async function createSession({ root, config, restore = null, permissionMo
     tel.event('oasis.session_start', { model: config && config.model || '', provider: config && config.protocol || '', resumed: Boolean(restore) });
   }
   mcpHost.session = session;
+  if (mcpBackground) {
+    session.mcpNonBlocking = true;
+    session.mcpConnecting = mcpBackground.then((result) => {
+      session.mcpConnecting = null;
+      if (session.closed) { closeMcpClients(result.clients); return; }
+      for (const [name, client] of result.clients) session.mcpClients.set(name, client);
+      session.mcpFailures.push(...result.failures);
+      refreshSessionMcpTools(session);
+      const ready = [...result.clients.keys()];
+      const notes = [];
+      if (ready.length) notes.push('MCP servers finished connecting: ' + ready.join(', ') + '. Their tools (mcp_<server>_<tool>) are now available.' + mcpInstructionsSection(result.clients, { channels: session.channels, settings: loadedSettings }));
+      if (result.failures.length) notes.push('MCP servers that failed to connect: ' + result.failures.map((f) => f.name + ' (' + String(f.error).slice(0, 200) + ')').join(', '));
+      if (notes.length) (session.asyncHookFeedback ||= []).push(notes.join('\n'));
+    });
+  }
   flushPendingChannels(mcpHost);
   session.hookOptionsFor = () => hookOptions(session, env);
   // FileChanged / ConfigChange hooks, and live settings reload in interactive sessions.
@@ -632,6 +652,7 @@ export function closeSession(session) {
   if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
     runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, hookOptions(session)).catch(() => {});
   }
+  if (session) session.closed = true;
   if (session && session.mcpClients) closeMcpClients(session.mcpClients);
   if (session && session.mcpClients) session.mcpClients.clear();
 }
@@ -1295,7 +1316,7 @@ async function requestCompletionRaw(session, options = {}) {
   const providerEnv = options.env || session.providerEnv || process.env;
   const nativeResponses = config.protocol === 'openai-responses';
   // schedule_wakeup only exists while a self-paced /loop is running.
-  const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS).filter((tool) => tool.function.name !== 'schedule_wakeup' || Boolean(session.selfPacedLoop));
+  const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS).filter((tool) => (tool.function.name !== 'schedule_wakeup' || Boolean(session.selfPacedLoop)) && (tool.function.name !== 'wait_for_mcp_servers' || Boolean(session.mcpNonBlocking)));
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
   let apiKey = config.apiKey;
   if (!apiKey && config.apiKeyHelper) {
@@ -2993,6 +3014,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (mentioned.blocks.length) userContent += '\n\n' + mentioned.blocks.join('\n\n');
     if (mentioned.errors.length) userContent += '\n\n<mcp-resource-errors>\n' + mentioned.errors.join('\n') + '\n</mcp-resource-errors>';
   }
+  if (!options.isSubagent && session.mcpConnecting) userContent += '\n\n<system-reminder>Some MCP servers are still connecting in the background; their tools are not in your list yet. If the task needs them, call wait_for_mcp_servers first.</system-reminder>';
   // "ultracode" in a prompt (or the ultracode setting) asks for a dynamic workflow, as in Claude Code.
   if (!options.isSubagent && !options.planOnly && (/\bultracode\b/i.test(request) || session.ultracode) && session.toolDefinitions.some((tool) => tool.function.name === 'workflow')) {
     userContent += '\n\n<system-reminder>Ultracode: plan this task as a dynamic workflow. Write a workflow script that fans the work out to agents (pipeline/parallel, phases, schema for results you process), run it with the workflow tool, then verify and report its result. Size it to the task.</system-reminder>';

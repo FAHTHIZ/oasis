@@ -795,6 +795,8 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- Set `MCP_CONNECTION_NONBLOCKING=true` (or `OASIS_MCP_NONBLOCKING=1`, or `"mcpNonBlocking": true` in settings) to start sessions without waiting for MCP servers. Their tools appear once connected, the model gets a reminder when they are ready, `/mcp` shows that servers are still connecting, and the model can call `wait_for_mcp_servers` (hooks: `WaitForMcpServers`) before it needs one.
+
 - Reviews (`/review`, `/security-review`, `/ultrareview`, `oasis ultrareview`) record confirmed problems with the `report_findings` tool: file, line, severity, category, summary, failure scenario and fix. The CLI renders them as a `[findings]` list, and `-p --output-format json` / `oasis ultrareview --json` results carry them as `findings` (plus `findings_summary`). Hooks see the tool as `ReportFindings`.
 
 - `/loop PROMPT` with no interval is self-paced: after each run the model calls `schedule_wakeup` with `delay_seconds` (60 to 3600) and a reason, or `stop: true` to end the loop when the work is done. If it never calls it, the loop falls back to 10 minutes. `/loop 5m PROMPT` keeps a fixed interval.

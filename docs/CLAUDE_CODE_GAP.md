@@ -96,6 +96,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | `EnterWorktree` / `ExitWorktree` tools | `enter_worktree` / `exit_worktree` switch the session root mid-task; outside paths need approval; `remove` refuses unsaved work unless `discard_changes` | Done |
 | `ScheduleWakeup` / self-paced `/loop` | `/loop PROMPT` without an interval exposes `schedule_wakeup` (60-3600s or `stop`); the tool is hidden outside such loops | Done |
 | `ReportFindings` tool | `report_findings` stores structured, deduped, severity-sorted findings; rendered in the CLI and returned as `findings` in JSON results; review prompts use it | Done |
+| `WaitForMcpServers` / `MCP_CONNECTION_NONBLOCKING` | Background MCP connection; tools are added when ready; `wait_for_mcp_servers` blocks with a timeout and is shown only in non-blocking mode | Done |
 
 ## Ranked next improvements
 
