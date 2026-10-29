@@ -23,6 +23,7 @@
 // Hooks come from user settings or trusted workspaces only (see settings.mjs).
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
 
@@ -124,13 +125,13 @@ export function runHookCommand(command, payload, options = {}) {
     Object.assign(env, options.pluginEnv || {});
     let child;
     try {
-      child = spawn(shell.cmd, shell.args, { cwd: options.root, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+      child = spawn(shell.cmd, shell.args, { cwd: options.root, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, ...processTreeSpawnOptions() });
     } catch (error) {
       resolve({ exitCode: null, stdout: '', stderr: error.message, failed: true });
       return;
     }
     const finish = (value) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); resolve(value); };
-    const timer = timeoutMs ? setTimeout(() => { child.kill('SIGKILL'); finish({ exitCode: null, stdout, stderr: stderr + '\nHook timed out.', timedOut: true }); }, timeoutMs) : null;
+    const timer = timeoutMs ? setTimeout(() => { signalProcessTree(child, 'SIGKILL'); finish({ exitCode: null, stdout, stderr: stderr + '\nHook timed out.', timedOut: true }); }, timeoutMs) : null;
     child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(0, MAX_HOOK_OUTPUT); });
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(0, MAX_HOOK_OUTPUT); });
     child.on('error', (error) => finish({ exitCode: null, stdout, stderr: error.message, failed: true }));
