@@ -31,9 +31,16 @@ function entryPath(id, env) {
 
 async function writeEntry(entry, env) {
   const file = entryPath(entry.id, env);
-  const temp = file + '.' + process.pid + '.tmp';
-  await writeFile(temp, JSON.stringify(entry, null, 2) + '\n', { mode: 0o600 });
-  await rename(temp, file);
+  // A unique same-directory temp file prevents overlapping writers in one
+  // process from sharing a pathname. Rename publishes a complete JSON snapshot
+  // so readers never observe an empty/truncated registry entry.
+  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+  try {
+    await writeFile(temp, JSON.stringify(entry, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    await rename(temp, file);
+  } finally {
+    await unlink(temp).catch(() => {});
+  }
 }
 
 export async function readEntry(id, env = process.env) {
@@ -96,17 +103,27 @@ export async function startExecJob(options = {}) {
     "const { spawn } = require('node:child_process');",
     "const fs = require('node:fs');",
     "const [command, cwd, entryFile] = process.argv.slice(1);",
-    "const shell = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : (process.env.SHELL || '/bin/sh');",
-    "const args = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];",
-    "const child = spawn(shell, args, { cwd, stdio: 'inherit', env: { ...process.env, TERM: process.env.TERM || 'xterm-256color', FORCE_COLOR: process.env.FORCE_COLOR || '1' } });",
-    "const stop = () => { try { child.kill('SIGTERM'); } catch {} };",
-    "process.on('SIGTERM', stop); process.on('SIGINT', stop);",
-    "child.on('exit', (code, signal) => {",
-    "  const exitCode = code === null ? 128 : code;",
-    "  process.stdout.write('\\n[exit ' + exitCode + (signal ? ' ' + signal : '') + ']\\n');",
-    "  try { const e = JSON.parse(fs.readFileSync(entryFile, 'utf8')); if (e.status === 'running') { e.status = exitCode === 0 ? 'completed' : 'failed'; e.exitCode = exitCode; e.finishedAt = new Date().toISOString(); fs.writeFileSync(entryFile, JSON.stringify(e, null, 2) + '\\n'); } } catch {}",
-    "  process.exit(exitCode);",
-    "});"
+    "const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));",
+    "async function main() {",
+    "  // Parent must publish this runner's PID before the command can finish. This",
+    "  // prevents a fast command from writing 'completed' and then being overwritten",
+    "  // by the parent's stale initial 'running' snapshot.",
+    "  let registered = false;",
+    "  for (let i = 0; i < 300; i++) { try { if (JSON.parse(fs.readFileSync(entryFile, 'utf8')).pid === process.pid) { registered = true; break; } } catch {} await wait(10); }",
+    "  if (!registered) { process.stderr.write('Background registry startup timed out.\\n'); process.exit(125); }",
+    "  const shell = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : (process.env.SHELL || '/bin/sh');",
+    "  const args = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];",
+    "  const child = spawn(shell, args, { cwd, stdio: 'inherit', env: { ...process.env, TERM: process.env.TERM || 'xterm-256color', FORCE_COLOR: process.env.FORCE_COLOR || '1' } });",
+    "  const stop = () => { try { child.kill('SIGTERM'); } catch {} };",
+    "  process.on('SIGTERM', stop); process.on('SIGINT', stop);",
+    "  child.on('exit', (code, signal) => {",
+    "    const exitCode = code === null ? 128 : code;",
+    "    process.stdout.write('\\n[exit ' + exitCode + (signal ? ' ' + signal : '') + ']\\n');",
+    "    try { const e = JSON.parse(fs.readFileSync(entryFile, 'utf8')); if (e.status === 'running') { e.status = exitCode === 0 ? 'completed' : 'failed'; e.exitCode = exitCode; e.finishedAt = new Date().toISOString(); const temp = entryFile + '.' + process.pid + '.tmp'; fs.writeFileSync(temp, JSON.stringify(e, null, 2) + '\\n', { flag: 'wx', mode: 0o600 }); fs.renameSync(temp, entryFile); } } catch {}",
+    "    process.exit(exitCode);",
+    "  });",
+    "}",
+    "main().catch((error) => { process.stderr.write(String(error && error.message || error) + '\\n'); process.exit(125); });"
   ].join('\n');
   const out = openSync(logFile, 'a', 0o600);
   try {
