@@ -190,10 +190,8 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'context': {
       if (!session) return { output: 'No conversation yet. Context in use: system prompt only.' };
-      const used = estimateTokens(session.messages);
+      const conversationTokens = estimateTokens(session.messages);
       const windowSize = contextWindowSize(session.config, env);
-      const percent = windowSize ? Math.round(used / windowSize * 100) : 0;
-      const bar = '#'.repeat(Math.min(30, Math.round(percent * 0.3))).padEnd(30, '.');
       const system = estimateTokens([session.messages[0]]);
       const definitions = session.toolDefinitions || [];
       const mcpNames = session.mcpToolMap instanceof Map ? new Set(session.mcpToolMap.keys()) : new Set();
@@ -202,13 +200,18 @@ export async function runBuiltinCommand(name, argument, state) {
       const localTools = Math.round(JSON.stringify(localDefinitions).length / 4);
       const mcpTools = Math.round(JSON.stringify(mcpDefinitions).length / 4);
       const startup = system + localTools + mcpTools;
+      // Tool schemas are sent with requests but are not represented in session.messages.
+      // Include them in the displayed context estimate so a tool-heavy setup is visible.
+      const used = conversationTokens + localTools + mcpTools;
+      const percent = windowSize ? Math.round(used / windowSize * 100) : 0;
+      const bar = '#'.repeat(Math.min(30, Math.round(percent * 0.3))).padEnd(30, '.');
       return { output: [
-        'Context: [' + bar + '] ' + percent + '% of ' + formatNumber(windowSize) + ' tokens',
+        'Estimated context: [' + bar + '] ' + percent + '% of ' + formatNumber(windowSize) + ' tokens',
         '  Startup before chat: ~' + formatNumber(startup) + ' tokens',
         '  System prompt, project instructions and memory: ~' + formatNumber(system),
         '  Built-in tools (' + localDefinitions.length + '): ~' + formatNumber(localTools),
         '  MCP tools (' + mcpDefinitions.length + '): ~' + formatNumber(mcpTools),
-        '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, used - system)),
+        '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, conversationTokens - system)),
         ...(startup > 15000 ? ['Warning: startup context is over 15,000 tokens before your messages. Disconnect unused tools or trim long project instructions.'] : []),
         'These are estimates. Tool schemas and hidden provider metadata can change the real count.',
         'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
