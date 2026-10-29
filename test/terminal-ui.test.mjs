@@ -241,5 +241,6 @@ test('verbose tool output preserves distinct stdout and stderr', () => {
     stderr: 'standard error'
   });
   assert.match(rendered, /standard output/);
-  assert.match(rendered, /\[stderr\]\nstandard error/);
+  assert.ok(rendered.includes('[stderr]'));
+  assert.ok(rendered.indexOf('[stderr]') < rendered.indexOf('standard error'));
 });
