@@ -1,8 +1,8 @@
 # OASIS current implementation status
 
 **Audit date:** October 29, 2026  
-**Code snapshot audited:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca) (before the provider-setup fix was ported to main)
-**Last fully recorded quality baseline:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77). Results for that commit are historical until the current main head completes its own checks.  
+**Latest fully verified feature snapshot:** [`2636739b7867c5d160de3cab5547d0e7b152345d`](https://github.com/FAHTHIZ/oasis/commit/2636739b7867c5d160de3cab5547d0e7b152345d). [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789) passed 584 tests, 22 evaluation fixtures, the Node.js 22/24/26 matrix, Linux PTY smoke, and browser E2E.
+**Current-head caveat:** `main` has received later public-fetch and federated-search commits; these are newer than the verified feature snapshot and must pass their own workflow before being called release-verified.  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist.
@@ -11,21 +11,21 @@ This is the repository-grounded status page. It separates shipped implementation
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-The last fully recorded quality baseline, comparator revision `268862c`, passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, a Linux PTY smoke test and browser E2E. [Homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) also passed for that earlier revision. These results are useful baseline evidence, not proof that later commits pass. The main branch has since received a provider-setup behavior fix and regression tests; current-head CI must pass before those changes are treated as verified. `oasis eval --compare` compares saved reports, but the 22 existing fixtures remain mostly small helper tasks rather than a representative repository-level coding benchmark.
+The latest fully completed feature-quality run, [run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789) on `2636739`, passed 584 tests on Node.js 22/24/26, validated 22 evaluation fixtures, and passed native PTY plus browser E2E. This includes the browser task-history and isolated-worktree implementation. Later public-fetch/federated-search changes are newer than that tested revision; do not treat the current main head as green until its own checks complete. `oasis eval --compare` compares saved reports, but the 22 fixtures remain a smoke suite rather than a representative repository-level coding benchmark.
 
 ## Verified repository and CI snapshot
 
-**Code snapshot used for the latest source audit:** `92798f0b5e0c636fd9702b3251759d14d74a03ca` (October 29, 2026). Provider-setup fixes were committed to `main` after that snapshot; check the current workflow results before treating them as release-verified.
+**Latest fully tested code snapshot:** `2636739b7867c5d160de3cab5547d0e7b152345d` (October 29, 2026; see [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789)). Newer main commits add public URL-fetch and federated-search work and still require a completed current-head matrix.
 
 | Evidence | Latest verified result |
 | --- | --- |
 | Runtime modules | 61 `.mjs` modules under `src/` after adding the process-tree termination helper |
-| Test layout | Node.js test specifications plus shared helpers; current quality run reports 573 passing tests |
-| Last recorded Node test suite | **573 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40807290624](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), on the historical comparator baseline |
-| Last recorded evaluation-fixture validation | **21/21 valid**; a small regression/smoke suite, not a full coding benchmark |
-| Node runtime matrix | Node.js 22, 24 and 26 passed in the latest Quality Checks run |
-| Native PTY check | Real interactive-process smoke test passed on Linux / Node.js 22; this is not proof of Windows/macOS/Termux support |
-| Browser E2E | Linux Chromium authenticated chat smoke test passed, including a workspace write/read cycle |
+| Test layout | Node.js test specifications plus shared helpers; latest fully verified feature run reports 584 passing tests |
+| Latest fully verified Node test suite | **584 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789) |
+| Latest fully verified evaluation-fixture validation | **22/22 valid**; still a smoke suite, not a representative coding benchmark |
+| Node runtime matrix | Node.js 22, 24 and 26 passed in run 40817267789; newer main commits need their own run |
+| Native PTY check | Passed on Linux / Node.js 22 in run 40817267789; this is not proof of Windows/macOS/Termux support |
+| Browser E2E | Authenticated Linux Chromium chat smoke test passed in run 40817267789, including workspace write/read |
 | Package integrity | Production-package checks passed in the latest Quality Checks run |
 | Desktop packaging | [Build OASIS desktop installers run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. Installers remain unsigned. |
 | Homepage/repository validation | [Homepage/repository validation run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed on comparator code revision `268862c` |
@@ -84,7 +84,8 @@ All three required workflows passed together on the historical comparator code r
 - Browser GitHub access reuses the host's GitHub CLI login (`gh auth login`); it is not embedded GitHub OAuth or a GitHub App integration.
 - The static public site is served through GitHub Pages. It is not a desktop/mobile app or a remote cloud-agent service.
 
-- The browser now includes a Run history panel backed by `GET /api/jobs`, with bounded local task summaries and retrieval of saved tasks after runtime restart. Records remain on the host under the private OASIS configuration directory, with atomic writes, size limits, and common credential redaction; this is not hosted compute or cross-device sync. This commit adds a restart-persistence end-to-end test and workspace-lock tests; current-head CI must pass before these additions are considered verified.
+- The browser includes a Run history panel backed by the authenticated `GET /api/jobs` API, with bounded local summaries and retrieval after runtime restart. Records remain under the host's private OASIS configuration directory, with atomic writes, size limits, and common credential redaction; this is not hosted compute or cross-device sync.
+- Browser chat offers an opt-in isolated Git-worktree mode. It requires a clean checkout, runs edits on a separate branch, applies a bounded heuristic secret scan before automatic commit, and exposes a capped diff preview through an authenticated API. The main checkout is not auto-merged; if a scan or finalization fails, the worktree is retained for review. This feature was verified in Quality Checks run 40817267789. Secret-pattern scanning is a safety layer, not a complete security guarantee.
 
 ## Code inventory
 

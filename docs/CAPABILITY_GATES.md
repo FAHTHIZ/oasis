@@ -49,6 +49,8 @@ Every task must include a pinned base snapshot, prompt, allowed tools, budget/ti
 
 ## Gate 3 — Durable, observable agent work
 
+**Implemented on `main` (browser-task scope):** task history persists locally and marks unfinished runs interrupted after a process restart; the browser exposes run summaries/details; an opt-in isolated Git-worktree mode requires a clean checkout, saves changes on a dedicated review branch, runs a bounded secret-pattern check before committing, and serves a bounded authenticated diff preview. The change never auto-merges into the checkout. These are meaningful foundations, but do not close the broader gate: cross-session scheduler recovery, full approve/deny/cancel UI coverage, visual worker monitoring, and no-orphan process checks across supported OSes remain open.
+
 - [ ] Persist task identity, state transitions, events, worker, workspace/branch, approvals, verification results, and failure reason.
 - [ ] Recover interrupted work after restart without relabeling unfinished work as completed.
 - [ ] Make pause, resume, cancellation, and shutdown idempotent and observable.

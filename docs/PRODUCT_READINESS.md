@@ -7,9 +7,9 @@ OASIS is an independent open-source coding agent and local-first developer works
 
 ## What is already in place
 
-The project has a multi-step agent/tool loop; scoped workspace file operations; approvals; snapshots and rewind; Git and test tools; saved sessions; multiple hosted and local provider routes; MCP; skills and hooks; plugin adapters; subagents; a session-local task board; bounded worktree dispatch; a local authenticated browser workspace; a VS Code-family extension; a GitHub Action; and desktop packaging.
+The project has a multi-step agent/tool loop; scoped workspace file operations; approvals; snapshots and rewind; Git and test tools; saved sessions; multiple hosted and local provider routes; MCP; skills and hooks; plugin adapters; subagents; a session-local task board; bounded worktree dispatch; persisted browser task history; opt-in isolated browser coding runs with a separate Git branch and reviewable diffs; a local authenticated browser workspace; a VS Code-family extension; a GitHub Action; and desktop packaging.
 
-The last fully recorded baseline passed 573 Node tests on Node.js 22, 24 and 26, validated 21 evaluation fixtures, and passed native PTY, browser E2E, homepage/repository validation, and desktop build checks. Those results belong to the recorded historical baseline, not the latest `main` head. The provider-setup preservation fix and its regression tests were subsequently committed directly to `main`; confirm current-main checks before release. These checks are regression and packaging signals—not proof of production readiness or repository-scale coding quality. Live CI: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
+The latest fully verified feature baseline, commit `2636739`, passed [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789): 584 Node tests, 22/22 evaluation fixtures, Node.js 22/24/26, native PTY and browser E2E. Later public-fetch/federated-search commits are newer and still require a completed main-head run. These checks are regression evidence—not proof of production readiness or repository-scale coding quality. Live CI: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
 
 ## Biggest remaining gaps
 
@@ -38,7 +38,7 @@ For each task, store the repository snapshot identifier, prompt, allowed tools, 
 
 ### P2 — Durable agent operations
 
-The project already has subagents, task leases, peer messaging, session-local teams, activity events and worktree-isolated dispatch. The next useful layer is a reliable lifecycle around them:
+The project now also has durable local browser task history, interrupted-task recovery, and opt-in isolated browser coding runs with a bounded, review-only diff endpoint. The next useful layer is a reliable, observable lifecycle across all agent types:
 
 1. A run ledger with task, worker, status, branch, approvals, token/cost usage, last event and failure reason.
 2. Pause/resume/cancel with clear terminal states and idempotent recovery after a process restart.
