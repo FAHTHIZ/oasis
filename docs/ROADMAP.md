@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 28, 2026**, against implementation baseline `1da39af90f36629a706e0d452c1b5d5bbaeccc44`. The current test and capability inventory lives in [CURRENT_STATUS.md](CURRENT_STATUS.md); the competitor-specific backlog lives in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against implementation baseline [`eeb5e7ee623ed18dc9c7fcca79b9ebd0503e25c4`](https://github.com/FAHTHIZ/oasis/commit/eeb5e7ee623ed18dc9c7fcca79b9ebd0503e25c4). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); the implementation/CI inventory is [CURRENT_STATUS.md](CURRENT_STATUS.md), and the competitor-specific comparison is [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -32,7 +32,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Public documentation fetch with URL checks, redirect handling, and size limits.
 - User-level provider configuration, environment setup diagnostics, built-in skills, project instructions, file snapshots, and snapshot restore.
 - PDF text extraction in `read_file` (page ranges), headless `--json-schema` structured output with validation and retries, and `-w/--worktree` sessions on their own branch.
-- Hooks: 14 events (including PostToolUseFailure, PermissionRequest, SubagentStart, Pre/PostCompact, Notification, CwdChanged) and `command`, `http`, and `prompt` hook types.
+- Hooks: a broad Claude Code-style event and handler surface, including command, HTTP, prompt, MCP-tool and agent handlers, with file/config/worktree/team lifecycle events and regression coverage. The parity details and remaining semantics are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
 - Custom commands and skills: inline `` !`cmd` `` output, `allowed-tools`, `effort`, `context: fork` subagent runs, `/skill-name`, and headless `/command` expansion.
 - Auto permission mode: a classifier model allows routine actions and blocks risky ones. It is resistant to prompt injection because it never sees tool output.
 - SDK (`import { query, tool } from 'oasis-oss'`) with in-process tools and `canUseTool`, plus a `--bare` headless mode.
@@ -44,26 +44,32 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Bundled [Ponytail](https://github.com/DietrichGebert/ponytail) skills (MIT) for a lean, smallest-complete-change mode.
 - CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
 
-## Next: Claude Code parity
+## Next milestone — Alpha confidence and end-to-end reliability
 
-Recommended order is based on capability impact, not ease of implementation:
+The current priority is to make the existing product dependable and measurable before adding another layer of feature parity. The key blocker is a mixed CI signal: Quality Checks and desktop builds passed on the current main commit, while homepage/repository validation failed the `FileChanged` hook test on that same commit.
 
-1. **Finish PTY reliability and terminal delivery** — the CLI agent supports `run_command interactive=true` plus `terminal_read/input/resize/interrupt/stop/list`; the browser has a locally bundled xterm.js renderer for ANSI, keyboard input and resize. The first native smoke test is Linux/Node 22 only. Still open: Windows/macOS and process-tree cleanup, browser interaction end-to-end tests, and verified no-terminal installers (currently unsigned until credentials are configured).
-2. **Complete multi-agent coordination** — a bounded ready-task dispatcher now starts task-linked background workers in isolated worktrees and frees claims on cancellation/failure. Next: persistent workflow scheduling, visual agent monitoring, cross-session coordination, and richer conflict-aware review/merge handling.
-3. **IDE integrations** — start with a VS Code extension that can review diffs, expose task/session state and hand off to the same runtime.
-4. **Remote and cross-surface workflows** — cloud/remote sessions, mobile steering, Chrome, desktop and chat integrations; this requires an explicit server trust/auth model rather than merely exposing `oasis web`.
-5. **Platform and extension parity** — a native Gemini adapter, PowerShell/Windows sandboxing, broader plugin compatibility and a remote marketplace.
-6. **Terminal polish** — full-screen transcript (vim mode, themes and an editable keybinding file have shipped).
+Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md). The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. Until the required workflows pass on one commit and the failure is explained, the release-confidence milestone is open.
 
-See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CURRENT_STATUS.md](CURRENT_STATUS.md) for the current verification baseline.
+## Post-alpha — highest-value Claude Code gaps
 
-## Milestone 1 — make the CLI release-quality
+Once the Alpha-confidence gate is complete, prioritize:
 
-- Run CI on the default branch and fix all failures.
-- Exercise install/update on Linux, macOS, Windows, and Android/Termux.
-- **Progress:** a Linux Chromium smoke test exercises authenticated browser chat against a fixture provider, including a real write/read tool cycle and verification of the resulting workspace file. Broader critical-path UI coverage, approval/cancellation flows, accessibility review, and cross-platform browser testing remain open.
-- Improve error recovery for package-manager failures and models without tool-calling support.
-- Publish versioned releases only after successful builds and installation tests.
+1. **Persistent, observable agent work:** a visual agent/run monitor; durable pause/resume and recovery; cross-session messaging; transparent worker status, cost, approvals and failures; conflict-aware worktree integration with explicit human approval.
+2. **Secure remote continuity:** remote/mobile access to existing sessions only after identity, trusted-device enrollment, workspace isolation, permission enforcement, reconnect/revocation and audit logs are designed and tested.
+3. **Platform gaps:** JetBrains integration; validated native PTY/process cleanup across supported systems; Windows sandbox and credential storage; native Gemini adapter; desktop signing or explicit unsigned-package handling.
+4. **Ecosystem hardening:** test real third-party plugin compatibility, lifecycle boundaries, marketplace trust/update/rollback and provider failure recovery. Don't present a detected or importable extension as fully compatible without tests.
+
+These priorities follow from the [Claude Code comparison](CLAUDE_CODE_GAP.md). Do not treat an accessible local web server as a replacement for a secure hosted session service.
+
+## Milestone 1 — Alpha release gate
+
+- Make the `FileChanged` hook regression deterministic and root-caused.
+- Require Quality Checks, homepage/repository validation, and desktop build workflows to pass on the same commit.
+- Add end-to-end coverage for approval/denial, cancellation, recovery/resume, worktree conflicts, and browser PTY interaction.
+- Verify first launch and a small edit/test task on each OS claimed as supported. Treat Android/Termux as experimental until tested.
+- Document TLS behavior, sandbox defaults, provider setup, unsigned installers and platform limits truthfully.
+- Expand the 21-task smoke suite into at least 25–30 representative, reviewed repository tasks and publish reproducible OASIS-versus-Claude Code results where the same model can be pinned.
+- Publish a versioned Alpha only when the acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md) are satisfied; successful packaging alone is not sufficient.
 
 ## Milestone 2 — provider and tool ecosystem
 
@@ -86,7 +92,7 @@ See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CUR
 
 - Upgrade plan mode into persistent task checklists with explicit acceptance criteria, execution gates, and regression-oriented verifier cycles.
 - Add narrow specialist agents for review/testing/research, with bounded concurrency. **Progress:** the session task board now supports dependency-aware `task_claim`/`task_renew`/`task_release`, peer messages, named team lifecycle, and `dispatch_ready_tasks` for bounded model-directed waves of background workers in isolated worktrees. Cancellation/failure releases the worker's task lease. It remains session-local and does not run an autonomous persistent queue.
-- **Progress:** up to two independent read-only specialist reviews can execute concurrently; parent tool-call results remain ordered. The ready-task dispatcher adds parallel code-writing waves, but it does not automatically launch new work when a prerequisite completes, merge branches, resolve overlapping edits, or persist a workflow across sessions.
+- **Progress:** up to two independent read-only specialist reviews can execute concurrently; parent tool-call results remain ordered. With `auto_dispatch: true`, the ready-task dispatcher fills freed slots and can start downstream work once prerequisite commits are integrated. It does not persist the live worker chain across process restarts, auto-merge branches, or resolve overlapping edits.
 - **Progress:** OpenTelemetry export is implemented (metrics, events and nested traces over OTLP/HTTP JSON) and tested against a local collector.
 - Add structured event logs, task checklists, stronger independent verification, and more complete undo/revert workflows.
 - **Progress:** a `diagnostics` tool runs detected type checkers and linters (tsc, ESLint, Ruff, mypy, Pyright, go vet, cargo check) plus built-in JS/JSON syntax checks and returns structured problems. An `lsp` tool now keeps language servers running per session for definition, references, hover, symbols, call hierarchy, and pushed or pulled diagnostics. Auto memory keeps durable notes across sessions (Markdown files, BM25 recall, secret redaction, duplicate merging). MCP resources and prompts are supported. Session commands now include `/effort`, `/copy`, `/undo`, `/fork`, `/loop`, `/cd`, `/sandbox`, `/skills`, `/config`, `/doctor` and `/release-notes`. Workspace-specific policy rules remain future work.
@@ -97,10 +103,14 @@ See [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the sourced comparison and [CUR
 - Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
 - Expand the optional OpenHands bridge into a richer delegated-task lifecycle: direct event streaming, UI-linked confirmation status, and worktree change inspection/integration. Current bridge requires a separately configured Agent Server and profile; remote confirmations remain handled in OpenHands.
 - Establish a well-tested install/bootstrap flow for supported platforms.
-- Upgrade the argv-based command runner to a real interactive PTY and terminal emulator, with lifecycle controls and platform testing.
+- **Progress:** the CLI has a persistent PTY manager and the browser includes a bundled xterm.js renderer; complete process-tree cleanup and cross-platform integration testing remain Alpha-gate work.
 - **Progress:** the web bridge supports HTTPS with a user-provided certificate/key pair, enforces TLS 1.2+, and refuses non-loopback plaintext listeners unless `--allow-insecure-lan` is explicitly used. Certificate provisioning, phone trust onboarding, and real-device security tests remain unfinished.
 - Share browser dashboard projects/tasks/notes with the selected repository workspace through a tested sync and conflict-resolution design.
 
 ## Deliberate non-claims
 
-OASIS is not yet at Claude Code feature parity. The tested baseline is strong for a single-machine CLI coding agent, but does not establish equal coding outcomes or full platform parity. It includes MCP, saved sessions, patch edits, glob/ranged reads, permissions, optional Linux/macOS sandboxing, a dependency-aware shared task board with exclusive leases and bounded ready-task dispatch, incremental streaming, and bounded read-only specialist reviews. It still lacks a fully portable PTY/process lifecycle, a persistent dynamic-workflow scheduler, a visual agent monitor, cross-session teams, automatic conflict repair/merge, embedded GitHub OAuth, a general remote plugin marketplace, Windows sandboxing, native Gemini/Azure adapters, IDE and Chrome integrations, cloud/remote sessions, mobile/desktop surfaces, broad cross-platform end-to-end tests, and a mature browser/GitHub execution environment. Mid-turn compaction remains a best-effort heuristic and the 21 evaluation fixtures are only a smoke suite.
+OASIS is not yet at Claude Code feature parity, and no apples-to-apples task benchmark demonstrates equal coding outcomes. The tested baseline is meaningful for a local-first single-machine coding agent, but it does not establish release maturity across every OS.
+
+Current boundaries: the PTY/xterm path still needs broader cross-platform lifecycle testing; multi-agent task dispatch and named teams remain session-scoped without a durable visual run monitor or cross-session team service; branches are not merged automatically; embedded GitHub OAuth is not implemented; the general remote/mobile control lifecycle is incomplete; third-party plugin compatibility is feature-by-feature rather than universal; the optional sandbox is disabled by default and has no Windows implementation; native Gemini and JetBrains support remain gaps; desktop installers are unsigned; browser dashboard data does not fully sync with the CLI; and context compaction is a best-effort heuristic. The 21 fixture suite is only a smoke benchmark.
+
+See [NEXT_MILESTONE.md](NEXT_MILESTONE.md) for the prioritized acceptance gate, [CURRENT_STATUS.md](CURRENT_STATUS.md) for current verification evidence, and [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the source-backed capability comparison.
