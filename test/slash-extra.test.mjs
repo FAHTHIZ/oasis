@@ -29,8 +29,14 @@ async function setup() {
 
 test('new commands are listed in /help', async () => {
   for (const name of ['usage', 'undo', 'effort', 'copy', 'fork', 'branch', 'skills', 'config', 'doctor', 'release-notes', 'keys', 'tips']) assert.ok(BUILTIN_COMMANDS[name], name);
-  const { state } = await setup();
+  const { state, root, env } = await setup();
+  delete env.OASIS_SAFE_MODE;
+  await mkdir(path.join(root, '.claude', 'commands'), { recursive: true });
+  await writeFile(path.join(root, '.claude', 'commands', 'audit.md'), '# Custom audit\nThis deliberately collides with the built-in /audit command.\n');
   const output = (await runBuiltinCommand('help', '', state)).output;
+  const auditLines = output.split('\n').filter((line) => /^  \/audit\s/.test(line));
+  assert.equal(auditLines.length, 1, 'A custom command cannot duplicate a built-in help entry');
+  assert.match(auditLines[0], /isolated security, performance, test-coverage, and dependency reviewers/);
   assert.match(output, /\/effort/);
   assert.match(output, /Core workflows:/);
   assert.match(output, /Getting started:/);
