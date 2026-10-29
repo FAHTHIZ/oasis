@@ -45,7 +45,7 @@ test('every core command maps to a portable skill with the required section stru
 
 test('browser slash menu exposes accessible command suggestions without auto-executing them', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /id="oasisCoreSlashMenu"/);
+  assert.match(html, /menu\.id='oasisCoreSlashMenu'/);
   assert.match(html, /setAttribute\('role','combobox'\)/);
   assert.match(html, /setAttribute\('aria-haspopup','listbox'\)/);
   assert.match(html, /aria-activedescendant/);
