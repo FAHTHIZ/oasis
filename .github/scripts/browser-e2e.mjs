@@ -110,6 +110,8 @@ try {
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
 
+  await page.locator('[data-agent-example="Explain this project"]').click();
+  assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
   try {
