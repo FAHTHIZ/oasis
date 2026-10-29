@@ -1,0 +1,24 @@
+name: Idea or feature request
+description: Suggest an improvement to OASIS
+title: "[Idea]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+      description: Start with the difficulty you are trying to avoid.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a good result look like?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried?
+    validations:
+      required: false
