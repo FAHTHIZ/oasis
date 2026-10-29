@@ -1123,7 +1123,15 @@ test('desktop provider setup stores the API key through the host callback, not c
   const env = { OASIS_CONFIG_DIR: configDir };
   const app = await startOasisWebServer({
     root, host: '127.0.0.1', port: 0, env,
-    onProviderConfig: async (provider) => { captured = { ...provider }; },
+    onProviderConfig: async (provider) => {
+      captured = { ...provider };
+      await saveConfig({
+        protocol: provider.protocol,
+        baseURL: provider.baseURL,
+        model: provider.model,
+        apiKey: ''
+      }, { env });
+    },
     token: 'test-runtime-token-0123456789'
   });
   t.after(async () => {
