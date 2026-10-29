@@ -16,9 +16,10 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
+import { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
+export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
 
 const MAX_SETTINGS_BYTES = 256 * 1024;
-export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'];
 
 export function userSettingsPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'settings.json');
@@ -248,7 +249,8 @@ export async function loadSettings(root, options = {}) {
     }
     result.permissions.allow.push(...stringList(permissions.allow));
     result.permissions.additionalDirectories.push(...stringList(permissions.additionalDirectories));
-    if (PERMISSION_MODES.includes(permissions.defaultMode)) result.permissions.defaultMode = permissions.defaultMode;
+    const configuredMode = normalizePermissionMode(permissions.defaultMode);
+    if (configuredMode) result.permissions.defaultMode = configuredMode;
     mergeHooks(result.hooks, normalizeHooks(settings.hooks), scope);
     if (settings.sandbox && typeof settings.sandbox === 'object') {
       if (typeof settings.sandbox.enabled === 'boolean') result.sandbox.enabled = settings.sandbox.enabled;
