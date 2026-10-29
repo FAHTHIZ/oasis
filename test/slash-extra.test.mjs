@@ -69,7 +69,7 @@ test('/context separates startup tools and warns when setup is token-heavy', asy
   session.mcpToolMap = new Map([['remote_fixture', {}]]);
   const output = (await runBuiltinCommand('context', '', state)).output;
   assert.match(output, /Startup before chat:/);
-  assert.match(output, /Estimated context: \\[#+\\.+\\] \\d+% of/);
+  assert.match(output, /Estimated context: \[#+\.+\] \d+% of/);
   assert.match(output, /Built-in tools \(1\)/);
   assert.match(output, /MCP tools \(1\)/);
   assert.match(output, /over 15,000 tokens/);
