@@ -26,3 +26,8 @@ Before removing any same-content file, inspect its references and whether it is 
 ## Branch retirement
 
 Keep `main` as the integration branch. Retire a branch only after comparing its tip to the current `main`, checking open and closed pull requests, and confirming that useful changes are already present or explicitly rejected. A branch behind `main` with zero commits ahead is a safe retirement candidate; a nonzero ahead count is not by itself evidence that the work is missing or safe to delete. Keep the branch audit evidence current in `docs/BRANCH_AUDIT.md`.
+
+
+## Automated stale-branch retirement
+
+The .github/workflows/cleanup-merged-branches.yml workflow runs on pushes to main and supports manual dispatch on main. It preserves the default branch, protected refs and open-PR refs. It retires only exact merged PR heads, fully-behind refs, exact audited superseded heads with expected replacement files, or complete net diff file states that match main byte-for-byte. Incomplete/oversized diffs and API errors fail closed. The workflow log is the source of truth for actual deletions.

@@ -96,4 +96,11 @@ The available GitHub actions do not expose remote branch deletion, so no remote 
 | `test/browser-e2e-smoke-20261027` | 9 | 805 | Merged feature; compare tree before retirement |
 | `test/browser-e2e-tool-cycle-20261027` | 6 | 803 | Merged feature; compare tree before retirement |
 
-The latest comparison found 22 retirement candidates: 18 branch tips match merged PR heads, three additional branches are strictly behind `main`, and one closed-PR branch changes only `STATUS.md` and `CHANGELOG.md`. This is an audited candidate list, not a deletion receipt. The current GitHub connector can list and compare refs but does not expose a remote-ref deletion operation, so no branch is claimed deleted. Preserve divergent branches with unmerged application, permission, cloud, or security changes until their content is reviewed.
+The latest comparison found 22 retirement candidates: 18 branch tips match merged PR heads, three additional branches are strictly behind `main`, and one closed-PR branch changes only `STATUS.md` and `CHANGELOG.md`. This is an audited candidate list, not a deletion receipt. A guarded branch-cleanup workflow now lives at .github/workflows/cleanup-merged-branches.yml. It preserves the default and protected branches plus any branch used by an open same-repository PR. It retires only branch heads confirmed as merged into the default branch, fully-behind refs, four exact reviewed superseded heads whose replacement paths are present on main, or branches whose complete net file states match main byte-for-byte. The first workflow run is the authoritative deletion receipt; preserve every branch with non-equivalent or unverified content.
+
+
+## Branch cleanup automation (2026-10-29)
+
+The repository cleanup action uses the repository GITHUB_TOKEN with contents: write and pull-requests: read. It checks the full default-branch tree, all branches, open PR heads and closed merged PR heads before deciding. It retires only exact merged heads, strict behind-only refs, four exact audited/superseded heads with required replacement paths, or branches whose complete net changed-file states match the default tree byte-for-byte. Protected/default branches and every branch referenced by an open same-repository PR are always retained.
+
+The first cleanup workflow run is still pending at the time of this note, so actual deletion totals are not yet known. Do not infer deletions until the action's summary says so.
