@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against code baseline [`02feecc610f5775279b827a51744bc244e725068`](https://github.com/FAHTHIZ/oasis/commit/02feecc610f5775279b827a51744bc244e725068). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the competitor-specific comparison is [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against code baseline [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the competitor-specific comparison is [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -46,9 +46,9 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Next milestone — Alpha confidence and end-to-end reliability
 
-The current priority is to make the existing product dependable and measurable before adding another layer of feature parity. The previous main baseline had mixed CI: Quality Checks/desktop passed while homepage validation failed the `FileChanged` hook test. A test synchronization fix, process-tree cancellation changes and additional URL-address filtering are now committed; current-main workflows must finish successfully before the release gate is considered green.
+The latest required main-branch checks are green on one code revision: 570 tests pass across Node 22/24/26, the `FileChanged` hook regression is covered, homepage/repository validation passes, and Windows/macOS/Linux desktop packaging succeeds. The Alpha-confidence milestone remains open for repeated focused reliability checks, broader supported-OS user journeys, and a reproducible coding-outcome benchmark.
 
-Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md), and see [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for fixes made and security boundaries that remain. The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. Until the required workflows pass on one commit and the failure is explained, the release-confidence milestone is open.
+Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md), and see [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for fixes made and security boundaries that remain. The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. The CI consistency sub-gate is now satisfied; the broader release-confidence milestone remains open until the remaining user journeys, platform limitations and benchmark criteria are addressed.
 
 ## Post-alpha — highest-value Claude Code gaps
 
