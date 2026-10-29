@@ -18,7 +18,7 @@ import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
-export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'bug', 'install-github-action': 'install-github-app' };
+export const COMMAND_ALIASES = { keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'bug', 'install-github-action': 'install-github-app' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -100,6 +100,8 @@ export const BUILTIN_COMMANDS = {
   batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
   schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID)',
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
+  keys: 'Show the keyboard shortcut cheat sheet (/keys; alias /keybindings)',
+  tips: 'Show a rotating setup and workflow tip (/tips)',
   keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
   diff: 'Show uncommitted changes in the working tree (/diff [PATH], /diff --stat)',
@@ -883,6 +885,16 @@ export async function runBuiltinCommand(name, argument, state) {
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
       return { output: wanted === 'vim' ? 'Vim mode on. Esc enters NORMAL mode; i, a, o, A, I return to INSERT. /vim again to turn it off.' : 'Vim mode off (standard editing).' };
+    }
+    case 'tips': {
+      const { startupTip } = await import('./terminal-ui.mjs');
+      const tip = startupTip(env);
+      return { output: [
+        'OASIS tip:',
+        tip || 'Startup tips are disabled. Set OASIS_TIP=on or remove OASIS_NO_TIPS to show them again.',
+        '',
+        'Useful starting points: /plan for risky work, /context for token estimates, /cost for usage, /undo to roll back, and /keys for shortcuts.'
+      ].join('\\n') };
     }
     case 'keybindings': {
       const { SHORTCUTS_HELP } = await import('./line-editor.mjs');
