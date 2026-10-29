@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises';
-import { runBuiltinCommand, BUILTIN_COMMANDS, SKILL_COMMANDS } from '../src/slash.mjs';
+import { runBuiltinCommand, BUILTIN_COMMANDS, SKILL_COMMANDS, reviewPrompt } from '../src/slash.mjs';
+import { createCompleter } from '../src/completion.mjs';
 import { imageInputCapability } from '../src/images.mjs';
 
 async function fixture() {
@@ -30,6 +31,40 @@ test('core skill command registry stays small, explicit, and discoverable', () =
     assert.ok(SKILL_COMMANDS[name].mode, 'permission mode for ' + name);
     assert.ok(SKILL_COMMANDS[name].summary, 'preview summary for ' + name);
   }
+});
+
+test('every core command maps to a portable skill with the required section structure', async () => {
+  const required = ['## Purpose', '## Inputs', '## Workflow', '## Required provider capabilities', '## Permissions', '## Success criteria'];
+  for (const skill of new Set(Object.values(SKILL_COMMANDS).map((item) => item.skill))) {
+    const content = await readFile(new URL('../skills/' + skill + '/SKILL.md', import.meta.url), 'utf8');
+    assert.match(content, new RegExp('^---\\nname: ' + skill + '\\n', 'm'), skill + ' front matter');
+    for (const heading of required) assert.ok(content.includes(heading), skill + ' is missing ' + heading);
+  }
+});
+
+test('terminal slash completion puts the six core workflows first', async () => {
+  const { root } = await fixture();
+  const complete = createCompleter({ root, commands: async () => [
+    { name: 'help', description: 'Help' },
+    { name: 'rollback', description: 'Preview restore' },
+    { name: 'plan', description: 'Plan' },
+    { name: 'fix', description: 'Fix' },
+    { name: 'review', description: 'Review' },
+    { name: 'diagnose', description: 'Diagnose' },
+    { name: 'init', description: 'Init' },
+    { name: 'zebra', description: 'Another command' }
+  ] });
+  const result = await complete('/', 1);
+  assert.deepEqual(result.candidates.slice(0, 6).map((item) => item.value), [
+    '/init', '/plan', '/fix', '/diagnose', '/review', '/rollback'
+  ]);
+});
+
+test('review prompt loads the portable code-review skill', () => {
+  const prompt = reviewPrompt('review', '');
+  assert.match(prompt, /load_skill\\(\\{ name: "code-review" \\}\\)/);
+  assert.match(prompt, /accessibility/i);
+  assert.match(prompt, /read-only/i);
 });
 
 test('missing task inputs do not start /plan, /fix, or /diagnose', async () => {
