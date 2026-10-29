@@ -6,6 +6,7 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 - Added post-edit LSP verification for source edits where a language server is configured, including baseline-aware diagnostics and explicit unavailable states when a server does not answer.
 - Added a completion blocker for new or unclassified LSP errors and focused tests for TypeScript-style diagnostics, diagnostic timeouts, startup failure, and the /fix gate. Full current-head checks remain pending.
+- Added a built-in `/audit` workflow that runs isolated security, performance, test-coverage and dependency reviewers, merges duplicate findings, verifies up to four high/critical findings, and separates verified from unverified results. Worker timeout/cancellation stress coverage and full current-head validation remain open.
 
 - Added a root capability status with Implemented, Actively hardening, Experimental, and Not yet guaranteed sections.
 - Added a source-backed implementation plan and capability matrix for LSP verification, multi-agent audit, cross-session messaging, context controls, deterministic policy, session forking/steering, plugin packaging, investigation artifacts, scoped rules/styles, and remote execution.
