@@ -1610,7 +1610,26 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       }
     }).finally(() => { if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
-    if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
+    if (result.verification && result.verification.required) {
+      const evidence = result.verification;
+      const check = evidence.checkRequired
+        ? (evidence.lastCheck
+          ? evidence.lastCheck.kind + (evidence.lastCheck.passed ? ' passed' : ' failed') +
+            (Number.isInteger(evidence.lastCheck.exitCode) ? ' (exit ' + evidence.lastCheck.exitCode + ')' : '')
+          : 'not recorded')
+        : 'not required';
+      const lsp = Array.isArray(evidence.lsp) ? evidence.lsp : [];
+      const lspIssues = lsp.filter((item) => item.status === 'unavailable' || item.status === 'errors').length;
+      const lspStatus = lsp.length
+        ? 'LSP ' + lspIssues + ' issue(s) across ' + lsp.length + ' changed file(s)'
+        : 'LSP not reported';
+      stdout.write('[verification] ' + (evidence.complete ? 'Complete' : 'Incomplete') +
+        ' · diff ' + (evidence.diffReviewed ? 'reviewed' : 'not reviewed') +
+        ' · check ' + check + ' · ' + lspStatus + '\n');
+      if (!evidence.complete && Array.isArray(evidence.issues) && evidence.issues.length) {
+        stdout.write('[verification] Blockers: ' + evidence.issues.join('; ') + '. Do not treat the task as fully verified yet.\n');
+      }
+    } else if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
       stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
     } else if (!result.finished) {
       stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
