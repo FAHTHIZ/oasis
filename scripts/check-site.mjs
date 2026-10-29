@@ -54,6 +54,7 @@ assert.ok(secureSecrets.includes('safeStorage.encryptString'), 'Desktop secret s
 assert.ok(webRuntime.includes("pathname === '/api/provider/local-models'"), 'The first-run wizard needs local model discovery.');
 assert.ok(webRuntime.includes("http://127.0.0.1:11434/api/tags"), 'Ollama discovery must use a fixed local endpoint.');
 assert.ok(webRuntime.includes("if (!isLoopbackClient(req))"), 'Local model discovery must be limited to loopback clients.');
+assert.ok(webRuntime.includes('text = redactApprovalSecrets(text)'), 'Browser tool-result summaries must redact credential values.');
 assert.ok(e2e.includes('Denying the delete approval must leave the file intact.'), 'Browser E2E must verify destructive actions can be denied.');
 assert.ok(e2e.includes('Cancellation must abort the task before another model request.'), 'Browser E2E must verify cancellation interrupts a pending task.');
 
