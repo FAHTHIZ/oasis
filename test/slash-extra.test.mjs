@@ -39,8 +39,11 @@ test('new commands are listed in /help', async () => {
   assert.match(output, /More commands:/);
   const firstGroup = output.split('Working:')[0].split('\n').filter((line) => /^  \/[a-z-]+\s/.test(line)).map((line) => line.trim().split(/\s+/)[0]);
   assert.deepEqual(firstGroup, ['/help', '/setup', '/status', '/plan', '/doctor', '/context', '/cost', '/undo']);
-  const listed = [...output.matchAll(/^  \/([a-z-]+)\s/gm)].map((match) => match[1]);
-  assert.equal(new Set(listed).size, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear once in the grouped help.');
+  const listed = output.split('\n')
+    .map((line) => line.trim().split(/\s+/)[0].replace(/^\//, ''))
+    .filter((name) => Object.hasOwn(BUILTIN_COMMANDS, name));
+  assert.equal(listed.length, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear in grouped help.');
+  assert.equal(new Set(listed).size, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear once in grouped help.');
 });
 
 test('/context separates startup tools and warns when setup is token-heavy', async () => {
