@@ -1,43 +1,32 @@
 # OASIS current implementation status
 
-## Latest duplicate-output fix (verification pending)
-
-The terminal's verbose tool-result renderer now suppresses identical payload strings exposed under multiple adapter aliases (for example, the same text in both `output` and `content`) while retaining distinct stdout/stderr fields. Regression tests were added to `test/terminal-ui.test.mjs`. Source and test changes were committed directly to `main` in commits [`65b93d3`](https://github.com/FAHTHIZ/oasis/commit/65b93d316a584f5af19d494186d519f6ef038512) and [`3bebdb6`](https://github.com/FAHTHIZ/oasis/commit/3bebdb6f45836d0e6729b0edc0610cec8ee5409d). This change is **not marked verified until the new main-branch checks finish**.
+## Latest verified main snapshot
 
 **Audit date:** October 29, 2026  
-**Last fully verified implementation revision before the follow-up patches in this commit:** [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589). [Quality Checks run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973) passed 651 tests with zero failures, the Node.js 22/24/26 matrix, 33 evaluation fixtures, Linux PTY, authenticated browser E2E, and Ubuntu/macOS/Windows security regressions. [Publishing validation run 40860786970](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970) and [desktop packaging/release run 40860787120](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120) also passed on that same SHA.
-**Verification boundary:** the verified `9ed2cc9` revision includes strict saved/runtime/turn budget validation, process-tree cleanup for the evaluator, Git tools, persistent background sessions, shell/background runner, diagnostics and language servers, plus bounded HTTP MCP `headersHelper` output and process-tree termination. The next patch serializes OAuth token-store updates, refuses to overwrite malformed token files and makes settings-file mutations atomic/private; validate those changes on the new SHA before marking them verified. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).  
-**Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
-
-This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist and the [whole-codebase gap register](WHOLE_CODEBASE_GAP_REGISTER.md) for code-backed closure criteria.
-
-The core mechanics are documented in [Core mechanics audit](CORE_MECHANICS_AUDIT.md). The external comparison is optional engineering evidence—not a product definition or parity goal. See the [whole-codebase gap register](WHOLE_CODEBASE_GAP_REGISTER.md) for the implementation-backed remaining gaps and their closure criteria.
+**Verified implementation revision before this documentation-only refresh:** [0002f84a534cd1498b83b5e78fede53922aca7e5](https://github.com/FAHTHIZ/oasis/commit/0002f84a534cd1498b83b5e78fede53922aca7e5). [Quality Checks run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114) passed **685 Node tests, 0 failures** on the Node 22/24/26 matrix and passed the clean-environment suite, Linux native PTY integration, and Ubuntu/macOS/Windows security regression jobs. The run validates all **33 evaluation fixtures** and the authenticated browser E2E, including first-run choices, starter prompt fill, responsive chat/terminal controls, dangerous-action denial and cancellation before a command side effect.
+**Publishing validation:** [run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141) passed on the same implementation SHA. Desktop installer workflow [run 40870856180](https://github.com/FAHTHIZ/oasis/actions/runs/40870856180) was still in progress when this note was written; installers are unsigned and a successful build would not prove clean-machine first-run, update or uninstall readiness. The docs-only refresh itself has not yet received its own CI run.
 
 ## Executive assessment
 
-OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
+OASIS is a feature-rich, local-first coding-agent project rather than a documentation-only prototype. The repository includes a CLI/headless runtime, model/provider adapters, permissioned tools, snapshots and rewind, saved sessions, subagents and task coordination, MCP/skills/hooks/plugins, diagnostics and LSP, a browser workspace, VS Code-family integration, a GitHub Action, and desktop packaging. New user-facing work in this pass adds a three-path first-run setup, desktop-only OS-encrypted API-key storage with rollback on config-save failure, fixed-localhost Ollama discovery, plain-language approval prompts and credential redaction, a responsive chat/terminal split, empty-chat starter cards, terminal status metrics, grouped help, startup tips, and a searchable Ctrl+K palette.
 
-The last fully verified implementation baseline before the follow-up fixes was `9ed2cc9`: 651 tests passed on Node.js 22/24/26, all 33 evaluation fixtures validated, and the PTY, browser E2E, cross-platform security, publishing and desktop packaging jobs passed on that same revision. The fixture suite remains a smoke/regression suite rather than a representative repository-level coding benchmark. `oasis eval --compare` compares saved reports across shared task IDs.
+The Ctrl+K palette searches built-in/custom commands, skills, settings and recent saved sessions. Selecting an entry places the command into the prompt for review; it does not auto-execute. The browser E2E regression suite now exercises denial of a risky delete and cancellation before a command executes.
+
+The 33-item evaluation suite is a regression/smoke suite, not a representative repository-level coding benchmark. CI coverage is not a penetration test or proof of universal platform support. The separate phone-safety brief required by the product brief was not present in the available conversation/library files, so phone pairing remains unimplemented.
 
 ## Verified repository and CI snapshot
 
-**Last fully verified code snapshot before the follow-up patches:** `9ed2cc9f98d24691a3e902983538110b02284589` (October 29, 2026; see [Quality Checks run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973)). The run passed 651 tests, validated 33 fixtures, and passed Node 22/24/26, security regressions, native PTY and browser E2E.
-
 | Evidence | Latest verified result |
 | --- | --- |
-| Runtime modules | 61 `.mjs` modules under `src/` after adding the process-tree termination helper |
-| Test layout | Node.js test specifications plus shared helpers; latest verified main code run reports 651 passing tests |
-| Latest verified Node test suite | **651 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) |
-| Latest fully verified evaluation-fixture validation | **33/33 valid**; still a smoke suite, not a representative coding benchmark |
-| Node runtime matrix | Node.js 22, 24 and 26 passed in run 40818083171 |
-| Native PTY check | Passed on Linux / Node.js 22 in run 40818083171; this is not proof of Windows/macOS/Termux support |
-| Browser E2E | Authenticated Linux Chromium chat smoke test passed in run 40818083171, including workspace write/read |
-| Package integrity | Production-package checks passed in the latest Quality Checks run |
-| Desktop packaging | [Build OASIS desktop installers run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. Installers remain unsigned. |
-| Homepage/repository validation | [Homepage/repository validation run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed on comparator code revision `268862c` |
-| Release maturity | Package version `0.3.0`; CI can build desktop installers, but the current installers are unsigned and first-run behavior is not yet proven across all supported operating systems |
+| Implementation SHA | 0002f84a534cd1498b83b5e78fede53922aca7e5 |
+| Quality Checks | [Run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114): 685 passed, 0 failed; Node 22/24/26; clean environment; 33/33 eval fixtures; Linux PTY; browser E2E; Ubuntu/macOS/Windows security regressions |
+| Browser E2E | Passed on the above SHA: authenticated chat, workspace file write/read, first-run options, starter prompt behavior, responsive workspace controls, risky delete denial, and pending-approval cancellation |
+| Publishing validation | [Run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141) passed on the same SHA |
+| Desktop packaging | [Run 40870856180](https://github.com/FAHTHIZ/oasis/actions/runs/40870856180) was still in progress when reviewed; installers remain unsigned |
+| Release maturity | Package version 0.3.0; actual clean-machine installation, signing, first-run/update/uninstall and accessibility checks remain incomplete |
+| Device coverage | Linux PTY is tested in CI; real Windows/macOS user journeys, real-device TLS, Android/Termux and full cross-platform PTY lifecycle remain separate verification gaps |
 
-Quality Checks [run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973), publishing validation [run 40860786970](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970), and desktop packaging/release [run 40860787120](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120) passed on the same implementation revision `9ed2cc9`. The OAuth token-store and user-settings persistence follow-up in this commit requires fresh same-SHA verification. Browser E2E runs in Linux Chromium and does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
+This status page distinguishes implementation, automated evidence and known gaps. A feature name, passing unit test or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) and the [whole-codebase gap register](WHOLE_CODEBASE_GAP_REGISTER.md).
 
 ## What the code currently provides
 

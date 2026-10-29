@@ -1,8 +1,8 @@
 # Security and reliability audit
 
 **Audit date:** October 29, 2026  
-**Original source-review baseline:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286).  
-**Latest fully verified implementation baseline before the current follow-up:** [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589): [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973) passed 651 tests on Node 22/24/26 and the cross-platform security matrix; [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970) and [Windows/macOS/Linux desktop packaging and release](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120) passed on the same SHA. These are regression/packaging checks, not a penetration test. See [Current status](CURRENT_STATUS.md).
+**Original source-review baseline:** [a044ed403091a2fb885ff796bd364f010a13e286](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286).  
+**Latest verified implementation snapshot before this documentation refresh:** [0002f84a534cd1498b83b5e78fede53922aca7e5](https://github.com/FAHTHIZ/oasis/commit/0002f84a534cd1498b83b5e78fede53922aca7e5). [Quality Checks run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114) passed 685 tests across Node 22/24/26, clean environment, Linux PTY, browser E2E and Ubuntu/macOS/Windows security regression jobs; 33/33 evaluation fixtures validated. [Publishing validation run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141) passed. Desktop packaging was still running when this note was checked. These are regression/packaging checks, not a penetration test. See [Current status](CURRENT_STATUS.md).
 
 This is an initial source-level security/reliability pass, not a penetration test and not a claim that every defect has been found. It focused on network boundaries, command lifecycle, workspace paths, runtime authentication, MCP/plugin trust and hook execution. Findings below distinguish direct fixes from open risks.
 
@@ -169,6 +169,14 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Regression coverage:** `test/command-risk.test.mjs` covers option-prefixed npm/pnpm/yarn script execution and confirms publishing remains blocked with options before the verb.
 
+## Additional controls covered by the latest regression snapshot
+
+- **Desktop provider credentials:** the Electron desktop provider form uses OS-backed safeStorage encryption and fails closed when encryption is unavailable. The desktop host owns encrypted-key plus non-secret-config persistence and attempts to restore the prior secret if the config write fails. Unit and source-integrity checks cover this boundary.
+- **CLI/browser provider credentials:** outside the Electron host, provider keys remain in the local OASIS config file with restrictive permissions where supported; this is not OS-backed encryption. The UI and user guide make that distinction explicit.
+- **Approval and event redaction:** CLI and browser approval prompts share plain-language explanations; common credential formats are redacted from approval text, browser tool details/results and channel relay previews. This is best-effort pattern/field-name redaction, not a general data-loss-prevention system.
+- **Local model discovery:** Ollama discovery queries a fixed loopback endpoint, is guarded by the same-device boundary in the browser runtime, and has regression tests for timeout, model-list bounds and missing services.
+- **User-controlled actions:** browser E2E verifies that denying a risky delete keeps the file intact and stopping a task while command approval is pending prevents a command side effect. Terminal Ctrl+K palette selection inserts a command for review rather than executing it immediately.
+
 ## High-impact risks that remain open
 
 1. **Approved commands still inherit the user's authority.** The optional Linux/macOS sandbox is disabled by default; no Windows sandbox or general container isolation is implemented. Permission prompts are consent gates, not OS isolation.
@@ -185,16 +193,16 @@ The high-impact runner guard and package-publishing block initially examined onl
 ## Required verification
 
 - [ ] Verify browser-navigation guards for same-origin navigation, cross-origin click/form/redirect behavior, opaque data/file URLs, and denied navigation with live Chrome E2E tests.
-- [x] Re-ran the full runtime test suite on Node.js 22/24/26 in [Quality Checks run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973); all three Node versions and the browser E2E job passed on the verified `9ed2cc9` baseline. The current OAuth token-store concurrency/corruption and atomic user-settings changes require a fresh run.
+- [x] Re-ran the full runtime test suite on Node.js 22/24/26 in [Quality Checks run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114); 685 tests passed, 0 failed, the clean-environment run passed, all 33 fixtures validated, and browser E2E plus cross-platform security jobs passed on 0002f84.
 
-- [x] Full Quality Checks passed with 651 tests on `9ed2cc9`: https://github.com/FAHTHIZ/oasis/actions/runs/40860786973.
-- [x] Publishing validation passed on the same code revision: https://github.com/FAHTHIZ/oasis/actions/runs/40860786970.
-- [x] Desktop packaging and its versioned-release step passed for Windows, macOS and Linux on the same revision: https://github.com/FAHTHIZ/oasis/actions/runs/40860787120.
+- [x] Full Quality Checks passed with 685 tests on 0002f84: https://github.com/FAHTHIZ/oasis/actions/runs/40870856114.
+- [x] Publishing validation passed on the same code revision: https://github.com/FAHTHIZ/oasis/actions/runs/40870856141.
+- [ ] Desktop packaging workflow for 0002f84 was still in progress when this audit was refreshed; installers remain unsigned and need clean-machine installation/update/uninstall checks.
 - [ ] Repeat cancellation/timeout tests and confirm descendants are stopped and inherited pipes close.
 - [ ] Run process-tree cancellation tests on Windows as well as POSIX before claiming cross-platform closure.
 - [ ] Continue adversarial URL tests for normalization, IPv4-mapped IPv6, DNS answer sets, redirects and provider/network failure cases.
 
-**Bottom line:** multiple concrete security and reliability findings have been patched on main, including network-address policy consistency, secret-safe Keychain writes, cloud-token cache isolation, command-risk parsing, and optional sandbox credential masking. The fully verified `9ed2cc9` baseline passed Quality Checks, publishing validation and desktop packaging on one SHA. The OAuth token-store concurrency/corruption and user-settings atomic-write fixes remain pending same-SHA verification. This audit does not claim exhaustive coverage or zero remaining bugs.
+**Bottom line:** multiple concrete security and reliability findings have been patched on main, including network-address policy consistency, secret-safe Keychain writes, cloud-token cache isolation, command-risk parsing, optional sandbox credential masking, desktop OS-encrypted provider-key storage, shared approval wording and secret redaction across browser/relay paths. The 0002f84 implementation snapshot passed Quality Checks and publishing validation on one SHA. Desktop packaging was still in progress at the time of this refresh. This audit does not claim exhaustive coverage or zero remaining bugs.
 
 ## Follow-up hardening: macOS Seatbelt profile path injection
 

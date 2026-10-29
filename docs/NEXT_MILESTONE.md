@@ -1,8 +1,9 @@
 # Next milestone: Alpha confidence and end-to-end reliability
 
 **Status checked:** October 29, 2026  
-**Code snapshot audited before the latest main changes:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca)  
-**Last fully verified implementation baseline before the follow-up patches in this commit:** [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589), [Quality Checks run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973): 651 tests, 33 fixtures, Node 22/24/26, Linux PTY and browser E2E passed. [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970) and [Windows/macOS/Linux desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120) passed on the same SHA.
+**Latest verified implementation revision before this documentation refresh:** [0002f84a534cd1498b83b5e78fede53922aca7e5](https://github.com/FAHTHIZ/oasis/commit/0002f84a534cd1498b83b5e78fede53922aca7e5)  
+**Quality Checks:** [run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114) passed 685 Node tests on Node 22/24/26, clean-environment tests, 33 evaluation fixtures, Linux PTY, browser E2E and cross-platform security regressions. [Publishing validation run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141) passed on that SHA. The desktop build workflow was still running when reviewed; unsigned installers and actual clean-machine install/update/uninstall validation remain open.
+
 **Purpose:** prioritize OASIS-owned reliability, coding quality, safety, and release readiness based on what is implemented and verifiable.
 
 ## Decision
@@ -13,11 +14,11 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-Earlier isolated-worktree, durable task-history, public-fetch and federated-search/query-planning work was added before the current verified baseline. The latest fully verified revision, `9ed2cc9`, passed 651 tests and validated 33/33 fixtures on Node 22/24/26; PTY, browser E2E, cross-platform security, publishing, and desktop release checks all passed on that same SHA. Keep remaining priorities focused on measurable OASIS user outcomes and end-to-end reliability, not feature count.
+Earlier isolated-worktree, durable task-history, public-fetch and federated-search/query-planning work is present in the current code. The latest verified revision, 0002f84, passed 685 tests, validated 33/33 fixtures on Node 22/24/26, and passed clean-environment, Linux PTY, browser E2E, publishing validation and cross-platform security checks. The desktop packaging workflow was still running, so release readiness is not fully closed. Keep remaining priorities focused on measurable OASIS user outcomes and end-to-end reliability, not feature count.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
-| Last fully verified Quality Checks baseline | [Run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973) passed: 651 tests, Node 22/24/26, 33 validated fixtures, Linux PTY, browser E2E and cross-platform security regressions | Publishing and desktop packaging also passed on the same `9ed2cc9` revision; the OAuth token-store and atomic settings-write follow-up still needs fresh verification. |
+| Last fully verified Quality Checks baseline | [Run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114) passed: 685 tests, Node 22/24/26, clean environment, 33 validated fixtures, Linux PTY, browser E2E and cross-platform security regressions | [Publishing validation run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141) passed on the same 0002f84 revision. The desktop build was still running when checked; installers remain unsigned. |
 | Current desktop build | [Run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. | Platform packaging passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
 | Current publishing validation | [Run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed | The repository/public-site checks passed on comparator code revision `268862c`. |
 
@@ -27,13 +28,13 @@ Earlier isolated-worktree, durable task-history, public-fetch and federated-sear
 Verified main-branch hardening now also includes OAuth DNS pinning, stricter plugin archive SSRF/redirect validation, ZIP traversal/collision/header protections, API-key helper cache isolation and timeout cleanup. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md).
 
 
-### Security-hardening follow-up (verification pending)
+### Security-hardening follow-up (CI-verified; platform validation remains open)
 
 - [x] Centralize public-address validation across public fetch, plugin archive downloads, MCP OAuth discovery and browser requests; add IPv6 special-purpose and NAT64-encoded private destination regression cases.
 - [x] Remove plaintext Keychain secrets from macOS subprocess argv and isolate cloud-token caches by configured profile/project/tenant context.
 - [x] Add optional Linux/macOS sandbox masks for detected credential paths, ensure the masks overlay broad writable mounts, and reject unsafe paths in generated Seatbelt profiles.
 - [x] Add tests for option-prefixed npm/pnpm/yarn verbs and command-chain permission parsing.
-- [ ] Verify the new hardening sequence on one current-main SHA across Quality Checks, publishing validation and desktop packaging. The latest completed Quality + publish evidence before this sequence is `e0591d6`; its desktop build was cancelled.
+- [x] Quality Checks and publishing validation passed together on 0002f84; see [Quality run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114) and [publishing run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141). Desktop packaging was still running when checked.
 - [ ] Validate macOS sandbox enforcement and Keychain interactions on an actual macOS host; Windows still has no OS sandbox, and Windows file ACL behavior requires testing.
 
 ## Prioritized worklist
@@ -80,7 +81,8 @@ For the controlled coding benchmark:
 
 ### P3 — Close the product-level end-to-end gaps
 
-- [ ] Add UI/runtime tests for approve, deny, interrupt, cancel, resume, dirty-worktree conflict, and failed-tool recovery.
+- [x] Browser E2E now covers approval display, deny-once for a destructive file delete, stop/cancel while approval is pending, and confirms the file remains intact/no command side effect occurs.
+- [ ] Add the remaining UI/runtime cases for resume, dirty-worktree conflict and failed-tool recovery.
 - [ ] Exercise a real browser PTY round trip: launch a fixture process, stream output, send input, resize, interrupt/stop, and confirm there are no orphan processes.
 - [ ] Verify trusted local HTTPS on real devices and ensure tokens/secrets never appear in browser logs, URLs, or workflow artifacts.
 - [x] Replace the macOS Keychain plaintext-argv write path with `security -i` and hex-encoded stdin; unit tests verify the secret is absent from process argv. [ ] Validate that path against a real macOS Keychain and verify Windows fallback-file ACLs.
