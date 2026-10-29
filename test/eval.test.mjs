@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { saveConfig } from '../src/config.mjs';
-import { runEvalCommand, validateEvaluationSuite } from '../src/eval.mjs';
+import { compareEvalReports, runEvalCommand, validateEvaluationSuite } from '../src/eval.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
 // enforcement is covered by test/file-state.test.mjs.
@@ -216,3 +216,80 @@ test('eval command refuses model execution unless explicitly approved', async ()
   );
 });
 
+
+
+test('eval comparison reports matched-task pass rate, median time, and cost', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const aPath = path.join(tmp, 'oasis-run.json');
+  const bPath = path.join(tmp, 'external-run.json');
+  await writeFile(aPath, JSON.stringify({
+    provider: { model: 'fixture-model-a' },
+    results: [
+      { taskId: 'fix-a', status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
+      { taskId: 'fix-a', status: 'failed', wallTimeMs: 120, costUSD: 0.02 },
+      { taskId: 'fix-b', status: 'passed', wallTimeMs: 200, costUSD: 0.01 },
+      { taskId: 'only-a', status: 'passed', wallTimeMs: 50, costUSD: 0.01 }
+    ]
+  }));
+  await writeFile(bPath, JSON.stringify({
+    label: 'Claude Code baseline',
+    results: [
+      { taskId: 'fix-a', status: 'passed', wallTimeMs: 90, costUSD: 0.02 },
+      { taskId: 'fix-a', status: 'passed', wallTimeMs: 95, costUSD: 0.02 },
+      { taskId: 'fix-a', status: 'passed', wallTimeMs: 100, costUSD: 0.02 },
+      { taskId: 'fix-b', status: 'failed', wallTimeMs: 300, costUSD: 0.02 },
+      { taskId: 'fix-b', status: 'failed', wallTimeMs: 310, costUSD: 0.02 },
+      { taskId: 'fix-b', status: 'passed', wallTimeMs: 320, costUSD: 0.02 },
+      { taskId: 'only-b', status: 'passed', wallTimeMs: 1, costUSD: 0.001 }
+    ]
+  }));
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand(['--compare', aPath, bPath], {
+    env: { ...process.env }, output
+  });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.comparison.commonTaskCount, 2);
+  assert.deepEqual(result.comparison.onlyInA, ['only-a']);
+  assert.deepEqual(result.comparison.onlyInB, ['only-b']);
+  assert.equal(result.comparison.sources[1].label, 'Claude Code baseline');
+  assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 0.75);
+  assert.ok(Math.abs(result.comparison.metrics.b.taskBalancedPassRate - (2 / 3)) < 1e-9);
+  assert.ok(Math.abs(result.comparison.metrics.deltaBMinusA.taskBalancedPassRatePercentagePoints - (-100 / 12)) < 1e-6);
+  assert.equal(result.comparison.tasks[0].left.medianWallTimeMs, 110);
+  assert.equal(result.comparison.tasks[0].right.medianWallTimeMs, 95);
+  assert.equal(result.comparison.metrics.a.meanCostPerTrialUSD, 0.0125);
+  assert.equal(result.comparison.metrics.b.meanCostPerTrialUSD, 0.02);
+  assert.match(output.text, /Evaluation comparison \(matched tasks only\)/);
+  assert.match(output.text, /Task-level outcomes/);
+  assert.match(output.text, /unmatched task IDs are excluded/);
+});
+
+test('eval comparison refuses unsafe files, invalid result rows and disjoint task sets', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const aPath = path.join(tmp, 'a.json');
+  const bPath = path.join(tmp, 'b.json');
+  await writeFile(aPath, JSON.stringify({ label: 'A', results: [{ taskId: 'task-a', status: 'passed' }] }));
+  await writeFile(bPath, JSON.stringify({ label: 'B', results: [{ taskId: 'task-b', status: 'failed' }] }));
+  await assert.rejects(compareEvalReports([aPath, bPath]), /no matching task IDs/);
+
+  await writeFile(bPath, JSON.stringify({ results: [{ taskId: '../bad', status: 'passed' }] }));
+  await assert.rejects(compareEvalReports([aPath, bPath]), /invalid taskId/);
+
+  const linkPath = path.join(tmp, 'linked.json');
+  await symlink(aPath, linkPath);
+  await assert.rejects(compareEvalReports([linkPath, bPath]), /regular, non-symlink file/);
+});
+
+test('eval comparison requires exactly two report paths and rejects conflicting CLI options', async () => {
+  await assert.rejects(
+    runEvalCommand(['--compare', 'only-one.json'], { env: { ...process.env } }),
+    /requires two JSON report paths/
+  );
+  await assert.rejects(
+    runEvalCommand(['--compare', 'a.json', 'b.json', '--task', 'fix-a'], { env: { ...process.env } }),
+    /cannot be combined with --task or --trials/
+  );
+});
