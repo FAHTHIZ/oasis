@@ -438,3 +438,13 @@ test('Claude Code eval requires explicit approval and rejects incompatible CLI o
     /timeout-seconds must be an integer/
   );
 });
+
+test('eval rejects trial counts with partial, fractional, or exponent syntax', async () => {
+  for (const value of ['2junk', '2.5', '1e1', '0', '11', '']) {
+    await assert.rejects(
+      runEvalCommand(['--trials', value], { autoApprove: false, env: { ...process.env } }),
+      /--trials must be an integer from 1 to 10/,
+      'should reject trial count ' + JSON.stringify(value)
+    );
+  }
+});

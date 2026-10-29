@@ -514,8 +514,14 @@ function parseArgs(args) {
       continue;
     }
     if (arg === '--trials') {
-      const value = Number.parseInt(args[++i], 10);
-      if (!Number.isInteger(value) || value < 1 || value > 10) throw new Error('--trials must be an integer from 1 to 10.');
+      const raw = args[++i];
+      if (!/^\d+$/.test(String(raw ?? ''))) {
+        throw new Error('--trials must be an integer from 1 to 10.');
+      }
+      const value = Number(raw);
+      if (!Number.isSafeInteger(value) || value < 1 || value > 10) {
+        throw new Error('--trials must be an integer from 1 to 10.');
+      }
       config.trials = value;
       continue;
     }
