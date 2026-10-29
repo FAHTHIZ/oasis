@@ -2,6 +2,19 @@ import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+
+function relativeLuminance(hex) {
+  const value = hex.replace('#', '');
+  assert.match(value, /^[0-9a-f]{6}$/i, 'Contrast check expects six-digit hex colors.');
+  const channels = [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16) / 255)
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrastRatio(foreground, background) {
+  const values = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
 const [html, manifestText, serviceWorker, icon, packageText] = await Promise.all([
   read('../index.html'),
   read('../manifest.webmanifest'),
@@ -29,10 +42,19 @@ const required = [
   'id="commandPaletteDialog"', 'id="commandPaletteSearch"', 'id="commandPaletteButton"', 'commandPaletteOpen()', 'starter-find-bug', 'Ctrl+K or ?',
   "document.getElementById('agentStopBtn').disabled=!agentBusy",
   'function exportBackup()', 'function importBackup(file)',
-  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
+  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
+  'color:#84968a', 'color:#87988b'
 ];
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
+}
+
+for (const [label, foreground, background] of [
+  ['section labels', '#84968a', '#0d1713'],
+  ['sidebar footer', '#87988b', '#0b0f0c'],
+  ['muted body text', '#9aa99d', '#0b0f0c']
+]) {
+  assert.ok(contrastRatio(foreground, background) >= 4.5, label + ' must meet WCAG AA contrast for normal text.');
 }
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
 assert.equal(scripts.length, 1, 'Expected exactly one inline application script.');
