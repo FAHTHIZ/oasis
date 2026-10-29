@@ -31,6 +31,40 @@ import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClien
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
+
+function createBoundedOutput(maxChars = MAX_TOOL_OUTPUT) {
+  const headLimit = Math.floor(maxChars / 4);
+  const tailLimit = maxChars - headLimit;
+  let complete = '';
+  let head = '';
+  let tail = '';
+  let totalChars = 0;
+  let truncated = false;
+
+  return {
+    append(chunk) {
+      const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      totalChars += text.length;
+      if (!truncated) {
+        complete += text;
+        if (complete.length <= maxChars) return;
+        truncated = true;
+        head = complete.slice(0, headLimit);
+        tail = complete.slice(-tailLimit);
+        complete = '';
+        return;
+      }
+      tail = (tail + text).slice(-tailLimit);
+    },
+    text() {
+      if (!truncated) return complete;
+      const omitted = Math.max(0, totalChars - head.length - tail.length);
+      return head + '\\n[OASIS omitted ' + omitted + ' characters from the middle of command output; the complete output was not retained.]\\n' + tail;
+    },
+    get truncated() { return truncated; }
+  };
+}
+
 const BUNDLED_SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills');
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target']);
 
@@ -327,8 +361,8 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onLine: options.onLine, onExit: options.onExit, monitor: options.monitor });
   }
   return await new Promise((resolve) => {
-    let stdout = '';
-    let stderr = '';
+    const stdoutBuffer = createBoundedOutput();
+    const stderrBuffer = createBoundedOutput();
     let timedOut = false;
     let cancelled = false;
     let settled = false;
@@ -337,8 +371,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     const launch = wrapCommand(command, args, sandbox, root);
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     const append = (target, chunk) => {
-      if (target === 'stdout') stdout = (stdout + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
-      else stderr = (stderr + chunk.toString()).slice(-MAX_TOOL_OUTPUT);
+      (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(chunk);
     };
     const cleanup = () => {
       clearTimeout(timer);
@@ -373,12 +406,22 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     child.on('error', (error) => {
       if (settled) return;
       settled = true; cleanup();
-      resolve({ command, approved: true, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled });
+      resolve({
+        command, approved: true, exitCode: null,
+        stdout: stdoutBuffer.text(), stderr: stderrBuffer.text(),
+        stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated,
+        error: error.message, timedOut, cancelled
+      });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true; cleanup();
-      resolve({ command, approved: true, exitCode: code, signal, stdout, stderr, timedOut, cancelled, ...(sandbox && sandbox.available ? { sandboxed: sandbox.kind } : {}) });
+      resolve({
+        command, approved: true, exitCode: code, signal,
+        stdout: stdoutBuffer.text(), stderr: stderrBuffer.text(),
+        stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated,
+        timedOut, cancelled, ...(sandbox && sandbox.available ? { sandboxed: sandbox.kind } : {})
+      });
     });
   });
 }
