@@ -139,11 +139,35 @@ export async function runBuiltinCommand(name, argument, state) {
   switch (name) {
     case 'help': {
       const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
-      const lines = ['Built-in commands:'];
-      for (const [command, description] of Object.entries(BUILTIN_COMMANDS)) lines.push('  /' + command.padEnd(12) + ' ' + description);
+      // Put the eight useful starting commands first. Other built-ins are still
+      // listed below, grouped by purpose, so this remains a complete reference.
+      const groups = [
+        { title: 'Getting started', commands: ['help', 'setup', 'status', 'plan', 'doctor', 'context', 'cost', 'undo'] },
+        { title: 'Working', commands: ['clear', 'compact', 'review', 'diagnostics', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
+        { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
+        { title: 'Settings', commands: ['model', 'effort', 'config', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
+      ];
+      const used = new Set();
+      const lines = [];
+      for (const group of groups) {
+        const entries = group.commands
+          .filter((command) => Object.hasOwn(BUILTIN_COMMANDS, command) && !used.has(command))
+          .map((command) => [command, BUILTIN_COMMANDS[command]]);
+        if (!entries.length) continue;
+        lines.push(group.title + ':');
+        for (const [command, description] of entries) {
+          lines.push('  /' + command.padEnd(18) + ' ' + description);
+          used.add(command);
+        }
+      }
+      const rest = Object.entries(BUILTIN_COMMANDS).filter(([command]) => !used.has(command));
+      if (rest.length) {
+        lines.push('More commands:');
+        for (const [command, description] of rest) lines.push('  /' + command.padEnd(18) + ' ' + description);
+      }
       if (custom.size) {
         lines.push('Custom commands:');
-        for (const command of custom.values()) lines.push('  /' + (command.name + (command.argumentHint ? ' ' + command.argumentHint : '')).padEnd(12) + ' ' + command.description + ' (' + command.scope + ')');
+        for (const command of custom.values()) lines.push('  /' + (command.name + (command.argumentHint ? ' ' + command.argumentHint : '')).padEnd(18) + ' ' + command.description + ' (' + command.scope + ')');
       }
       lines.push('Tips: mention files with @path, start a line with # to save a project memory, and say "install pnpm" for direct installs.');
       return { output: lines.join('\n') };

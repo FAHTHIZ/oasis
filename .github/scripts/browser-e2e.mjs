@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startOasisWebServer } from '../../src/web.mjs';
@@ -11,6 +11,8 @@ const timeoutMs = 15_000;
 const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-browser-e2e-'));
 const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config') };
 const token = 'oasis-browser-e2e-token-0123456789';
+const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(), 'artifacts', 'browser-e2e');
+await mkdir(screenshotDir, { recursive: true });
 
 let providerServer;
 let app;
@@ -99,6 +101,7 @@ try {
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+  await page.screenshot({ path: path.join(screenshotDir, 'workspace-before.png'), fullPage: true });
   await page.locator('button[data-nav="agent"]').first().click();
   await page.locator('#agentTokenInput').fill(token);
   await page.locator('#agentConnectBtn').click();
@@ -107,6 +110,8 @@ try {
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
 
+  await page.locator('[data-agent-example="Explain this project"]').click();
+  assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
   try {
@@ -132,7 +137,53 @@ try {
     'The browser request should result in a real workspace file write.'
   );
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
+  await page.locator('#agentSplitDivider').focus();
+  const splitBefore = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
+  await page.keyboard.press('ArrowRight');
+  const splitAfter = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
+  assert.notEqual(splitAfter, splitBefore, 'Keyboard arrows should resize the chat/terminal divider.');
+
+  await page.locator('#agentTerminalToggle').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false', 'The desktop terminal toggle should hide the terminal.');
+  await page.locator('#agentTerminalToggle').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true', 'The desktop terminal toggle should restore the terminal.');
+
+  await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#agentTerminalTab').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal', 'The terminal tab should reveal the terminal on narrow screens.');
+  await page.locator('#agentChatTab').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
+  await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-390px.png'), fullPage: true });
   console.log('PASS browser E2E: app loaded, token connection succeeded, write/read tools ran, workspace change verified, final reply rendered.');
+
+  // Exercise the unconfigured first-run journey in a separate, isolated config directory.
+  const firstRunEnv = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'first-run-config') };
+  for (const name of ['OASIS_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OASIS_LOCAL_API_KEY']) delete firstRunEnv[name];
+  const firstRunApp = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env: firstRunEnv,
+    token: 'oasis-first-run-e2e-token-0123456789'
+  });
+  try {
+    const firstRunPage = await context.newPage();
+    const firstRunErrors = [];
+    firstRunPage.on('pageerror', (error) => firstRunErrors.push(error.message));
+    await firstRunPage.setViewportSize({ width: 1280, height: 900 });
+    await firstRunPage.goto('http://127.0.0.1:' + firstRunApp.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await firstRunPage.locator('button[data-nav="agent"]').first().click();
+    await firstRunPage.locator('#agentTokenInput').fill(firstRunApp.token);
+    await firstRunPage.locator('#agentConnectBtn').click();
+    await firstRunPage.locator('#firstRunWizard').waitFor({ state: 'visible', timeout: timeoutMs });
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-desktop.png'), fullPage: true });
+    await firstRunPage.setViewportSize({ width: 390, height: 844 });
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-390px.png'), fullPage: true });
+    assert.equal(await firstRunPage.locator('[data-first-run]').count(), 3, 'First run should present all three model choices.');
+    assert.deepEqual(firstRunErrors, [], 'The first-run screen must not throw JavaScript errors.');
+    await firstRunPage.close();
+    console.log('PASS first-run E2E: unconfigured provider exposes all three setup paths at desktop and 390px.');
+  } finally {
+    await firstRunApp.close();
+  }
   await context.close();
 } finally {
   if (browser) await browser.close().catch(() => {});

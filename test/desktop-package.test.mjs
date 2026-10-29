@@ -33,3 +33,26 @@ test('install instructions explain desktop release and current OS signing limita
   assert.match(installGuide, /unsigned/i);
   assert.match(installGuide, /releases\/latest/i);
 });
+
+const webRuntime = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
+const desktopSecrets = await readFile(new URL('../desktop/secure-secrets.mjs', import.meta.url), 'utf8');
+
+test('desktop stores API keys through Electron OS-backed encryption rather than config plaintext', () => {
+  assert.match(desktopMain, /safeStorage/);
+  assert.match(desktopMain, /isEncryptionAvailable/);
+  assert.match(desktopMain, /secure-secrets\.json/);
+  assert.match(desktopMain, /onProviderConfig: persistProviderSecret/);
+  assert.match(desktopMain, /saveConfig\(\{ \.\.\.legacy, apiKey: '' \}/);
+  assert.match(desktopSecrets, /encryptString/);
+  assert.match(desktopSecrets, /decryptString/);
+  assert.match(desktopSecrets, /secure storage is unavailable/i);
+  assert.match(webRuntime, /onProviderConfig/);
+  assert.match(webRuntime, /apiKey: ''/);
+});
+
+test('local model discovery is loopback-only and uses a fixed Ollama endpoint', () => {
+  assert.match(webRuntime, /pathname === '\/api\/provider\/local-models'/);
+  assert.match(webRuntime, /if \(!isLoopbackClient\(req\)\)/);
+  assert.match(webRuntime, /http:\/\/127\.0\.0\.1:11434\/api\/tags/);
+  assert.match(webRuntime, /redirect: 'error'/);
+});

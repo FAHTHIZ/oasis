@@ -117,6 +117,89 @@ body.light .extension-card,body.light .integration-card{background:#fff}
 .worktree-toggle span{display:grid;gap:3px}.worktree-toggle strong{font-size:11px}.worktree-toggle small{font-size:10px;line-height:1.5;color:var(--muted)}
 .cloud-run-diff-pre{max-height:55vh;overflow:auto;white-space:pre;font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-radius:10px;background:#0002;padding:12px;margin:0;color:var(--text)}
 
+
+.first-run-wizard{display:grid;gap:16px;padding:clamp(18px,3vw,26px);margin:0 0 18px;border:1px solid #b9ed824a;border-radius:18px;background:linear-gradient(145deg,#1d3024,#131f18);box-shadow:var(--shadow)}
+.first-run-wizard[hidden]{display:none}
+.first-run-heading h2{font-size:clamp(21px,2.5vw,28px);letter-spacing:-.035em;line-height:1.18;margin:7px 0}
+.first-run-heading p{max-width:680px;color:var(--muted);font-size:12px;line-height:1.7;margin:0}
+.first-run-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.first-run-choice{display:flex;align-items:flex-start;gap:10px;min-width:0;min-height:116px;text-align:left;padding:15px 13px;border:1px solid var(--line);border-radius:14px;background:#ffffff04;color:var(--text);font:inherit}
+.first-run-choice:hover,.first-run-choice:focus-visible{border-color:var(--accent);background:#b9ed820d}
+.first-run-choice>span:nth-child(2){display:grid;gap:6px;flex:1;min-width:0}
+.first-run-choice strong{font-size:12px;line-height:1.45}
+.first-run-choice small{font-size:10px;line-height:1.7;color:var(--muted)}
+.first-run-icon{width:30px;height:30px;display:grid;place-items:center;flex:0 0 30px;border-radius:9px;background:#b9ed8217;color:var(--accent);font-size:18px}
+.first-run-arrow{color:var(--accent);font-size:20px;line-height:1}
+.first-run-status{font-size:11px;line-height:1.6;color:var(--muted);margin:0}
+.first-run-status[data-error="true"]{color:var(--danger)}
+.first-run-install{font-size:12px;font-weight:700;color:var(--accent);width:fit-content}
+.first-run-install[hidden]{display:none}
+#providerKeyHelp a{color:var(--accent);text-underline-offset:3px}
+body.light .first-run-wizard{background:linear-gradient(145deg,#eef6e8,#fff);border-color:#cbdcbe}
+body.light .first-run-choice{background:#fff}
+@media(max-width:950px){.first-run-options{grid-template-columns:minmax(0,1fr)}.first-run-choice{min-height:0;padding:13px}.first-run-arrow{margin-left:auto}}
+@media(max-width:390px){.first-run-wizard{padding:15px}.first-run-choice{gap:8px}.first-run-choice small{font-size:10px}}
+
+
+/* Chat and terminal stay side by side on wide screens and become tabs on phones. */
+#view-agent.active{display:flex;flex-direction:column;gap:16px}
+#view-agent.active>.intro-row{order:0;margin-bottom:0}
+#view-agent.active>.first-run-wizard{order:1;margin:0}
+#view-agent.active>.agent-setup{order:2;margin:0}
+#view-agent.active>.agent-workspace-toolbar{order:3;margin:0}
+#view-agent.active>.agent-workspace-grid{order:4;margin:0}
+#view-agent.active>.provider-setup{order:5;margin:0}
+#view-agent.active>.github-panel{order:6;margin:0}
+#view-agent.active>.cloud-runs-panel{order:7;margin:0}
+.agent-workspace-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.agent-workspace-tabs{display:flex;gap:6px;align-items:center}
+.agent-workspace-tab{border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:#ffffff05;color:var(--muted);font-size:12px;font-weight:700;min-height:38px}
+.agent-workspace-tab[aria-selected="true"]{color:var(--accent);border-color:#9BFF5555;background:#9BFF5514}
+.agent-workspace-grid{--agent-chat-split:56%;display:grid;grid-template-columns:minmax(0,var(--agent-chat-split)) 8px minmax(280px,1fr);gap:0;align-items:stretch;min-width:0}
+.agent-chat-column,.agent-terminal-column{min-width:0;min-height:0}
+.agent-chat-column .agent-chat-panel{width:100%;max-width:100%}
+.agent-chat-column .agent-messages{flex:1 1 0;min-width:0;overflow:auto}
+.agent-chat-column .agent-compose{flex:0 0 auto;position:relative;z-index:1;min-width:0}
+.agent-chat-column .agent-compose form{grid-template-columns:minmax(0,1fr);min-width:0;width:100%}
+.agent-chat-column .agent-compose form>*{grid-column:1;min-width:0}
+.agent-chat-column .agent-compose textarea{min-width:0}
+.agent-chat-column .agent-compose-actions{display:flex;justify-content:flex-end;flex-wrap:wrap}
+
+#view-agent.active .agent-workspace-grid .agent-chat-panel{display:flex;flex-direction:column;height:min(72vh,860px);min-height:460px;margin:0}
+#view-agent.active .agent-chat-panel .agent-messages{flex:1;min-height:0;max-height:none}
+#view-agent.active .agent-workspace-grid .agent-terminal{display:flex;flex-direction:column;height:min(72vh,860px);min-height:460px;margin:0}
+#view-agent.active .agent-terminal .panel-pad{flex:1;min-height:0;overflow:auto}
+.agent-split-divider{position:relative;display:flex;align-items:stretch;justify-content:center;cursor:col-resize;touch-action:none;outline-offset:-1px}
+.agent-split-divider:before{content:"";display:block;width:2px;border-radius:99px;background:var(--line);transition:background .15s,width .15s}
+.agent-split-divider:hover:before,.agent-split-divider:focus-visible:before{width:4px;background:var(--accent)}
+.agent-workspace-grid[data-terminal-visible="false"]{grid-template-columns:minmax(0,1fr)}
+.agent-workspace-grid[data-terminal-visible="false"] .agent-split-divider,.agent-workspace-grid[data-terminal-visible="false"] .agent-terminal-column{display:none}
+@media(max-width:780px){
+  #view-agent.active>.agent-workspace-toolbar{order:3}
+  .agent-workspace-toolbar{gap:8px}
+  .agent-workspace-tabs{width:100%}
+  .agent-workspace-tab{flex:1}
+  .agent-terminal-toggle{display:none}
+  .agent-workspace-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+  .agent-workspace-grid .agent-split-divider{display:none}
+  .agent-workspace-grid[data-active-panel="chat"] .agent-terminal-column{display:none}
+  .agent-workspace-grid[data-active-panel="terminal"] .agent-chat-column{display:none}
+  .agent-workspace-grid[data-terminal-visible="false"] .agent-terminal-column{display:none}
+  #view-agent.active .agent-workspace-grid .agent-chat-panel{height:65vh;min-height:440px}
+  #view-agent.active .agent-workspace-grid .agent-terminal{height:auto;min-height:0}
+  .agent-workspace-grid .agent-terminal-column .panel-pad{padding:12px}
+}
+@media(max-width:390px){
+  .agent-workspace-tab{padding:8px 10px;min-height:44px}
+  .agent-workspace-grid .terminal-xterm{height:270px}
+}
+
+.agent-example-prompts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.agent-example-prompt{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;min-width:0;min-height:76px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#ffffff04;color:var(--text);font:700 11px/1.45 inherit;cursor:pointer}
+.agent-example-prompt:hover,.agent-example-prompt:focus-visible{border-color:var(--accent);background:#b9ed820d;outline-offset:2px}
+.agent-example-prompt span{font-size:10px;font-weight:400;color:var(--muted);line-height:1.6}
+@media(max-width:1050px){.agent-example-prompts{grid-template-columns:minmax(0,1fr)}.agent-example-prompt{min-height:0}}
+@media(max-width:390px){.agent-example-prompt{min-height:44px;padding:11px}.agent-example-prompt span{font-size:10px}}
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -145,9 +228,19 @@ body.light .extension-card,body.light .integration-card{background:#fff}
 
 <section class="view" id="view-agent">
   <div class="intro-row"><div><div class="eyebrow">YOUR CODING PARTNER</div><h1 class="page-title">Build with Oasis.</h1><p class="page-subtitle">Describe the change in plain English. Oasis can inspect your workspace, edit files, run checks, and ask before consequential actions.</p></div></div>
+  <section class="first-run-wizard" id="firstRunWizard" hidden aria-labelledby="firstRunTitle">
+    <div class="first-run-heading"><div class="eyebrow">FIRST-TIME SETUP</div><h2 id="firstRunTitle">Give Oasis a model to work with</h2><p>Oasis is the workspace, not the AI model. Choose one route below. Nothing is saved until you test the connection.</p></div>
+    <div class="first-run-options">
+      <button class="first-run-choice" type="button" data-first-run="api"><span class="first-run-icon" aria-hidden="true">⌁</span><span><strong>I have an API key</strong><small>Choose a provider, paste the key into the masked field, and test it before saving.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
+      <button class="first-run-choice" type="button" data-first-run="omniroute"><span class="first-run-icon" aria-hidden="true">◇</span><span><strong>Use a free gateway</strong><small>Connect through OmniRoute running on this computer. Free gateways can be slow, limited, or require their own key.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
+      <button class="first-run-choice" type="button" data-first-run="ollama"><span class="first-run-icon" aria-hidden="true">◌</span><span><strong>Use a model on my computer</strong><small>Check Ollama for models already installed on this device. Local models can be more private, but smaller ones may be less capable.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
+    </div>
+    <p class="first-run-status" id="firstRunStatus" role="status" aria-live="polite">Choose one option to get started.</p>
+    <a class="first-run-install" id="firstRunOllamaLink" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" hidden>Get Ollama from its official download page ↗</a>
+  </section>
   <div class="panel panel-pad provider-setup">
     <div class="section-head"><h2>Model provider</h2><span class="provider-setup-status" id="providerSetupStatus">Connect runtime first</span></div>
-    <p class="agent-help">Choose a preset to fill in the endpoint, then confirm the exact model ID and test the connection. OmniRoute uses a local gateway on port 20128 and model auto; run oasis setup to install/start it or use this form when it is already running. Some OmniRoute setups require the local endpoint key shown in its dashboard. OpenRouter requires a model ID from its catalog; Ollama requires a running local server and an installed model. Provider credentials are accepted only from this same device over localhost and are saved to its local Oasis configuration. If you connect from a second device over the private-Wi-Fi bridge, configure the provider in the host terminal instead—this HTTP connection is not encrypted.</p>
+    <p class="agent-help">Choose a preset to fill in the endpoint, then confirm the exact model ID and test the connection. OmniRoute uses a local gateway on port 20128 and model auto; run oasis setup to install/start it or use this form when it is already running. Some OmniRoute setups require the local endpoint key shown in its dashboard. OpenRouter requires a model ID from its catalog; Ollama requires a running local server and an installed model. Keys entered in the desktop app use the operating-system secure store. The CLI/browser setup path stores keys in the local OASIS config file with restrictive permissions, so use it only on a trusted computer. Provider credentials are accepted only from this same device over localhost. If you connect from a second device over the private-Wi-Fi bridge, configure the provider in the host terminal instead—this HTTP connection is not encrypted.</p>
     <form id="providerSetupForm">
       <div class="provider-fields">
         <label for="providerPreset">Provider preset<select id="providerPreset"><option value="custom" selected>Manual / custom endpoint</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="gemini">Google Gemini API</option><option value="ollama">Ollama (local)</option><option value="omniroute">OmniRoute (local gateway)</option></select></label>
@@ -157,6 +250,7 @@ body.light .extension-card,body.light .integration-card{background:#fff}
         <label for="providerApiKey">API key<input id="providerApiKey" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false" placeholder="Required for hosted providers"></label>
       </div>
       <div class="agent-buttons"><button class="btn btn-primary" id="providerSaveBtn" type="submit" disabled>Test &amp; save provider</button></div>
+      <p class="agent-help" id="providerKeyHelp">Choose a provider to see its official key page. The desktop app encrypts new API keys with your operating-system secure storage.</p>
     </form>
   </div>
   <div class="panel panel-pad agent-setup">
@@ -168,15 +262,33 @@ body.light .extension-card,body.light .integration-card{background:#fff}
     </div>
     <p class="agent-help" id="agentConnectionHelp">Start <code>oasis web</code> in the terminal for the project you want to work on, then paste its one-time connection token. The token is held in this browser tab's session storage, not in workspace notes.</p>
   </div>
-  <div class="panel agent-chat-panel">
+  <div class="agent-workspace-toolbar" aria-label="Agent workspace panels">
+    <div class="agent-workspace-tabs" role="tablist" aria-label="Chat or terminal">
+      <button class="agent-workspace-tab" id="agentChatTab" type="button" role="tab" aria-selected="true" aria-controls="agentChatColumn">Chat</button>
+      <button class="agent-workspace-tab" id="agentTerminalTab" type="button" role="tab" aria-selected="false" aria-controls="agentTerminalColumn">Terminal</button>
+    </div>
+    <button class="btn btn-secondary agent-terminal-toggle" id="agentTerminalToggle" type="button" aria-controls="agentTerminalColumn" aria-expanded="true">Hide terminal</button>
+  </div>
+  <div class="agent-workspace-grid" id="agentWorkspaceGrid" data-active-panel="chat" data-terminal-visible="true">
+    <div class="agent-chat-column" id="agentChatColumn" role="tabpanel" aria-labelledby="agentChatTab">
+<div class="panel agent-chat-panel">
     <div class="agent-chat-header"><div class="agent-model-summary"><span class="agent-runtime-state" id="agentRuntimeState" data-connected="false">Runtime not connected</span><button class="agent-model-pill" id="agentModelButton" type="button" data-nav="agent" data-scroll-target="provider-setup" title="Open model settings"><span class="agent-model-glyph" aria-hidden="true">◈</span><span class="agent-model-pill-copy"><strong id="agentModelName">Choose a model</strong><small id="agentModelDetail">Connect a runtime</small></span><span class="agent-model-chevron" aria-hidden="true">⌄</span></button></div><div class="agent-session-tools"><label class="sr-only" for="agentModeSelect">Permission mode</label><select id="agentModeSelect" title="Permission mode for this chat"><option value="default">Ask before changes</option><option value="acceptEdits">Auto-accept edits</option><option value="plan">Plan only</option><option value="auto">Auto (classifier decides)</option></select><label class="sr-only" for="agentHistorySelect">Saved chats</label><select id="agentHistorySelect" title="Open a saved chat" hidden><option value="">Saved chats…</option></select><span class="agent-context-meter" id="agentContextMeter" title="Context window use" hidden></span><button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button></div></div>
-    <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">Connect a runtime, then tell Oasis what you want to build.</div></div>
+    <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
+      <p>Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
+      <div class="agent-example-prompts" aria-label="Example tasks">
+        <button class="agent-example-prompt" type="button" data-agent-example="Explain this project">Explain this project<span>Read the important files and explain how they fit together.</span></button>
+        <button class="agent-example-prompt" type="button" data-agent-example="Find a bug">Find a bug<span>Inspect the project, identify one likely bug, and suggest a fix before editing.</span></button>
+        <button class="agent-example-prompt" type="button" data-agent-example="Write tests">Write tests<span>Look at the current tests and propose useful coverage for a missing case.</span></button>
+      </div>
+    </div></div>
     <div class="agent-approval" id="agentApprovalCard" hidden><h3>Approval required</h3><p id="agentApprovalPrompt"></p><div class="agent-buttons"><button class="btn btn-secondary" id="agentDenyBtn" type="button">Deny once</button><button class="btn btn-primary" id="agentApproveBtn" type="button">Approve once</button><button class="btn btn-secondary" id="agentAlwaysBtn" type="button" hidden>Always allow</button></div></div>
     <div class="agent-approval agent-question" id="agentQuestionCard" hidden><h3 id="agentQuestionHeader">Oasis has a question</h3><p id="agentQuestionText"></p><div class="agent-question-options" id="agentQuestionOptions"></div><form class="agent-question-custom" id="agentQuestionForm"><label class="sr-only" for="agentQuestionInput">Your own answer</label><input id="agentQuestionInput" maxlength="2000" placeholder="Or type your own answer" autocomplete="off"><button class="btn btn-primary" type="submit" id="agentQuestionSubmit">Send</button><button class="btn btn-secondary" type="button" id="agentQuestionSkip">Skip</button></form></div>
     <div class="agent-compose"><form id="agentForm"><label class="sr-only" for="agentPrompt">Describe what you want Oasis to do</label><textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Build a settings page, inspect the project first, implement it, and run the relevant tests…" required></textarea><label class="worktree-toggle" for="agentIsolateWorktree"><input id="agentIsolateWorktree" type="checkbox"><span><strong>Isolated Git worktree</strong><small>Keep edits on a separate review branch. Requires a clean Git workspace. Nothing is merged automatically.</small></span></label><div class="agent-buttons agent-compose-actions"><button class="btn btn-primary" id="agentSendBtn" type="submit">Send ↑</button><button class="btn btn-secondary" id="agentStopBtn" type="button" hidden>Stop</button></div></form><small>Commands, package installs, file deletion, and plugin installation wait for your approval. This runs code as your operating-system user; it is not an OS sandbox. Do not expose this HTTP server to the public Internet.</small></div>
   </div>
-
-  <div class="panel agent-terminal">
+    </div>
+    <div class="agent-split-divider" id="agentSplitDivider" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="72" aria-valuenow="56" tabindex="0" aria-label="Resize chat and terminal panels"></div>
+    <div class="agent-terminal-column" id="agentTerminalColumn" role="tabpanel" aria-labelledby="agentTerminalTab">
+<div class="panel agent-terminal">
     <div class="agent-chat-header"><span><strong>Terminal</strong> · command runner</span><span id="terminalStatus">Ready when runtime is connected</span></div>
     <div class="panel-pad">
       <form id="terminalForm" class="agent-terminal-form">
@@ -193,7 +305,8 @@ body.light .extension-card,body.light .integration-card{background:#fff}
       <p class="agent-help">Every process passes the existing command-safety and approval checks. Interactive terminal sessions support live output, input, resize, Ctrl+C and stop. Full-screen terminal emulation and the no-terminal desktop installer are still separate gaps.</p>
     </div>
   </div>
-
+    </div>
+  </div>
 
 <div class="panel github-panel">
   <div class="agent-chat-header"><span><strong>GitHub</strong> · repositories and workspaces</span><span id="githubStatus" class="github-state" data-connected="false">Not checked</span></div>
@@ -444,7 +557,7 @@ function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if
 function agentActivity(text){agentAppendMessage('activity',text)}
 function agentClearMessages(){document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null}
 function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentIsolateWorktree').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy;if(!agentBusy&&agentToken)void agentLoadCloudTasks(true)}
-async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
+async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
 function agentDisconnect(){agentToken='';sessionStorage.removeItem('oasis.web.token');document.getElementById('agentTokenInput').value='';agentSetStatus('Runtime not connected',false);document.getElementById('agentModelName').textContent='Choose a model';document.getElementById('agentModelDetail').textContent='Connect a runtime';document.getElementById('agentConnectionHelp').textContent='Disconnected. Start or return to oasis web, then paste its token to reconnect.';notify('Runtime disconnected from this browser tab.')}
 var agentQuestionId=null,agentQuestionMulti=false;
 function agentShowQuestion(d){agentQuestionId=d.questionId;agentQuestionMulti=!!d.multiSelect;document.getElementById('agentQuestionHeader').textContent=d.header?d.header:'Oasis has a question';document.getElementById('agentQuestionText').textContent=d.question;var box=document.getElementById('agentQuestionOptions');box.innerHTML='';(d.options||[]).forEach(function(o){var b=document.createElement('button');b.type='button';b.className='agent-question-option';b.setAttribute('aria-pressed','false');var l=document.createElement('strong');l.textContent=o.label;b.appendChild(l);if(o.description){var s=document.createElement('span');s.textContent=o.description;b.appendChild(s)}b.addEventListener('click',function(){if(agentQuestionMulti){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')}else{void agentAnswerQuestion(o.label)}});box.appendChild(b)});document.getElementById('agentQuestionInput').value='';document.getElementById('agentQuestionSubmit').textContent=agentQuestionMulti?'Send selected':'Send';document.getElementById('agentQuestionCard').hidden=false;agentSetStatus('Waiting for your answer',true);agentScroll()}
@@ -493,9 +606,87 @@ document.getElementById('githubRefreshBtn').addEventListener('click',function(){
 document.getElementById('githubCloneBtn').addEventListener('click',async function(){if(agentBusy)return;if(!agentToken){notify('Connect the Oasis runtime first.');return}var repo=document.getElementById('githubRepoSelect').value;if(!repo){notify('Choose a repository first.');return}agentSetBusy(true);terminalStatus('Requesting clone approval…');try{var d=await agentApi('/api/github/clone',{method:'POST',body:JSON.stringify({repository:repo})});if(d.reused){agentSetBusy(false);githubWorkspaceSwitched(d.workspaceName||repo);terminalAppend('Using existing workspace: '+(d.workspacePath||d.workspaceName||repo));terminalStatus('Workspace ready');return}agentActiveJob=d.jobId;void githubClonePoll(d.jobId)}catch(e){terminalAppend('Could not open repository: '+e.message);terminalStatus('Could not open repository');agentSetBusy(false);githubSetStatus('Connection or clone error',false)}});
 document.getElementById('githubResetWorkspaceBtn').addEventListener('click',async function(){if(agentBusy){notify('Wait until the current task finishes before changing workspaces.');return}if(!agentToken){notify('Connect the Oasis runtime first.');return}try{var d=await agentApi('/api/workspace/reset',{method:'POST',body:JSON.stringify({})});githubWorkspaceSwitched(d.workspaceName||'launch workspace');githubSetStatus('Launch workspace selected',true)}catch(e){notify('Could not switch workspace: '+e.message)}});
 
+function firstRunStatus(message,isError){var node=document.getElementById('firstRunStatus');node.textContent=message||'';node.dataset.error=isError?'true':'false';}
+function setProviderKeyHelp(){var preset=document.getElementById('providerPreset').value;var items={openai:['OpenAI','https://platform.openai.com/api-keys'],anthropic:['Anthropic','https://console.anthropic.com/settings/keys'],openrouter:['OpenRouter','https://openrouter.ai/keys'],gemini:['Google AI Studio','https://aistudio.google.com/app/apikey']};var node=document.getElementById('providerKeyHelp');node.replaceChildren();var info=items[preset];if(!info){node.textContent='For a custom endpoint, use that provider’s own key instructions. New desktop keys are encrypted with system secure storage.';return;}node.appendChild(document.createTextNode('Need a key? Get one from '));var link=document.createElement('a');link.href=info[1];link.target='_blank';link.rel='noopener noreferrer';link.textContent=info[0]+' official settings';node.appendChild(link);node.appendChild(document.createTextNode('. New desktop keys are encrypted with system secure storage.'));}
+async function firstRunCheckOllama(){document.getElementById('firstRunOllamaLink').hidden=true;firstRunStatus('Checking this computer for Ollama and installed models…',false);try{var result=await agentApi('/api/provider/local-models');if(result.available&&result.models&&result.models.length){var modelField=document.getElementById('providerModel');if(!modelField.value||modelField.value==='auto'||!result.models.includes(modelField.value))modelField.value=result.models[0];firstRunStatus('Ollama is running. Found '+result.models.length+' model'+(result.models.length===1?'':'s')+': '+result.models.join(', ')+'. The first model is selected; edit the model field before testing if needed.',false);}else{firstRunStatus(result.message||'Ollama is running but no models were found.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}catch(error){firstRunStatus('Could not check Ollama: '+error.message+' Connect the local runtime and try again.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}
+document.querySelectorAll('[data-first-run]').forEach(function(button){button.addEventListener('click',function(){var choice=button.getAttribute('data-first-run');var preset=choice==='api'?'openai':choice;var selector=document.getElementById('providerPreset');selector.value=preset;selector.dispatchEvent(new Event('change'));document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});if(choice==='api'){firstRunStatus('Choose your provider from the list, enter its API key in the masked field, then select Test & save provider.',false);document.getElementById('providerApiKey').focus();}else if(choice==='omniroute'){firstRunStatus('OmniRoute must be running on this computer first. In a terminal, run oasis setup and choose OmniRoute; then return here and test the connection. A shared/free gateway may be slower or limited.',false);document.getElementById('providerModel').focus();}else{firstRunCheckOllama();document.getElementById('providerModel').focus();}});});
+
+// Responsive chat/terminal layout. Divider adjustments are keyboard accessible and remembered.
+(function setupAgentExamples(){
+  var input=document.getElementById('agentPrompt');
+  if(!input)return;
+  document.querySelectorAll('[data-agent-example]').forEach(function(button){
+    button.addEventListener('click',function(){
+      input.value=button.getAttribute('data-agent-example')||'';
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      input.focus();
+    });
+  });
+})();
+(function setupAgentWorkspaceLayout(){
+  var grid=document.getElementById('agentWorkspaceGrid');
+  var chatTab=document.getElementById('agentChatTab');
+  var terminalTab=document.getElementById('agentTerminalTab');
+  var toggle=document.getElementById('agentTerminalToggle');
+  var divider=document.getElementById('agentSplitDivider');
+  if(!grid||!chatTab||!terminalTab||!toggle||!divider)return;
+  function saved(key){try{return localStorage.getItem(key)}catch{return null}}
+  function persist(key,value){try{localStorage.setItem(key,value)}catch{}}
+  function setPanel(name){
+    var panel=name==='terminal'?'terminal':'chat';
+    grid.dataset.activePanel=panel;
+    chatTab.setAttribute('aria-selected',String(panel==='chat'));
+    terminalTab.setAttribute('aria-selected',String(panel==='terminal'));
+    persist('oasis.agent.activePanel',panel);
+  }
+  function setVisible(visible){
+    grid.dataset.terminalVisible=String(!!visible);
+    toggle.textContent=visible?'Hide terminal':'Show terminal';
+    toggle.setAttribute('aria-expanded',String(!!visible));
+    persist('oasis.agent.terminalVisible',String(!!visible));
+    if(!visible)setPanel('chat');
+    if(visible&&window.matchMedia('(max-width: 780px)').matches)setPanel('terminal');
+  }
+  function setSplit(value){
+    var split=Math.max(35,Math.min(72,Number(value)||56));
+    grid.style.setProperty('--agent-chat-split',split+'%');
+    divider.setAttribute('aria-valuenow',String(Math.round(split)));
+    persist('oasis.agent.chatSplit',String(split));
+  }
+  function adjustSplit(clientX){
+    var bounds=grid.getBoundingClientRect();
+    if(bounds.width>0)setSplit((clientX-bounds.left)/bounds.width*100);
+  }
+  var initialVisible=saved('oasis.agent.terminalVisible')!=='false';
+  setVisible(initialVisible);
+  var initialPanel=saved('oasis.agent.activePanel');
+  if(initialVisible&&(initialPanel==='chat'||initialPanel==='terminal'))setPanel(initialPanel);
+  var initialSplit=Number(saved('oasis.agent.chatSplit'));
+  setSplit(Number.isFinite(initialSplit)&&initialSplit>=35&&initialSplit<=72?initialSplit:56);
+  chatTab.addEventListener('click',function(){setPanel('chat')});
+  terminalTab.addEventListener('click',function(){if(grid.dataset.terminalVisible==='false')setVisible(true);setPanel('terminal')});
+  toggle.addEventListener('click',function(){setVisible(grid.dataset.terminalVisible!=='true')});
+  var dragging=false;
+  divider.addEventListener('pointerdown',function(event){
+    if(window.matchMedia('(max-width: 780px)').matches||grid.dataset.terminalVisible!=='true')return;
+    dragging=true;divider.setPointerCapture(event.pointerId);adjustSplit(event.clientX);event.preventDefault();
+  });
+  divider.addEventListener('pointermove',function(event){if(dragging)adjustSplit(event.clientX)});
+  function finishDrag(){dragging=false}
+  divider.addEventListener('pointerup',finishDrag);
+  divider.addEventListener('pointercancel',finishDrag);
+  divider.addEventListener('lostpointercapture',finishDrag);
+  divider.addEventListener('keydown',function(event){
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    event.preventDefault();
+    var current=Number.parseFloat(getComputedStyle(grid).getPropertyValue('--agent-chat-split'))||56;
+    setSplit(current+(event.key==='ArrowRight'?5:-5));
+  });
+})();
 document.getElementById('providerProtocol').addEventListener('change',function(){var p=this.value;document.getElementById('providerBaseUrl').value=p==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1';document.getElementById('providerModel').value=p==='anthropic'?'claude-sonnet-5':(p==='openai-responses'?'gpt-6.1-sol':'');document.getElementById('providerApiKey').value='';document.getElementById('providerSetupStatus').textContent='Unsaved changes'});
-document.getElementById('providerPreset').addEventListener('change',function(){var presets={openai:{protocol:'openai-responses',baseURL:'https://api.openai.com/v1',model:'gpt-6.1-sol'},anthropic:{protocol:'anthropic',baseURL:'https://api.anthropic.com',model:'claude-sonnet-5'},openrouter:{protocol:'openai-compatible',baseURL:'https://openrouter.ai/api/v1',model:''},gemini:{protocol:'openai-compatible',baseURL:'https://generativelanguage.googleapis.com/v1beta/openai/',model:'gemini-3.8-flash'},ollama:{protocol:'openai-compatible',baseURL:'http://localhost:11434/v1',model:''},omniroute:{protocol:'openai-compatible',baseURL:'http://127.0.0.1:20128/v1',model:'auto'}};var selected=presets[this.value];if(!selected)return;document.getElementById('providerProtocol').value=selected.protocol;document.getElementById('providerBaseUrl').value=selected.baseURL;document.getElementById('providerModel').value=selected.model;document.getElementById('providerApiKey').value='';});
-document.getElementById('providerSetupForm').addEventListener('submit',async function(e){e.preventDefault();if(!agentToken){notify('Connect the runtime before saving provider settings.');return}var button=document.getElementById('providerSaveBtn'),status=document.getElementById('providerSetupStatus'),apiKey=document.getElementById('providerApiKey').value;button.disabled=true;status.textContent='Testing model and tool calling, then saving locally…';try{var result=await agentApi('/api/provider/config',{method:'POST',body:JSON.stringify({protocol:document.getElementById('providerProtocol').value,baseURL:document.getElementById('providerBaseUrl').value.trim(),model:document.getElementById('providerModel').value.trim(),apiKey:apiKey})});document.getElementById('providerApiKey').value='';status.textContent='Provider responded · saving locally…';notify('Provider response verified. Saving settings locally…');await agentConnect(true);status.textContent='Verified · '+result.provider.model;notify('Provider tested successfully and settings were saved. The API key was not returned to the browser.')}catch(err){status.textContent='Verification failed · not saved';notify('Provider settings were not saved because verification failed: '+err.message)}finally{button.disabled=false}});
+document.getElementById('providerPreset').addEventListener('change',function(){var presets={openai:{protocol:'openai-responses',baseURL:'https://api.openai.com/v1',model:'gpt-6.1-sol'},anthropic:{protocol:'anthropic',baseURL:'https://api.anthropic.com',model:'claude-sonnet-5'},openrouter:{protocol:'openai-compatible',baseURL:'https://openrouter.ai/api/v1',model:''},gemini:{protocol:'openai-compatible',baseURL:'https://generativelanguage.googleapis.com/v1beta/openai/',model:'gemini-3.8-flash'},ollama:{protocol:'openai-compatible',baseURL:'http://localhost:11434/v1',model:''},omniroute:{protocol:'openai-compatible',baseURL:'http://127.0.0.1:20128/v1',model:'auto'}};var selected=presets[this.value];if(!selected){setProviderKeyHelp();return;}document.getElementById('providerProtocol').value=selected.protocol;document.getElementById('providerBaseUrl').value=selected.baseURL;document.getElementById('providerModel').value=selected.model;document.getElementById('providerApiKey').value='';setProviderKeyHelp();});
+setProviderKeyHelp();
+ document.getElementById('providerSetupForm').addEventListener('submit',async function(e){e.preventDefault();if(!agentToken){notify('Connect the runtime before saving provider settings.');return}var button=document.getElementById('providerSaveBtn'),status=document.getElementById('providerSetupStatus'),apiKey=document.getElementById('providerApiKey').value;button.disabled=true;status.textContent='Testing model and tool calling, then saving locally…';try{var result=await agentApi('/api/provider/config',{method:'POST',body:JSON.stringify({protocol:document.getElementById('providerProtocol').value,baseURL:document.getElementById('providerBaseUrl').value.trim(),model:document.getElementById('providerModel').value.trim(),apiKey:apiKey})});document.getElementById('providerApiKey').value='';status.textContent='Provider responded · saving locally…';notify('Provider response verified. Saving settings locally…');await agentConnect(true);status.textContent='Verified · '+result.provider.model;notify('Provider tested successfully and settings were saved. The API key was not returned to the browser.')}catch(err){status.textContent='Verification failed · not saved';notify('Provider settings were not saved because verification failed: '+err.message)}finally{button.disabled=false}});
 
 /* Git URL extension import, inventory and removal. Only reviewed Markdown is imported. */
 var extensionInspection=null;

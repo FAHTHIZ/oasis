@@ -1,15 +1,70 @@
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, Menu, safeStorage, shell } from 'electron';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { startOasisWebServer } from '../src/web.mjs';
+import { loadConfig, saveConfig } from '../src/config.mjs';
+import { loadDesktopApiKey, saveDesktopApiKey } from './secure-secrets.mjs';
 
 let mainWindow = null;
 let runtime = null;
 let activeOrigin = null;
 let shuttingDown = false;
 let startupComplete = false;
+const desktopEnv = { ...process.env };
+const inheritedOasisApiKey = process.env.OASIS_API_KEY || '';
+
+const secureStorage = {
+  isEncryptionAvailable() {
+    try {
+      if (!safeStorage.isEncryptionAvailable()) return false;
+      if (process.platform === 'linux' &&
+          typeof safeStorage.getSelectedStorageBackend === 'function' &&
+          safeStorage.getSelectedStorageBackend() === 'basic_text') return false;
+      return true;
+    } catch { return false; }
+  },
+  encryptString(value) { return safeStorage.encryptString(value); },
+  decryptString(value) { return safeStorage.decryptString(value); }
+};
 
 const statePath = () => path.join(app.getPath('userData'), 'desktop-state.json');
+const secretsPath = () => path.join(app.getPath('userData'), 'secure-secrets.json');
+
+async function persistProviderSecret({ apiKey }) {
+  if (apiKey) {
+    await saveDesktopApiKey(apiKey, { filePath: secretsPath(), safeStorage: secureStorage });
+    desktopEnv.OASIS_API_KEY = apiKey;
+    return;
+  }
+  await saveDesktopApiKey('', { filePath: secretsPath(), safeStorage: secureStorage });
+  if (inheritedOasisApiKey) desktopEnv.OASIS_API_KEY = inheritedOasisApiKey;
+  else delete desktopEnv.OASIS_API_KEY;
+}
+
+async function restoreProviderSecret() {
+  const saved = await loadDesktopApiKey({ filePath: secretsPath(), safeStorage: secureStorage });
+  if (saved) {
+    desktopEnv.OASIS_API_KEY = saved;
+    return;
+  }
+
+  // Migrate an older desktop/CLI config key only when it came from the config
+  // file (not from the user's environment) and OS-backed encryption is available.
+  const suppliedFromEnvironment = Boolean(
+    process.env.OASIS_API_KEY || process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY || process.env.OASIS_LOCAL_API_KEY
+  );
+  if (suppliedFromEnvironment || !secureStorage.isEncryptionAvailable()) return;
+  try {
+    const legacy = await loadConfig({ env: desktopEnv });
+    if (!legacy.apiKey) return;
+    await saveDesktopApiKey(legacy.apiKey, { filePath: secretsPath(), safeStorage: secureStorage });
+    desktopEnv.OASIS_API_KEY = legacy.apiKey;
+    await saveConfig({ ...legacy, apiKey: '' }, { env: desktopEnv });
+  } catch {
+    // Keep startup resilient. The provider form explains if secure storage is unavailable.
+  }
+}
 
 async function loadState() {
   try {
@@ -74,7 +129,7 @@ async function openWorkspace(root) {
     activeOrigin = null;
     await previous.close();
   }
-  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0 });
+  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistProviderSecret });
   activeOrigin = 'http://127.0.0.1:' + runtime.port;
   await saveWorkspace(resolved);
   const window = createWindow();
@@ -137,6 +192,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     app.setName('OASIS');
     installMenu();
+    await restoreProviderSecret();
     const saved = await loadState();
     if (await isDirectory(saved.workspace)) {
       try { await openWorkspace(saved.workspace); startupComplete = true; return; }

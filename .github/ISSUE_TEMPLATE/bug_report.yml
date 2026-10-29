@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible OASIS problem
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Please remove API keys, runtime tokens, private repository details and personal data before posting."
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: Describe the expected result in plain words.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open ...\n2. Choose ...\n3. See ..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OASIS version and install type
+      placeholder: "0.3.0 desktop / CLI / browser"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and Node version (if using CLI)
+      placeholder: "Windows 11 / Node 22"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Safe error details
+      description: Share relevant error text only after checking that it contains no secrets.
+    validations:
+      required: false
