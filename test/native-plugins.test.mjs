@@ -1,10 +1,21 @@
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { installNativePlugin, validateNativePluginPackage, listNativePlugins, uninstallNativePlugin } from '../src/native-plugins.mjs';
+import { installNativePlugin, validateNativePluginPackage, listNativePlugins, uninstallNativePlugin, parseNativePluginPackageArguments } from '../src/native-plugins.mjs';
 import { loadEnabledPlugins, pluginCommands, pluginSkills, pluginAgents, pluginHooks, pluginMcpServers } from '../src/claude-plugins.mjs';
+
+function git(cwd, ...args) {
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: 'pipe',
+    env: { ...process.env, GIT_AUTHOR_NAME: 'Oasis Test', GIT_AUTHOR_EMAIL: 'oasis-test@example.invalid', GIT_COMMITTER_NAME: 'Oasis Test', GIT_COMMITTER_EMAIL: 'oasis-test@example.invalid' }
+  });
+}
 
 async function setup(t) {
   const home=await mkdtemp(path.join(os.tmpdir(),'oasis-native-plugin-home-'));
@@ -43,6 +54,35 @@ async function writePackage(pkg,{version='1.0.0',permissions=['commands','skills
   for(const file of Object.keys(entries)){await mkdir(path.dirname(path.join(pkg,file)),{recursive:true});await writeFile(path.join(pkg,file),entries[file]);}
   await writeFile(path.join(pkg,'plugin.json'),JSON.stringify(manifest,null,2));
 }
+test('native plugin validates and installs HTTPS-compatible Git sources from a temporary clone',async t=>{
+  const {root,pkg,env,home}=await setup(t);
+  await writePackage(pkg,{permissions:['commands']});
+  git(pkg,'init','-q');
+  git(pkg,'config','user.name','Oasis Test');
+  git(pkg,'config','user.email','oasis-test@example.invalid');
+  git(pkg,'add','.');
+  git(pkg,'commit','-qm','fixture');
+  git(pkg,'branch','-M','main');
+  const gitUrl=pathToFileURL(pkg).href+'#main';
+  const parsed=parseNativePluginPackageArguments('install '+gitUrl+' --grant commands',root);
+  assert.equal(parsed.positionals[0],gitUrl,'Git URLs and their optional refs must not be resolved as local paths');
+  const checked=await validateNativePluginPackage(gitUrl,{env});
+  assert.equal(checked.name,'review-helper');
+  const cloneRoot=path.join(home,'.config','oasis','native-plugin-sources');
+  assert.deepEqual(await (await import('node:fs/promises')).readdir(cloneRoot),[],'validation removes the temporary clone');
+  const installed=await installNativePlugin(gitUrl,{env,grantedPermissions:['commands']});
+  assert.equal(installed.installed,true);
+  assert.equal(installed.name,'review-helper');
+  assert.deepEqual(await (await import('node:fs/promises')).readdir(cloneRoot),[],'install removes the temporary clone after staging the granted files');
+  assert.ok(await readFile(path.join(installed.installPath,'commands/review.md'),'utf8'));
+});
+
+test('native plugin Git URLs reject insecure HTTP and unsafe refs', async () => {
+  const { root } = await setup({ after() {} });
+  assert.throws(() => parseNativePluginPackageArguments('validate http://example.invalid/repo.git', root), /HTTPS, SSH, or file:\/\//i);
+  assert.throws(() => parseNativePluginPackageArguments('validate https://github.com/example/plugin.git#../../etc', root), /safe branch or tag/i);
+});
+
 test('native plugin validates and installs only explicitly granted capabilities',async t=>{
   const {root,pkg,env}=await setup(t);await writePackage(pkg);
   const validated=await validateNativePluginPackage(pkg);assert.equal(validated.name,'review-helper');assert.equal(validated.components.commands[0],'review');
