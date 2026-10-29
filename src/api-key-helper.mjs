@@ -16,7 +16,8 @@ export function helperTtl(env = process.env) {
 
 export function runApiKeyHelper(command, options = {}) {
   const env = options.env || process.env;
-  const timeoutMs = options.timeoutMs || 30000;
+  const requestedTimeout = Number(options.timeoutMs);
+  const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0 ? Math.max(1, Math.min(5 * 60 * 1000, Math.floor(requestedTimeout))) : 30000;
   return new Promise((resolve, reject) => {
     const shell = process.platform === 'win32' ? (env.ComSpec || 'cmd.exe') : '/bin/sh';
     const args = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
@@ -47,7 +48,7 @@ export function runApiKeyHelper(command, options = {}) {
     child.stderr.on('data', (chunk) => { err = append(err, chunk, 4096); });
     child.on('error', (error) => finish(reject, new Error('apiKeyHelper could not start: ' + error.message)));
     child.on('close', (code) => {
-      if (code !== 0) return finish(reject, new Error('apiKeyHelper exited with code ' + code + (err.trim() ? ': ' + err.trim().slice(0, 300) : '')));
+      if (code !== 0) return finish(reject, new Error('apiKeyHelper exited with code ' + code + '. Stderr is not echoed because the helper may handle credentials.'));
       const key = out.trim().split(/\r?\n/).pop() || '';
       if (!key) return finish(reject, new Error('apiKeyHelper printed no API key.'));
       if (/\s/.test(key) || key.length > 8192) return finish(reject, new Error('apiKeyHelper output is not a single API key.'));
