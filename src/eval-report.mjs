@@ -1,4 +1,5 @@
-import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { chmod, lstat, mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 function escapeHtml(value) {
@@ -20,8 +21,19 @@ export async function saveComparisonArtifact(outputPath, content) {
   if (existing && (!existing.isFile() || existing.isSymbolicLink())) {
     throw new Error('Comparison report output must be a regular, non-symlink file: ' + outputPath);
   }
-  await writeFile(resolved, content, { encoding: 'utf8', mode: 0o600 });
-  await chmod(resolved, 0o600).catch(() => {});
+  // Create the complete artifact beside the destination, then rename it into
+  // place. A final-component symlink can never redirect report bytes into its
+  // target, and readers never see a half-written JSON/HTML document.
+  const temporary = path.join(path.dirname(resolved),
+    '.' + path.basename(resolved) + '.' + process.pid + '.' + randomUUID() + '.tmp');
+  try {
+    await writeFile(temporary, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    await chmod(temporary, 0o600).catch(() => {});
+    await rename(temporary, resolved);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
   return resolved;
 }
 
