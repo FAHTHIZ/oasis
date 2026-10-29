@@ -4,6 +4,9 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Refreshed the branch audit against main SHA db3d49c8729f8dc6e264dad294e878aeca0eed08: 40 non-main refs, 18 exact merged-PR heads, three additional behind-only refs, and four exact reviewed/superseded heads are eligible for guarded retirement. The cleanup workflow now runs the branch-cleanup, installer-hash and path-collision regression tests before attempting deletion. Current action and quality results remain pending.
+
+
 - Hardened branch cleanup so exact merged PR heads and SHA-pinned superseded refs can be retired from their direct evidence without first depending on a separate compare request. Protected/default/open-PR branches remain preserved; transient compare failures still retain uncertain refs. The cleanup workflow now cancels stale in-flight cleanup attempts in favor of the latest main revision.
 
 

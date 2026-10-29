@@ -25,6 +25,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify cleanup and file-hygiene safeguards
+        run: node --test test/branch-cleanup.test.mjs test/installer-scripts.test.mjs test/repository-hygiene.test.mjs
       - name: Retire only verified merged or content-equivalent branches
         run: node scripts/cleanup-merged-branches.mjs --apply
         env:

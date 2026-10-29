@@ -4,7 +4,7 @@
 **Canonical destination:** `main`  
 **Scope:** 37 non-main branch tips visible during the October 29, 2026 audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
 
-**Comparison baseline:** branch tips were compared against `main` at `b52f36a19a8bc8512a76fe9dc9c99299f41dadec`. The completed Quality Checks and homepage/repository validation passed on this baseline; its desktop packaging matrix was still running. The workspace-lock and restart-persistence tests are newer work and require current-head checks.
+**Current-main baseline:** `db3d49c8729f8dc6e264dad294e878aeca0eed08`. The latest Quality Checks, installer checks and branch-cleanup jobs are queued; no new passing result or branch-deletion receipt is claimed for this SHA.
 
 ## Decisions
 
@@ -49,58 +49,61 @@ The live comparison against the audited `main` head found these branches fully b
 
 Other branch tips have unique commits or diverged file trees. Several contain work already merged through squash/rebase or superseded by later code; use the per-branch decisions above rather than treating `ahead_by` as proof that a feature is missing. The cloud-engine branch's useful task-history, recovery, isolated-worktree, and diff-review capabilities were ported selectively to `main` and tested in run #705. Its stale full tree must not be merged over newer runtime/search changes.
 
-The available GitHub actions do not expose remote branch deletion, so no remote branch refs have been deleted from this session. PRs #22 and #23 are closed; the useful cloud-engine work is now represented on `main`. The remaining merged/superseded branch refs are cleanup candidates, but branch deletion itself must be performed through GitHub's branch-management UI or an authorized tool that supports deleting refs. The latest fully completed quality evidence is [run #726](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) on commit `5a53756`: 594 tests, 22 fixtures, Node 22/24/26, PTY and browser E2E passed. Homepage/repository validation [run #468](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code revision.
+PRs #22 and #23 are closed; the useful cloud-engine work is represented on `main`, but its divergent branch is retained pending a full content equivalence check. Remote ref deletion is now performed by the guarded `cleanup-merged-branches.yml` workflow after its focused safety regression tests pass. The current action is still queued, so no branches are yet claimed deleted. The latest fully completed quality evidence is [run #726](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) on commit `5a53756`: 594 tests, 22 fixtures, Node 22/24/26, PTY and browser E2E passed. Homepage/repository validation [run #468](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code revision.
 
 
 ## Latest full branch inventory (2026-10-29)
 
-**Latest comparison baseline:** `main` at `bec81366d483895adfa899c6bd157a09642f93d9`. This table records Git ancestry counts, not a guarantee of content equivalence; squash/rebase merges can leave ahead counts even when a feature was ported.
+**Latest comparison baseline:** `main` at `db3d49c8729f8dc6e264dad294e878aeca0eed08`. This table records Git ancestry counts, not a guarantee of content equivalence; squash/rebase merges can leave ahead counts even when a feature was ported.
 
 | Branch | Ahead | Behind | Assessment |
 | --- | ---: | ---: | --- |
-| `app/alpha-readiness-gaps` | 21 | 163 | Diverged; inspect unique app changes before retirement |
-| `app/empty-chat` | 33 | 356 | Diverged; inspect unique app changes before retirement |
-| `app/first-run` | 24 | 356 | Diverged; inspect unique app changes before retirement |
-| `app/status-activity` | 34 | 356 | Diverged; inspect unique app changes before retirement |
-| `app/workspace-layout` | 29 | 356 | Diverged; inspect unique app changes before retirement |
-| `chore/current-head-verification-status` | 2 | 80 | Stale closed-PR branch; check content overlap, then retire |
-| `chore/public-launch-metadata` | 0 | 705 | Behind-only; safe retirement candidate |
-| `cli/getting-started` | 24 | 354 | Diverged; inspect unique CLI changes before retirement |
-| `cloud-engine/maturity-foundation` | 51 | 753 | Diverged; preserve only verified missing improvements |
-| `docs/alpha-confidence-milestone-2026-10-29` | 13 | 602 | Diverged docs branch; audit relevant documentation diff |
-| `feat/context-ordering-todo` | 7 | 950 | Diverged; verify source-equivalent port before retirement |
-| `feat/eval-harness` | 0 | 820 | Behind-only; safe retirement candidate |
-| `feat/first-run-guided-onboarding` | 13 | 817 | Merged/ported feature; compare tree before retirement |
-| `feat/mid-turn-context-compaction-20261027` | 5 | 806 | Merged/ported feature; compare tree before retirement |
-| `feat/omniroute-chat-bootstrap` | 16 | 818 | Merged/ported feature; compare tree before retirement |
-| `feat/openhands-agent-server-bridge` | 8 | 813 | Closed duplicate PR lineage; verify current adapter before retirement |
-| `feat/ordered-tools-context-checklists-20261027` | 10 | 811 | Merged/ported feature; compare tree before retirement |
-| `feat/parallel-readonly-specialists-20261027` | 4 | 803 | Merged feature; compare tree before retirement |
-| `feat/provider-transient-retries` | 2 | 814 | Merged feature; compare tree before retirement |
-| `feat/workspace-extensions-integration-hub` | 77 | 820 | Merged/ported feature; do not merge stale branch wholesale |
-| `fix/browser-session-start-lock-20261027` | 4 | 807 | Merged feature; compare tree before retirement |
-| `fix/chained-command-permissions` | 3 | 428 | Closed unmerged fix; verify permission behavior before retirement |
-| `fix/guided-onboarding-entrypoints` | 0 | 816 | Behind-only; safe retirement candidate |
-| `fix/omniroute-setup-default-20261027` | 3 | 806 | Older sibling of newer OmniRoute branch |
-| `fix/omniroute-setup-default-latest` | 3 | 805 | Merged feature; compare tree before retirement |
-| `fix/preserve-current-provider-on-setup-20261027` | 3 | 801 | Ported fix; retain until current-main regression suite passes |
-| `fix/safety-part-1-completion` | 7 | 352 | Closed unmerged; verify safe runtime changes before retirement |
-| `fix/verification-command-detection` | 2 | 815 | Merged feature; compare tree before retirement |
-| `fix/verification-gate-completeness` | 2 | 816 | Merged feature; compare tree before retirement |
-| `fix/web-job-capacity` | 0 | 809 | Behind-only; safe retirement candidate |
-| `fix/web-job-capacity-guard-20261027` | 0 | 810 | Behind-only; duplicate tip with next entry |
-| `fix/web-job-capacity-main-20261027` | 0 | 810 | Behind-only; duplicate tip with previous entry |
-| `security/bound-mcp-oauth-metadata` | 2 | 704 | Closed security branch; verify equivalent hardening before retirement |
-| `security/public-fetch-ssrf-hardening` | 8 | 704 | Closed security branch; verify equivalent hardening before retirement |
-| `test/browser-chat-tool-lifecycle` | 1 | 812 | Merged feature; compare tree before retirement |
-| `test/browser-e2e-smoke-20261027` | 9 | 805 | Merged feature; compare tree before retirement |
-| `test/browser-e2e-tool-cycle-20261027` | 6 | 803 | Merged feature; compare tree before retirement |
+| `app/alpha-readiness-gaps` | 21 | 212 | Diverged; inspect unique app changes before retirement |
+| `app/empty-chat` | 33 | 405 | Diverged; inspect unique app changes before retirement |
+| `app/first-run` | 24 | 405 | Diverged; inspect unique app changes before retirement |
+| `app/status-activity` | 34 | 405 | Diverged; inspect unique app changes before retirement |
+| `app/workspace-layout` | 29 | 405 | Diverged; inspect unique app changes before retirement |
+| `chore/current-head-verification-status` | 2 | 129 | Exact reviewed stale status head; retire only if its SHA still matches and replacement files exist |
+| `chore/public-launch-metadata` | 0 | 754 | Merged PR #24 and behind-only; safe candidate |
+| `cli/getting-started` | 24 | 403 | Diverged; inspect unique CLI changes before retirement |
+| `cloud-engine/maturity-foundation` | 51 | 802 | Diverged; preserve unique task-history/cloud changes |
+| `docs/alpha-confidence-milestone-2026-10-29` | 13 | 651 | Diverged docs branch; inspect diffs before retirement |
+| `docs/termux-install-guide-2026-10-29` | 1 | 39 | Exact reviewed stale doc head; retire only if its SHA still matches and main contains docs/TERMUX.md |
+| `feat/context-ordering-todo` | 7 | 999 | Diverged; inspect source-equivalent port before retirement |
+| `feat/eval-harness` | 0 | 869 | Merged PR #2 and behind-only; safe candidate |
+| `feat/first-run-guided-onboarding` | 13 | 866 | Merged PR #7; retire if exact head still matches |
+| `feat/mid-turn-context-compaction-20261027` | 5 | 855 | Merged PR #17; retire if exact head still matches |
+| `feat/omniroute-chat-bootstrap` | 16 | 867 | Merged PR #6; retire if exact head still matches |
+| `feat/openhands-agent-server-bridge` | 8 | 862 | Merged PR #11; retire if exact head still matches |
+| `feat/ordered-tools-context-checklists-20261027` | 10 | 860 | Merged PR #14; retire if exact head still matches |
+| `feat/parallel-readonly-specialists-20261027` | 4 | 852 | Merged PR #21; retire if exact head still matches |
+| `feat/provider-transient-retries` | 2 | 863 | Merged PR #10; retire if exact head still matches |
+| `feat/workspace-extensions-integration-hub` | 77 | 869 | Merged PR #4; retire exact merged head, never merge the stale tree wholesale |
+| `fix/browser-session-start-lock-20261027` | 4 | 856 | Merged PR #16; retire if exact head still matches |
+| `fix/chained-command-permissions` | 3 | 477 | Closed unmerged permission fix; preserve until net content is confirmed equivalent |
+| `fix/guided-onboarding-entrypoints` | 0 | 865 | Behind-only with no unique commits; safe candidate |
+| `fix/omniroute-setup-default-20261027` | 3 | 855 | Older sibling; preserve unless net file states match main |
+| `fix/omniroute-setup-default-latest` | 3 | 854 | Merged PR #19; retire if exact head still matches |
+| `fix/preserve-current-provider-on-setup-20261027` | 3 | 850 | Ported fix; preserve unless net file states match main |
+| `fix/safety-part-1-completion` | 7 | 401 | Closed unmerged runtime/CI fix; inspect before retirement |
+| `fix/verification-command-detection` | 2 | 864 | Merged PR #9; retire if exact head still matches |
+| `fix/verification-gate-completeness` | 2 | 865 | Merged PR #8; retire if exact head still matches |
+| `fix/web-job-capacity` | 0 | 858 | Merged PR #15 and behind-only; safe candidate |
+| `fix/web-job-capacity-guard-20261027` | 0 | 859 | Behind-only; safe candidate; shares tip with following row |
+| `fix/web-job-capacity-main-20261027` | 0 | 859 | Behind-only; safe candidate; shares tip with previous row |
+| `installer/painless-cli-2026-10-29` | 1 | 41 | Exact reviewed installer head; retire only if its SHA still matches and main contains scripts/install.sh |
+| `installer/windows-powershell-2026-10-29` | 1 | 39 | Exact reviewed installer head; retire only if its SHA still matches and main contains scripts/install.ps1 |
+| `security/bound-mcp-oauth-metadata` | 2 | 753 | Closed security change; preserve unless verified equivalent |
+| `security/public-fetch-ssrf-hardening` | 8 | 753 | Closed SSRF/security change; preserve unless verified equivalent |
+| `test/browser-chat-tool-lifecycle` | 1 | 861 | Merged PR #12; retire if exact head still matches |
+| `test/browser-e2e-smoke-20261027` | 9 | 854 | Merged PR #18; retire if exact head still matches |
+| `test/browser-e2e-tool-cycle-20261027` | 6 | 852 | Merged PR #20; retire if exact head still matches |
 
-The latest comparison found 22 retirement candidates: 18 branch tips match merged PR heads, three additional branches are strictly behind `main`, and one closed-PR branch changes only `STATUS.md` and `CHANGELOG.md`. This is an audited candidate list, not a deletion receipt. A guarded branch-cleanup workflow now lives at .github/workflows/cleanup-merged-branches.yml. It preserves the default and protected branches plus any branch used by an open same-repository PR. It retires only branch heads confirmed as merged into the default branch, fully-behind refs, four exact reviewed superseded heads whose replacement paths are present on main, or branches whose complete net file states match main byte-for-byte. The first workflow run is the authoritative deletion receipt; preserve every branch with non-equivalent or unverified content.
+The latest comparison found 25 guarded retirement candidates: 18 exact branch heads match merged PRs, three additional branches are strictly behind `main`, and four exact reviewed/superseded heads cover the old status/changelog branch plus the three installer/Termux branches. These counts describe eligibility, not deletion receipts. This is an audited candidate list, not a deletion receipt. A guarded branch-cleanup workflow now lives at .github/workflows/cleanup-merged-branches.yml. It preserves the default and protected branches plus any branch used by an open same-repository PR. It retires only branch heads confirmed as merged into the default branch, fully-behind refs, four exact reviewed superseded heads whose replacement paths are present on main, or branches whose complete net file states match main byte-for-byte. The first workflow run is the authoritative deletion receipt; preserve every branch with non-equivalent or unverified content.
 
 
 ## Branch cleanup automation (2026-10-29)
 
 The repository cleanup action uses the repository GITHUB_TOKEN with contents: write and pull-requests: read. It checks the full default-branch tree, all branches, open PR heads and closed merged PR heads before deciding. It retires only exact merged heads, strict behind-only refs, four exact audited/superseded heads with required replacement paths, or branches whose complete net changed-file states match the default tree byte-for-byte. Protected/default branches and every branch referenced by an open same-repository PR are always retained.
 
-The first cleanup workflow run is still pending at the time of this note, so actual deletion totals are not yet known. Do not infer deletions until the action's summary says so.
+The cleanup action is currently queued, so actual deletion totals are not yet known. Do not infer deletions until the action's summary says so.
