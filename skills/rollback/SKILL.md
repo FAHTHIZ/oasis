@@ -3,7 +3,9 @@ name: rollback
 description: Preview and restore the latest OASIS-tracked file checkpoint with recovery backups and explicit confirmation.
 ---
 
-# Purpose
+# Rollback skill
+
+## Purpose
 Restore file state from the latest eligible OASIS checkpoint without silently discarding the current contents or rewriting the conversation.
 
 ## Inputs
