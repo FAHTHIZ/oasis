@@ -212,6 +212,7 @@ export async function expandInlineShell(text, options = {}) {
     else if (options.policy) {
       const verdict = options.policy.evaluate('run_shell', { command });
       if (verdict.decision === 'deny') skipped = 'blocked by permission rule ' + verdict.rule;
+      else if (verdict.decision === 'ask') skipped = 'requires explicit approval under permission rule ' + verdict.rule;
     }
     if (skipped) {
       ran.push({ command, skipped });
