@@ -234,10 +234,23 @@ export class LspClient {
 
   waitForDiagnostics(uri, timeout) {
     return new Promise((resolve) => {
-      const timer = setTimeout(resolve, timeout);
+      let timer;
+      let settled = false;
+      const finish = (received) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        const list = this.diagnosticWaiters.get(uri) || [];
+        const next = list.filter((waiter) => waiter !== onDiagnostics);
+        if (next.length) this.diagnosticWaiters.set(uri, next);
+        else this.diagnosticWaiters.delete(uri);
+        resolve(received);
+      };
+      const onDiagnostics = () => finish(true);
+      timer = setTimeout(() => finish(false), timeout);
       timer.unref?.();
       const list = this.diagnosticWaiters.get(uri) || [];
-      list.push(() => { clearTimeout(timer); resolve(); });
+      list.push(onDiagnostics);
       this.diagnosticWaiters.set(uri, list);
     });
   }
@@ -481,8 +494,16 @@ export async function runLsp(root, args = {}, options = {}) {
       } catch { list = null; }
     }
     if (!list) {
-      if (client.staleDiagnostics.has(uri) || !client.diagnostics.has(uri)) await client.waitForDiagnostics(uri, 8000);
-      list = client.diagnostics.get(uri) || [];
+      if (client.staleDiagnostics.has(uri) || !client.diagnostics.has(uri)) {
+        const received = await client.waitForDiagnostics(uri, Number.isFinite(options.diagnosticTimeoutMs) ? Math.max(1, Math.min(30000, options.diagnosticTimeoutMs)) : 8000);
+        if (!received && (client.staleDiagnostics.has(uri) || !client.diagnostics.has(uri))) {
+          throw new Error('Timed out waiting for ' + server.name + ' language-server diagnostics for ' + relative + '. Verification is unavailable; no clean result was received.');
+        }
+      }
+      if (!client.diagnostics.has(uri) || client.staleDiagnostics.has(uri)) {
+        throw new Error('The ' + server.name + ' language server did not provide current diagnostics for ' + relative + '. Verification is unavailable.');
+      }
+      list = client.diagnostics.get(uri);
     }
     const diagnostics = describeDiagnostics(list, relative);
     return { ...base, diagnostics, summary: { errors: diagnostics.filter((d) => d.severity === 'error').length, warnings: diagnostics.filter((d) => d.severity === 'warning').length, total: diagnostics.length } };
