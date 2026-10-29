@@ -16,6 +16,7 @@ import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } 
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
+import { priceFor } from './pricing.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff } from './worktrees.mjs';
@@ -23,18 +24,31 @@ import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readW
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
 
-// Compact session status for the browser: permission mode, context use, token totals.
+// Compact session status for the browser: permission mode, context use, tokens and priced cost.
 export function webSessionState(session, env = process.env) {
-  const windowSize = contextWindowSize(session.config, env);
+  const config = session.config || {};
+  const windowSize = contextWindowSize(config, env);
   const contextTokens = estimateTokens(session.messages || []);
   const usage = session.webUsage || {};
+  const model = String(config.model || '').slice(0, 200);
+  const pricing = priceFor(model, { config, overrides: session.pricing || {}, env });
+  const costKnown = Boolean(pricing);
+  const costUsd = costKnown ? Math.max(0, Number(session.costUsd) || 0) : null;
+  const budgetUsd = Math.max(0, Number(session.maxBudgetUsd) || 0);
+  const budgetPercent = costKnown && budgetUsd > 0 ? Math.round(costUsd / budgetUsd * 100) : null;
   return {
     mode: session.permissions ? session.permissions.mode : 'default',
-    model: String(session.config && session.config.model || '').slice(0, 200),
+    model,
     contextTokens,
     contextWindow: windowSize,
     contextPercent: windowSize ? Math.min(100, Math.round(contextTokens / windowSize * 100)) : 0,
-    totalTokens: Number(usage.totalTokens || 0)
+    totalTokens: Number(usage.totalTokens || 0),
+    costKnown,
+    costUsd,
+    localModel: Boolean(pricing && pricing.local),
+    budgetUsd,
+    budgetPercent,
+    budgetLevel: budgetPercent === null ? 'unknown' : budgetPercent >= 90 ? 'high' : budgetPercent >= 50 ? 'mid' : 'low'
   };
 }
 
