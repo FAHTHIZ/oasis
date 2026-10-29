@@ -253,3 +253,29 @@ test('remote MCP over plain HTTP is rejected, and untrusted workspaces ignore .m
   assert.ok(trusted.mcpClients.has('b'));
   assert.ok(trusted.toolDefinitions.some((tool) => tool.function.name === 'mcp_b_whoami'));
 });
+
+
+test('closing an HTTP MCP client aborts in-flight requests', async (t) => {
+  let startedResolve;
+  const started = new Promise((resolve) => { startedResolve = resolve; });
+  let aborted = false;
+  const client = new McpHttpClient(
+    { name: 'slow-http', url: 'https://mcp.example/mcp', headers: { Authorization: 'Bearer test' } },
+    {
+      fetch: (_url, options) => new Promise((_resolve, reject) => {
+        startedResolve();
+        options.signal.addEventListener('abort', () => {
+          aborted = true;
+          const error = new Error('The operation was aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      })
+    }
+  );
+  const request = client._request('tools/call', { name: 'slow', arguments: {} }, 120000);
+  await started;
+  client.close();
+  await assert.rejects(request, /timed out|closed|aborted/i);
+  assert.equal(aborted, true, 'close should abort the underlying HTTP request');
+});
