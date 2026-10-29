@@ -1,0 +1,126 @@
+diff --git a/src/config.mjs b/src/config.mjs
+--- a/src/config.mjs
++++ b/src/config.mjs
+@@ -48,6 +48,25 @@ export function validateProtocol(raw) {
+   return protocol;
+ }
+ 
++export function getProviderSetupDefaults(saved = {}) {
++  const savedBaseURL = (() => {
++    try { return validateBaseUrl(saved.baseURL || ''); }
++    catch { return ''; }
++  })();
++  let protocol;
++  try {
++    protocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL));
++  } catch {
++    protocol = inferProtocol(savedBaseURL, 'openai-compatible');
++  }
++  const baseURL = savedBaseURL || (
++    protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL :
++      protocol === 'openai-responses' ? DEFAULT_BASE_URL : ''
++  );
++  const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' :
++    protocol === 'openai-responses' ? DEFAULT_MODEL : '';
++  const model = String(saved.model || defaultModel).trim();
++  return { protocol, baseURL, model };
++}
++
+ function stripTrailingSlashes(raw) {
+   let value = String(raw || '');
+   while (value.endsWith('/')) value = value.slice(0, -1);
+diff --git a/src/cli.mjs b/src/cli.mjs
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -7,7 +7,7 @@ import path from 'node:path';
+ import { fileURLToPath } from 'node:url';
+-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
++import { loadConfig, saveConfig, getProviderSummary, getProviderSetupDefaults, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
+ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
+ import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
+ import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
+@@ -104,25 +104,28 @@ async function configureProvider() {
+   stdout.write('\nOasis setup — model provider\n');
+   stdout.write('Choose the native OpenAI Responses API (recommended for current OpenAI reasoning models), the native Anthropic Messages API, or an OpenAI-compatible endpoint. Local Ollama-style endpoints use OpenAI-compatible mode.\n');
++  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '', model: '' }));
++  const defaults = getProviderSetupDefaults(existing);
+   const rl = createInterface({ input: stdin, output: stdout });
+   let protocol, baseURL, model;
+   try {
+-    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase();
+-    protocol = validateProtocol(selected || 'openai-responses');
+-    const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+-    baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
+-    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
++    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default ' + defaults.protocol + '): ')).trim().toLowerCase();
++    protocol = validateProtocol(selected || defaults.protocol);
++    const basePrompt = 'Base URL' + (defaults.baseURL ? ' [' + defaults.baseURL + ']' : '') + ': ';
++    baseURL = (await rl.question(basePrompt)).trim() || defaults.baseURL;
++    const defaultModel = defaults.model;
+     const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (required for a compatible endpoint): ';
+     model = (await rl.question(modelPrompt)).trim() || defaultModel;
+     if (!model) throw new Error('Enter the exact model name supported by this compatible endpoint.');
+   } finally { rl.close(); }
+   protocol = validateProtocol(protocol);
+   baseURL = validateBaseUrl(baseURL);
+-  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
+   let apiKey = '';
+   if (!isLoopbackUrl(baseURL)) {
+     const label = protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key';
+diff --git a/test/provider-setup-defaults.test.mjs b/test/provider-setup-defaults.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/test/provider-setup-defaults.test.mjs
+@@ -0,0 +1,39 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  getProviderSetupDefaults,
++  DEFAULT_BASE_URL,
++  DEFAULT_ANTHROPIC_BASE_URL,
++  DEFAULT_MODEL
++} from '../src/config.mjs';
++
++test('fresh setup defaults to the native OpenAI Responses provider', () => {
++  assert.deepEqual(getProviderSetupDefaults({}), {
++    protocol: 'openai-responses',
++    baseURL: DEFAULT_BASE_URL,
++    model: DEFAULT_MODEL
++  });
++});
++
++test('reopening setup preserves a saved Anthropic provider', () => {
++  assert.deepEqual(getProviderSetupDefaults({
++    protocol: 'anthropic',
++    baseURL: DEFAULT_ANTHROPIC_BASE_URL,
++    model: 'claude-sonnet-5'
++  }), {
++    protocol: 'anthropic',
++    baseURL: DEFAULT_ANTHROPIC_BASE_URL,
++    model: 'claude-sonnet-5'
++  });
++});
++
++test('reopening setup preserves a saved compatible endpoint and model', () => {
++  assert.deepEqual(getProviderSetupDefaults({
++    protocol: 'openai-compatible',
++    baseURL: 'http://localhost:11434/v1',
++    model: 'local-model'
++  }), {
++    protocol: 'openai-compatible',
++    baseURL: 'http://localhost:11434/v1',
++    model: 'local-model'
++  });
++});
++
++test('unknown protocols keep valid custom endpoints in compatible mode', () => {
++  assert.deepEqual(getProviderSetupDefaults({
++    protocol: 'future-provider-protocol',
++    baseURL: 'https://gateway.example/v1',
++    model: 'custom-model'
++  }), {
++    protocol: 'openai-compatible',
++    baseURL: 'https://gateway.example/v1',
++    model: 'custom-model'
++  });
++});
