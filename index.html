@@ -509,7 +509,7 @@ function commandPaletteItems(){
     {id:'backup-export',label:'Export workspace backup',description:'Download the projects, tasks and notes in this browser',category:'Workspace',keywords:'backup download export data',run:function(){document.getElementById('exportBtn').click()}},
     {id:'theme-toggle',label:'Toggle light / dark theme',description:'Switch the workspace appearance',category:'Settings',keywords:'appearance theme color',run:function(){document.getElementById('themeToggle').click()}},
     {id:'provider-setup',label:'Model provider setup',description:'Choose an API provider, local Ollama or a gateway',category:'Settings',keywords:'model api key ollama omniroute',run:function(){navigate('agent');window.setTimeout(function(){var el=document.querySelector('.provider-setup');if(el)el.scrollIntoView({block:'start'});var first=document.getElementById('providerPreset');if(first)first.focus()},100)}},
-    {id:'first-run',label:'First-run model choices',description:'Review API key, free gateway and local-model setup paths',category:'Settings',keywords:'first run setup model install',run:function(){navigate('agent');window.setTimeout(function(){var el=document.getElementById('firstRunWizard');if(el){el.hidden=false;el.scrollIntoView({block:'start'})}},100)}},
+    {id:'first-run',label:'First-run model choices',description:'Review API key, free gateway and local-model setup paths',category:'Settings',keywords:'first run setup model install',run:function(){navigate('agent');window.setTimeout(function(){var wizard=document.getElementById('firstRunWizard');if(wizard&&!wizard.hidden)wizard.scrollIntoView({block:'start'});else{var provider=document.querySelector('.provider-setup');if(provider)provider.scrollIntoView({block:'start'})}},100)}},
     {id:'github-settings',label:'GitHub repository settings',description:'Connect GitHub CLI and select a workspace repository',category:'Settings',keywords:'clone repository github git',run:function(){navigate('agent');window.setTimeout(function(){var el=document.querySelector('.github-panel');if(el)el.scrollIntoView({block:'start'});var btn=document.getElementById('githubCheckBtn');if(btn)btn.focus()},100)}},
     {id:'terminal-open',label:'Open terminal panel',description:'Switch to the terminal inside the coding workspace',category:'Workspace',keywords:'run command shell process console',run:function(){navigate('agent');window.setTimeout(function(){var tab=document.getElementById('agentTerminalTab');if(tab)tab.click();var el=document.getElementById('agentWorkspaceGrid');if(el)el.scrollIntoView({block:'start'})},100)}},
     {id:'new-agent-chat',label:'Start a new agent chat',description:'Keep saved sessions, but begin a clean conversation',category:'Workspace',keywords:'new session clear conversation',run:function(){navigate('agent');window.setTimeout(function(){var btn=document.getElementById('newAgentSessionBtn');if(btn)btn.click()},100)}},
@@ -520,9 +520,10 @@ function commandPaletteItems(){
   ];
 }
 function prepareAgentPrompt(prompt){
-  navigate('agent');
   if(agentBusy){notify('Wait until the current task finishes before replacing the prompt.');return}
-  window.setTimeout(function(){var input=document.getElementById('agentPrompt');if(input){input.value=prompt;input.focus();input.dispatchEvent(new Event('input',{bubbles:true}))}},80);
+  navigate('agent');
+  var input=document.getElementById('agentPrompt');
+  if(input){input.value=prompt;input.focus();input.dispatchEvent(new Event('input',{bubbles:true}))}
 }
 function commandPaletteScore(item,query){
   var haystack=(item.label+' '+item.description+' '+item.category+' '+(item.keywords||'')).toLowerCase();
@@ -559,7 +560,7 @@ function commandPaletteRender(){
     var category=document.createElement('span');category.className='command-palette-result-category';category.textContent=item.category;
     var description=document.createElement('span');description.className='command-palette-result-description';description.textContent=item.description;
     button.append(label,category,description);
-    button.addEventListener('mouseenter',function(){commandPaletteSelected=index;commandPaletteRender()});
+    button.addEventListener('mouseenter',function(){commandPaletteSelected=index;commandPaletteResults.querySelectorAll('[role="option"]').forEach(function(option){option.setAttribute('aria-selected',String(option===button))})});
     button.addEventListener('click',function(){commandPaletteChoose(item.id)});
     commandPaletteResults.appendChild(button);
   });
