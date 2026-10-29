@@ -25,6 +25,7 @@ const required = [
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
   'aria-label="Resize chat and terminal panels"', 'oasis.agent.chatSplit', 'ArrowLeft', 'ArrowRight',
   'id="agentEmptyState"', 'data-agent-example="Explain this project"', 'data-agent-example="Find a bug"', 'data-agent-example="Write tests"',
+  'id="commandPaletteDialog"', 'id="commandPaletteSearch"', 'id="commandPaletteButton"', 'commandPaletteOpen()', 'starter-find-bug', 'Ctrl+K or ?',
   "document.getElementById('agentStopBtn').disabled=!agentBusy",
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
@@ -58,6 +59,8 @@ assert.ok(webRuntime.includes("if (!isLoopbackClient(req))"), 'Local model disco
 assert.ok(webRuntime.includes('text = redactApprovalSecrets(text)'), 'Browser tool-result summaries must redact credential values.');
 assert.ok(e2e.includes('Denying the delete approval must leave the file intact.'), 'Browser E2E must verify destructive actions can be denied.');
 assert.ok(e2e.includes('Cancellation must abort the task before another model request.'), 'Browser E2E must verify cancellation interrupts a pending task.');
+assert.ok(e2e.includes("page.keyboard.press('Control+k')"), 'Browser E2E must exercise the browser command palette.');
+assert.ok(e2e.includes('Selecting a starter must not send a message.'), 'Browser palette selection must not automatically send an agent task.');
 
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'OASIS — Coding Agent Workspace');

@@ -142,6 +142,23 @@ try {
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+
+  // Ctrl+K opens the browser palette. A selection fills the composer but must
+  // not start an agent task; the user explicitly presses Send afterwards.
+  await page.keyboard.press('Control+k');
+  await page.locator('#commandPaletteSearch').fill('Find a bug');
+  await page.locator('[data-palette-id="starter-find-bug"]').waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#commandPaletteResults [role="option"]').count(), 1, 'Fuzzy search should narrow to the matching starter.');
+  await page.locator('[data-palette-id="starter-find-bug"]').click();
+  assert.equal(await page.locator('#agentPrompt').inputValue(), 'Find a bug');
+  assert.equal(await page.locator('#agentMessages .agent-message.user').count(), 0, 'Selecting a starter must not send a message.');
+
+  await page.keyboard.press('Control+k');
+  await page.locator('#commandPaletteSearch').fill('provider setup');
+  await page.locator('[data-palette-id="provider-setup"]').waitFor({ state: 'visible', timeout: timeoutMs });
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#commandPaletteDialog').isVisible(), false, 'Escape should close the palette without running the selection.');
+
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-before.png'), fullPage: true });
   await page.locator('button[data-nav="agent"]').first().click();
   // The starter cards belong to the empty-state UI, so test them before connecting.
