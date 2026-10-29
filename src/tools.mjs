@@ -1153,10 +1153,16 @@ async function installExternalSkill(args, context, root) {
 function isPrivateIPv4(address) {
   const parts = address.split('.').map(Number);
   if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return true;
-  return parts[0] === 0 || parts[0] === 10 || parts[0] === 127 ||
-    (parts[0] === 169 && parts[1] === 254) || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    (parts[0] === 192 && parts[1] === 168) || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) ||
-    (parts[0] >= 224) || (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19));
+  const [a, b, c] = parts;
+  return a === 0 || a === 10 || a === 127 ||
+    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    // Non-global special-purpose/documentation ranges are blocked as well as RFC1918.
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113) ||
+    (a === 100 && b >= 64 && b <= 127) || a >= 224;
 }
 
 // Node's URL parser canonicalizes dotted IPv4-mapped IPv6 hosts to hex form,
@@ -1183,7 +1189,9 @@ function isPrivateAddress(address) {
     if (mappedIPv4) return isPrivateIPv4(mappedIPv4);
     return value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') ||
       value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') ||
-      value.startsWith('ff');
+      value.startsWith('fec') || value.startsWith('ff') ||
+      // Reserved/transition IPv6 ranges should not be used to bypass URL-fetch policy.
+      value.startsWith('2001:0:') || value.startsWith('2001:db8:') || value.startsWith('2002:');
   }
   return true;
 }
