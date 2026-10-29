@@ -6,7 +6,7 @@ This page records how to produce a reproducible, auditable comparison. It delibe
 
 ## What the current 30-task suite proves
 
-The repository has 30 deterministic evaluation fixtures under **evals/tasks/**. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
+The repository has 31 deterministic evaluation fixtures under **evals/tasks/**. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. The `config-strict-integer-bounds` task is the first multi-file project regression: it fixes permissive configuration parsing and requires a dedicated regression-test file. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
 
 ### Added fixture catalogue
 
@@ -21,7 +21,7 @@ The repository has 30 deterministic evaluation fixtures under **evals/tasks/**. 
 | `safe-archive-entry` | POSIX/Windows absolute paths, UNC paths, NULs, and traversal rejection |
 | `normalize-request-headers` | Case-insensitive lookup, whitespace trimming, and ambiguous record-key rejection |
 
-This is useful for checking evaluator integrity and a broader range of narrow coding behaviors. The additional fixtures have independent external verifiers, but the suite is still **not** a representative real-world software-engineering benchmark: tasks are small, largely utility-level changes over one codebase, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code.
+This is useful for checking evaluator integrity and a broader range of coding behaviors. One fixture now requires a coordinated production-code and regression-test change, but the suite is still **not** a representative real-world software-engineering benchmark: most tasks remain small and utility-level, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code.
 
 ## Run the suite validator first
 
