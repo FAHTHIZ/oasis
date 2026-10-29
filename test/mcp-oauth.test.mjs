@@ -7,8 +7,25 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { connectMcpServers, closeMcpClients } from '../src/mcp.mjs';
 import { loadProjectMcpServers } from '../src/mcp-project.mjs';
-import { getStoredToken, parseWwwAuthenticate, discoverOAuth } from '../src/mcp-oauth.mjs';
+import { getStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser } from '../src/mcp-oauth.mjs';
 import { mcpLogin, mcpLogout } from '../src/mcp-auth-commands.mjs';
+
+test('Windows OAuth browser launch passes URL as an argument without cmd.exe', () => {
+  const url = 'https://login.example.test/authorize?client_id=demo&redirect_uri=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback&state=x';
+  let invocation = null;
+  const result = openInBrowser(url, {
+    platform: 'win32',
+    env: {},
+    spawnImpl: (command, args, options) => {
+      invocation = { command, args, options };
+      return { on() { return this; }, unref() {} };
+    }
+  });
+  assert.equal(result, true);
+  assert.equal(invocation.command, 'explorer.exe');
+  assert.deepEqual(invocation.args, [url]);
+  assert.equal(invocation.options.shell, false);
+});
 
 // A fake MCP server that is also its own OAuth authorization server.
 async function fakeServer(t, { expiresIn = 3600 } = {}) {
