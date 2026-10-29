@@ -208,22 +208,46 @@ const INTERPRETER_EVAL_FLAGS = {
   osascript: ['-e'], Rscript: ['-e'], rscript: ['-e'], julia: ['-e', '--eval']
 };
 
+const PACKAGE_MANAGER_VALUE_OPTIONS = new Set([
+  '--prefix', '--workspace', '-w', '--userconfig', '--globalconfig', '--cache',
+  '--registry', '--script-shell', '--install-strategy', '--omit', '--include',
+  '--cpu', '--os', '--libc', '--loglevel', '--fetch-retries', '--fetch-timeout',
+  '--node-options', '--maxsockets', '--dir', '-c', '--config', '--store-dir',
+  '--global-dir', '--package-import-method', '--network-concurrency', '--cwd',
+  '--cache-folder', '--modules-folder', '--ignore-path', '--network-timeout', '--mutex'
+]);
+
+function packageManagerAction(args) {
+  const values = args.map((arg) => String(arg).toLowerCase());
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    if (value === '--') {
+      const verb = values[index + 1];
+      return verb ? { verb, rest: values.slice(index + 2) } : null;
+    }
+    if (PACKAGE_MANAGER_VALUE_OPTIONS.has(value)) { index += 1; continue; }
+    if (value.startsWith('--') && value.includes('=')) continue;
+    if (value.startsWith('-')) continue;
+    return { verb: value, rest: values.slice(index + 1) };
+  }
+  return null;
+}
+
 function projectRunnerRisk(base, args) {
   const values = args.map((arg) => String(arg).toLowerCase());
   const first = values[0] || '';
-  const second = values[1] || '';
+  const packageAction = ['npm', 'pnpm', 'yarn'].includes(base) ? packageManagerAction(args) : null;
+  const action = packageAction?.verb || first;
+  const actionArgs = packageAction?.rest || values.slice(1);
+  const scriptName = actionArgs[0] || '';
 
-  // Remote package runners and package-manager execution helpers can execute
-  // code that is not part of the reviewed workspace.
   if (['npx', 'bunx'].includes(base)) return true;
   if (['npm', 'pnpm', 'yarn'].includes(base)) {
-    if (['exec', 'dlx'].includes(first)) return true;
-    if (['install', 'add', 'update', 'link', 'publish'].includes(first)) return true;
-    if (['run', 'run-script'].includes(first)) {
-      const scriptName = first === 'run' ? second : second;
-      // Preserve common, explicit test commands as normal risk. Other named
-      // package scripts can deploy, publish, or run arbitrary project code.
-      return Boolean(scriptName) && !/^test(?:$|:)/.test(scriptName) && !['check', 'lint', 'typecheck', 'format:check'].includes(scriptName);
+    if (['exec', 'dlx'].includes(action)) return true;
+    if (['install', 'add', 'update', 'link', 'publish'].includes(action)) return true;
+    if (['run', 'run-script'].includes(action)) {
+      return Boolean(scriptName) && !/^test(?:$|:)/.test(scriptName) &&
+        !['check', 'lint', 'typecheck', 'format:check'].includes(scriptName);
     }
   }
   if (base === 'cargo' && first === 'run') return true;
@@ -311,7 +335,7 @@ export function analyzeCommand(command, args = [], depth = 0) {
     }
     if (sub === 'branch' && args.some((a) => a === '-D')) return { highRisk: 'force-deletes a branch', effective: { base, args } };
   }
-  if ((base === 'npm' || base === 'pnpm' || base === 'yarn') && lowered[0] === 'publish') return { blocked: 'Publishing a package is blocked by default.' };
+  if (['npm', 'pnpm', 'yarn'].includes(base) && packageManagerAction(args)?.verb === 'publish') return { blocked: 'Publishing a package is blocked by default.' };
   if (base === 'gh' && lowered[0] === 'repo' && lowered[1] === 'delete') return { blocked: 'Deleting a remote repository is blocked by default.' };
   if (joined.includes('rm -rf') || joined.includes('rm -fr') || joined.includes('format c:')) return { blocked: 'The command contains a destructive operation and is blocked.' };
   if (['apt', 'apt-get', 'dnf', 'yum', 'pacman', 'brew', 'winget', 'choco', 'snap', 'zypper', 'apk'].includes(base) && /\b(remove|purge|uninstall|autoremove|erase)\b/.test(joined)) {

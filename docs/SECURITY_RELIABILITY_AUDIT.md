@@ -128,6 +128,22 @@ Google Cloud and Microsoft Foundry token helpers previously kept a single module
 
 **Regression coverage:** test/cloud-providers.test.mjs switches between two fake Google and two fake Azure credential contexts, verifies that each gets its own token, and confirms the cache is reused only within the same context. The tests validate application cache selection, not the external cloud CLIs' account selection.
 
+### Optional sandbox credential masking and limits
+
+The opt-in Linux/macOS sandbox previously restricted writes and could block network access, but left host-readable credential stores in view. A script running inside the sandbox could still attempt to read common home-directory credential locations.
+
+**Fix:** when the OS sandbox is enabled, OASIS now detects and masks common credential roots/files (SSH, AWS, Azure, Kubernetes, Docker, GnuPG, GitHub CLI, Google Cloud, OASIS config, Claude/Codex config, and common netrc/npmrc/Git credential files). Linux overlays directories with tmpfs and masks standalone files with an empty read-only `/dev/null` bind; macOS Seatbelt adds matching read-deny rules. Explicit writable directory overlap is preserved, and `sandbox.maskSensitivePaths: false` is an opt-out for users who knowingly need those paths.
+
+**Regression coverage:** `test/power.test.mjs` checks the generated Linux argv and macOS Seatbelt rules. Actual sandbox behavior still needs runtime validation on macOS, and Windows remains unsupported. This is not complete filesystem-read isolation: unlisted secret locations may remain readable, and network isolation can be enabled by the user.
+
+### Command-risk policy bypass through package-manager options
+
+The high-impact runner guard and package-publishing block initially examined only the first argument, so forms like `npm --prefix ./app run deploy` could skip the intended classification.
+
+**Fix:** package-manager action parsing now skips common global options before examining verbs. The publication block and high-risk classification share that parsed action.
+
+**Regression coverage:** `test/command-risk.test.mjs` covers option-prefixed npm/pnpm/yarn script execution and confirms publishing remains blocked with options before the verb.
+
 ## High-impact risks that remain open
 
 1. **Approved commands still inherit the user's authority.** The optional Linux/macOS sandbox is disabled by default; no Windows sandbox or general container isolation is implemented. Permission prompts are consent gates, not OS isolation.
@@ -137,7 +153,7 @@ Google Cloud and Microsoft Foundry token helpers previously kept a single module
 5. **HTTPS provisioning is operator-managed.** Certificate issuance/renewal and trusted-device onboarding are not turnkey. Do not enable `--allow-insecure-lan` on untrusted networks or port-forward/publish the local runtime to the Internet.
 6. **Browser dashboard data is unencrypted local storage.** Do not put credentials or sensitive personal information into browser projects/tasks/notes. The runtime connection token in browser session storage must be treated as a secret.
 7. **Desktop installers are unsigned.** Packaging success does not establish signer identity, first-run/update/uninstall success or accessibility on every platform.
-8. **Secret storage has platform-specific residual risk.** The macOS Keychain write path currently passes the secret as an argument to the `security` subprocess; a same-user process with process-inspection access may observe it. Prefer a native Security-framework helper or another non-argv transport before calling this path fully secret-safe. On Windows, file fallback permissions also need explicit ACL verification rather than assuming POSIX `0600` semantics.
+8. **Secret storage needs platform-specific validation.** The macOS Keychain write path now supplies a hex-encoded secret through `security -i` stdin rather than a plaintext argument, with unit tests for argv isolation. A real macOS Keychain test is still required, and Windows file-fallback ACLs need explicit verification rather than assuming POSIX `0600` semantics.
 9. **Temporary plugin cleanup is best-effort.** Normal process exit removes the temporary extraction root, but a crash or forced termination can leave files in the OS temporary directory; stale-root cleanup and crash-recovery tests remain useful.
 10. **Tests are not a full security audit.** The 21-task evaluation suite is a smoke benchmark. Passing it does not prove all provider, platform or adversarial cases are safe.
 
