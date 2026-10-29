@@ -51,9 +51,18 @@ This is separate from the generic agent loop. Several OASIS files contain delibe
 - [src/subagents.mjs](../src/subagents.mjs#L1-L80) imports .claude/agents definitions and maps names such as Read, Edit, Bash, Glob, and Grep onto OASIS tool names.
 - [src/hooks.mjs](../src/hooks.mjs#L1-L40) defines a Claude-compatible hook event surface, while [src/agent.mjs](../src/agent.mjs#L27-L50) imports the compatibility mapping used to expose hook-facing names.
 
-Those are real compatibility choices, not evidence of copying the underlying runtime source. However, they make the product boundary look blurrier and cause OASIS behavior to be shaped partly by another product's conventions.
+Those are real compatibility choices, not evidence of copying the underlying runtime source. There are also explicit source comments in src/agent.mjs that tie particular behaviors to Claude Code conventions, including the environment summary, ultracode workflow prompting, and advisorModel naming. So the blur is real at the **product-mechanics and conventions level**; it is not just a visual/UI resemblance.
 
-**Recommended architectural separation:** keep the OASIS core's tool names, memory model, settings model, session state machine, and execution policy product-neutral. Put legacy/external-format readers and translators behind a clearly named, tested compatibility adapter. Keep interoperability only where it has real user value; don't let external naming conventions become the internal architecture. Any removal or migration needs tests and a clear data-preservation path.
+### Similarity assessment
+
+| Layer | Finding | Confidence |
+| --- | --- | --- |
+| Generic agent loop (context → model/tool call → result → repeat) | Same high-level control pattern. The pattern is common to tool-using agents and does not establish copied code. | High |
+| Concrete behavior/UX primitives (plan mode, approval rules, compaction, rewind, specialist agents, parallel work) | OASIS implements several equivalents with similar goals and sometimes similar names; exact equivalence requires side-by-side tests. | High that overlap exists; low on exact equivalence |
+| Claude-specific formats and names (.claude paths, CLAUDE.md, hook names, tool aliases, advisor/ultracode terminology) | Deliberate compatibility and convention reuse is visible directly in OASIS's source. | High |
+| Line-by-line runtime source reuse | The official GitHub repository does not provide the actual CLI runtime source for comparison, so this audit cannot prove or disprove source copying. | Undetermined |
+
+**Recommended architectural separation:** keep the OASIS core's tool names, memory model, settings model, session state machine, and execution policy product-neutral. Put format readers and translators behind a clearly named, tested compatibility adapter. Decide deliberately which external conventions deserve an opt-in adapter and which copied names/behaviors should be replaced with OASIS-owned concepts. Any migration needs tests and a clear data-preservation path. A later provenance review must compare any source that is actually available under its license; visual similarity is not proof of code copying, and a generic architecture is not proof of originality.
 
 ## What the current evidence does—and does not—prove
 
