@@ -90,6 +90,16 @@ The project currently selects **Apache-2.0**. The root LICENSE contains the lice
 
 A root NOTICE is not added without an established project-wide attribution obligation. Preserve third-party notices with the components that require them and reassess when bundled dependencies or attribution requirements change.
 
+## Repository hygiene and branch retirement
+
+A case-insensitive path scan of `main` at d4cd33911efe95d4150ae98bcb5716d5e255089f found one portability defect: `.github/PULL_REQUEST_TEMPLATE.md` collided with the richer `.github/pull_request_template.md`. The uppercase duplicate is being removed; the lowercase template is canonical. A new repository-hygiene regression test scans all non-generated workspace paths for case-only collisions.
+
+An exact-blob scan found other identical files. These were triaged as intentional: evaluation snapshot files are frozen baselines, the icon under `site/assets/` is a standalone deployment copy, and repeated small `BASE_SNAPSHOT` files are evaluation fixture markers. They are documented in `docs/REPOSITORY_HYGIENE.md` rather than deleted blindly.
+
+Branch inventory at scan time: 38 total refs, including `main`, and 37 non-main refs. Six branches are strictly behind `main` with zero commits ahead: `chore/public-launch-metadata`, `feat/eval-harness`, `fix/guided-onboarding-entrypoints`, `fix/web-job-capacity`, `fix/web-job-capacity-guard-20261027`, and `fix/web-job-capacity-main-20261027`. The last two share the same tip SHA. These are confirmed retirement candidates. Other branches diverge or contain ahead commits; the branch audit lists them and does not treat ahead/behind counts alone as a content-equivalence proof.
+
+Remote branch deletion is not recorded as complete: this session's GitHub connector exposes branch reads and compare operations but no branch-ref deletion operation, and its browser profile has no saved GitHub sign-in. No ref has been destructively rewritten to simulate deletion.
+
 ## Change discipline
 
 For each completed increment, update STATUS.md and CHANGELOG.md, add focused regression tests, run the relevant tests and full quality suite, and record the exact tested SHA. If execution is unavailable, report verification as pending rather than inferring success from source inspection.
