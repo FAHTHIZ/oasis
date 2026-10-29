@@ -1,6 +1,6 @@
 # Contributing to OASIS
 
-Thanks for helping with OASIS! This is an alpha hobby project, and small, careful improvements are welcome.
+Thanks for helping with OASIS! The project is currently in beta, and small, careful improvements are welcome. See [current status and limitations](docs/CURRENT_STATUS.md) before assuming a capability is complete.
 
 ## Before you begin
 
