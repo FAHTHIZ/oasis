@@ -5,7 +5,8 @@
 // and refresh tokens. Tokens are stored per server URL in
 // <config>/mcp-auth.json with 0600 permissions and are never shown to the model.
 import { createHash, randomBytes } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
@@ -115,7 +116,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error(label + ' is not a valid URL.'); }
   if (parsed.username || parsed.password) throw new Error(label + ' must not include credentials.');
-  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   const local = isLoopbackUrl(parsed.toString());
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local && safety.localOrigin === parsed.origin)) {
     throw new Error(label + ' must use HTTPS, except for the configured loopback MCP server origin.');
@@ -179,7 +180,7 @@ async function readJsonBody(response, maxBytes = MAX_OAUTH_METADATA_BYTES) {
 }
 
 function normalizedHostname(url) {
-  return new URL(url).hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
+  return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
 }
 
 // The standard fetch implementation resolves hostnames again when it connects.
