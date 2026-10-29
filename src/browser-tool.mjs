@@ -38,6 +38,40 @@ export function browserAvailable(env = process.env) {
   return Boolean(env.OASIS_CHROME_PORT || findChrome(env));
 }
 
+const MAX_BROWSER_NAVIGATION_URL = 32 * 1024;
+
+// Opaque URL schemes do not provide a stable web origin. Approval must be bound
+// to the exact target, not the shared string "null" or a synthetic file origin.
+export function browserNavigationPolicy(rawUrl) {
+  let url = String(rawUrl || '').trim();
+  if (!url) throw new Error('navigate needs a url.');
+  if (url.length > MAX_BROWSER_NAVIGATION_URL) throw new Error('The browser URL is too long (maximum 32 KiB).');
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = (/^(localhost|127\.|\[::1\])/.test(url) ? 'http://' : 'https://') + url;
+  const parsed = new URL(url);
+  if (!['http:', 'https:', 'file:', 'about:', 'data:'].includes(parsed.protocol)) {
+    throw new Error('Only http, https, file, about and data URLs can be opened.');
+  }
+  if (parsed.username || parsed.password) throw new Error('Browser URLs must not embed usernames or passwords.');
+  const localHttp = ['http:', 'https:'].includes(parsed.protocol) &&
+    /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/.test(parsed.hostname);
+  const localBlank = parsed.protocol === 'about:' && parsed.href === 'about:blank';
+  const opaqueTarget = ['file:', 'data:'].includes(parsed.protocol) ||
+    (parsed.protocol === 'about:' && !localBlank);
+  return {
+    url: parsed.href,
+    local: localHttp || localBlank,
+    approvalKey: opaqueTarget ? 'opaque-target:' + parsed.href : parsed.origin,
+    approvalTarget: opaqueTarget ? parsed.href.slice(0, 1200) : parsed.origin
+  };
+}
+
+export function browserNavigationNeedsApproval(rawUrl, approvedNavigations) {
+  const policy = rawUrl && typeof rawUrl === 'object' && typeof rawUrl.approvalKey === 'string'
+    ? rawUrl
+    : browserNavigationPolicy(rawUrl);
+  return !policy.local && !approvedNavigations.has(policy.approvalKey);
+}
+
 const KEYS = {
   Enter: { code: 'Enter', keyCode: 13, text: '\r' }, Tab: { code: 'Tab', keyCode: 9 }, Escape: { code: 'Escape', keyCode: 27 }, Backspace: { code: 'Backspace', keyCode: 8 },
   Delete: { code: 'Delete', keyCode: 46 }, ArrowUp: { code: 'ArrowUp', keyCode: 38 }, ArrowDown: { code: 'ArrowDown', keyCode: 40 }, ArrowLeft: { code: 'ArrowLeft', keyCode: 37 },
@@ -82,8 +116,8 @@ async function evaluate(page, expression, { awaitPromise = true } = {}) {
   return out.result ? out.result.value : undefined;
 }
 
-async function setupPage(state, page) {
-  const tab = { page, console: [], network: new Map() };
+async function setupPage(state, page, context) {
+  const tab = { page, console: [], network: new Map(), blockedNavigations: [] };
   page.on('Runtime.consoleAPICalled', (p) => { tab.console.push({ type: p.type, text: (p.args || []).map((a) => (a.value !== undefined ? (typeof a.value === 'string' ? a.value : JSON.stringify(a.value)) : a.description || a.type)).join(' ').slice(0, 1000) }); if (tab.console.length > 200) tab.console.shift(); });
   page.on('Runtime.exceptionThrown', (p) => { const d = p.exceptionDetails || {}; tab.console.push({ type: 'exception', text: ((d.exception && d.exception.description) || d.text || 'Uncaught exception').slice(0, 1500) }); });
   page.on('Log.entryAdded', (p) => { const e = p.entry || {}; if (e.level === 'error' || e.level === 'warning') tab.console.push({ type: e.level, text: String(e.text || '').slice(0, 1000) + (e.url ? ' (' + e.url + ')' : '') }); });
@@ -91,6 +125,49 @@ async function setupPage(state, page) {
   page.on('Network.responseReceived', (p) => { const r = tab.network.get(p.requestId); if (r) { r.status = p.response.status; r.mime = p.response.mimeType; } });
   page.on('Network.loadingFailed', (p) => { const r = tab.network.get(p.requestId); if (r) r.failed = p.errorText || 'failed'; });
   await Promise.all([page.send('Page.enable'), page.send('Runtime.enable'), page.send('Network.enable'), page.send('Log.enable').catch(() => {})]);
+  const frameTree = await page.send('Page.getFrameTree');
+  tab.mainFrameId = frameTree && frameTree.frameTree && frameTree.frameTree.frame && frameTree.frameTree.frame.id;
+  page.on('Page.frameNavigated', (frame) => {
+    if (frame && !frame.parentId) tab.mainFrameId = frame.id;
+  });
+  // Gate top-level document navigations from links, forms, redirects and page
+  // scripts too—not only explicit browser.navigate tool calls.
+  await page.send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] });
+  page.on('Fetch.requestPaused', (request) => {
+    void (async () => {
+      const resume = () => page.send('Fetch.continueRequest', { requestId: request.requestId }).catch(() => {});
+      const fail = () => page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+      if (request.resourceType !== 'Document') { await resume(); return; }
+      if (!tab.mainFrameId) {
+        tab.blockedNavigations.push({ url: String(request.request.url || '').slice(0, 1200), reason: 'The browser main frame could not be identified safely.' });
+        await fail();
+        return;
+      }
+      if (request.frameId !== tab.mainFrameId) { await resume(); return; }
+      let policy;
+      try { policy = browserNavigationPolicy(request.request.url); }
+      catch (error) {
+        tab.blockedNavigations.push({ url: String(request.request.url || '').slice(0, 1200), reason: error.message });
+        await fail();
+        return;
+      }
+      if (browserNavigationNeedsApproval(policy, state.approvedNavigations)) {
+        const approved = await approve(context,
+          'Follow top-level navigation to ' + policy.approvalTarget + '?\n  ' + policy.url,
+          { tool: 'browser', input: { action: 'navigate', url: policy.url, source: 'page-navigation' } });
+        if (!approved) {
+          tab.blockedNavigations.push({ url: policy.url.slice(0, 1200), reason: 'The user did not approve this navigation.' });
+          await fail();
+          return;
+        }
+        state.approvedNavigations.add(policy.approvalKey);
+      }
+      await resume();
+    })().catch(async () => {
+      tab.blockedNavigations.push({ url: String(request.request && request.request.url || '').slice(0, 1200), reason: 'Navigation approval could not be completed safely.' });
+      await page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
+    });
+  });
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }).catch(() => {});
   return tab;
 }
@@ -101,12 +178,12 @@ async function ensureBrowser(session, env) {
   const port = Number(env.OASIS_CHROME_PORT || 0);
   const headless = env.OASIS_CHROME_HEADLESS ? env.OASIS_CHROME_HEADLESS !== '0' : !(process.platform === 'darwin' || process.platform === 'win32' || env.DISPLAY || env.WAYLAND_DISPLAY);
   const browser = port ? await Browser.attach(port) : await Browser.launch({ env, headless });
-  const state = { browser, tabs: [], active: 0, origins: new Set(), evalApproved: false, attached: Boolean(port) };
+  const state = { browser, tabs: [], active: 0, approvedNavigations: new Set(), evalApproved: false, attached: Boolean(port) };
   session.browserState = state;
   let target = null;
   if (!port) target = (await browser.pages())[0] || null;
   const page = target ? await browser.connect(target) : await browser.newPage('about:blank');
-  state.tabs.push(await setupPage(state, page));
+  state.tabs.push(await setupPage(state, page, context));
   return state;
 }
 
@@ -164,23 +241,21 @@ export async function executeBrowserTool(args, context = {}) {
   const page = tab.page;
   switch (action) {
     case 'navigate': {
-      let url = String(args.url || '').trim();
-      if (!url) throw new Error('navigate needs a url.');
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = (/^(localhost|127\.|\[::1\])/.test(url) ? 'http://' : 'https://') + url;
-      const parsed = new URL(url);
-      if (!['http:', 'https:', 'file:', 'about:', 'data:'].includes(parsed.protocol)) throw new Error('Only http, https, file, about and data URLs can be opened.');
-      const origin = parsed.protocol === 'file:' ? 'file://' : parsed.origin;
-      const local = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/.test(parsed.hostname) || parsed.protocol === 'about:';
-      if (!local && !state.origins.has(origin)) {
-        if (!(await approve(context, 'Open ' + origin + ' in the browser?\n  ' + url, { tool: 'browser', input: args }))) return { error: 'The user did not approve opening ' + origin + '.' };
+      const policy = browserNavigationPolicy(args.url);
+      const url = policy.url;
+      if (browserNavigationNeedsApproval(policy, state.approvedNavigations)) {
+        if (!(await approve(context, 'Open ' + policy.approvalTarget + ' in the browser?\n  ' + url, { tool: 'browser', input: args }))) {
+          return { error: 'The user did not approve opening ' + policy.approvalTarget + '.' };
+        }
       }
-      state.origins.add(origin);
+      state.approvedNavigations.add(policy.approvalKey);
       const loaded = page.once('Page.loadEventFired', 20000);
       const nav = await page.send('Page.navigate', { url });
-      if (nav.errorText) return { error: 'Navigation failed: ' + nav.errorText, url };
+      if (nav.errorText) return { error: 'Navigation failed: ' + nav.errorText, url, blockedNavigations: tab.blockedNavigations.splice(0) };
       await Promise.race([loaded, settle(20000)]);
       await waitForLoad(page);
-      return { url: await evaluate(page, 'location.href'), title: await evaluate(page, 'document.title'), hint: 'Take a snapshot to read the page and get element refs.' };
+      const blockedNavigations = tab.blockedNavigations.splice(0);
+      return { url: await evaluate(page, 'location.href'), title: await evaluate(page, 'document.title'), ...(blockedNavigations.length ? { blockedNavigations } : {}), hint: 'Take a snapshot to read the page and get element refs.' };
     }
     case 'snapshot': {
       const snap = await evaluate(page, SNAPSHOT_JS);
@@ -191,7 +266,8 @@ export async function executeBrowserTool(args, context = {}) {
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
       await settle(400);
       await waitForLoad(page, 5000);
-      return { clicked: box.tag + (box.name ? ' "' + box.name + '"' : ''), url: await evaluate(page, 'location.href') };
+      const blockedNavigations = tab.blockedNavigations.splice(0);
+      return { clicked: box.tag + (box.name ? ' "' + box.name + '"' : ''), url: await evaluate(page, 'location.href'), ...(blockedNavigations.length ? { blockedNavigations } : {}) };
     }
     case 'type': {
       const locator = locatorJs(args);
@@ -201,12 +277,14 @@ export async function executeBrowserTool(args, context = {}) {
       }
       await page.send('Input.insertText', { text: String(args.text || '') });
       if (args.submit) { await pressKey(page, 'Enter'); await settle(500); await waitForLoad(page, 8000); }
-      return { typed: String(args.text || '').length + ' characters', submitted: Boolean(args.submit) };
+      const blockedNavigations = tab.blockedNavigations.splice(0);
+      return { typed: String(args.text || '').length + ' characters', submitted: Boolean(args.submit), ...(blockedNavigations.length ? { blockedNavigations } : {}) };
     }
     case 'press': {
       await pressKey(page, String(args.key || 'Enter'));
       await settle(250);
-      return { pressed: args.key || 'Enter' };
+      const blockedNavigations = tab.blockedNavigations.splice(0);
+      return { pressed: args.key || 'Enter', ...(blockedNavigations.length ? { blockedNavigations } : {}) };
     }
     case 'scroll': {
       const amount = Math.max(1, Math.min(20000, Number(args.amount) || 700));
@@ -265,7 +343,7 @@ export async function executeBrowserTool(args, context = {}) {
     }
     case 'new_tab': {
       const created = await state.browser.newPage('about:blank');
-      state.tabs.push(await setupPage(state, created));
+      state.tabs.push(await setupPage(state, created, context));
       state.active = state.tabs.length - 1;
       if (args.url) return executeBrowserTool({ action: 'navigate', url: args.url }, context);
       return { index: state.active };

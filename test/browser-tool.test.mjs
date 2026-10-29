@@ -6,11 +6,39 @@ import path from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import '../src/tools.mjs';
 import { findChrome } from '../src/cdp.mjs';
+import { browserNavigationNeedsApproval, browserNavigationPolicy } from '../src/browser-tool.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const chrome = findChrome(process.env);
+
+test('browser navigation approvals scope web URLs by origin and opaque URLs by exact target', () => {
+  const approved = new Set();
+  const firstWeb = browserNavigationPolicy('https://example.test/one');
+  assert.equal(browserNavigationNeedsApproval(firstWeb, approved), true);
+  approved.add(firstWeb.approvalKey);
+  assert.equal(browserNavigationNeedsApproval('https://example.test/two', approved), false);
+
+  const dataOne = browserNavigationPolicy('data:text/html,<title>one</title>');
+  const dataTwo = browserNavigationPolicy('data:text/html,<title>two</title>');
+  assert.equal(dataOne.local, false);
+  assert.notEqual(dataOne.approvalKey, dataTwo.approvalKey);
+  assert.equal(browserNavigationNeedsApproval(dataTwo, approved), true);
+
+  const fileOne = browserNavigationPolicy('file:///tmp/first.html');
+  const fileTwo = browserNavigationPolicy('file:///tmp/second.html');
+  assert.equal(fileOne.local, false);
+  assert.notEqual(fileOne.approvalKey, fileTwo.approvalKey);
+  assert.equal(browserNavigationNeedsApproval(fileTwo, approved), true);
+
+  assert.equal(browserNavigationPolicy('about:blank').local, true);
+  assert.equal(browserNavigationPolicy('about:srcdoc').local, false);
+  assert.equal(browserNavigationNeedsApproval('about:srcdoc', approved), true);
+  assert.equal(browserNavigationPolicy('http://127.0.0.1:8123/').local, true);
+  assert.throws(() => browserNavigationPolicy('https://example.test/' + 'x'.repeat(33000)), /too long/);
+  assert.throws(() => browserNavigationPolicy('https://user:pass@example.test/'), /must not embed/);
+});
 const PAGE = '<html><head><title>Fixture</title></head><body><h1>Hello browser</h1><input placeholder="Search"><button onclick="document.getElementById(\'out\').textContent=\'clicked:\'+document.querySelector(\'input\').value;console.log(\'btn\')">Go</button><div id="out"></div><script>console.error(\'boom-fixture\');fetch(\'/missing\')</script></body></html>';
 
 test('the browser tool drives Chrome inside an agent turn', { skip: chrome ? false : 'no Chrome/Chromium installed' }, async (t) => {

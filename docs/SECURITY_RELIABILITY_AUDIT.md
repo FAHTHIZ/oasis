@@ -8,6 +8,15 @@ This is an initial source-level security/reliability pass, not a penetration tes
 
 ## Concrete findings fixed on main
 
+### Browser navigation approval could be reused across opaque URL targets
+
+The browser tool cached approvals by `URL.origin`. `data:` URLs share the opaque origin string `null`; `file:` URLs do not have normal web-origin semantics; and the previous implementation treated every `about:` URL as inherently local. Approving one opaque target could therefore be reused for another.
+
+**Fix committed:** approval for `data:`, `file:` and non-blank `about:` targets is now bound to the exact normalized URL. Only loopback HTTP(S) and exact `about:blank` bypass the navigation prompt. URLs with embedded username/password values are rejected and URL length is capped at 32 KiB. Chrome DevTools Fetch interception now gates main-frame document requests initiated by links, forms, redirects and page scripts, not just explicit `browser.navigate` actions. Denied navigations are failed before their document request proceeds.
+
+**Regression coverage:** standalone unit tests cover origin-scoped approvals for normal web URLs, exact-target approvals for opaque URLs, loopback/`about:blank` handling and URL-size/userinfo constraints. Live interception still needs the browser E2E workflow to pass.
+
+
 ### 1. Child processes could survive command cancellation and timeout
 
 The earlier command path signalled only the immediate child process. If a command created a grandchild that inherited stdout/stderr, that descendant could keep running, mutate files or keep the command completion event waiting. This affected normal commands and similar subprocess paths such as package installs, external skill installation and shell hooks.
@@ -55,6 +64,9 @@ Source references: [web server](../src/web.mjs), [workspace tools and URL guard]
 8. **Tests are not a full security audit.** The 21-task evaluation suite is a smoke benchmark. Passing it does not prove all provider, platform or adversarial cases are safe.
 
 ## Required verification
+
+- [ ] Verify browser-navigation guards for same-origin navigation, cross-origin click/form/redirect behavior, opaque data/file URLs, and denied navigation with live Chrome E2E tests.
+- [ ] Re-run the Chrome tool E2E test on Node.js 22/24/26; the Node 26 job previously timed out waiting for DevTools during Chrome startup, so startup reliability remains open.
 
 - [ ] Current Quality Checks passes with the process-tree descendant test and new IP-range tests.
 - [ ] Publishing validation passes on the same commit, including the corrected FileChanged hook test.
