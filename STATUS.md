@@ -44,7 +44,7 @@ The list above records implementation evidence only; it does not certify securit
 - **Durable cross-session messaging:** storage and commands for /notify and /inbox are now wired on main with busy-target queue gating, live-target revalidation, per-session rate limits, loop prevention, and read/dismiss state. Focused tests and current-head CI remain pending; do not count as verified until they pass.
 - **Path-scoped rules:** matching-only loading, safe glob matching and deterministic broad-to-specific/user-to-project ordering are implemented on main; current-head tests are pending.
 - **Complete built-in output styles:** the requested built-ins and /style command are implemented on main, with legacy /output-style compatibility. Fresh test results are pending; do not count as verified until CI passes.
-- **Native plugin package:** plugin.json, bundled skills/hooks/subagents/MCP servers/metadata, namespaced /plugin-name:command commands, explicit permission grants and visible permission diffs during updates.
+- **Native plugin package:** a local plugin.json package manager is implemented on main. It validates and bundles granted commands/skills/agents/hooks/MCP files, requires explicit capability grants, uses namespaced commands, rejects conflicts, and previews granted/requested permission diffs before versioned updates. Focused tests and current-head CI pending.
 - **Local-only investigation artifacts:** /artifact <name> creating a live local investigation page with goal, timeline, commands, changed files, tests, errors, hypotheses and rollback points; local-only defaults, secret redaction and cleanup.
 - A general Oasis-owned local/self-hosted/managed runner with authenticated event streaming, approval pauses, cancellation, workspace allowlists, revocation and retention.
 - Guaranteed diagnostic coverage for every edit/language, and a /fix gate that always blocks success when new diagnostics remain or verification fails.
@@ -52,6 +52,8 @@ The list above records implementation evidence only; it does not certify securit
 - Production readiness, security certification, platform parity, signed installers or competitive coding quality.
 
 ## Implemented on main; verification pending
+
+The native plugin increment adds local plugin.json packages, allowlisted component copying, explicit grants, integration with the existing namespaced command/skill/agent/hook/MCP loader, conflict rejection, versioned updates and permission-diff confirmation. Tests cover install, permission isolation, unrequested grants, conflicts, updates, MCP bundle paths and uninstall. This remains unverified until the exact current-main Quality workflow passes.
 
 The current main increment adds the requested built-in output styles and /style command, and changes path-scoped rule loading so path-frontmatter rules are excluded from base project memory and attached only to matching file operations. Focused regression tests were added for style switching, preservation of project rules, path matching, non-matching files, unsafe paths and user/project conflict ordering. These changes remain **implemented but not yet verified on current HEAD** until the Quality Checks workflow passes on the exact commit.
 
