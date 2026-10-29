@@ -54,6 +54,16 @@ test('allowed-tools Bash rules and deny rules gate inline shell', async (t) => {
   assert.match(failing.text, /\(exit 3\)/);
 });
 
+test('inline shell enforces timeout, kills the process tree, and bounds captured output', { skip: process.platform === 'win32' }, async (t) => {
+  const root = await tmp(t);
+  const timed = await expandInlineShell('!\u0060sleep 30\u0060', { root, allowed: true, timeoutSeconds: 0.05 });
+  assert.match(timed.text, /timed out/);
+  assert.equal(timed.ran[0].code, null);
+  const noisy = await expandInlineShell('!\u0060node -e "process.stdout.write(\'x\'.repeat(1000000))"\u0060', { root, allowed: true, timeoutSeconds: 5 });
+  assert.ok(noisy.text.length <= 16 * 1024);
+  assert.equal(noisy.ran[0].code, 0);
+});
+
 test('skills with context: fork run in a subagent and return a report', async (t) => {
   const root = await tmp(t);
   await mkdir(path.join(root, '.oasis', 'skills', 'audit'), { recursive: true });
