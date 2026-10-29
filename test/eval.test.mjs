@@ -227,6 +227,7 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
   const aPath = path.join(tmp, 'oasis-run.json');
   const bPath = path.join(tmp, 'external-run.json');
   await writeFile(aPath, JSON.stringify({
+    sourceRevision: 'c'.repeat(40),
     provider: { model: 'fixture-model-a' },
     results: [
       { taskId: 'fix-a', status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
