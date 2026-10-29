@@ -3,7 +3,7 @@ name: code-review
 description: Review current changes for correctness, security, performance, accessibility, regressions, and test gaps.
 ---
 
-# Purpose
+# Code review skill
 Find concrete risks in a diff without making changes by default.
 
 ## Inputs
