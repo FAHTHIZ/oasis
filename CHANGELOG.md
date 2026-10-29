@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Completed the project license consistency audit on main: aligned DISCOVERABILITY.md, PUBLIC_LAUNCH.md and USER_GUIDE.md with Apache-2.0, while retaining accurate MIT references for third-party dependencies and projects. Root LICENSE and package metadata were already Apache-2.0; no project-wide NOTICE requirement was identified.
+
 - Wired durable session messages into `/notify` and `/inbox`; agent-turn lifecycle marks live sessions busy/idle, queued delivery waits while the target is busy, cached target objects are revalidated against the live registry, and inbox read/dismiss actions are available. Message text is displayed as untrusted data and never returned as an agent prompt. Focused tests and current-head CI pending.
 
 - Implemented the requested built-in response styles (default, concise, explanatory, architect, reviewer) and the /style command while retaining /output-style compatibility. Added style-switching tests for one-active-style and preserving project instructions; CI verification pending.

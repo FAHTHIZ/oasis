@@ -26,7 +26,7 @@ These capabilities have implementation and/or focused regression tests in the re
 - **Integrations:** MCP, skills, hooks, custom commands, layered memory, output styles, reviewed skill bundles and a plugin/marketplace compatibility adapter.
 - **Workspace and delivery:** authenticated local browser workspace, task history, optional isolated Git worktrees, reviewable diffs, PTY-backed browser terminal where available, editor integration, GitHub Action, evaluation harness and desktop packaging.
 - **Verification evidence and evaluation reports:** structured post-edit evidence, JSON/offline HTML comparison exports, atomic report writes and symlink-destination protections.
-- **Licensing:** root Apache-2.0 license text and matching package metadata/README badge have been inspected. A complete documentation-wide license-string audit is still required.
+- **Licensing:** root Apache-2.0 license text and matching package metadata/README badge have been inspected. Conflicting project-license statements in the discoverability guide, public launch guide, and user guide were corrected; third-party MIT dependency/skill references remain intentionally intact.
 
 The list above records implementation evidence only; it does not certify security, platform parity, production readiness or complete acceptance criteria.
 
@@ -78,7 +78,7 @@ The prior documented result of 685 tests on Node.js 22/24/26 belongs to an earli
 
 ## License and attribution
 
-The project currently selects **Apache-2.0**. The root LICENSE contains the license terms and application appendix; package.json declares Apache-2.0; and the README badge names Apache-2.0. Keep these aligned and search the full documentation tree for conflicting license statements before declaring the audit complete.
+The project currently selects **Apache-2.0**. The root LICENSE contains the license terms and application appendix; package.json declares Apache-2.0; and the README badge names Apache-2.0. The documentation-wide audit corrected the remaining project-license statements. MIT references that describe third-party dependencies or projects are intentionally retained. No root NOTICE obligation was established; component-level notices remain with their components.
 
 A root NOTICE is not added without an established project-wide attribution obligation. Preserve third-party notices with the components that require them and reassess when bundled dependencies or attribution requirements change.
 
