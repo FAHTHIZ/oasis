@@ -99,7 +99,7 @@ jobs:
               echo "## OASIS public launch: setup still required"
               echo
               echo "Validation passed, but deployment and repository metadata were skipped."
-              echo "Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret using the instructions in [docs/PUBLIC_LAUNCH.md](https://github.com/FAHTHIZ/oasis/blob/main/docs/PUBLIC_LAUNCH.md), then run this workflow again on `main`."
+              echo 'Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret using the instructions in [docs/PUBLIC_LAUNCH.md](https://github.com/FAHTHIZ/oasis/blob/main/docs/PUBLIC_LAUNCH.md), then run this workflow again on `main`.'
             } >> "$GITHUB_STEP_SUMMARY"
           elif [ "$DEPLOYMENT_OUTCOME" = "success" ] && [ "$METADATA_OUTCOME" = "success" ]; then
             {
