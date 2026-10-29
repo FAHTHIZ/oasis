@@ -130,6 +130,8 @@ Oasis is a Node.js ESM application. src/cli.mjs starts terminal/headless workflo
 
 ### 10. Self-hosted remote execution
 
+- **Progress (2026-10-29):** created `docs/REMOTE_RUNNER_DESIGN.md` before implementation. It defines deployment modes, task envelopes, authenticated transport, workspace boundaries, secret handling, action-bound approvals, event streaming, cancellation, retention, threat model and acceptance tests. This is a design deliverable only; runner code remains unimplemented and requires its own test-backed increment.
+
 - **Existing equivalent:** src/web.mjs local jobs, src/cloud-task-store.mjs task metadata and the OpenHands bridge. These are not the requested Oasis-owned runner.
 - **Affected files:** first docs/REMOTE_RUNNER_DESIGN.md; later src/runner-protocol.mjs and src/runner-server.mjs, CLI/permission integration, runner tests and security docs.
 - **Minimum viable implementation:** a self-hosted runner accepts bounded task envelopes and workspace roots from explicit allowlists. Stream typed status/tool/output/approval/complete/error events; pause at approval; cancel process trees. Keep secrets as opaque handles, never model-context values. Persist bounded redacted logs; support revoke/delete. Local execution is default; managed execution is later and optional.
