@@ -170,3 +170,12 @@ The high-impact runner guard and package-publishing block initially examined onl
 - [ ] Continue adversarial URL tests for normalization, IPv4-mapped IPv6, DNS answer sets, redirects and provider/network failure cases.
 
 **Bottom line:** three concrete weaknesses have been patched on main, but the high-impact execution/trust boundaries above remain. This audit does not claim exhaustive coverage or zero remaining bugs.
+
+## Follow-up hardening: macOS Seatbelt profile path injection
+
+**Finding:** `macProfile()` inserts workspace, additional-writable-directory, and masked-sensitive paths into generated Seatbelt Profile Language (SBPL). The path renderer escaped backslashes and double quotes but accepted CR/LF and other control characters. POSIX pathnames can contain such characters; interpolating them into policy source risks turning a path value into additional policy text.
+
+**Fix added on main:** the SBPL string renderer now rejects C0 controls, DEL, and Unicode line separators before generating a profile. The failure is closed: OASIS refuses to construct that sandbox profile instead of attempting to execute with an ambiguous policy. Regression tests cover writable and masked paths. This is a source-level hardening change; macOS runtime enforcement and the full CI result must still be verified on the resulting commit.
+
+**Comparison note:** Anthropic's public `sandbox-runtime` provides a useful reference for OS-level filesystem and network confinement. OASIS's current sandbox remains a smaller optional implementation and should not be described as feature-equivalent to that runtime until equivalent adversarial and platform tests exist.
+
