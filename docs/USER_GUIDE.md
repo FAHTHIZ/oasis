@@ -114,6 +114,14 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - An integrated argv-based command runner that captures command output and requires per-command approval.
 - GitHub CLI integration to check the host's existing authentication, list up to 30 repositories accessible to that account, clone a selected repo after approval, and switch the active agent workspace.
 
+## Native Oasis plugin packages
+
+A native Oasis package has a root `plugin.json` with `schemaVersion: 1`, `name`, `version`, `description`, `author`, `license`, `minimumOasisVersion`, and an explicit `permissions` array. Components can be declared under `commands/`, `skills/`, `agents/` or `subagents/`, `hooks/`, and `mcp/`; hooks and MCP remain inactive unless their capability is granted.
+
+Use `/plugin-package validate ./my-plugin` to inspect a local package without installing it. Install with `/plugin-package install ./my-plugin --grant commands,skills`, or use an HTTPS/SSH Git URL (optionally `#branch-or-tag`) in place of the folder. For example: `/plugin-package install https://github.com/example/my-plugin.git#v1.2.0 --grant commands,skills`. Native Git sources are cloned into a private temporary directory with a bounded timeout; Oasis does not run package install scripts, and it removes the clone after validation/staging. Credentials embedded in URLs and insecure HTTP are rejected.
+
+Updates require a higher plugin version. Any change to requested or granted capabilities is displayed and must be explicitly accepted using `--accept-permission-diff`. Commands are namespaced as `/plugin-name:command`; conflicting plugin names are rejected. Use `/plugin-package list` and `/plugin-package uninstall NAME` to inspect or remove installed native packages. A package listing is not a security certification; inspect code before granting hooks or MCP access.
+
 ## Plugins, integrations, and installation
 
 Oasis separates three things that are often all called “plugins”:
