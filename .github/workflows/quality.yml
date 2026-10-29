@@ -7,12 +7,15 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: oasis-quality-${{ github.ref }}
+  # Every commit gets its own quality signal. A stalled Node matrix for an older
+  # SHA must not serialize verification of newer main commits behind it.
+  group: oasis-quality-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   integrity:
     name: Node ${{ matrix.node-version }} runtime and package integrity
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
