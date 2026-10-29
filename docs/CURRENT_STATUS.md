@@ -8,14 +8,14 @@
 
 ## Current-main follow-up — quality and publishing verified
 
-The current implementation revision [`349f5ad`](https://github.com/FAHTHIZ/oasis/commit/349f5add40b363c9ac384d058e11e55b43b8097a) has fresh passing CI evidence:
+The current implementation revision [`fef120a`](https://github.com/FAHTHIZ/oasis/commit/fef120a52af030249aae1ba1b1df2e0cf4054a81) has fresh passing CI evidence:
 
-- [Quality Checks run 40879705797](https://github.com/FAHTHIZ/oasis/actions/runs/40879705797) passed on Node.js 22, 24 and 26; clean-environment tests; the Ubuntu/macOS/Windows security regression jobs; Linux native PTY integration; and the authenticated browser end-to-end smoke test. The full quality gate and CLI package checks passed on all three Node versions.
-- [Publishing validation run 40879705789](https://github.com/FAHTHIZ/oasis/actions/runs/40879705789) passed on the same revision.
+- [Quality Checks run 40882893190](https://github.com/FAHTHIZ/oasis/actions/runs/40882893190) passed on Node.js 22, 24 and 26; clean-environment tests; the Ubuntu/macOS/Windows security regression jobs; Linux native PTY integration; and the authenticated browser end-to-end smoke test. The full quality gate and CLI package checks passed on all three Node versions.
+- [Publishing validation run 40882893526](https://github.com/FAHTHIZ/oasis/actions/runs/40882893526) passed on the same revision.
 
-The snapshot evaluator now supports reusable, safely named repository snapshots. The browser workspace also includes an authenticated **Agent run monitor** with redacted worker/team events, run/worktree metadata, approval counts, available token totals and a lifecycle timeline. On restart, saved workers and teams are marked interrupted, and outstanding approvals are counted as interrupted rather than displayed as live or actionable. Regression tests cover the observer boundary, run attribution, redaction, metadata, restart-state handling and authentication.
+The snapshot evaluator now supports reusable, safely named repository snapshots. The browser workspace also includes an authenticated **Agent run monitor** with redacted worker/team events, run/worktree metadata, approval counts, available token totals and a lifecycle timeline. On restart, saved workers and teams are marked interrupted, and outstanding approvals are counted as interrupted rather than displayed as live or actionable. Regression tests cover the observer boundary, run attribution, redaction, metadata, restart-state handling and authentication. A guarded **Open saved chat** action now reopens a completed/interrupted workspace-mode run's saved parent conversation in Agent; isolated worktree runs do not expose a potentially stale session. The browser E2E verifies the original user request and assistant response are restored after reopening.
 
-**Remaining lifecycle boundary:** this preserves the run record, not the live Node.js worker processes or pending approval state. The monitor does not yet pause/resume running agents across process restarts, reconcile every stale task lease, resolve conflicting diffs, or merge branches. CI passing is evidence for the configured regression suite—not proof of production readiness, a complete security audit, or parity with Claude Code.
+**Remaining lifecycle boundary:** this preserves the run record and lets a user reopen the saved parent conversation, not the live Node.js worker processes or pending approval state. The monitor does not yet pause/resume running agents across process restarts, reconcile every stale task lease, resolve conflicting diffs, or merge branches. CI passing is evidence for the configured regression suite—not proof of production readiness, a complete security audit, or parity with Claude Code.
 
 This status section records the last verified code/workflow revision above. Any subsequent code change must be checked against its own fresh main-branch workflow results.
  
