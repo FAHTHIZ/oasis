@@ -451,6 +451,8 @@ Esc in NORMAL mode keeps its usual role, so Esc Esc still clears the input or re
 
 Use `/keys` for the shortcut cheat sheet and `/tips` for a rotating practical suggestion. Start with `/help` for grouped commands. `oasis --calm` disables animated startup output; `OASIS_NO_ANIMATION=1` does the same, and `OASIS_NO_TIPS=1` hides rotating startup tips.
 
+Use `/keys` for the shortcut cheat sheet and `/tips` for a rotating practical suggestion. Start with `/help` for grouped commands. `oasis --calm` disables animated startup output; `OASIS_NO_ANIMATION=1` does the same, and `OASIS_NO_TIPS=1` hides rotating startup tips.
+
 Ctrl+O opens the full transcript in a full-screen pager, the way compatible-format transcript mode does: every prompt, reply, reasoning block, tool call (with pretty-printed arguments) and tool result, expanded. Scroll with ↑/↓ or j/k, page with Space/b, jump with g/G, and return with q, Esc or Ctrl+O. Your half-typed prompt is kept. Rebind it with `app:toggleTranscript` in `keybindings.json`.
 
 Ctrl+G (or Ctrl+X Ctrl+E) opens the current prompt in `$VISUAL` / `$EDITOR` (falling back to `vi`, or `notepad` on Windows). Save and quit, and the edited text comes back as the prompt. Ctrl+S stashes a half-written prompt so you can send something else first. The stash comes back at the next prompt, or right away if you press Ctrl+S on an empty prompt.
