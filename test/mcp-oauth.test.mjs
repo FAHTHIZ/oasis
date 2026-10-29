@@ -105,6 +105,7 @@ test('WWW-Authenticate parsing and discovery through protected-resource metadata
 test('OAuth discovery refuses redirects and bounds metadata bodies', async () => {
   const origin = 'https://mcp.example';
   const requests = [];
+  const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
   const authorizationMetadata = {
     issuer: origin,
     authorization_endpoint: origin + '/authorize',
@@ -129,7 +130,7 @@ test('OAuth discovery refuses redirects and bounds metadata bodies', async () =>
     return new Response(null, { status: 404 });
   };
 
-  const found = await discoverOAuth(origin + '/mcp', { fetch: fetchImpl });
+  const found = await discoverOAuth(origin + '/mcp', { fetch: fetchImpl, lookupImpl: publicLookup });
   assert.equal(found.tokenEndpoint, origin + '/token');
   assert.equal(requests.some((request) => request.url.startsWith('https://attacker.example/')), false);
   assert.equal(requests.find((request) => request.url === origin + '/mcp').options.redirect, 'manual');
@@ -153,9 +154,35 @@ test('OAuth discovery refuses redirects and bounds metadata bodies', async () =>
     }
     return new Response(null, { status: 404 });
   };
-  const large = await discoverOAuth(origin + '/mcp', { fetch: oversizedFetch, resourceMetadataUrl: origin + '/large' });
+  const large = await discoverOAuth(origin + '/mcp', { fetch: oversizedFetch, resourceMetadataUrl: origin + '/large', lookupImpl: publicLookup });
   assert.equal(large.tokenEndpoint, origin + '/token');
   assert.equal(large.scopes, null, 'oversized resource metadata is ignored');
+});
+
+test('OAuth discovery never fetches private-network resource metadata URLs', async () => {
+  const origin = 'https://mcp.example';
+  const requests = [];
+  const lookupImpl = async () => [{ address: '93.184.216.34', family: 4 }];
+  const fetchImpl = async (url) => {
+    requests.push(String(url));
+    if (url === origin + '/mcp') {
+      return new Response(null, {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer resource_metadata="http://169.254.169.254/latest/meta-data"' }
+      });
+    }
+    if (url === origin + '/.well-known/oauth-authorization-server') {
+      return new Response(JSON.stringify({
+        issuer: origin,
+        authorization_endpoint: origin + '/authorize',
+        token_endpoint: origin + '/token'
+      }), { headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(null, { status: 404 });
+  };
+  const found = await discoverOAuth(origin + '/mcp', { fetch: fetchImpl, lookupImpl });
+  assert.equal(found.tokenEndpoint, origin + '/token');
+  assert.equal(requests.some((url) => url.includes('169.254.169.254')), false);
 });
 
 test('a server that needs sign-in fails with clear advice, then works after oasis mcp login', async (t) => {
