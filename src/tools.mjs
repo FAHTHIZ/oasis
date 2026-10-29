@@ -1455,10 +1455,13 @@ async function runReadOnlyGit(root, args) {
       if (target === 'stdout') stdout = clipped;
       else stderr = clipped;
     };
+    let killTimer = null;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // A timed-out Git leader may exit while a child still lives. Keep escalation.
+      if (!timedOut) clearTimeout(killTimer);
       resolve({
         command: 'git ' + args.join(' '),
         ...result,
@@ -1470,12 +1473,15 @@ async function runReadOnlyGit(root, args) {
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGTERM'); } catch {}
-      const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 500);
+      signalProcessTree(child, 'SIGTERM');
+      killTimer = setTimeout(() => { killTimer = null; signalProcessTree(child, 'SIGKILL'); }, 500);
       killTimer.unref?.();
     }, 15000);
     try {
-      child = spawn('git', safeArgs, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn('git', safeArgs, {
+        cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        ...processTreeSpawnOptions()
+      });
       child.stdout.on('data', (chunk) => append('stdout', chunk));
       child.stderr.on('data', (chunk) => append('stderr', chunk));
       child.on('error', (error) => finish({ exitCode: 127, error: error.message, timedOut }));

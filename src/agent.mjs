@@ -810,8 +810,31 @@ function strictConfiguredInteger(value) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function firstPositiveConfiguredInteger(...values) {
+  for (const value of values) {
+    const parsed = strictConfiguredInteger(value);
+    if (parsed > 0) return parsed;
+  }
+  return 0;
+}
+
+function boundedTurnInteger(primary, fallback, defaultValue, min, max) {
+  let value = strictConfiguredInteger(primary);
+  if (value <= 0) value = strictConfiguredInteger(fallback);
+  if (value <= 0) value = defaultValue;
+  return Math.max(min, Math.min(max, value));
+}
+
+export function resolveTurnLimits(options = {}, config = {}) {
+  return {
+    maxSteps: boundedTurnInteger(options.maxSteps, config.maxSteps, 60, 1, 400),
+    tokenBudget: boundedTurnInteger(options.maxTokens, config.maxTokens, 2000000, 10000, 20000000),
+    maxToolCalls: boundedTurnInteger(options.maxToolCalls, config.maxToolCalls, DEFAULT_TURN_TOOL_CALLS, 1, MAX_TURN_TOOL_CALLS)
+  };
+}
+
 export function maxOutputTokensFor(config = {}, env = process.env) {
-  const configured = strictConfiguredInteger(env.OASIS_MAX_OUTPUT_TOKENS || env.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0);
+  const configured = firstPositiveConfiguredInteger(env.OASIS_MAX_OUTPUT_TOKENS, env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, config.maxOutputTokens);
   if (configured > 0) return Math.max(1024, Math.min(128000, configured));
   const model = String(config.model || '');
   if (LEGACY_8K_MODELS.test(model) && !/claude-3-7|claude-3\.7/i.test(model)) return 8192;
@@ -842,7 +865,7 @@ function truncationRecoveryPrompt(limit, droppedCall) {
 
 // Anthropic prompt caching: mark the system prompt, the tool list, and the newest
 // message so each request reuses the previous prefix (cheaper and faster).
-// Extended thinking (Anthropic): Claude Code-style keywords pick a budget per turn.
+// OASIS prompt keywords can request a larger per-turn reasoning budget.
 // MAX_THINKING_TOKENS / OASIS_THINKING_BUDGET or config.thinkingBudget set a default.
 export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
   const text = String(prompt || '').toLowerCase();
@@ -850,7 +873,7 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
   if (/\bultrathink\b|\bthink (?:harder|intensely|super hard|really hard|very hard)\b/.test(text)) budget = 31999;
   else if (/\bmegathink\b|\bthink (?:hard|deeply|a lot|more)\b/.test(text)) budget = 10000;
   else if (/\bthink\b/.test(text) && /\b(?:think (?:about|through|carefully|step)|please think|let'?s think)\b/.test(text)) budget = 4000;
-  const configured = strictConfiguredInteger(env.OASIS_THINKING_BUDGET || env.MAX_THINKING_TOKENS || config.thinkingBudget || 0);
+  const configured = firstPositiveConfiguredInteger(env.OASIS_THINKING_BUDGET, env.MAX_THINKING_TOKENS, config.thinkingBudget);
   budget = Math.max(budget, configured);
   if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return 0;
   return budget ? Math.max(1024, Math.min(budget, 64000)) : 0;
@@ -1414,7 +1437,7 @@ async function requestCompletionRaw(session, options = {}) {
   } else {
     endpoint = openAIEndpoint(config.baseURL);
     // Compatible gateways differ on max_tokens support, so only send it when configured.
-    const explicitChatLimit = session.outputTokenCap || strictConfiguredInteger(providerEnv.OASIS_MAX_OUTPUT_TOKENS || providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0);
+    const explicitChatLimit = session.outputTokenCap || firstPositiveConfiguredInteger(providerEnv.OASIS_MAX_OUTPUT_TOKENS, providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, config.maxOutputTokens);
     if (explicitChatLimit) outputLimit = explicitChatLimit;
     bodyObject = {
       model: config.model,
@@ -3102,9 +3125,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let stopHookContinuations = 0;
   let outputRecoveries = 0;
   let pendingTruncationNotice = '';
-  const maxSteps = Math.max(1, Math.min(400, Number.parseInt(options.maxSteps || session.config.maxSteps, 10) || 60));
-  const tokenBudget = Math.max(10000, Math.min(20000000, Number.parseInt(options.maxTokens || session.config.maxTokens, 10) || 2000000));
-  const maxToolCalls = Math.max(1, Math.min(MAX_TURN_TOOL_CALLS, Number.parseInt(options.maxToolCalls || session.config.maxToolCalls, 10) || DEFAULT_TURN_TOOL_CALLS));
+  const { maxSteps, tokenBudget, maxToolCalls } = resolveTurnLimits(options, session.config);
   const context = {
     root: session.root,
     config: session.config,

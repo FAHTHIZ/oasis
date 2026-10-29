@@ -66,6 +66,68 @@ test('evaluation subprocess timeout terminates descendants that inherit output p
   assert.ok(elapsedMs < 4500, 'the evaluator should terminate the process group instead of waiting for a child-held pipe (elapsed ' + elapsedMs + 'ms)');
 });
 
+test('evaluation timeout escalates after its leader exits and a descendant ignores SIGTERM', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('This descendant-state assertion uses Linux /proc.');
+    return;
+  }
+  const tmp = await temporaryDirectory('oasis-eval-tree-escalation-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const readyPath = path.join(tmp, 'descendant.ready');
+  const pidPath = path.join(tmp, 'descendant.pid');
+  const descendantSource = [
+    "process.on('SIGTERM', () => {});",
+    "require('node:fs').writeFileSync(process.env.OASIS_TEST_READY_FILE, 'ready');",
+    "setInterval(() => {}, 1000);"
+  ].join('\n');
+  const source = [
+    "const { spawn } = require('node:child_process');",
+    "const fs = require('node:fs');",
+    "const child = spawn(process.execPath, ['-e', " + JSON.stringify(descendantSource) + "], { stdio: 'ignore', env: process.env });",
+    "const publish = setInterval(() => { if (fs.existsSync(process.env.OASIS_TEST_READY_FILE)) { clearInterval(publish); fs.writeFileSync(process.env.OASIS_TEST_PID_FILE, String(child.pid)); } }, 10);",
+    "setInterval(() => {}, 1000);"
+  ].join('\n');
+  const startedAt = Date.now();
+  let descendantPid = 0;
+  try {
+    const result = await runEvalProcess(process.execPath, ['-e', source], {
+      cwd: tmp,
+      env: { PATH: process.env.PATH || '', OASIS_TEST_READY_FILE: readyPath, OASIS_TEST_PID_FILE: pidPath },
+      timeoutMs: 1000,
+      outputLimit: 2048
+    });
+    assert.equal(result.timedOut, true);
+    assert.equal(result.exitCode, 124);
+    const pidDeadline = Date.now() + 1000;
+    while (!descendantPid && Date.now() < pidDeadline) {
+      try { descendantPid = Number((await readFile(pidPath, 'utf8')).trim()); } catch {}
+      if (!descendantPid) await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(descendantPid > 0, 'the child must install its SIGTERM handler before its PID is published');
+    assert.equal(await readFile(readyPath, 'utf8'), 'ready');
+
+    const running = async () => {
+      try {
+        const stat = await readFile('/proc/' + descendantPid + '/stat', 'utf8');
+        const end = stat.lastIndexOf(')');
+        return stat.slice(end + 2, end + 3) !== 'Z';
+      } catch (error) {
+        if (error && error.code === 'ENOENT') return false;
+        try { process.kill(descendantPid, 0); return true; }
+        catch (signalError) { return signalError && signalError.code === 'EPERM'; }
+      }
+    };
+    const stopDeadline = Date.now() + 5000;
+    while (await running() && Date.now() < stopDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(Date.now() - startedAt >= 1800, 'the test should exercise the delayed SIGKILL escalation');
+    assert.equal(await running(), false, 'the stubborn descendant must be gone after escalation');
+  } finally {
+    if (descendantPid > 0) { try { process.kill(descendantPid, 'SIGKILL'); } catch {} }
+  }
+});
+
 test('eval suite validation requires no-op failure and reference-patch success', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
