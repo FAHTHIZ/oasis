@@ -37,7 +37,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Checkpoints and one-click undo | Partial / verify | Core snapshots/checkpoints/rewind exist; the desktop UI still needs a full manual test that the last edit can be safely undone from the intended screen. |
 | Plain-language settings, help, and copy-details/doctor action | Partial / verify | CLI doctor and browser settings exist; a complete desktop-friendly error/help journey with a copy-details action was not verified. |
 | Automatic desktop updates | **Missing** | `electron-updater` is not a dependency and no updater integration was found. Do not promise automatic updates. |
-| Crash recovery screen | **Missing / unverified** | No explicit renderer/background-process crash recovery UI was found in `desktop/main.mjs`. |
+| Crash recovery screen | **Implemented on `app/alpha-readiness-gaps`; app-level verification pending** | `desktop/main.mjs` now handles Electron renderer termination and loads a recovery screen with a restart link and escaped reason/exit-code details. `test/desktop-crash-screen.test.mjs` covers the helper's output and loopback-only restart target; the full desktop crash/restart journey still needs CI and host testing. |
 | Clean-machine installer validation | Partial / verify | Packaging exists, but unsigned installers and first-run/update/uninstall journeys require actual Windows, macOS, and Linux testing. |
 
 ## Terminal
@@ -107,7 +107,13 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 - Added `docs/PHONE_CONNECT_SECURITY.md` and clarified that explicit LAN/TLS options exist today but do not constitute secure phone pairing.
 - Added an Alpha badge to the README and corrected the Apache license badge's alt text.
 - Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
+- On `app/alpha-readiness-gaps`, added a desktop renderer-crash recovery screen and focused tests. The helper tests passed in isolation in the working runtime (3/3); the complete repository suite and Electron crash/restart journey have not been run here.
 
 ## Verification limits
 
 The repository could be read and updated through GitHub, but this runtime could not clone the repository to execute its test suite because it could not resolve `github.com`. The newly added test has **not** been run in this environment. The next check is `npm run check` on the current main revision, followed by a real VS Code manual check. Do not mark those checks green until the results are available.
+
+
+## Follow-up branch status — `app/alpha-readiness-gaps`
+
+This branch adds the missing desktop renderer-crash recovery path. It is intentionally separate from the verified default-branch snapshot; do not treat the change as shipped until the repository checks pass and the recovery flow is exercised in a packaged or development Electron app. The isolated helper tests passed 3/3 locally; this is not a substitute for `npm run check`, the clean-environment suite, or an actual renderer-crash test.
