@@ -1004,6 +1004,43 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/provider/local-models') {
+      // This status check never accepts a caller-supplied URL: it can only query
+      // the conventional local Ollama endpoint and is never exposed to phone clients.
+      if (!isLoopbackClient(req)) {
+        json(res, 403, { error: 'Local model discovery is available only from the same computer.' });
+        return;
+      }
+      try {
+        const response = await fetch('http://127.0.0.1:11434/api/tags', {
+          method: 'GET',
+          redirect: 'error',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(1500),
+          headers: { accept: 'application/json' }
+        });
+        if (!response.ok) throw new Error('Ollama did not respond successfully.');
+        const payload = await response.json();
+        const models = Array.isArray(payload && payload.models)
+          ? payload.models.map((model) => String(model && (model.name || model.model) || '').trim()).filter(Boolean).slice(0, 100)
+          : [];
+        json(res, 200, {
+          available: true,
+          models,
+          message: models.length
+            ? 'Ollama is running. Choose an installed model, then test the connection.'
+            : 'Ollama is running, but no models are installed yet. Install a model from the Ollama app or terminal, then check again.'
+        });
+      } catch {
+        json(res, 200, {
+          available: false,
+          models: [],
+          message: 'Ollama was not found or is not running. Install it from ollama.com/download, open it, and check again.'
+        });
+      }
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/api/provider/config') {
       // Provider credentials may only be submitted over the local loopback connection.
       // The remote-device HTTP bridge is intentionally not allowed to receive API keys.
@@ -1040,10 +1077,19 @@ export function createOasisWebServer(options = {}) {
       try {
         await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
       } catch (error) {
-        json(res, 422, { saved: false, verified: false, error: String(error && error.message || 'Provider verification failed.').slice(0, 1600) });
+        const rawMessage = String(error && error.message || 'Provider verification failed.');
+        const safeMessage = apiKey ? rawMessage.split(apiKey).join('[redacted]') : rawMessage;
+        json(res, 422, { saved: false, verified: false, error: safeMessage.slice(0, 1600) });
         return;
       }
-      await saveConfig({ protocol, baseURL, model, apiKey }, { env });
+      if (typeof options.onProviderConfig === 'function') {
+        // Desktop hosts keep the key in Electron safeStorage. Only non-secret
+        // provider details are written to the shared OASIS config file.
+        await options.onProviderConfig({ protocol, baseURL, model, apiKey });
+        await saveConfig({ protocol, baseURL, model, apiKey: '' }, { env });
+      } else {
+        await saveConfig({ protocol, baseURL, model, apiKey }, { env });
+      }
       json(res, 200, {
         saved: true,
         verified: true,
