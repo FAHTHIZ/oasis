@@ -2,7 +2,7 @@
   <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish. A panoramic lime-green portal and reflective digital workspace for an open-source, local-first AI coding agent." width="100%" />
 </p>
 
-<p align="center"><a href="https://fahthiz.github.io/oasis/">Homepage ↗</a> · <a href="docs/INSTALL.md">Install</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
+<p align="center"><a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download desktop app ↗</a> · <a href="docs/QUICKSTART.md">5-minute quickstart</a> · <a href="docs/INSTALL.md">Install</a> · <a href="https://fahthiz.github.io/oasis/">Homepage ↗</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
