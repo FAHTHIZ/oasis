@@ -678,10 +678,12 @@ test('cancelling a dispatched worker immediately releases its shared task lease'
 
 test('agent lifecycle observers receive structured events without affecting orchestration', () => {
   const observed = [];
-  const session = { agentTasks: { next: 1, nextTeam: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 }, onAgentEvent: (event) => observed.push(event) };
+  const session = { agentRunId: 'monitor-run-1', agentTasks: { next: 1, nextTeam: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 }, onAgentEvent: (event) => observed.push(event) };
   const record = registerAgent(session, { type: 'explore', description: 'Inspect package graph', background: true });
   assert.equal(observed.length, 1);
   assert.equal(observed[0].type, 'agent.started');
+  assert.equal(observed[0].run_id, 'monitor-run-1');
+  assert.equal(record.runId, 'monitor-run-1');
   assert.equal(observed[0].agent_id, record.id);
   assert.equal(observed[0].description, 'Inspect package graph');
 
