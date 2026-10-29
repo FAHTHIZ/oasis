@@ -198,7 +198,8 @@ test('built-in audit workflow merges duplicate findings and preserves partial re
 
 test('/audit is listed and delegates to the built-in workflow instead of a single review', async () => {
   assert.ok(BUILTIN_COMMANDS.audit);
-  const { state } = await setup();
+  const root = process.cwd();
+  const state = { root, env: process.env, session: { root, messages: [], settings: {} } };
   const handled = await runBuiltinCommand('audit', 'src/security', state);
   assert.match(handled.prompt, /workflow named "audit"/);
   assert.match(handled.prompt, /security, performance, test-coverage, and dependency reviewers/);
