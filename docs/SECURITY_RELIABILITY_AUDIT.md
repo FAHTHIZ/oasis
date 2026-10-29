@@ -203,3 +203,11 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Verification boundary:** current main CI is being rerun against the test and source changes. This is a source-level finding/fix, not a penetration-test result. See [open-source security research](OPEN_SOURCE_SECURITY_RESEARCH.md) for the component evaluation and integration constraints.
 
+## Follow-up hardening: fail closed when the requested OS sandbox is unavailable
+
+**Finding:** the single-executable command runner and shell runner could continue after sandbox configuration explicitly enabled isolation but the host could not provide it. They would fall back to ordinary execution with approval, which is not equivalent to the requested containment. The shell path also converted an unavailable-but-enabled sandbox into `null`, losing the user's isolation requirement.
+
+**Fix added on main:** centralized an `assertSandboxAvailable()` guard in the sandbox module and call it before command approval in both command execution paths. The command wrapper also checks it as defense in depth. When sandboxing is explicitly enabled but unavailable, OASIS now refuses to start the command and explains why; the user must either make the sandbox available or deliberately disable it. Regression tests verify the single-executable path, shell path, and direct wrapper fail before approval/execution.
+
+**Verification boundary:** regression tests have been added but must pass in GitHub Actions on the resulting main SHA. Native OS enforcement remains a separate platform-validation requirement.
+

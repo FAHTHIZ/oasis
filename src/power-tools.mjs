@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
-import { wrapCommand } from './sandbox.mjs';
+import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
@@ -337,7 +337,9 @@ async function runShell(root, args, context, flavor = 'sh') {
   if (command.length > 8000 || command.includes('\0')) throw new Error('Shell command is too long or invalid.');
   const blocked = shellCommandBlocked(command);
   if (blocked) throw new Error(blocked);
-  const sandbox = context.sandbox && context.sandbox.enabled && context.sandbox.available ? context.sandbox : null;
+  const requestedSandbox = context.sandbox && context.sandbox.enabled ? context.sandbox : null;
+  assertSandboxAvailable(requestedSandbox);
+  const sandbox = requestedSandbox;
   const autoAllowed = context.ruleAllowed || (sandbox && sandbox.autoAllowCommands !== false) || (context.autoApprove && context.permissionMode === 'bypassPermissions');
   if (!autoAllowed) {
     const ok = context.approval && await context.approval('Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox);

@@ -17,7 +17,7 @@ import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_A
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
-import { wrapCommand } from './sandbox.mjs';
+import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES, executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
@@ -296,6 +296,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(options.timeoutSeconds, 10) || 120));
   const approval = options.approval;
   const sandbox = options.sandbox && options.sandbox.enabled ? options.sandbox : null;
+  assertSandboxAvailable(sandbox);
   // An explicit allow rule is the user's own decision. Otherwise high-risk commands
   // (inline code, wrappers, find -exec, ...) always need an interactive answer.
   const highRisk = analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null;

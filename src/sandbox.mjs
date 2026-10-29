@@ -107,6 +107,13 @@ function seatbeltString(value) {
   return '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
+export function assertSandboxAvailable(sandbox) {
+  if (sandbox && sandbox.enabled && !sandbox.available) {
+    const reason = String(sandbox.reason || 'No supported OS sandbox is available on this platform.');
+    throw new Error('The OS sandbox is enabled but unavailable; refusing to run commands without isolation. ' + reason);
+  }
+}
+
 export function macProfile(sandbox) {
   const writable = [...sandbox.writable, os.tmpdir(), '/private/tmp', '/private/var/folders'];
   return [
@@ -121,6 +128,7 @@ export function macProfile(sandbox) {
 
 // Returns { command, args } that runs the requested argv inside the sandbox.
 export function wrapCommand(command, args, sandbox, cwd) {
+  assertSandboxAvailable(sandbox);
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
