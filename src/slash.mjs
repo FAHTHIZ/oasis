@@ -469,7 +469,12 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'diagnostics': {
       const targets = argument ? argument.split(/\s+/).filter(Boolean) : [];
-      return { prompt: 'Run the diagnostics tool' + (targets.length ? ' with paths ' + JSON.stringify(targets) : '') + '. Report the problems grouped by file. If there are errors, fix them with minimal edits, then run diagnostics again until it reports no errors or the remaining ones need my decision. Do not silence checks with ignore comments or config changes unless I ask.' };
+      return { prompt: [
+        'Run both the project-checker diagnostics tool and language-server diagnostics for the relevant source files' + (targets.length ? ': ' + JSON.stringify(targets) : ' (use current changed source files when available, otherwise inspect the workspace file list).'),
+        'For every file with a configured LSP, use the lsp operation "diagnostics"; use the diagnostics tool for type checkers, linters, and built-in syntax checks. Keep the two evidence sources distinct.',
+        'Report separate sections for Errors, Warnings, Information, and Verification unavailable. Include file, line, code/source, and message for every issue. If diagnostic collection fails or the language server cannot start, state that LSP verification was unavailable rather than reporting a clean LSP result.',
+        'If there are errors, fix them with minimal edits and rerun both applicable diagnostic sources until clean or until a remaining issue needs my decision. Do not silence checks with ignore comments or config changes unless I ask.'
+      ].join(' ') };
     }
     case 'cost': {
       const u = usage || createUsageTracker();
