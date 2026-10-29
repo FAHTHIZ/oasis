@@ -475,6 +475,8 @@ export function readInput(options = {}) {
     let lastCtrlC = 0;
     let lastEscape = 0;
     let completion = null; // { range, candidates, index }
+    let palette = null;
+    let paletteScreen = false;
     let busy = Promise.resolve();
     let done = false;
     const decoder = new KeyDecoder();
@@ -505,10 +507,129 @@ export function readInput(options = {}) {
       previousCursorRow = frame.cursorRow;
     };
 
+    const paletteMatches = () => {
+      if (!palette) return [];
+      const query = String(palette.query || '').trim().toLowerCase();
+      if (!query) return palette.items.map((item, index) => ({ item, index, score: index }));
+      const words = query.split(/\\s+/).filter(Boolean);
+      const matched = [];
+      for (const [index, item] of palette.items.entries()) {
+        const haystack = [item.label, item.description, item.category, item.value].join(' ').toLowerCase();
+        let score = 0;
+        let ok = true;
+        for (const word of words) {
+          const at = haystack.indexOf(word);
+          if (at >= 0) score += at === 0 ? 0 : at + 1;
+          else {
+            let pos = 0;
+            let gaps = 0;
+            for (const ch of word) {
+              const found = haystack.indexOf(ch, pos);
+              if (found < 0) { ok = false; break; }
+              gaps += found - pos;
+              pos = found + 1;
+            }
+            if (!ok) break;
+            score += 30 + gaps;
+          }
+        }
+        if (ok) matched.push({ item, index, score });
+      }
+      return matched.sort((a, b) => a.score - b.score || a.index - b.index);
+    };
+    const drawPalette = () => {
+      if (!palette) return;
+      const width = Math.max(32, output.columns || 80);
+      const height = Math.max(10, output.rows || 24);
+      const rows = Math.max(3, Math.min(12, height - 7));
+      const matches = paletteMatches();
+      palette.selected = Math.max(0, Math.min(palette.selected, Math.max(0, matches.length - 1)));
+      const top = Math.max(0, Math.min(palette.selected - Math.floor(rows / 2), Math.max(0, matches.length - rows)));
+      const lines = [
+        truncateToWidth(' OASIS COMMAND PALETTE', width),
+        truncateToWidth(' Search: ' + (palette.query || '') + '▏', width),
+        truncateToWidth('─'.repeat(width), width)
+      ];
+      if (!matches.length) lines.push('  No matches. Try another word.');
+      else {
+        for (let offset = 0; offset < rows; offset += 1) {
+          const entry = matches[top + offset];
+          if (!entry) { lines.push(''); continue; }
+          const item = entry.item;
+          const prefix = entry.index === matches[palette.selected].index ? ' › ' : '   ';
+          const category = item.category ? '[' + item.category + '] ' : '';
+          const detail = item.description ? ' — ' + item.description : '';
+          const line = truncateToWidth(prefix + category + item.label + detail, width);
+          lines.push(entry.index === matches[palette.selected].index && color ? '\\x1b[7m' + line + '\\x1b[27m' : line);
+        }
+      }
+      lines.push(truncateToWidth(' Enter select · ↑↓ move · type to search · Ctrl+U clear · Esc close', width));
+      while (lines.length < height) lines.push('');
+      output.write('\\x1b[H\\x1b[2J' + lines.slice(0, height).join('\\r\\n'));
+    };
+    const closePalette = (chosen = null) => {
+      palette = null;
+      if (paletteScreen) { output.write('\\x1b[?1049l'); paletteScreen = false; }
+      previousCursorRow = 0;
+      if (chosen && chosen.value) {
+        state = insertText(state, chosen.value);
+        hints = [DIM('Added ' + chosen.value + ' to the prompt. Press Enter to run it, or edit it first.', color)];
+      }
+      draw();
+    };
+    const openCommandPalette = async () => {
+      if (typeof options.onCommandPalette !== 'function') {
+        hints = [DIM('The command palette is not available in this context.', color)];
+        return;
+      }
+      try {
+        const supplied = await options.onCommandPalette();
+        const source = Array.isArray(supplied) ? supplied : (supplied && Array.isArray(supplied.items) ? supplied.items : []);
+        const items = source.slice(0, 500).filter((item) =>
+          item && typeof item.label === 'string' && typeof item.value === 'string' && item.value.length <= 1000
+        ).map((item) => ({
+          label: item.label.replace(/[\\r\\n\\0]/g, ' ').slice(0, 160),
+          value: item.value.replace(/[\\r\\n\\0]/g, ' ').slice(0, 1000),
+          description: String(item.description || '').replace(/[\\r\\n\\0]/g, ' ').slice(0, 220),
+          category: String(item.category || 'Commands').replace(/[\\r\\n\\0]/g, ' ').slice(0, 40)
+        }));
+        palette = { items, query: '', selected: 0 };
+        paletteScreen = true;
+        output.write('\\x1b[?1049h');
+        drawPalette();
+      } catch (error) {
+        palette = null;
+        hints = [DIM('Could not open the command palette: ' + String(error && error.message || 'try again').slice(0, 160), color)];
+      }
+    };
+    const paletteKey = (key) => {
+      if (!palette) return;
+      if (key.name === 'escape' || key.name === 'ctrlC' || key.stroke === 'ctrl+k') { closePalette(); return; }
+      if (key.name === 'enter') {
+        const matches = paletteMatches();
+        closePalette(matches.length ? matches[palette.selected]?.item : null);
+        return;
+      }
+      if (key.name === 'up' || key.name === 'ctrlP') palette.selected -= 1;
+      else if (key.name === 'down' || key.name === 'ctrlN') palette.selected += 1;
+      else if (key.name === 'pageUp') palette.selected -= Math.max(1, Math.min(12, (output.rows || 24) - 7));
+      else if (key.name === 'pageDown') palette.selected += Math.max(1, Math.min(12, (output.rows || 24) - 7));
+      else if (key.name === 'backspace' || key.name === 'killWord') palette.query = Array.from(palette.query).slice(0, -1).join('');
+      else if (key.name === 'killStart' || key.stroke === 'ctrl+u') palette.query = '';
+      else if (key.name === 'char' && key.text && !/[\\r\\n\\0]/.test(key.text)) {
+        if (palette.query.length < 160) palette.query += key.text;
+        palette.selected = 0;
+      }
+      const count = paletteMatches().length;
+      palette.selected = Math.max(0, Math.min(palette.selected, Math.max(0, count - 1)));
+      drawPalette();
+    };
+
     const finish = (result) => {
       if (done) return;
       done = true;
       hints = [];
+      if (paletteScreen) { output.write('\\x1b[?1049l'); paletteScreen = false; palette = null; }
       if (result.type === 'submit') draw(true);
       else { state = { ...state, text: '' }; draw(true); }
       output.write('\r\n\x1b[?2004l');
@@ -602,6 +723,7 @@ export function readInput(options = {}) {
         return { name: effect.key, stroke: key.stroke, text: key.text };
       }
       if (effect.command) { finish({ type: 'submit', text: '/' + effect.command }); return null; }
+      if (effect.action === 'commandPalette') { await openCommandPalette(); return null; }
       if (effect.action === 'externalEditor') { openExternalEditor(); return null; }
       if (effect.action === 'stash') {
         if (state.text.trim()) { stash.text = state.text; state = { ...state, text: '', cursor: 0, undo: [...state.undo, { text: state.text, cursor: state.cursor }] }; hints = [DIM('Prompt stashed; it comes back after your next message (Ctrl+S on an empty prompt restores it now).', color)]; }
@@ -644,9 +766,10 @@ export function readInput(options = {}) {
     };
     const handle = async (rawKey) => {
       if (pager) { pagerKey(rawKey); return; }
+      if (palette) { paletteKey(rawKey); return; }
       const key = await bindKey(rawKey);
       if (done) return;
-      if (!key) { draw(); return; }
+      if (!key) { if (palette) drawPalette(); else draw(); return; }
       if (key.name !== 'tab') completion = null;
       if (key.name !== 'ctrlC') lastCtrlC = 0;
       const wasHinting = hints.length > 0;
