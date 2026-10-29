@@ -3,7 +3,7 @@
 // { resetSession: true } when the caller should drop the current session.
 import { describeHook, runHooks, hasHooks } from './hooks.mjs';
 import { compactHistoryIfNeeded, hookOptions } from './agent.mjs';
-import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview } from './context.mjs';
+import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES } from './settings.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
@@ -325,6 +325,10 @@ export async function runBuiltinCommand(name, argument, state) {
       if (/^confirm$/i.test(input)) {
         const preview = session.pendingCompactionPreview;
         if (!preview) return { output: 'No compaction preview is pending. Run /compact [focus] to preview first.' };
+        if (!compactionPreviewIsCurrent(session, preview)) {
+          delete session.pendingCompactionPreview;
+          return { output: 'The conversation changed after this preview. Nothing was compacted. Run /compact [focus] to preview the current history again.' };
+        }
         const before = estimateTokens(session.messages);
         const result = await compactHistoryIfNeeded(session, {
           force: true,
