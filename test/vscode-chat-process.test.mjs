@@ -8,7 +8,9 @@ const { friendlyStartError } = require('../ide/vscode/src/chat-process.js');
 test('VS Code explains when the OASIS command is missing', () => {
   const message = friendlyStartError({ code: 'ENOENT', message: 'spawn oasis ENOENT' }, 'oasis');
   assert.match(message, /could not be found/i);
-  assert.match(message, /Install it/i);
+  assert.match(message, /install the CLI using/i);
+  assert.match(message, /npm install --global/i);
+  assert.match(message, /Node\.js 22 or newer/i);
   assert.match(message, /oasis\.command/);
 });
 
