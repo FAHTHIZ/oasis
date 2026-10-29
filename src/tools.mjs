@@ -59,7 +59,7 @@ function createBoundedOutput(maxChars = MAX_TOOL_OUTPUT) {
     text() {
       if (!truncated) return complete;
       const omitted = Math.max(0, totalChars - head.length - tail.length);
-      return head + '\\n[OASIS omitted ' + omitted + ' characters from the middle of command output; the complete output was not retained.]\\n' + tail;
+      return head + '\n[OASIS omitted ' + omitted + ' characters from the middle of command output; the complete output was not retained.]\n' + tail;
     },
     get truncated() { return truncated; }
   };
