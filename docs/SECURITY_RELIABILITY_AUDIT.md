@@ -195,3 +195,11 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Verification boundary:** this is source-level hardening until the current main commit's Quality Checks pass; CI cannot establish macOS Seatbelt enforcement by itself, and native macOS sandbox behavior still needs platform-specific runtime tests.
 
+## Follow-up hardening: re-check permissions after PreToolUse rewrites
+
+**Finding:** `authorizeCall()` evaluated the permission policy against model-provided arguments, then accepted `PreToolUse` `updatedInput` and passed the original `allow` decision into execution. A hook could therefore rewrite an explicitly allowed command to a different command without the new arguments being checked against the allow/deny rules. For command execution, the stale allow also set `ruleAllowed`, which bypasses the high-risk command approval gate.
+
+**Fix added on main:** when a `PreToolUse` hook changes tool input, OASIS evaluates the final merged arguments again. A matching deny rule blocks immediately; an explicit ask is preserved; and an allow for the original inputs no longer authorizes a different command by accident. Auto-mode shell classification is re-applied to the final decision. Regression tests cover both fresh approval after an input rewrite and enforcement of a deny rule against the rewritten command.
+
+**Verification boundary:** current main CI is being rerun against the test and source changes. This is a source-level finding/fix, not a penetration-test result. See [open-source security research](OPEN_SOURCE_SECURITY_RESEARCH.md) for the component evaluation and integration constraints.
+

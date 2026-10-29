@@ -18,6 +18,71 @@ const nodeHook = (code) => JSON.stringify(process.execPath) + ' -e ' + JSON.stri
 const printJson = (value) => nodeHook('process.stdin.resume();process.stdin.on("end",()=>process.stdout.write(' + JSON.stringify(JSON.stringify(value)) + '))');
 const group = (hook, matcher) => ({ ...(matcher ? { matcher } : {}), hooks: [hook] });
 
+test('PreToolUse input rewrites cannot inherit an allow rule for the original command', async (t) => {
+  const root = await tmp(t);
+  const hooks = {
+    PreToolUse: [group({
+      type: 'command',
+      command: printJson({
+        hookSpecificOutput: {
+          updatedInput: { command: 'echo', args: ['rewritten'] }
+        }
+      })
+    }, 'Bash')]
+  };
+  const settings = settingsWith(hooks);
+  settings.permissions.allow = ['Bash(npm test:*)'];
+  const { config } = await scriptedModel(t, [
+    toolCall('rewritten-command-1', 'run_command', { command: 'npm', args: ['test'], timeoutSeconds: 10 }),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  let approvals = 0;
+
+  await runAgentTurn(session, 'Run the tests.', {
+    approval: async () => { approvals++; return false; }
+  });
+
+  assert.ok(approvals > 0, 'the rewritten command must require a fresh approval');
+  const result = session.messages.find((message) => message.role === 'tool' && message.tool_call_id === 'rewritten-command-1');
+  assert.ok(result, 'the rewritten tool call should have a result');
+  assert.match(result.content, /not approved|denied/i);
+});
+
+test('PreToolUse input rewrites are checked against deny rules for the final command', async (t) => {
+  const root = await tmp(t);
+  const hooks = {
+    PreToolUse: [group({
+      type: 'command',
+      command: printJson({
+        hookSpecificOutput: {
+          updatedInput: { command: 'echo', args: ['rewritten'] }
+        }
+      })
+    }, 'Bash')]
+  };
+  const settings = settingsWith(hooks);
+  settings.permissions.allow = ['Bash(npm test:*)'];
+  settings.permissions.deny = ['Bash(echo:*)'];
+  const { config } = await scriptedModel(t, [
+    toolCall('rewritten-command-denied', 'run_command', { command: 'npm', args: ['test'], timeoutSeconds: 10 }),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  let approvals = 0;
+
+  await runAgentTurn(session, 'Run the tests.', {
+    approval: async () => { approvals++; return false; }
+  });
+
+  assert.equal(approvals, 0, 'a matching deny rule must block without prompting');
+  const result = session.messages.find((message) => message.role === 'tool' && message.tool_call_id === 'rewritten-command-denied');
+  assert.ok(result, 'the rewritten tool call should have a result');
+  assert.match(result.content, /Denied by permission rule.*after PreToolUse updated the tool input/);
+});
+
 test('every Claude Code event and handler type is known', () => {
   for (const event of ['PostToolBatch', 'PermissionDenied', 'StopFailure', 'UserPromptExpansion', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'DirectoryAdded']) assert.ok(HOOK_EVENTS.includes(event), event);
   assert.deepEqual(HOOK_TYPES, ['command', 'http', 'mcp_tool', 'prompt', 'agent']);
