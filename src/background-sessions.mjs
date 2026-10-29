@@ -67,6 +67,7 @@ export async function startBackgroundSession(options = {}) {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const id = options.id && ID.test(options.id) ? options.id : 'bg-' + randomUUID().replace(/-/g, '').slice(0, 8);
   const sessionId = options.resumeId || randomUUID();
+  const runId = randomUUID();
   const logFile = path.join(dir, id + '.log');
   const args = [CLI, '-p', prompt, '--output-format', 'stream-json', '--workspace', root];
   if (options.resumeId) args.push('--resume', options.resumeId); else args.push('--session-id', sessionId);
@@ -74,11 +75,11 @@ export async function startBackgroundSession(options = {}) {
   if (options.model) args.push('--model', options.model);
   if (options.name) args.push('--name', options.name);
   for (const extra of options.extraArgs || []) args.push(extra);
-  const entry = { id, sessionId, root, prompt: prompt.slice(0, 500), status: 'running', startedAt: new Date().toISOString(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}), ...(options.permissionMode ? { permissionMode: options.permissionMode } : {}), ...(options.model ? { model: options.model } : {}), ...(options.resumeId ? { handoff: true } : {}), ...(options.respawns ? { respawns: options.respawns } : {}) };
+  const entry = { id, runId, sessionId, root, prompt: prompt.slice(0, 500), status: 'running', startedAt: new Date().toISOString(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}), ...(options.permissionMode ? { permissionMode: options.permissionMode } : {}), ...(options.model ? { model: options.model } : {}), ...(options.resumeId ? { handoff: true } : {}), ...(options.respawns ? { respawns: options.respawns } : {}) };
   await writeEntry(entry, env);
   const out = openSync(logFile, 'a', 0o600);
   try {
-    const child = spawn(options.execPath || process.execPath, args, { cwd: root, env: { ...env, OASIS_BACKGROUND_ID: id }, detached: true, stdio: ['ignore', out, out], windowsHide: true });
+    const child = spawn(options.execPath || process.execPath, args, { cwd: root, env: { ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }, detached: true, stdio: ['ignore', out, out], windowsHide: true });
     entry.pid = child.pid;
     child.unref();
   } finally { closeSync(out); }
@@ -168,6 +169,11 @@ export async function respawnBackgroundSession(id, env = process.env, options = 
 export async function finishBackgroundSession(id, result = {}, env = process.env) {
   let entry;
   try { entry = JSON.parse(await readFile(entryPath(id, env), 'utf8')); } catch { return; }
+  // A stopped/respawned job may reuse the same public ID. An older process must
+  // never finish the replacement run after it exits late.
+  const runId = env.OASIS_BACKGROUND_RUN_ID;
+  if (runId && entry.runId !== runId) return;
+  if (entry.status !== 'running') return;
   await writeEntry({ ...entry, status: result.exitCode === 0 ? 'completed' : 'failed', exitCode: result.exitCode, finishedAt: new Date().toISOString() }, env);
 }
 
