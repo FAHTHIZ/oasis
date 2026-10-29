@@ -59,3 +59,11 @@ Run `npm test` for focused and broader Node tests, and `npm run check` for the r
 - `/notify SESSION-ID-OR-NAME MESSAGE` stores a bounded structured message for a live session. Targets must be registered and alive; busy targets queue messages until idle. The store enforces a per-session rate limit and disallows forwarded-message loops.
 - `/inbox` or `/inbox list` lists retained messages. Use `/inbox read MESSAGE-ID` to mark one read and `/inbox dismiss MESSAGE-ID` to dismiss it.
 - Messages are untrusted contextual data. They do not become prompts, tool calls, permissions, or executable commands in the target session.
+
+
+## Local investigation artifacts
+
+- `/artifact NAME [GOAL]` creates or resumes a local investigation page and enables capture for the current session.
+- `/artifact add NAME TYPE DETAILS` records a `timeline`, `command`, `file`, `test`, `error`, `hypothesis`, or `rollback` entry. `/artifact goal NAME TEXT` sets the task goal.
+- `/artifact list`, `/artifact open NAME`, `/artifact stop NAME`, and `/artifact delete NAME` manage artifact lifecycle.
+- Pages refresh locally every five seconds. Data is stored under the Oasis user config directory, not in the repository. No remote assets/scripts are loaded; common tokens/passwords/private keys are redacted before storage.

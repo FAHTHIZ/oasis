@@ -26,6 +26,7 @@ export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
   notify: 'Send a structured, non-executable message to another live Oasis session (/notify SESSION MESSAGE)',
   inbox: 'Read and manage durable messages for this session (/inbox [list|read ID|dismiss ID])',
+  artifact: 'Create and update a local investigation page (/artifact NAME, /artifact add NAME TYPE DETAILS)',
   status: 'Show the model provider configuration',
   setup: 'Configure the model provider',
   clear: 'Start a fresh conversation',
@@ -572,6 +573,52 @@ export async function runBuiltinCommand(name, argument, state) {
       const messages = await listSessionInbox(session, { env });
       if (!messages.length) return { output: 'Inbox is empty.' };
       return { output: messages.map((message) => '[' + message.id + '] ' + (message.read ? 'READ' : message.delivered ? 'DELIVERED / UNREAD' : 'QUEUED') + ' | ' + message.priority + ' | ' + (message.sourceName || message.sourceSessionId) + '\\n' + formatSessionMessage(message)).join('\\n\\n---\\n\\n') };
+    }
+    case 'artifact': {
+      const input = String(argument || '').trim();
+      const parts = input.split(/\s+/).filter(Boolean);
+      if (!input || /^list$/i.test(input)) {
+        const { listArtifacts } = await import('./artifacts.mjs');
+        const items = await listArtifacts(root, { env });
+        return { output: items.length ? 'Local investigation artifacts:\n' + items.map((item) => '  ' + item.slug + ' — ' + (item.goal || '(goal not set)') + ' — updated ' + item.updatedAt).join('\n') : 'No investigation artifacts for this workspace. Create one with /artifact NAME.' };
+      }
+      const action=(parts[0]||'').toLowerCase();
+      if(action==='add'&&parts.length>=4){
+        const {recordArtifactEvent}=await import('./artifacts.mjs');
+        const typeMap={goal:'goal',timeline:'timeline',command:'command',file:'file',test:'test',error:'error',hypothesis:'hypothesis',rollback:'rollback'};
+        const type=typeMap[(parts[2]||'').toLowerCase()];
+        if(!type)return {output:'Unsupported artifact type. Use goal, timeline, command, file, test, error, hypothesis, or rollback.'};
+        const details=input.split(/\s+/).slice(3).join(' ');
+        const {artifact,htmlPath}=await recordArtifactEvent(root,parts[1],type,details,{env});
+        return {output:'Recorded '+type+' in '+artifact.slug+'. Local page: '+htmlPath};
+      }
+      if(action==='goal'&&parts.length>=3){
+        const {recordArtifactEvent}=await import('./artifacts.mjs');
+        const goal=input.split(/\s+/).slice(2).join(' ');
+        const {artifact,htmlPath}=await recordArtifactEvent(root,parts[1],'goal',goal,{env});
+        return {output:'Updated goal for '+artifact.slug+'. Local page: '+htmlPath};
+      }
+      if(action==='open'&&parts[1]){
+        const {readArtifact}=await import('./artifacts.mjs');
+        const found=await readArtifact(root,parts[1],{env});
+        return found?{output:'Local investigation page: '+found.fileUrl+'\nRaw state: '+found.dataPath}:{output:'Artifact not found. Use /artifact list or /artifact NAME.'};
+      }
+      if(action==='delete'&&parts[1]){
+        const {deleteArtifact}=await import('./artifacts.mjs');
+        await deleteArtifact(root,parts[1],{env});
+        if(session&&session.activeArtifact===parts[1])session.activeArtifact=null;
+        return {output:'Artifact '+parts[1]+' deleted from local storage.'};
+      }
+      if(action==='stop'&&parts[1]){
+        if(session&&session.activeArtifact===parts[1])session.activeArtifact=null;
+        return {output:'Automatic capture stopped for '+parts[1]+'. The stored artifact remains on this device.'};
+      }
+      const name=parts[0];
+      const goal=parts.slice(1).join(' ');
+      const {createArtifact}=await import('./artifacts.mjs');
+      const created=await createArtifact(root,name,{env,goal:goal||undefined});
+      if(session)session.activeArtifact=created.artifact.slug;
+      return {output:'Local investigation artifact '+created.artifact.slug+' is active. Page: '+created.fileUrl+'\nGoal: '+(created.artifact.goal||'Use /artifact goal '+created.artifact.slug+' YOUR GOAL.')+'\nAutomatic task timeline, commands, changed files, tests, and errors will be recorded for this session. Use /artifact add '+created.artifact.slug+' TYPE DETAILS, /artifact open '+created.artifact.slug+', or /artifact stop '+created.artifact.slug+'. Data stays in the local Oasis config directory.'};
     }
     case 'style':
     case 'output-style': {

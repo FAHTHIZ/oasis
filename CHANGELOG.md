@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Added `/artifact NAME` with an auto-refreshing local-only investigation page and structured event store. Active sessions record task starts, commands, changed files, test outcomes and tool errors; users can add hypotheses/rollback notes, list/open/stop/delete artifacts, and common secrets are redacted before local storage. Focused tests added; current-head CI pending.
+
 - Added a license-consistency regression test covering the full Apache-2.0 sections/application appendix, package metadata, README badge/statement, and project-license claims in public documentation.
 
 - Completed the project license consistency audit on main: aligned DISCOVERABILITY.md, PUBLIC_LAUNCH.md and USER_GUIDE.md with Apache-2.0, while retaining accurate MIT references for third-party dependencies and projects. Root LICENSE and package metadata were already Apache-2.0; no project-wide NOTICE requirement was identified.
