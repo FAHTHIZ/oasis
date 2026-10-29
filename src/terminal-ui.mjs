@@ -76,6 +76,24 @@ async function packageVersion() {
   } catch { return ''; }
 }
 
+const STARTUP_TIPS = [
+  'Ask Oasis to read the project and explain it before changing files.',
+  'Use /plan before a large or risky change.',
+  'Use /undo to review and rewind the last turn when needed.',
+  'Use /doctor when setup or the model connection seems broken.',
+  'Read each approval prompt; Oasis runs commands with your account permissions.',
+  'Use /context to see how much of the model context is in use.',
+  'Use /cost to review estimated usage for this session.',
+  'Ask Oasis to run the relevant tests before it says a change is done.'
+];
+
+export function startupTip(env = process.env, now = Date.now()) {
+  if (String(env.OASIS_TIP || '').toLowerCase() === 'off' || env.OASIS_NO_TIPS === '1') return '';
+  const day = Math.floor(Number(now) / 86_400_000);
+  const index = ((day % STARTUP_TIPS.length) + STARTUP_TIPS.length) % STARTUP_TIPS.length;
+  return STARTUP_TIPS[index];
+}
+
 export async function showStartupBanner({ root, model = '', provider = '', mode = 'default', output = process.stdout, env = process.env } = {}) {
   const color = colorEnabled(output, env);
   const animate = animationEnabled(output, env) && output.isTTY;
@@ -107,6 +125,8 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   ];
   for (const [label, value] of rows) output.write('  ' + dim(label.padEnd(10)) + value + '\n');
   output.write('  ' + dim('? shortcuts · / commands · @ files · ! shell · # memory · Shift+Tab modes') + '\n');
+  const tip = startupTip(env);
+  if (tip) output.write('  Tip: ' + tip + '\n');
 }
 
 // Prompt and footer -------------------------------------------------------
