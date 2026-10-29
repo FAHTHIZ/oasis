@@ -1,7 +1,11 @@
 diff --git a/src/sessions.mjs b/src/sessions.mjs
 --- a/src/sessions.mjs
 +++ b/src/sessions.mjs
-@@ -42,1 +42,6 @@
+@@ -38,6 +38,11 @@
+ export async function saveSession(session, options = {}) {
+   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
+   const env = options.env || process.env;
+   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
 -  const messages = validateMessages(session.messages.slice(-MAX_MESSAGES));
 +  const history = session.messages;
 +  const messages = validateMessages(
@@ -9,11 +13,12 @@ diff --git a/src/sessions.mjs b/src/sessions.mjs
 +      ? [history[0], ...history.slice(-(MAX_MESSAGES - 1))]
 +      : history
 +  );
+   const payload = {
 diff --git a/test/session-history.test.mjs b/test/session-history.test.mjs
 new file mode 100644
 --- /dev/null
 +++ b/test/session-history.test.mjs
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,73 @@
 +import test from 'node:test';
 +import assert from 'node:assert/strict';
 +import os from 'node:os';
@@ -70,5 +75,20 @@ new file mode 100644
 +  ];
 +  const saved = await saveSession(makeSession(root, messages), { env });
 +  const restored = await loadSession(root, saved.id, { env });
++  assert.deepEqual(restored.messages, messages);
++});
++
++test('saveSession preserves histories at exactly the limit', async (t) => {
++  const { root, env } = await makeFixture(t);
++  const messages = [
++    { role: 'system', content: 'system context' },
++    ...Array.from({ length: 119 }, (_, index) => ({
++      role: index % 2 === 0 ? 'user' : 'assistant',
++      content: 'message-' + index
++    }))
++  ];
++  const saved = await saveSession(makeSession(root, messages), { env });
++  const restored = await loadSession(root, saved.id, { env });
++  assert.equal(restored.messages.length, 120);
 +  assert.deepEqual(restored.messages, messages);
 +});
