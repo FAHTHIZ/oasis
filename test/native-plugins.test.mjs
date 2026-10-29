@@ -14,9 +14,9 @@ async function setup(t) {
   t.after(()=>rm(home,{recursive:true,force:true}));
   return {home,root,pkg,env};
 }
-async function writePackage(pkg,{version='1.0.0',permissions=['commands','skills','agents','hooks','mcp']}={}) {
+async function writePackage(pkg,{version='1.0.0',permissions=['commands','skills','agents','hooks','mcp'],subagents=false,minimumOasisVersion='0.3.0'}={}) {
   const entries={};
-  const manifest={schemaVersion:1,name:'review-helper',version,description:'A local review helper plugin.',permissions,metadata:{owner:'test'}};
+  const manifest={schemaVersion:1,name:'review-helper',version,description:'A local review helper plugin.',author:'Oasis Test Suite',license:'MIT',minimumOasisVersion,permissions,metadata:{owner:'test'}};
   if(permissions.includes('commands')) {
     entries['commands/review.md']='Review the changes; preserve all project rules.\n';
     manifest.commands={review:{source:'commands/review.md',description:'Review a diff'}};
@@ -25,9 +25,10 @@ async function writePackage(pkg,{version='1.0.0',permissions=['commands','skills
     entries['skills/review/SKILL.md']='---\nname: review\ndescription: review changes\n---\nUse evidence and tests.\n';
     manifest.skills=['skills/review'];
   }
-  if(permissions.includes('agents')) {
-    entries['agents/reviewer.md']='Review source code safely.\n';
-    manifest.agents=['agents/reviewer.md'];
+  if(permissions.includes('agents')||permissions.includes('subagents')) {
+    const directory=subagents?'subagents':'agents';
+    entries[directory+'/reviewer.md']='Review source code safely.\n';
+    manifest[subagents?'subagents':'agents']=[directory+'/reviewer.md'];
   }
   if(permissions.includes('hooks')) {
     entries['hooks/hooks.json']=JSON.stringify({hooks:{PreToolUse:[]}});
@@ -57,6 +58,35 @@ test('native plugin validates and installs only explicitly granted capabilities'
   assert.equal((await pluginSkills([plugin])).length,1);assert.equal((await pluginAgents([plugin])).length,0);
   assert.equal((await pluginHooks([plugin],{env,root})).length,0);assert.equal((await pluginMcpServers([plugin],{env,root})).length,0);
   assert.equal((await listNativePlugins({env})).length,1);
+});
+
+test('native plugin manifest requires author, license, and a compatible minimum Oasis version',async t=>{
+  const {pkg}=await setup(t);await writePackage(pkg,{permissions:['commands']});
+  const manifestPath=path.join(pkg,'plugin.json');
+  const valid=JSON.parse(await readFile(manifestPath,'utf8'));
+  delete valid.author;await writeFile(manifestPath,JSON.stringify(valid));
+  await assert.rejects(validateNativePluginPackage(pkg),/author is required/i);
+  valid.author='Oasis Test Suite';delete valid.license;await writeFile(manifestPath,JSON.stringify(valid));
+  await assert.rejects(validateNativePluginPackage(pkg),/license is required/i);
+  valid.license='MIT';valid.minimumOasisVersion='999.0.0';await writeFile(manifestPath,JSON.stringify(valid));
+  await assert.rejects(validateNativePluginPackage(pkg),/requires Oasis 999.0.0 or newer/i);
+  valid.minimumOasisVersion='0.3.0';await writeFile(manifestPath,JSON.stringify(valid));
+  const checked=await validateNativePluginPackage(pkg);
+  assert.equal(checked.author,'Oasis Test Suite');
+  assert.equal(checked.license,'MIT');
+  assert.equal(checked.minimumOasisVersion,'0.3.0');
+});
+
+test('native plugin accepts subagents manifest paths and requires the explicit subagents grant',async t=>{
+  const {root,pkg,env}=await setup(t);await writePackage(pkg,{permissions:['subagents'],subagents:true});
+  const checked=await validateNativePluginPackage(pkg);
+  assert.deepEqual(checked.components.agents,['subagents/reviewer.md']);
+  const installed=await installNativePlugin(pkg,{env,grantedPermissions:['subagents']});
+  const plugins=await loadEnabledPlugins(root,{env});
+  const plugin=plugins.find(item=>item.id==='review-helper@oasis-native');
+  assert.ok(plugin);
+  assert.equal((await pluginAgents([plugin])).length,1);
+  assert.ok(await readFile(path.join(installed.installPath,'subagents/reviewer.md'),'utf8'));
 });
 
 test('native plugin install requires explicit grants, rejects conflicts and unknown permissions',async t=>{
