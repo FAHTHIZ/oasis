@@ -4,10 +4,10 @@
 // (RFC 7591), PKCE (S256), a loopback redirect, resource indicators (RFC 8707)
 // and refresh tokens. Tokens are stored per server URL in
 // <config>/mcp-auth.json with 0600 permissions and are never shown to the model.
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -20,22 +20,58 @@ const OAUTH_METADATA_TIMEOUT_MS = 10 * 1000;
 const MAX_OAUTH_METADATA_BYTES = 256 * 1024;
 
 function authFile(env = process.env) {
-  return path.join(getConfigDirectory(env), 'mcp-auth.json');
+  return path.resolve(getConfigDirectory(env), 'mcp-auth.json');
 }
 
 async function readStore(env) {
-  try {
-    const data = JSON.parse(await readFile(authFile(env), 'utf8'));
-    return data && typeof data.servers === 'object' ? data : { servers: {} };
-  } catch { return { servers: {} }; }
+  const file = authFile(env);
+  let raw;
+  try { raw = await readFile(file, 'utf8'); }
+  catch (error) {
+    if (error && error.code === 'ENOENT') return { servers: {} };
+    throw new Error('Could not read MCP OAuth token store: ' + error.message);
+  }
+  let data;
+  try { data = JSON.parse(raw); }
+  catch {
+    throw new Error('MCP OAuth token store contains invalid JSON; preserving the existing file instead of overwriting saved tokens.');
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data) ||
+      !data.servers || typeof data.servers !== 'object' || Array.isArray(data.servers)) {
+    throw new Error('MCP OAuth token store has an invalid structure; refusing to overwrite it.');
+  }
+  return data;
+}
+
+const storeQueues = new Map();
+
+function updateStore(env, mutate) {
+  const file = authFile(env);
+  const previous = storeQueues.get(file) || Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    const store = await readStore(env);
+    const result = mutate(store);
+    await writeStore(store, env);
+    return result;
+  });
+  let queued;
+  queued = operation.finally(() => {
+    if (storeQueues.get(file) === queued) storeQueues.delete(file);
+  });
+  storeQueues.set(file, queued);
+  return queued;
 }
 
 async function writeStore(store, env) {
   const file = authFile(env);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temp = file + '.' + process.pid + '.tmp';
-  await writeFile(temp, JSON.stringify(store, null, 2) + '\n', { mode: 0o600 });
-  await rename(temp, file);
+  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+  try {
+    await writeFile(temp, JSON.stringify(store, null, 2) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    await rename(temp, file);
+  } finally {
+    await unlink(temp).catch(() => {});
+  }
   try { await chmod(file, 0o600); } catch {}
 }
 
@@ -51,18 +87,18 @@ export async function getStoredToken(serverUrl, env = process.env) {
 }
 
 export async function saveStoredToken(serverUrl, entry, env = process.env) {
-  const store = await readStore(env);
-  store.servers[canonicalResource(serverUrl)] = entry;
-  await writeStore(store, env);
+  return await updateStore(env, (store) => {
+    store.servers[canonicalResource(serverUrl)] = entry;
+  });
 }
 
 export async function deleteStoredToken(serverUrl, env = process.env) {
-  const store = await readStore(env);
-  const key = canonicalResource(serverUrl);
-  const existed = Boolean(store.servers[key]);
-  delete store.servers[key];
-  await writeStore(store, env);
-  return existed;
+  return await updateStore(env, (store) => {
+    const key = canonicalResource(serverUrl);
+    const existed = Boolean(store.servers[key]);
+    delete store.servers[key];
+    return existed;
+  });
 }
 
 function privateAddress(address) {

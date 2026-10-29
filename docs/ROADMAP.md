@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Implementation baseline reviewed: October 29, 2026**, last fully verified on [`abe7c2fc2decbd0de35973c7f5812ad3e93d4230`](https://github.com/FAHTHIZ/oasis/commit/abe7c2fc2decbd0de35973c7f5812ad3e93d4230). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the project-owned readiness plan is [Product readiness](PRODUCT_READINESS.md).
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Implementation baseline reviewed: October 29, 2026**, last fully verified on [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the project-owned readiness plan is [Product readiness](PRODUCT_READINESS.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -46,7 +46,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Next milestone — Alpha confidence and end-to-end reliability
 
-The last fully verified implementation revision before the follow-up fixes, `abe7c2f`, passed 648 tests on Node 22/24/26, validated 33 fixtures, and passed Linux PTY/browser E2E, cross-platform security regressions, publishing validation, and Windows/macOS/Linux desktop packaging on the same SHA. The Git workflow, persistent background-session and HTTP MCP-helper lifecycle follow-up in the next commit needs its own same-SHA workflow result. The Alpha-confidence milestone remains open for representative coding outcomes, broader supported-OS journeys and release confidence.
+The last fully verified implementation revision before the follow-up fixes, `9ed2cc9`, passed 651 tests on Node 22/24/26, validated 33 fixtures, and passed Linux PTY/browser E2E, cross-platform security regressions, publishing validation, and Windows/macOS/Linux desktop packaging on the same SHA. The OAuth token-store concurrency/corruption and atomic user-settings persistence follow-up in the next commit needs its own same-SHA workflow result. The Alpha-confidence milestone remains open for representative coding outcomes, broader supported-OS journeys and release confidence.
 
 Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md), and see [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for fixes made and security boundaries that remain. The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. The CI consistency sub-gate is now satisfied; the broader release-confidence milestone remains open until the remaining user journeys, platform limitations and benchmark criteria are addressed.
 

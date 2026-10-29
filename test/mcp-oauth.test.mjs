@@ -7,8 +7,45 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { connectMcpServers, closeMcpClients } from '../src/mcp.mjs';
 import { loadProjectMcpServers } from '../src/mcp-project.mjs';
-import { getStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser } from '../src/mcp-oauth.mjs';
+import { getStoredToken, saveStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser } from '../src/mcp-oauth.mjs';
 import { mcpLogin, mcpLogout } from '../src/mcp-auth-commands.mjs';
+
+test('OAuth token storage preserves concurrent server updates', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-oauth-store-race-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: home };
+  const count = 16;
+  await Promise.all(Array.from({ length: count }, (_, index) =>
+    saveStoredToken('https://mcp-' + index + '.example/mcp', {
+      accessToken: 'access-' + index,
+      refreshToken: 'refresh-' + index
+    }, env)
+  ));
+
+  const saved = JSON.parse(await readFile(path.join(home, 'mcp-auth.json'), 'utf8'));
+  assert.equal(Object.keys(saved.servers).length, count);
+  for (let index = 0; index < count; index++) {
+    assert.equal(saved.servers['https://mcp-' + index + '.example/mcp'].accessToken, 'access-' + index);
+  }
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(path.join(home, 'mcp-auth.json'))).mode & 0o777, 0o600);
+  }
+});
+
+test('OAuth token storage refuses to overwrite a corrupted store', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-oauth-store-corrupt-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: home };
+  const file = path.join(home, 'mcp-auth.json');
+  const malformed = '{"servers":';
+  await writeFile(file, malformed, 'utf8');
+
+  await assert.rejects(
+    saveStoredToken('https://mcp.example/mcp', { accessToken: 'new-token' }, env),
+    /invalid JSON.*preserving the existing file/
+  );
+  assert.equal(await readFile(file, 'utf8'), malformed, 'corrupt token data must not be silently replaced');
+});
 
 test('Windows OAuth browser launch passes URL as an argument without cmd.exe', () => {
   const url = 'https://login.example.test/authorize?client_id=demo&redirect_uri=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback&state=x';

@@ -11,8 +11,9 @@
 // always apply. Rules that loosen policy (allow, hooks that run commands,
 // defaultMode, sandbox opt-outs) apply only after the user trusts the workspace
 // with `oasis trust` or `/trust`. User-level settings always apply.
-import { readFile, writeFile, mkdir, realpath, chmod } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
 
@@ -77,14 +78,34 @@ export async function isWorkspaceTrusted(root, env = process.env) {
   return trusted.includes(id);
 }
 
+const settingsMutationQueues = new Map();
+
+function mutateSettingsFile(file, mutator, mode = 0o600) {
+  const previous = settingsMutationQueues.get(file) || Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    const current = (await readJsonFile(file)) || {};
+    const next = mutator(structuredClone(current)) || current;
+    await mkdir(path.dirname(file), { recursive: true, mode: mode === 0o600 ? 0o700 : 0o755 });
+    const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+    try {
+      await writeFile(temp, JSON.stringify(next, null, 2) + '\n', { encoding: 'utf8', mode, flag: 'wx' });
+      await rename(temp, file);
+    } finally {
+      await unlink(temp).catch(() => {});
+    }
+    if (mode === 0o600) { try { await chmod(file, 0o600); } catch {} }
+    return next;
+  });
+  let queued;
+  queued = operation.finally(() => {
+    if (settingsMutationQueues.get(file) === queued) settingsMutationQueues.delete(file);
+  });
+  settingsMutationQueues.set(file, queued);
+  return queued;
+}
+
 export async function updateUserSettings(mutator, env = process.env) {
-  const file = userSettingsPath(env);
-  const current = (await readJsonFile(file)) || {};
-  const next = mutator(structuredClone(current)) || current;
-  await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  await writeFile(file, JSON.stringify(next, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-  try { await chmod(file, 0o600); } catch {}
-  return next;
+  return await mutateSettingsFile(userSettingsPath(env), mutator, 0o600);
 }
 
 export async function setWorkspaceTrust(root, trusted, env = process.env) {
@@ -101,19 +122,19 @@ export async function setWorkspaceTrust(root, trusted, env = process.env) {
 export async function addPermissionRule(scope, kind, rule, root, env = process.env) {
   if (!['allow', 'ask', 'deny'].includes(kind)) throw new Error('Permission kind must be allow, ask, or deny.');
   if (typeof rule !== 'string' || !rule.trim() || rule.length > 500) throw new Error('Provide a permission rule such as run_command(npm test:*).');
-  const write = async (file) => {
-    const current = (await readJsonFile(file)) || {};
-    current.permissions = current.permissions && typeof current.permissions === 'object' ? current.permissions : {};
-    const list = new Set(stringList(current.permissions[kind]));
-    list.add(rule.trim());
-    current.permissions[kind] = [...list];
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, JSON.stringify(current, null, 2) + '\n', 'utf8');
+  const write = async (file, mode) => {
+    await mutateSettingsFile(file, (current) => {
+      current.permissions = current.permissions && typeof current.permissions === 'object' && !Array.isArray(current.permissions) ? current.permissions : {};
+      const list = new Set(stringList(current.permissions[kind]));
+      list.add(rule.trim());
+      current.permissions[kind] = [...list];
+      return current;
+    }, mode);
     return file;
   };
-  if (scope === 'user') return await write(userSettingsPath(env));
-  if (scope === 'local') return await write(path.join(root, '.oasis', 'settings.local.json'));
-  if (scope === 'project') return await write(path.join(root, '.oasis', 'settings.json'));
+  if (scope === 'user') return await write(userSettingsPath(env), 0o600);
+  if (scope === 'local') return await write(path.join(root, '.oasis', 'settings.local.json'), 0o600);
+  if (scope === 'project') return await write(path.join(root, '.oasis', 'settings.json'), 0o644);
   throw new Error('Scope must be user, project, or local.');
 }
 
