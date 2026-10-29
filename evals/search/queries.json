@@ -1,0 +1,75 @@
+[
+  {
+    "id": "node-fetch-api",
+    "query": "Node.js official documentation fetch API",
+    "expectedDomains": [
+      "nodejs.org"
+    ]
+  },
+  {
+    "id": "claude-mcp",
+    "query": "Claude Code official MCP server documentation",
+    "expectedDomains": [
+      "code.claude.com",
+      "docs.anthropic.com"
+    ]
+  },
+  {
+    "id": "exa-api",
+    "query": "Exa search API official reference endpoint",
+    "expectedDomains": [
+      "exa.ai",
+      "docs.exa.ai"
+    ]
+  },
+  {
+    "id": "tavily-api",
+    "query": "Tavily Search API official endpoint reference",
+    "expectedDomains": [
+      "docs.tavily.com"
+    ]
+  },
+  {
+    "id": "firecrawl-api",
+    "query": "Firecrawl v2 search API official endpoint documentation",
+    "expectedDomains": [
+      "docs.firecrawl.dev"
+    ]
+  },
+  {
+    "id": "searxng-json",
+    "query": "SearXNG official JSON search API format documentation",
+    "expectedDomains": [
+      "docs.searxng.org"
+    ]
+  },
+  {
+    "id": "brave-search",
+    "query": "Brave Search API official web search endpoint documentation",
+    "expectedDomains": [
+      "brave.com",
+      "api.search.brave.com"
+    ]
+  },
+  {
+    "id": "mdn-fetch",
+    "query": "MDN Web Docs Fetch API reference",
+    "expectedDomains": [
+      "developer.mozilla.org"
+    ]
+  },
+  {
+    "id": "claude-plugin",
+    "query": "Claude Code official plugin manifest documentation",
+    "expectedDomains": [
+      "code.claude.com"
+    ]
+  },
+  {
+    "id": "node-package",
+    "query": "Node.js official package.json exports documentation",
+    "expectedDomains": [
+      "nodejs.org"
+    ]
+  }
+]
