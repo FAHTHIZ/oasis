@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile, rm, access, chmod, symlink, readdir, mkdir } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { listWorktrees, inspectWorktree, mergeWorktree, isCommitIntegrated } from '../src/worktrees.mjs';
+import { listWorktrees, inspectWorktree, mergeWorktree, isCommitIntegrated, runWorktreeCommand } from '../src/worktrees.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
@@ -185,4 +185,58 @@ test('worktree completion runs hooks by default and only bypasses them when expl
   const result = await finishWorktree(root, unattended, { skipHooks: true });
   assert.equal(result.changed, true);
   await assert.rejects(access(marker), { code: 'ENOENT' }, 'the explicit unattended-worker exception must not run the hook');
+});
+
+
+async function waitForWorktreeMarker(file, timeoutMs = 2500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try { return await readFile(file, 'utf8'); } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail('the timed Git process did not create its marker');
+}
+
+async function waitForWorktreeProcessExit(pid, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let alive = true;
+    try {
+      process.kill(pid, 0);
+      if (process.platform === 'linux') {
+        const stat = await readFile('/proc/' + pid + '/stat', 'utf8').catch(() => '');
+        const close = stat.lastIndexOf(')');
+        if (close >= 0 && stat.slice(close + 1).trim().startsWith('Z ')) alive = false;
+      }
+    } catch (error) {
+      alive = Boolean(error && error.code === 'EPERM');
+    }
+    if (!alive) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail('worktree command process ' + pid + ' survived timeout');
+}
+
+test('worktree Git command timeout terminates a child and its descendant', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-process-tree-'));
+  const marker = path.join(dir, 'pids.json');
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const script = [
+    "const { spawn } = require('node:child_process');",
+    "const fs = require('node:fs');",
+    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+    "fs.writeFileSync(process.argv[1], JSON.stringify([process.pid, child.pid]));",
+    "setInterval(() => {}, 1000);"
+  ].join('\\n');
+  const result = await runWorktreeCommand(process.execPath, ['-e', script, marker], {
+    cwd: dir,
+    env: process.env,
+    timeout: 150
+  });
+  assert.equal(result.exitCode, 124, JSON.stringify(result));
+  assert.equal(result.timedOut, true);
+  assert.match(result.stderr, /timed out after 150ms/);
+  const pids = JSON.parse(await waitForWorktreeMarker(marker));
+  assert.equal(pids.length, 2);
+  await Promise.all(pids.map((pid) => waitForWorktreeProcessExit(pid)));
 });
