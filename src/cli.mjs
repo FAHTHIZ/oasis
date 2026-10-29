@@ -561,12 +561,19 @@ async function doctor(args = [], root = process.cwd()) {
   stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
   stdout.write('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
   const probes = ['git', 'npm', 'python3', 'python', 'pipx', 'pkg', 'apt-get', 'dnf', 'pacman', 'brew', 'winget', 'ollama'];
+  const nodeOK = isNodeVersionSupported();
+  const gitOK = commandAvailable('git');
+  let modelConfigured = false;
+  const statusLabel = (ok) => colorEnabled(stdout)
+    ? (ok ? '\x1b[32mOK\x1b[0m' : '\x1b[31mCHECK\x1b[0m')
+    : (ok ? 'OK' : 'CHECK');
   for (const item of probes) stdout.write('  ' + item + ': ' + (commandAvailable(item) ? 'available' : 'not found') + '\n');
   try {
     const config = await loadConfig();
+    modelConfigured = Boolean(config.configured);
     const summary = getProviderSummary(config);
-    stdout.write('  Model provider: ' + summary.provider + ' (' + summary.protocol + ')\n');
-    stdout.write('  Model: ' + summary.model + '\n');
+    stdout.write('  Model provider: ' + (modelConfigured ? summary.provider + ' (' + summary.protocol + ')' : 'not set yet — run oasis setup') + '\n');
+    stdout.write('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
     stdout.write('  Authentication: ' + summary.authentication + '\n');
     stdout.write('  Config: ' + summary.configPath + '\n');
     if (args.includes('--test-provider')) {
@@ -585,6 +592,12 @@ async function doctor(args = [], root = process.cwd()) {
     stdout.write('  Provider config: invalid (' + error.message + ')\n');
     if (args.includes('--test-provider')) process.exitCode = 1;
   }
+  const ptyAvailable = await import('node-pty').then(() => true).catch(() => false);
+  stdout.write('\nQuick summary\n');
+  stdout.write('  Node.js 22+: ' + statusLabel(nodeOK) + '\n');
+  stdout.write('  Git: ' + (gitOK ? 'available (optional)' : 'not found (optional)') + '\n');
+  stdout.write('  Model connection: ' + (modelConfigured ? statusLabel(true) : statusLabel(false) + ' — run oasis setup') + '\n');
+  stdout.write('  Native terminal panel (PTY): ' + (ptyAvailable ? 'available' : 'not available (optional native component)') + '\n');
   await doctorWorkspaceReport(root);
 }
 
