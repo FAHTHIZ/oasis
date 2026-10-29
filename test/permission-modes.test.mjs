@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
@@ -32,9 +32,10 @@ test('PermissionPolicy normalizes aliases on construction and setMode', () => {
   assert.throws(() => policy.setMode('unsafe-mode'), /Unknown permission mode/);
 });
 
-test('/mode accepts aliases but stores canonical mode semantics', async () => {
+test('/mode accepts aliases but stores canonical mode semantics', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-alias-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-home-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(home, { recursive: true, force: true }); });
   const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis') };
   const session = {
     root,
@@ -85,9 +86,10 @@ test('CLI --permission-mode accepts aliases and rejects unknown values', async (
   assert.match(invalid.output, /aliases: manual, accept-edits/);
 });
 
-test('/help documents the permission-mode aliases', async () => {
+test('/help documents the permission-mode aliases', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-help-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-help-home-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(home, { recursive: true, force: true }); });
   const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis') };
   const session = {
     root,
@@ -101,9 +103,10 @@ test('/help documents the permission-mode aliases', async () => {
   assert.match(help.output, /aliases: manual, accept-edits/);
 });
 
-test('layered settings normalize defaultMode aliases in user settings', async () => {
+test('layered settings normalize defaultMode aliases in user settings', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-settings-root-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-settings-home-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(home, { recursive: true, force: true }); });
   const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis') };
   const configDir = env.OASIS_CONFIG_DIR;
   await mkdir(configDir, { recursive: true });
