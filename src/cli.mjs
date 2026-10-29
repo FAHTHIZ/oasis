@@ -1404,7 +1404,26 @@ function printConfig(config) {
   stdout.write('  Config file: ' + config.configPath + '\n');
 }
 
+async function waitForBackgroundRegistration() {
+  const id = process.env.OASIS_BACKGROUND_ID;
+  const runId = process.env.OASIS_BACKGROUND_RUN_ID;
+  if (!id || !runId) return;
+  const { readEntry } = await import('./background-sessions.mjs');
+  for (let i = 0; i < 300; i++) {
+    try {
+      const entry = await readEntry(id, process.env);
+      if (entry.pid === process.pid && entry.runId === runId) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for the parent process to register this background run. No task was started.');
+}
+
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
+  // The parent starts this process before persisting its PID; wait so a fast
+  // background task cannot finish and then be overwritten by the parent's stale
+  // initial "running" record.
+  await waitForBackgroundRegistration();
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
