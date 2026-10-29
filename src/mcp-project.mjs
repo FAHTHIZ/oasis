@@ -124,7 +124,8 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
           if (Array.isArray(spec.oauth.scopes) || typeof spec.oauth.scopes === 'string') oauth.scopes = spec.oauth.scopes;
           if (Number.isInteger(spec.oauth.callbackPort) && spec.oauth.callbackPort > 1023 && spec.oauth.callbackPort < 65536) oauth.callbackPort = spec.oauth.callbackPort;
         }
-        servers.push({ name, type: 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), source });
+        if (spec.headersHelper !== undefined && (typeof spec.headersHelper !== 'string' || !spec.headersHelper.trim())) throw new Error('headersHelper must be a command string');
+        servers.push({ name, type: 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), ...(spec.headersHelper ? { headersHelper: spec.headersHelper, ...(env.CLAUDE_PLUGIN_ROOT ? { pluginRoot: env.CLAUDE_PLUGIN_ROOT } : {}) } : {}), source });
       } else if (type === 'stdio') {
         const extraEnv = {};
         for (const [key, value] of Object.entries(spec.env || {})) {
@@ -218,7 +219,8 @@ async function readSseResponse(response, id, onMessage = null) {
 // Minimal Streamable HTTP MCP client with the same surface as McpServerClient.
 export class McpHttpClient {
   constructor(config, options = {}) {
-    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: 'http', ...(config.oauth ? { oauth: config.oauth } : {}) };
+    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}) };
+    this.helperHeaders = null;
     this.fetch = options.fetch || fetch;
     this.env = options.env || process.env;
     this.explicitAuth = Object.keys(this.config.headers).some((key) => key.toLowerCase() === 'authorization');
@@ -229,8 +231,38 @@ export class McpHttpClient {
     this.host = options.host || null;
   }
 
+  // headersHelper: a shell command printing a JSON object of headers (short-lived tokens).
+  // Runs before the first request and again after a 401; its headers override static ones.
+  async _helperHeaders(refresh = false) {
+    if (!this.config.headersHelper) return {};
+    if (this.helperHeaders && !refresh) return this.helperHeaders;
+    const { spawn } = await import('node:child_process');
+    const env = { ...this.env, CLAUDE_CODE_MCP_SERVER_NAME: this.config.name, CLAUDE_CODE_MCP_SERVER_URL: this.config.url, ...(this.config.pluginRoot ? { CLAUDE_PLUGIN_ROOT: this.config.pluginRoot } : {}) };
+    const output = await new Promise((resolve, reject) => {
+      const child = spawn(this.config.headersHelper, { shell: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = ''; let err = '';
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('headersHelper timed out after 10s')); }, 10000);
+      child.stdout.on('data', (chunk) => { out += chunk; if (out.length > 65536) child.kill('SIGKILL'); });
+      child.stderr.on('data', (chunk) => { err += chunk; });
+      child.on('error', (error) => { clearTimeout(timer); reject(error); });
+      child.on('close', (code) => { clearTimeout(timer); if (code === 0) resolve(out); else reject(new Error('headersHelper exited with ' + code + (err.trim() ? ': ' + err.trim().slice(0, 300) : ''))); });
+    });
+    let parsed;
+    try { parsed = JSON.parse(output); } catch { throw new Error('MCP server ' + this.config.name + ': headersHelper must print a JSON object of headers.'); }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('MCP server ' + this.config.name + ': headersHelper must print a JSON object of headers.');
+    const headers = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!/^[A-Za-z0-9-]{1,100}$/.test(key) || typeof value !== 'string' || /[\r\n]/.test(value)) throw new Error('MCP server ' + this.config.name + ': headersHelper returned an invalid header ' + key);
+      headers[key] = value;
+    }
+    this.helperHeaders = headers;
+    return headers;
+  }
+
   async _post(message, timeoutMs = 30000, retried = false) {
-    const authorization = this.explicitAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
+    const extra = await this._helperHeaders(false);
+    const helperAuth = Object.keys(extra).some((key) => key.toLowerCase() === 'authorization');
+    const authorization = this.explicitAuth || helperAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -240,6 +272,7 @@ export class McpHttpClient {
         signal: controller.signal,
         headers: {
           ...this.config.headers,
+          ...extra,
           ...(authorization ? { authorization } : {}),
           'content-type': 'application/json',
           accept: 'application/json, text/event-stream',
@@ -250,11 +283,16 @@ export class McpHttpClient {
       });
       const session = response.headers.get('mcp-session-id');
       if (session) this.sessionId = session;
+      if (response.status === 401 && this.config.headersHelper && !retried) {
+        await this._helperHeaders(true);
+        clearTimeout(timer);
+        return await this._post(message, timeoutMs, true);
+      }
       if (response.status === 401 && authorization && !retried) {
         const refreshed = await refreshStoredToken(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
         if (refreshed) { clearTimeout(timer); return await this._post(message, timeoutMs, true); }
       }
-      if (response.status === 401 && !this.explicitAuth) {
+      if (response.status === 401 && !this.explicitAuth && !helperAuth) {
         const error = new Error('MCP server ' + this.config.name + ' needs sign-in. Run oasis mcp login ' + this.config.name + ' (or /mcp login ' + this.config.name + ' in the terminal).');
         error.code = 'MCP_AUTH_REQUIRED';
         throw error;
