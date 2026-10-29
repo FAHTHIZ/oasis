@@ -326,11 +326,14 @@ async function resolveNativePluginSource(source, env = process.env) {
   return { path: target, cleanup: async () => { await rm(target, { recursive: true, force: true }); } };
 }
 
-export async function validateNativePluginPackage(source){
-  const pkg=await validatePackage(source);
-  return {name:pkg.manifest.name,version:pkg.manifest.version,description:pkg.manifest.description,author:pkg.manifest.author,license:pkg.manifest.license,minimumOasisVersion:pkg.manifest.minimumOasisVersion,requestedPermissions:pkg.manifest.permissions,components:{commands:pkg.components.commands.map(x=>x.name),skills:pkg.components.skills,agents:pkg.components.agents,hooks:pkg.components.hooks?1:0,hookFiles:pkg.components.hookFiles,mcpServers:pkg.components.mcp?Object.keys(JSON.parse(pkg.files.get(pkg.components.mcp)).mcpServers||{}):[],mcpFiles:pkg.components.mcpFiles},metadata:pkg.manifest.metadata||{}};
+export async function validateNativePluginPackage(source, options = {}){
+  const resolved = await resolveNativePluginSource(source, options.env || process.env);
+  try {
+    const pkg=await validatePackage(resolved.path);
+    return {name:pkg.manifest.name,version:pkg.manifest.version,description:pkg.manifest.description,author:pkg.manifest.author,license:pkg.manifest.license,minimumOasisVersion:pkg.manifest.minimumOasisVersion,requestedPermissions:pkg.manifest.permissions,components:{commands:pkg.components.commands.map(x=>x.name),skills:pkg.components.skills,agents:pkg.components.agents,hooks:pkg.components.hooks?1:0,hookFiles:pkg.components.hookFiles,mcpServers:pkg.components.mcp?Object.keys(JSON.parse(pkg.files.get(pkg.components.mcp)).mcpServers||{}):[],mcpFiles:pkg.components.mcpFiles},metadata:pkg.manifest.metadata||{}};
+  } finally { await resolved.cleanup(); }
 }
-export async function installNativePlugin(source,options={}){
+async function installNativePluginFromDirectory(source,options={}){
   const env=options.env||process.env;
   if(!Array.isArray(options.grantedPermissions))throw new Error('Explicit permissions are required. Pass grantedPermissions as the user-approved capability list.');
   const grants=[...new Set(options.grantedPermissions)];
@@ -385,6 +388,11 @@ export async function installNativePlugin(source,options={}){
     throw error;
   }
   return {installed:true,id,name:validated.manifest.name,version:validated.manifest.version,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:(grants.includes('agents')||grants.includes('subagents'))?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
+}
+export async function installNativePlugin(source, options = {}) {
+  const resolved = await resolveNativePluginSource(source, options.env || process.env);
+  try { return await installNativePluginFromDirectory(resolved.path, options); }
+  finally { await resolved.cleanup(); }
 }
 export async function uninstallNativePlugin(name,options={}){
   const env=options.env||process.env;
@@ -442,7 +450,7 @@ export function parseNativePluginPackageArguments(argument,root){
   }
   if(['install','update','validate'].includes(action)){
     if(!positionals[0])throw new Error('Usage: /plugin-package '+action+' LOCAL-PATH'+(action==='install'?' --grant commands,skills,hooks,agents,mcp':' --grant ...'));
-    positionals[0]=path.resolve(root,positionals[0]);
+    if (!parseNativePluginGitSource(positionals[0])) positionals[0]=path.resolve(root,positionals[0]);
   }
   return {action,positionals,grantedPermissions:[...new Set(grantedPermissions)],acceptPermissionDiff};
 }
