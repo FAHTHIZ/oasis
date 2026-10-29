@@ -44,6 +44,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Install production dependencies
         run: npm install --omit=dev --no-audit --no-fund
       - name: Run portable security and filesystem regressions
