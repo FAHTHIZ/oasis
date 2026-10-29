@@ -26,7 +26,7 @@ These capabilities have implementation and/or focused regression tests in the re
 - **Integrations:** MCP, skills, hooks, custom commands, layered memory, output styles, reviewed skill bundles and a plugin/marketplace compatibility adapter.
 - **Workspace and delivery:** authenticated local browser workspace, task history, optional isolated Git worktrees, reviewable diffs, PTY-backed browser terminal where available, editor integration, GitHub Action, evaluation harness and desktop packaging.
 - **Verification evidence and evaluation reports:** structured post-edit evidence, JSON/offline HTML comparison exports, atomic report writes and symlink-destination protections.
-- **Licensing:** root Apache-2.0 license text and matching package metadata/README badge have been inspected. Conflicting project-license statements in the discoverability guide, public launch guide, and user guide were corrected; third-party MIT dependency/skill references remain intentionally intact.
+- **Licensing:** root Apache-2.0 license text and matching package metadata/README badge have been inspected. Conflicting project-license statements in the discoverability guide, public launch guide, and user guide were corrected; third-party MIT dependency/skill references remain intentionally intact. A regression test now asserts the root Apache-2.0 text, package metadata, README badge/statement, and those public documentation claims stay aligned.
 
 The list above records implementation evidence only; it does not certify security, platform parity, production readiness or complete acceptance criteria.
 
