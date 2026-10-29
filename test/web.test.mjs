@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { createOasisWebServer, startOasisWebServer, toolDetail, summarizeToolResult } from '../src/web.mjs';
+import { createOasisWebServer, startOasisWebServer, toolDetail, summarizeToolResult, summarizeAgentRun } from '../src/web.mjs';
 import { saveConfig } from '../src/config.mjs';
 
 async function tempDir() {
@@ -32,6 +32,33 @@ test('browser activity details and tool results redact credential values before 
   assert.match(summarized, /\[redacted\]/);
 });
 
+
+test('agent run monitor derives worker lifecycle and redacts activity detail', () => {
+  const job = {
+    id: '4ee8f9f0-c654-4c1d-9678-31a75eaa4402',
+    title: 'Refactor and test provider setup',
+    type: 'agent',
+    status: 'completed',
+    createdAt: '2026-10-29T10:00:00.000Z',
+    workspaceName: 'oasis',
+    events: [
+      { id: 1, type: 'agent_activity', at: '2026-10-29T10:00:01.000Z', data: { id: 1, at: '2026-10-29T10:00:01.000Z', type: 'team.created', team_id: 'team_1', description: 'Quality team', detail: 'Review current setup' } },
+      { id: 2, type: 'agent_activity', at: '2026-10-29T10:00:02.000Z', data: { id: 2, at: '2026-10-29T10:00:02.000Z', type: 'agent.started', run_id: '4ee8f9f0-c654-4c1d-9678-31a75eaa4402', agent_id: 'agent_1', team_id: 'team_1', description: 'Inspect configuration' } },
+      { id: 3, type: 'agent_activity', at: '2026-10-29T10:00:03.000Z', data: { id: 3, at: '2026-10-29T10:00:03.000Z', type: 'task.dispatched', agent_id: 'agent_1', team_id: 'team_1', description: 'task_2', detail: 'Add tests' } },
+      { id: 4, type: 'agent_activity', at: '2026-10-29T10:00:04.000Z', data: { id: 4, at: '2026-10-29T10:00:04.000Z', type: 'agent.completed', agent_id: 'agent_1', team_id: 'team_1', description: 'Inspect configuration', detail: 'apiKey=private-value' } }
+    ]
+  };
+  const view = summarizeAgentRun(job);
+  assert.equal(view.id, job.id);
+  assert.equal(view.workerCount, 1);
+  assert.equal(view.runningWorkers, 0);
+  assert.equal(view.workers[0].status, 'completed');
+  assert.equal(view.workers[0].taskId, 'task_2');
+  assert.equal(view.teamCount, 1);
+  assert.equal(view.teams[0].name, 'Quality team');
+  assert.doesNotMatch(JSON.stringify(view), /private-value/);
+  assert.equal(summarizeAgentRun(null), null);
+});
 
 test('network listeners require TLS unless unencrypted LAN access is explicitly acknowledged', async (t) => {
   const root = await tempDir();
