@@ -111,12 +111,17 @@ export async function resolveActiveTarget(target, options = {}) {
   const query = String(target || '').trim();
   if (!query) throw new Error('Usage: /notify <active-session-id-or-name> <message>.');
   const active = await listActiveSessions(options);
+  const sameWorkspace = (record) => !options.workspaceRoot ||
+    path.resolve(record.workspaceRoot || '') === path.resolve(options.workspaceRoot);
   const exact = active.find((record) => record.id === query || record.persistedSessionId === query);
-  if (exact) return exact;
-  const matches = active.filter((record) => record.name && record.name.toLowerCase() === query.toLowerCase());
+  if (exact) {
+    if (!sameWorkspace(exact)) throw new Error('Cross-workspace messages are disabled. The recipient must be active in the same workspace.');
+    return exact;
+  }
+  const matches = active.filter((record) => record.name && record.name.toLowerCase() === query.toLowerCase() && sameWorkspace(record));
   if (matches.length === 1) return matches[0];
-  if (matches.length > 1) throw new Error('More than one active session is named "' + query + '". Target its active session ID instead.');
-  throw new Error('No active Oasis session matches "' + query + '". Only live sessions can receive messages.');
+  if (matches.length > 1) throw new Error('More than one active session is named "' + query + '" in this workspace. Target its active session ID instead.');
+  throw new Error('No active Oasis session matches "' + query + '" in this workspace. Only live sessions in the same workspace can receive messages.');
 }
 
 async function enforceRateLimit(sourceId, env) {
@@ -135,7 +140,7 @@ export async function sendSessionMessage(session, target, messageText, options =
   const source = await registerActiveSession(session, { env });
   // Resolve by the registry again even for object callers: stale cached records
   // must never route a message to a session that is no longer registered.
-  const targetRecord = await resolveActiveTarget(typeof target === 'object' && target && target.id ? target.id : target, { env });
+  const targetRecord = await resolveActiveTarget(typeof target === 'object' && target && target.id ? target.id : target, { env, workspaceRoot: session.root });
   if (targetRecord.id === source.id) throw new Error('A session cannot notify itself.');
   const text = String(messageText || '').trim();
   if (!text) throw new Error('Message text cannot be empty.');
@@ -170,7 +175,7 @@ export async function readSessionInbox(session, options = {}) {
   const id = validId(session.activeSessionId);
   const activeTarget = (await listActiveSessions({ env })).find((item) => item.id === id);
   // A busy target retains queued messages until it reaches a user-visible boundary.
-  if (!activeTarget || activeTarget.state === 'busy') return [];
+  if (!activeTarget || (activeTarget.state === 'busy' && options.allowBusy !== true)) return [];
   const directory = path.join(storeRoot(env), 'inbox', id);
   let files = [];
   try { files = (await readdir(directory)).filter((name) => /^[a-f0-9-]{20,80}\.json$/i.test(name)); } catch { return []; }
