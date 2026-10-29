@@ -4,6 +4,9 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Hardened GitHub Action completion wording so an incomplete verification result is not described as finished successfully; added a focused status test.
+- Updated path-scoped memory coverage to assert matching-only on-demand loading, restored the reviewer style's evidence-first wording, and made the `/audit` test fixture self-contained. Latest full-suite validation is still pending.
+
 - Added an explicit clean protocol-level LSP fixture to the post-edit verification happy-path tests, fixed diagnostic offset calculation in the fake LSP, and added `/context all` category/caveat regression coverage. The tests are committed for current-head CI; no passing result is claimed yet.
 
 - Added `/artifact NAME` with an auto-refreshing local-only investigation page and structured event store. Active sessions record task starts, commands, changed files, test outcomes and tool errors; users can add hypotheses/rollback notes, list/open/stop/delete artifacts, and common secrets are redacted before local storage. Focused tests added; current-head CI pending.
