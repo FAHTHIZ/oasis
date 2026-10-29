@@ -48,6 +48,8 @@ Task categories and difficulty are now maintained in `evals/tasks/metadata.json`
 
 ### P1 — Expand task representativeness
 
+- [x] Add reusable named repository snapshots: task pointers may resolve to any safe lowercase snapshot ID under `evals/snapshots/`, rather than being hard-coded to the single `oasis-main` snapshot. Regression coverage checks both an additional named snapshot and rejection of path-traversal IDs. The introducing commit still needs a fresh CI run before this is considered verified.
+
 Add and validate at least 17 additional representative tasks to reach a minimum of 50 before promoting the suite as a serious coding benchmark. Prioritize:
 
 - Existing-code bug fixes with regression tests across 2–5 files.
