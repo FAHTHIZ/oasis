@@ -12,17 +12,17 @@ This is the phone-first path for people using Android. The Electron desktop app 
 
 Run the commands below one at a time. Tap the terminal, paste a command, then press **Enter**.
 
-`@`@`sh
+```sh
 pkg update
-`@`@`
+```
 
 Read the package list before accepting. Then install Node.js:
 
-`@`@`sh
+```sh
 pkg install nodejs
 node --version
 npm --version
-`@`@`
+```
 
 OASIS requires Node.js 22 or newer. If the version is below 22, update Termux's Node.js package and check again before continuing. Git is optional for this archive-based installation.
 
@@ -38,17 +38,17 @@ A hosted provider may receive the prompts and code you choose to send to it. OAS
 
 Open a new Termux session after setup, then run:
 
-`@`@`sh
+```sh
 oasis --version
 oasis doctor
 oasis
-`@`@`
+```
 
 To start the browser workspace:
 
-`@`@`sh
+```sh
 oasis web
-`@`@`
+```
 
 Open the **local address printed in the terminal** in the browser on the same phone. Keep it on localhost; do not expose it to the Internet or an untrusted network.
 
@@ -58,15 +58,15 @@ Termux's extra-keys row makes **ESC**, **TAB**, **CTRL**, and arrow keys easier 
 
 For a two-row layout, create or edit `~/.termux/termux.properties` and add:
 
-`@`@`properties
+```properties
 extra-keys = [['ESC','/','-','HOME','UP','END','PGUP'], ['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN']]
-`@`@`
+```
 
 Save the file and apply the setting:
 
-`@`@`sh
+```sh
 termux-reload-settings
-`@`@`
+```
 
 This keyboard layout is optional. Use the layout you prefer.
 
