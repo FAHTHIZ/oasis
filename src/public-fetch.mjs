@@ -2,57 +2,14 @@ import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { isNonPublicIpAddress } from './network-safety.mjs';
 
 const MAX_TOOL_OUTPUT = 24 * 1024;
 const MAX_PUBLIC_RESPONSE_BYTES = 1024 * 1024;
 
-function isPrivateIPv4(address) {
-  const parts = address.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((p) => !Number.isInteger(p) || p < 0 || p > 255)) return true;
-  const [a, b, c] = parts;
-  return a === 0 || a === 10 || a === 127 ||
-    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    // Non-global special-purpose/documentation ranges are blocked as well as RFC1918.
-    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
-    (a === 192 && b === 88 && c === 99) ||
-    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
-    (a === 203 && b === 0 && c === 113) ||
-    (a === 100 && b >= 64 && b <= 127) || a >= 224;
-}
-
-// Node's URL parser canonicalizes dotted IPv4-mapped IPv6 hosts to hex form,
-// e.g. ::ffff:127.0.0.1 becomes ::ffff:7f00:1. Decode both representations
-// before applying the IPv4 private/reserved-address policy.
-function mappedIPv4Address(address) {
-  const value = String(address || '').toLowerCase();
-  if (!value.startsWith('::ffff:')) return null;
-  const tail = value.slice(7);
-  if (isIP(tail) === 4) return tail;
-  const parts = tail.split(':');
-  if (parts.length !== 2 || parts.some((part) => !/^[a-f0-9]{1,4}$/.test(part))) return null;
-  const high = Number.parseInt(parts[0], 16);
-  const low = Number.parseInt(parts[1], 16);
-  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join('.');
-}
-
 function isPrivateAddress(address) {
-  const version = isIP(address);
-  if (version === 4) return isPrivateIPv4(address);
-  if (version === 6) {
-    const value = address.toLowerCase();
-    const mappedIPv4 = mappedIPv4Address(value);
-    if (mappedIPv4) return isPrivateIPv4(mappedIPv4);
-    return value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') ||
-      value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') ||
-      value.startsWith('fec') || value.startsWith('ff') ||
-      // Reserved/transition IPv6 ranges should not be used to bypass URL-fetch policy.
-      value.startsWith('2001:0:') || value.startsWith('2001:1:') || value.startsWith('2001:2:') ||
-      value.startsWith('2001:3:') || value.startsWith('2001:4:112:') || value.startsWith('2001:10:') ||
-      value.startsWith('2001:20:') || value.startsWith('2001:db8:') || value.startsWith('2002:') ||
-      value.startsWith('64:ff9b:') || value.startsWith('3fff:');
-  }
-  return true;
+  const version = isIP(String(address || '').replace(/^\[|\]$/g, ''));
+  return version !== 4 && version !== 6 || isNonPublicIpAddress(address);
 }
 
 async function validatePublicUrl(raw, options = {}) {
