@@ -92,12 +92,12 @@ For the controlled coding benchmark:
 
 ### P4 — Close the multi-agent lifecycle gap
 
-**Initial monitor slice implemented on current `main`; CI verification pending.** The browser's new Run monitor lists recent coding-agent runs, reconstructs worker/team status from lifecycle events, and shows a saved event timeline. The server authenticates the endpoint, redacts emitted event metadata and routes later background-worker events to the run that launched that worker. The service worker now invalidates the old static shell.
+**Initial monitor slice implemented and CI-verified on [`349f5ad`](https://github.com/FAHTHIZ/oasis/commit/349f5add40b363c9ac384d058e11e55b43b8097a).** [Quality Checks run 40879705797](https://github.com/FAHTHIZ/oasis/actions/runs/40879705797) passed the Node 22/24/26 matrix, cross-platform security regressions, clean-environment tests, Linux PTY and browser E2E; [publishing validation run 40879705789](https://github.com/FAHTHIZ/oasis/actions/runs/40879705789) also passed. The authenticated Run monitor lists recent coding-agent runs, reconstructs worker/team state from lifecycle events, displays worktree/branch and available usage/approval metadata, and explicitly marks worker processes and outstanding approvals interrupted after runtime restart. It does not restore those processes or approvals.
 
 The next steps are deliberately in order:
 
-1. Verify the monitor's source, unit/regression tests, authenticated API and browser journey on the latest main SHA. Fix any failure rather than weakening assertions.
-2. Persist orchestration state, not just the event trail: durable task dependencies, worker identities, claim leases and recovery state with explicit schema/versioning.
+1. Persist orchestration state, not just the event trail: durable task dependencies, worker identities, claim leases and recovery state with explicit schema/versioning.
+2. Add a safe restart/resume contract that reconstructs only recoverable work, propagates cancellation and requires human review when the original worker or approval state cannot be restored.
 3. Add safe pause/resume and cancellation propagation, including honest interrupted states after restart. Never pretend a process that was killed by restart has resumed.
 4. Add per-worker review, conflicting-diff previews and deliberate human-approved worktree integration. Do not auto-merge by default.
 5. Only after the local lifecycle is reliable, revisit cross-device/remote control with identity, trusted-device enrollment, workspace isolation, reconnects and audit logs.
