@@ -22,11 +22,17 @@ test('remote package execution and high-impact project runner verbs are high-ris
   ];
   for (const [command, args] of cases) {
     const result = analyzeCommand(command, args);
-    assert.match(
-      result.highRisk || '',
-      /executes a remote package or an explicit high-impact project runner/,
-      command + ' ' + args.join(' ')
+    assert.ok(
+      result.blocked || result.highRisk,
+      command + ' ' + args.join(' ') + ' must be blocked or require high-risk approval'
     );
+    if (!result.blocked) {
+      assert.match(
+        result.highRisk || '',
+        /executes a remote package or an explicit high-impact project runner/,
+        command + ' ' + args.join(' ')
+      );
+    }
   }
 });
 
@@ -34,6 +40,7 @@ test('ordinary scripts and common test/check runners retain normal risk', () => 
   for (const [command, args] of [
     ['node', ['script.mjs']],
     ['python3', ['tool.py']],
+    ['npm', ['--version']],
     ['npm', ['test']],
     ['npm', ['run', 'test']],
     ['npm', ['--silent', 'run', 'test']],
