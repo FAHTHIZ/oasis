@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile, readFile, readdir } from 'node:fs/promises';
-import { addMarketplace, installPlugin, loadEnabledPlugins, readInstalledPlugins, fetchNpmPluginSource } from '../src/claude-plugins.mjs';
+import { addMarketplace, installPlugin, loadEnabledPlugins, readInstalledPlugins, fetchNpmPluginSource, resolveNpmInvocation } from '../src/claude-plugins.mjs';
 
 async function put(file, content) { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, content); }
 const hasNpm = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['--version'], { shell: process.platform === 'win32' }).status === 0;
@@ -55,6 +55,20 @@ test('npm plugin sources are fetched with npm pack from the given registry', { s
   assert.equal(record.npm.integrity, integrity);
   const plugins = await loadEnabledPlugins(root, { env });
   assert.ok(plugins.some((plugin) => plugin.id === 'greeter@npm-market'));
+});
+
+test('Windows npm plugin installs resolve npm-cli.js instead of invoking npm.cmd through a shell', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-npm-invocation-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const execPath = path.join(base, 'node.exe');
+  const cli = path.join(base, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  await put(cli, '// fixture npm cli');
+  const invocation = await resolveNpmInvocation({ platform: 'win32', execPath, env: { PATH: '' } });
+  assert.deepEqual(invocation, { command: execPath, argsPrefix: [cli] });
+  await assert.rejects(
+    resolveNpmInvocation({ platform: 'win32', execPath: path.join(base, 'missing', 'node.exe'), env: { PATH: '' } }),
+    /Could not locate npm-cli\.js/
+  );
 });
 
 test('npm plugin sources reject bad names, versions and plain-http registries', async () => {
