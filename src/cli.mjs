@@ -33,7 +33,7 @@ import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
-import { fstatSync, readFileSync } from 'node:fs';
+import { fstatSync, readFileSync, rmSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -43,6 +43,15 @@ import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough,
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
+
+// --plugin-url archives are intentionally session-scoped. Remove their temporary
+// extraction roots on every normal process exit, including startup/error paths.
+const TEMPORARY_PLUGIN_DIRS = new Set();
+process.once('exit', () => {
+  for (const directory of TEMPORARY_PLUGIN_DIRS) {
+    try { rmSync(directory, { recursive: true, force: true }); } catch {}
+  }
+});
 const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
@@ -2672,6 +2681,7 @@ async function main() {
     const { fetchPluginArchive } = await import('./zip.mjs');
     for (const url of SESSION_OPTIONS.pluginUrls) {
       const dir = await fetchPluginArchive(url);
+      TEMPORARY_PLUGIN_DIRS.add(dir);
       process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, dir].filter(Boolean).join(path.delimiter);
     }
   }
