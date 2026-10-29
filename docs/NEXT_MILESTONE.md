@@ -2,7 +2,7 @@
 
 **Status checked:** October 29, 2026  
 **Code baseline before this documentation update:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77)  
-**Purpose:** decide what OASIS should ship next based on the current implementation and the documented Claude Code capability set.
+**Purpose:** decide what OASIS should ship next based on the current implementation and the documented compatible ecosystem capability set.
 
 ## Decision
 
@@ -12,7 +12,7 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-For comparator revision `268862c`, all three required workflows passed: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [Windows/macOS/Linux desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). The next step remains measured coding outcomes and end-to-end reliability, not another large feature.
+For comparator revision `268862c`, all three required workflows passed: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [Windows/macOS/Linux desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). The next step is measured coding outcomes and end-to-end reliability, not feature-count expansion.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
@@ -40,12 +40,12 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 
 - [x] Corrected the stale TLS claim in `SECURITY.md`: the web runtime supports HTTPS when given a certificate and private key; non-loopback plaintext requires an explicit `--allow-insecure-lan` opt-in. Clearly state the remaining certificate-provisioning and real-device validation limitations.
 - [x] The user guide describes the browser xterm.js/PTY path and keeps cross-platform lifecycle limitations explicit.
-- [x] Updated the implementation baseline, current CI evidence and priority order in the status, roadmap and Claude Code comparison docs. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risk.
+- [x] Updated the implementation baseline, current CI evidence and priority order in the status, roadmap and compatible ecosystem comparison docs. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risk.
 - [ ] Acceptance: no documented feature is described as both shipped and unsupported in different sections; platform limitations are explicit.
 
 ### P2 — Prove coding ability with a reproducible benchmark
 
-- [x] Added `oasis eval --compare <run-a.json> <run-b.json>` to compare repeated-trial reports over common task IDs, including task-balanced pass rates, median per-task time, mean cost per trial, and unmatched-task lists. External reports must be normalized; the command does not run Claude Code or validate external results.
+- [x] Added `oasis eval --compare <run-a.json> <run-b.json>` to compare repeated-trial reports over common task IDs, including task-balanced pass rates, median per-task time, mean cost per trial, and unmatched-task lists. External reports must be normalized; the command does not run compatible ecosystem or validate external results.
 
 The 21 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 25–30 representative tasks** across multiple repository snapshots:
 
@@ -56,7 +56,7 @@ The 21 existing fixtures are a useful starter suite, not a serious competitive s
 - Tool/permission-denial and cancellation/resume paths.
 - Long-context tasks where compaction and memory matter.
 
-For the OASIS-vs-Claude Code comparison:
+For the controlled coding benchmark:
 
 - Use the same task text, pinned repository snapshot, acceptance tests, allowed tools, permission policy, and budget/time cap.
 - Use the same pinned model when both products support that exact model; otherwise document the model/provider difference and avoid attributing all differences to the harness.
@@ -85,20 +85,18 @@ After the Alpha gate is green, prioritize **persistent, observable multi-agent w
 
 This is the highest-leverage next feature area because OASIS already has subagents, task leases, named teams, activity events and bounded dispatch. The missing value is a reliable, observable lifecycle—not simply spawning more agents.
 
-## Current comparison with Claude Code
+## Product readiness scorecard
 
-| Capability area | OASIS today | Practical gap |
+| Area | Current state | Acceptance gate |
 | --- | --- | --- |
-| Local coding loop and provider choice | Multi-step tool calling, file changes, approvals, checkpoints, Git/testing tools, SDK/headless modes, hosted and local provider options | Feature presence does not establish equal coding quality, latency, or reliability. |
-| Extensions | MCP, hooks, skills, CLI workflows and a broad Claude Code plugin-format compatibility layer | Compatibility remains feature-by-feature; arbitrary third-party plugins and managed enterprise policies are not assumed equivalent. |
-| Agents | Subagents, task claims/dependencies, peer messages, named per-session teams, worktree-isolated bounded dispatch and activity events | No equivalent polished visual agent monitor, persistent scheduler, or cross-session team lifecycle. |
-| IDEs | VS Code-family integration (including Cursor/Windsurf support), selection context, reviewable diffs and chat panel | JetBrains is still a gap; Marketplace distribution and cross-version testing remain. |
-| Browser and terminal | Local browser workspace with approvals and a bundled xterm.js renderer; CLI PTY manager | Linux/Node 22 PTY integration is verified; broader OS lifecycle and browser PTY E2E are not yet proved. |
-| Remote and managed surfaces | Local-first browser, desktop packaging path, GitHub Action and Chrome browser tool | No equivalent complete Remote Control/cloud/mobile workflow, and desktop installers are currently unsigned. |
-| Safety | Workspace checks, approvals, secrets filtering, optional Linux/macOS sandbox and configurable TLS for non-loopback web access | No Windows sandbox; sandbox is off by default; TLS does not replace trusted-device/session security or real-device verification. |
-| Evaluation | 573 passing tests, 21 validated smoke fixtures, and new `oasis eval --compare` tooling | The comparison tool exists, but no apples-to-apples OASIS-vs-Claude Code task benchmark has been run or published. |
+| Coding outcomes | The 21-task evaluation suite is a small helper-focused smoke suite; it does not measure repository-scale quality. | Expand to 30+ maintained tasks with pinned workspaces, deterministic acceptance checks, repeated runs, recorded failures, time, cost, and regression review. |
+| Agent lifecycle | Subagents, task leases, peer messaging, session-local teams and worktree-isolated dispatch exist. | Add a durable run ledger, visible task/worker state, reliable pause/resume/cancel, recovery after restart and conflict-aware integration. |
+| Safety | Workspace/path checks, approvals, secret filtering and optional Linux/macOS sandboxing exist. Windows OS isolation is not implemented. | Reduce secret exposure, validate platform storage/ACL behavior, and ship an explicit per-platform isolation support matrix. |
+| Browser / PTY | Local authenticated browser workspace and a PTY-backed terminal path exist. | Verify full launch, input, resize, stream, cancellation, teardown and no-orphan-process behavior on supported platforms. |
+| Distribution | Desktop build workflows exist; installers remain unsigned. | Validate first launch, update and uninstall on each supported OS, configure signing, and document release provenance. |
+| Integrations | OASIS supports model providers, MCP, skills, hooks, plugin adapters and editor integration. | Test high-value integrations against pinned fixtures and publish concrete limitations; do not treat manifest compatibility as universal behavior parity. |
 
-Claude Code's documented surface includes subagents, Agent View, agent teams, dynamic workflows, MCP, hooks, skills, plugins/marketplaces, IDEs, Remote Control, web/desktop/mobile entry points, Chrome, and CI/code-review workflows. Agent teams are documented as experimental; OASIS should compare feature behavior, limitations and measured outcomes—not market feature names as parity. Official references: [parallel agents and workflows](https://code.claude.com/docs/en/agents), [extension overview](https://code.claude.com/docs/en/features-overview), [Remote Control](https://code.claude.com/docs/en/remote-control), [best practices](https://code.claude.com/docs/en/best-practices), and [Claude Code power-user tips](https://support.claude.com/en/articles/14554000-claude-code-power-user-tips).
+**Release rule:** ship only claims that have a repeatable verification path. Keep unsupported platform behavior explicitly marked, and prefer reliability and trust over adding another option to the feature list.
 
 ## Definition of done for the Alpha-confidence milestone
 

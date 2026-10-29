@@ -172,7 +172,7 @@ export class CdpPage {
 /** A launched (or attached) browser. */
 export class Browser {
   constructor({ port, child = null, profile = null }) { this.port = port; this.child = child; this.profile = profile; }
-  static async launch({ env = process.env, headless = true, executable = null, timeoutMs = 20000 } = {}) {
+  static async launch({ env = process.env, headless = true, executable = null, timeoutMs = 45000 } = {}) {
     const exe = executable || findChrome(env);
     if (!exe) throw new Error('No Chrome, Chromium or Edge found. Install one, or set OASIS_CHROME_PATH to its executable.');
     const port = await freePort();
@@ -181,6 +181,7 @@ export class Browser {
     // GitHub-hosted Linux runners and small-memory containers can have a tiny
     // /dev/shm. Chrome otherwise may start slowly or fail before opening CDP.
     if (process.platform === 'linux') args.push('--disable-dev-shm-usage');
+    if (headless) args.push('--disable-gpu', '--disable-extensions', '--disable-default-apps');
     if (headless) args.push('--headless=new');
     if (process.platform === 'linux' && (env.OASIS_CHROME_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0))) args.push('--no-sandbox');
     args.push('about:blank');
@@ -202,7 +203,7 @@ export class Browser {
         await browser.close();
         throw new Error('Chrome exited during startup (' + status + ').' + (stderr ? '\n' + stderr : ''));
       }
-      if (Date.now() - started > timeoutMs) {
+      if (Date.now() - started > Math.max(1000, Math.min(Number(timeoutMs) || 45000, 90000))) {
         await browser.close();
         throw new Error('Chrome did not open its DevTools port in time.' + (stderr ? '\n' + stderr : ''));
       }

@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against code baseline [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the competitor-specific comparison is [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against code baseline [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the competitor-specific comparison is [PRODUCT_READINESS.md](PRODUCT_READINESS.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -32,13 +32,13 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Public documentation fetch with URL checks, redirect handling, and size limits.
 - User-level provider configuration, environment setup diagnostics, built-in skills, project instructions, file snapshots, and snapshot restore.
 - PDF text extraction in `read_file` (page ranges), headless `--json-schema` structured output with validation and retries, and `-w/--worktree` sessions on their own branch.
-- Hooks: a broad Claude Code-style event and handler surface, including command, HTTP, prompt, MCP-tool and agent handlers, with file/config/worktree/team lifecycle events and regression coverage. The parity details and remaining semantics are tracked in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
+- Hooks: a broad interoperable event and handler surface, including command, HTTP, prompt, MCP-tool and agent handlers, with file/config/worktree/team lifecycle events and regression coverage. The parity details and remaining semantics are tracked in [PRODUCT_READINESS.md](PRODUCT_READINESS.md).
 - Custom commands and skills: inline `` !`cmd` `` output, `allowed-tools`, `effort`, `context: fork` subagent runs, `/skill-name`, and headless `/command` expansion.
 - Auto permission mode: a classifier model allows routine actions and blocks risky ones. It is resistant to prompt injection because it never sees tool output.
 - SDK (`import { query, tool } from 'oasis-oss'`) with in-process tools and `canUseTool`, plus a `--bare` headless mode.
 - GitHub Action (`action.yml`): `@oasis` mentions on issues and PRs lead to a branch, a PR, and a reply in the thread.
 - Interactive terminal rebuilt (October 2026): multiline editor, per-workspace history with Ctrl+R, Tab completion for `/commands` and `@files`, Shift+Tab modes, `!` shell mode, Ctrl+V image paste, streaming Markdown with syntax highlighting, colored diffs, type-ahead queue, Esc to interrupt, and an animated startup banner (`OASIS_NO_ANIMATION=1` to skip).
-- Claude Code-compatible CLI flags (`--system-prompt`, `--tools`, `--mcp-config`, `--agents`, `--session-id`, `--name`, `--fallback-model`, `--max-budget-usd`, `--settings`, `--setting-sources`, `--from-pr`, stream-json input and more) and USD cost tracking.
+- compatible ecosystem-compatible CLI flags (`--system-prompt`, `--tools`, `--mcp-config`, `--agents`, `--session-id`, `--name`, `--fallback-model`, `--max-budget-usd`, `--settings`, `--setting-sources`, `--from-pr`, stream-json input and more) and USD cost tracking.
 - Session tools: `tool_search` (deferred MCP tools), `monitor_command`, `enter_plan_mode`, `notify`, and in-session cron (`cron_create`, `cron_list`, `cron_delete`, `/schedule`).
 - Workflow commands: `/goal`, `/btw`, `/recap`, `/rename`, `/simplify`, `/verify`, `/batch`, `/fewer-permission-prompts`, `/keybindings`, `/terminal-setup`, `/privacy-settings`, `/stop`. Sessions are saved by default.
 - Bundled [Ponytail](https://github.com/DietrichGebert/ponytail) skills (MIT) for a lean, smallest-complete-change mode.
@@ -50,7 +50,7 @@ The latest required main-branch checks are green on one code revision: 570 tests
 
 Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md), and see [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for fixes made and security boundaries that remain. The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. The CI consistency sub-gate is now satisfied; the broader release-confidence milestone remains open until the remaining user journeys, platform limitations and benchmark criteria are addressed.
 
-## Post-alpha — highest-value Claude Code gaps
+## Post-alpha — highest-value compatible ecosystem gaps
 
 Once the Alpha-confidence gate is complete, prioritize:
 
@@ -59,7 +59,7 @@ Once the Alpha-confidence gate is complete, prioritize:
 3. **Platform gaps:** JetBrains integration; validated native PTY/process cleanup across supported systems; Windows sandbox and credential storage; native Gemini adapter; desktop signing or explicit unsigned-package handling.
 4. **Ecosystem hardening:** test real third-party plugin compatibility, lifecycle boundaries, marketplace trust/update/rollback and provider failure recovery. Don't present a detected or importable extension as fully compatible without tests.
 
-These priorities follow from the [Claude Code comparison](CLAUDE_CODE_GAP.md). Do not treat an accessible local web server as a replacement for a secure hosted session service.
+These priorities follow from the [compatible ecosystem comparison](PRODUCT_READINESS.md). Do not treat an accessible local web server as a replacement for a secure hosted session service.
 
 ## Milestone 1 — Alpha release gate
 
@@ -68,16 +68,16 @@ These priorities follow from the [Claude Code comparison](CLAUDE_CODE_GAP.md). D
 - Add end-to-end coverage for approval/denial, cancellation, recovery/resume, worktree conflicts, and browser PTY interaction.
 - Verify first launch and a small edit/test task on each OS claimed as supported. Treat Android/Termux as experimental until tested.
 - Document TLS behavior, sandbox defaults, provider setup, unsigned installers and platform limits truthfully.
-- Expand the 21-task smoke suite into at least 25–30 representative, reviewed repository tasks and publish reproducible OASIS-versus-Claude Code results where the same model can be pinned.
+- Expand the 21-task smoke suite into at least 25–30 representative, reviewed repository tasks and publish reproducible OASIS-versus-compatible ecosystem results where the same model can be pinned.
 - Publish a versioned Alpha only when the acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md) are satisfied; successful packaging alone is not sufficient.
 
 ## Milestone 2 — provider and tool ecosystem
 
-- **Current extension gap:** OASIS has a broad native Claude Code plugin-format path, including marketplaces, core plugin manifests, commands, agents, skills, hooks, MCP servers, multiple source types, and supporting settings. This is not a guarantee that every third-party or enterprise plugin works unchanged. The separate Claude/Codex/Gemini import adapters are intentionally safety-reviewed: detected capabilities are classified, imported command prompts remain untrusted, MCP proposals are disabled until approved, and unsupported hooks/scripts/lifecycle actions do not silently execute. Track feature-specific gaps and evidence in [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md).
+- **Current extension gap:** OASIS has a broad native compatible ecosystem plugin-format path, including marketplaces, core plugin manifests, commands, agents, skills, hooks, MCP servers, multiple source types, and supporting settings. This is not a guarantee that every third-party or enterprise plugin works unchanged. The separate Claude/Codex/Gemini import adapters are intentionally safety-reviewed: detected capabilities are classified, imported command prompts remain untrusted, MCP proposals are disabled until approved, and unsupported hooks/scripts/lifecycle actions do not silently execute. Track feature-specific gaps and evidence in [PRODUCT_READINESS.md](PRODUCT_READINESS.md).
 - **Progress:** portable Agent Skills preserve bounded text references/assets and expose them through manifest-verified, traversal-safe read access; scripts remain inactive.
-- **Progress:** extension inspection now emits a versioned, normalized adapter/install plan for detected Claude Code, Codex, Gemini CLI, and portable Agent Skills layouts. Each capability is explicitly classified as supported, inspect-only, review-required, unsupported, or not detected. The CLI and browser show the plan before install approval.
-- **Progress:** recognized Markdown slash-command instructions from Claude Code plugin/command layouts can be imported as ordinary untrusted Oasis skill prompts. Oasis does not register native slash-command aliases, argument interpolation, or TOML command behavior; those remain inactive.
-- **Progress:** supported Markdown command files from Claude Code plugin/command paths and Gemini CLI command paths receive namespaced aliases such as `/acme-agent:review`. The CLI and browser resolve aliases into integrity-checked, untrusted prompt context; arguments are literal text, not shell expansion. Native slash-command argument conventions are only partially mapped; hooks and scripts stay inactive.
+- **Progress:** extension inspection now emits a versioned, normalized adapter/install plan for detected compatible ecosystem, Codex, Gemini CLI, and portable Agent Skills layouts. Each capability is explicitly classified as supported, inspect-only, review-required, unsupported, or not detected. The CLI and browser show the plan before install approval.
+- **Progress:** recognized Markdown slash-command instructions from compatible ecosystem plugin/command layouts can be imported as ordinary untrusted Oasis skill prompts. Oasis does not register native slash-command aliases, argument interpolation, or TOML command behavior; those remain inactive.
+- **Progress:** supported Markdown command files from compatible ecosystem plugin/command paths and Gemini CLI command paths receive namespaced aliases such as `/acme-agent:review`. The CLI and browser resolve aliases into integrity-checked, untrusted prompt context; arguments are literal text, not shell expansion. Native slash-command argument conventions are only partially mapped; hooks and scripts stay inactive.
 - **Progress:** native MCP declarations from `.mcp.json`, `mcp.json`, `mcp-servers.json`, and `gemini-extension.json` are inspected into a bounded proposal. Only local stdio commands passing Oasis validation can be selected. The browser and CLI can import reviewed proposals, with the inspected commit rechecked after approval and duplicate names rejected; saved configurations are disabled, manifest environment values are not copied, and source repository/commit/manifest provenance is retained for auditability.
 - **Progress:** verified extension updates stage the new revision, refuse edited/missing/unexpected owned files, and preserve up to three prior verified revisions per scope. Rollback re-verifies the selected backup and swaps it in transactionally; the formerly active revision is retained as another backup.
 - **Next extension runtime work:** add richer native agent metadata adapters, permissioned lifecycle management, and encrypted secret/environment provisioning. Keep hooks and executable lifecycle actions inactive until sandboxing and audit logging are in place.
@@ -109,8 +109,8 @@ These priorities follow from the [Claude Code comparison](CLAUDE_CODE_GAP.md). D
 
 ## Deliberate non-claims
 
-OASIS is not yet at Claude Code feature parity, and no apples-to-apples task benchmark demonstrates equal coding outcomes. The tested baseline is meaningful for a local-first single-machine coding agent, but it does not establish release maturity across every OS.
+OASIS is not yet at compatible ecosystem feature parity, and no apples-to-apples task benchmark demonstrates equal coding outcomes. The tested baseline is meaningful for a local-first single-machine coding agent, but it does not establish release maturity across every OS.
 
 Current boundaries: the PTY/xterm path still needs broader cross-platform lifecycle testing; multi-agent task dispatch and named teams remain session-scoped without a durable visual run monitor or cross-session team service; branches are not merged automatically; embedded GitHub OAuth is not implemented; the general remote/mobile control lifecycle is incomplete; third-party plugin compatibility is feature-by-feature rather than universal; the optional sandbox is disabled by default and has no Windows implementation; native Gemini and JetBrains support remain gaps; desktop installers are unsigned; browser dashboard data does not fully sync with the CLI; and context compaction is a best-effort heuristic. The 21 fixture suite is only a smoke benchmark.
 
-See [NEXT_MILESTONE.md](NEXT_MILESTONE.md) for the prioritized acceptance gate, [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risks, [CURRENT_STATUS.md](CURRENT_STATUS.md) for verification evidence, and [CLAUDE_CODE_GAP.md](CLAUDE_CODE_GAP.md) for the source-backed capability comparison.
+See [NEXT_MILESTONE.md](NEXT_MILESTONE.md) for the prioritized acceptance gate, [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risks, [CURRENT_STATUS.md](CURRENT_STATUS.md) for verification evidence, and [PRODUCT_READINESS.md](PRODUCT_READINESS.md) for the source-backed capability comparison.

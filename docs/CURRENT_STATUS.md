@@ -10,7 +10,7 @@ This is the repository-grounded status page. It separates shipped implementation
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-On comparator code revision `268862c`, [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, native PTY smoke and browser E2E; [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) also passed. `oasis eval --compare` now compares saved run reports on common task IDs, but OASIS still has no actual apples-to-apples Claude Code benchmark. The 21 fixtures remain mostly small helper tasks rather than a representative coding score. The current revision's desktop build matrix is tracked separately in [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603); the latest previously completed full matrix passed on the earlier baseline.
+On comparator code revision `268862c`, [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, native PTY smoke and browser E2E; [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) also passed. `oasis eval --compare` compares saved run reports on common task IDs, but the project still has no representative repository-level coding benchmark. The 21 fixtures remain mostly small helper tasks rather than a representative coding score. The current revision's desktop build matrix is tracked separately in [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603); the latest previously completed full matrix passed on the earlier baseline.
 
 ## Verified repository and CI snapshot
 
@@ -71,7 +71,7 @@ All three required workflows passed on comparator code revision `268862c`: [Qual
 
 - MCP stdio and Streamable HTTP support, server configuration, OAuth flows where supported, resources, prompt exposure, deferred tool discovery, and an MCP server mode.
 - Hooks, custom slash commands, output styles, layered memory, auto memory, a reviewed capability catalog, and portable Agent Skills.
-- Inspect/import flows recognize Claude Code, Codex, Gemini CLI and portable-skill layouts. Imported Markdown prompts and standard text resources can be supported, while native hooks, scripts, dependency lifecycle execution, full command semantics, and all ecosystem manifest features are not automatically activated. This is **not** drop-in compatibility with every third-party plugin.
+- Inspect/import flows recognize compatible tooling, Codex, Gemini CLI and portable-skill layouts. Imported Markdown prompts and standard text resources can be supported, while native hooks, scripts, dependency lifecycle execution, full command semantics, and all ecosystem manifest features are not automatically activated. This is **not** drop-in compatibility with every third-party plugin.
 - An optional OpenHands bridge can delegate to a separately configured, running Agent Server; OASIS does not install or provision that remote service for you.
 - A GitHub Action supports `@oasis`-triggered issue/PR workflows.
 
@@ -102,7 +102,7 @@ Repository-level verification also covers `index.html`, `manifest.webmanifest`, 
 Prioritized by the risk they pose to release confidence and everyday usefulness—not by how exciting or visible a new feature would be.
 
 1. **Keep CI deterministic and expand regression depth.** The `FileChanged` test now waits for hook-message delivery; the latest full test matrix passes on Node 22/24/26. Continue repeated focused runs and add supported-OS process lifecycle coverage.
-2. **Measure real coding outcomes.** `oasis eval --compare` now compares repeated-run reports over common task IDs, reporting task-balanced pass rate, median task time and mean cost. The 21-task suite is still too small and utility-heavy to measure repository-level software work; expand it to 25–30 representative tasks and run a reproducible OASIS-vs-Claude Code benchmark with pinned snapshots/models where possible, acceptance tests, repeated trials, and reviewed diffs.
+2. **Measure real coding outcomes.** `oasis eval --compare` now compares repeated-run reports over common task IDs, reporting task-balanced pass rate, median task time and mean cost. The 21-task suite is still too small and utility-heavy to measure repository-level software work; expand it to 25–30 representative tasks and run a reproducible cross-run benchmark with pinned snapshots/models where possible, acceptance tests, repeated trials, and reviewed diffs.
 3. **Validate product journeys across platforms.** The Linux/Node 22 PTY smoke and Linux Chromium chat smoke are useful, but they do not prove native PTY cleanup on Windows/macOS or first-run/update/uninstall behavior for every desktop installer. Termux remains experimental for PTY.
 4. **Finish multi-agent lifecycle visibility.** Teams, leases, activity events, bounded worktree dispatch, and tmux panes exist. The remaining gaps are a visual agent/run monitor, durable pause/resume across process restarts, cross-session messaging, and conflict-aware integration. Avoid claiming self-coordinating persistent teams.
 5. **Only then expand remote surfaces.** Remote/mobile/hosted sessions need authenticated identity, trusted-device management, workspace isolation, execution policy, reconnect/recovery, and audit trails—not simply a network-accessible web server.
@@ -117,7 +117,7 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 - Third-party plugin imports are safety-reviewed subsets; detection does not mean full runtime compatibility.
 - History compaction is heuristic. Long sessions still need provider-by-provider and long-horizon evaluation for continuity.
 - The browser command panel has a PTY-backed path with a bundled xterm.js renderer. The web runtime supports HTTPS with user-provided certificate/key files for non-loopback access; broader terminal lifecycle and real-device TLS validation remain open.
-- The latest Quality Checks, publishing validation and desktop-build matrix all passed on the same code revision. Passing CI does not establish a full security audit, real-device support, cross-platform usability or equivalence with Claude Code's code quality.
+- The latest Quality Checks, publishing validation and desktop-build matrix all passed on the same code revision. Passing CI does not establish a full security audit, real-device support, cross-platform usability or equivalence with compatible tooling's code quality.
 
 ## Source references
 
@@ -130,9 +130,9 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 
 - [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md)
 - [Alpha-confidence milestone](NEXT_MILESTONE.md)
-- [Claude Code agent/workflow documentation](https://code.claude.com/docs/en/agents)
-- [Claude Code Remote Control documentation](https://code.claude.com/docs/en/remote-control)
-- [Claude Code best practices](https://code.claude.com/docs/en/best-practices)
+- [compatible tooling agent/workflow documentation](https://code.claude.com/docs/en/agents)
+- [compatible tooling Remote Control documentation](https://code.claude.com/docs/en/remote-control)
+- [compatible tooling best practices](https://code.claude.com/docs/en/best-practices)
 
 ## PTY milestone update (October 29, 2026)
 
