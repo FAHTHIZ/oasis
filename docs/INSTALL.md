@@ -18,12 +18,13 @@ OmniRoute setup is not yet a fully automatic one-click installer; the current gu
 
 ## Command-line installation (optional)
 
-For users who prefer the CLI, Node.js 22 or newer is required. Git is not required for the archive-based install.
+The recommended CLI installer checks Node.js 22+, asks before installing or changing shell startup files, and installs the fixed `v0.3.0` source tag into your user directory. It does not use administrator rights.
 
-```sh
-npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.tar.gz
-oasis
-```
+- **macOS, Linux, and Android/Termux:** copy the checksum-verifying one-line command from the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux).
+- **Windows PowerShell:** use the PowerShell one-liner in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux), which checks the script hash before running it.
+- **Android-specific taps and known limits:** see [the Termux guide](TERMUX.md).
+
+Installer checksums are printed in the README. If a hash does not match, stop and do not run the downloaded script. The installer runs `oasis doctor` and opens `oasis setup` after installation. npm publishing is not enabled yet; the source archive route remains the supported CLI bootstrap.
 
 ## Interactive terminal sessions (PTY)
 
