@@ -184,7 +184,26 @@ export function createOasisWebServer(options = {}) {
   const taskStore = createCloudTaskStore(root, { env });
   const busySessions = new Set();
   const startingSessions = new Set();
+  const busyWorkspaces = new Set();
+  const startingWorkspaces = new Set();
+  const ptyWorkspaceLocks = new Map();
   let reservedJobSlots = 0;
+
+  function refreshPtyWorkspaceLocks() {
+    const sessions = new Map(ptyManager.list().map((session) => [session.id, session]));
+    for (const [id, workspaceKey] of ptyWorkspaceLocks) {
+      const session = sessions.get(id);
+      if (!session || session.state === 'exited' || session.state === 'error') {
+        ptyWorkspaceLocks.delete(id);
+        busyWorkspaces.delete(workspaceKey);
+      }
+    }
+  }
+
+  function workspaceIsBusy(workspaceKey) {
+    refreshPtyWorkspaceLocks();
+    return busyWorkspaces.has(workspaceKey) || startingWorkspaces.has(workspaceKey);
+  }
 
   function emit(job, type, data = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
@@ -283,6 +302,11 @@ export function createOasisWebServer(options = {}) {
     if (sessionId && (busySessions.has(sessionId) || startingSessions.has(sessionId))) {
       throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
     }
+    const workspaceKey = path.resolve(activeRoot);
+    if (workspaceIsBusy(workspaceKey)) {
+      throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before starting another task in the same workspace.'), { statusCode: 409 });
+    }
+    startingWorkspaces.add(workspaceKey);
     if (sessionId) startingSessions.add(sessionId);
 
     let releaseJobReservation = null;
@@ -315,7 +339,14 @@ export function createOasisWebServer(options = {}) {
     }
     const activeId = sessionId || session.sessionId;
     const job = newJob();
+    job.type = 'agent';
+    job.title = incomingMessage.replace(/\s+/g, ' ').slice(0, 160) || 'Coding task';
+    job.sessionId = activeId;
+    job.workspaceRoot = workspaceKey;
+    job.workspaceName = path.basename(workspaceKey);
     jobs.set(job.id, job);
+    startingWorkspaces.delete(workspaceKey);
+    busyWorkspaces.add(workspaceKey);
     releaseJobReservation();
     releaseJobReservation = null;
     if (sessionId) startingSessions.delete(sessionId);
@@ -409,11 +440,13 @@ export function createOasisWebServer(options = {}) {
         }
       } finally {
         busySessions.delete(activeId);
+        busyWorkspaces.delete(workspaceKey);
       }
     })();
     return { jobId: job.id, sessionId: activeId };
     } catch (error) {
       if (sessionId) startingSessions.delete(sessionId);
+      startingWorkspaces.delete(workspaceKey);
       if (releaseJobReservation) releaseJobReservation();
       throw error;
     }
@@ -470,6 +503,10 @@ export function createOasisWebServer(options = {}) {
     if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) {
       throw Object.assign(new Error('Choose a repository in owner/name format from the GitHub list.'), { statusCode: 400 });
     }
+    const workspaceKey = path.resolve(activeRoot);
+    if (workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before switching workspaces.'), { statusCode: 409 });
+    startingWorkspaces.add(workspaceKey);
+    try {
     const status = await getGithubStatus();
     if (!status.cliAvailable || !status.authenticated) throw Object.assign(new Error(status.hint), { statusCode: 412 });
     if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
@@ -502,7 +539,12 @@ export function createOasisWebServer(options = {}) {
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = 'github-clone';
+    job.title = 'Clone ' + repository;
+    job.workspaceRoot = workspaceKey;
+    job.workspaceName = path.basename(workspaceKey);
     jobs.set(job.id, job);
+    startingWorkspaces.delete(workspaceKey);
+    busyWorkspaces.add(workspaceKey);
     releaseJobReservation();
     emit(job, 'github_clone_started', { repository });
     void (async () => {
@@ -558,9 +600,14 @@ export function createOasisWebServer(options = {}) {
         job.error = String(error && error.message || error || 'GitHub clone failed').slice(0, 4000);
         job.status = 'error';
         emit(job, 'failed', { jobType: 'github-clone', message: job.error });
+      } finally {
+        busyWorkspaces.delete(workspaceKey);
       }
     })();
     return { jobId: job.id, jobType: 'github-clone' };
+    } finally {
+      startingWorkspaces.delete(workspaceKey);
+    }
   }
 
   async function startTerminalJob(input) {
@@ -577,12 +624,19 @@ export function createOasisWebServer(options = {}) {
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
       throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
     }
+    const workspaceKey = path.resolve(activeRoot);
+    if (workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before running another command.'), { statusCode: 409 });
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = interactive ? 'terminal-pty' : 'terminal';
+    job.title = command + (args.length ? ' ' + args.join(' ') : '');
+    job.workspaceRoot = workspaceKey;
+    job.workspaceName = path.basename(workspaceKey);
     jobs.set(job.id, job);
+    busyWorkspaces.add(workspaceKey);
     releaseJobReservation();
     emit(job, 'terminal_started', { command, args, interactive });
+    let holdWorkspaceForPty = false;
     void (async () => {
       try {
         const result = await executeTool('run_command', { command, args, timeoutSeconds, ...(interactive ? { interactive: true } : {}) }, {
@@ -596,6 +650,8 @@ export function createOasisWebServer(options = {}) {
         });
         job.result = { ...result, jobType: interactive ? 'terminal-pty' : 'terminal' };
         if (interactive && result && result.id && result.state) {
+          ptyWorkspaceLocks.set(result.id, workspaceKey);
+          holdWorkspaceForPty = true;
           emit(job, 'terminal_pty_started', result);
           job.status = 'completed';
           emit(job, 'completed', job.result);
@@ -620,6 +676,8 @@ export function createOasisWebServer(options = {}) {
           job.status = 'error';
           emit(job, 'failed', { jobType: 'terminal', message: job.error });
         }
+      } finally {
+        if (!holdWorkspaceForPty) busyWorkspaces.delete(workspaceKey);
       }
     })();
     return { jobId: job.id, jobType: 'terminal' };
@@ -948,7 +1006,7 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'POST' && pathname === '/api/workspace/reset') {
-      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
+      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size || workspaceIsBusy(path.resolve(activeRoot))) {
         json(res, 409, { error: 'Wait until the current agent or terminal task finishes before switching workspaces.' });
         return;
       }

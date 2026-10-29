@@ -33,7 +33,7 @@ Work directly on `main` in small, reviewable commits. Update this document and t
 
 ## Gate 2 — Representative coding evaluation
 
-The existing 21 fixtures are a utility-focused smoke suite, not a representative coding-quality score. Expand the maintained suite to at least 30 tasks across pinned repository snapshots, including:
+The existing 22 fixtures are a utility-focused smoke suite, not a representative coding-quality score. Expand the maintained suite to at least 30 tasks across pinned repository snapshots, including:
 
 - [ ] Repository navigation and source-grounded questions.
 - [ ] Multi-file feature implementation and refactoring.
