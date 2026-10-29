@@ -9,6 +9,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 export function findChrome(env = process.env, platform = process.platform) {
   const explicit = env.OASIS_CHROME_PATH || env.CHROME_PATH;
@@ -177,17 +178,34 @@ export class Browser {
     const port = await freePort();
     const profile = await mkdtemp(path.join(os.tmpdir(), 'oasis-chrome-'));
     const args = ['--remote-debugging-port=' + port, '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--window-size=1280,900'];
+    // GitHub-hosted Linux runners and small-memory containers can have a tiny
+    // /dev/shm. Chrome otherwise may start slowly or fail before opening CDP.
+    if (process.platform === 'linux') args.push('--disable-dev-shm-usage');
     if (headless) args.push('--headless=new');
     if (process.platform === 'linux' && (env.OASIS_CHROME_NO_SANDBOX === '1' || (typeof process.getuid === 'function' && process.getuid() === 0))) args.push('--no-sandbox');
     args.push('about:blank');
-    const child = spawn(exe, args, { stdio: 'ignore', detached: false });
-    child.on('error', () => {});
+    const child = spawn(exe, args, { stdio: ['ignore', 'ignore', 'pipe'], ...processTreeSpawnOptions() });
+    let spawnError = null;
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => { stderr = (stderr + chunk.toString('utf8')).slice(-4000); });
+    child.on('error', (error) => { spawnError = error; });
     const browser = new Browser({ port, child, profile });
     const started = Date.now();
     for (;;) {
       try { await getJson(port, '/json/version'); break; } catch {}
-      if (child.exitCode !== null) throw new Error('Chrome exited during startup (code ' + child.exitCode + ').');
-      if (Date.now() - started > timeoutMs) { await browser.close(); throw new Error('Chrome did not open its DevTools port in time.'); }
+      if (spawnError) {
+        await browser.close();
+        throw new Error('Could not start Chrome: ' + spawnError.message + (stderr ? '\n' + stderr : ''));
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
+        const status = child.signalCode ? 'signal ' + child.signalCode : 'code ' + child.exitCode;
+        await browser.close();
+        throw new Error('Chrome exited during startup (' + status + ').' + (stderr ? '\n' + stderr : ''));
+      }
+      if (Date.now() - started > timeoutMs) {
+        await browser.close();
+        throw new Error('Chrome did not open its DevTools port in time.' + (stderr ? '\n' + stderr : ''));
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     return browser;
@@ -204,9 +222,30 @@ export class Browser {
   async connect(target) { return new CdpPage(await WsClient.connect(target.webSocketDebuggerUrl), target); }
   async closePage(id) { try { await getJson(this.port, '/json/close/' + id); } catch {} }
   async close() {
-    if (this.child && this.child.exitCode === null) {
-      this.child.kill('SIGTERM');
-      await new Promise((resolve) => { const t = setTimeout(() => { try { this.child.kill('SIGKILL'); } catch {} resolve(); }, 3000); this.child.once('exit', () => { clearTimeout(t); resolve(); }); });
+    const child = this.child;
+    if (child && Number.isInteger(child.pid) && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          child.removeListener('exit', onExit);
+          child.removeListener('error', onExit);
+          resolve(value);
+        };
+        const onExit = () => finish(true);
+        const timer = setTimeout(() => finish(false), 2500);
+        timer.unref?.();
+        child.once('exit', onExit);
+        child.once('error', onExit);
+      });
+      signalProcessTree(child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
+      if (process.platform !== 'win32') {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        signalProcessTree(child, 'SIGKILL');
+      }
+      await exited;
     }
     if (this.profile) await rm(this.profile, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
   }
