@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, symlink } from 'node:fs/promises';
 import os from 'node:os';
@@ -19,6 +21,25 @@ phase('Audit')
 const audits = await pipeline(found.files, (file) => agent('AUDIT ' + file, { label: file }))
 log('audited', audits.length)
 return audits.filter(Boolean)`;
+
+test('OASIS can load without QuickJS and gives a helpful message when a workflow runs', () => {
+  const loader = fileURLToPath(new URL('./helpers/block-quickjs-loader.mjs', import.meta.url));
+  const workflowsUrl = new URL('../src/workflows.mjs', import.meta.url).href;
+  const childScript = [
+    'const { runWorkflow } = await import(' + JSON.stringify(workflowsUrl) + ');',
+    "const result = await runWorkflow({ source: 'return 42', runAgent: async () => '' });",
+    "console.log(result.error || '');",
+    "if (result.status !== 'failed') process.exitCode = 2;"
+  ].join('\n');
+  const output = execFileSync(process.execPath, [
+    '--no-warnings', '--experimental-loader', loader, '--input-type=module', '-e', childScript
+  ], {
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
+    encoding: 'utf8',
+    timeout: 5000
+  });
+  assert.match(output, /Workflows need quickjs-emscripten\. Run npm install\./);
+});
 
 test('workflow sandbox pumps pending jobs for plain workflow results', async () => {
   const result = await runWorkflow({ source: 'return 42', runAgent: async () => '' });
