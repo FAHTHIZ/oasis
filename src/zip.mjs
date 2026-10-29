@@ -24,6 +24,7 @@ export function readZipEntries(buffer) {
   let offset = data.readUInt32LE(eocd + 16);
   if (count > MAX_ENTRIES) throw new Error('Zip archive has too many entries.');
   const entries = [];
+  const seenPaths = new Set();
   let total = 0;
   for (let n = 0; n < count; n++) {
     if (data.readUInt32LE(offset) !== 0x02014b50) throw new Error('Corrupt zip central directory.');
@@ -44,6 +45,11 @@ export function readZipEntries(buffer) {
         parts.some((part, i) => part === '.' || part === '..' || (!part && i !== parts.length - 1))) {
       throw new Error('Zip entry has an unsafe or ambiguous path: ' + rawName);
     }
+    // Reject duplicate/case-colliding paths so extraction is deterministic on
+    // both case-sensitive and case-insensitive filesystems.
+    const pathKey = name.replace(/\/$/, '').normalize('NFC').toLowerCase();
+    if (seenPaths.has(pathKey)) throw new Error('Zip archive contains duplicate or case-colliding paths: ' + rawName);
+    seenPaths.add(pathKey);
     offset += 46 + nameLength + extraLength + commentLength;
     const mode = (externalAttrs >>> 16) & 0o170000;
     if (mode === 0o120000) continue; // symlink: skipped
@@ -52,11 +58,13 @@ export function readZipEntries(buffer) {
     if (total > MAX_TOTAL) throw new Error('Zip archive is too large when extracted.');
     if (data.readUInt32LE(localOffset) !== 0x04034b50) throw new Error('Corrupt zip local header for ' + name + '.');
     const start = localOffset + 30 + data.readUInt16LE(localOffset + 26) + data.readUInt16LE(localOffset + 28);
+    if (start < 0 || compressed > data.length - start) throw new Error('Corrupt zip compressed data for ' + name + '.');
     const raw = data.subarray(start, start + compressed);
     let content;
     if (method === 0) content = Buffer.from(raw);
-    else if (method === 8) content = inflateRawSync(raw, { maxOutputLength: Math.max(size, 1) + 1024 });
+    else if (method === 8) content = inflateRawSync(raw, { maxOutputLength: Math.max(size, 1) });
     else throw new Error('Unsupported zip compression method ' + method + ' for ' + name + '.');
+    if (content.length !== size) throw new Error('Zip entry size does not match its declared size: ' + name + '.');
     entries.push({ name, content, executable: Boolean((externalAttrs >>> 16) & 0o111) });
   }
   return entries;
@@ -65,14 +73,41 @@ export function readZipEntries(buffer) {
 export async function extractZip(buffer, destination) {
   const root = path.resolve(destination);
   await mkdir(root, { recursive: true });
+  const rootInfo = await (await import('node:fs/promises')).lstat(root);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('ZIP destination must be a real directory, not a symbolic link.');
+  const realRoot = await (await import('node:fs/promises')).realpath(root);
   const files = [];
+  const ensureSafeParents = async (target, includeTarget = false) => {
+    const stop = includeTarget ? target : path.dirname(target);
+    let cursor = realRoot;
+    const relative = path.relative(realRoot, stop);
+    if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) {
+      throw new Error('Zip entry escapes the destination: ' + target);
+    }
+    for (const part of relative.split(path.sep).filter(Boolean)) {
+      cursor = path.join(cursor, part);
+      try {
+        const info = await (await import('node:fs/promises')).lstat(cursor);
+        if (info.isSymbolicLink()) throw new Error('ZIP extraction refuses to write through symbolic links: ' + cursor);
+        if (!info.isDirectory() && cursor !== target) throw new Error('ZIP path component is not a directory: ' + cursor);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+  };
   for (const entry of readZipEntries(buffer)) {
-    const target = path.resolve(root, entry.name);
-    if (target !== root && !target.startsWith(root + path.sep)) throw new Error('Zip entry escapes the destination: ' + entry.name);
-    if (entry.directory) { await mkdir(target, { recursive: true }); continue; }
+    const target = path.resolve(realRoot, entry.name);
+    if (target !== realRoot && !target.startsWith(realRoot + path.sep)) throw new Error('Zip entry escapes the destination: ' + entry.name);
+    await ensureSafeParents(target);
+    if (entry.directory) {
+      await mkdir(target, { recursive: true });
+      await ensureSafeParents(target, true);
+      continue;
+    }
     await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, entry.content, { mode: entry.executable ? 0o755 : 0o644 });
-    files.push(path.relative(root, target));
+    await ensureSafeParents(target);
+    await writeFile(target, entry.content, { mode: entry.executable ? 0o755 : 0o644, flag: 'wx' });
+    files.push(path.relative(realRoot, target));
   }
   return files;
 }
