@@ -2,6 +2,8 @@
 
 ## Current security boundary
 
+See [Security and reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md) for recent fixes, verification status and open security boundaries. This is a source-level pass, not a guarantee that every defect has been found.
+
 Oasis OSS has two parts:
 
 - The browser workspace is a static client-side app. Projects, tasks, and notes are stored in browser local storage and are not encrypted by the application.
@@ -13,7 +15,9 @@ Do not store passwords, API keys, private keys, payment information, or sensitiv
 
 The CLI confines file tools to the selected workspace, blocks common secret-file paths, snapshots files before overwriting, requires interactive approval for file deletion, asks before command execution and package installation by default, blocks several destructive commands, strips common credential variables from child-process environments, restricts URL fetching to public HTTP/HTTPS targets, and supports user-configured MCP stdio servers with per-tool approval. MCP servers are arbitrary executables and can execute with the current user's permissions.
 
-The web command runner reuses the CLI's executable-plus-argv policy; it does not accept shell expansion, and interactive PTY programs are not supported. GitHub access reuses a host-side `gh auth login` session: the browser never receives the GitHub CLI token. Fixed API calls list accessible repositories, and a selected repository clone requires an approval before any files are downloaded. Cloned project code is still untrusted and must not be executed without reviewing the requested command. The browser's runtime bridge does not use TLS. Binding to `0.0.0.0` exposes it to the reachable network, and the bearer token can be observed by someone able to sniff that HTTP traffic. Use that mode only on trusted private Wi-Fi, never on public/untrusted networks, and never port-forward or publish it to the Internet. TLS/reverse-proxy deployment is not implemented.
+The web command runner reuses the CLI's executable-plus-argv policy and does not permit arbitrary shell expansion through that interface. The browser workspace now has a PTY-backed terminal path with a bundled xterm.js renderer when the optional native PTY dependency is available; cross-platform process cleanup and the full browser-terminal lifecycle are not yet completely validated. GitHub access reuses a host-side `gh auth login` session: the browser never receives the GitHub CLI token. Fixed API calls list accessible repositories, and a selected repository clone requires an approval before any files are downloaded. Cloned project code is still untrusted and must not be executed without reviewing the requested command.
+
+The runtime bridge supports HTTPS when both a certificate and private-key file are supplied with `--tls-cert` and `--tls-key`; it enforces TLS 1.2 or newer and refuses a non-loopback listener without TLS unless `--allow-insecure-lan` is explicitly set. That option deliberately permits unencrypted LAN traffic. Do not use it on public or untrusted networks, and never port-forward or publish the runtime to the Internet. Certificate provisioning/renewal, reverse-proxy deployment instructions and real-device trust tests are not yet a turnkey managed service. TLS protects the transport but does not replace token secrecy, trusted-device controls, workspace isolation or careful network binding.
 
 These are defense-in-depth checks, not a sandbox. Commands and project scripts can still run with the user's privileges after approval. Package installation can execute third-party code. The \`--yes\` option automatically approves supported command/install operations and should not be used with untrusted repositories. No system can promise that an arbitrary model, repository, MCP server, or package is safe.
 
