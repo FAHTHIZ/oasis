@@ -1,7 +1,7 @@
 diff --git a/src/config.mjs b/src/config.mjs
 --- a/src/config.mjs
 +++ b/src/config.mjs
-@@ -48,6 +48,25 @@ export function validateProtocol(raw) {
+@@ -42,4 +42,26 @@ export function validateProtocol(raw) {
    return protocol;
  }
  
@@ -32,41 +32,37 @@ diff --git a/src/config.mjs b/src/config.mjs
 diff --git a/src/cli.mjs b/src/cli.mjs
 --- a/src/cli.mjs
 +++ b/src/cli.mjs
-@@ -7,7 +7,7 @@ import path from 'node:path';
+@@ -7,3 +7,3 @@
  import { fileURLToPath } from 'node:url';
 -import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
 +import { loadConfig, saveConfig, getProviderSummary, getProviderSetupDefaults, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl } from './config.mjs';
  import { createSession, runAgentTurn, closeSession } from './agent.mjs';
- import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
- import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
-@@ -104,25 +104,28 @@ async function configureProvider() {
+@@ -102,3 +102,5 @@ async function configureProvider() {
    stdout.write('\nOasis setup — model provider\n');
    stdout.write('Choose the native OpenAI Responses API (recommended for current OpenAI reasoning models), the native Anthropic Messages API, or an OpenAI-compatible endpoint. Local Ollama-style endpoints use OpenAI-compatible mode.\n');
 +  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '', model: '' }));
 +  const defaults = getProviderSetupDefaults(existing);
    const rl = createInterface({ input: stdin, output: stdout });
+@@ -108,7 +110,7 @@ async function configureProvider() {
    let protocol, baseURL, model;
    try {
 -    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase();
 -    protocol = validateProtocol(selected || 'openai-responses');
--    const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
--    baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
--    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
 +    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default ' + defaults.protocol + '): ')).trim().toLowerCase();
 +    protocol = validateProtocol(selected || defaults.protocol);
+     const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+-    baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
+-    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
 +    const basePrompt = 'Base URL' + (defaults.baseURL ? ' [' + defaults.baseURL + ']' : '') + ': ';
-+    baseURL = (await rl.question(basePrompt)).trim() || defaults.baseURL;
++    baseURL = (await rl.question(basePrompt)).trim() || defaults.baseURL || defaultBase;
 +    const defaultModel = defaults.model;
      const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (required for a compatible endpoint): ';
-     model = (await rl.question(modelPrompt)).trim() || defaultModel;
-     if (!model) throw new Error('Enter the exact model name supported by this compatible endpoint.');
-   } finally { rl.close(); }
+@@ -125,3 +127,2 @@ async function configureProvider() {
    protocol = validateProtocol(protocol);
    baseURL = validateBaseUrl(baseURL);
 -  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
    let apiKey = '';
    if (!isLoopbackUrl(baseURL)) {
-     const label = protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key';
 diff --git a/test/provider-setup-defaults.test.mjs b/test/provider-setup-defaults.test.mjs
 new file mode 100644
 --- /dev/null
