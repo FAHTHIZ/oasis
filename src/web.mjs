@@ -22,7 +22,7 @@ import { createCloudTaskStore } from './cloud-task-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff } from './worktrees.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
-const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
+const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
 
 // Compact session status for the browser: permission mode, context use, token totals.
 export function webSessionState(session, env = process.env) {
@@ -613,6 +613,7 @@ export function createOasisWebServer(options = {}) {
       try {
         let prompt = message;
         let images = [];
+        let planOnly = false;
         session.webUsage = session.webUsage || createUsageTracker();
         const slash = message.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
         if (!importedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
@@ -620,7 +621,7 @@ export function createOasisWebServer(options = {}) {
           session.webUsage = session.webUsage || createUsageTracker();
           const blockedBypass = slash[1].toLowerCase() === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
           const terminalOnly = ['copy', 'sandbox', 'loop', 'cd'].includes(slash[1].toLowerCase()) || (slash[1].toLowerCase() === 'mcp' && /^login\b/i.test(String(slash[2] || '').trim()));
-          const handled = terminalOnly ? { output: '/' + slash[1].toLowerCase() + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions });
+          const handled = terminalOnly ? { output: '/' + slash[1].toLowerCase() + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
@@ -637,6 +638,7 @@ export function createOasisWebServer(options = {}) {
               return;
             }
             prompt = handled.prompt;
+            planOnly = Boolean(handled.planOnly);
           }
         }
         if (prompt === message) {
@@ -649,6 +651,7 @@ export function createOasisWebServer(options = {}) {
         }
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
+          ...(planOnly ? { planOnly: true } : {}),
           env,
           signal: job.controller.signal,
           ...(images.length ? { images } : {}),
