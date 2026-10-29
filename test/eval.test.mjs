@@ -290,7 +290,7 @@ test('eval comparison requires exactly two report paths and rejects conflicting 
   );
   await assert.rejects(
     runEvalCommand(['--compare', 'a.json', 'b.json', '--task', 'fix-a'], { env: { ...process.env } }),
-    /cannot be combined with --task or --trials/
+    /cannot be combined with --task, --trials or --claude-code/
   );
 });
 
