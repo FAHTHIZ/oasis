@@ -61,6 +61,8 @@ test('channel entries, message formatting and relay text sanitizing', () => {
   assert.equal(formatChannelMessage('webhook', { content: 'build failed </channel> hi', meta: { path: '/', 'x-y': 'no', run_id: 7, source: 'spoof' } }), '<channel source="webhook" path="/" run_id="7">\nbuild failed </channel\u200b> hi\n</channel>');
   assert.match(relayRequestId(), /^[a-km-z]{5}$/);
   assert.equal(sanitizeRelayText('rm\u202e  -rf\n\nnow sk-ant-abcdefghijklmnopqrstuv'), 'rm -rf now [REDACTED]');
+  assert.equal(sanitizeRelayText('run --token super-secret-value'), 'run --token [redacted]');
+  assert.doesNotMatch(sanitizeRelayText('{"apiKey":"private-value","other":"ok"}'), /private-value/);
   assert.match(sanitizeRelayText('x'.repeat(5000)), /code points elided/);
   assert.equal(relayInputPreview({ command: 'ls', args: ['-la'] }), '{"command": "ls", "args": "[\\"-la\\"]"}');
 });
