@@ -156,3 +156,53 @@ test('workflow tool runs subagents from the main session and /workflows reports 
   const save = await runBuiltinCommand('workflows', 'save ' + payload.run_id, { root, session, env });
   assert.match(save.output, /\/audit-demo/);
 });
+
+test('built-in audit workflow merges duplicate findings and preserves partial reviewer failures', async () => {
+  const workflows = await loadWorkflows(process.cwd());
+  const audit = workflows.get('audit');
+  assert.ok(audit, 'audit workflow is discoverable as a built-in workflow');
+  const source = await readFile(audit.file, 'utf8');
+  const calls = [];
+  const finding = {
+    title: 'Unsafe path validation',
+    severity: 'high',
+    file: 'src/a.ts',
+    line: 7,
+    evidence: 'The path is joined without checking the resolved workspace boundary.',
+    fix: 'Resolve the path and reject traversal before access.',
+    confidence: 0.82
+  };
+  const result = await runWorkflow({
+    source,
+    args: 'src/',
+    runAgent: async ({ label, prompt }) => {
+      calls.push(label);
+      if (label === 'dependency reviewer') throw new Error('simulated dependency worker failure');
+      if (label === 'security reviewer') return JSON.stringify({ findings: [finding] });
+      if (label === 'performance reviewer') return JSON.stringify({ findings: [{ ...finding, evidence: 'A second reviewer observed the same unsafe path join.', confidence: 0.75 }] });
+      if (label === 'test coverage reviewer') return JSON.stringify({ findings: [] });
+      if (label.startsWith('verify finding')) return JSON.stringify({ verdict: 'verified', reason: 'The cited path join is confirmed by source inspection.' });
+      throw new Error('unexpected worker: ' + label);
+    }
+  });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.result.status, 'partial');
+  assert.deepEqual(result.result.reviewersFailed, ['dependency']);
+  assert.equal(result.result.reviewersSucceeded, 3);
+  assert.equal(result.result.summary.total, 1, 'overlapping reviewer findings should be merged');
+  assert.equal(result.result.verifiedFindings.length, 1);
+  assert.equal(result.result.verifiedFindings[0].verified, true);
+  assert.deepEqual(result.result.verifiedFindings[0].provenance.sort(), ['performance', 'security']);
+  assert.equal(calls.filter((label) => label.startsWith('verify finding')).length, 1);
+});
+
+test('/audit is listed and delegates to the built-in workflow instead of a single review', async () => {
+  assert.ok(BUILTIN_COMMANDS.audit);
+  const { state } = await setup();
+  const handled = await runBuiltinCommand('audit', 'src/security', state);
+  assert.match(handled.prompt, /workflow named "audit"/);
+  assert.match(handled.prompt, /security, performance, test-coverage, and dependency reviewers/);
+  assert.match(handled.prompt, /verified and unverified findings/);
+  assert.match(handled.prompt, /src\/security/);
+});
+
