@@ -172,3 +172,31 @@ test('federated result domain filters are enforced locally', async () => {
   });
   assert.deepEqual(result.results.map((item) => new URL(item.url).hostname), ['trusted.example']);
 });
+
+
+test('single strategy chooses the first configured new provider when legacy providers are absent', async () => {
+  let calledUrl = '';
+  const result = await webSearch({ query: 'one provider', strategy: 'single' }, {
+    env: { EXA_API_KEY: 'exa', FIRECRAWL_API_KEY: 'firecrawl' },
+    fetch: async (url) => {
+      calledUrl = String(url);
+      return { ok: true, status: 200, json: async () => ({ results: [{ title: 'Result', url: 'https://example.org/', text: 'source' }] }) };
+    }
+  });
+  assert.equal(result.backend, 'exa');
+  assert.equal(calledUrl, 'https://api.exa.ai/search');
+});
+
+test('auto strategy falls back to DuckDuckGo when its sole configured provider fails', async () => {
+  const result = await webSearch({ query: 'fallback research' }, {
+    env: { TAVILY_API_KEY: 'tv' },
+    fetch: async (url) => {
+      if (String(url).includes('api.tavily.com')) return { ok: false, status: 503, text: async () => '' };
+      return { ok: true, status: 200, text: async () => DDG };
+    }
+  });
+  assert.equal(result.backend, 'duckduckgo');
+  assert.equal(result.strategy, 'single-fallback');
+  assert.equal(result.results.length, 2);
+  assert.ok(result.providerErrors.some((item) => item.provider === 'tavily'));
+});
