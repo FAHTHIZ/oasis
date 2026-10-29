@@ -76,6 +76,34 @@ Caching helper results only by command string could reuse a credential produced 
 
 Source references: [web server](../src/web.mjs), [workspace tools and URL guard](../src/tools.mjs), [process-tree helper](../src/process-tree.mjs), [command policy](../src/permissions.mjs), [optional OS sandbox](../src/sandbox.mjs), [MCP runtime](../src/mcp.mjs), [hook runtime](../src/hooks.mjs).
 
+## Follow-up hardening: shared IP policy and secret-safe Keychain storage
+
+**Implementation commit:** this section records changes added after the original audit baseline. The accompanying Quality Checks, browser E2E and desktop workflows must be checked on the exact resulting commit before this is treated as verified release evidence.
+
+### Shared IP-address policy across network boundaries
+
+The URL fetcher, plugin archive downloader, MCP OAuth discovery and browser request interception previously maintained separate IPv4/IPv6 classifiers. The policy drift left several non-global IPv6 forms inconsistently covered, including discard-only/dummy/SRv6 ranges outside global unicast and the full deprecated site-local range.
+
+**Fix:** src/network-safety.mjs now owns the shared classifier and those four features use it. Existing hostname validation, DNS-answer pinning, manual redirect validation and local-target restrictions remain in place. Plugin archive validation classifies IP literals before its single-label-hostname rule, avoiding a false classification of IPv6 literals.
+
+**Regression coverage:** test/network-safety.test.mjs exercises non-public IPv6 targets across public fetch, plugin import and OAuth discovery, and ensures ordinary public IPs remain fetchable. Browser tests also cover the private-network blocking policy.
+
+This remains defense in depth: the browser URL filter does not substitute for OS/network egress controls, and this change is not a penetration test.
+
+### macOS Keychain secret exposure in process arguments
+
+The previous Keychain writer passed secret values as the -w argument to security add-generic-password. That puts the secret in the child process argument vector, where it can be exposed by process inspection or diagnostics.
+
+**Fix:** OASIS now invokes the security -i interactive parser and supplies an -X hex-encoded value via stdin; the child process arguments contain only -i. Account/label data is quoted and escaped, control characters are rejected to prevent command-line breakout, and oversized input fails closed so the existing protected-file fallback can be used rather than reverting to secret-in-argv.
+
+**Regression coverage:** test/secure-store.test.mjs verifies that the secret is not in process argv, account control characters are rejected, and oversized commands fail closed. The Keychain interaction itself still needs real macOS runtime validation; unit tests use an injected runner.
+
+### Browser handling of public IPv6 literals
+
+The browser request filter also treated every hostname without a dot as a local/single-label hostname, which unintentionally blocked public IPv6 literals. It now distinguishes IP literals with Node's isIP before applying the single-label DNS hostname rule, and passes IP literals through the shared classifier.
+
+**Regression coverage:** test/browser-tool.test.mjs asserts that the public IPv6 fixture is allowed while loopback and private/special-purpose literals remain blocked.
+
 ## High-impact risks that remain open
 
 1. **Approved commands still inherit the user's authority.** The optional Linux/macOS sandbox is disabled by default; no Windows sandbox or general container isolation is implemented. Permission prompts are consent gates, not OS isolation.
