@@ -235,8 +235,8 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     if (options.onCompactionError) options.onCompactionError(error);
   }
   if (!summary) summary = deterministicHistorySummary(oldMessages);
-  if (preserveBlock) summary = (summary + preserveBlock).slice(0, 20000);
   summary = summary.slice(0, 12_000);
+  if (preserveBlock) summary = (summary + preserveBlock).slice(0, 20_000);
   const restored = await runPostCompactHooks(session, 'auto', summary, options);
 
   const removedToolResults = oldMessages.filter((message) => message && message.role === 'tool').length;
