@@ -3,7 +3,9 @@ name: debugging
 description: Reproduce, diagnose, fix, and verify a concrete software bug with minimal changes.
 ---
 
-# Purpose
+# Debugging skill
+
+## Purpose
 Find the smallest evidenced cause of one bug and verify a focused correction.
 
 ## Inputs
