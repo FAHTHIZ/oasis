@@ -81,8 +81,11 @@ export function isNonPublicIpAddress(address) {
   // Conservative blocks for special-purpose/transition ranges that sit inside
   // global-unicast space. Keep the broad legacy exclusions for compatibility.
   // IANA registers 2001::/23 as special-purpose protocol-assignment space.
-  // Block it as a whole rather than relying on a short, drift-prone subrange list.
+  // Block it as a whole, while preserving the older documentation and transition
+  // exclusions that sit outside that /23.
   if (words[0] === 0x2001 && words[1] <= 0x01ff) return true;
+  if (words[0] === 0x2001 &&
+      (words[1] === 0x0db8 || (words[1] === 0x0004 && words[2] === 0x0112))) return true;
   if (words[0] === 0x2002 || words[0] === 0x3fff) return true;
 
   return false;

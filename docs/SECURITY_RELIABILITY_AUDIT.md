@@ -98,19 +98,19 @@ The previous Keychain writer passed secret values as the -w argument to security
 
 **Regression coverage:** test/secure-store.test.mjs verifies that the secret is not in process argv, account control characters are rejected, and oversized commands fail closed. The Keychain interaction itself still needs real macOS runtime validation; unit tests use an injected runner.
 
-### Script execution and project-runner commands under automatic approval
+### Remote package execution and high-impact runner approvals
 
-The command analyzer elevated inline interpreter code and some wrappers to high risk, but script-file launches and common project runners (such as Node/Python scripts, package scripts, Cargo/Go tests, and Make targets) could miss that classification. In automatic-approval mode or sandbox auto-allow, those commands could therefore avoid the extra interactive high-risk confirmation.
+The command analyzer already marked inline interpreter evaluation and selected wrappers as high risk. A further review identified a narrow gap around remote package-execution helpers and explicit high-impact runner verbs, which may execute code not previously reviewed as part of the workspace.
 
-**Fix:** the command policy now classifies interpreter invocations and common repository-controlled runners as high-risk, except for narrowly scoped single-argument help/version probes. Existing explicit allow rules retain their documented semantics; ordinary automatic approval no longer bypasses this high-risk gate.
+**Fix:** the policy now requires interactive high-risk approval for helpers such as npx/bunx, package-manager exec/dlx/install/publish operations, non-test deploy/release package scripts, Cargo/Go run commands, and explicit deploy/release/install targets. Existing normal-risk behavior for direct local scripts and conventional test/check commands is preserved; changing that broader policy would require a deliberate compatibility decision.
 
-**Regression coverage:** test/command-risk.test.mjs covers direct scripts, package scripts, build/test runners, explicit inline-code checks, and safe version/help invocations. This tightens the approval gate but is not OS isolation; the optional OS sandbox remains a separate, still-open hardening area.
+**Regression coverage:** test/command-risk.test.mjs covers remote package helpers and high-impact verbs, while asserting that ordinary scripts and common test/check commands retain their previous classification. High-risk operations still need real interactive approval; --yes alone does not override the high-risk gate.
 
 ### Broader IPv6 protocol-assignment block
 
-The shared IP policy previously covered selected subranges of IANA's 2001::/23 special-purpose registry block. The selective list risked missing other assignments.
+The shared IP policy previously covered selected subranges of IANA's 2001::/23 special-purpose registry block. The selective list risked missing other assignments, and the first broadening pass dropped an older 2001:db8::/32 exclusion.
 
-**Fix:** the policy now rejects the whole 2001::/23 block, conservatively treating it as special-purpose for outbound SSRF checks.
+**Fix:** the policy rejects the whole 2001::/23 block while preserving the documentation and transition exclusions outside that range, including 2001:db8::/32 and 2001:4:112::/48, conservatively treating them as special-purpose for outbound SSRF checks.
 
 **Regression coverage:** shared-network tests cover addresses near the start, middle, and end of that block.
 

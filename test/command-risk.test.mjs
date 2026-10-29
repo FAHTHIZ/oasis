@@ -2,41 +2,46 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeCommand } from '../src/permissions.mjs';
 
-test('script and project-runner commands remain high-risk under automatic approval', () => {
+test('remote package execution and high-impact project runner verbs are high-risk', () => {
   const cases = [
-    ['node', ['script.mjs']],
-    ['python3', ['tool.py']],
-    ['ruby', ['task.rb']],
-    ['deno', ['run', 'main.ts']],
-    ['bun', ['run', 'task.ts']],
-    ['npm', ['run', 'test']],
-    ['pnpm', ['exec', 'eslint', '.']],
-    ['yarn', ['test']],
-    ['cargo', ['test']],
-    ['go', ['test', './...']],
-    ['make', ['all']]
+    ['npx', ['untrusted-package']],
+    ['bunx', ['untrusted-package']],
+    ['npm', ['exec', 'deploy-tool']],
+    ['pnpm', ['dlx', 'deploy-tool']],
+    ['yarn', ['exec', 'deploy-tool']],
+    ['npm', ['run', 'deploy']],
+    ['pnpm', ['run', 'release']],
+    ['yarn', ['run', 'publish']],
+    ['cargo', ['run', '--release']],
+    ['go', ['run', './cmd/deploy']],
+    ['make', ['deploy']]
   ];
   for (const [command, args] of cases) {
     const result = analyzeCommand(command, args);
     assert.match(
       result.highRisk || '',
-      /executes interpreter code, repository-controlled scripts, or project-provided runners/,
+      /executes a remote package or an explicit high-impact project runner/,
       command + ' ' + args.join(' ')
     );
   }
 });
 
-test('pure version/help probes do not acquire unnecessary high-risk classification', () => {
+test('ordinary scripts and common test/check runners retain normal risk', () => {
   for (const [command, args] of [
-    ['node', ['--version']],
-    ['python3', ['-V']],
-    ['npm', ['--version']],
-    ['cargo', ['--help']],
-    ['go', ['version']]
+    ['node', ['script.mjs']],
+    ['python3', ['tool.py']],
+    ['npm', ['test']],
+    ['npm', ['run', 'test']],
+    ['npm', ['run', 'check']],
+    ['pnpm', ['run', 'typecheck']],
+    ['yarn', ['test']],
+    ['cargo', ['test']],
+    ['go', ['test', './...']],
+    ['make', ['all']]
   ]) {
     const result = analyzeCommand(command, args);
-    assert.equal(result.blocked, undefined, command);
-    assert.equal(result.highRisk, undefined, command + ' ' + args.join(' '));
+    assert.equal(result.blocked, undefined, command + ' ' + args.join(' '));
+    assert.equal(result.highRisk, undefined, command + ' ' + args.join(' ') + ' should be normal risk');
   }
 });
 
