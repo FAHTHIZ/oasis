@@ -18,15 +18,19 @@ class ChatController {
   ensureProcess() {
     if (this.process) return this.process;
     const proc = new OasisChatProcess({ command: this.getCommand(), cwd: this.getCwd(), env: this.getEnv() });
-    proc.on('ui', (message) => {
-      this.history.push(message);
-      if (this.history.length > 2000) this.history.splice(0, this.history.length - 2000);
-      this.post(message);
-      if (message.kind === 'exit' || message.kind === 'error') { if (this.process === proc) this.process = null; }
-    });
     let stderrTail = '';
     proc.on('stderr', (chunk) => { stderrTail = (stderrTail + chunk).slice(-4000); });
-    proc.on('ui', (message) => { if (message.kind === 'exit' && message.code) this.post({ kind: 'error', text: friendlyExitError(message.code, stderrTail) }); });
+    proc.on('ui', (message) => {
+      // Keep actionable errors in replay history, rather than showing a second raw
+      // stderr block after the exit code.
+      const visibleMessage = message.kind === 'exit' && message.code
+        ? { ...message, friendlyError: friendlyExitError(message.code, stderrTail) }
+        : message;
+      this.history.push(visibleMessage);
+      if (this.history.length > 2000) this.history.splice(0, this.history.length - 2000);
+      this.post(visibleMessage);
+      if (message.kind === 'exit' || message.kind === 'error') { if (this.process === proc) this.process = null; }
+    });
     this.process = proc;
     proc.start();
     return proc;
