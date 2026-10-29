@@ -157,6 +157,14 @@ body.light .first-run-choice{background:#fff}
 .agent-workspace-tab[aria-selected="true"]{color:var(--accent);border-color:#9BFF5555;background:#9BFF5514}
 .agent-workspace-grid{--agent-chat-split:56%;display:grid;grid-template-columns:minmax(0,var(--agent-chat-split)) 8px minmax(280px,1fr);gap:0;align-items:stretch;min-width:0}
 .agent-chat-column,.agent-terminal-column{min-width:0;min-height:0}
+.agent-chat-column .agent-chat-panel{width:100%;max-width:100%}
+.agent-chat-column .agent-messages{flex:1 1 0;min-width:0;overflow:auto}
+.agent-chat-column .agent-compose{flex:0 0 auto;position:relative;z-index:1;min-width:0}
+.agent-chat-column .agent-compose form{grid-template-columns:minmax(0,1fr);min-width:0;width:100%}
+.agent-chat-column .agent-compose form>*{grid-column:1;min-width:0}
+.agent-chat-column .agent-compose textarea{min-width:0}
+.agent-chat-column .agent-compose-actions{display:flex;justify-content:flex-end;flex-wrap:wrap}
+
 #view-agent.active .agent-workspace-grid .agent-chat-panel{display:flex;flex-direction:column;height:min(72vh,860px);min-height:460px;margin:0}
 #view-agent.active .agent-chat-panel .agent-messages{flex:1;min-height:0;max-height:none}
 #view-agent.active .agent-workspace-grid .agent-terminal{display:flex;flex-direction:column;height:min(72vh,860px);min-height:460px;margin:0}
