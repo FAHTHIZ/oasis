@@ -105,7 +105,10 @@ function chatHtml(webview) {
   .error { color: var(--vscode-errorForeground); white-space: pre-wrap; }
   pre { background: var(--vscode-textCodeBlock-background); padding: 6px 8px; border-radius: 4px; overflow-x: auto; }
   code { font-family: var(--vscode-editor-font-family); }
-  .perm { border: 1px solid var(--vscode-focusBorder); border-radius: 6px; padding: 8px; }
+  .perm { border: 1px solid var(--vscode-focusBorder); border-left: 4px solid var(--vscode-editorWarning-foreground, var(--vscode-focusBorder)); border-radius: 6px; padding: 8px; }
+  .perm.perm-risk { border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground)); }
+  .perm .perm-warning { color: var(--vscode-errorForeground); font-weight: 700; margin-top: 6px; }
+  .perm .perm-guidance { color: var(--vscode-descriptionForeground); margin: 8px 0; }
   .perm pre { max-height: 160px; }
   .perm .done { color: var(--vscode-descriptionForeground); }
   button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 3px; padding: 4px 10px; cursor: pointer; margin-right: 6px; }
@@ -151,11 +154,22 @@ function render(m) {
     case 'init': statusEl.textContent = (m.model || 'OASIS') + ' · ' + (m.permissionMode || 'default'); break;
     case 'permission': {
       endLive();
-      const div = add('perm', '<div><strong>Permission request</strong>' + (m.tool ? ' · ' + esc(m.tool) : '') + '</div><pre>' + esc(m.message.slice(0, 4000)) + '</pre><div class="actions"><button data-b="allow">Allow</button>' + (m.canAlways ? '<button data-b="always" class="secondary">Always allow ' + esc(m.suggestion || '') + '</button>' : '') + '<button data-b="deny" class="secondary">Deny</button></div>');
+      const requestText = String(m.message || 'No action details were supplied.');
+      const mayDestroyData = /\\brm\\s+-[a-z]*r\\b|\\b(delete|remove|overwrite|format|truncate)\\b|\\bdrop\\s+table\\b/i.test(requestText);
+      const promptClass = mayDestroyData ? 'perm perm-risk' : 'perm';
+      const warning = mayDestroyData ? '<div class="perm-warning">Caution: this request may remove or overwrite data.</div>' : '';
+      const div = add(promptClass,
+        '<div><strong>OASIS needs permission to continue</strong>' + (m.tool ? ' · ' + esc(m.tool) : '') + '</div>' +
+        warning +
+        '<p class="perm-guidance">Review the requested action and its target below. If anything is unclear, choose Deny.</p>' +
+        '<pre>' + esc(requestText.slice(0, 4000)) + '</pre>' +
+        '<div class="actions"><button data-b="allow">Allow once</button>' +
+        (m.canAlways ? '<button data-b="always" class="secondary">Always allow ' + esc(m.suggestion || 'this suggested action') + '</button>' : '') +
+        '<button data-b="deny" class="secondary">Deny</button></div>');
       div.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => {
         const b = btn.getAttribute('data-b');
         vscode.postMessage({ type: 'permission', requestId: m.requestId, behavior: b === 'deny' ? 'deny' : 'allow', always: b === 'always' });
-        div.querySelector('.actions').innerHTML = '<span class="done">' + (b === 'deny' ? 'Denied' : b === 'always' ? 'Always allowed' : 'Allowed') + '</span>';
+        div.querySelector('.actions').innerHTML = '<span class="done">' + (b === 'deny' ? 'Denied' : b === 'always' ? 'Saved the allow rule' : 'Allowed once') + '</span>';
       }));
       break;
     }
