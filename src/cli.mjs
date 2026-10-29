@@ -22,7 +22,7 @@ import { runEvalCommand } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
-import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, userSettingsPath } from './settings.mjs';
+import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, normalizePermissionMode, userSettingsPath } from './settings.mjs';
 import { detectSandbox, resolveSandbox } from './sandbox.mjs';
 import { resolveCustomCommand, expandFileMentions, loadCustomCommands } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
@@ -137,7 +137,7 @@ function printHelp() {
     '  --workspace PATH              Choose the workspace root',
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
-    '  --permission-mode MODE        default | acceptEdits | plan | auto | bypassPermissions',
+    '  --permission-mode MODE        manual/default | acceptEdits/accept-edits | plan | auto | bypassPermissions',
     '  --add-dir PATH                Let tools read and edit another directory (repeatable)',
     '  --dangerously-skip-permissions  Same as --permission-mode bypassPermissions --yes',
     '  --continue, -c                Continue the most recent saved session',
@@ -2591,8 +2591,9 @@ async function main() {
     const arg = rawArgs[i];
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; continue; }
     if (arg === '--permission-mode') {
-      const mode = rawArgs[++i];
-      if (!PERMISSION_MODES.includes(mode)) throw new Error('--permission-mode must be one of ' + PERMISSION_MODES.join(', ') + '.');
+      const requestedMode = rawArgs[++i];
+      const mode = normalizePermissionMode(requestedMode);
+      if (!mode) throw new Error('--permission-mode must be one of ' + PERMISSION_MODES.join(', ') + ' (aliases: manual, accept-edits).');
       SESSION_OPTIONS.permissionMode = mode;
       if (mode === 'bypassPermissions') autoApprove = true;
       continue;
