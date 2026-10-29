@@ -78,8 +78,6 @@ async function validatePublicUrl(raw, options = {}) {
   return { url, addresses };
 }
 
-const MAX_PUBLIC_RESPONSE_BYTES = 1024 * 1024;
-
 async function requestPublicUrl(url, addresses, signal) {
   return await new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? httpsRequest : httpRequest;
