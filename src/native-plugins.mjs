@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { mkdir, lstat, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -251,6 +252,80 @@ async function replaceDirectory(stage,target,updating){
   try{await rename(stage,target);return backup;}
   catch(error){if(backup)await rename(backup,target).catch(()=>{});throw error;}
 }
+
+function parseNativePluginGitSource(input) {
+  const value = String(input || '').trim();
+  let urlText = value;
+  let ref = null;
+  const isRemoteUrl = /^(?:https|ssh|file):\/\//i.test(value);
+  const isScpUrl = /^git@[A-Za-z0-9.-]+:/i.test(value);
+  if (!isRemoteUrl && !isScpUrl) {
+    if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)) {
+      throw new Error('Native plugin Git URLs must use HTTPS, SSH, or file://; insecure HTTP and other URL schemes are not supported.');
+    }
+    return null;
+  }
+  const hash = value.lastIndexOf('#');
+  if (hash >= 0) {
+    urlText = value.slice(0, hash);
+    ref = value.slice(hash + 1);
+    if (!ref || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$/.test(ref) ||
+        ref.includes('..') || ref.includes('//') || ref.endsWith('/') || ref.endsWith('.')) {
+      throw new Error('Git reference after # must be a safe branch or tag name.');
+    }
+  }
+  if (isScpUrl) {
+    const match = /^git@([A-Za-z0-9.-]+):([A-Za-z0-9._/-]+(?:\.git)?)$/.exec(urlText);
+    if (!match || match[2].split('/').some(part => !part || part === '.' || part === '..')) {
+      throw new Error('Git SSH source must look like git@host:owner/repository.git.');
+    }
+  } else {
+    let parsed;
+    try { parsed = new URL(urlText); } catch { throw new Error('Invalid native plugin Git URL.'); }
+    if (parsed.username && parsed.protocol !== 'ssh:') throw new Error('Credentials in native plugin Git URLs are not allowed; configure Git credentials separately.');
+    if (parsed.password || parsed.search || parsed.hash) throw new Error('Native plugin Git URLs must not contain passwords, query strings, or URL fragments other than #ref.');
+    if (!parsed.pathname || parsed.pathname === '/') throw new Error('Native plugin Git URL must point to a repository path.');
+    if (parsed.protocol === 'file:') {
+      if (parsed.hostname && parsed.hostname !== 'localhost') throw new Error('file:// Git URLs may only reference this machine.');
+      if (!path.isAbsolute(fileURLToPath(parsed))) throw new Error('file:// Git URL must resolve to an absolute local path.');
+    } else if ((parsed.protocol === 'https:' || parsed.protocol === 'ssh:') && !parsed.hostname) {
+      throw new Error('Git URL must include a host.');
+    } else if (!['https:', 'ssh:', 'file:'].includes(parsed.protocol)) {
+      throw new Error('Native plugin Git URLs must use HTTPS, SSH, or file://.');
+    }
+    urlText = parsed.href;
+  }
+  return { url: urlText, ref };
+}
+
+async function resolveNativePluginSource(source, env = process.env) {
+  const input = String(source || '').trim();
+  const gitSource = parseNativePluginGitSource(input);
+  if (!gitSource) return { path: path.resolve(input), cleanup: async () => {} };
+  const cloneRoot = path.join(getConfigDirectory(env), 'native-plugin-sources');
+  await mkdir(cloneRoot, { recursive: true, mode: 0o700 });
+  const rootInfo = await lstat(cloneRoot);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('Refusing to clone a native plugin through an unsafe temporary directory.');
+  const realCloneRoot = await realpath(cloneRoot);
+  const target = path.join(realCloneRoot, 'source-' + randomUUID());
+  const args = ['clone', '--depth', '1', '--no-recurse-submodules', ...(gitSource.ref ? ['--branch', gitSource.ref] : []), '--', gitSource.url, target];
+  const result = spawnSync('git', args, { cwd: realCloneRoot, encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024, windowsHide: true, shell: false });
+  if (result.error || result.status !== 0) {
+    await rm(target, { recursive: true, force: true }).catch(() => {});
+    const reason = result.error ? result.error.message : String(result.stderr || result.stdout || 'git clone failed').trim().slice(0, 700);
+    throw new Error('Could not fetch native plugin Git URL: ' + reason);
+  }
+  try {
+    const info = await lstat(target);
+    const realTarget = await realpath(target);
+    if (!info.isDirectory() || info.isSymbolicLink() || !within(realCloneRoot, realTarget)) throw new Error('Git clone created an unsafe plugin source directory.');
+  } catch (error) {
+    await rm(target, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+  return { path: target, cleanup: async () => { await rm(target, { recursive: true, force: true }); } };
+}
+
 export async function validateNativePluginPackage(source){
   const pkg=await validatePackage(source);
   return {name:pkg.manifest.name,version:pkg.manifest.version,description:pkg.manifest.description,author:pkg.manifest.author,license:pkg.manifest.license,minimumOasisVersion:pkg.manifest.minimumOasisVersion,requestedPermissions:pkg.manifest.permissions,components:{commands:pkg.components.commands.map(x=>x.name),skills:pkg.components.skills,agents:pkg.components.agents,hooks:pkg.components.hooks?1:0,hookFiles:pkg.components.hookFiles,mcpServers:pkg.components.mcp?Object.keys(JSON.parse(pkg.files.get(pkg.components.mcp)).mcpServers||{}):[],mcpFiles:pkg.components.mcpFiles},metadata:pkg.manifest.metadata||{}};
