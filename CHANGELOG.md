@@ -1,8 +1,10 @@
 # Changelog
 
-OASIS is an alpha hobby project. This file records notable user-facing changes; it does not imply that a release has been published.
+OASIS is an open-source coding-agent project. This file records notable user-facing changes; it does not imply that a release has been published.
 
 ## Unreleased
+
+- Hardened isolated worktree Git subprocesses: no-shell spawning, 4 MiB per-stream output bounds, explicit timeout results, and process-tree TERM/KILL escalation now apply to worktree creation, diff inspection and merge preflight. Added a child/grandchild timeout regression; current-main CI is pending.
 
 - Hardened HTTP MCP header helpers: stdout uses a strict 64 KiB byte cap, stderr retention is bounded, the production timeout is fixed at 10 seconds, and overflow/timeout/client shutdown terminate the helper process tree. Added regression tests for overflow, timeout and in-flight shutdown; current-head CI is pending.
 

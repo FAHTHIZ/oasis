@@ -18,6 +18,7 @@ This is a conservative evidence status, not a claim that the repository has no w
 - **Task history input hardening:** event-data sanitization was tightened for unusual JSON keys and a focused persistence regression test was added. Current-head CI remains pending.
 - **CI scheduling reliability:** quality and desktop checks use latest-run-only groups per ref to avoid queueing obsolete matrices. Publishing uses separate groups per ref, so pull requests cannot cancel main's validation. The regression test covers all three workflows. The current-main verification still needs to pass on one stable SHA.
 - **HTTP MCP credential-helper lifecycle:** the stdout cap, bounded stderr, timeout, overflow kill and client-close cleanup now have dedicated regression coverage. Verification on current HEAD is pending.
+- **Worktree Git subprocess lifecycle:** replaced `execFile` calls in the isolated worktree manager with a no-shell runner that bounds output and kills the full process tree after timeout; added a child/grandchild regression. Current-head CI is pending.
 
 
 These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:
