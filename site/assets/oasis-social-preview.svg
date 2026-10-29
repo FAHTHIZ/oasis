@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+<title id="title">OASIS — Open-source AI coding agent</title>
+<desc id="desc">OASIS alpha, an open-source AI coding agent. Bring your own model. Inspect, edit, and verify software in a local-first workspace.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0f0c"/><stop offset=".55" stop-color="#14271b"/><stop offset="1" stop-color="#233b29"/></linearGradient>
+  <linearGradient id="lime" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d4ff7a"/><stop offset="1" stop-color="#76e64b"/></linearGradient>
+  <radialGradient id="glow"><stop stop-color="#9bff55" stop-opacity=".28"/><stop offset="1" stop-color="#9bff55" stop-opacity="0"/></radialGradient>
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#baf59a" stroke-opacity=".07"/></pattern>
+</defs>
+<rect width="1200" height="630" fill="url(#bg)"/><rect width="1200" height="630" fill="url(#grid)"/>
+<circle cx="1000" cy="90" r="360" fill="url(#glow)"/>
+<path d="M72 78h54l34 34-34 34H72l34-34z" fill="none" stroke="url(#lime)" stroke-width="5" stroke-linejoin="round"/>
+<text x="184" y="126" fill="#f2f5ee" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="42" font-weight="800" letter-spacing="6">OASIS</text>
+<rect x="880" y="82" width="230" height="43" rx="21.5" fill="#9bff5517" stroke="#9bff5577"/>
+<circle cx="906" cy="103.5" r="5" fill="#9bff55"/><text x="923" y="110" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="2">ALPHA · APACHE 2.0</text>
+<text x="74" y="263" fill="#f2f5ee" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="800" letter-spacing="-1.8">Open-source AI coding agent.</text>
+<text x="76" y="333" fill="#9bff55" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="50" font-weight="750" letter-spacing="-1">Bring your own model.</text>
+<text x="78" y="384" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="23">Local-first tools to inspect code, make changes, and prove the fix.</text>
+<g transform="translate(76 452)">
+  <rect width="322" height="112" rx="15" fill="#0b130d" stroke="#526a51"/>
+  <circle cx="24" cy="23" r="5" fill="#ff8b80"/><circle cx="42" cy="23" r="5" fill="#ffd66b"/><circle cx="60" cy="23" r="5" fill="#9bff55"/>
+  <text x="22" y="59" fill="#9bff55" font-family="ui-monospace,Consolas,monospace" font-size="17">$ oasis "find a bug"</text>
+  <text x="22" y="86" fill="#b7c8b8" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14">Inspect · plan · edit · verify</text>
+</g>
+<g transform="translate(422 452)">
+  <rect width="322" height="112" rx="15" fill="#122018" stroke="#344a3b"/>
+  <text x="22" y="37" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="750">YOUR MODEL</text>
+  <text x="22" y="64" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15">API key · free gateway · local</text>
+  <text x="22" y="88" fill="#91a795" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13">You choose the provider</text>
+</g>
+<g transform="translate(768 452)">
+  <rect width="354" height="112" rx="15" fill="#122018" stroke="#344a3b"/>
+  <text x="22" y="37" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="750">REVIEWABLE WORK</text>
+  <text x="22" y="64" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15">Approvals · checkpoints · tests</text>
+  <text x="22" y="88" fill="#91a795" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13">Open source · built in the open</text>
+</g>
+</svg>
