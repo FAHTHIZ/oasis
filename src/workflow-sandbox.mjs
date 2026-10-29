@@ -176,7 +176,23 @@ export async function runWorkflowScript({ body, args, agent, phase, log, signal,
       } finally { promiseHandle.dispose(); }
     })();
     evaluation.catch(() => {});
-    return await Promise.race([evaluation, abortPromise]);
+
+    // QuickJS promises require the guest job queue to be pumped explicitly. Keep it moving
+    // while host promises are pending too, and stop the pump on completion or cancellation.
+    let evaluationSettled = false;
+    const pumpTimer = setInterval(() => {
+      if (!evaluationSettled && alive) pumpJobs();
+    }, 1);
+    evaluation.then(
+      () => { evaluationSettled = true; clearInterval(pumpTimer); },
+      () => { evaluationSettled = true; clearInterval(pumpTimer); }
+    );
+    pumpJobs();
+    try {
+      return await Promise.race([evaluation, abortPromise]);
+    } finally {
+      clearInterval(pumpTimer);
+    }
   } finally {
     alive = false;
     if (signal) signal.removeEventListener('abort', handleAbort);
