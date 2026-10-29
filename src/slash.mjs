@@ -193,14 +193,24 @@ export async function runBuiltinCommand(name, argument, state) {
       const percent = windowSize ? Math.round(used / windowSize * 100) : 0;
       const bar = '#'.repeat(Math.min(30, Math.round(percent * 0.3))).padEnd(30, '.');
       const system = estimateTokens([session.messages[0]]);
-      const tools = Math.round(JSON.stringify(session.toolDefinitions || []).length / 4);
+      const definitions = session.toolDefinitions || [];
+      const mcpNames = session.mcpToolMap instanceof Map ? new Set(session.mcpToolMap.keys()) : new Set();
+      const mcpDefinitions = definitions.filter((item) => item && item.function && mcpNames.has(item.function.name));
+      const localDefinitions = definitions.filter((item) => !item || !item.function || !mcpNames.has(item.function.name));
+      const localTools = Math.round(JSON.stringify(localDefinitions).length / 4);
+      const mcpTools = Math.round(JSON.stringify(mcpDefinitions).length / 4);
+      const startup = system + localTools + mcpTools;
       return { output: [
         'Context: [' + bar + '] ' + percent + '% of ' + formatNumber(windowSize) + ' tokens',
-        '  System prompt and project memory: ~' + formatNumber(system),
-        '  Tool definitions (' + (session.toolDefinitions || []).length + '): ~' + formatNumber(tools),
+        '  Startup before chat: ~' + formatNumber(startup) + ' tokens',
+        '  System prompt, project instructions and memory: ~' + formatNumber(system),
+        '  Built-in tools (' + localDefinitions.length + '): ~' + formatNumber(localTools),
+        '  MCP tools (' + mcpDefinitions.length + '): ~' + formatNumber(mcpTools),
         '  Conversation (' + (session.messages.length - 1) + ' messages): ~' + formatNumber(Math.max(0, used - system)),
+        ...(startup > 15000 ? ['Warning: startup context is over 15,000 tokens before your messages. Disconnect unused tools or trim long project instructions.'] : []),
+        'These are estimates. Tool schemas and hidden provider metadata can change the real count.',
         'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
-      ].join('\n') };
+      ].join('\\n') };
     }
     case 'teams': {
       if (!session) return { output: 'Start a session first; named agent teams are session-local.' };
