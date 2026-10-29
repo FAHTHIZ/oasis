@@ -9,10 +9,12 @@ import { loadSettings, PERMISSION_MODES } from './settings.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
+import { snapshotFile } from './backups.mjs';
+import { imageInputCapability } from './images.mjs';
 import { listSessions } from './sessions.mjs';
-import { setAdditionalDirectories } from './tools.mjs';
+import { resolveWorkspacePath, setAdditionalDirectories } from './tools.mjs';
 import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
-import { writeFile } from 'node:fs/promises';
+import { lstat, writeFile } from 'node:fs/promises';
 import { listWorktrees } from './worktrees.mjs';
 import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
@@ -26,6 +28,9 @@ export const BUILTIN_COMMANDS = {
   setup: 'Configure the model provider',
   clear: 'Start a fresh conversation',
   plan: 'Plan a task without writing files or running commands (/plan TASK)',
+  fix: 'Reproduce, diagnose, fix, and verify one bug (/fix BUG)',
+  diagnose: 'Analyze an error, log, screenshot, or failing output (/diagnose INPUT)',
+  rollback: 'Preview and restore the latest file checkpoint (/rollback, then /rollback confirm)',
   compact: 'Summarize the conversation to free context (/compact [focus])',
   context: 'Show how much of the context window is in use',
   cost: 'Show token usage for this session',
@@ -115,9 +120,18 @@ export const BUILTIN_COMMANDS = {
   'terminal-setup': 'Set up Shift+Enter for newlines in your terminal',
   'privacy-settings': 'Show what Oasis sends where and how to turn things off',
   stop: 'Stop background agents and processes in this session',
-  init: 'Create an OASIS.md project guide',
+  init: 'Inspect this project and create or carefully update OASIS.md',
   exit: 'Leave Oasis'
 };
+
+export const SKILL_COMMANDS = Object.freeze({
+  init: { skill: 'init', mode: 'workspace-edit', summary: 'Inspect the project and create or update OASIS.md.' },
+  plan: { skill: 'plan', mode: 'read-only', summary: 'Inspect relevant code and return an implementation plan without side effects.' },
+  fix: { skill: 'debugging', mode: 'workspace-edit', summary: 'Reproduce one bug, apply a focused fix, and verify it.' },
+  diagnose: { skill: 'diagnose', mode: 'read-only', summary: 'Analyze supplied evidence and separate confirmed causes from hypotheses.' },
+  review: { skill: 'code-review', mode: 'read-only-by-default', summary: 'Review the current diff for correctness, security, performance, accessibility, and test gaps.' },
+  rollback: { skill: 'rollback', mode: 'explicit-restore-confirmation', summary: 'Preview and restore the latest tracked file checkpoint after a second-step confirmation.' }
+});
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString('en-US');
@@ -173,6 +187,93 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       lines.push('Tips: mention files with @path, start a line with # to save a project memory, and say "install pnpm" for direct installs.');
       return { output: lines.join('\n') };
+    }
+    case 'init': {
+      const focus = String(argument || '').trim();
+      return {
+        output: 'Preview: inspect project structure, documentation, scripts, tests, and existing instructions; then create or carefully merge OASIS.md. No file changes occur until the agent proposes a change through the existing workspace tools and approvals.',
+        prompt: 'Load the portable init skill first with load_skill({ name: "init" }). Inspect this workspace read-only and use source files and scripts as evidence. Create or carefully update OASIS.md with project purpose, architecture and key paths, setup and verification commands, conventions, and safety constraints. Preserve useful existing human-authored guidance. Do not guess facts, copy secrets, install anything, or bypass existing approval, snapshot, or file-state protections. Use normal workspace tools and approval prompts before changing files. ' + (focus ? 'User focus: ' + focus : 'Use the project itself to determine the most useful guide content.')
+      };
+    }
+    case 'plan': {
+      if (!String(argument || '').trim()) return { output: 'Usage: /plan Describe the task to plan. This command is read-only and will not edit files or run project commands.' };
+      return {
+        output: 'Preview: inspect relevant source and tests, then return an ordered implementation plan with file targets, risks, and verification steps. No files, installs, or project commands will be changed or run.',
+        prompt: 'Load the portable plan skill first with load_skill({ name: "plan" }). Create an implementation plan for the following task. Inspect project instructions, source, call sites, and tests using read-only tools only. Do not edit files, install packages, make network requests, or run project commands. Return ordered steps, likely files, acceptance criteria, risks, unknowns, and verification for each step. Task: ' + String(argument).trim(),
+        planOnly: true
+      };
+    }
+    case 'fix': {
+      if (!String(argument || '').trim()) return { output: 'Usage: /fix Describe the bug or provide its error/reproduction steps. Nothing has been changed.' };
+      return {
+        output: 'Preview: inspect the bug, reproduce it where possible, add a focused regression test, make the smallest correct fix, and rerun relevant checks. File edits, commands, installs, and network actions remain subject to existing OASIS approvals and snapshots.',
+        prompt: 'Load the portable debugging skill with load_skill({ name: "debugging" }) before proceeding. Reproduce and fix only the reported bug: ' + String(argument).trim() + '\\n\\nInspect first, distinguish evidence from hypotheses, add a regression test where practical, use minimal edits, and verify with relevant tests. Use OASIS tools so normal approval, workspace validation, snapshots, and stale-file checks apply. Do not install dependencies, access the network, or change unrelated files without separate approval. Report exact checks and results; never claim an unrun test passed.'
+      };
+    }
+    case 'diagnose': {
+      if (!String(argument || '').trim()) return { output: 'Usage: /diagnose Paste an error/log/output or provide a file path and observed failure. For screenshots, attach the image or provide its path. Nothing has been changed.' };
+      const capability = imageInputCapability(session && session.config || {}, env);
+      const imageMentioned = /(?:screenshot|image|picture|photo|\\.(?:png|jpe?g|gif|webp)\\b|@[^\\s]+\\.(?:png|jpe?g|gif|webp)\\b)/i.test(String(argument));
+      const imageNote = imageMentioned
+        ? '\\nImage capability preflight: ' + capability.status.toUpperCase() + ' — ' + capability.reason + ' Do not claim visual analysis unless image data is actually attached and the active model accepts it.'
+        : '';
+      return {
+        output: 'Preview: analyze the supplied evidence, trace likely causes, and identify the next useful diagnostic step. This is read-only; it will not attempt a fix.' + (imageMentioned ? '\\nImage input status: ' + capability.status + '. ' + capability.reason : ''),
+        prompt: 'Load the portable diagnose skill first with load_skill({ name: "diagnose" }). Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\\n\\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
+      };
+    }
+    case 'rollback': {
+      if (!session || !session.checkpoints || !session.checkpoints.turns.length) {
+        if (session) session.pendingSkillRollback = null;
+        return { output: 'No file checkpoint is available in this session. No files were changed. /rollback only restores OASIS-tracked file changes; it cannot reverse shell-command side effects, installs, network activity, or changes outside the checkpoint system.' };
+      }
+      const currentTurn = session.checkpoints.turns.at(-1);
+      const currentFiles = [...currentTurn.files.keys()].sort();
+      const confirmWord = String(argument || '').trim().toLowerCase();
+      if (!confirmWord) {
+        if (!currentFiles.length) return { output: 'The latest checkpoint has no tracked file changes to restore. No files were changed.' };
+        session.pendingSkillRollback = { createdAt: currentTurn.createdAt, prompt: currentTurn.prompt, files: currentFiles };
+        return { output: [
+          'ROLLBACK PREVIEW — no files have changed.',
+          'Checkpoint task: ' + String(currentTurn.prompt || '(no task label)').slice(0, 200),
+          'Files affected (' + currentFiles.length + '):',
+          ...currentFiles.map((file) => '  • ' + file),
+          '',
+          'Before restoring, OASIS will preserve the current contents of eligible files in its local recovery-backup store.',
+          'Type /rollback confirm to apply this exact preview. A changed checkpoint requires a new preview.',
+          'Limit: shell-command side effects, dependency installs, network operations, and untracked external changes are not reversed.'
+        ].join('\\n') };
+      }
+      if (confirmWord !== 'confirm') return { output: 'Usage: /rollback to preview the latest checkpoint, then /rollback confirm to restore it. No files were changed.' };
+      const pending = session.pendingSkillRollback;
+      if (!pending || pending.createdAt !== currentTurn.createdAt || pending.prompt !== currentTurn.prompt || pending.files.join('\\0') !== currentFiles.join('\\0')) {
+        session.pendingSkillRollback = null;
+        return { output: 'The preview is missing or the latest checkpoint changed. No files were changed; run /rollback to preview again.' };
+      }
+      const recovery = [];
+      for (const [relative, entry] of currentTurn.files) {
+        if (entry.skipped) continue;
+        const target = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+        let info;
+        try { info = await lstat(target.absolute); }
+        catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+        if (!info.isFile() || info.isSymbolicLink()) throw new Error('Refusing rollback because ' + relative + ' is not a safe regular file. No checkpoint restoration was started.');
+        recovery.push(await snapshotFile(root, target.absolute, 'before-skill-rollback', { env }));
+      }
+      const result = await rewind(session, 1, 'code');
+      session.pendingSkillRollback = null;
+      if (!result.skipped.length && result.turns > 0) {
+        const consumed = session.checkpoints.turns.pop();
+        if (consumed) for (const entry of consumed.files.values()) session.checkpoints.bytes = Math.max(0, session.checkpoints.bytes - (entry.content ? entry.content.length : 0));
+      }
+      const lines = ['Rollback ' + (result.skipped.length ? 'partially completed' : 'completed') + '.'];
+      lines.push('  Restored: ' + (result.restored.length ? result.restored.join(', ') : '(none)'));
+      if (result.deleted.length) lines.push('  Removed new files: ' + result.deleted.join(', '));
+      if (result.skipped.length) lines.push('  Skipped: ' + result.skipped.join(', '), '  The checkpoint remains available for another attempt.');
+      lines.push('  Recovery copies: ' + (recovery.length ? recovery.map((item) => item.relativePath + ' [' + item.id + ']').join(', ') : '(no current file contents needed backing up)'));
+      lines.push('  Conversation history was not rewound.');
+      lines.push('  Shell-command side effects, installs, network activity, and changes not captured by file tools were not reversed.');
+      return { output: lines.join('\\n'), rollback: { restored: result.restored, deleted: result.deleted, skipped: result.skipped, recovery } };
     }
     case 'commands': {
       const custom = await loadCustomCommands(root, { env });
