@@ -118,4 +118,4 @@ The repository could be read and updated through GitHub, but this runtime could 
 
 ## Follow-up branch status — `app/alpha-readiness-gaps`
 
-This branch adds the missing desktop renderer-crash recovery path. It is intentionally separate from the verified default-branch snapshot; do not treat the change as shipped until the repository checks pass and the recovery flow is exercised in a packaged or development Electron app. The isolated helper tests passed 3/3 locally; this is not a substitute for `npm run check`, the clean-environment suite, or an actual renderer-crash test.
+This branch adds the missing desktop renderer-crash recovery path. It is intentionally separate from the verified default-branch snapshot; do not treat the change as shipped until the repository checks pass and the recovery flow is exercised in a packaged or development Electron app. The isolated crash-screen and error-dialog helper tests passed **7/7** in a local temporary harness; this is not a substitute for `npm run check`, the clean-environment suite, or actual Electron crash/restart testing.
