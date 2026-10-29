@@ -1,13 +1,13 @@
-# OASIS vs Claude Code: Code-Level Comparison
+# OASIS Implementation Audit and External Capability Benchmark
 
 **Audit date:** October 29, 2026  
 **OASIS revision inspected:** [77a5021] (full revision: [77a50213a0d1e7570be3d97db7a5d9d80c7f8d6b](https://github.com/FAHTHIZ/oasis/commit/77a50213a0d1e7570be3d97db7a5d9d80c7f8d6b))  
 **Claude Code release artifact inspected:** [@anthropic-ai/claude-code 2.1.312](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/)  
 **Method:** inspect OASIS source, registered tools, tests, task fixtures and CI configuration; compare these with files shipped in Claude Code's official public release and official public repository. This is a code-evidence audit, not a claim of measured product parity.
 
-## Executive verdict
+## Executive verdict: OASIS on its own merits
 
-OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.
+OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.
 
 That establishes **broad architectural and capability overlap** with Claude Code. It does **not** establish equal success rate, patch quality, speed, reliability or security. Those are behavioral outcomes that need controlled evaluation.
 
@@ -113,7 +113,7 @@ Claude Code's official repository exposes public plugin and example material, an
 | Product-specific tools and hosted features | Some same-named tools not present in the built-in OASIS registry reviewed | SDK schema includes Projects, ClaudeDesign, Artifacts, RemoteTrigger and notification-related contracts | Potential feature-level gaps; verify user need and implement deliberately rather than adding empty stubs |
 | Proven coding performance | 33 deterministic regression/eval tasks in manifest | No comparable result inferred from tool schemas | Not established for either side by this audit |
 
-## What needs to happen before claiming competitiveness
+## OASIS-owned gaps to close
 
 ### P0 — Prove coding performance
 
@@ -123,7 +123,7 @@ Claude Code's official repository exposes public plugin and example material, an
 4. Separate automatic acceptance from blinded human diff review for correctness, regressions, maintainability and test quality. A reference patch that passes establishes a useful verifier; it does not alone establish task realism.
 5. Refresh the shared benchmark repository snapshot deliberately. The existing benchmark audit notes that its snapshot is behind current main, so results on that snapshot must not be described as results on current-main code.
 
-**Why this is the leading blocker:** source inspection shows the main agent loop and a large set of tools exist. What the current repository does not yet show is robust, representative, repeated head-to-head success on realistic coding work.
+**Why this is the leading blocker:** source inspection shows the main agent loop and a broad set of tools exist. What the current repository does not yet show is robust, representative performance on realistic coding work. OASIS's own release criteria should prioritize user outcomes, trust, reliability, usability and its stated product goals; external comparisons remain diagnostic evidence.
 
 ### P1 — Close the isolation and recovery evidence gap
 
@@ -165,4 +165,4 @@ That is evidence that the audited base revision passed the repository's configur
 
 ---
 
-**Bottom line:** OASIS has real code behind a broad set of core coding-agent capabilities. The defensible next step is not to claim that source volume or matching tool names make it equal to Claude Code. It is to keep the code-level evidence traceable, strengthen Windows isolation and recovery validation, and prove the product with a much more representative and reproducible benchmark.
+**Bottom line:** OASIS is an independent coding-agent project, and this audit should help it become better at its own goals. The external comparison is an engineering instrument—not a product identity or a feature-parity mandate. Immediate work is to strengthen process lifecycle and configuration validation, maintain evidence-backed platform boundaries, and prove real-world task quality with representative, reproducible evaluation.

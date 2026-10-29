@@ -99,8 +99,10 @@ export function validateBaseUrl(raw) {
 }
 
 function clampInteger(value, fallback, min, max) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return fallback;
+  const raw = typeof value === 'number' ? value : String(value ?? '').trim();
+  if (typeof raw === 'string' && !/^[+-]?\d+$/.test(raw)) return fallback;
+  const parsed = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isSafeInteger(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
 }
 
