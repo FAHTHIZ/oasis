@@ -86,6 +86,10 @@ export async function createWorktree(root, label, options = {}) {
   if (path.resolve(top) !== path.resolve(root)) throw new Error('isolation "worktree" works only from the repository root (' + top + ').');
   try { await git(root, ['rev-parse', '--verify', 'HEAD'], env); }
   catch { throw new Error('isolation "worktree" needs at least one commit to branch from.'); }
+  if (options.requireClean) {
+    const changes = await git(root, ['status', '--porcelain', '--untracked-files=all'], env);
+    if (changes) throw new Error('Isolated task mode requires a clean Git workspace. Commit or stash your existing changes first; OASIS did not create a worktree.');
+  }
   const commonDir = path.resolve(root, await git(root, ['rev-parse', '--git-common-dir'], env));
   await excludeWorktreeDir(commonDir);
   const name = worktreeSlug(label) + '-' + randomBytes(3).toString('hex');
@@ -98,6 +102,39 @@ export async function createWorktree(root, label, options = {}) {
   return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base };
 }
 
+
+const SENSITIVE_PATH = /^(?:\.env(?:\..*)?|\.npmrc|\.pypirc|\.netrc|credentials?(?:[._-].*)?|secrets?(?:[._-].*)?|id_(?:rsa|ed25519|ecdsa)|.*\.(?:pem|key|p12|pfx|keystore|jks))$/i;
+const SECRET_VALUE = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b|\bAKIA[0-9A-Z]{16}\b|\bAuthorization:\s*Bearer\s+\S{16,}/i;
+
+async function inspectWorktreeSecrets(worktree, options = {}) {
+  const env = options.env || process.env;
+  const changed = await git(worktree.path, ['diff', '--name-only', '-z', worktree.base, '--'], env);
+  const untracked = await git(worktree.path, ['ls-files', '--others', '--exclude-standard', '-z'], env);
+  const files = [...new Set([...changed.split('\0'), ...untracked.split('\0')].filter(Boolean))];
+  if (files.length > 256) throw new Error('Automatic task commit blocked: more than 256 changed files exceed the safety scan limit. Inspect the worktree manually.');
+  const sensitivePaths = files.filter((file) => SENSITIVE_PATH.test(path.posix.basename(file.replace(/\\/g, '/'))));
+  if (sensitivePaths.length) {
+    throw new Error('Automatic task commit blocked because potentially sensitive file paths were changed: ' + sensitivePaths.slice(0, 20).join(', ') + '. The worktree was retained for review.');
+  }
+  let scannedBytes = 0;
+  const possibleSecrets = [];
+  for (const file of files) {
+    const absolute = path.resolve(worktree.path, file);
+    if (!absolute.startsWith(path.resolve(worktree.path) + path.sep)) continue;
+    const info = await lstat(absolute).catch(() => null);
+    if (!info || !info.isFile() || info.isSymbolicLink()) continue;
+    if (info.size > 2 * 1024 * 1024) throw new Error('Automatic task commit blocked: changed file exceeds the 2 MB secret-scan limit (' + file + '). Inspect the worktree manually.');
+    scannedBytes += info.size;
+    if (scannedBytes > 8 * 1024 * 1024) throw new Error('Automatic task commit blocked: changed files exceed the safety scan byte limit. Inspect the worktree manually.');
+    const contents = await readFile(absolute).catch(() => null);
+    if (!contents) continue;
+    if (SECRET_VALUE.test(contents.toString('latin1'))) possibleSecrets.push(file);
+  }
+  if (possibleSecrets.length) {
+    throw new Error('Automatic task commit blocked because possible credentials were detected in: ' + possibleSecrets.slice(0, 20).join(', ') + '. The worktree was retained for review.');
+  }
+}
+
 // Commit the subagent's work on its branch. Unchanged worktrees are removed entirely.
 export async function finishWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
@@ -107,6 +144,7 @@ export async function finishWorktree(root, worktree, options = {}) {
     await removeWorktree(root, worktree, { env, deleteBranch: true });
     return { changed: false, branch: worktree.branch, removed: true };
   }
+  if (options.blockSecrets) await inspectWorktreeSecrets(worktree, { env });
   await git(worktree.path, ['add', '-A'], env);
   const identity = [];
   const email = await git(worktree.path, ['config', 'user.email'], env).catch(() => '');
@@ -130,6 +168,56 @@ export async function finishWorktree(root, worktree, options = {}) {
     merge: 'git merge ' + worktree.branch + '   (or review with: git diff HEAD...' + worktree.branch + ')',
     cleanup: 'git worktree remove ' + worktree.relative + ' && git branch -D ' + worktree.branch
   };
+}
+
+
+export async function readWorktreeDiff(root, baseCommit, headCommit, options = {}) {
+  const env = options.env || process.env;
+  if (!/^[a-f0-9]{40}$/i.test(String(baseCommit || ''))) throw new Error('A full base commit SHA is required to read an isolated task diff.');
+  if (!/^[a-f0-9]{7,40}$/i.test(String(headCommit || ''))) throw new Error('A valid task commit SHA is required to read an isolated task diff.');
+  const maxChars = Math.max(1000, Math.min(250000, Number(options.maxChars) || 180000));
+  const diff = await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--unified=3', baseCommit, headCommit, '--'], env, 30000);
+  return { diff: diff.slice(0, maxChars), truncated: diff.length > maxChars };
+}
+
+export async function readWorktreeWorkingDiff(worktreeRoot, baseCommit, options = {}) {
+  const env = options.env || process.env;
+  if (!/^[a-f0-9]{40}$/i.test(String(baseCommit || ''))) throw new Error('A full base commit SHA is required to inspect an interrupted task.');
+  const root = path.resolve(worktreeRoot);
+  const top = await git(root, ['rev-parse', '--show-toplevel'], env);
+  if (path.resolve(top) !== root) throw new Error('The task directory is no longer a Git worktree root.');
+  const maxChars = Math.max(1000, Math.min(250000, Number(options.maxChars) || 180000));
+  let diff = await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--unified=3', baseCommit, '--'], env, 30000);
+  const listed = await git(root, ['ls-files', '--others', '--exclude-standard', '-z'], env, 15000).catch(() => '');
+  const untrackedFiles = [];
+  let omitted = 0;
+  for (const candidate of listed.split('\0').filter(Boolean).slice(0, 100)) {
+    const absolute = path.resolve(root, candidate);
+    if (path.isAbsolute(candidate) || absolute === root || !absolute.startsWith(root + path.sep)) continue;
+    const info = await lstat(absolute).catch(() => null);
+    if (!info || !info.isFile() || info.isSymbolicLink()) continue;
+    const label = candidate.split(path.sep).join('/');
+    untrackedFiles.push(label);
+    if (info.size > 30000) {
+      diff += '\n\n# Untracked file omitted from preview (over 30 KB): ' + label;
+      omitted++;
+      continue;
+    }
+    const bytes = await readFile(absolute).catch(() => null);
+    if (!bytes) continue;
+    if (bytes.includes(0)) {
+      diff += '\n\n# Binary untracked file omitted from text preview: ' + label;
+      omitted++;
+      continue;
+    }
+    const text = bytes.toString('utf8').replace(/\r\n/g, '\n');
+    diff += '\n\ndiff --git a/' + label + ' b/' + label +
+      '\nnew file mode 100644\n--- /dev/null\n+++ b/' + label +
+      '\n' + text.split('\n').map((line) => '+' + line).join('\n');
+  }
+  const truncated = diff.length > maxChars;
+  if (truncated) diff = diff.slice(0, maxChars);
+  return { diff, truncated, untrackedFiles: untrackedFiles.slice(0, 100), omittedUntracked: omitted };
 }
 
 export async function removeWorktree(root, worktree, options = {}) {
