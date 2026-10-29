@@ -525,3 +525,83 @@ export async function runLsp(root, args = {}, options = {}) {
   const described = await describeLocations(raw, target.root, cache);
   return { ...base, ...described, ...(described.locations.length ? {} : { message: 'No results at that position. Check line/column, or try symbol.' }) };
 }
+
+
+// Compare current LSP diagnostics with an optional pre-edit baseline. This helper
+// never turns server startup/timeout failures into a successful verification.
+function diagnosticIdentity(item) {
+  return [String(item.severity || 'information').toLowerCase(), String(item.code || ''), String(item.message || '')].join('\0');
+}
+
+function diagnosticDifference(current, baseline) {
+  if (!Array.isArray(baseline)) return [...current];
+  const remaining = new Map();
+  for (const item of baseline) {
+    const key = diagnosticIdentity(item);
+    remaining.set(key, (remaining.get(key) || 0) + 1);
+  }
+  const added = [];
+  for (const item of current) {
+    const key = diagnosticIdentity(item);
+    const count = remaining.get(key) || 0;
+    if (count > 0) remaining.set(key, count - 1);
+    else added.push(item);
+  }
+  return added;
+}
+
+function isSeverity(item, severity) {
+  const value = String(item && item.severity || '').toLowerCase();
+  return value === severity || (severity === 'error' && value === '1') ||
+    (severity === 'warning' && value === '2') ||
+    (severity === 'information' && (value === '3' || value === '4' || value === 'info'));
+}
+
+/**
+ * Collect diagnostics after a successful source-file edit. baselineDiagnostics
+ * may be omitted when no language server was already active before the edit; in
+ * that case existing errors are conservatively reported as unclassified blockers.
+ */
+export async function verifyEditedFileWithLsp(root, file, options = {}) {
+  const settings = options.settings || options.session && options.session.settings || {};
+  const server = serverForFile(file, settings);
+  if (!server) return { status: 'unavailable', path: file, reason: 'No language server is configured for this file type.' };
+  try {
+    const checked = await runLsp(root, { operation: 'diagnostics', path: file }, options);
+    const diagnostics = Array.isArray(checked.diagnostics) ? checked.diagnostics : [];
+    const baselineKnown = Array.isArray(options.baselineDiagnostics);
+    const added = diagnosticDifference(diagnostics, options.baselineDiagnostics);
+    const newErrors = added.filter((item) => isSeverity(item, 'error'));
+    const newWarnings = added.filter((item) => isSeverity(item, 'warning'));
+    const newInformation = added.filter((item) => isSeverity(item, 'information'));
+    const existingErrors = baselineKnown
+      ? diagnostics.filter((item) => isSeverity(item, 'error') && !newErrors.includes(item))
+      : [];
+    const status = newErrors.length ? 'issues' : newWarnings.length ? 'warnings' : 'verified';
+    return {
+      status,
+      path: checked.path || file,
+      server: checked.server || server.name,
+      baselineKnown,
+      summary: checked.summary || {
+        errors: diagnostics.filter((item) => isSeverity(item, 'error')).length,
+        warnings: diagnostics.filter((item) => isSeverity(item, 'warning')).length,
+        total: diagnostics.length
+      },
+      diagnostics: diagnostics.slice(0, 100),
+      ...(diagnostics.length > 100 ? { diagnosticsTruncated: true } : {}),
+      newErrors,
+      newWarnings,
+      newInformation,
+      existingErrors,
+      ...(baselineKnown ? {} : { note: 'No pre-edit LSP baseline was available; remaining diagnostics are conservatively treated as new until reviewed.' })
+    };
+  } catch (error) {
+    return {
+      status: 'unavailable',
+      path: file,
+      server: server.name,
+      reason: String(error && error.message || error).slice(0, 600)
+    };
+  }
+}
