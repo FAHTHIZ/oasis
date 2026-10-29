@@ -13,4 +13,6 @@ Notable user-facing changes to the OASIS VS Code integration are recorded here.
 ## Unreleased
 
 - Marketplace screenshots and a marketplace-ready PNG extension icon still need to be prepared and checked before publishing.
-- The CLI-missing startup message is implemented; the approval card now explains the decision and adds warning styling for likely destructive requests. Live VS Code wording and allow-rule scope still need manual review.
+- Permission cards now use “Allow once” and “Deny”, explain that the requested action should be reviewed, and add warning styling for likely destructive requests. Reusable rules remain explicitly scoped to the current session.
+- Nonzero CLI exits now show a plain-language next step and an `oasis doctor` hint; stack-frame lines are omitted from the short error summary.
+- Approval buttons have visible keyboard-focus styling and a larger click target. Manual review of exact wording and allow-rule scope is still needed in a live VS Code session.
