@@ -1,4 +1,3 @@
-import { getQuickJS } from 'quickjs-emscripten';
 
 const MAX_BRIDGE_JSON_CHARS = 256 * 1024;
 const MAX_MEMORY_BYTES = 16 * 1024 * 1024;
@@ -12,9 +11,23 @@ function errorText(error) {
   try { return JSON.stringify(error); } catch { return String(error); }
 }
 
+/** Load the workflow runtime only when someone actually runs a workflow. */
+async function loadQuickJSRuntime() {
+  try {
+    const { getQuickJS } = await import('quickjs-emscripten');
+    return await getQuickJS();
+  } catch (error) {
+    if (error && error.code === 'ERR_MODULE_NOT_FOUND' &&
+        String(error.message || error).includes('quickjs-emscripten')) {
+      throw new Error('Workflows need quickjs-emscripten. Run npm install.', { cause: error });
+    }
+    throw error;
+  }
+}
+
 /** Run workflow-authored JavaScript in a separate QuickJS WebAssembly runtime. */
 export async function runWorkflowScript({ body, args, agent, phase, log, signal, onLimit = () => {} }) {
-  const QuickJS = await getQuickJS();
+  const QuickJS = await loadQuickJSRuntime();
   const runtime = QuickJS.newRuntime();
   runtime.setMemoryLimit(MAX_MEMORY_BYTES);
   runtime.setMaxStackSize(MAX_STACK_BYTES);
