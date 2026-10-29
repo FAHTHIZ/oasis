@@ -1,0 +1,9 @@
+{
+  "name": "oasis-research",
+  "version": "0.1.0",
+  "description": "Multi-provider web research for Claude Code, backed by the OASIS search engine.",
+  "author": {
+    "name": "OASIS Contributors"
+  },
+  "license": "MIT"
+}
