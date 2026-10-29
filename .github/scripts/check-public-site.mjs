@@ -2,6 +2,19 @@ import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+
+function relativeLuminance(hex) {
+  const value = hex.replace('#', '');
+  assert.match(value, /^[0-9a-f]{6}$/i, 'Contrast check expects six-digit hex colors.');
+  const channels = [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16) / 255)
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrastRatio(foreground, background) {
+  const values = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
 const [html, robots, sitemap, icon, socialPreview, packageText] = await Promise.all([
   read('../../site/index.html'),
   read('../../site/robots.txt'),
@@ -40,4 +53,13 @@ assert.ok(icon.startsWith('<svg') && icon.includes('</svg>'), 'Homepage favicon 
 const pkg = JSON.parse(packageText);
 assert.ok(pkg.keywords.includes('ai-coding-agent') && pkg.keywords.includes('agent-skills') && pkg.keywords.includes('ollama'));
 assert.ok(expectedDescription.length <= 160, 'Search description should fit a typical snippet length.');
+
+for (const [label, foreground, background] of [
+  ['muted page text', '#a1b0a3', '#0b0f0c'],
+  ['code example comments', '#7f9681', '#0a100c'],
+  ['feature chips', '#b7c7b9', '#0b0f0c'],
+  ['footer text', '#b0bfb2', '#0b0f0c']
+]) {
+  assert.ok(contrastRatio(foreground, background) >= 4.5, label + ' must meet WCAG AA contrast for normal text.');
+}
 console.log('OASIS public-launch checks passed: landing page metadata, key links, sitemap, robots, favicon, and package discoverability.');
