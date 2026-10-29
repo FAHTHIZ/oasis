@@ -3,7 +3,9 @@ name: init
 description: Inspect a project and create or carefully update its OASIS.md project guide.
 ---
 
-# Purpose
+# Init skill
+
+## Purpose
 Create a useful, evidence-based project guide for OASIS without overwriting valid human guidance or inventing project facts.
 
 ## Inputs
