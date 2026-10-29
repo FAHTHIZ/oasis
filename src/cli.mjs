@@ -356,6 +356,24 @@ async function configureOmniRoute(root = process.cwd()) {
   return result;
 }
 
+async function discoverLocalOllamaModels() {
+  try {
+    const response = await fetch('http://127.0.0.1:11434/api/tags', {
+      method: 'GET',
+      redirect: 'error',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(1500),
+      headers: { accept: 'application/json' }
+    });
+    if (!response.ok) return { available: false, models: [] };
+    const payload = await response.json();
+    const models = Array.isArray(payload && payload.models)
+      ? payload.models.map((item) => String(item && (item.name || item.model) || '').trim()).filter(Boolean).slice(0, 100)
+      : [];
+    return { available: true, models };
+  } catch { return { available: false, models: [] }; }
+}
+
 async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
   stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
@@ -379,7 +397,9 @@ async function configureProvider(root = process.cwd(), options = {}) {
     const defaultPreset = options.defaultPreset === undefined
       ? inferSetupProviderPreset(currentConfig)
       : resolveSetupProviderPreset(options.defaultPreset);
-    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / foundry / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
+    presetName = options.skipPresetPrompt
+      ? defaultPreset
+      : (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / foundry / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'bedrock' || protocol === 'vertex' || protocol === 'foundry' ? defaultCloudBaseURL(protocol, process.env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
@@ -393,10 +413,20 @@ async function configureProvider(root = process.cwd(), options = {}) {
       protocol = selected.protocol;
       baseURL = selected.baseURL;
       model = selected.model;
+      if (presetName === 'ollama') {
+        const detected = await discoverLocalOllamaModels();
+        if (detected.available && detected.models.length) {
+          stdout.write('Ollama is running. Installed models: ' + detected.models.join(', ') + '\n');
+          model = detected.models[0];
+        } else {
+          stdout.write('Ollama was not found, is not running, or has no installed models. Install it from https://ollama.com/download, start it, and install a model with: ollama pull <model-name>\n');
+          model = '';
+        }
+      }
       if (presetName !== 'omniroute') {
         baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
-        const modelPrompt = selected.model ? 'Model name [' + selected.model + ']: ' : 'Model name (exact model ID required): ';
-        model = (await rl.question(modelPrompt)).trim() || selected.model;
+        const modelPrompt = model ? 'Model name [' + model + ']: ' : 'Model name (exact model ID required, after installing a model): ';
+        model = (await rl.question(modelPrompt)).trim() || model;
       }
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
@@ -445,19 +475,29 @@ async function ensureModelProviderSetup(root, options = {}) {
 
   if (options.announce !== false) {
     stdout.write('\nNo model connection is configured yet.\n');
-    stdout.write('Oasis can set one up now. OmniRoute is the recommended starting point if you do not already have a provider key; free routes depend on upstream availability and limits.\n');
+    stdout.write('OASIS is the workspace; the model you choose is its brain. Choose one way to connect.\n');
   }
+  stdout.write('\n  1. I have an API key (OpenAI, Anthropic, OpenRouter, Gemini, or a custom provider)\n');
+  stdout.write('  2. Use a free gateway (OmniRoute; it can be slow or limited)\n');
+  stdout.write('  3. Use a model on this computer (Ollama; smaller models may be weaker)\n');
+  stdout.write('  4. Set this up later\n');
   let answer;
-  try { answer = (await askLine('Start guided setup now? [Y/n] ')).trim().toLowerCase(); }
+  try { answer = (await askLine('Choose [1/2/3/4] (default 2): ')).trim().toLowerCase() || '2'; }
   catch { return false; }
-  if (['n', 'no', 'skip', 'later'].includes(answer)) {
-    stdout.write('Setup skipped. Run oasis setup later; install/startup is also available through the interactive terminal prompt.\n');
+  if (['4', 'later', 'n', 'no', 'skip'].includes(answer)) {
+    stdout.write('Setup skipped. Run oasis setup when you are ready.\n');
+    return false;
+  }
+  const choices = { '1': 'openai', '2': 'omniroute', '3': 'ollama' };
+  const preset = choices[answer];
+  if (!preset) {
+    stdout.write('Choose 1, 2, 3, or 4. No setup was run. Start Oasis again or run oasis setup.\n');
     return false;
   }
   try {
-    await configureProvider(root, { defaultPreset: 'omniroute' });
+    await configureProvider(root, { defaultPreset: preset, skipPresetPrompt: true });
   } catch (error) {
-    stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Retry with oasis setup.\n');
+    stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
   }
   try { return Boolean((await loadConfig()).configured); } catch { return false; }
 }
