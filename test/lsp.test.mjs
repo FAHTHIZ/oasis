@@ -19,8 +19,13 @@ function handle(m) {
   if (m.method === 'initialize') return send({ jsonrpc: '2.0', id: m.id, result: { capabilities: { definitionProvider: true, referencesProvider: true, hoverProvider: true, documentSymbolProvider: true, workspaceSymbolProvider: true } } });
   if (m.method === 'textDocument/didOpen' || m.method === 'textDocument/didChange') {
     const uri = p.textDocument.uri; const text = m.method === 'textDocument/didOpen' ? p.textDocument.text : p.contentChanges[0].text; docs.set(uri, text);
-    const diagnostics = []; text.split('\n').forEach((line, i) => { const c = line.indexOf('BAD'); if (c >= 0) diagnostics.push({ range: { start: { line: i, character: c }, end: { line: i, character: c + 3 } }, severity: 1, message: 'BAD is not allowed', code: 'X1', source: 'fake' }); });
-    return send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics } });
+    const diagnostics = []; text.split('\\n').forEach((line, i) => {
+      const c = line.indexOf('BAD');
+      if (c >= 0) diagnostics.push({ range: { start: { line: i, character: c }, end: { line: i, character: c + 3 } }, severity: 1, message: 'BAD is not allowed', code: 'X1', source: 'fake' });
+      const badType = line.indexOf('"bad"');
+      if (/const value: number = "bad";/.test(line)) diagnostics.push({ range: { start: { line: i, character: badType }, end: { line: i, character: badType + 5 } }, severity: 1, message: "Type 'string' is not assignable to type 'number'.", code: 'TS2322', source: 'typescript' });
+    });
+    if (!text.includes('NO_DIAGS')) return send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri, diagnostics } });
   }
   if (m.method === 'textDocument/definition') return send({ jsonrpc: '2.0', id: m.id, result: decl(word(p.textDocument.uri, p.position)) || null });
   if (m.method === 'textDocument/references') return send({ jsonrpc: '2.0', id: m.id, result: find(word(p.textDocument.uri, p.position)) });
@@ -95,51 +100,43 @@ test('definition, references, hover, symbols and diagnostics through a language 
   }
 });
 
-test('post-edit verification collects diagnostics and identifies new errors', async () => {
-  const { root, settings } = await project();
+test('post-edit verification surfaces an introduced TypeScript diagnostic', async () => {
+  const { root } = await project();
+  const server = path.join(root, 'fake-server.cjs');
+  const settings = { lspServers: { fakeTypescript: { command: process.execPath, args: [server], extensions: ['.ts'], languageId: 'typescript' } } };
+  await writeFile(path.join(root, 'main.ts'), 'const value: number = 1;\n');
   const session = { settings };
   const options = { session, settings, autoApprove: true };
   try {
-    await writeFile(path.join(root, 'main.fake'), 'helper();\nconst value = 1;\n');
-    const baseline = await runLsp(root, { operation: 'diagnostics', path: 'main.fake' }, options);
+    const baseline = await runLsp(root, { operation: 'diagnostics', path: 'main.ts' }, options);
     assert.equal(baseline.summary.errors, 0);
-
-    // Simulate an edit that introduces a TypeScript-like source error, then run
-    // the same post-edit verifier used by the agent execution loop.
-    await writeFile(path.join(root, 'main.fake'), 'helper();\nconst value = BAD;\n');
-    const result = await verifyEditedFileWithLsp(root, 'main.fake', {
-      ...options,
-      baselineDiagnostics: baseline.diagnostics
-    });
+    await writeFile(path.join(root, 'main.ts'), 'const value: number = "bad";\n');
+    const result = await verifyEditedFileWithLsp(root, 'main.ts', { ...options, baselineDiagnostics: baseline.diagnostics });
     assert.equal(result.status, 'issues');
     assert.equal(result.baselineKnown, true);
     assert.equal(result.newErrors.length, 1);
-    assert.equal(result.newErrors[0].code, 'X1');
-    assert.equal(result.newErrors[0].line, 2);
+    assert.equal(result.newErrors[0].code, 'TS2322');
+    assert.equal(result.newErrors[0].line, 1);
   } finally {
     await stopLspClients(session);
   }
 });
 
-test('post-edit verification reports LSP startup failure without throwing', async () => {
-  const { root } = await project();
-  const settings = {
-    lspServers: {
-      broken: {
-        command: path.join(root, 'missing-language-server'),
-        args: [],
-        extensions: ['.fake']
-      }
-    }
-  };
-  const result = await verifyEditedFileWithLsp(root, 'main.fake', {
-    session: { settings },
-    settings,
-    autoApprove: true
-  });
-  assert.equal(result.status, 'unavailable');
-  assert.match(result.reason, /spawn|ENOENT|language server|failed|closed|initialize/i);
+test('post-edit diagnostics time out as unavailable when a server does not answer', async () => {
+  const { root, settings } = await project();
+  const session = { settings };
+  await writeFile(path.join(root, 'main.fake'), 'NO_DIAGS\n');
+  try {
+    const result = await verifyEditedFileWithLsp(root, 'main.fake', {
+      session, settings, autoApprove: true, diagnosticTimeoutMs: 20
+    });
+    assert.equal(result.status, 'unavailable');
+    assert.match(result.reason, /Timed out waiting|did not provide current diagnostics/i);
+  } finally {
+    await stopLspClients(session);
+  }
 });
+
 
 test('starting a server needs approval once per session', async () => {
   const { root, settings } = await project();
