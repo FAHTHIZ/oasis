@@ -31,7 +31,7 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
   buffer += chunk;
   let i;
-  while ((i = buffer.indexOf('\\n')) >= 0) {
+  while ((i = buffer.indexOf('\n')) >= 0) {
     const line = buffer.slice(0, i);
     buffer = buffer.slice(i + 1);
     let m;
@@ -40,7 +40,7 @@ process.stdin.on('data', (chunk) => {
     let result = {};
     if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} } };
     if (m.method === 'tools/list') result = { tools: [] };
-    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\\n');
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\n');
   }
 });
 `;
