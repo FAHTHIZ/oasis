@@ -795,6 +795,8 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- HTTP MCP servers in `.mcp.json` (or `~/.claude.json`, `--mcp-config`, plugins) can set `"headersHelper": "./scripts/mcp-token.sh"`: a shell command that prints a JSON object of headers, such as a short-lived `Authorization` token. Oasis runs it before the first request and again after a 401, with `CLAUDE_CODE_MCP_SERVER_NAME`, `CLAUDE_CODE_MCP_SERVER_URL` (and `CLAUDE_PLUGIN_ROOT` for plugin servers) in its environment. Its headers override static `headers`, and it has a 10-second timeout.
+
 - `MessageDisplay` hooks (no matcher) see each assistant message before it is shown (`turn_id`, `message_id`, `index`, `final`, `delta`) and can return `hookSpecificOutput.displayContent` to change what appears on screen, for example to redact secrets. The transcript and what the model sees stay unchanged. Oasis sends one batch per message (`index: 0`, `final: true`) and turns off token streaming while such a hook is configured; the default timeout is 10 seconds.
 
 - `/fast [on|off]` toggles fast mode: on Opus 5.5, Opus 5 and Opus 4.8 through the Anthropic API, requests carry `speed: "fast"` (plus the `fast-mode-2026-02-01` beta for Opus 5 / 4.8) for faster output at the higher fast-mode price. The choice is saved as `fastMode` in user settings; other models and cloud providers ignore it, and `CLAUDE_CODE_DISABLE_FAST_MODE=1` turns it off.
