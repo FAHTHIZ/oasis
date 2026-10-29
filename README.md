@@ -77,7 +77,7 @@ cd oasis
 npm run check
 ```
 
-The latest verified main revision (`a044ed4`) passed **570 Node tests with zero failures** on Node.js 22, 24 and 26, validated **21 evaluation fixtures**, passed native PTY and authenticated browser E2E smoke checks, passed homepage/repository validation, and built desktop installers for Windows, macOS and Linux. Recent hardening covers process-tree cancellation, URL/SSRF checks, OAuth DNS pinning, API-key helper isolation, and plugin archive/ZIP validation. Installers remain unsigned, and these checks are not a full security audit or a comparative coding-quality benchmark. See [Current status](docs/CURRENT_STATUS.md) and [the security/reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md).
+The latest verified code revision before this documentation refresh (`a044ed4`) passed **570 Node tests with zero failures** on Node.js 22, 24 and 26, validated **21 evaluation fixtures**, passed native PTY and authenticated browser E2E smoke checks, passed homepage/repository validation, and built desktop installers for Windows, macOS and Linux. Recent hardening covers process-tree cancellation, URL/SSRF checks, OAuth DNS pinning, API-key helper isolation, and plugin archive/ZIP validation. Installers remain unsigned, and these checks are not a full security audit or a comparative coding-quality benchmark. See [Current status](docs/CURRENT_STATUS.md) and [the security/reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md).
 
 ## License
 
