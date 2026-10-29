@@ -51,7 +51,7 @@ test('desktop stores API keys through Electron OS-backed encryption rather than 
   assert.match(desktopSecrets, /decryptString/);
   assert.match(desktopSecrets, /secure storage is unavailable/i);
   assert.match(webRuntime, /onProviderConfig/);
-  assert.match(webRuntime, /await options\.onProviderConfig\(\{ protocol, baseURL, model, apiKey \}\)/);
+  assert.match(webRuntime, /await saveConfig\(\{ protocol, baseURL, model, apiKey \}, \{ env \}\)/, 'Non-desktop mode keeps its config-file provider setup fallback.');
 });
 
 test('local model discovery is loopback-only and uses a fixed Ollama endpoint', () => {
