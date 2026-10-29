@@ -254,6 +254,15 @@ export function analyzeCommand(command, args = [], depth = 0) {
   }
   const lowered = args.map((a) => String(a).toLowerCase());
   const joined = lowered.join(' ');
+  // GNU env's -S/--split-string parses a command line inside one argument. The
+  // normal wrapper parser cannot safely inspect that nested command, so reject
+  // this form rather than allowing --yes or a broad rule to hide a shell/runtime.
+  if (base === 'env' && args.some((arg) => {
+    const value = String(arg);
+    return value === '-S' || value.startsWith('-S') || value === '--split-string' || value.startsWith('--split-string=');
+  })) {
+    return { blocked: 'env -S/--split-string hides a nested executable from command safety checks. Pass the executable and each argument directly instead.' };
+  }
   if (WRAPPERS.has(base)) {
     if (depth > 4) return { blocked: 'Too many nested command wrappers.' };
     const inner = unwrap(base, args.map(String));
