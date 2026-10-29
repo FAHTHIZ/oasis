@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { debugLog } from './debug-log.mjs';
 import { mkdir, readFile, writeFile, chmod, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -171,6 +172,8 @@ export class McpServerClient {
     this.stderrTail = '';
     this.tools = [];
     this.startPromise = null;
+    this.terminationRequested = false;
+    this.killTimer = null;
     this.host = options.host || null;
   }
 
@@ -187,7 +190,8 @@ export class McpServerClient {
       env: safeEnvironment(this.config, this.env, this.extraEnv),
       shell: false,
       windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      ...processTreeSpawnOptions()
     });
     this.child.stdout.setEncoding('utf8');
     this.child.stderr.setEncoding('utf8');
@@ -199,6 +203,9 @@ export class McpServerClient {
     this.child.on('close', (code) => {
       this.closed = true;
       this._failAll(new Error('MCP server ' + this.config.name + ' exited' + (code === null ? '' : ' with code ' + code) + '.'));
+      // The leader can exit before descendants. Signal the process group even on
+      // an unexpected exit, then retain the force-kill timer for stubborn children.
+      this._terminateProcessTree();
     });
 
     const init = await this._request('initialize', {
@@ -259,7 +266,19 @@ export class McpServerClient {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(String(id));
+        const key = String(id);
+        if (!this.pending.has(key)) return;
+        this.pending.delete(key);
+        // Initialize MUST NOT be cancelled. Other in-flight stdio requests use
+        // MCP's standard cancellation notification when their deadline expires.
+        if (method !== 'initialize' && !this.closed) {
+          try {
+            this._notify('notifications/cancelled', {
+              requestId: id,
+              reason: 'MCP request timed out: ' + method
+            });
+          } catch {}
+        }
         reject(new Error('MCP request timed out: ' + method));
       }, timeoutMs);
       this.pending.set(String(id), { resolve, reject, timer });
@@ -305,12 +324,25 @@ export class McpServerClient {
     this.pending.clear();
   }
 
+  _terminateProcessTree() {
+    if (!this.child || this.terminationRequested) return;
+    this.terminationRequested = true;
+    signalProcessTree(this.child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
+    if (process.platform !== 'win32') {
+      // Do not cancel this timer when the leader exits: descendants may ignore
+      // SIGTERM or outlive the MCP server process itself.
+      this.killTimer = setTimeout(() => {
+        this.killTimer = null;
+        signalProcessTree(this.child, 'SIGKILL');
+      }, 1500);
+      this.killTimer.unref?.();
+    }
+  }
+
   close() {
     this.closed = true;
     this._failAll(new Error('MCP server session closed.'));
-    if (this.child && !this.child.killed) {
-      try { this.child.kill('SIGTERM'); } catch {}
-    }
+    this._terminateProcessTree();
   }
 }
 

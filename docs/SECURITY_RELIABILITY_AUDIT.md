@@ -8,6 +8,14 @@ This is an initial source-level security/reliability pass, not a penetration tes
 
 ## Concrete findings fixed on main
 
+### MCP stdio shutdown could orphan descendants, and request timeouts were silent
+
+**Finding:** the stdio MCP client launched its server outside OASIS's dedicated process group and closed only the immediate child. A server-spawned descendant could therefore keep running after the MCP connection closed. Separately, an expired stdio request was removed from the pending map and rejected locally without the protocol cancellation notification, leaving a cooperative server unaware that the result was no longer wanted.
+
+**Fix committed:** stdio MCP processes now use the shared process-tree spawn options and termination helper. Shutdown signals the process group, schedules a forced stop on POSIX even if the leader exits first, and also handles an unexpected leader exit. Request timeouts send MCP's `notifications/cancelled` with the original request ID and a reason; the `initialize` request is intentionally excluded from cancellation.
+
+**Regression coverage:** an integration fixture spawns a harmless descendant and verifies closing the client stops it; a second fixture observes the standard cancellation notification after a request timeout. The latest CI run must pass before this change is described as verified. Windows process-tree behavior remains dependent on the existing `taskkill /T /F` implementation and must be exercised by the cross-platform workflow.
+
 ### Browser navigation approval could be reused across opaque URL targets
 
 The browser tool cached approvals by `URL.origin`. `data:` URLs share the opaque origin string `null`; `file:` URLs do not have normal web-origin semantics; and the previous implementation treated every `about:` URL as inherently local. Approving one opaque target could therefore be reused for another.
