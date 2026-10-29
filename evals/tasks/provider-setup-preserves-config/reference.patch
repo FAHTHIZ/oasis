@@ -1,7 +1,7 @@
 diff --git a/src/config.mjs b/src/config.mjs
 --- a/src/config.mjs
 +++ b/src/config.mjs
-@@ -42,4 +42,26 @@ export function validateProtocol(raw) {
+@@ -42,6 +42,27 @@ export function validateProtocol(raw) {
    return protocol;
  }
  
