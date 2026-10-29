@@ -7,13 +7,13 @@
 
 OASIS is beyond a documentation-only prototype. The repository contains an implemented agent/tool loop, file and command tools, permission evaluation, snapshots and rewind, model/provider adapters, MCP, skills, hooks, plugin loading, memory and context compaction, sessions, subagents, task coordination, worktree support, workflows, diagnostics/LSP, CLI/headless paths, browser workspace, IDE integration, GitHub Action and desktop packaging.
 
-The most recently fully verified implementation baseline before the follow-up patches in this commit is [`67df415fad3fc5530f1418f2ee8b44ac485fd349`](https://github.com/FAHTHIZ/oasis/commit/67df415fad3fc5530f1418f2ee8b44ac485fd349):
+The most recently fully verified implementation baseline before the follow-up patches in this commit is [`abe7c2fc2decbd0de35973c7f5812ad3e93d4230`](https://github.com/FAHTHIZ/oasis/commit/abe7c2fc2decbd0de35973c7f5812ad3e93d4230):
 
-- [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224): **646 tests passed, 0 failed**, Node.js 22/24/26; all 33 evaluation fixtures validated; Ubuntu/macOS/Windows security regression jobs, Linux native PTY and browser end-to-end smoke passed.
-- [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40857806325): passed on that same revision.
-- [Desktop packaging and release workflow](https://github.com/FAHTHIZ/oasis/actions/runs/40857806335): Windows, macOS and Linux package jobs and the versioned-release step passed on that same revision.
+- [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40859242172): **648 tests passed, 0 failed**, Node.js 22/24/26; all 33 evaluation fixtures validated; Ubuntu/macOS/Windows security regression jobs, Linux native PTY and browser end-to-end smoke passed.
+- [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40859242145): passed on that same revision.
+- [Desktop packaging and release workflow](https://github.com/FAHTHIZ/oasis/actions/runs/40859242030): Windows, macOS and Linux package jobs and the versioned-release step passed on that same revision.
 
-Those results are real regression and packaging evidence. They do **not** prove production readiness, complete security, or representative repository-level coding quality. The current follow-up adds process-tree and strict-configuration changes; those changes must complete their own CI runs before being treated as verified.
+Those results are real regression and packaging evidence. They do **not** prove production readiness, complete security, or representative repository-level coding quality. The next patch adds process-tree cancellation to Git operations and background-session stops, and enforces an output cap for HTTP MCP header helpers; it must complete its own CI runs before those additions are treated as verified.
 
 This register is an actionable implementation/status map based on the recursive repository tree and direct inspection of the main runtime, tools, permissions, sandbox, context/memory, task coordination, MCP/hooks, LSP/diagnostics, evaluator, tests and CI. It is not a formal proof that every line or dependency is defect-free.
 
@@ -54,7 +54,9 @@ See [the evaluation protocol](BENCHMARKS.md) and [benchmark audit](BENCHMARK_AUD
 
 **Gap:** timeouts and cancellation must terminate descendants and close inherited handles, not merely signal the leader. Linux/POSIX process groups and Windows `taskkill /T /F` have different semantics.
 
-**Patch in the current follow-up:** evaluation runner, background/shell tools, diagnostics and language-server cleanup use the shared process-tree helper; the background regression specifically tests a child that ignores SIGTERM after its leader exits. Configuration/runtime model limits also reject malformed integer prefixes instead of silently accepting `parseInt` fragments.
+**Verified on `abe7c2f`:** the evaluator, shell/background tools, diagnostics, language servers and read-only Git use the shared process-tree helper. Regression tests cover inherited output pipes and a descendant that ignores SIGTERM after its leader exits. Saved/runtime/turn model budgets reject malformed integer prefixes.
+
+**Next patch:** extend whole-tree shutdown to Git workflow tools and persistent background-session stops, and impose bounded output plus tree termination on HTTP MCP header helpers. Close this gap only after the new revision passes CI; Windows process-tree semantics still need dedicated adversarial coverage.
 
 **Close it when:** the new revision passes Quality Checks, and platform-specific tests cover leader-exits-first behavior, cancellation, timeout, inherited-pipe cleanup and LSP/background process shutdown on Windows, macOS and Linux. The new patch is not considered verified until those workflows pass.
 

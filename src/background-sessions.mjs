@@ -1,4 +1,4 @@
-// Background sessions (Claude Code's `--bg`, /background and /bg): a detached headless
+// Background sessions (`--bg`, /background and /bg): a detached headless
 // Oasis process works on a task while the terminal is free. Each run has a registry entry
 // in <oasis config>/background/<id>.json and a stream-json log next to it.
 //
@@ -10,6 +10,7 @@
 //   oasis --bg --exec 'cmd'    run a shell command as a background job (logs/stop/rm work the same)
 // attach/logs/stop/rm/respawn are also top-level commands and accept an id prefix or part of a name.
 import { spawn } from 'node:child_process';
+import { signalProcessTree } from './process-tree.mjs';
 import { randomUUID } from 'node:crypto';
 import { closeSync, openSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
@@ -191,7 +192,10 @@ export async function listBackgroundSessions(env = process.env) {
 export async function stopBackgroundSession(id, env = process.env) {
   const entry = await readEntry(id, env);
   if (entry.status !== 'running') return { ...entry, stopped: false };
-  try { process.kill(process.platform === 'win32' ? entry.pid : -entry.pid, 'SIGTERM'); } catch { try { process.kill(entry.pid, 'SIGTERM'); } catch {} }
+  const processHandle = { pid: entry.pid, kill: (signal) => { try { process.kill(entry.pid, signal); return true; } catch { return false; } } };
+  signalProcessTree(processHandle, 'SIGTERM');
+  const killTimer = setTimeout(() => signalProcessTree(processHandle, 'SIGKILL'), 1500);
+  killTimer.unref?.();
   const stopped = { ...entry, status: 'stopped', finishedAt: new Date().toISOString() };
   await writeEntry(stopped, env);
   return { ...stopped, stopped: true };

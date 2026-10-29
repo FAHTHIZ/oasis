@@ -2,7 +2,7 @@
 
 **Status checked:** October 29, 2026  
 **Code snapshot audited before the latest main changes:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca)  
-**Last fully verified implementation baseline before the follow-up patches in this commit:** [`67df415fad3fc5530f1418f2ee8b44ac485fd349`](https://github.com/FAHTHIZ/oasis/commit/67df415fad3fc5530f1418f2ee8b44ac485fd349), [Quality Checks run 40857806224](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224): 646 tests, 33 fixtures, Node 22/24/26, Linux PTY and browser E2E passed. [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40857806325) and [Windows/macOS/Linux desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/40857806335) passed on the same SHA.
+**Last fully verified implementation baseline before the follow-up patches in this commit:** [`abe7c2fc2decbd0de35973c7f5812ad3e93d4230`](https://github.com/FAHTHIZ/oasis/commit/abe7c2fc2decbd0de35973c7f5812ad3e93d4230), [Quality Checks run 40859242172](https://github.com/FAHTHIZ/oasis/actions/runs/40859242172): 648 tests, 33 fixtures, Node 22/24/26, Linux PTY and browser E2E passed. [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40859242145) and [Windows/macOS/Linux desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/40859242030) passed on the same SHA.
 **Purpose:** prioritize OASIS-owned reliability, coding quality, safety, and release readiness based on what is implemented and verifiable.
 
 ## Decision
@@ -13,11 +13,11 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-The isolated-worktree, durable task-history, public-fetch and federated-search/query-planning changes are included in code commit `5a53756`, whose [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) passed 646 tests, 33/33 fixtures, the Node 22/24/26 matrix, PTY and browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code commit. Keep remaining priorities focused on measurable coding outcomes and end-to-end reliability, not feature count.
+Earlier isolated-worktree, durable task-history, public-fetch and federated-search/query-planning work was added before the current verified baseline. The latest fully verified revision, `abe7c2f`, passed 648 tests and validated 33/33 fixtures on Node 22/24/26; PTY, browser E2E, cross-platform security, publishing, and desktop release checks all passed on that same SHA. Keep remaining priorities focused on measurable OASIS user outcomes and end-to-end reliability, not feature count.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
-| Last fully verified Quality Checks baseline | [Run 40857806224](https://github.com/FAHTHIZ/oasis/actions/runs/40857806224) passed: 646 tests, Node 22/24/26, 33 validated fixtures, Linux PTY, browser E2E and cross-platform security regressions | Publishing and desktop packaging also passed on the same `67df415` revision; the evaluator escalation, read-only Git and strict turn-budget follow-up still needs fresh verification. |
+| Last fully verified Quality Checks baseline | [Run 40859242172](https://github.com/FAHTHIZ/oasis/actions/runs/40859242172) passed: 648 tests, Node 22/24/26, 33 validated fixtures, Linux PTY, browser E2E and cross-platform security regressions | Publishing and desktop packaging also passed on the same `abe7c2f` revision; the Git, background-session, and MCP-helper lifecycle follow-up still needs fresh verification. |
 | Current desktop build | [Run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. | Platform packaging passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
 | Current publishing validation | [Run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed | The repository/public-site checks passed on comparator code revision `268862c`. |
 

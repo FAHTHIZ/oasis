@@ -122,6 +122,42 @@ test('.mcp.json stdio servers start with expanded env; bad entries are reported'
 
 
 
+test('HTTP MCP headersHelper output overflow kills its full process tree', { skip: process.platform !== 'linux' }, async (t) => {
+  const root = await tmp(t);
+  const readyPath = path.join(root, 'helper-child.ready');
+  const pidPath = path.join(root, 'helper-child.pid');
+  const childScript = path.join(root, 'helper-stubborn-child.cjs');
+  const helperScript = path.join(root, 'headers-helper.cjs');
+  await writeFile(childScript, [
+    "process.on('SIGTERM', () => {});",
+    "require('node:fs').writeFileSync(process.env.OASIS_TEST_READY_FILE, 'ready');",
+    "setInterval(() => {}, 1000);"
+  ].join('\n'));
+  await writeFile(helperScript, [
+    "const { spawn } = require('node:child_process');",
+    "const fs = require('node:fs');",
+    "const child = spawn(process.execPath, [process.env.OASIS_TEST_CHILD_SCRIPT], { stdio: 'ignore', env: process.env });",
+    "const publish = setInterval(() => { if (fs.existsSync(process.env.OASIS_TEST_READY_FILE)) { clearInterval(publish); fs.writeFileSync(process.env.OASIS_TEST_PID_FILE, String(child.pid)); process.stdout.write('x'.repeat(70000)); } }, 10);",
+    "setInterval(() => {}, 1000);"
+  ].join('\n'));
+  const client = new McpHttpClient({
+    name: 'tree-overflow',
+    url: 'https://mcp.example/mcp',
+    headersHelper: process.execPath + ' ' + helperScript
+  }, {
+    env: { ...process.env, OASIS_TEST_READY_FILE: readyPath, OASIS_TEST_PID_FILE: pidPath, OASIS_TEST_CHILD_SCRIPT: childScript }
+  });
+  let pid = 0;
+  try {
+    await assert.rejects(client._helperHeaders(), /headersHelper output exceeded 64 KiB/);
+    pid = Number((await readFile(pidPath, 'utf8')).trim());
+    assert.ok(pid > 0, 'helper should write descendant PID before producing oversized output');
+    assert.equal(await waitForProcessExit(pid, 3000), true, 'overflow must not leave the helper descendant running');
+  } finally {
+    if (pid > 0) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+  }
+});
+
 test('stdio MCP request timeout sends a cancellation notification', async (t) => {
   const root = await tmp(t);
   const notificationFile = path.join(root, 'cancelled.json');
