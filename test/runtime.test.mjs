@@ -666,6 +666,8 @@ test('command policy blocks env split-string forms that can hide nested executab
     assert.match(result.blocked || '', /env -S\/--split-string hides a nested executable/);
   }
   assert.match(analyzeCommand('nice', ['env', '-S', 'sh -c id']).blocked || '', /blocked by Oasis safety policy|env -S/);
+  assert.match(analyzeCommand('script', ['-c', 'sh -c id']).blocked || '', /Could not safely inspect the nested executable/);
+  assert.match(analyzeCommand('flock', ['-c', 'sh -c id']).blocked || '', /Could not safely inspect the nested executable/);
 });
 
 test('public URL fetch blocks loopback and private network addresses', async () => {
