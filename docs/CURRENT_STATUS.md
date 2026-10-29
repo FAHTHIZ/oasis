@@ -130,9 +130,6 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 
 - [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md)
 - [Alpha-confidence milestone](NEXT_MILESTONE.md)
-- [compatible tooling agent/workflow documentation](https://code.claude.com/docs/en/agents)
-- [compatible tooling Remote Control documentation](https://code.claude.com/docs/en/remote-control)
-- [compatible tooling best practices](https://code.claude.com/docs/en/best-practices)
 
 ## PTY milestone update (October 29, 2026)
 
