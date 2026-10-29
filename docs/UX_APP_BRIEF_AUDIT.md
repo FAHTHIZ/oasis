@@ -71,7 +71,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Requirement | Status | Evidence / remaining work |
 |---|---|---|
 | Chat panel, selection context, diff review | Implemented in source | `ide/vscode/src/chat-view.js` and `ide/vscode/src/extension.js`. |
-| Plain-language approvals | Partial / verify | Permission cards display the CLI-provided message; verify wording, risky-action visibility and denial behavior in a real editor. |
+| Plain-language approvals | Improved; manual verification remains | Browser card now says “OASIS needs your permission,” “Allow once,” and “Deny”; reusable approvals explicitly say they apply for this session. VS Code cards add a cautious destructive-action warning, a clear deny instruction, keyboard-focus styling and a minimum 36px button height. The shared approval backend still enforces the actual decision; risk highlighting is only a visual heuristic. Manual review is still required. |
 | Friendly missing-CLI error | Implemented in this pass | `ide/vscode/src/chat-process.js` now explains how to install OASIS or configure `oasis.command`; a focused regression test was added. |
 | Changelog | Implemented in this pass | `ide/vscode/CHANGELOG.md`. |
 | Marketplace icon and screenshots | **Partial / missing** | Activity-bar SVG exists, but a marketplace-ready PNG extension icon and real chat/diff/selection screenshots are still outstanding. |
@@ -103,11 +103,13 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 
 - Added `ide/vscode/CHANGELOG.md`.
 - Improved VS Code startup failures for missing or non-executable OASIS commands, including clear next steps and an `oasis doctor` hint for unexpected errors.
-- Added focused regression tests in `test/vscode-chat-process.test.mjs`.
+- Clarified VS Code permission cards with “Allow once” / “Deny”, a review-before-approval reminder, and a conservative red warning for likely destructive requests; added keyboard-focus styling.
+- Added actionable guidance for nonzero VS Code CLI exits, filtered stack frames from the user-facing summary, and added focused regression tests in `test/vscode-chat-process.test.mjs`.
+- Aligned browser approval labels with the same one-time allow/deny wording and explicitly scoped reusable approvals to the current session.
 - Added `docs/PHONE_CONNECT_SECURITY.md` and clarified that explicit LAN/TLS options exist today but do not constitute secure phone pairing.
 - Added an Alpha badge to the README and corrected the Apache license badge's alt text.
 - Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
 
 ## Verification limits
 
-The repository could be read and updated through GitHub, but this runtime could not clone the repository to execute its test suite because it could not resolve `github.com`. The newly added test has **not** been run in this environment. The next check is `npm run check` on the current main revision, followed by a real VS Code manual check. Do not mark those checks green until the results are available.
+The repository can be read and updated through GitHub, but this runtime could not clone the repository to run tests locally because it could not resolve `github.com`. GitHub Actions caught a syntax error in an earlier VS Code exit-message commit (`Unexpected identifier 'oasis'` from a nested template-literal backtick); the wording was corrected in commit `6ff224bc`. The subsequent quality run was still queued at the last status check, so the latest code is **not yet confirmed green**. Re-check [GitHub Actions](https://github.com/FAHTHIZ/oasis/actions) for the current `main` run, then do a live VS Code review. Do not treat source edits as test passes.
