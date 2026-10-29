@@ -159,6 +159,12 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.equal(statusBody.workspaceName, path.basename(root));
   assert.equal('apiKey' in statusBody, false);
 
+  const anonymousMonitor = await fetch(base + '/api/agent-monitor');
+  assert.equal(anonymousMonitor.status, 401, 'the run monitor must use the same bearer-token boundary as other APIs');
+  const monitorResponse = await fetch(base + '/api/agent-monitor', { headers: auth });
+  assert.equal(monitorResponse.status, 200);
+  assert.deepEqual((await monitorResponse.json()).runs, []);
+
   const sessions = await fetch(base + '/api/sessions', { headers: auth });
   assert.equal(sessions.status, 200);
   assert.deepEqual((await sessions.json()).sessions, []);
