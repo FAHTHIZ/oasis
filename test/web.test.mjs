@@ -527,7 +527,7 @@ test('browser chat runs a model tool call through approval and completes the sam
 });
 
 
-test('browser runtime rejects a 21st active job instead of exceeding its bounded job history', async (t) => {
+test('browser runtime rejects overlapping mutating jobs before workspace capacity can be exceeded', async (t) => {
   const root = await tempDir();
   const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
   const pendingResponses = [];
@@ -558,7 +558,7 @@ test('browser runtime rejects a 21st active job instead of exceeding its bounded
   });
   const base = 'http://127.0.0.1:' + app.port;
   const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
-  const jobIds = [];
+  let jobId = null;
   const releaseProvider = () => {
     releaseResponses = true;
     for (const res of pendingResponses.splice(0)) {
@@ -567,56 +567,54 @@ test('browser runtime rejects a 21st active job instead of exceeding its bounded
       res.end(fixtureResponse);
     }
   };
-  const finishActiveJobs = async () => {
+  const finishActiveJob = async () => {
+    if (!jobId) return;
     const deadline = Date.now() + 5000;
-    while (jobIds.length && Date.now() < deadline) {
-      const snapshots = await Promise.all(jobIds.map(async (id) => {
-        try {
-          const response = await fetch(base + '/api/jobs/' + id + '?after=0', {
-            headers: { authorization: 'Bearer ' + app.token }
-          });
-          return response.ok ? await response.json() : null;
-        } catch { return null; }
-      }));
-      if (snapshots.every((snapshot) => snapshot && ['completed', 'error', 'cancelled'].includes(snapshot.status))) return;
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch(base + '/api/jobs/' + jobId + '?after=0', {
+          headers: { authorization: 'Bearer ' + app.token }
+        });
+        const snapshot = response.ok ? await response.json() : null;
+        if (snapshot && ['completed', 'error', 'cancelled'].includes(snapshot.status)) return;
+      } catch {}
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   };
   t.after(async () => {
     releaseProvider();
-    await finishActiveJobs();
+    await finishActiveJob();
     await app.close();
     await new Promise((resolve) => providerServer.close(resolve));
     await rm(root, { recursive: true, force: true });
   });
 
-  for (let index = 0; index < 20; index++) {
-    const response = await fetch(base + '/api/chat', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ message: 'Keep active capacity fixture ' + index + ' running.' })
-    });
-    assert.equal(response.status, 202, 'job ' + (index + 1) + ' should be admitted');
-    const body = await response.json();
-    assert.ok(body.jobId);
-    jobIds.push(body.jobId);
-  }
-
-  const overflow = await fetch(base + '/api/chat', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ message: 'This 21st active job must be rejected.' })
+  const first = await fetch(base + '/api/chat', {
+    method: 'POST', headers,
+    body: JSON.stringify({ message: 'Keep the first mutating task active while testing workspace locking.' })
   });
-  assert.equal(overflow.status, 429, await overflow.clone().text());
-  assert.match((await overflow.json()).error, /20-job limit/i);
+  assert.equal(first.status, 202, await first.clone().text());
+  jobId = (await first.json()).jobId;
+  assert.ok(jobId);
 
   const deadline = Date.now() + 5000;
-  while (pendingResponses.length < 20 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  while (pendingResponses.length < 1 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(pendingResponses.length, 1, 'the first task must be waiting on the held provider response');
+
+  for (let index = 0; index < 20; index++) {
+    const response = await fetch(base + '/api/chat', {
+      method: 'POST', headers,
+      body: JSON.stringify({ message: 'Overlapping task ' + index + ' must be rejected.' })
+    });
+    assert.equal(response.status, 409, await response.clone().text());
+    assert.match((await response.json()).error, /workspace already has an active task/i);
   }
-  assert.equal(pendingResponses.length, 20, 'all admitted jobs should reach the intentionally held provider response');
+  assert.equal(pendingResponses.length, 1, 'rejected tasks must not reach the provider');
+
   releaseProvider();
-  await finishActiveJobs();
+  await finishActiveJob();
+  const final = await (await fetch(base + '/api/jobs/' + jobId, { headers: { authorization: 'Bearer ' + app.token } })).json();
+  assert.equal(final.status, 'completed', JSON.stringify(final));
 });
 
 test('browser runtime rejects a second concurrent request for the same saved session', async (t) => {
