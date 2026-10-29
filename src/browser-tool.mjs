@@ -92,6 +92,10 @@ function isPrivateOrSpecialIPv4(host) {
 export function isPrivateBrowserRequest(rawUrl) {
   let parsed;
   try { parsed = new URL(String(rawUrl)); } catch { return true; }
+  // Page-initiated file/about requests are local-resource access too. Gate them
+  // through the same approval path instead of letting subframes bypass the
+  // HTTP(S)-only host checks below. Data URLs remain non-network content.
+  if (parsed.protocol === 'file:' || parsed.protocol === 'about:') return true;
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
   let host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
@@ -106,7 +110,8 @@ export function isPrivateBrowserRequest(rawUrl) {
   if (isPrivateOrSpecialIPv4(host)) return true;
   return host === '::' || host === '::1' || /^f[cd]/i.test(host) ||
     /^fe[89ab]/i.test(host) || /^fec0/i.test(host) || /^ff/i.test(host) ||
-    /^2001:(?:0|db8):/i.test(host) || /^2002:/i.test(host);
+    /^2001:(?:0|1|2|3|10|20|db8):/i.test(host) || /^2001:4:112:/i.test(host) ||
+    /^2002:/i.test(host) || /^64:ff9b:/i.test(host) || /^3fff:/i.test(host);
 }
 
 const KEYS = {
