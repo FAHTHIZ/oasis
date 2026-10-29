@@ -26,11 +26,11 @@ On comparator code revision `268862c`, [Quality Checks](https://github.com/FAHTH
 | Native PTY check | Real interactive-process smoke test passed on Linux / Node.js 22; this is not proof of Windows/macOS/Termux support |
 | Browser E2E | Linux Chromium authenticated chat smoke test passed, including a workspace write/read cycle |
 | Package integrity | Production-package checks passed in the latest Quality Checks run |
-| Desktop packaging | Previous complete matrix [run 40804769799](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux. The comparator revision's new matrix is [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603); check that run for the final Windows result. |
+| Desktop packaging | [Build OASIS desktop installers run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. Installers remain unsigned. |
 | Homepage/repository validation | [Homepage/repository validation run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed on comparator code revision `268862c` |
 | Release maturity | Package version `0.3.0`; CI can build desktop installers, but the current installers are unsigned and first-run behavior is not yet proven across all supported operating systems |
 
-Quality Checks and publishing validation passed for comparator code revision `268862c`; the desktop matrix for that revision is tracked in [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603), with the previously completed cross-platform matrix linked above. The browser smoke test runs in Linux Chromium; it does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
+All three required workflows passed on comparator code revision `268862c`: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). The browser smoke test runs in Linux Chromium; it does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
 
 ## What the code currently provides
 
