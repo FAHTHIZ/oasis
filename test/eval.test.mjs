@@ -191,11 +191,11 @@ test('eval tasks support reusable named repository snapshots with safe IDs', asy
   const taskRepo = path.join(taskDir, 'repo');
   await rm(taskRepo, { recursive: true, force: true });
   await mkdir(taskRepo);
-  await writeFile(path.join(taskRepo, 'BASE_SNAPSHOT'), 'fixture-repo\\n');
+  await writeFile(path.join(taskRepo, 'BASE_SNAPSHOT'), 'fixture-repo\n');
 
   const snapshot = path.join(snapshotsDir, 'fixture-repo');
   await mkdir(snapshot, { recursive: true });
-  await writeFile(path.join(snapshot, 'demo.txt'), 'old\\n');
+  await writeFile(path.join(snapshot, 'demo.txt'), 'old\n');
 
   const report = await validateEvaluationSuite({
     tasksDir,
@@ -206,7 +206,7 @@ test('eval tasks support reusable named repository snapshots with safe IDs', asy
   assert.equal(report.results[0].id, 'shared-snapshot-task');
   assert.equal(report.results[0].ok, true);
 
-  await writeFile(path.join(taskRepo, 'BASE_SNAPSHOT'), '../escape\\n');
+  await writeFile(path.join(taskRepo, 'BASE_SNAPSHOT'), '../escape\n');
   const unsafe = await validateEvaluationSuite({
     tasksDir,
     snapshotsDir,
