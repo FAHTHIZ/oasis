@@ -387,11 +387,11 @@ async function configureProvider(root = process.cwd(), options = {}) {
     if (options.skipPresetPrompt) {
       presetName = defaultPreset;
     } else {
-      stdout.write('\\nChoose how you want to connect OASIS:\\n');
-      stdout.write('  1. I have an API key\\n');
-      stdout.write('  2. Use the free OmniRoute gateway (may be slow or limited)\\n');
-      stdout.write('  3. Use a model on this computer (Ollama)\\n');
-      stdout.write('  4. Advanced provider or custom endpoint\\n');
+      stdout.write('\nChoose how you want to connect OASIS:\n');
+      stdout.write('  1. I have an API key\n');
+      stdout.write('  2. Use the free OmniRoute gateway (may be slow or limited)\n');
+      stdout.write('  3. Use a model on this computer (Ollama)\n');
+      stdout.write('  4. Advanced provider or custom endpoint\n');
       const defaultChoice = defaultPreset === 'omniroute' ? '2'
         : defaultPreset === 'ollama' ? '3'
         : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '4' : '1';
