@@ -478,6 +478,35 @@ test('eval comparison exports private JSON and self-contained escaped HTML repor
   }
 });
 
+test('comparison artifact refuses symlink outputs without changing the target', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const reports = path.join(tmp, 'reports');
+  await mkdir(reports);
+  const aPath = path.join(tmp, 'a.json');
+  const bPath = path.join(tmp, 'b.json');
+  const target = path.join(tmp, 'protected.html');
+  const linkedOutput = path.join(reports, 'comparison.html');
+  const run = { results: [{ taskId: 'task-one', status: 'passed' }] };
+  await writeFile(aPath, JSON.stringify({ ...run, label: 'A' }));
+  await writeFile(bPath, JSON.stringify({ ...run, label: 'B' }));
+  await writeFile(target, 'do not overwrite\\n');
+  try {
+    await symlink(target, linkedOutput);
+  } catch (error) {
+    t.skip('symlinks are unavailable in this environment: ' + error.message);
+    return;
+  }
+
+  const output = { text: '', write(value) { this.text += String(value); } };
+  await assert.rejects(
+    runEvalCommand(['--compare', aPath, bPath, '--html', linkedOutput], { env: { ...process.env }, output }),
+    /regular, non-symlink file/
+  );
+  assert.equal(await readFile(target, 'utf8'), 'do not overwrite\\n');
+  assert.equal(await readFile(linkedOutput, 'utf8'), 'do not overwrite\\n');
+});
+
 test('comparison reports category-balanced rates separately from task-balanced rates', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
