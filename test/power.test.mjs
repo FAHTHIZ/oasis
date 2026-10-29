@@ -6,7 +6,7 @@ import { mkdtemp, writeFile, readFile, rm, mkdir, access } from 'node:fs/promise
 import { analyzeCommand, PermissionPolicy, parseRule, ruleMatches, suggestRule } from '../src/permissions.mjs';
 import { runWorkspaceCommand, executeTool } from '../src/tools.mjs';
 import { grepWorkspace, multiEditFile, shellCommandBlocked } from '../src/power-tools.mjs';
-import { detectSandbox, resolveSandbox, wrapCommand } from '../src/sandbox.mjs';
+import { detectSandbox, resolveSandbox, wrapCommand, macProfile } from '../src/sandbox.mjs';
 
 async function tmp(prefix = 'oasis-power-') { return await mkdtemp(path.join(os.tmpdir(), prefix)); }
 
@@ -167,6 +167,18 @@ test('OS sandbox confines writes to the workspace and blocks network when availa
   assert.ok(wrapped.args.includes('--unshare-net') || wrapped.args.join(' ').includes('deny network'));
 });
 
+test('OS sandbox masks common credential paths from sandboxed processes', () => {
+  const maskedPaths = [
+    { path: '/home/test/.ssh', type: 'directory' },
+    { path: '/home/test/.netrc', type: 'file' }
+  ];
+  const linux = wrapCommand('node', ['script.js'], { enabled: true, available: true, kind: 'bubblewrap', network: false, writable: ['/workspace'], maskedPaths }, '/workspace');
+  assert.ok(linux.args.some((arg, index) => arg === '--tmpfs' && linux.args[index + 1] === '/home/test/.ssh'));
+  assert.ok(linux.args.some((arg, index) => arg === '--ro-bind' && linux.args[index + 1] === '/dev/null' && linux.args[index + 2] === '/home/test/.netrc'));
+  const profile = macProfile({ writable: ['/workspace'], network: false, maskedPaths: [{ path: '/Users/test/.ssh', type: 'directory' }, { path: '/Users/test/.netrc', type: 'file' }] });
+  assert.ok(profile.includes('(deny file-read* (subpath "/Users/test/.ssh"))'));
+  assert.ok(profile.includes('(deny file-read* (literal "/Users/test/.netrc"))'));
+});
 test('session rules for path commands keep the path; deny rules also catch path forms', () => {
   const policy = new PermissionPolicy({ permissions: { deny: ['run_command(rm:*)'] } });
   const rule = suggestRule('run_command', { command: '/usr/local/bin/node', args: ['--version'] });
