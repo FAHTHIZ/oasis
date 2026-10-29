@@ -28,20 +28,20 @@ The installers are currently unsigned. Your operating system may show a warning.
 Paste this **single line** into your terminal. It downloads the installer, checks its SHA-256 against the published value below, and runs it only if the checksum matches.
 
 ```sh
-sh -c 'set -eu; f="${TMPDIR:-/tmp}/oasis-install.sh.$"; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f"; expected=0d93c4ffbb0c0093bb0b803f3e80d5fccbf7904741286cf3460de9f980bb8f3a; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
+sh -c 'set -eu; f="${TMPDIR:-/tmp}/oasis-install.sh.$"; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f"; expected=0969eb1ed71b21158bfe0ba3fe7a13b1198299d84fcbb5f4873574de47c287e5; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
 ```
 
-The installer checks Node.js 22+, asks before installing OASIS or changing your shell startup file, uses the fixed `v0.3.0` release rather than `main`, then runs `oasis doctor` and opens first-run setup. It never requests administrator rights. If Node.js is missing, it offers Termux's `pkg install nodejs` or Homebrew on a Mac when available; otherwise it shows the official Node.js download page.
+The installer checks Node.js 22+, asks before installing OASIS or changing your shell startup file, uses immutable source revision `27efc103994c26cab2331bb7037167372ceaa787` (package version `0.3.0`) rather than moving `main`, then runs `oasis doctor` and opens first-run setup. It never requests administrator rights. If Node.js is missing, it offers Termux's `pkg install nodejs` or Homebrew on a Mac when available; otherwise it shows the official Node.js download page.
 
-**Published installer SHA-256:** `0d93c4ffbb0c0093bb0b803f3e80d5fccbf7904741286cf3460de9f980bb8f3a`
+**Published installer SHA-256:** `0969eb1ed71b21158bfe0ba3fe7a13b1198299d84fcbb5f4873574de47c287e5`
 
 For **Windows PowerShell**, paste this one line. It checks the downloaded script's hash before running it:
 
 ```powershell
-$p=Join-Path $env:TEMP 'oasis-install.ps1'; Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='68d69885471fba16b39986e7070086df562a440d0be98747df60b4f66db5bb18'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p
+$p=Join-Path $env:TEMP 'oasis-install.ps1'; Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='920e1c647c905977afc308ee9c72f8a9cac2f173c279460fa0ca35505f97efd3'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p
 ```
 
-**Published Windows installer SHA-256:** `68d69885471fba16b39986e7070086df562a440d0be98747df60b4f66db5bb18`
+**Published Windows installer SHA-256:** `920e1c647c905977afc308ee9c72f8a9cac2f173c279460fa0ca35505f97efd3`
 
 If the check fails, stop and do not run the script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
 
