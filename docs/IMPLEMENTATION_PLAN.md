@@ -101,6 +101,8 @@ Oasis is a Node.js ESM application. src/cli.mjs starts terminal/headless workflo
 
 ### 7. Plugin package and marketplace
 
+- **Progress (2026-10-29):** `src/native-plugins.mjs` now validates required author/license/minimum Oasis version metadata, supports both `agents` and `subagents` component paths, and accepts local folders or HTTPS/SSH/file Git URLs with optional safe refs. Git sources are cloned with shell-disabled `spawnSync`, a 120-second timeout, no recursive submodules, and cleanup after validation/staging; package scripts are never invoked. Tests cover explicit grants, permission diffs, metadata/version rejection, subagents and clone cleanup. Full-current-head CI remains pending; broader enable/disable parity and remote-source stress/security tests remain open.
+
 - **Existing equivalent:** src/plugins.mjs manages reviewed skill bundles; src/claude-plugins.mjs supports portions of the ecosystem plugin/marketplace format; plugins/catalog.json is a reviewed catalog.
 - **Affected files:** src/plugins.mjs, src/claude-plugins.mjs, new src/plugin-manifest.mjs, src/settings.mjs, src/slash.mjs, registry/catalog and plugin tests/author docs.
 - **Minimum viable implementation:** versioned plugin.json declares name/version/description/author/license/minimum Oasis version, skills/hooks/subagents/MCP servers/commands and requested permissions. Validate paths and identifiers; namespace commands as /plugin-name:command; reject collisions. Stage local/Git installs and validate before activation. Show grants; hooks/MCP stay disabled until approved; show permission diffs before updates.
