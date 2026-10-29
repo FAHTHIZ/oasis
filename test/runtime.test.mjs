@@ -11,7 +11,7 @@ import { analyzeCommand } from '../src/permissions.mjs';
 import { microcompact, estimateTokens, contextWindowSize } from '../src/context.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
-import { saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
+import { loadMcpServers, saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
@@ -21,6 +21,20 @@ process.env.OASIS_REQUIRE_READ_BEFORE_EDIT = '0';
 async function temporaryDirectory(prefix = 'oasis-test-') {
   return await mkdtemp(path.join(os.tmpdir(), prefix));
 }
+
+test('MCP configuration loading rejects duplicate names and excessive server counts', async (t) => {
+  const tmp = await temporaryDirectory('oasis-mcp-config-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configPath = path.join(tmp, 'mcp-servers.json');
+  const server = { name: 'fixture', command: process.execPath, args: [], passEnv: [], enabled: false };
+
+  await writeFile(configPath, JSON.stringify({ schemaVersion: 1, servers: [server, { ...server }] }));
+  await assert.rejects(loadMcpServers({ configPath }), /MCP server names must be unique/);
+
+  const servers = Array.from({ length: 41 }, (_, index) => ({ ...server, name: 'server' + index }));
+  await writeFile(configPath, JSON.stringify({ schemaVersion: 1, servers }));
+  await assert.rejects(loadMcpServers({ configPath }), /supports up to 40 servers/);
+});
 
 test('configuration validates HTTPS provider URLs and permits loopback HTTP', () => {
   assert.equal(validateBaseUrl('https://api.example.com/v1/'), 'https://api.example.com/v1');
