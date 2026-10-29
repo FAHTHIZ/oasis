@@ -176,11 +176,48 @@ export async function loadEnabledPlugins(root, options = {}) {
     } catch { /* missing plugin directories are reported by `oasis plugin list` */ }
   };
   for (const dir of String(env.OASIS_PLUGIN_DIRS || '').split(path.delimiter).filter(Boolean)) await add('', path.resolve(dir), 'plugin-dir');
-  for (const [id, record] of Object.entries(registries)) {
-    if (enabled[id] !== true) continue;
+  const { active } = await resolvePluginActivation(registries, enabled);
+  for (const id of active) {
+    const record = registries[id];
     await add(id, record.installPath, record.source === 'claude-code' ? 'claude-code' : 'oasis');
   }
   return out;
+}
+
+// Normalizes manifest.dependencies ("name", "name@market", or { name, marketplace }) to ids.
+export function pluginDependencyIds(manifest, ownId = '') {
+  const market = ownId.includes('@') ? ownId.slice(ownId.indexOf('@') + 1) : '';
+  const list = Array.isArray(manifest && manifest.dependencies) ? manifest.dependencies : [];
+  const ids = [];
+  for (const entry of list.slice(0, 50)) {
+    const name = typeof entry === 'string' ? entry : entry && typeof entry.name === 'string' ? entry.name + (entry.marketplace ? '@' + entry.marketplace : '') : '';
+    if (!name) continue;
+    ids.push(name.includes('@') || !market ? name : name + '@' + market);
+  }
+  return ids;
+}
+
+/**
+ * Which installed plugins load. Explicit enabledPlugins entries win; otherwise the manifest's
+ * defaultEnabled (default true) decides. A plugin depended on by an active plugin starts enabled
+ * unless the user explicitly disabled it. Returns { active, missing: [{ plugin, dependency }] }.
+ */
+export async function resolvePluginActivation(registries, enabled) {
+  const manifests = {};
+  for (const [id, record] of Object.entries(registries)) manifests[id] = await readManifest(record.installPath).catch(() => ({}));
+  const active = new Set(Object.keys(registries).filter((id) => enabled[id] === true || (enabled[id] === undefined && manifests[id].defaultEnabled !== false)));
+  const missing = [];
+  const queue = [...active];
+  while (queue.length) {
+    const id = queue.shift();
+    for (const dep of pluginDependencyIds(manifests[id], id)) {
+      const match = registries[dep] ? dep : Object.keys(registries).find((key) => key.split('@')[0] === dep.split('@')[0] && (!dep.includes('@') || key === dep));
+      if (!match) { missing.push({ plugin: id, dependency: dep }); continue; }
+      if (enabled[match] === false) { missing.push({ plugin: id, dependency: match, disabled: true }); continue; }
+      if (!active.has(match)) { active.add(match); queue.push(match); }
+    }
+  }
+  return { active: [...active], missing };
 }
 
 export async function readManifest(pluginRoot) {
@@ -1010,13 +1047,15 @@ export async function pluginCli(root, args = [], options = {}) {
     const { enabled, declaredUntrusted } = await resolveEnabledPlugins(root, env);
     const registries = { ...(await readClaudeCodeInstalled(env)), ...(await readInstalledPlugins(env)) };
     const active = await loadEnabledPlugins(root, { env });
+    const activation = await resolvePluginActivation(registries, enabled);
     if (!Object.keys(registries).length && !active.length) out('No Claude Code plugins installed. Try: oasis plugin marketplace add anthropics/claude-code\n');
     for (const [id, record] of Object.entries(registries)) {
-      const on = enabled[id] === true;
+      const on = activation.active.includes(id);
       out((on ? '[enabled]  ' : '[disabled] ') + id + (record.source === 'claude-code' ? ' (from Claude Code)' : '') + (record.version ? ' v' + record.version : '') + '\n');
     }
     for (const plugin of active.filter((p) => p.origin === 'plugin-dir')) out('[session]  ' + plugin.name + ' (' + plugin.root + ')\n');
     for (const id of Object.keys(enabled)) if (enabled[id] && !registries[id]) out('[missing]  ' + id + ' is enabled in settings but not installed: oasis plugin install ' + id + '\n');
+    for (const item of activation.missing) out('[dependency] ' + item.plugin + ' needs ' + item.dependency + (item.disabled ? ', which you disabled: oasis plugin enable ' + item.dependency : ': oasis plugin install ' + item.dependency) + '\n');
     for (const id of declaredUntrusted) out('[untrusted] ' + id + ' is enabled by this project; run oasis trust to allow project plugins\n');
     return;
   }

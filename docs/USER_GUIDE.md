@@ -795,6 +795,8 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- Plugin manifests can set `"defaultEnabled": false` (the plugin stays off until enabled in `enabledPlugins`; default is on) and `"dependencies"` (`"name"`, `"name@marketplace"` or `{ "name", "marketplace" }`; bare names use the plugin's own marketplace). Dependencies of an active plugin load automatically unless you explicitly disabled them, and `oasis plugin list` reports missing or disabled dependencies.
+
 - HTTP MCP servers in `.mcp.json` (or `~/.claude.json`, `--mcp-config`, plugins) can set `"headersHelper": "./scripts/mcp-token.sh"`: a shell command that prints a JSON object of headers, such as a short-lived `Authorization` token. Oasis runs it before the first request and again after a 401, with `CLAUDE_CODE_MCP_SERVER_NAME`, `CLAUDE_CODE_MCP_SERVER_URL` (and `CLAUDE_PLUGIN_ROOT` for plugin servers) in its environment. Its headers override static `headers`, and it has a 10-second timeout.
 
 - `MessageDisplay` hooks (no matcher) see each assistant message before it is shown (`turn_id`, `message_id`, `index`, `final`, `delta`) and can return `hookSpecificOutput.displayContent` to change what appears on screen, for example to redact secrets. The transcript and what the model sees stay unchanged. Oasis sends one batch per message (`index: 0`, `final: true`) and turns off token streaming while such a hook is configured; the default timeout is 10 seconds.
