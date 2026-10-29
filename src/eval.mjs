@@ -427,6 +427,16 @@ export async function compareEvalReports(paths, options = {}) {
     throw new Error('Usage: oasis eval --compare <run-a.json> <run-b.json>');
   }
   const output = options.output || process.stdout;
+  const jsonOutputPath = options.jsonOutputPath || null;
+  const htmlOutputPath = options.htmlOutputPath || null;
+  if (jsonOutputPath && htmlOutputPath && path.resolve(jsonOutputPath) === path.resolve(htmlOutputPath)) {
+    throw new Error('JSON and HTML comparison outputs must use different paths.');
+  }
+  for (const reportPath of [jsonOutputPath, htmlOutputPath].filter(Boolean)) {
+    if (paths.some((inputPath) => path.resolve(inputPath) === path.resolve(reportPath))) {
+      throw new Error('Comparison output paths must differ from the input run report paths.');
+    }
+  }
   const [left, right] = await Promise.all(paths.map(readComparisonRun));
   const leftIds = new Set(left.results.map((item) => item.taskId));
   const rightIds = new Set(right.results.map((item) => item.taskId));
