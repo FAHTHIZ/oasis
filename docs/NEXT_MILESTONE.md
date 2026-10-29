@@ -48,6 +48,7 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 - [x] Added regression cases for additional reserved/documentation IPv4 and IPv6 addresses to the public URL-fetch guard.
 - [ ] Repeat focused hook and process-tree tests independently, then keep all required workflows passing on the same commit as code changes continue.
 - [ ] Verify the HTTP MCP credential-helper stdout cap, timeout, overflow termination and in-flight shutdown tests on current-main CI.
+- [ ] Verify isolated worktree Git timeout cleanup kills the command and descendant, while normal worktree creation/merge tests still pass on current-main CI.
 - [ ] Keep the workflows' validation commands aligned where they are intended to cover the same checks. A passing workflow must not mask a failing duplicate gate.
 - [x] Acceptance: Quality Checks, homepage/repository validation, and the desktop build matrix passed for one code commit. Continue repeated focused runs as additional reliability evidence.
 

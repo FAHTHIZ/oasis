@@ -231,11 +231,11 @@ test('worktree Git command timeout terminates a child and its descendant', async
   const result = await runWorktreeCommand(process.execPath, ['-e', script, marker], {
     cwd: dir,
     env: process.env,
-    timeout: 150
+    timeout: 1000
   });
   assert.equal(result.exitCode, 124, JSON.stringify(result));
   assert.equal(result.timedOut, true);
-  assert.match(result.stderr, /timed out after 150ms/);
+  assert.match(result.stderr, /timed out after 1000ms/);
   const pids = JSON.parse(await waitForWorktreeMarker(marker));
   assert.equal(pids.length, 2);
   await Promise.all(pids.map((pid) => waitForWorktreeProcessExit(pid)));

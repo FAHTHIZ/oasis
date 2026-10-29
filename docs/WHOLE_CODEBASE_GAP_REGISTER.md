@@ -58,7 +58,9 @@ See [the evaluation protocol](BENCHMARKS.md) and [benchmark audit](BENCHMARK_AUD
 
 **Progress in the current implementation:** HTTP MCP header helpers cap stdout at 64 KiB, retain only a small stderr tail, use a fixed 10-second production timeout, and signal their process tree on timeout/overflow. Client shutdown now terminates an in-flight helper. Focused overflow, timeout, process-exit, and client-close regressions have been added; current-head verification is pending.
 
-**Remaining work:** extend whole-tree shutdown to Git workflow tools and persistent background-session stops. Windows process-tree semantics still need dedicated adversarial coverage.
+**Progress:** `src/worktrees.mjs` now routes Git commands through the shared process-tree helper rather than `execFile`, with bounded output, explicit timeout results, and TERM-to-KILL escalation even if a leader exits first. A regression test launches a child and grandchild and verifies both exit after timeout; current-main CI is pending.
+
+**Remaining work:** validate descendant cleanup under native Windows/macOS CI and continue hardening filesystem race resistance.
 
 **Close it when:** additional platform-specific tests cover leader-exits-first behavior, cancellation, timeout, inherited-pipe cleanup and LSP/background process shutdown on Windows, macOS and Linux.
 
