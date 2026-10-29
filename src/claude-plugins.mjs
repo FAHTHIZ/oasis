@@ -630,7 +630,10 @@ async function readMarketplaceManifest(dir) {
 function runAsync(command, args, options) {
   return new Promise((resolve) => {
     let child;
-    try { child = spawn(command, args, { cwd: options.cwd, env: options.env, shell: options.shell, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (error) { resolve({ error }); return; }
+    // Never invoke a shell here: marketplace metadata controls package/version/
+    // registry arguments, and shell parsing would turn metacharacters into code
+    // execution on Windows (where npm is commonly exposed as npm.cmd).
+    try { child = spawn(command, args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (error) { resolve({ error }); return; }
     let stdout = '', stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
@@ -638,6 +641,26 @@ function runAsync(command, args, options) {
     child.on('error', (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
     child.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
   });
+}
+
+export async function resolveNpmInvocation({ platform = process.platform, execPath = process.execPath, env = process.env } = {}) {
+  if (platform !== 'win32') return { command: 'npm', argsPrefix: [] };
+  // Resolve npm's JavaScript CLI and invoke it with node.exe. npm.cmd requires a
+  // shell on Windows, which is unsafe when registry metadata supplies argv values.
+  const pathEntries = String(env.PATH || env.Path || '').split(path.delimiter).filter(Boolean);
+  const candidates = [
+    path.join(path.dirname(execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    ...(env.APPDATA ? [path.join(env.APPDATA, 'npm', 'node_modules', 'npm', 'bin', 'npm-cli.js')] : []),
+    ...pathEntries.map((entry) => path.join(entry, 'node_modules', 'npm', 'bin', 'npm-cli.js'))
+  ];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const resolved = path.resolve(candidate);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    if (await exists(resolved)) return { command: execPath, argsPrefix: [resolved] };
+  }
+  throw new Error('Could not locate npm-cli.js for a shell-free Windows npm invocation. Repair the Node.js/npm installation and retry.');
 }
 
 const NPM_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
@@ -654,8 +677,8 @@ export async function fetchNpmPluginSource(source, staging, env = process.env) {
     args.push('--registry', url.toString());
   }
   await mkdir(staging, { recursive: true });
-  const windows = process.platform === 'win32';
-  const packed = await runAsync(windows ? 'npm.cmd' : 'npm', args, { timeout: 180000, cwd: staging, env: { ...env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' }, shell: windows });
+  const invocation = await resolveNpmInvocation({ env });
+  const packed = await runAsync(invocation.command, [...invocation.argsPrefix, ...args], { timeout: 180000, cwd: staging, env: { ...env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' } });
   if (packed.error) throw new Error('npm is required for npm plugin sources: ' + packed.error.message);
   if (packed.status !== 0) throw new Error('npm pack ' + pkg + ' failed: ' + String(packed.stderr || packed.stdout).trim().slice(0, 500));
   let info;
