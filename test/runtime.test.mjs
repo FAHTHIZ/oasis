@@ -645,13 +645,13 @@ test('command tool blocks destructive executable names and strips API keys from 
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
   await assert.rejects(runWorkspaceCommand(tmp, 'rm', ['-rf', '.'], { autoApprove: true }), /blocked by Oasis safety policy/);
-  const result = await runWorkspaceCommand(tmp, process.execPath, ['-e', 'process.stdout.write(process.env.OASIS_API_KEY || "not-present")'], {
+  const result = await runWorkspaceCommand(tmp, process.execPath, ['-e', 'process.stdout.write(JSON.stringify({api: process.env.OASIS_API_KEY || null, aws: process.env.AWS_ACCESS_KEY_ID || null}))'], {
     autoApprove: true,
     approval: async () => true,
-    env: { ...process.env, OASIS_API_KEY: 'do-not-leak-this' }
+    env: { ...process.env, OASIS_API_KEY: 'do-not-leak-this', AWS_ACCESS_KEY_ID: 'aws-access-key-fixture' }
   });
   assert.equal(result.exitCode, 0);
-  assert.equal(result.stdout, 'not-present');
+  assert.equal(result.stdout, '{"api":null,"aws":null}');
 });
 
 test('command policy blocks env split-string forms that can hide nested executables', () => {
