@@ -70,6 +70,8 @@ Oasis is a Node.js ESM application. src/cli.mjs starts terminal/headless workflo
 
 ### 4. Context and compaction
 
+- **Progress (2026-10-29):** `/context all` now reports estimated system/memory/tool-schema/history categories, MCP server schema cost, largest messages and redacted previews. `/compact` now previews before mutation, supports confirm/cancel, stores bounded must-preserve records through session save/resume, and appends those records to automatic/manual summaries. A SHA-256 in-memory freshness guard rejects confirmation after the conversation changes. `test/context-controls.test.mjs` covers redaction, preview non-mutation, stale preview rejection, preservation limits and session persistence. Current-head full-suite verification is pending.
+
 - **Existing equivalent:** src/context.mjs estimates tokens and compacts history; src/slash.mjs has /context and /compact [focus]; PreCompact/PostCompact hooks exist.
 - **Affected files:** src/context.mjs, src/slash.mjs, src/agent.mjs, src/sessions.mjs, context/compaction tests, user-guide and architecture docs.
 - **Minimum viable implementation:** a pure breakdown for system prompt, memory, skills, local/MCP tool schemas, history and outputs, plus largest-message entries and /context all. Label figures estimates. Store must-preserve goal, constraints, plan, paths, latest errors and verification results. Preview proposed retained/summarized content and support cancel without changing history.
