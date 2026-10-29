@@ -39,7 +39,7 @@ export const BUILTIN_COMMANDS = {
   'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id])',
-  mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + ')',
+  mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
   teams: 'List named agent teams and their member status',
