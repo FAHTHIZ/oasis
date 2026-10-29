@@ -675,3 +675,17 @@ test('cancelling a dispatched worker immediately releases its shared task lease'
   assert.equal(task.claimedBy, '');
   assert.equal(task.claimExpiresAt, null);
 });
+
+test('agent lifecycle observers receive structured events without affecting orchestration', () => {
+  const observed = [];
+  const session = { agentTasks: { next: 1, nextTeam: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 }, onAgentEvent: (event) => observed.push(event) };
+  const record = registerAgent(session, { type: 'explore', description: 'Inspect package graph', background: true });
+  assert.equal(observed.length, 1);
+  assert.equal(observed[0].type, 'agent.started');
+  assert.equal(observed[0].agent_id, record.id);
+  assert.equal(observed[0].description, 'Inspect package graph');
+
+  session.onAgentEvent = () => { throw new Error('UI observer unavailable'); };
+  assert.doesNotThrow(() => recordAgentEvent(session, 'agent.completed', { agentId: record.id, description: record.description }));
+  assert.equal(agentEvents(session).events.length, 2);
+});
