@@ -1059,7 +1059,7 @@ test('large command output keeps its beginning, ending, exit code and truncation
     "process.stdout.write('BEGIN-MARKER\\n');",
     "for (let i = 0; i < 5000; i++) process.stdout.write('LINE-' + i + ' ' + 'x'.repeat(30) + '\\n');",
     "process.stdout.write('END-MARKER\\n');"
-  ].join('\\n');
+  ].join('\n');
   await writeFile(path.join(root, 'output-fixture.mjs'), script);
   const result = await runWorkspaceCommand(root, process.execPath, ['output-fixture.mjs'], { autoApprove: true, timeoutSeconds: 10 });
 
@@ -1067,7 +1067,7 @@ test('large command output keeps its beginning, ending, exit code and truncation
   assert.equal(result.stdoutTruncated, true);
   assert.match(result.stdout, /BEGIN-MARKER/);
   assert.match(result.stdout, /END-MARKER/);
-  assert.match(result.stdout, /OASIS omitted \\d+ characters from the middle/);
+  assert.match(result.stdout, /OASIS omitted \d+ characters from the middle/);
   assert.doesNotMatch(result.stdout, /LINE-2000/);
 });
 
