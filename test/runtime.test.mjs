@@ -682,6 +682,10 @@ test('public URL fetch rejects additional IPv4 and IPv6 special-purpose addresse
     'http://203.0.113.9/',
     'http://[fec0::1]/',
     'http://[2001:db8::1]/',
+    'http://[2001:20::1]/',
+    'http://[64:ff9b::1]/',
+    'http://[64:ff9b:1::1]/',
+    'http://[3fff::1]/',
     'http://[2002:c000:0201::1]/'
   ]) {
     await assert.rejects(
