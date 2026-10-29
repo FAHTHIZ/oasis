@@ -1087,11 +1087,12 @@ export function createOasisWebServer(options = {}) {
         return;
       }
       if (typeof options.onProviderConfig === 'function') {
-        // Desktop hosts keep the key in Electron safeStorage. Only non-secret
-        // provider details are written to the shared OASIS config file.
+        // The desktop host commits the encrypted key and non-secret provider
+        // configuration together, including best-effort rollback on save failure.
         await options.onProviderConfig({ protocol, baseURL, model, apiKey });
-        await saveConfig({ protocol, baseURL, model, apiKey: '' }, { env });
       } else {
+        // CLI/browser mode uses the local config file, protected by restrictive
+        // permissions where supported but not OS-backed encryption.
         await saveConfig({ protocol, baseURL, model, apiKey }, { env });
       }
       json(res, 200, {
