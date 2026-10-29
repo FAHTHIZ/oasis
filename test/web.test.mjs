@@ -41,6 +41,7 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
     status: 'completed',
     createdAt: '2026-10-29T10:00:00.000Z',
     workspaceName: 'oasis',
+    sessionId: 'abcdef12-3456-7890-abcd-ef1234567890',
     worktreeBranch: 'oasis/provider-setup',
     worktreePath: '.oasis/worktrees/provider-setup',
     worktreeBaseCommit: 'a'.repeat(40),
@@ -57,6 +58,8 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
   };
   const view = summarizeAgentRun(job);
   assert.equal(view.id, job.id);
+  assert.equal(view.sessionId, job.sessionId);
+  assert.equal(summarizeAgentRun({ ...job, sessionId: '../../private' }).sessionId, '', 'unsafe session identifiers are never returned as recovery targets');
   assert.equal(view.workerCount, 1);
   assert.equal(view.runningWorkers, 0);
   assert.equal(view.workers[0].status, 'completed');
