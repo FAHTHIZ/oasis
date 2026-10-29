@@ -18,8 +18,8 @@ This is a conservative evidence status, not a claim that the repository has no w
 These capabilities have implementation and/or focused regression tests in the repository, but this audit has not established a fresh passing run on the audited commit:
 
 - **Agent/runtime foundation:** CLI, headless text/JSON/stream-JSON workflows, Node SDK, multi-provider tool loops, workspace-bound file tools, command execution, approvals, snapshots/checkpoints/rewind, saved sessions, budgets and context estimation.
-- **LSP and diagnostics:** language-server navigation and diagnostics; configured project checkers; post-edit LSP verification for mapped files; baseline-aware findings and explicit unavailable outcomes; /fix completion gating; happy-path gate tests now use an explicit clean LSP fixture, and current-head CI is still pending.
-- **Audit workflow:** isolated security, performance, test-coverage and dependency reviewers; structured finding validation, deduplication, bounded verification of high/critical findings, and partial-coverage reporting.
+- **LSP and diagnostics:** language-server navigation and diagnostics; configured project checkers; post-edit LSP verification for mapped files; baseline-aware findings and explicit unavailable outcomes; /fix completion gating; happy-path gate tests now use an explicit clean LSP fixture, and current-head CI remains pending after the latest test-fix batch.
+- **Audit workflow:** isolated security, performance, test-coverage and dependency reviewers; structured finding validation, deduplication, bounded verification of high/critical findings, and partial-coverage reporting; the command-test fixture is now self-contained. Current-head CI is still pending.
 - **Policy and permissions:** allow/ask/deny rules, command-risk analysis, pre-tool hooks, path protections, secret redaction, process cancellation and optional Linux/macOS sandboxing. A permission-mode alias layer now maps `manual` to `default` and `accept-edits` to `acceptEdits` across settings, `/mode`, the policy object and CLI parsing; this remains unverified until current-head tests pass.
 - **Sessions and context:** persisted sessions, /fork, /resume, /context, /compact, between-turn summarization, deterministic fallback and within-turn microcompaction. Direct `/context all` category/caveat coverage is added in this increment; do not mark it verified until CI passes.
 - **Orchestration:** dynamic workflows, schema-checked results, parallel/pipeline/phase helpers, bounded subagents, background workers, resumable workflow results and a session-local task board.
@@ -64,6 +64,8 @@ Cross-session message storage is now connected to /notify and /inbox, and agent-
 The artifact increment adds an auto-refreshing local-only investigation page, structured event storage, secret redaction, lifecycle commands and automatic task/command/file/test/error capture for the active session. Focused tests cover creation, updates, redaction and cleanup. The artifact and command behavior remains unverified until CI passes on the exact current-main commit.
 
 ## Current-head verification plan
+
+The latest regression-test cleanup also covers honest GitHub Action status when verification is incomplete, evidence-first reviewer style, and matching-only scoped memory. All remain unverified until Quality Checks passes for the exact latest `main` SHA.
 
 Run the repository quality workflow on the exact candidate commit, then inspect focused results for each area below. Do not mark a capability verified if a required test is missing, skipped, or failing.
 
