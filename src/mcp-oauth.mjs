@@ -122,7 +122,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   }
   if (local) {
     if (!safety.localOrigin || safety.localOrigin !== parsed.origin) throw new Error(label + ' cannot target a different loopback origin.');
-    if (hostname === 'localhost') safety.resolvedAddresses?.set(hostname, [{ address: '127.0.0.1', family: 4 }]);
+    if (host === 'localhost') safety.resolvedAddresses?.set(host, [{ address: '127.0.0.1', family: 4 }]);
     return parsed.toString();
   }
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
