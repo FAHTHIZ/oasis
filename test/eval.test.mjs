@@ -53,7 +53,7 @@ test('evaluation subprocess timeout terminates descendants that inherit output p
     "spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 6500); setInterval(() => {}, 250);'], { stdio: 'inherit' });",
     "process.stdout.write('descendant-started\\n');",
     "setInterval(() => {}, 250);"
-  ].join('\\n');
+  ].join('\n');
   const result = await runEvalProcess(process.execPath, ['-e', source], {
     env: { PATH: process.env.PATH || '' },
     timeoutMs: 1000,
