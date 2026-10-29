@@ -527,6 +527,12 @@ Sessions are saved by default. `oasis -c` continues the latest one, `oasis -r ID
 
 Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|auto|bypassPermissions|log]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
 
+Context controls:
+
+- `/context` shows the quick context estimate. `/context all` shows the detailed estimate by system prompt, memory sources, local/MCP tool schemas (including grouped MCP server costs), conversation history, and selected subsets such as command output. Category counts overlap and are estimates; largest message previews redact common secret patterns.
+- `/compact [focus]` first shows a preview and does not change history. Review the estimated scope, likely paths, errors/checks, largest messages and must-preserve records, then use `/compact confirm` or `/compact cancel`. If the conversation changes after the preview, confirmation is rejected and you must preview again.
+- `/compact preserve goal: ...`, `/compact preserve constraint: ...`, `/compact preserve path: ...`, `/compact preserve error: ...`, `/compact preserve decision: ...`, and `/compact preserve rule: ...` keep explicit notes in the context digest across compaction. Use `/compact preserve list` to inspect them and `/compact preserve clear` to remove them. These notes are session data, not a guarantee that an external provider will retain information outside Oasis's context.
+
 More session commands:
 
 - `/effort [low|medium|high|max|auto]` sets how hard the model thinks for the rest of the session (also `oasis --effort high`). Prompt words like "ultrathink" can still raise a single turn.
