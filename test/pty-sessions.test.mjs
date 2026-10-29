@@ -12,12 +12,18 @@ function makeFakePty() {
         const data = new Set();
         const exits = new Set();
         const child = {
-          command, args, options, writes: [], resizes: [], killed: false,
+          command, args, options, writes: [], resizes: [], killSignals: [], killed: false,
           onData(callback) { data.add(callback); return { dispose: () => data.delete(callback) }; },
           onExit(callback) { exits.add(callback); return { dispose: () => exits.delete(callback) }; },
           write(value) { this.writes.push(value); },
           resize(cols, rows) { this.resizes.push([cols, rows]); },
-          kill() { this.killed = true; for (const callback of [...exits]) callback({ exitCode: 143, signal: 15 }); },
+          kill(signal) {
+            this.killSignals.push(signal || 'default');
+            if (signal === 'SIGKILL' || !signal) {
+              this.killed = true;
+              for (const callback of [...exits]) callback({ exitCode: 137, signal: 9 });
+            }
+          },
           emitData(value) { for (const callback of [...data]) callback(value); },
           emitExit(event = { exitCode: 0, signal: 0 }) { for (const callback of [...exits]) callback(event); }
         };
@@ -62,7 +68,7 @@ test('bounds captured output and reports lost cursor content', async () => {
 
 test('writes input, resizes, sends Ctrl+C, and stops sessions', async () => {
   const fake = makeFakePty();
-  const manager = new PtySessionManager({ loadPty: async () => fake.module, idFactory: () => 'term_controls' });
+  const manager = new PtySessionManager({ loadPty: async () => fake.module, idFactory: () => 'term_controls', killGraceMs: 20 });
   const started = await manager.start('node', [], { cwd: '/workspace', env: {} });
   assert.equal(manager.write(started.id, 'yes' + String.fromCharCode(13)).writtenChars, 4);
   assert.deepEqual(fake.processes[0].writes, ['yes' + String.fromCharCode(13)]);
@@ -71,6 +77,10 @@ test('writes input, resizes, sends Ctrl+C, and stops sessions', async () => {
   assert.equal(manager.interrupt(started.id).interrupted, true);
   assert.equal(fake.processes[0].writes[1], String.fromCharCode(3));
   assert.equal(manager.stop(started.id).stopped, true);
+  assert.deepEqual(fake.processes[0].killSignals, ['SIGTERM']);
+  assert.equal(manager.list().sessions[0].state, 'stopping');
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.deepEqual(fake.processes[0].killSignals, ['SIGTERM', 'SIGKILL']);
   assert.equal(fake.processes[0].killed, true);
   assert.equal(manager.list().sessions[0].state, 'exited');
 });
