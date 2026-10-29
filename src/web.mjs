@@ -19,7 +19,7 @@ import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
-import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff } from './worktrees.mjs';
+import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
@@ -52,7 +52,7 @@ export function summarizeAgentRun(job) {
   // return arbitrary assistant text, prompts, tool results, or command output.
   const visibleRunTypes = new Set([
     'started', 'approval_required', 'approval_resolved', 'cancel_requested',
-    'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'usage'
+    'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'worktree_merged', 'usage'
   ]);
   const agentEvents = rawEvents
     .filter((event) => event && event.data && typeof event.data === 'object' &&
@@ -113,6 +113,11 @@ export function summarizeAgentRun(job) {
         description = 'Worktree ready for review';
         const branch = monitorText(data.branch, 120);
         detail = branch ? 'Branch ' + branch : '';
+      } else if (event.type === 'worktree_merged') {
+        description = 'Reviewed worktree merged';
+        const branch = monitorText(data.branch, 120);
+        const targetBranch = monitorText(data.targetBranch, 120);
+        detail = branch && targetBranch ? branch + ' → ' + targetBranch : (branch || targetBranch);
       } else if (event.type === 'usage') {
         description = 'Model usage';
         const tokens = Number(data.totalTokens);
@@ -1508,13 +1513,129 @@ export function createOasisWebServer(options = {}) {
         const diff = committed
           ? await readWorktreeDiff(canonicalRoot, baseCommit, commit, { env, maxChars: 180000 })
           : await readWorktreeWorkingDiff(worktree, baseCommit, { env, maxChars: 180000 });
+        let mergeReview = null;
+        const recordedCommit = String(artifact && artifact.commitSha || '');
+        if (committed && task.status === 'completed' && /^[a-f0-9]{40}$/i.test(recordedCommit)) {
+          try {
+            const inspection = await inspectWorktree(canonicalRoot, branch, { env });
+            const branchMatches = inspection.branch_head.toLowerCase() === recordedCommit.toLowerCase();
+            const pathMatches = inspection.worktree_path === relative;
+            const alreadyIntegrated = await isCommitIntegrated(canonicalRoot, recordedCommit, { env });
+            const blockedReasons = [...inspection.blocked_reasons];
+            if (!branchMatches) blockedReasons.unshift('The agent branch moved after this task commit; review the current branch before merging.');
+            if (!pathMatches) blockedReasons.unshift('The branch is not attached to the worktree recorded for this task.');
+            if (alreadyIntegrated) blockedReasons.unshift('This task commit is already integrated into the current branch.');
+            mergeReview = {
+              canMerge: inspection.can_merge && branchMatches && pathMatches && !alreadyIntegrated,
+              head: inspection.head,
+              branchHead: inspection.branch_head,
+              targetBranch: inspection.current_branch,
+              blockedReasons
+            };
+          } catch {
+            mergeReview = { canMerge: false, head: '', branchHead: '', targetBranch: '', blockedReasons: ['The isolated worktree is no longer available for safe integration.'] };
+          }
+        }
         json(res, 200, { branch, baseCommit, commit, complete: committed, requiresReview, status: task.status,
           files: Array.isArray(artifact && artifact.files) ? artifact.files.slice(0, 200) : [],
           untrackedFiles: Array.isArray(diff.untrackedFiles) ? diff.untrackedFiles : [],
           omittedUntracked: Number(diff.omittedUntracked) || 0,
-          diffStat: String(artifact && artifact.diffStat || '').slice(0, 4000), diff: diff.diff, truncated: diff.truncated });
+          diffStat: String(artifact && artifact.diffStat || '').slice(0, 4000), diff: diff.diff, truncated: diff.truncated, mergeReview });
       } catch {
         json(res, 410, { error: 'The task diff is no longer available. The worktree may have been removed or its Git history changed.' });
+      }
+      return;
+    }
+
+    const mergeMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/merge$/i);
+    if (req.method === 'POST' && mergeMatch) {
+      const liveJob = jobs.get(mergeMatch[1]);
+      const task = liveJob ? await taskStore.save(liveJob) : await taskStore.get(mergeMatch[1]);
+      if (!task) { json(res, 404, { error: 'Task not found or expired.' }); return; }
+      if (task.status !== 'completed' || (task.result && task.result.finished === false) || task.error) {
+        json(res, 409, { error: 'Only successfully completed isolated tasks can be merged. Review interrupted or incomplete work without merging it.' });
+        return;
+      }
+      const artifact = task.result && task.result.isolatedWorktree;
+      const branch = artifact && artifact.branch || task.worktreeBranch;
+      const baseCommit = artifact && artifact.baseCommit || task.worktreeBaseCommit;
+      const commit = artifact && artifact.commitSha;
+      const relative = artifact && artifact.path || task.worktreePath;
+      if (!artifact || artifact.changed !== true || artifact.error || artifact.requiresReview ||
+          !/^[a-f0-9]{40}$/i.test(String(commit || '')) ||
+          !/^[a-f0-9]{40}$/i.test(String(baseCommit || '')) ||
+          !/^oasis\/[a-z0-9-]+$/i.test(String(branch || '')) ||
+          !/^\.oasis\/worktrees\/[a-z0-9-]+$/i.test(String(relative || ''))) {
+        json(res, 409, { error: 'This task does not have a completed, committed isolated change ready for merge review.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const expectedHead = String(body.expectedHead || '');
+      const expectedBranchHead = String(body.expectedBranchHead || '');
+      if (!/^[a-f0-9]{40}$/i.test(expectedHead) || !/^[a-f0-9]{40}$/i.test(expectedBranchHead)) {
+        json(res, 400, { error: 'A full main-branch and agent-branch commit SHA from the current review is required.' });
+        return;
+      }
+      const workspaceRoot = typeof task.workspaceRoot === 'string' ? path.resolve(task.workspaceRoot) : '';
+      const primaryRoot = path.resolve(root);
+      const managedWorkspaces = path.resolve(root, '.oasis', 'workspaces') + path.sep;
+      if (!workspaceRoot || (workspaceRoot !== primaryRoot && !workspaceRoot.startsWith(managedWorkspaces))) {
+        json(res, 403, { error: 'The task workspace is outside the runtime’s permitted workspace roots.' });
+        return;
+      }
+      try {
+        const canonicalRoot = await realpath(workspaceRoot);
+        const canonicalPrimaryRoot = await realpath(root);
+        if (canonicalRoot !== canonicalPrimaryRoot) {
+          const canonicalManagedWorkspaces = await realpath(path.resolve(root, '.oasis', 'workspaces'));
+          if (!canonicalRoot.startsWith(canonicalManagedWorkspaces + path.sep)) {
+            json(res, 403, { error: 'The canonical task workspace resolves outside the managed workspace directory.' }); return;
+          }
+        }
+        const worktree = await realpath(path.resolve(canonicalRoot, relative));
+        const managedWorktrees = path.resolve(canonicalRoot, '.oasis', 'worktrees') + path.sep;
+        if (!worktree.startsWith(managedWorktrees)) {
+          json(res, 403, { error: 'The saved worktree resolves outside its managed directory.' }); return;
+        }
+        const inspection = await inspectWorktree(canonicalRoot, branch, { env });
+        if (inspection.worktree_path !== relative || inspection.branch_head.toLowerCase() !== String(commit).toLowerCase()) {
+          json(res, 409, { error: 'The task branch or worktree changed after the saved review. Inspect it again before merging.' });
+          return;
+        }
+        if (await isCommitIntegrated(canonicalRoot, commit, { env })) {
+          json(res, 409, { error: 'This task commit is already integrated into the current branch.' });
+          return;
+        }
+        if (inspection.head.toLowerCase() !== expectedHead.toLowerCase() ||
+            inspection.branch_head.toLowerCase() !== expectedBranchHead.toLowerCase()) {
+          json(res, 409, { error: 'The main branch or agent branch changed after review. Refresh the diff and inspect it again.' });
+          return;
+        }
+        if (!inspection.can_merge) {
+          json(res, 409, { error: 'Merge blocked by the current review.', blockedReasons: inspection.blocked_reasons });
+          return;
+        }
+        const merged = await mergeWorktree(canonicalRoot, branch, { env, expectedHead, expectedBranchHead: commit });
+        const eventData = {
+          branch: merged.branch, targetBranch: merged.target_branch,
+          commit: merged.commit, files: merged.files.slice(0, 200)
+        };
+        try {
+          if (liveJob) {
+            emit(liveJob, 'worktree_merged', eventData);
+            await taskStore.save(liveJob);
+          } else {
+            const nextId = Number.isSafeInteger(task.nextEventId) && task.nextEventId > 0 ? task.nextEventId : task.events.length + 1;
+            task.events.push({ id: nextId, type: 'worktree_merged', at: new Date().toISOString(), data: eventData });
+            task.nextEventId = nextId + 1;
+            await taskStore.save(task);
+          }
+        } catch {
+          // Git integration is durable; do not report it as failed if optional event persistence fails.
+        }
+        json(res, 200, merged);
+      } catch (error) {
+        json(res, 409, { error: String(error && error.message || 'The isolated worktree could not be merged safely.').slice(0, 1200) });
       }
       return;
     }

@@ -392,7 +392,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
     <div class="cloud-runs-toolbar"><p class="github-help">Review recent agent and terminal runs, including tasks interrupted by a runtime restart. History is saved locally on the connected Oasis host; it is not hosted cloud compute or cross-device sync.</p><button class="btn btn-secondary" id="cloudRunsRefreshBtn" type="button">Refresh runs</button></div>
     <div class="cloud-runs-list" id="cloudRunsList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div>
     <div class="cloud-run-detail" id="cloudRunDetail" hidden>
-      <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="github-actions"><button class="btn btn-secondary" id="cloudRunDiffBtn" type="button" hidden>Review diff</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
+      <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="github-actions"><button class="btn btn-secondary" id="cloudRunDiffBtn" type="button" hidden>Review diff</button><button class="btn btn-primary" id="cloudRunMergeBtn" type="button" hidden>Merge reviewed changes</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
       <div class="cloud-run-events" id="cloudRunEvents"></div>
       <div class="cloud-run-detail" id="cloudRunDiffDetail" hidden><div class="cloud-run-detail-head"><strong id="cloudRunDiffTitle">Isolated changes</strong><button class="btn btn-secondary" id="cloudRunDiffClose" type="button">Close diff</button></div><pre class="cloud-run-diff-pre" id="cloudRunDiffText"></pre></div>
     </div>
@@ -830,7 +830,8 @@ async function agentLoadMonitor(silent){
 }
 
 async function agentOpenCloudRun(id,titleFromList){
-  var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),heading=document.getElementById('cloudRunDetailTitle'),diffButton=document.getElementById('cloudRunDiffBtn');
+  var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),heading=document.getElementById('cloudRunDetailTitle'),diffButton=document.getElementById('cloudRunDiffBtn'),mergeButton=document.getElementById('cloudRunMergeBtn');
+  mergeButton.hidden=true;mergeButton.disabled=false;mergeButton.textContent='Merge reviewed changes';
   try{
     var task=await agentApi('/api/jobs/'+encodeURIComponent(id)+'?after=0');
     heading.textContent=(task.title||titleFromList||'Task '+String(id).slice(0,8))+' · '+String(task.status||'unknown').replace(/_/g,' ');
@@ -869,10 +870,40 @@ window.setInterval(function(){if(currentView==='monitor'&&agentToken)void agentL
 document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
 document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){
   var id=this.dataset.cloudRunId;if(!id)return;
-  var heading=document.getElementById('cloudRunDiffTitle'),body=document.getElementById('cloudRunDiffText'),wrap=document.getElementById('cloudRunDiffDetail');
-  heading.textContent='Loading isolated changes…';body.textContent='';wrap.hidden=false;
-  try{var data=await agentApi('/api/jobs/'+encodeURIComponent(id)+'/diff');heading.textContent=(data.complete?'Committed preview':'Partial changes · review required')+' · '+(data.branch||'isolated task');body.textContent=(data.diff||'(No text diff available.)')+(data.truncated?'\n\n[Preview truncated at the safety limit.]':'')}
-  catch(error){heading.textContent='Diff unavailable';body.textContent=error.message}
+  var heading=document.getElementById('cloudRunDiffTitle'),body=document.getElementById('cloudRunDiffText'),wrap=document.getElementById('cloudRunDiffDetail'),mergeButton=document.getElementById('cloudRunMergeBtn');
+  heading.textContent='Loading isolated changes…';body.textContent='';wrap.hidden=false;mergeButton.hidden=true;mergeButton.disabled=false;
+  try{
+    var data=await agentApi('/api/jobs/'+encodeURIComponent(id)+'/diff');
+    heading.textContent=(data.complete?'Committed preview':'Partial changes · review required')+' · '+(data.branch||'isolated task');
+    body.textContent=(data.diff||'(No text diff available.)')+(data.truncated?'\n\n[Preview truncated at the safety limit.]':'');
+    if(data.mergeReview&&data.mergeReview.canMerge){
+      mergeButton.hidden=false;mergeButton.dataset.cloudRunId=id;
+      mergeButton.dataset.expectedHead=data.mergeReview.head||'';
+      mergeButton.dataset.expectedBranchHead=data.mergeReview.branchHead||'';
+      mergeButton.dataset.branch=data.branch||'isolated branch';
+      mergeButton.dataset.targetBranch=data.mergeReview.targetBranch||'current branch';
+    }else if(data.mergeReview&&Array.isArray(data.mergeReview.blockedReasons)&&data.mergeReview.blockedReasons.length){
+      body.textContent+='\n\nMerge unavailable:\n'+data.mergeReview.blockedReasons.map(function(reason){return '• '+reason}).join('\n');
+    }
+  }catch(error){heading.textContent='Diff unavailable';body.textContent=error.message}
+});
+document.getElementById('cloudRunMergeBtn').addEventListener('click',async function(){
+  var button=this,id=button.dataset.cloudRunId,expectedHead=button.dataset.expectedHead,expectedBranchHead=button.dataset.expectedBranchHead;
+  if(!id||!expectedHead||!expectedBranchHead||button.disabled)return;
+  var branch=button.dataset.branch||'the isolated branch',target=button.dataset.targetBranch||'the current branch';
+  if(!window.confirm('Merge '+branch+' into '+target+'? OASIS will re-check the exact commits, local changes and Git conflict preview. If anything changed after review, the merge will be blocked.'))return;
+  button.disabled=true;button.textContent='Merging…';
+  var heading=document.getElementById('cloudRunDiffTitle'),body=document.getElementById('cloudRunDiffText');
+  try{
+    var result=await agentApi('/api/jobs/'+encodeURIComponent(id)+'/merge',{method:'POST',body:JSON.stringify({expectedHead:expectedHead,expectedBranchHead:expectedBranchHead})});
+    heading.textContent='Merged '+result.branch+' into '+result.target_branch;
+    body.textContent+='\n\nMerge completed at '+result.commit+'. The source branch and worktree were left in place for review and cleanup.';
+    button.hidden=true;void agentLoadMonitor(true);
+  }catch(error){
+    heading.textContent='Merge blocked — review again';
+    body.textContent+='\n\nMerge was not performed: '+error.message+'\nRefresh the diff and review the latest state before trying again.';
+    button.hidden=true;
+  }finally{button.disabled=false;button.textContent='Merge reviewed changes'}
 });
 document.getElementById('cloudRunDiffClose').addEventListener('click',function(){document.getElementById('cloudRunDiffDetail').hidden=true});
 document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true});
