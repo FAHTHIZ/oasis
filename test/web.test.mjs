@@ -69,7 +69,7 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
   assert.deepEqual(view.approvals, { requested: 1, resolved: 1, approved: 0, denied: 1, pending: 0 });
   assert.equal(view.usage.totalTokens, 42);
   assert.ok(view.events.some((event) => event.type === 'run.approval_resolved' && event.description === 'Action denied'));
-  assert.ok(view.events.some((event) => event.type === 'worktree_ready' && /oasis\/provider-setup/.test(event.detail)));
+  assert.ok(view.events.some((event) => event.type === 'run.worktree_ready' && /oasis\/provider-setup/.test(event.detail)));
   assert.doesNotMatch(JSON.stringify(view), /private-value|Never expose private-prompt-text/);
   assert.equal(summarizeAgentRun(null), null);
 });
