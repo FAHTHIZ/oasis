@@ -7,10 +7,10 @@
  */
 export function redactApprovalSecrets(value) {
   return String(value == null ? '' : value)
-    .replace(/\b(?:sk-ant-[A-Za-z0-9_-]{12,}|sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[redacted secret]')
+    .replace(/\b(?:sk-ant-[A-Za-z0-9_-]{12,}|sk-proj-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|glpat-[A-Za-z0-9_-]{20,})\b/g, '[redacted secret]')
     .replace(/(\b(?:authorization|proxy-authorization)\s*[:=]\s*(?:bearer\s+)?)[^\s"'\x60,;]+/gi, '$1[redacted]')
-    .replace(/(--?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|token|authorization)\s+)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]')
-    .replace(/(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|token)\b["']?\s*[:=]\s*["']?)[^"'\s,;]+/gi, '$1[redacted]');
+    .replace(/(--?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|token|authorization|credential|private[_-]?key|client[_-]?secret)\s+)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]')
+    .replace(/(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|token|credential|private[_ -]?key|client[_ -]?secret)\b["']?\s*[:=]\s*["']?)[^"'\s,;]+/gi, '$1[redacted]');
 }
 
 function safeLabel(value, fallback = 'the requested item') {
