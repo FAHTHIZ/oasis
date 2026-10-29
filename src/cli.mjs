@@ -384,9 +384,46 @@ async function configureProvider(root = process.cwd(), options = {}) {
     const defaultPreset = options.defaultPreset === undefined
       ? inferSetupProviderPreset(currentConfig)
       : resolveSetupProviderPreset(options.defaultPreset);
-    presetName = options.skipPresetPrompt
-      ? defaultPreset
-      : (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / foundry / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
+    if (options.skipPresetPrompt) {
+      presetName = defaultPreset;
+    } else {
+      stdout.write('\\nChoose how you want to connect OASIS:\\n');
+      stdout.write('  1. I have an API key\\n');
+      stdout.write('  2. Use the free OmniRoute gateway (may be slow or limited)\\n');
+      stdout.write('  3. Use a model on this computer (Ollama)\\n');
+      stdout.write('  4. Advanced provider or custom endpoint\\n');
+      const defaultChoice = defaultPreset === 'omniroute' ? '2'
+        : defaultPreset === 'ollama' ? '3'
+        : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '4' : '1';
+      const answer = (await rl.question('Choose [1/2/3/4] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
+      const directPresets = ['omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'];
+      if (directPresets.includes(answer)) {
+        // Keep accepting named presets for existing scripts and experienced users.
+        presetName = answer;
+      } else if (answer === '2') {
+        presetName = 'omniroute';
+      } else if (answer === '3') {
+        presetName = 'ollama';
+      } else if (answer === '1') {
+        stdout.write('\\nChoose your API-key provider:\\n');
+        stdout.write('  1. OpenAI\\n  2. Anthropic\\n  3. OpenRouter\\n  4. Gemini\\n  5. Other / compatible endpoint\\n');
+        const keyDefault = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', custom: '5' })[defaultPreset] || '1';
+        const keyAnswer = (await rl.question('Choose [1/2/3/4/5] (default ' + keyDefault + '): ')).trim().toLowerCase() || keyDefault;
+        const keyProviders = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'custom' };
+        presetName = keyProviders[keyAnswer] || (directPresets.includes(keyAnswer) ? keyAnswer : '');
+        if (!presetName) throw new Error('Choose a number from 1 to 5 for the API-key provider.');
+      } else if (answer === '4') {
+        stdout.write('\\nChoose an advanced provider:\\n');
+        stdout.write('  1. AWS Bedrock\\n  2. Google Vertex AI\\n  3. Microsoft Foundry\\n  4. Custom / compatible endpoint\\n');
+        const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4' })[defaultPreset] || '4';
+        const advancedAnswer = (await rl.question('Choose [1/2/3/4] (default ' + advancedDefault + '): ')).trim().toLowerCase() || advancedDefault;
+        const advancedProviders = { '1': 'bedrock', '2': 'vertex', '3': 'foundry', '4': 'custom' };
+        presetName = advancedProviders[advancedAnswer] || (['bedrock', 'vertex', 'foundry', 'custom'].includes(advancedAnswer) ? advancedAnswer : '');
+        if (!presetName) throw new Error('Choose a number from 1 to 4 for the advanced provider.');
+      } else {
+        throw new Error('Choose 1, 2, 3, or 4. No provider settings were changed.');
+      }
+    }
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'bedrock' || protocol === 'vertex' || protocol === 'foundry' ? defaultCloudBaseURL(protocol, process.env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
