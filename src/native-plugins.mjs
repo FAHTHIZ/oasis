@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { mkdir, lstat, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -72,7 +73,7 @@ async function validatePackage(source) {
   if(typeof manifest.author!=='string'||!manifest.author.trim()||manifest.author.trim().length>200)throw new Error('Plugin author is required and limited to 200 characters.');
   if(typeof manifest.license!=='string'||!/^[A-Za-z0-9][A-Za-z0-9.+() -]{0,79}$/.test(manifest.license.trim()))throw new Error('Plugin license is required and must be a short SPDX identifier or expression.');
   if(typeof manifest.minimumOasisVersion!=='string'||!validVersion(manifest.minimumOasisVersion))throw new Error('minimumOasisVersion must be a semantic MAJOR.MINOR.PATCH version.');
-  const runtimePackage=JSON.parse(await readFile(path.join(path.dirname(new URL(import.meta.url).pathname),'..','package.json'),'utf8'));
+  const runtimePackage=JSON.parse(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)),'..','package.json'),'utf8'));
   if(compareVersion(manifest.minimumOasisVersion,runtimePackage.version)>0)throw new Error('This plugin requires Oasis '+manifest.minimumOasisVersion+' or newer; this installation is '+runtimePackage.version+'.');
   if(!Array.isArray(manifest.permissions)||manifest.permissions.some(p=>!CAPABILITIES.has(p))||new Set(manifest.permissions.map(p=>p==='subagents'?'agents':p)).size!==manifest.permissions.length)throw new Error('permissions must be a unique array of commands, skills, agents/subagents, hooks, and/or mcp.');
   if(manifest.agents!==undefined&&manifest.subagents!==undefined)throw new Error('Use either agents or subagents, not both.');
