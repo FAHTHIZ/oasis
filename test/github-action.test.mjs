@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import { readTrigger, buildPrompt, runAction } from '../src/github-action.mjs';
+import { readTrigger, buildPrompt, runAction, actionStatus } from '../src/github-action.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
@@ -47,6 +47,13 @@ function fakeGitHub() {
   };
   return { calls, request };
 }
+
+test('GitHub Action status never says finished when verification is incomplete', () => {
+  assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Verification incomplete: LSP is unavailable.'), 'pushed changes, but verification is incomplete.');
+  assert.equal(actionStatus({ is_error: false }, { changed: false }, 'Verification incomplete: a diagnostic remains.'), 'verification is incomplete.');
+  assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Fixed the bug and tests passed.'), 'finished and pushed changes.');
+  assert.equal(actionStatus({ is_error: true, subtype: 'error_during_execution' }, { changed: true }, 'Verification incomplete: blocked.'), 'ran into a problem (error_during_execution).');
+});
 
 test('readTrigger responds only to trusted human mentions', () => {
   const yes = readTrigger('issue_comment', comment('@oasis please fix the login'));
