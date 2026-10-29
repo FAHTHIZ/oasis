@@ -20,7 +20,7 @@ This file distinguishes existing code from behavior proven reliable. A module or
 ## Actively hardening
 
 - **LSP-verified editing:** automatically collect LSP diagnostics after edits, baseline pre-existing findings, surface collection failures, and block /fix success while new errors remain.
-- **Multi-agent review:** add /audit with isolated security, performance, coverage and dependency reviewers, strict schemas, deduplication, optional verification, timeouts and bounded reporting.
+- **Multi-agent review:** a built-in /audit workflow now runs four isolated read-only reviewer roles, validates structured findings, deduplicates by file/line/title, verifies up to four high/critical findings, caps the final report at 25 findings, and reports failed reviewers as partial coverage. It remains under hardening until its focused and full-current-head tests pass; per-worker timeout/cancellation stress tests remain open.
 - **Policy enforcement:** define stable plan/manual/accept-edits/auto semantics, policy-source precedence and protected paths; prove denial prevents execution.
 - **Context controls:** add detailed /context all attribution, must-preserve records and a cancelable compaction preview.
 - **Session lifecycle:** test fork isolation, resume continuity, checkpoint references, queued steering and interrupt cleanup as invariants.
