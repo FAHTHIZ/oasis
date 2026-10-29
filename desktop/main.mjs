@@ -4,12 +4,15 @@ import path from 'node:path';
 import { startOasisWebServer } from '../src/web.mjs';
 import { loadConfig, saveConfig } from '../src/config.mjs';
 import { loadDesktopApiKey, saveDesktopApiKey } from './secure-secrets.mjs';
+import { crashRecoveryHtml } from './crash-screen.mjs';
 
 let mainWindow = null;
 let runtime = null;
 let activeOrigin = null;
 let shuttingDown = false;
 let startupComplete = false;
+let recoveryScreenActive = false;
+let recoveryReloadPending = false;
 const desktopEnv = { ...process.env };
 const inheritedOasisApiKey = process.env.OASIS_API_KEY || '';
 
@@ -121,9 +124,43 @@ function createWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    try { if (new URL(url).origin === activeOrigin) return; } catch {}
+    try {
+      const parsed = new URL(url);
+      if (recoveryScreenActive && parsed.protocol === 'data:') return;
+      if (parsed.origin === activeOrigin) {
+        if (recoveryScreenActive) {
+          recoveryScreenActive = false;
+          recoveryReloadPending = true;
+        }
+        return;
+      }
+    } catch {}
     event.preventDefault();
     try { const parsed = new URL(url); if (parsed.protocol === 'https:') void shell.openExternal(url).catch(() => {}); } catch {}
+  });
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!recoveryReloadPending) return;
+    recoveryReloadPending = false;
+    void injectRuntimeToken();
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details = {}) => {
+    if (shuttingDown || !runtime || !mainWindow || mainWindow.isDestroyed()) return;
+    recoveryScreenActive = true;
+    const html = crashRecoveryHtml({
+      reason: details.reason || 'unknown',
+      exitCode: details.exitCode,
+      restartUrl: activeOrigin + '/'
+    });
+    void mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)).catch(async () => {
+      recoveryScreenActive = false;
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      await dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'OASIS stopped',
+        message: 'The workspace window stopped unexpectedly.',
+        detail: 'Close and reopen OASIS. If this keeps happening, run oasis doctor from the terminal.'
+      });
+    });
   });
   mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow;
