@@ -5,7 +5,7 @@ import { getConfigDirectory } from './config.mjs';
 import { pluginHome, readInstalledPlugins } from './claude-plugins.mjs';
 import { userSettingsPath } from './settings.mjs';
 
-const CAPABILITIES = new Set(['commands','skills','agents','hooks','mcp']);
+const CAPABILITIES = new Set(['commands','skills','agents','subagents','hooks','mcp']);
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_COMPONENT_BYTES = 256 * 1024;
 const PLUGIN_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -69,7 +69,13 @@ async function validatePackage(source) {
   if(typeof manifest.name!=='string'||!PLUGIN_NAME.test(manifest.name))throw new Error('Plugin name must be lowercase kebab-case (max 63 characters).');
   if(typeof manifest.version!=='string'||!validVersion(manifest.version))throw new Error('Plugin version must be semantic MAJOR.MINOR.PATCH.');
   if(typeof manifest.description!=='string'||!manifest.description.trim()||manifest.description.length>500)throw new Error('Plugin description is required and limited to 500 characters.');
-  if(!Array.isArray(manifest.permissions)||manifest.permissions.some(p=>!CAPABILITIES.has(p))||new Set(manifest.permissions).size!==manifest.permissions.length)throw new Error('permissions must be a unique array of commands, skills, agents, hooks, and/or mcp.');
+  if(typeof manifest.author!=='string'||!manifest.author.trim()||manifest.author.trim().length>200)throw new Error('Plugin author is required and limited to 200 characters.');
+  if(typeof manifest.license!=='string'||!/^[A-Za-z0-9][A-Za-z0-9.+() -]{0,79}$/.test(manifest.license.trim()))throw new Error('Plugin license is required and must be a short SPDX identifier or expression.');
+  if(typeof manifest.minimumOasisVersion!=='string'||!validVersion(manifest.minimumOasisVersion))throw new Error('minimumOasisVersion must be a semantic MAJOR.MINOR.PATCH version.');
+  const runtimePackage=JSON.parse(await readFile(path.join(path.dirname(new URL(import.meta.url).pathname),'..','package.json'),'utf8'));
+  if(compareVersion(manifest.minimumOasisVersion,runtimePackage.version)>0)throw new Error('This plugin requires Oasis '+manifest.minimumOasisVersion+' or newer; this installation is '+runtimePackage.version+'.');
+  if(!Array.isArray(manifest.permissions)||manifest.permissions.some(p=>!CAPABILITIES.has(p))||new Set(manifest.permissions.map(p=>p==='subagents'?'agents':p)).size!==manifest.permissions.length)throw new Error('permissions must be a unique array of commands, skills, agents/subagents, hooks, and/or mcp.');
+  if(manifest.agents!==undefined&&manifest.subagents!==undefined)throw new Error('Use either agents or subagents, not both.');
   const files=new Map();
   const components={commands:[],skills:[],agents:[],hooks:null,hookFiles:[],mcp:null,mcpFiles:[]};
   const addFile=async(rel,label,prefixes)=>{
@@ -97,10 +103,13 @@ async function validatePackage(source) {
       components.skills.push(rel);
     }
   }
-  if(manifest.agents!==undefined){
-    if(!Array.isArray(manifest.agents))throw new Error('agents must be an array of Markdown file paths.');
-    for(const rel of manifest.agents){
-      const file=await addFile(rel,'Agent definition',['agents/']);
+  if(manifest.agents!==undefined||manifest.subagents!==undefined){
+    const field=manifest.subagents!==undefined?'subagents':'agents';
+    const prefix=field==='subagents'?'subagents/':'agents/';
+    const entries=manifest[field];
+    if(!Array.isArray(entries))throw new Error(field+' must be an array of Markdown file paths.');
+    for(const rel of entries){
+      const file=await addFile(rel,'Agent definition',[prefix]);
       if(!file.relative.toLowerCase().endsWith('.md'))throw new Error('Agent definitions must be Markdown.');
       components.agents.push(file.relative);
     }
@@ -131,7 +140,7 @@ async function validatePackage(source) {
     for(const rel of manifest.mcpFiles)components.mcpFiles.push((await addFile(rel,'MCP server support file',['mcp/'])).relative);
   }
   const declared={commands:components.commands.length>0,skills:components.skills.length>0,agents:components.agents.length>0,hooks:Boolean(components.hooks)||components.hookFiles.length>0,mcp:Boolean(components.mcp)||components.mcpFiles.length>0};
-  for(const [capability,used] of Object.entries(declared))if(used&&!manifest.permissions.includes(capability))throw new Error('plugin.json uses '+capability+' but does not request that permission.');
+  for(const [capability,used] of Object.entries(declared))if(used&&!manifest.permissions.includes(capability)&&!(capability==='agents'&&manifest.permissions.includes('subagents')))throw new Error('plugin.json uses '+(capability==='agents'?'agents/subagents':capability)+' but does not request that permission.');
   return {root,manifest,files,components,declared};
 }
 function validVersion(version) {
@@ -192,7 +201,7 @@ function compatibilityManifest(manifest,grants,components){
   const out={name:manifest.name,version:manifest.version,description:manifest.description,defaultEnabled:true};
   if(allowed.has('commands'))out.commands=Object.fromEntries(components.commands.map(command=>[command.name,{source:command.source,description:command.description,argumentHint:command.argumentHint}]));
   if(allowed.has('skills'))out.skills=components.skills;
-  if(allowed.has('agents'))out.agents=components.agents;
+  if(allowed.has('agents')||allowed.has('subagents'))out.agents=components.agents;
   if(allowed.has('hooks')&&components.hooks)out.hooks=components.hooks;
   if(allowed.has('mcp')&&components.mcp)out.mcpServers=components.mcp;
   return out;
@@ -201,7 +210,7 @@ function filesForGrants(validated,grants){
   const allowed=new Set(grants),result=new Map([['plugin.json',JSON.stringify(validated.manifest,null,2)+'\n']]);
   for(const component of validated.components.commands)if(allowed.has('commands'))result.set(component.source,validated.files.get(component.source));
   for(const dir of validated.components.skills)if(allowed.has('skills'))result.set(dir+'/SKILL.md',validated.files.get(dir+'/SKILL.md'));
-  for(const rel of validated.components.agents)if(allowed.has('agents'))result.set(rel,validated.files.get(rel));
+  for(const rel of validated.components.agents)if(allowed.has('agents')||allowed.has('subagents'))result.set(rel,validated.files.get(rel));
   if(allowed.has('hooks')){if(validated.components.hooks)result.set(validated.components.hooks,validated.files.get(validated.components.hooks));for(const rel of validated.components.hookFiles)result.set(rel,validated.files.get(rel));}
   if(allowed.has('mcp')){if(validated.components.mcp)result.set(validated.components.mcp,validated.files.get(validated.components.mcp));for(const rel of validated.components.mcpFiles)result.set(rel,validated.files.get(rel));}
   return result;
@@ -220,7 +229,7 @@ async function buildStage(validated,target,grants,env){
     const compat=path.join(stage,'.claude-plugin','plugin.json');
     await mkdir(path.dirname(compat),{recursive:true,mode:0o700});
     await writeFile(compat,JSON.stringify(compatibilityManifest(validated.manifest,grants,validated.components),null,2)+'\n',{encoding:'utf8',mode:0o600,flag:'wx'});
-    const meta={schemaVersion:1,name:validated.manifest.name,version:validated.manifest.version,description:validated.manifest.description,requestedPermissions:validated.manifest.permissions,grantedPermissions:grants,metadata:validated.manifest.metadata&&typeof validated.manifest.metadata==='object'?validated.manifest.metadata:{}};
+    const meta={schemaVersion:1,name:validated.manifest.name,version:validated.manifest.version,description:validated.manifest.description,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,requestedPermissions:validated.manifest.permissions,grantedPermissions:grants,metadata:validated.manifest.metadata&&typeof validated.manifest.metadata==='object'?validated.manifest.metadata:{}};
     await writeFile(path.join(stage,'.oasis-native-installed.json'),JSON.stringify(meta,null,2)+'\n',{encoding:'utf8',mode:0o600,flag:'wx'});
     return stage;
   }catch(error){await rm(stage,{recursive:true,force:true});throw error;}
@@ -240,7 +249,7 @@ async function replaceDirectory(stage,target,updating){
 }
 export async function validateNativePluginPackage(source){
   const pkg=await validatePackage(source);
-  return {name:pkg.manifest.name,version:pkg.manifest.version,description:pkg.manifest.description,requestedPermissions:pkg.manifest.permissions,components:{commands:pkg.components.commands.map(x=>x.name),skills:pkg.components.skills,agents:pkg.components.agents,hooks:pkg.components.hooks?1:0,hookFiles:pkg.components.hookFiles,mcpServers:pkg.components.mcp?Object.keys(JSON.parse(pkg.files.get(pkg.components.mcp)).mcpServers||{}):[],mcpFiles:pkg.components.mcpFiles},metadata:pkg.manifest.metadata||{}};
+  return {name:pkg.manifest.name,version:pkg.manifest.version,description:pkg.manifest.description,author:pkg.manifest.author,license:pkg.manifest.license,minimumOasisVersion:pkg.manifest.minimumOasisVersion,requestedPermissions:pkg.manifest.permissions,components:{commands:pkg.components.commands.map(x=>x.name),skills:pkg.components.skills,agents:pkg.components.agents,hooks:pkg.components.hooks?1:0,hookFiles:pkg.components.hookFiles,mcpServers:pkg.components.mcp?Object.keys(JSON.parse(pkg.files.get(pkg.components.mcp)).mcpServers||{}):[],mcpFiles:pkg.components.mcpFiles},metadata:pkg.manifest.metadata||{}};
 }
 export async function installNativePlugin(source,options={}){
   const env=options.env||process.env;
@@ -296,7 +305,7 @@ export async function installNativePlugin(source,options={}){
     await rm(stage,{recursive:true,force:true}).catch(()=>{});
     throw error;
   }
-  return {installed:true,id,name:validated.manifest.name,version:validated.manifest.version,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:grants.includes('agents')?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
+  return {installed:true,id,name:validated.manifest.name,version:validated.manifest.version,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:grants.includes('agents')?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
 }
 export async function uninstallNativePlugin(name,options={}){
   const env=options.env||process.env;
