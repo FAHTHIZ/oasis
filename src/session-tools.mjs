@@ -31,11 +31,15 @@ export const SESSION_TOOL_DEFINITIONS = [
     { cron: { type: 'string' }, prompt: { type: 'string' }, recurring: { type: 'boolean', description: 'Default true. false runs once at the next match.' } }, ['cron', 'prompt']),
   fn('cron_list', 'List scheduled prompts in this session.', {}),
   fn('cron_delete', 'Cancel a scheduled prompt by id.', { id: { type: 'string' } }, ['id']),
+  fn('enter_worktree', 'Create an isolated git worktree on a new branch and switch this session into it (files, commands and git now act there; the conversation continues). Pass path to switch into an existing worktree of this repository instead. Use exit_worktree to return.',
+    { name: { type: 'string', description: 'Short label for the new worktree/branch.' }, path: { type: 'string', description: 'Existing worktree to enter instead of creating one.' } }),
+  fn('exit_worktree', 'Leave the worktree entered with enter_worktree and return to the original directory. action "keep" leaves the worktree and branch; "remove" deletes them (refused when there are uncommitted changes or new commits unless discard_changes is true).',
+    { action: { type: 'string', enum: ['keep', 'remove'] }, discard_changes: { type: 'boolean' } }, ['action']),
   ...SHARED_TASK_TOOL_DEFINITIONS
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
+export const SESSION_READ_ONLY_TOOLS = ['enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
@@ -258,6 +262,8 @@ export async function runSessionTool(session, name, args, options = {}) {
     }
     case 'monitor_command': return monitorCommand(session, args, options);
     case 'enter_plan_mode': return enterPlanMode(session, args);
+    case 'enter_worktree': return enterWorktree(session, args, options);
+    case 'exit_worktree': return exitWorktree(session, args, options);
     case 'notify': return notifyUser(args, options.notify || {});
     case 'cron_create': return createCronJob(session, args);
     case 'cron_list': return listCronJobs(session);
@@ -266,4 +272,63 @@ export async function runSessionTool(session, name, args, options = {}) {
       if (SHARED_TASK_TOOL_NAMES.has(name)) return runSharedTaskTool(session, name, args);
       throw new Error('Unknown session tool ' + name);
   }
+}
+
+// EnterWorktree / ExitWorktree (Claude Code): move the whole session into a worktree and back.
+async function gitOut(cwd, args) {
+  const { execFile } = await import('node:child_process');
+  return await new Promise((resolve, reject) => execFile('git', args, { cwd, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(String(stdout).trim())));
+}
+
+async function enterWorktree(session, args = {}, options = {}) {
+  const path = (await import('node:path')).default;
+  const { createWorktree, WORKTREE_DIR } = await import('./worktrees.mjs');
+  if (args.path) {
+    const base = session.worktreeSession ? session.worktreeSession.originalRoot : session.root;
+    const target = path.resolve(session.root, String(args.path));
+    const common = async (dir) => path.resolve(dir, await gitOut(dir, ['rev-parse', '--git-common-dir']));
+    const [mine, theirs] = await Promise.all([common(base), common(target).catch(() => null)]);
+    if (!theirs || theirs !== mine) throw new Error(target + ' is not a worktree of this repository.');
+    const managed = [WORKTREE_DIR, path.join('.claude', 'worktrees')].some((dir) => target.startsWith(path.join(base, dir) + path.sep));
+    if (session.worktreeSession && !managed) throw new Error('From inside a worktree you can only switch to worktrees under ' + WORKTREE_DIR + '.');
+    if (!managed) {
+      const approve = typeof options.approval === 'function' ? options.approval : null;
+      const ok = approve ? await approve('Move this session (and its write access) into the worktree ' + target + '?', true) : false;
+      if (!ok) throw new Error('Entering ' + target + ' needs your approval (it is outside ' + WORKTREE_DIR + ').');
+    }
+    if (!session.worktreeSession) session.worktreeSession = { originalRoot: session.root, created: null };
+    session.worktreeSession.current = target;
+    session.root = target;
+    return { entered: target, created: false, message: 'Working directory is now ' + target + '. Files, commands and git act there until exit_worktree.' };
+  }
+  if (session.worktreeSession) throw new Error('Already in a worktree (' + session.root + '). Call exit_worktree first, or pass path to switch to another managed worktree.');
+  const { hookOptions } = options;
+  const worktree = await createWorktree(session.root, String(args.name || 'session'), { env: options.env, hookOptions });
+  session.worktreeSession = { originalRoot: session.root, created: worktree, current: worktree.path };
+  session.root = worktree.path;
+  return { entered: worktree.path, created: true, branch: worktree.branch || null, message: 'Created ' + (worktree.relative || worktree.path) + (worktree.branch ? ' on branch ' + worktree.branch : '') + ' and switched into it. Files, commands and git act there until exit_worktree.' };
+}
+
+async function exitWorktree(session, args = {}, options = {}) {
+  const state = session.worktreeSession;
+  if (!state) throw new Error('This session is not in a worktree entered with enter_worktree.');
+  const action = String(args.action || 'keep');
+  const worktree = state.created;
+  let note = '';
+  if (action === 'remove') {
+    if (!worktree || worktree.hook) throw new Error('Only a worktree created by enter_worktree in this session can be removed here; use action "keep".');
+    const status = await gitOut(worktree.path, ['status', '--porcelain', '--untracked-files=all']).catch(() => '');
+    const head = await gitOut(worktree.path, ['rev-parse', 'HEAD']).catch(() => worktree.base);
+    if ((status || head !== worktree.base) && args.discard_changes !== true) {
+      throw new Error('The worktree has ' + (status ? status.split('\n').length + ' uncommitted change(s)' : '') + (status && head !== worktree.base ? ' and ' : '') + (head !== worktree.base ? 'new commits on ' + worktree.branch : '') + '. Use action "keep", or pass discard_changes: true after confirming with the user.');
+    }
+    const { removeWorktree } = await import('./worktrees.mjs');
+    await removeWorktree(state.originalRoot, worktree, { env: options.env, deleteBranch: true });
+    note = 'Removed ' + worktree.path + ' and branch ' + worktree.branch + '.';
+  } else {
+    note = 'Kept ' + state.current + (worktree && worktree.branch ? ' (branch ' + worktree.branch + '; merge with git merge ' + worktree.branch + ')' : '') + '.';
+  }
+  session.root = state.originalRoot;
+  session.worktreeSession = null;
+  return { returned_to: session.root, message: note + ' Working directory is back to ' + session.root + '.' };
 }

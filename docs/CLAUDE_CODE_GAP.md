@@ -93,6 +93,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | `--betas`, `--system-prompt-snapshot`, `--ide`, `--ax-screen-reader`, `--tmux` | Implemented. Snapshot default is `off` (OASIS has always rebuilt on resume); `on` reuses the recorded prompt until compaction. `--teammate-mode tmux\|iterm2` is not implemented: teammates run in-process | Partial |
 | `/setup-bedrock`, `/setup-vertex`, `/bug`/`/feedback`, `/login`/`/logout`, `/new` `/reset` `/quit` `/routines`, `/run` `/verify` `/workflow-authoring` `/plugin-authoring` skills | Wizards detect credentials/region/project/pins and save to user settings `env` after confirmation; `/bug` drafts a prefilled GitHub issue (nothing sent) | Done |
 | `/auto-mode-setup`, `/autofix-pr` | Auto-mode environment drafted from the repo and saved after confirmation; autofix runs locally (Claude uses a cloud session) with gh, up to 5 fix/push/wait rounds | Done |
+| `EnterWorktree` / `ExitWorktree` tools | `enter_worktree` / `exit_worktree` switch the session root mid-task; outside paths need approval; `remove` refuses unsaved work unless `discard_changes` | Done |
 
 ## Ranked next improvements
 
