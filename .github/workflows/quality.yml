@@ -7,10 +7,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Give every main commit a unique group so later pushes cannot replace even a
-  # pending verification run. Updates to one PR share a group and remain cancellable.
-  group: oasis-quality-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Keep only the latest run per ref to avoid queuing obsolete test matrices.
+  # Main and pull requests use distinct refs; superseded runs are intentionally cancelled.
+  group: oasis-quality-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   integrity:
     name: Node ${{ matrix.node-version }} runtime and package integrity

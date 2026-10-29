@@ -41,7 +41,7 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 
 ### P0 — Make the default-branch quality signal trustworthy
 
-- [ ] Give every main commit a unique concurrency group so later pushes cannot replace even a pending verification run; keep pull-request checks keyed by PR number and cancellable. The quality, publishing, and desktop policies and regression test are updated; acceptance remains pending fresh current-main CI. This favors per-commit evidence over minimizing CI runner consumption.
+- [ ] Keep latest-run-only CI scheduling per ref to avoid an expensive queue of obsolete matrices; ensure publishing groups main and pull requests separately so a PR cannot cancel main. Per-SHA grouping was dropped because it grows runner demand during rapid pushes. Acceptance still requires current-main quality, publishing, and desktop checks to pass on one stable SHA.
 - [ ] Verify the newly committed provider-setup regression fix on current `main`: fresh setup must still default to OmniRoute, while re-opening setup must preserve the configured known provider or select `custom` for an unrecognized endpoint. The test has been added; do not mark this complete until current-main CI passes.
 - [x] Change the `FileChanged` test to wait for hook-message delivery using the existing bounded `waitFor` helper; the full current test matrix passes with the assertion synchronized to the hook response.
 - [x] Added process-tree termination to command, package-install, external-skill install and hook timeout/cancellation paths, plus a regression test for a descendant that inherits output pipes. Cross-platform process behavior still requires verification.

@@ -9,29 +9,18 @@ test('Pages launch summary prints Markdown backticks literally', async () => {
   assert.ok(!workflow.includes('echo "Add the `OASIS_REPO_ADMIN_TOKEN`'));
 });
 
-test('main revisions receive unique CI groups while superseded PR runs remain cancellable', async () => {
+test('CI keeps latest-run-only concurrency per ref and isolates publishing refs', async () => {
   const cases = [
-    {
-      path: '../.github/workflows/quality.yml',
-      group: "group: oasis-quality-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}",
-      cancel: "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-    },
-    {
-      path: '../.github/workflows/pages.yml',
-      group: "group: oasis-public-launch-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}",
-      cancel: "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
-    },
-    {
-      path: '../.github/workflows/desktop-build.yml',
-      group: 'group: oasis-desktop-${{ github.sha }}',
-      cancel: 'cancel-in-progress: false'
-    }
+    { path: '../.github/workflows/quality.yml', group: 'group: oasis-quality-${{ github.ref }}' },
+    { path: '../.github/workflows/pages.yml', group: 'group: oasis-public-launch-${{ github.ref }}' },
+    { path: '../.github/workflows/desktop-build.yml', group: 'group: oasis-desktop-${{ github.ref }}' }
   ];
-
   for (const item of cases) {
     const workflow = await readFile(new URL(item.path, import.meta.url), 'utf8');
-    assert.ok(workflow.includes(item.group), item.path + ' must key main-run concurrency by commit SHA');
-    assert.ok(workflow.includes(item.cancel), item.path + ' has incorrect cancellation policy');
-    assert.ok(!workflow.includes('cancel-in-progress: true'), item.path + ' must not cancel main-commit verification');
+    assert.ok(workflow.includes(item.group), item.path + ' must use a per-ref concurrency group');
+    assert.ok(workflow.includes('cancel-in-progress: true'), item.path + ' should cancel superseded runs');
+    assert.ok(!workflow.includes('${{ github.sha }}'), item.path + ' must not create a separate expensive run for every commit');
   }
+  const publishing = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
+  assert.ok(publishing.includes('group: oasis-public-launch-${{ github.ref }}'));
 });

@@ -9,9 +9,9 @@ permissions:
   contents: read
 
 concurrency:
-  # A later push must not replace this SHA's desktop-build evidence.
-  group: oasis-desktop-${{ github.sha }}
-  cancel-in-progress: false
+  # Keep only the newest desktop build per ref to avoid an obsolete build backlog.
+  group: oasis-desktop-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
