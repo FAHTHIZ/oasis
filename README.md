@@ -77,7 +77,7 @@ cd oasis
 npm run check
 ```
 
-The last fully verified quality baseline before the current hardening patches passed **549 Node tests**, validated **21 evaluation fixtures**, passed Node.js 22/24/26 package/runtime checks, and passed the authenticated browser chat smoke test. The current main revision adds process-tree cancellation, URL-address filtering and a hook-test synchronization fix; its latest workflows must pass before those patches are called verified. See [Current status](docs/CURRENT_STATUS.md) and [the security/reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md) for evidence and limitations. Neither CI nor the current smoke benchmark is a full security audit or a comparative coding-quality benchmark.
+The latest verified main revision (`a044ed4`) passed **570 Node tests with zero failures** on Node.js 22, 24 and 26, validated **21 evaluation fixtures**, passed native PTY and authenticated browser E2E smoke checks, passed homepage/repository validation, and built desktop installers for Windows, macOS and Linux. Recent hardening covers process-tree cancellation, URL/SSRF checks, OAuth DNS pinning, API-key helper isolation, and plugin archive/ZIP validation. Installers remain unsigned, and these checks are not a full security audit or a comparative coding-quality benchmark. See [Current status](docs/CURRENT_STATUS.md) and [the security/reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md).
 
 ## License
 
