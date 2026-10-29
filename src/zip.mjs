@@ -209,12 +209,12 @@ async function fetchPinnedArchiveBytes(parsed, addresses, maxBytes, signal) {
       request = transport(parsed, options, (response) => {
         response.on('error', (error) => finish(error));
         if (response.statusCode >= 300 && response.statusCode < 400) {
-          finish(new Error('--plugin-url redirects are blocked. Use the final HTTPS archive URL directly.'));
+          finish(null, { status: response.statusCode, location: response.headers.location || null });
           response.destroy();
           return;
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          finish(new Error('--plugin-url download failed: HTTP ' + response.statusCode + ' for ' + parsed.href));
+          finish(null, { status: response.statusCode, location: null });
           response.destroy();
           return;
         }
@@ -235,7 +235,7 @@ async function fetchPinnedArchiveBytes(parsed, addresses, maxBytes, signal) {
           chunks.push(Buffer.from(chunk));
         });
         response.on('end', () => {
-          if (!settled) finish(null, Buffer.concat(chunks, total));
+          if (!settled) finish(null, { status: response.statusCode, body: Buffer.concat(chunks, total) });
         });
       });
     } catch (error) {
@@ -254,22 +254,53 @@ export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tm
   const { mkdtemp, readdir, stat } = await import('node:fs/promises');
   const os = await import('node:os');
   const limit = Number.isFinite(maxBytes) && maxBytes > 0 ? Math.min(maxBytes, 100 * 1024 * 1024) : 100 * 1024 * 1024;
-  const { url: parsed, addresses } = await validateArchiveTarget(String(url || ''), lookupImpl);
+  let currentUrl = String(url || '');
+  let firstUrl;
+  try { firstUrl = new URL(currentUrl); } catch { /* validateArchiveTarget returns the user-facing error */ }
+  const allowLoopbackHttp = Boolean(firstUrl && isLoopbackUrl(firstUrl.toString()));
+  const visited = new Set();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   let buffer;
   try {
-    if (fetchImpl === globalThis.fetch) {
-      buffer = await fetchPinnedArchiveBytes(parsed, addresses, limit, controller.signal);
-    } else {
-      const response = await fetchImpl(parsed.href, { redirect: 'error', signal: controller.signal });
-      if (response.status >= 300 && response.status < 400) throw new Error('--plugin-url redirects are blocked. Use the final HTTPS archive URL directly.');
-      if (!response.ok) throw new Error('--plugin-url download failed: HTTP ' + response.status + ' for ' + parsed.href);
-      buffer = await boundedResponseBytes(response, limit);
+    for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
+      const { url: parsed, addresses } = await validateArchiveTarget(currentUrl, lookupImpl);
+      if (!allowLoopbackHttp && isLoopbackUrl(parsed.toString())) {
+        throw new Error('--plugin-url redirects from a public URL to loopback are blocked.');
+      }
+      if (visited.has(parsed.href)) throw new Error('--plugin-url redirect loop detected.');
+      visited.add(parsed.href);
+      let result;
+      if (fetchImpl === globalThis.fetch) {
+        result = await fetchPinnedArchiveBytes(parsed, addresses, limit, controller.signal);
+      } else {
+        const response = await fetchImpl(parsed.href, { redirect: 'manual', signal: controller.signal });
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          result = { status: response.status, location: response.headers.get('location') || null };
+          await response.body?.cancel().catch(() => {});
+        } else {
+          if (!response.ok) throw new Error('--plugin-url download failed: HTTP ' + response.status + ' for ' + parsed.href);
+          result = { status: response.status, body: await boundedResponseBytes(response, limit) };
+        }
+      }
+      if ([301, 302, 303, 307, 308].includes(result.status)) {
+        if (!result.location) throw new Error('--plugin-url redirect response had no Location header.');
+        if (redirectCount === 5) throw new Error('--plugin-url exceeded the five-redirect limit.');
+        const nextUrl = new URL(result.location, parsed);
+        if (!allowLoopbackHttp && isLoopbackUrl(nextUrl.toString())) {
+          throw new Error('--plugin-url redirects from a public URL to loopback are blocked.');
+        }
+        currentUrl = nextUrl.toString();
+        continue;
+      }
+      if (result.status < 200 || result.status >= 300) throw new Error('--plugin-url download failed: HTTP ' + result.status + ' for ' + parsed.href);
+      buffer = result.body;
+      break;
     }
   } finally {
     clearTimeout(timer);
   }
+  if (!buffer) throw new Error('--plugin-url download did not produce an archive body.');
 
   const dir = await mkdtemp(path.join(tmpRoot || os.tmpdir(), 'oasis-plugin-url-'));
   try {
