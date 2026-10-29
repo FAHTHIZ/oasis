@@ -155,7 +155,7 @@ function render(m) {
     case 'permission': {
       endLive();
       const requestText = String(m.message || 'No action details were supplied.');
-      const mayDestroyData = /\\brm\\s+-[a-z]*r\\b|\\b(delete|remove|overwrite|format|truncate)\\b|\\bdrop\\s+table\\b/i.test(requestText);
+      const mayDestroyData = /\brm\s+-[a-z]*r\b|\b(delete|remove|overwrite|format|truncate)\b|\bdrop\s+table\b/i.test(requestText);
       const promptClass = mayDestroyData ? 'perm perm-risk' : 'perm';
       const warning = mayDestroyData ? '<div class="perm-warning">Caution: this request may remove or overwrite data.</div>' : '';
       const div = add(promptClass,
