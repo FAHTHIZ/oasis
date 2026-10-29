@@ -1,8 +1,9 @@
 # Next milestone: Alpha confidence and end-to-end reliability
 
 **Status checked:** October 29, 2026  
-**Code baseline before this documentation update:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77)  
-**Purpose:** decide what OASIS should ship next based on the current implementation and the documented compatible ecosystem capability set.
+**Code snapshot audited before the latest main changes:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca)  
+**Last fully recorded CI baseline:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77). Later `main` commits need their own current-head checks.  
+**Purpose:** prioritize OASIS-owned reliability, coding quality, safety, and release readiness based on what is implemented and verifiable.
 
 ## Decision
 
@@ -12,7 +13,7 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-For comparator revision `268862c`, all three required workflows passed: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [Windows/macOS/Linux desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). The next step is measured coding outcomes and end-to-end reliability, not feature-count expansion.
+The last fully recorded baseline (`268862c`) passed all three required workflows: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [Windows/macOS/Linux desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). This is historical evidence. A provider-setup preservation fix and regression tests have since been committed directly to `main`; verify the current-head workflows before release. The next step remains measurable coding outcomes and end-to-end reliability, not feature-count expansion.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
@@ -29,6 +30,7 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 
 ### P0 — Make the default-branch quality signal trustworthy
 
+- [ ] Verify the newly committed provider-setup regression fix on current `main`: fresh setup must still default to OmniRoute, while re-opening setup must preserve the configured known provider or select `custom` for an unrecognized endpoint. The test has been added; do not mark this complete until current-main CI passes.
 - [x] Change the `FileChanged` test to wait for hook-message delivery using the existing bounded `waitFor` helper; the full current test matrix passes with the assertion synchronized to the hook response.
 - [x] Added process-tree termination to command, package-install, external-skill install and hook timeout/cancellation paths, plus a regression test for a descendant that inherits output pipes. Cross-platform process behavior still requires verification.
 - [x] Added regression cases for additional reserved/documentation IPv4 and IPv6 addresses to the public URL-fetch guard.
