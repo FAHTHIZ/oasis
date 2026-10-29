@@ -2638,7 +2638,21 @@ async function authorizeCall(session, name, args, context, options) {
     }, hookOptions(session, context.env));
     session.hookMessages.push(...pre.messages);
     if (pre.blocked || pre.permissionDecision === 'deny') return { deniedReason: 'Blocked by PreToolUse hook: ' + (pre.reason || 'no reason given') };
-    if (pre.updatedInput) args = { ...args, ...pre.updatedInput };
+    if (pre.updatedInput) {
+      // A PreToolUse hook can rewrite the action after the model call. The
+      // original verdict only covered the old input and must not authorize the
+      // rewritten command or resource.
+      const priorDecision = decision;
+      args = { ...args, ...pre.updatedInput };
+      const updatedVerdict = policy ? policy.evaluate(name, args) : { decision: 'default', rule: null };
+      if (updatedVerdict.decision === 'deny') {
+        return { deniedReason: 'Denied by permission rule ' + updatedVerdict.rule + ' after PreToolUse updated the tool input.' };
+      }
+      decision = updatedVerdict.decision;
+      // A prior explicit ask is not weakened by rewriting the action.
+      if (priorDecision === 'ask') decision = 'ask';
+      if (decision === 'allow' && mode === 'auto' && session.autoModeSettings && session.autoModeSettings.classifyAllShell && (name === 'run_command' || name === 'powershell')) decision = 'default';
+    }
     if (pre.permissionDecision === 'ask') decision = 'ask';
     else if (pre.permissionDecision === 'allow' && decision !== 'ask') decision = 'allow';
     hookContext = pre.additionalContext;
