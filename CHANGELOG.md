@@ -4,6 +4,9 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Hardened task-history event data preservation for unusual input keys and added a focused persistence regression test. Current-head CI is pending.
+
+
 - Hardened local task-history serialization so special JSON property names are preserved as inert data; added a focused persistence regression test. Source and test are committed on main; current-head CI is pending.
 
 
