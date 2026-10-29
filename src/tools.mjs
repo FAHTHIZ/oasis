@@ -335,6 +335,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let cancelled = false;
     let settled = false;
     let killTimer = null;
+    let terminationRequested = false;
     const launch = wrapCommand(command, args, sandbox, root);
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     const append = (target, chunk) => {
@@ -343,13 +344,16 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     };
     const cleanup = () => {
       clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
+      // Keep a scheduled force-kill alive after the leader exits: descendants may
+      // ignore SIGTERM or may not inherit the parent's output pipes.
+      if (killTimer && !terminationRequested) clearTimeout(killTimer);
       if (options.signal) options.signal.removeEventListener('abort', onAbort);
     };
     const terminateTree = () => {
-      signalProcessTree(child, 'SIGTERM');
-      if (killTimer) return;
-      killTimer = setTimeout(() => { if (!settled) signalProcessTree(child, 'SIGKILL'); }, 1500);
+      terminationRequested = true;
+      signalProcessTree(child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
+      if (process.platform === 'win32' || killTimer) return;
+      killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1500);
       killTimer.unref?.();
     };
     const onAbort = () => {
@@ -397,16 +401,18 @@ async function runInstallPlan(plan, options) {
     let cancelled = false;
     let timedOut = false;
     let killTimer = null;
+    let terminationRequested = false;
     const child = spawn(plan.command, plan.args, { cwd: options.root, env, shell: false, windowsHide: true, stdio: 'inherit', ...processTreeSpawnOptions() });
     const cleanup = () => {
       clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
+      if (killTimer && !terminationRequested) clearTimeout(killTimer);
       if (options.signal) options.signal.removeEventListener('abort', onAbort);
     };
     const terminateTree = () => {
-      signalProcessTree(child, 'SIGTERM');
-      if (killTimer) return;
-      killTimer = setTimeout(() => { if (!settled) signalProcessTree(child, 'SIGKILL'); }, 1500);
+      terminationRequested = true;
+      signalProcessTree(child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
+      if (process.platform === 'win32' || killTimer) return;
+      killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1500);
       killTimer.unref?.();
     };
     const onAbort = () => {
@@ -1063,13 +1069,16 @@ function runExternalSkillsCommand(root, cliArgs, env, signal) {
     let output = '';
     let settled = false;
     let timedOut = false;
+    let terminationRequested = false;
     let timer;
+    let killTimer = null;
     let child;
     const append = (chunk) => {
       output = (output + chunk.toString('utf8')).slice(-16000);
     };
     const cleanup = () => {
       clearTimeout(timer);
+      if (killTimer && !terminationRequested) clearTimeout(killTimer);
       if (signal) signal.removeEventListener('abort', onAbort);
     };
     const finish = (value) => {
@@ -1079,8 +1088,9 @@ function runExternalSkillsCommand(root, cliArgs, env, signal) {
       resolve(value);
     };
     const terminateTree = () => {
-      signalProcessTree(child, 'SIGTERM');
-      if (killTimer) return;
+      terminationRequested = true;
+      signalProcessTree(child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
+      if (process.platform === 'win32' || killTimer) return;
       killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1500);
       killTimer.unref?.();
     };

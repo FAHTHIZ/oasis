@@ -2063,3 +2063,51 @@ test('workspace command cancellation also stops descendants holding inherited pi
   assert.equal(result.cancelled, true);
   assert.ok(result.signal || result.exitCode !== 0, 'The parent process should be stopped rather than complete normally.');
 });
+
+test('workspace cancellation force-kills a descendant that ignores SIGTERM after the leader exits', async (t) => {
+  if (process.platform === 'win32') return t.skip('POSIX process-group behavior is tested on POSIX; Windows uses taskkill tree termination.');
+  const tmp = await temporaryDirectory('oasis-cancel-ignored-child-');
+  let descendantPid = null;
+  const controller = new AbortController();
+  t.after(async () => {
+    if (descendantPid) { try { process.kill(descendantPid, 'SIGKILL'); } catch {} }
+    await rm(tmp, { recursive: true, force: true });
+  });
+  const pidFile = path.join(tmp, 'ignored-grandchild.pid');
+  const descendantCode = "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)";
+  const parentCode = [
+    "const fs=require('node:fs');",
+    "const {spawn}=require('node:child_process');",
+    "const child=spawn(" + JSON.stringify(process.execPath) + ",['-e'," + JSON.stringify(descendantCode) + "],{stdio:'ignore'});",
+    "fs.writeFileSync(" + JSON.stringify(pidFile) + ",String(child.pid));",
+    "setInterval(()=>{},1000);"
+  ].join('');
+  const running = runWorkspaceCommand(tmp, process.execPath, ['-e', parentCode], {
+    autoApprove: true,
+    approval: async () => true,
+    ruleAllowed: true,
+    timeoutSeconds: 30,
+    signal: controller.signal
+  });
+  for (let i = 0; i < 100; i++) {
+    try { descendantPid = Number(await readFile(pidFile, 'utf8')); break; } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.ok(Number.isInteger(descendantPid) && descendantPid > 0, 'ignoring descendant should start');
+  controller.abort();
+  const result = await Promise.race([
+    running,
+    new Promise((resolve) => setTimeout(() => resolve(null), 3000))
+  ]);
+  assert.ok(result, 'parent command should settle after cancellation even if its descendant ignores SIGTERM');
+  assert.equal(result.cancelled, true);
+  const deadline = Date.now() + 3500;
+  let alive = true;
+  while (Date.now() < deadline) {
+    try { process.kill(descendantPid, 0); alive = true; }
+    catch (error) { if (error && error.code === 'ESRCH') { alive = false; break; } else throw error; }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(alive, false, 'force-kill escalation must stop descendants even after the process leader has exited');
+});
+

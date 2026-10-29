@@ -1,9 +1,9 @@
-// Best-effort process-tree termination for commands launched by OASIS.
+// Process-tree termination for commands and PTY sessions launched by OASIS.
 //
-// On POSIX, commands are started in their own process group and signals are sent
-// to that group so grandchildren cannot keep inherited pipes alive after a timeout
-// or cancellation. On Windows, taskkill /T is used for the forced-stop phase;
-// direct child termination remains the graceful first attempt.
+// On POSIX, commands use their own process group and signals are sent to the group,
+// so descendants can be stopped even after the original leader exits. Node's
+// portable Windows child API has no equivalent process-group signal; taskkill /T /F
+// is therefore used on Windows to stop the process tree on an explicit stop/timeout.
 import { spawn } from 'node:child_process';
 
 export function processTreeSpawnOptions() {
@@ -31,19 +31,19 @@ export function signalProcessTree(child, signal = 'SIGTERM') {
     }
   }
 
-  if (signal === 'SIGKILL') {
-    try {
-      const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore'
-      });
-      killer.on('error', () => { try { child.kill(signal); } catch {} });
-      killer.unref();
-      return true;
-    } catch {
-      try { return Boolean(child.kill(signal)); } catch { return false; }
-    }
+  // Windows has no Node.js API for signalling an entire process group. A direct
+  // child can exit before a later escalation and leave descendants orphaned, so
+  // cancellation/timeout uses taskkill immediately while the tree is discoverable.
+  try {
+    const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore'
+    });
+    killer.on('error', () => { try { child.kill(signal); } catch {} });
+    killer.unref();
+    return true;
+  } catch {
+    try { return Boolean(child.kill(signal)); } catch { return false; }
   }
-
   try { return Boolean(child.kill(signal)); } catch { return false; }
 }

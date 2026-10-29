@@ -2,6 +2,7 @@
 // node-pty is loaded only when the first interactive session is requested so a
 // missing native binding never prevents OASIS's normal CLI from starting.
 import { randomBytes } from 'node:crypto';
+import { signalProcessTree } from './process-tree.mjs';
 
 const MAX_ACTIVE_SESSIONS = 8;
 const MAX_RETAINED_SESSIONS = 32;
@@ -32,10 +33,11 @@ function statusOf(record) {
 }
 
 export class PtySessionManager {
-  constructor({ loadPty = () => import('node-pty'), maxSessions = MAX_ACTIVE_SESSIONS, bufferLimit = DEFAULT_BUFFER_CHARS, idFactory } = {}) {
+  constructor({ loadPty = () => import('node-pty'), maxSessions = MAX_ACTIVE_SESSIONS, bufferLimit = DEFAULT_BUFFER_CHARS, idFactory, killGraceMs = 1500 } = {}) {
     this.loadPty = loadPty;
     this.maxSessions = safeInteger(maxSessions, MAX_ACTIVE_SESSIONS, 1, MAX_ACTIVE_SESSIONS);
     this.bufferLimit = safeInteger(bufferLimit, DEFAULT_BUFFER_CHARS, 1024, 4 * 1024 * 1024);
+    this.killGraceMs = safeInteger(killGraceMs, 1500, 10, 10000);
     this.idFactory = idFactory || (() => 'term_' + randomBytes(8).toString('hex'));
     this.sessions = new Map();
     this.ptyPromise = null;
@@ -69,6 +71,24 @@ export class PtySessionManager {
       const record = exited.shift();
       this.sessions.delete(record.id);
     }
+  }
+
+  _terminateRecord(record, { force = false } = {}) {
+    if (force || process.platform === 'win32') {
+      if (record.stopTimer) clearTimeout(record.stopTimer);
+      record.stopTimer = null;
+      this.signalTree(record.process, 'SIGKILL');
+      return;
+    }
+    this.signalTree(record.process, 'SIGTERM');
+    if (record.stopTimer) return;
+    // Do not clear this timer when the PTY leader exits: descendants may have
+    // ignored SIGTERM and may not share the PTY's observable exit lifecycle.
+    record.stopTimer = setTimeout(() => {
+      record.stopTimer = null;
+      this.signalTree(record.process, 'SIGKILL');
+    }, this.killGraceMs);
+    record.stopTimer.unref?.();
   }
 
   async start(command, args = [], options = {}) {
@@ -110,6 +130,7 @@ export class PtySessionManager {
       updatedAt: new Date().toISOString(),
       exitCode: null,
       signal: null,
+      stopTimer: null,
       sandboxed: options.sandboxed || null,
       waiters: new Set(),
       dataDisposable: null,
@@ -226,8 +247,8 @@ export class PtySessionManager {
     if (record.state !== 'running' && record.state !== 'stopping') return { ...statusOf(record), stopped: false };
     record.state = 'stopping';
     record.updatedAt = new Date().toISOString();
-    try { record.process.kill(); }
-    catch (error) { throw new Error('Could not stop terminal session ' + record.id + ': ' + String(error.message || error)); }
+    try { this._terminateRecord(record); }
+    catch (error) { throw new Error('Could not stop terminal process tree ' + record.id + ': ' + String(error.message || error)); }
     return { ...statusOf(record), stopped: true };
   }
 
@@ -260,7 +281,7 @@ export class PtySessionManager {
     for (const record of this.sessions.values()) {
       if (record.state !== 'running' && record.state !== 'stopping') continue;
       record.state = 'stopping';
-      try { record.process.kill(); stopped += 1; } catch {}
+      try { this._terminateRecord(record, { force: true }); stopped += 1; } catch {}
     }
     this.sessions.clear();
     return { stopped };
