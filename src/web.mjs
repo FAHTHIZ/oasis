@@ -173,7 +173,7 @@ export function summarizeAgentRun(job) {
   const worktreePath = monitorText(artifact.path || job.worktreePath, 180);
   const baseCommit = /^[a-f0-9]{40}$/i.test(String(artifact.baseCommit || job.worktreeBaseCommit || ''))
     ? String(artifact.baseCommit || job.worktreeBaseCommit).toLowerCase() : '';
-  if (hasTokenUsage) approvalState.totalTokens = totalTokens;
+  const usage = { totalTokens: hasTokenUsage ? totalTokens : null };
   return {
     id: monitorText(job.id, 80),
     title: monitorText(job.title || job.type || 'Coding task', 160),
@@ -186,6 +186,7 @@ export function summarizeAgentRun(job) {
     isolation: monitorText(job.isolation || (job.worktreeBranch ? 'worktree' : 'workspace'), 40),
     branch, worktreePath, baseCommit,
     approvals: approvalState,
+    usage,
     workerCount: workerList.length,
     runningWorkers: workerList.filter((worker) => worker.status === 'running' || worker.status === 'stopping').length,
     teamCount: teams.size,
