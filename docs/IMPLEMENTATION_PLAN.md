@@ -39,6 +39,8 @@ Oasis is a Node.js ESM application. src/cli.mjs starts terminal/headless workflo
 
 ### 1. LSP-verified development loop
 
+- **Progress (2026-10-29):** the first increment is on main in src/lsp.mjs, src/agent.mjs, and the focused LSP tests. It requests diagnostics after successful edits to LSP-mapped files, compares against a pre-edit diagnostic set when an already-approved server is active, represents missing-server/timeouts as unavailable, and suppresses successful completion when new/unclassified LSP errors remain after one repair opportunity. A fake TypeScript language-server test covers TS2322 reporting. The full current-head check remains pending; broader real-server/platform coverage remains open.
+
 - **Existing equivalent:** src/lsp.mjs has an on-demand LSP client with definitions, references, symbols and diagnostics; src/diagnostics.mjs runs configured type checkers and linters. test/lsp.test.mjs includes a fake server.
 - **Affected files:** src/lsp.mjs, src/tools.mjs, src/agent.mjs, src/slash.mjs, src/diagnostics.mjs, test/lsp.test.mjs, test/diagnostics.test.mjs, focused agent/slash tests, docs/USER_GUIDE.md, docs/ARCHITECTURE.md.
 - **Minimum viable implementation:** after successful edit/write/multi-edit/notebook edit, identify eligible source paths and request diagnostics from the existing LSP client where available. Return a structured state: verified, findings or unavailable. Keep a per-session/file/version baseline so new findings can be distinguished when feasible. /diagnostics should show error/warning/info groups. /fix must require verification and cannot report success while newly introduced errors remain.
