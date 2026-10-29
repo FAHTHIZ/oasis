@@ -3,7 +3,7 @@
 // { resetSession: true } when the caller should drop the current session.
 import { describeHook, runHooks, hasHooks } from './hooks.mjs';
 import { compactHistoryIfNeeded, hookOptions } from './agent.mjs';
-import { estimateTokens, contextWindowSize } from './context.mjs';
+import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES } from './settings.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
@@ -14,7 +14,7 @@ import { imageInputCapability } from './images.mjs';
 import { listSessions } from './sessions.mjs';
 import { resolveWorkspacePath, setAdditionalDirectories } from './tools.mjs';
 import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
-import { lstat, writeFile } from 'node:fs/promises';
+import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { listWorktrees } from './worktrees.mjs';
 import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
@@ -290,12 +290,65 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'compact': {
       if (!session || session.messages.length <= 1) return { output: 'Nothing to compact yet.' };
-      const before = estimateTokens(session.messages);
-      const result = await compactHistoryIfNeeded(session, { force: true, instructions: argument });
-      const after = estimateTokens(session.messages);
-      if (usage && result.tokensUsed) recordUsage(usage, { totalTokens: result.tokensUsed, phase: 'compaction' });
-      if (result.blockedByHook) return { output: 'A PreCompact hook cancelled /compact: ' + (result.reason || 'no reason given') };
-      return { output: result.compacted ? 'Conversation compacted: about ' + formatNumber(before) + ' -> ' + formatNumber(after) + ' tokens.' : 'Nothing to compact yet.' };
+      const input = String(argument || '').trim();
+      if (/^cancel$/i.test(input)) {
+        if (!session.pendingCompactionPreview) return { output: 'There is no pending compaction preview to cancel.' };
+        delete session.pendingCompactionPreview;
+        return { output: 'Compaction cancelled. Conversation history is unchanged.' };
+      }
+      if (/^preserve\s+list$/i.test(input)) {
+        const items = Array.isArray(session.mustPreserve) ? session.mustPreserve : [];
+        return { output: items.length ? ['Must-preserve context:', ...items.map((item, i) => '  ' + (i + 1) + '. [' + item.kind + '] ' + item.text)].join('\n') : 'No must-preserve records yet. Add one with /compact preserve <kind>: <text>.' };
+      }
+      if (/^preserve\s+clear$/i.test(input)) {
+        session.mustPreserve = [];
+        return { output: 'Cleared must-preserve records for this session.' };
+      }
+      if (/^preserve(?:\s+|$)/i.test(input)) {
+        const raw = input.replace(/^preserve\s*/i, '').trim();
+        const colon = raw.indexOf(':');
+        const kind = colon > 0 ? raw.slice(0, colon).trim().toLowerCase() : 'rule';
+        const text = colon > 0 ? raw.slice(colon + 1).trim() : raw;
+        try {
+          const items = addMustPreserve(session, kind, text);
+          return { output: 'Must-preserve record saved (' + items.length + '/20): [' + items[items.length - 1].kind + '] ' + items[items.length - 1].text };
+        } catch (error) {
+          return { output: 'Could not save must-preserve record: ' + String(error.message || error) };
+        }
+      }
+      if (/^confirm$/i.test(input)) {
+        const preview = session.pendingCompactionPreview;
+        if (!preview) return { output: 'No compaction preview is pending. Run /compact [focus] to preview first.' };
+        const before = estimateTokens(session.messages);
+        const result = await compactHistoryIfNeeded(session, {
+          force: true,
+          instructions: preview.focus,
+          env,
+          mustPreserve: session.mustPreserve
+        });
+        if (usage && result.tokensUsed) recordUsage(usage, { totalTokens: result.tokensUsed, phase: 'compaction' });
+        if (result.blockedByHook) return { output: 'A PreCompact hook cancelled /compact: ' + (result.reason || 'no reason given') + '. The preview remains available; history was not changed.' };
+        delete session.pendingCompactionPreview;
+        const after = estimateTokens(session.messages);
+        return { output: result.compacted ? 'Conversation compacted: about ' + formatNumber(before) + ' -> ' + formatNumber(after) + ' tokens. Must-preserve records were appended to the context digest.' : 'Nothing to compact yet.' };
+      }
+      const focus = input.replace(/^preview\s*/i, '').trim();
+      const preview = createCompactionPreview(session, focus);
+      session.pendingCompactionPreview = preview;
+      const lines = [
+        'COMPACTION PREVIEW — no history has been changed.',
+        'Estimated context before: ~' + formatNumber(preview.beforeTokens) + ' tokens.',
+        'Focus: ' + (preview.focus || '(general continuity)'),
+        'Will be summarized: ' + preview.summarizedMessages + ' non-system messages (users ' + preview.byRole.user + ', assistant ' + preview.byRole.assistant + ', tools ' + preview.byRole.tool + ').',
+        'Expected structure after compaction: system prompt + one context digest + one continuity message.',
+        'Detected likely paths: ' + (preview.recentPaths.length ? preview.recentPaths.join(', ') : '(none confidently identified)'),
+        'Messages containing errors/failures: ' + preview.errorOrFailureMessages + '; verification-related messages: ' + preview.verificationRelatedMessages + '.',
+        'Largest messages to summarize: ' + (preview.largestMessages.length ? preview.largestMessages.map((item) => '#' + item.index + ' ' + item.role + (item.name ? '/' + item.name : '') + ' ~' + formatNumber(item.tokens) + ' tokens: ' + item.preview).join('\n  ') : '(none over ~500 tokens)'),
+        'Must-preserve records: ' + (preview.mustPreserve.length ? preview.mustPreserve.map((item) => '[' + item.kind + '] ' + item.text).join(' | ') : '(none yet)'),
+        preview.note,
+        'Confirm with /compact confirm, or cancel with /compact cancel. Add records using /compact preserve goal: ... /compact preserve path: ... /compact preserve error: ...'
+      ];
+      return { output: lines.join('\n') };
     }
     case 'context': {
       if (!session) return { output: 'No conversation yet. Context in use: system prompt only.' };
@@ -314,6 +367,63 @@ export async function runBuiltinCommand(name, argument, state) {
       const used = conversationTokens + localTools + mcpTools;
       const percent = windowSize ? Math.round(used / windowSize * 100) : 0;
       const bar = '#'.repeat(Math.min(30, Math.round(percent * 0.3))).padEnd(30, '.');
+      if (String(argument || '').trim().toLowerCase() === 'all') {
+        const history = (session.messages || []).slice(1);
+        const toolMessages = history.filter((message) => message && message.role === 'tool');
+        const fileMessages = toolMessages.filter((message) => /^(read_file|notebook_read|ide_get_diagnostics)$/i.test(String(message.name || '')));
+        const commandMessages = toolMessages.filter((message) => /^(run_command|run_shell|command_output|powershell|diagnostics|monitor_command)$/i.test(String(message.name || '')));
+        const skillMessages = toolMessages.filter((message) => /^(load_skill|read_skill_resource)$/i.test(String(message.name || '')));
+        const tokensFor = (items) => estimateTokens(items);
+        const directMemory = await memoryFiles(root, { env });
+        let userMemoryTokens = 0, projectMemoryTokens = 0;
+        const userMemoryNames = [], projectMemoryNames = [];
+        for (const item of directMemory.filter((item) => item.exists)) {
+          try {
+            const contents = await readFile(item.path, 'utf8');
+            if (item.label === 'user') { userMemoryTokens += Math.ceil(contents.length / 4); userMemoryNames.push(item.path.replace(env.HOME || '', '~')); }
+            else { projectMemoryTokens += Math.ceil(contents.length / 4); projectMemoryNames.push(item.path.replace(root, '.')); }
+          } catch { /* A source may disappear while context is inspected. */ }
+        }
+        const byServer = new Map();
+        for (const definition of mcpDefinitions) {
+          const name = String(definition.function.name || 'mcp tool');
+          const entry = session.mcpToolMap instanceof Map ? session.mcpToolMap.get(name) : null;
+          const serverName = String(entry && (entry.serverName || entry.server && entry.server.name) || (name.includes('__') ? name.split('__')[0] : name.split('_').slice(0, 2).join('_')));
+          const current = byServer.get(serverName) || { count: 0, chars: 0 };
+          current.count++;
+          current.chars += JSON.stringify(definition).length;
+          byServer.set(serverName, current);
+        }
+        const largest = (session.messages || []).map((message, index) => {
+          let body = '';
+          try { body = typeof message.content === 'string' ? message.content : JSON.stringify(message.content || message.tool_calls || ''); } catch {}
+          body = body.replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|Bearer\s+[A-Za-z0-9._-]{12,})\b/gi, '[REDACTED]')
+            .replace(/((?:api[_-]?key|token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+            .replace(/[\r\n\t]+/g, ' ').slice(0, 180);
+          return { index: index + 1, role: message.role || 'unknown', name: message.name || (message.function && message.function.name) || '', tokens: estimateTokens([message]), preview: body };
+        }).sort((a, b) => b.tokens - a.tokens).slice(0, 8);
+        const conversationTokens = estimateTokens(session.messages);
+        const localTools = Math.round(JSON.stringify(localDefinitions).length / 4);
+        const mcpTools = Math.round(JSON.stringify(mcpDefinitions).length / 4);
+        const used = conversationTokens + localTools + mcpTools;
+        return { output: [
+          'Detailed estimated context — categories below can overlap; tool results and loaded memory are subsets of history/system prompt, not additive totals.',
+          'Total estimate: ~' + formatNumber(used) + ' / ' + formatNumber(windowSize) + ' tokens (' + Math.round(used / windowSize * 100) + '%).',
+          'System prompt (includes embedded memory/skills/instructions): ~' + formatNumber(system) + ' tokens.',
+          'User memory sources (subset of system prompt): ~' + formatNumber(userMemoryTokens) + (userMemoryNames.length ? ' — ' + userMemoryNames.join(', ') : ' — none directly found') + '.',
+          'Project/parent/local memory sources (subset of system prompt): ~' + formatNumber(projectMemoryTokens) + (projectMemoryNames.length ? ' — ' + projectMemoryNames.join(', ') : ' — none directly found') + '.',
+          'Active skill resources already returned into history: ~' + formatNumber(tokensFor(skillMessages)) + ' tokens across ' + skillMessages.length + ' tool results.',
+          'Built-in/local tool schemas: ~' + formatNumber(localTools) + ' tokens across ' + localDefinitions.length + ' tools.',
+          'MCP tool schemas: ~' + formatNumber(mcpTools) + ' tokens across ' + mcpDefinitions.length + ' tools.',
+          ...[...byServer.entries()].sort((a,b)=>b[1].chars-a[1].chars).map(([name, info]) => '  MCP ' + name + ': ' + info.count + ' tools, ~' + formatNumber(Math.ceil(info.chars / 4)) + ' tokens.'),
+          'Conversation history excluding system prompt: ~' + formatNumber(Math.max(0, conversationTokens - system)) + ' tokens across ' + history.length + ' messages.',
+          'File-content/IDE diagnostic results (subset of history): ~' + formatNumber(tokensFor(fileMessages)) + ' tokens across ' + fileMessages.length + ' tool results.',
+          'Command/build/test output (subset of history): ~' + formatNumber(tokensFor(commandMessages)) + ' tokens across ' + commandMessages.length + ' tool results.',
+          'Largest individual messages/tool results:',
+          ...largest.map((item) => '  #' + item.index + ' ' + item.role + (item.name ? '/' + item.name : '') + ' ~' + formatNumber(item.tokens) + ' tokens — ' + item.preview),
+          'Token figures are estimates. Provider-specific tokenization and hidden request metadata are unavailable to Oasis.'
+        ].join('\n') };
+      }
       return { output: [
         'Estimated context: [' + bar + '] ' + percent + '% of ' + formatNumber(windowSize) + ' tokens',
         '  Startup before chat: ~' + formatNumber(startup) + ' tokens',
