@@ -293,3 +293,107 @@ test('eval comparison requires exactly two report paths and rejects conflicting 
     /cannot be combined with --task or --trials/
   );
 });
+
+
+test('Claude Code JSON parsing preserves reported metrics and leaves absent cost unknown', async () => {
+  const { parseClaudeCodeOutput } = await import('../src/eval.mjs');
+  const parsed = parseClaudeCodeOutput(JSON.stringify({
+    type: 'result',
+    result: 'implemented',
+    is_error: false,
+    total_cost_usd: 0.0123,
+    duration_ms: 840,
+    num_turns: 4,
+    modelUsage: {
+      'claude-sonnet-fixture': { inputTokens: 10, outputTokens: 6, costUSD: 0.0123 }
+    }
+  }));
+  assert.equal(parsed.result, 'implemented');
+  assert.equal(parsed.model, 'claude-sonnet-fixture');
+  assert.equal(parsed.inputTokens, 10);
+  assert.equal(parsed.outputTokens, 6);
+  assert.equal(parsed.totalTokens, 16);
+  assert.equal(parsed.costUSD, 0.0123);
+  assert.equal(parsed.numTurns, 4);
+
+  const unpriced = parseClaudeCodeOutput(JSON.stringify({ result: 'ok', usage: { input_tokens: 2, output_tokens: 1 } }));
+  assert.equal(unpriced.inputTokens, 2);
+  assert.equal(unpriced.outputTokens, 1);
+  assert.equal(unpriced.costUSD, null, 'missing cost must not be reported as zero');
+  assert.throws(() => parseClaudeCodeOutput('not json'), /valid JSON result/);
+});
+
+test('Claude Code eval uses restricted tools, external verification and a comparable report format', async (t) => {
+  const tmp = await temporaryDirectory('oasis-claude-eval-test-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  const resultsDir = path.join(tmp, 'results');
+  await mkdir(tasksDir);
+  const taskDir = await createFixtureTask(tasksDir, 'fixture-task');
+  const calls = [];
+  const fakeRunner = async (args, runOptions = {}) => {
+    calls.push({ args, runOptions });
+    if (args.length === 1 && args[0] === '--version') {
+      return { exitCode: 0, stdout: '2.1.300\n', stderr: '', output: '', timedOut: false };
+    }
+    assert.equal(args.includes('--restricted'), true);
+    assert.equal(args.includes('--permission-mode'), true);
+    assert.equal(args[args.indexOf('--permission-mode') + 1], 'dontAsk');
+    assert.equal(args.includes('--tools'), true);
+    assert.equal(args[args.indexOf('--tools') + 1], 'Read,Edit,Write,Glob,Grep,Bash');
+    assert.equal(args.includes('Bash(npm test *)'), true);
+    assert.equal(args.includes('Bash(npm run check *)'), true);
+    assert.equal(args.includes('Bash(git diff *)'), true);
+    assert.match(args[args.length - 1], /Change demo\.txt/);
+    await writeFile(path.join(runOptions.cwd, 'demo.txt'), 'new\n');
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        type: 'result', result: 'done', is_error: false,
+        total_cost_usd: 0.0123, usage: { input_tokens: 10, output_tokens: 3 },
+        modelUsage: { 'claude-sonnet-fixture': { inputTokens: 10, outputTokens: 3, costUSD: 0.0123 } },
+        num_turns: 2
+      }),
+      stderr: '', output: '', timedOut: false
+    };
+  };
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand([
+    '--claude-code', '--task', 'fixture-task', '--trials', '1', '--model', 'claude-sonnet-fixture'
+  ], {
+    autoApprove: true,
+    env: { ...process.env },
+    tasksDir,
+    resultsDir,
+    output,
+    claudeRunner: fakeRunner
+  });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.summary.provider.protocol, 'claude-code-cli');
+  assert.equal(result.summary.provider.model, 'claude-sonnet-fixture');
+  assert.equal(result.summary.passed, 1);
+  assert.equal(result.results[0].costUSD, 0.0123);
+  assert.equal(calls.length, 2, 'one CLI version check and one trial');
+  const stored = JSON.parse(await readFile(result.resultsPath, 'utf8'));
+  assert.equal(stored.results[0].status, 'passed');
+  assert.equal(stored.results[0].taskId, 'fixture-task');
+  assert.equal(stored.results[0].passed, true);
+  assert.equal((await readFile(path.join(taskDir, 'repo', 'demo.txt'), 'utf8')), 'old\n',
+    'the baseline fixture must not be modified');
+});
+
+test('Claude Code eval requires explicit approval and rejects incompatible CLI options', async () => {
+  await assert.rejects(
+    runEvalCommand(['--claude-code'], { autoApprove: false, env: { ...process.env }, tasksDir: '/not-used' }),
+    /explicitly run oasis eval --claude-code --yes/
+  );
+  await assert.rejects(
+    runEvalCommand(['--model', 'sonnet'], { autoApprove: true, env: { ...process.env } }),
+    /require --claude-code/
+  );
+  await assert.rejects(
+    runEvalCommand(['--claude-code', '--timeout-seconds', '10'], { autoApprove: true, env: { ...process.env } }),
+    /timeout-seconds must be an integer/
+  );
+});
