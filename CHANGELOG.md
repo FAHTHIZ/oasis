@@ -4,6 +4,9 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Hardened local task-history serialization so special JSON property names are preserved as inert data; added a focused persistence regression test. Source and test are committed on main; current-head CI is pending.
+
+
 - Native Oasis plugins now validate author/license/minimum version metadata, support `subagents/` manifests, and can be installed or validated from local folders and explicit HTTPS/SSH/file Git URLs. Remote sources use bounded non-shell Git cloning and are removed after staging; no package scripts run automatically. Tests and current-head CI validation are tracked separately.
 
 - Simplified the invalid-version regression assertion and removed duplicated native-plugin verification wording; current-main CI remains the release gate.
