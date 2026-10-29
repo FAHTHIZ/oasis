@@ -7,11 +7,13 @@
 //
 // OASIS_SECURE_STORAGE=file forces the file fallback, =keychain forces the macOS
 // backend and =libsecret forces the Secret Service backend.
-// Values are passed on stdin where the tool allows it, never through argv on Linux.
+// Secrets are kept out of subprocess argv. macOS uses security -i with hex data
+// supplied over stdin; Linux Secret Service accepts the secret directly on stdin.
 
 import { spawnSync } from 'node:child_process';
 
 const SERVICE = 'oasis';
+const MAX_KEYCHAIN_COMMAND_BYTES = 3800;
 
 export function secureStoreBackend(env = process.env, platform = process.platform) {
   const forced = String(env.OASIS_SECURE_STORAGE || '').toLowerCase();
@@ -42,15 +44,39 @@ export function secureGet(account, env = process.env, backend = secureStoreBacke
   return null;
 }
 
+function quoteSecurityInteractiveArgument(value) {
+  const text = String(value);
+  if (/[\u0000-\u001f\u007f]/.test(text)) {
+    throw new Error('Keychain account labels cannot contain control characters.');
+  }
+  // security -i parses a quoted command line from stdin. Escape backslashes
+  // and quotes so account/label text cannot break out into another command.
+  return '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+function keychainStoreCommand(account, value) {
+  const accountArg = quoteSecurityInteractiveArgument(account);
+  const labelArg = quoteSecurityInteractiveArgument('Oasis: ' + account);
+  const secretHex = Buffer.from(String(value), 'utf8').toString('hex');
+  const command = 'add-generic-password -U -s ' + quoteSecurityInteractiveArgument(SERVICE) +
+    ' -a ' + accountArg + ' -l ' + labelArg + ' -X ' + secretHex + '\n';
+  if (Buffer.byteLength(command, 'utf8') > MAX_KEYCHAIN_COMMAND_BYTES) {
+    throw new Error('Keychain request is too large for safe interactive input; the protected file fallback will be used.');
+  }
+  return command;
+}
+
 /** Store a secret. Returns { ok, backend, error }. */
-export function secureSet(account, value, env = process.env, backend = secureStoreBackend(env)) {
+export function secureSet(account, value, env = process.env, backend = secureStoreBackend(env), runImpl = run) {
   if (backend === 'keychain') {
-    // -U updates an existing item. `security` has no stdin mode for -w in batch use.
-    const result = run('security', ['add-generic-password', '-U', '-s', SERVICE, '-a', account, '-l', 'Oasis: ' + account, '-w', value], { env });
+    let input;
+    try { input = keychainStoreCommand(account, value); }
+    catch (error) { return { ok: false, backend, error: error.message }; }
+    const result = runImpl('security', ['-i'], { env, input });
     return { ok: result.ok, backend, error: result.ok ? null : result.error };
   }
   if (backend === 'libsecret') {
-    const result = run('secret-tool', ['store', '--label=Oasis: ' + account, 'service', SERVICE, 'account', account], { env, input: value });
+    const result = runImpl('secret-tool', ['store', '--label=Oasis: ' + account, 'service', SERVICE, 'account', account], { env, input: value });
     return { ok: result.ok, backend, error: result.ok ? null : result.error };
   }
   return { ok: false, backend: null, error: 'No OS secure storage on this platform.' };

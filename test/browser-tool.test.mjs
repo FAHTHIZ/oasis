@@ -45,6 +45,7 @@ test('browser navigation approvals scope web URLs by origin and opaque URLs by e
   assert.equal(isPrivateBrowserRequest('http://metadata.google.internal/'), true);
   assert.equal(isPrivateBrowserRequest('http://printer.local/'), true);
   assert.equal(isPrivateBrowserRequest('http://[::1]:9222/json'), true);
+  assert.equal(isPrivateBrowserRequest('https://[2606:4700:4700::1111]/'), false, 'public IPv6 literals are not single-label hostnames');
   assert.equal(isPrivateBrowserRequest('http://[fd00::1]/private'), true);
   assert.equal(isPrivateBrowserRequest('http://[64:ff9b::1]/'), true);
   assert.equal(isPrivateBrowserRequest('http://[64:ff9b:1::1]/'), true);

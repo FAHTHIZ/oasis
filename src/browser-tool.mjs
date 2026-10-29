@@ -6,6 +6,7 @@
 // unless the call is auto-approved.
 import { Browser, findChrome } from './cdp.mjs';
 import { isNonPublicIpAddress } from './network-safety.mjs';
+import { isIP } from 'node:net';
 
 export const BROWSER_TOOL_DEFINITION = {
   type: 'function',
@@ -87,7 +88,7 @@ export function isPrivateBrowserRequest(rawUrl) {
   const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') ||
-      host === 'metadata' || host === 'metadata.google.internal' || !host.includes('.')) return true;
+      host === 'metadata' || host === 'metadata.google.internal' || (!host.includes('.') && isIP(host) === 0)) return true;
   return isNonPublicIpAddress(host);
 }
 
