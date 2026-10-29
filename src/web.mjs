@@ -1,6 +1,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
+import { formatApprovalMessage } from './approval-language.mjs';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { access, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -219,6 +220,7 @@ export function createOasisWebServer(options = {}) {
     return new Promise((resolve) => {
       const approvalId = randomUUID();
       let settled = false;
+      const detail = formatApprovalMessage(prompt, meta && typeof meta === 'object' ? meta : {});
       const suggestion = meta && meta.suggestion && !forceInteractive ? String(meta.suggestion).slice(0, 300) : null;
       const finish = (approved) => {
         if (settled) return;
@@ -232,10 +234,10 @@ export function createOasisWebServer(options = {}) {
       };
       const timer = setTimeout(() => finish(false), 5 * 60 * 1000);
       timer.unref?.();
-      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: String(prompt).slice(0, 5000), suggestion });
+      job.pendingApprovals.set(approvalId, { resolve: finish, prompt: detail.message, risky: detail.risky, suggestion });
       job.status = 'waiting_approval';
       emit(job, 'approval_required', {
-        approvalId, prompt: String(prompt).slice(0, 5000), expiresInSeconds: 300,
+        approvalId, prompt: detail.message, risky: detail.risky, expiresInSeconds: 300,
         ...(suggestion ? { suggestion } : {}),
         ...(meta && meta.tool ? { tool: String(meta.tool).slice(0, 100) } : {}),
         ...(meta && meta.subagent ? { subagent: String(meta.subagent).slice(0, 100) } : {})
