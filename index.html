@@ -226,6 +226,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
 .agent-monitor-stat span{font-size:10px;color:var(--muted)}
 .agent-monitor-stat strong{font-size:23px;line-height:1.2;letter-spacing:-.03em}
 .agent-monitor-grid{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.4fr);gap:16px;align-items:start}
+.agent-monitor-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap;min-width:0}
 .agent-monitor-runs,.agent-monitor-workers,.agent-monitor-events{display:grid;gap:9px;min-width:0}
 .agent-monitor-run{display:flex;flex-direction:column;align-items:stretch;gap:7px;width:100%;text-align:left;padding:12px;border:1px solid var(--line);border-radius:12px;background:#ffffff02;color:var(--text)}
 .agent-monitor-run:hover,.agent-monitor-run[aria-pressed="true"]{background:#b9ed8210;border-color:#6c9a55}
@@ -248,7 +249,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
 .agent-monitor-event-content small{font-size:10px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
 .agent-monitor-timeline-heading{margin-top:18px}
 @media(max-width:900px){.agent-monitor-grid{grid-template-columns:1fr}.agent-monitor-events{max-height:420px}}
-@media(max-width:480px){.agent-monitor-stats{gap:7px}.agent-monitor-stat{padding:10px}.agent-monitor-stat strong{font-size:19px}.agent-monitor-stat span{font-size:9px}}
+@media(max-width:480px){.agent-monitor-stats{gap:7px}.agent-monitor-stat{padding:10px}.agent-monitor-stat strong{font-size:19px}.agent-monitor-stat span{font-size:9px}.agent-monitor-actions{width:100%;justify-content:flex-start}.agent-monitor-actions .btn{flex:1}}
 
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
@@ -391,7 +392,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
   <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Runs loaded</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams observed</span><strong>—</strong></div></div>
   <div class="agent-monitor-grid">
     <section class="panel panel-pad"><div class="section-head"><div><h2>Recent runs</h2><div class="section-sub" id="agentMonitorRunStatus">Connect the runtime to inspect saved runs.</div></div></div><div class="agent-monitor-runs" id="agentMonitorRunList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div></section>
-    <section class="panel panel-pad"><div class="section-head"><div><h2 id="agentMonitorDetailTitle">Worker activity</h2><div class="section-sub" id="agentMonitorDetailMeta">Select a run to inspect its workers and event timeline.</div></div><button class="btn btn-secondary" id="agentMonitorOpenSessionBtn" type="button" aria-label="Open saved parent chat without restarting workers" hidden>Open saved chat</button></div><div class="agent-monitor-workers" id="agentMonitorWorkers"><div class="cloud-run-empty">No run selected.</div></div><div class="section-head agent-monitor-timeline-heading"><div><h2>Activity timeline</h2><div class="section-sub">Lifecycle events only; private prompts and chat content are not shown.</div></div></div><div class="agent-monitor-events" id="agentMonitorEvents"><div class="cloud-run-empty">Select a run to inspect saved worker activity.</div></div></section>
+    <section class="panel panel-pad"><div class="section-head"><div><h2 id="agentMonitorDetailTitle">Worker activity</h2><div class="section-sub" id="agentMonitorDetailMeta">Select a run to inspect its workers and event timeline.</div></div><div class="agent-monitor-actions"><button class="btn btn-secondary" id="agentMonitorOpenSessionBtn" type="button" aria-label="Open saved parent chat without restarting workers" hidden>Open saved chat</button><button class="btn btn-secondary" id="agentMonitorReviewRunBtn" type="button" aria-label="Review isolated changes without merging" hidden>Review isolated changes</button></div></div><div class="agent-monitor-workers" id="agentMonitorWorkers"><div class="cloud-run-empty">No run selected.</div></div><div class="section-head agent-monitor-timeline-heading"><div><h2>Activity timeline</h2><div class="section-sub">Lifecycle events only; private prompts and chat content are not shown.</div></div></div><div class="agent-monitor-events" id="agentMonitorEvents"><div class="cloud-run-empty">Select a run to inspect saved worker activity.</div></div></section>
   </div>
 </section>
 
@@ -700,12 +701,14 @@ function agentRenderMonitorDetail(run){
   var heading=document.getElementById('agentMonitorDetailTitle');
   var meta=document.getElementById('agentMonitorDetailMeta');
   var openSessionButton=document.getElementById('agentMonitorOpenSessionBtn');
+  var reviewRunButton=document.getElementById('agentMonitorReviewRunBtn');
   var workers=document.getElementById('agentMonitorWorkers');
   var events=document.getElementById('agentMonitorEvents');
   if(!run){
     heading.textContent='Worker activity';
     meta.textContent='Select a run to inspect its workers and event timeline.';
     openSessionButton.hidden=true;openSessionButton.dataset.sessionId='';
+    reviewRunButton.hidden=true;reviewRunButton.dataset.runId='';reviewRunButton.dataset.runTitle='';
     workers.replaceChildren(cloudRunNode('div','cloud-run-empty','No run selected.'));
     events.replaceChildren(cloudRunNode('div','cloud-run-empty','Select a run to inspect saved worker activity.'));
     return;
@@ -716,6 +719,10 @@ function agentRenderMonitorDetail(run){
   openSessionButton.hidden=!canOpenSavedChat;
   openSessionButton.dataset.sessionId=canOpenSavedChat?run.sessionId:'';
   openSessionButton.textContent=run.status==='interrupted'?'Review saved chat':'Open saved chat';
+  var canReviewIsolatedDiff=run.isolation==='worktree'&&!!run.branch&&!!run.worktreePath&&['completed','error','cancelled','interrupted'].includes(run.status);
+  reviewRunButton.hidden=!canReviewIsolatedDiff;
+  reviewRunButton.dataset.runId=canReviewIsolatedDiff?run.id:'';
+  reviewRunButton.dataset.runTitle=canReviewIsolatedDiff?run.title:'';
   workers.replaceChildren();
   if(!Array.isArray(run.workers)||!run.workers.length){
     workers.appendChild(cloudRunNode('div','cloud-run-empty','No subagent lifecycle events were recorded for this run.'));
@@ -843,6 +850,7 @@ async function agentOpenCloudRun(id,titleFromList){
 document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
 document.getElementById('agentMonitorRefreshBtn').addEventListener('click',function(){void agentLoadMonitor(false)});
 document.getElementById('agentMonitorOpenSessionBtn').addEventListener('click',function(){var id=this.dataset.sessionId;if(!id||!agentToken||agentBusy)return;navigate('agent');void agentOpenSession(id)});
+document.getElementById('agentMonitorReviewRunBtn').addEventListener('click',async function(){var id=this.dataset.runId,title=this.dataset.runTitle;if(!id||!agentToken)return;navigate('agent');await agentOpenCloudRun(id,title);var diffButton=document.getElementById('cloudRunDiffBtn');if(diffButton.dataset.cloudRunId===id&&!diffButton.hidden)diffButton.click();var detail=document.getElementById('cloudRunDetail');if(detail&&!detail.hidden)detail.scrollIntoView({behavior:'smooth',block:'start'})});
 window.setInterval(function(){if(currentView==='monitor'&&agentToken)void agentLoadMonitor(true)},5000);
 document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
 document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){
