@@ -4,6 +4,10 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Fixed README installer bootstrap races by using unique temporary filenames and reliable cleanup on Unix/Termux and Windows. Added tests for the published installer checksums, immutable source revision and Termux documentation link.
+- Added a guarded branch-retirement workflow with tests for default/protected/open-PR preservation, merged-PR evidence, exact audited replacement heads, content-equivalent diffs and fail-closed handling of incomplete or oversized comparisons. Branch removals must be confirmed from the action log.
+
+
 - Added structured shared-task progress checkpoints with bounded fields, basic credential redaction, active-claim enforcement, and recovery after saved-session restoration. The feature preserves progress for a replacement worker; it does not resurrect the old worker process. Current-main CI is pending.
 
 - Hardened persisted session and backup storage: session loads/listings use bounded descriptor reads, symlinked sessions are rejected/omitted, backup manifests are capped at 64 KiB, and restore rejects POSIX/Windows absolute paths and traversal segments. Added adversarial storage regressions; current-main CI is pending.

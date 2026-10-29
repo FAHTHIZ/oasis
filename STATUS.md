@@ -106,9 +106,13 @@ A case-insensitive path scan of `main` at d4cd33911efe95d4150ae98bcb5716d5e25508
 
 An exact-blob scan found other identical files. These were triaged as intentional: evaluation snapshot files are frozen baselines, the icon under `site/assets/` is a standalone deployment copy, and repeated small `BASE_SNAPSHOT` files are evaluation fixture markers. They are documented in `docs/REPOSITORY_HYGIENE.md` rather than deleted blindly.
 
-Branch inventory at scan time: 38 total refs, including `main`, and 37 non-main refs. The latest compare against `main` identifies 22 retirement candidates: 18 branches whose exact tip matches a merged PR head, three additional strictly-behind branches, and one closed-PR branch with changes limited to `STATUS.md` and `CHANGELOG.md`. Three of the six behind-only branches overlap with the merged-PR list; the two web-job-capacity guard variants share the same tip SHA. See `docs/BRANCH_AUDIT.md` for the complete branch-by-branch evidence. Other branches diverge or carry unique app, runtime, permissions, or security changes and remain preserved for review.
+Branch inventory at scan time: 41 total refs, including main, and 40 non-main refs. The latest compare against `main` identifies 22 retirement candidates: 18 branches whose exact tip matches a merged PR head, three additional strictly-behind branches, and one closed-PR branch with changes limited to `STATUS.md` and `CHANGELOG.md`. Three of the six behind-only branches overlap with the merged-PR list; the two web-job-capacity guard variants share the same tip SHA. See `docs/BRANCH_AUDIT.md` for the complete branch-by-branch evidence. Other branches diverge or carry unique app, runtime, permissions, or security changes and remain preserved for review.
 
-Remote branch deletion is not recorded as complete: this session's GitHub connector exposes branch reads and compare operations but no branch-ref deletion operation, and its browser profile has no saved GitHub sign-in. No ref has been destructively rewritten to simulate deletion.
+A guarded cleanup workflow is now committed directly to main. It preserves the default and protected branches plus every branch used by an open PR. It retires refs only when the exact branch head is confirmed merged, it is strictly behind with zero unique commits, it matches a reviewed superseded SHA with required replacement files on main, or its full net diff is byte-identical to main. The first cleanup workflow run is the authoritative deletion receipt; no deletion count is claimed before the action reports it.
+
+## Installer bootstrap temp-file handling
+
+The README shell installer command now allocates a unique mktemp file and removes it through an exit trap. The Windows command uses a GUID-qualified temporary filename and a finally cleanup block. A new test verifies the published SHA-256 hashes against the exact checked-in installer files and checks the pinned source revision and Termux guide. The installer files themselves are unchanged in this increment, so their published hashes remain stable. Test execution is pending the exact-head Quality Checks result.
 
 ## Change discipline
 
