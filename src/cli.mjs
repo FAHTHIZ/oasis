@@ -2143,18 +2143,10 @@ async function interactive(root, autoApprove, persistence = {}) {
       } catch (error) { stdout.write('[memory] ' + error.message + '\n'); }
       continue;
     }
-    if (text === '/plan' || text.startsWith('/plan ')) {
-      const planPrompt = text.slice('/plan'.length).trim();
-      if (!planPrompt) { stdout.write('Usage: /plan Describe the task to plan.\n'); continue; }
-      session = await runPrompt(planPrompt, root, autoApprove, session, persistence, { planOnly: true });
-      persistence.resumeId = null;
-      continue;
-    }
     if (text === '/clear' || text === '/new' || text === '/reset') { closeSession(session); session = null; persistence.resumeId = null; stdout.write('Conversation context cleared. Project instructions will be loaded again on the next task.\n'); continue; }
     if (text === '/status') { try { printConfig(await loadConfig()); } catch (e) { stdout.write(e.message + '\n'); } continue; }
     if (text === '/setup') { try { await configureProvider(root); closeSession(session); session = null; persistence.resumeId = null; } catch (e) { stdout.write(e.message + '\n'); } continue; }
     const slash = text.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
-    if (slash && slash[1].toLowerCase() === 'init') { try { await initWorkspace(root); } catch (error) { stdout.write(error.message + '\n'); } continue; }
     if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
       // /config without an argument opens the settings pane in a terminal.
@@ -2228,7 +2220,7 @@ async function interactive(root, autoApprove, persistence = {}) {
               break;
             } catch (error) { stdout.write('[background] ' + error.message + '\n'); continue; }
           }
-          if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence); persistence.resumeId = null; }
+          if (handled.prompt) { session = await runPrompt(handled.prompt, root, autoApprove, session, persistence, handled.planOnly ? { planOnly: true } : {}); persistence.resumeId = null; }
           if (handled.cd) { persistence.watchPaths = await fireCwdChanged(session, root, handled.cd); closeSession(session); session = null; persistence.resumeId = null; root = handled.cd; try { process.chdir(root); } catch {} }
           if (handled.loop) session = await runLoop(handled.loop, root, autoApprove, session, persistence);
           if (handled.goal) session = await runGoal(handled.goal, root, autoApprove, session, persistence);
