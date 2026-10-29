@@ -24,6 +24,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
+import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
@@ -544,6 +545,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
   session.ultracode = loadedSettings.ultracode === true;
+  session.teammateMode = env.OASIS_TEAMMATE_MODE || loadedSettings.teammateMode || 'auto';
   if (dynamicSections && !restore) session.pendingDynamicContext = dynamicSections.join('\n\n');
   if (loadedSettings.autoCompactEnabled === false && config && config.autoCompactPercent === undefined) config.autoCompactPercent = 0;
   if (restricted) {
@@ -649,6 +651,7 @@ export function closeSession(session) {
   if (session && session.browserState) closeBrowser(session).catch(() => {});
   if (session && session.lspClients) stopLspClients(session).catch(() => {});
   if (session && session.agentTasks) stopAllAgents(session);
+  if (session && session.teammatePanes) closeTeammatePanes(session);
   if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
     runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, hookOptions(session)).catch(() => {});
   }
@@ -2127,10 +2130,17 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     signal: record.controller.signal,
     onToolStart: track
   };
+  // --teammate-mode tmux (or auto inside tmux): mirror team members into their own panes.
+  if (record.teamId && !record.pane && resolveTeammateMode(parent.teammateMode, options.env || process.env) === 'tmux') {
+    let team = record.teamId;
+    try { const entry = agentRegistry(parent).teams.get(record.teamId); if (entry) team = entry.name; } catch {}
+    record.pane = openTeammatePane(parent, record, { env: options.env || process.env, team });
+  }
+  if (record.pane) record.pane.write('\n> ' + String(prompt).replace(/\s+/g, ' ').slice(0, 400));
   let outcome;
   try {
     outcome = await runAgentTurn(child, prompt, {
-      ...runOptions,
+      ...mirrorToPane(record.pane, runOptions),
       autoApprove: Boolean(options.autoApprove),
       planOnly: record.readOnly || Boolean(options.planOnly),
       env: options.env || process.env,
@@ -2149,6 +2159,7 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     record.finishedAt = Date.now();
     record.status = record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
     record.error = error.message;
+    if (record.pane) record.pane.write('[' + record.status + '] ' + error.message);
     recordAgentEvent(parent, record.status === 'cancelled' ? 'agent.cancelled' : 'agent.failed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: error.message });
     throw error;
   }
@@ -2169,6 +2180,7 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
   record.status = 'completed';
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = String(outcome.text || '').slice(0, 30000);
+  if (record.pane) record.pane.write('[completed] ' + Math.max(0, Number(outcome.toolCalls) || 0) + ' tool calls');
   record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
   return {
     agent: type,
