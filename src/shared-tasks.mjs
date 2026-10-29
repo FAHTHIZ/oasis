@@ -2,6 +2,9 @@
 // This is a session-local board, not a substitute for worktree isolation when agents edit code.
 const MAX_TASKS = 100;
 const MAX_DEPENDENCIES = 20;
+const MAX_CHECKPOINT_TEXT = 2000;
+const MAX_CHECKPOINT_ITEMS = 20;
+const MAX_CHECKPOINT_ITEM_TEXT = 500;
 const STATUSES = new Set(['pending', 'in_progress', 'completed']);
 const TASK_ID = /^task_([1-9]\d{0,8})$/;
 const DEFAULT_CLAIM_LEASE_SECONDS = 900;
@@ -15,6 +18,31 @@ function cleanString(value, label, max, { required = false } = {}) {
   if (required && !result) throw new Error(label + ' cannot be empty.');
   if (result.length > max) throw new Error(label + ' must be ' + max + ' characters or fewer.');
   return result;
+}
+
+function redactCheckpointText(value) {
+  return value
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|password|secret|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
+}
+
+function checkpointText(value, label, max, required = false) {
+  return redactCheckpointText(cleanString(value, label, max, { required }));
+}
+
+function checkpointItems(value, label) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(label + ' must be an array of text items.');
+  if (value.length > MAX_CHECKPOINT_ITEMS) throw new Error(label + ' can contain at most ' + MAX_CHECKPOINT_ITEMS + ' items.');
+  return value.map((item) => checkpointText(item, label + ' item', MAX_CHECKPOINT_ITEM_TEXT)).filter(Boolean);
+}
+
+function normalizeCheckpoint(value, timestamp) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const summary = typeof value.summary === 'string' ? redactCheckpointText(value.summary.trim().slice(0, MAX_CHECKPOINT_TEXT)) : '';
+  if (!summary) return null;
+  const list = (items) => Array.isArray(items) ? items.filter((item) => typeof item === 'string').map((item) => redactCheckpointText(item.trim().slice(0, MAX_CHECKPOINT_ITEM_TEXT))).filter(Boolean).slice(0, MAX_CHECKPOINT_ITEMS) : [];
+  return { summary, completedSteps: list(value.completedSteps), nextSteps: list(value.nextSteps), touchedFiles: list(value.touchedFiles), testsRun: list(value.testsRun), updatedAt: timestamp(value.updatedAt) };
 }
 
 function taskMap(store) {
@@ -68,11 +96,12 @@ export function sanitizeSharedTaskStore(value) {
     const createdBy = typeof item.createdBy === 'string' ? item.createdBy.slice(0, 100) : 'main';
     const timestamp = (candidate) => typeof candidate === 'string' && Number.isFinite(Date.parse(candidate)) ? candidate : new Date(0).toISOString();
     const blockedBy = Array.isArray(item.blockedBy) ? [...new Set(item.blockedBy.filter((dep) => typeof dep === 'string' && TASK_ID.test(dep)))].slice(0, MAX_DEPENDENCIES) : [];
+    const checkpoint = normalizeCheckpoint(item.checkpoint, timestamp);
     // A restored session has no live agent processes, so never restore a live lease.
     const worktreeChanged = item.worktreeChanged === true;
     const worktreeBranch = typeof item.worktreeBranch === 'string' && /^oasis\/[a-z0-9-]{1,100}$/i.test(item.worktreeBranch) ? item.worktreeBranch.slice(0, 120) : '';
     const worktreeCommit = typeof item.worktreeCommit === 'string' && /^[0-9a-f]{40}$/i.test(item.worktreeCommit) ? item.worktreeCommit.toLowerCase() : '';
-    tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: '', claimExpiresAt: null, worktreeChanged, worktreeBranch, worktreeCommit });
+    tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: '', claimExpiresAt: null, worktreeChanged, worktreeBranch, worktreeCommit, checkpoint });
     ids.add(id);
   }
 
@@ -135,6 +164,7 @@ function taskView(task, store, actor = 'main', nowMs = Date.now()) {
     created_by: task.createdBy,
     created_at: task.createdAt,
     updated_at: task.updatedAt,
+    checkpoint: task.checkpoint ? { summary: task.checkpoint.summary, completed_steps: [...task.checkpoint.completedSteps], next_steps: [...task.checkpoint.nextSteps], touched_files: [...task.checkpoint.touchedFiles], tests_run: [...task.checkpoint.testsRun], updated_at: task.checkpoint.updatedAt } : null,
     ready: waitingOn.length === 0 && task.status !== 'completed' && (!claimActive || task.claimedBy === actor),
     waiting_on: waitingOn
   };
@@ -174,6 +204,14 @@ export const SHARED_TASK_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'task_get', description: 'Read a shared task and its direct dependents.', parameters: { type: 'object', properties: {
     task_id: { type: 'string', description: 'Task ID such as task_1' }
   }, required: ['task_id'] } } },
+  { type: 'function', function: { name: 'task_checkpoint', description: 'Save a bounded, secret-redacted progress checkpoint for a task you currently claim. Checkpoints survive saved-session restoration so another worker can continue the work; they do not keep a worker process alive or imply that it resumed.', parameters: { type: 'object', properties: {
+    task_id: { type: 'string', description: 'Task ID such as task_1' },
+    summary: { type: 'string', description: 'Progress summary without credentials or raw tool output (max 2000 characters)' },
+    completed_steps: { type: 'array', items: { type: 'string' }, description: 'Completed actions, up to 20 items of 500 characters each' },
+    next_steps: { type: 'array', items: { type: 'string' }, description: 'Next actions for a replacement worker, up to 20 items' },
+    touched_files: { type: 'array', items: { type: 'string' }, description: 'Relevant file paths, up to 20 items' },
+    tests_run: { type: 'array', items: { type: 'string' }, description: 'Commands/tests and outcomes, up to 20 items' }
+  }, required: ['task_id', 'summary'] } } },
   { type: 'function', function: { name: 'task_claim', description: 'Atomically claim a ready shared task, or claim a specific task_id. A successful claim starts the task and gives you an exclusive time-limited lease. Renew it by claiming the same task again before it expires. Expired leases can be reclaimed; use task_release when abandoning work.', parameters: { type: 'object', properties: { task_id: { type: 'string', description: 'Optional specific task to claim; omit to claim the next ready task' }, lease_seconds: { type: 'integer', minimum: 30, maximum: 3600, description: 'Lease duration, 30–3600 seconds; defaults to 900 seconds' } }, required: [] } } },
   { type: 'function', function: { name: 'task_renew', description: 'Extend your own active task claim before it expires. Cannot renew another agent\'s claim or a lease that has already expired.', parameters: { type: 'object', properties: { task_id: { type: 'string', description: 'Task ID such as task_1' }, lease_seconds: { type: 'integer', description: 'New lease duration from 30 to 3600 seconds; defaults to 900' } }, required: ['task_id'] } } },
   { type: 'function', function: { name: 'task_release', description: 'Release a task claim when you cannot finish the work. An in-progress task returns to pending. Only the claimant can release an active lease; the main coordinator can force-release another agent\'s lease explicitly.', parameters: { type: 'object', properties: { task_id: { type: 'string' }, force: { type: 'boolean', description: 'Only the main coordinator may set true to force-release an active lease' } }, required: ['task_id'] } } },
@@ -203,7 +241,7 @@ export function runSharedTaskTool(session, name, args = {}) {
     const blockedBy = normaliseDependencies(args.blocked_by === undefined ? [] : args.blocked_by, store);
     const id = 'task_' + store.nextId++;
     const timestamp = now();
-    const task = { id, subject, description, status: 'pending', owner, blockedBy, createdBy: cleanString(session.agentId || 'main', 'created_by', 100), createdAt: timestamp, updatedAt: timestamp };
+    const task = { id, subject, description, status: 'pending', owner, blockedBy, createdBy: cleanString(session.agentId || 'main', 'created_by', 100), createdAt: timestamp, updatedAt: timestamp, checkpoint: null };
     store.tasks.push(task);
     return { task: taskView(task, store), total: store.tasks.length, message: 'Created ' + id + (task.blockedBy.length ? ' with prerequisites.' : '. Assign or start it when ready.') };
   }
@@ -292,6 +330,23 @@ export function runSharedTaskTool(session, name, args = {}) {
     const task = getTask(store, args.task_id);
     const dependents = store.tasks.filter((item) => item.blockedBy.includes(task.id));
     return { task: taskView(task, store, actor), dependents: dependents.map((item) => taskView(item, store, actor)) };
+  }
+
+  if (name === 'task_checkpoint') {
+    const task = getTask(store, args.task_id);
+    if (task.status === 'completed') throw new Error('Completed task ' + task.id + ' cannot be checkpointed.');
+    if (!claimIsActive(task, nowMs()) || task.claimedBy !== actor) throw new Error('Claim ' + task.id + ' before saving a progress checkpoint. Only the active claimant may checkpoint it.');
+    const checkpoint = {
+      summary: checkpointText(args.summary, 'summary', MAX_CHECKPOINT_TEXT, true),
+      completedSteps: checkpointItems(args.completed_steps, 'completed_steps'),
+      nextSteps: checkpointItems(args.next_steps, 'next_steps'),
+      touchedFiles: checkpointItems(args.touched_files, 'touched_files'),
+      testsRun: checkpointItems(args.tests_run, 'tests_run'),
+      updatedAt: now()
+    };
+    task.checkpoint = checkpoint;
+    task.updatedAt = checkpoint.updatedAt;
+    return { task: taskView(task, store, actor), saved: true, message: 'Saved a progress checkpoint for ' + task.id + '. This does not mean a worker process is still running.' };
   }
 
   if (name === 'task_update') {
