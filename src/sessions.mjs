@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, writeFile, chmod, unlink } from 'node:fs/promises';
+import { mkdir, readdir, rename, writeFile, chmod, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import { readBoundedRegularFile } from './safe-storage.mjs';
 import { getConfigDirectory } from './config.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
@@ -115,8 +116,7 @@ export async function saveSession(session, options = {}) {
 
 export async function loadSession(root, id, options = {}) {
   const env = options.env || process.env;
-  const source = await readFile(sessionPath(root, id, env), 'utf8');
-  if (Buffer.byteLength(source, 'utf8') > MAX_SESSION_BYTES) throw new Error('Stored session is too large.');
+  const source = await readBoundedRegularFile(sessionPath(root, id, env), MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' });
   const payload = JSON.parse(source);
   if (!payload || payload.schemaVersion !== 1 || payload.id !== id || path.resolve(payload.workspaceRoot || '') !== path.resolve(root)) {
     throw new Error('That saved session does not belong to this workspace or uses an unsupported format.');
@@ -137,16 +137,18 @@ export async function loadSession(root, id, options = {}) {
 export async function listSessions(root, options = {}) {
   const env = options.env || process.env;
   const directory = getSessionDirectory(root, env);
-  let names;
-  try { names = await readdir(directory); } catch (error) {
+  let entries;
+  try { entries = await readdir(directory, { withFileTypes: true }); } catch (error) {
     if (error.code === 'ENOENT') return [];
     throw error;
   }
   const sessions = [];
-  for (const name of names) {
-    if (!/^[a-f0-9-]{20,80}\.json$/i.test(name)) continue;
+  for (const entry of entries) {
+    const name = entry.name;
+    if (!entry.isFile() || !/^[a-f0-9-]{20,80}\\.json$/i.test(name)) continue;
     try {
-      const data = JSON.parse(await readFile(path.join(directory, name), 'utf8'));
+      const data = JSON.parse(await readBoundedRegularFile(path.join(directory, name), MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' }));
+
       if (data && data.schemaVersion === 1 && path.resolve(data.workspaceRoot || '') === path.resolve(root)) {
         const firstUser = Array.isArray(data.messages) ? data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string') : null;
         const title = firstUser ? firstUser.content.replace(/<[a-z-]+>[\s\S]*?<\/[a-z-]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
