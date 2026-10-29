@@ -7,14 +7,14 @@ import { execFileSync } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { createOasisWebServer, startOasisWebServer, toolDetail } from '../src/web.mjs';
+import { createOasisWebServer, startOasisWebServer, toolDetail, summarizeToolResult } from '../src/web.mjs';
 import { saveConfig } from '../src/config.mjs';
 
 async function tempDir() {
   return await mkdtemp(path.join(os.tmpdir(), 'oasis-web-test-'));
 }
 
-test('browser activity details redact credential flags before sending them to the UI', () => {
+test('browser activity details and tool results redact credential values before sending them to the UI', () => {
   assert.equal(
     toolDetail('run_command', { command: 'node', args: ['--token', 'super-secret-value'] }),
     'node --token [redacted]'
@@ -27,6 +27,9 @@ test('browser activity details redact credential flags before sending them to th
     toolDetail('run_shell', { command: 'curl https://example.test/run?access_token=abc123' }),
     /abc123/
   );
+  const summarized = summarizeToolResult({ output: 'request failed for apiKey=private-value', nested: { token: 'another-private-value' } });
+  assert.doesNotMatch(summarized, /private-value|another-private-value/);
+  assert.match(summarized, /\[redacted\]/);
 });
 
 
