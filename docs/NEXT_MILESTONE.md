@@ -8,7 +8,7 @@
 
 The next biggest milestone is **not another large feature**. It is to make OASIS a dependable, testable Alpha: the supported install paths should work, critical user journeys should be repeatable, all required CI workflows should agree, and the project should measure real coding outcomes instead of inferring quality from its feature list.
 
-OASIS already has a substantial coding-agent loop, broad provider choice, MCP, hooks, skills, Claude-format plugins, subagents, a dependency-aware team task board, a CLI, a local browser workspace, a VS Code-family extension, a GitHub Action, and a PTY/xterm path. More feature work will have diminishing value until we can prove those pieces work together reliably for a normal user.
+OASIS already has a substantial coding-agent loop, broad provider choice, MCP, hooks, skills, external ecosystem plugin formats, subagents, a dependency-aware team task board, a CLI, a local browser workspace, a VS Code-family extension, a GitHub Action, and a PTY/xterm path. More feature work will have diminishing value until we can prove those pieces work together reliably for a normal user.
 
 ## Why this is the next milestone
 
