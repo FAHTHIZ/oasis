@@ -1,4 +1,4 @@
-// Browser tool (Claude Code's Chrome integration, `--chrome` / `/chrome`): the agent drives a
+// Browser automation through Chrome DevTools Protocol (`--chrome` / `/chrome`): the agent drives a
 // real Chrome/Chromium/Edge through the DevTools Protocol to open pages, read them, click,
 // type, take screenshots, and read console and network activity. Oasis launches its own
 // browser with a throwaway profile, or attaches to yours (OASIS_CHROME_PORT) so it can use

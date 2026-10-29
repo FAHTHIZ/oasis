@@ -16,7 +16,7 @@ The launch workflow applies these 20 relevant topics as the blue clickable chips
 ai-coding-agent coding-agent ai-agents developer-tools developer-workspace cli terminal-agent llm mcp model-context-protocol agent-skills agentic-workflows local-first open-source javascript nodejs automation subagents ollama multi-provider
 ```
 
-The tags reflect current features: an agent CLI, browser workspace, multiple model providers, MCP, Agent Skills, automation, and bounded subagents. OASIS is not a Claude Code plugin; avoid copying Claude-specific tags that do not describe this project.
+The tags reflect current features: an agent CLI, browser workspace, multiple model providers, MCP, Agent Skills, automation, and bounded subagents. OASIS is not a external tools plugin; avoid copying Claude-specific tags that do not describe this project.
 
 ## Homepage and metadata automation
 
