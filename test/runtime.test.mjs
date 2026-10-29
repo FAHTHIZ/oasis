@@ -13,6 +13,7 @@ import { listBackups, restoreBackup } from '../src/backups.mjs';
 import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
 import { loadMcpServers, saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
+import { scriptedModel } from './helpers/scripted-model.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
 // enforcement is covered by test/file-state.test.mjs.
@@ -1049,6 +1050,31 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.equal(compactions[0].removedToolResults, 3);
   assert.equal(compactions[0].usedModelSummary, true);
   assert.ok(compactions[0].afterChars < compactions[0].beforeChars);
+});
+
+test('agent stops after the same tool call returns the same result three times', async (t) => {
+  const root = await temporaryDirectory('oasis-loop-breaker-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'loop.txt'), 'The same stable result.\\n');
+  const repeatedRead = (id) => ({
+    content: null,
+    tool_calls: [{ id, type: 'function', function: {
+      name: 'read_file',
+      arguments: JSON.stringify({ path: 'loop.txt' })
+    } }]
+  });
+  const { config, requests } = await scriptedModel(t, [
+    repeatedRead('loop-read-1'),
+    repeatedRead('loop-read-2'),
+    repeatedRead('loop-read-3'),
+    { content: 'A different approach would be needed.' }
+  ]);
+  const session = await createSession({ root, config });
+  const result = await runAgentTurn(session, 'Read loop.txt and explain it.');
+
+  assert.equal(result.stoppedByLoopBreaker, true);
+  assert.match(result.text, /same read_file tool call.*3 times/i);
+  assert.equal(requests.length, 3, 'The fourth model step must not happen after repeated identical results.');
 });
 
 test('post-edit verification gate asks for diff review and a passing check before completion', async (t) => {
