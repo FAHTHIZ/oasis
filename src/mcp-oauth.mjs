@@ -115,6 +115,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error(label + ' is not a valid URL.'); }
   if (parsed.username || parsed.password) throw new Error(label + ' must not include credentials.');
+  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
   const local = isLoopbackUrl(parsed.toString());
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local && safety.localOrigin === parsed.origin)) {
     throw new Error(label + ' must use HTTPS, except for the configured loopback MCP server origin.');
@@ -124,7 +125,6 @@ async function requireSafeEndpoint(url, label, safety = {}) {
     if (hostname === 'localhost') safety.resolvedAddresses?.set(hostname, [{ address: '127.0.0.1', family: 4 }]);
     return parsed.toString();
   }
-  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') || host === 'metadata.google.internal') {
     throw new Error(label + ' cannot target a local or internal hostname.');
