@@ -4,6 +4,9 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Hardened branch cleanup so exact merged PR heads and SHA-pinned superseded refs can be retired from their direct evidence without first depending on a separate compare request. Protected/default/open-PR branches remain preserved; transient compare failures still retain uncertain refs. The cleanup workflow now cancels stale in-flight cleanup attempts in favor of the latest main revision.
+
+
 - Fixed README installer bootstrap races by using unique temporary filenames and reliable cleanup on Unix/Termux and Windows. Added tests for the published installer checksums, immutable source revision and Termux documentation link.
 - Added a guarded branch-retirement workflow with tests for default/protected/open-PR preservation, merged-PR evidence, exact audited replacement heads, content-equivalent diffs and fail-closed handling of incomplete or oversized comparisons. Branch removals must be confirmed from the action log.
 

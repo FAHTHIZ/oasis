@@ -134,16 +134,21 @@ async function runCleanup() {
   let retired = 0, kept = 0, eligible = 0;
   for (const branch of branches) {
     if (branch.name === defaultBranch) continue;
-    let comparison;
-    try {
-      const suffix = encodeURIComponent(defaultBranch) + '...' + encodeURIComponent(branch.name);
-      comparison = await githubRequest(repository, token, '/repos/' + repository + '/compare/' + suffix);
-    } catch (error) {
-      kept++;
-      console.log('[keep] ' + branch.name + ': unable to compare (' + error.message + ')');
-      continue;
+    let decision = classifyRetirement(branch, null, defaultBranch, openPrBranches, mainTree, mergedPrHeads);
+    // Exact merged heads and audited replacements need no compare API call; this also means
+    // a transient compare endpoint failure cannot strand a branch already proven merged.
+    if (decision.reason === 'comparison is incomplete') {
+      let comparison;
+      try {
+        const suffix = encodeURIComponent(defaultBranch) + '...' + encodeURIComponent(branch.name);
+        comparison = await githubRequest(repository, token, '/repos/' + repository + '/compare/' + suffix);
+      } catch (error) {
+        kept++;
+        console.log('[keep] ' + branch.name + ': unable to compare (' + error.message + ')');
+        continue;
+      }
+      decision = classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads);
     }
-    const decision = classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads);
     if (!decision.retire) {
       kept++;
       console.log('[keep] ' + branch.name + ': ' + decision.reason);
