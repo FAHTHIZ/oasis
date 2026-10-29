@@ -41,6 +41,8 @@ import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
 import { formatApprovalMessage } from './approval-language.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
+import { estimateTokens, contextWindowSize } from './context.mjs';
+import { formatUsd, priceFor } from './pricing.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -1954,7 +1956,17 @@ async function readMainInput(root, session, state) {
     color,
     vim: editorModeFor(session) === 'vim',
     prompt: (editor) => promptFor(editor.text, color),
-    footer: (editor) => footerFor({ text: editor.text, mode: currentMode(), color }),
+    footer: (editor) => {
+      const model = session && session.config && session.config.model || '';
+      const contextPercent = session && Array.isArray(session.messages)
+        ? estimateTokens(session.messages) / Math.max(1, contextWindowSize(session.config, process.env)) * 100
+        : null;
+      const spentUsd = session && typeof session.costUsd === 'number' ? session.costUsd : null;
+      const budgetUsd = session && Number(session.maxBudgetUsd) > 0 ? Number(session.maxBudgetUsd) : Number(SESSION_OPTIONS.maxBudgetUsd) || 0;
+      const priced = session && session.config ? priceFor(model, { config: session.config, overrides: session.pricing || {}, env: process.env }) : null;
+      const costLabel = session ? (priced ? formatUsd(spentUsd == null ? 0 : spentUsd) : 'unknown') : '';
+      return footerFor({ text: editor.text, mode: currentMode(), color, model, contextPercent, costLabel, budgetUsd, spentUsd });
+    },
     complete: state.completer,
     onShiftTab: async () => {
       const mode = nextMode(currentMode(), { allowBypass: Boolean(SESSION_OPTIONS.allowBypass) });
