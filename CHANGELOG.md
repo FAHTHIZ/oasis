@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Updated STATUS.md directly on main to use four evidence/maturity categories and to keep current-head verification unclaimed until fresh checks pass on the exact revision. Added a focused verification matrix; this is a documentation/status change, not a test result.
+
 - Added detailed `/context all` accounting and a two-step `/compact` preview/confirm/cancel flow. Must-preserve records are bounded, included in compaction summaries and persisted across session save/resume; stale previews are rejected without mutating history. Focused tests cover redaction and freshness checks; full current-head CI remains pending.
 
 - Added JSON and self-contained offline HTML exports for Arena comparisons, including paired per-task wins/ties/losses and sample/provenance caveats; report writes are atomic and refuse symlink destinations.
