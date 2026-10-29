@@ -35,7 +35,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Activity timeline and empty-state starter tasks | Implemented in source | Browser workspace includes a run monitor/event list and three starter prompts. |
 | Model/mode/context/cost status and budget warnings | Implemented in source | Terminal status footer includes model, mode, context percentage, cost and budget warnings. Browser usage/status data is available, but complete visual parity needs checking. |
 | Checkpoints and one-click undo | Partial / verify | Core snapshots/checkpoints/rewind exist; the desktop UI still needs a full manual test that the last edit can be safely undone from the intended screen. |
-| Plain-language settings, help, and copy-details/doctor action | Partial / verify | CLI doctor and browser settings exist; a complete desktop-friendly error/help journey with a copy-details action was not verified. |
+| Plain-language settings, help, and copy-details/doctor action | Copy-details implemented on `app/alpha-readiness-gaps`; full journey pending | Desktop startup/workspace errors now offer Copy details / Close. Diagnostic text is redacted before display/copy and clipboard failure gives a manual-copy fallback. The full desktop error journey still needs host testing; the CLI doctor and browser settings remain separate paths. |
 | Automatic desktop updates | **Missing** | `electron-updater` is not a dependency and no updater integration was found. Do not promise automatic updates. |
 | Crash recovery screen | **Implemented on `app/alpha-readiness-gaps`; app-level verification pending** | `desktop/main.mjs` now handles Electron renderer termination and loads a recovery screen with a restart link and escaped reason/exit-code details. `test/desktop-crash-screen.test.mjs` covers the helper's output and loopback-only restart target; the full desktop crash/restart journey still needs CI and host testing. |
 | Clean-machine installer validation | Partial / verify | Packaging exists, but unsigned installers and first-run/update/uninstall journeys require actual Windows, macOS, and Linux testing. |
@@ -109,6 +109,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 - Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
 - On `app/alpha-readiness-gaps`, added a desktop renderer-crash recovery screen and focused tests. The helper tests passed in isolation in the working runtime (3/3); the complete repository suite and Electron crash/restart journey have not been run here.
 - Added WCAG contrast-ratio checks for selected public-homepage and browser-workspace text colors, and brightened two low-contrast workspace labels. The full public-site/app checks have not yet been run from the repository.
+- Added a reusable desktop error dialog with **Copy details** and **Close** choices. Error text is redacted before it is displayed or copied; if clipboard access fails, OASIS explains how to copy manually. Focused tests were added but have not yet been run as part of the repository suite.
 
 ## Verification limits
 
