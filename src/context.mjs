@@ -221,3 +221,18 @@ export function createCompactionPreview(session, focus = '') {
     note: 'Manual compaction summarizes all non-system messages into one digest. This preview is an estimate; the model-generated digest cannot be known in advance.'
   };
 }
+
+
+export function mustPreserveContextBlock(items) {
+  const records = sanitizeMustPreserve(items);
+  if (!records.length) return '';
+  return '\n\nMUST-PRESERVE USER RECORDS (retain explicitly and verbatim unless contradictory or unsafe):\n' +
+    records.map((item) => '[' + item.kind + '] ' + item.text).join('\n').slice(0, 8000);
+}
+
+export function appendMustPreserveContext(summary, items, maxChars = 20000) {
+  const block = mustPreserveContextBlock(items);
+  if (!block) return String(summary || '').slice(0, maxChars);
+  const limit = Math.max(0, Number.isInteger(maxChars) ? maxChars : 20000);
+  return (String(summary || '').slice(0, Math.max(0, limit - block.length)) + block).slice(0, limit);
+}
