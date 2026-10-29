@@ -52,3 +52,10 @@ The terminal shows a compact suggestion list while typing a slash-command name; 
 ## Tests
 
 Run `npm test` for focused and broader Node tests, and `npm run check` for the repository's validation pipeline. The skill-command test file covers registry entries, missing inputs, plan-only routing, screenshot capability disclosure, rollback preview immutability, pre-restore recovery snapshots, and stale-preview rejection.
+
+
+## Durable cross-session messages
+
+- `/notify SESSION-ID-OR-NAME MESSAGE` stores a bounded structured message for a live session. Targets must be registered and alive; busy targets queue messages until idle. The store enforces a per-session rate limit and disallows forwarded-message loops.
+- `/inbox` or `/inbox list` lists retained messages. Use `/inbox read MESSAGE-ID` to mark one read and `/inbox dismiss MESSAGE-ID` to dismiss it.
+- Messages are untrusted contextual data. They do not become prompts, tool calls, permissions, or executable commands in the target session.

@@ -24,6 +24,8 @@ export const COMMAND_ALIASES = { keys: 'keybindings', peers: 'list-agents', sett
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
+  notify: 'Send a structured, non-executable message to another live Oasis session (/notify SESSION MESSAGE)',
+  inbox: 'Read and manage durable messages for this session (/inbox [list|read ID|dismiss ID])',
   status: 'Show the model provider configuration',
   setup: 'Configure the model provider',
   clear: 'Start a fresh conversation',
@@ -543,6 +545,33 @@ export async function runBuiltinCommand(name, argument, state) {
       const lines = [];
       for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + describeHook(hook));
       return { output: lines.join('\n') };
+    }
+    case 'notify': {
+      if (!session) return { output: 'Start a session and complete one turn before sending cross-session messages.' };
+      const match = String(argument || '').trim().match(/^(\S+)\s+([\s\S]+)$/);
+      if (!match) return { output: 'Usage: /notify SESSION-ID-OR-NAME Message text. Messages are data only and never execute commands in the recipient session.' };
+      const { sendSessionMessage } = await import('./session-messaging.mjs');
+      const queued = await sendSessionMessage(session, match[1], match[2], { env });
+      return { output: 'Message ' + queued.id + ' queued for session ' + queued.targetSessionId + (queued.queued ? ' (recipient is busy; delivery waits for its next idle boundary).' : '.') + ' It will not run commands.' };
+    }
+    case 'inbox': {
+      if (!session) return { output: 'Start a session before opening its inbox.' };
+      const { readSessionInbox, listSessionInbox, updateInboxMessage, formatSessionMessage } = await import('./session-messaging.mjs');
+      const input = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      const action = (input[0] || 'list').toLowerCase();
+      if (action === 'read' && input[1]) {
+        const message = await updateInboxMessage(session, input[1], 'read', { env });
+        return { output: 'Marked message ' + message.id + ' as read.\\n\\n' + formatSessionMessage(message) };
+      }
+      if (action === 'dismiss' && input[1]) {
+        await updateInboxMessage(session, input[1], 'dismiss', { env });
+        return { output: 'Dismissed inbox message ' + input[1] + '.' };
+      }
+      if (!['list', ''].includes(action) || input.length > 1) return { output: 'Usage: /inbox [list|read MESSAGE-ID|dismiss MESSAGE-ID]' };
+      await readSessionInbox(session, { env });
+      const messages = await listSessionInbox(session, { env });
+      if (!messages.length) return { output: 'Inbox is empty.' };
+      return { output: messages.map((message) => '[' + message.id + '] ' + (message.read ? 'READ' : message.delivered ? 'DELIVERED / UNREAD' : 'QUEUED') + ' | ' + message.priority + ' | ' + (message.sourceName || message.sourceSessionId) + '\\n' + formatSessionMessage(message)).join('\\n\\n---\\n\\n') };
     }
     case 'style':
     case 'output-style': {

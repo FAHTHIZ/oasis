@@ -133,9 +133,9 @@ export async function sendSessionMessage(session, target, messageText, options =
   if (!session || !session.root) throw new Error('An active source session is required.');
   const env = options.env || process.env;
   const source = await registerActiveSession(session, { env });
-  const targetRecord = typeof target === 'object' && target && target.id
-    ? target
-    : await resolveActiveTarget(target, { env });
+  // Resolve by the registry again even for object callers: stale cached records
+  // must never route a message to a session that is no longer registered.
+  const targetRecord = await resolveActiveTarget(typeof target === 'object' && target && target.id ? target.id : target, { env });
   if (targetRecord.id === source.id) throw new Error('A session cannot notify itself.');
   const text = String(messageText || '').trim();
   if (!text) throw new Error('Message text cannot be empty.');
@@ -168,6 +168,9 @@ export async function readSessionInbox(session, options = {}) {
   if (!session || !session.activeSessionId) return [];
   const env = options.env || process.env;
   const id = validId(session.activeSessionId);
+  const activeTarget = (await listActiveSessions({ env })).find((item) => item.id === id);
+  // A busy target retains queued messages until it reaches a user-visible boundary.
+  if (!activeTarget || activeTarget.state === 'busy') return [];
   const directory = path.join(storeRoot(env), 'inbox', id);
   let files = [];
   try { files = (await readdir(directory)).filter((name) => /^[a-f0-9-]{20,80}\.json$/i.test(name)); } catch { return []; }
