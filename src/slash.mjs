@@ -5,7 +5,7 @@ import { describeHook, runHooks, hasHooks } from './hooks.mjs';
 import { compactHistoryIfNeeded, hookOptions } from './agent.mjs';
 import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
-import { loadSettings, PERMISSION_MODES } from './settings.mjs';
+import { loadSettings, PERMISSION_MODES, normalizePermissionMode } from './settings.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
@@ -509,15 +509,17 @@ export async function runBuiltinCommand(name, argument, state) {
         const log = state && state.log.length ? '\nRecent auto mode decisions:\n' + state.log.slice(-10).map((item) => '  ' + item.decision + ' ' + item.tool + (item.reason ? ': ' + item.reason : '')).join('\n') : '';
         return { output: 'Permission mode: ' + current + '. Options: ' + PERMISSION_MODES.join(', ') + '.' + log };
       }
-      if (!PERMISSION_MODES.includes(argument)) return { output: 'Unknown mode. Options: ' + PERMISSION_MODES.join(', ') + '.' };
-      if (argument === 'bypassPermissions' && (sessionOptions.disableBypass || (session && session.settings && session.settings.permissions && session.settings.permissions.disableBypassPermissionsMode))) return { output: 'bypassPermissions mode is disabled by settings (permissions.disableBypassPermissionsMode).' };
-      sessionOptions.permissionMode = argument;
+      const normalizedMode = normalizePermissionMode(argument);
+      if (!normalizedMode) return { output: 'Unknown mode. Options: ' + PERMISSION_MODES.join(', ') + '. Aliases: manual, accept-edits.' };
+      if (normalizedMode === 'bypassPermissions' && (sessionOptions.disableBypass || (session && session.settings && session.settings.permissions && session.settings.permissions.disableBypassPermissionsMode))) return { output: 'bypassPermissions mode is disabled by settings (permissions.disableBypassPermissionsMode).' };
+      sessionOptions.permissionMode = normalizedMode;
       if (session) {
-        if (argument === 'plan' && session.permissions.mode !== 'plan') session.prePlanMode = session.permissions.mode;
-        session.permissions.setMode(argument);
+        if (normalizedMode === 'plan' && session.permissions.mode !== 'plan') session.prePlanMode = session.permissions.mode;
+        session.permissions.setMode(normalizedMode);
       }
-      if (argument === 'auto' && session && session.autoMode) { session.autoMode.blockedInRow = 0; session.autoMode.blockedTotal = 0; }
-      return { output: 'Permission mode set to ' + argument + '.' + (argument === 'auto' ? ' A classifier model now approves routine actions and blocks risky ones; anything unclear still comes to you. /mode log shows its decisions.' : '') };
+      if (normalizedMode === 'auto' && session && session.autoMode) { session.autoMode.blockedInRow = 0; session.autoMode.blockedTotal = 0; }
+      const aliasNote = normalizedMode !== String(argument || '').trim() ? ' (alias for ' + normalizedMode + ')' : '';
+      return { output: 'Permission mode set to ' + normalizedMode + aliasNote + '.' + (normalizedMode === 'auto' ? ' A classifier model now approves routine actions and blocks risky ones; anything unclear still comes to you. /mode log shows its decisions.' : '') };
     }
     case 'permissions': {
       const described = session ? session.permissions.describe() : null;
