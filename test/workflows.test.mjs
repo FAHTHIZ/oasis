@@ -39,6 +39,41 @@ test('workflow scripts are sandboxed: no import, no Date.now', async () => {
   assert.match(parseWorkflowScript(SCRIPT).meta.name, /audit-demo/);
 });
 
+
+test('workflow runtime isolates Node host APIs and blocks host-constructor escape', async () => {
+  const result = await runWorkflow({
+    source: "return { process: typeof process, require: typeof require, globalProcess: typeof globalThis.process, escape: (() => { try { return agent.constructor.constructor('return process')(); } catch { return 'blocked'; } })(), random: (() => { try { Math.random(); return 'allowed'; } catch { return 'blocked'; } })(), clock: (() => { try { Date.now(); return 'allowed'; } catch { return 'blocked'; } })() }",
+    runAgent: async () => ''
+  });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.result.process, 'undefined');
+  assert.equal(result.result.require, 'undefined');
+  assert.equal(result.result.globalProcess, 'undefined');
+  assert.equal(result.result.escape, 'blocked');
+  assert.equal(result.result.random, 'blocked');
+  assert.equal(result.result.clock, 'blocked');
+});
+
+test('workflow runtime interrupts CPU-bound JavaScript', async () => {
+  const started = Date.now();
+  const result = await runWorkflow({ source: 'while (true) {}', runAgent: async () => '' });
+  assert.equal(result.status, 'failed');
+  assert.ok(Date.now() - started < 6000, 'untrusted script should not monopolize the process indefinitely');
+  assert.match(result.error, /interrupt|execut|failed/i);
+});
+
+test('workflow metadata parser refuses executable expressions', () => {
+  globalThis.__OASIS_METADATA_EXECUTED__ = false;
+  try {
+    const parsed = parseWorkflowScript("export const meta = { name: (globalThis.__OASIS_METADATA_EXECUTED__ = true, 'pwned') }\nreturn 1");
+    assert.equal(parsed.meta.name, undefined);
+    assert.equal(parsed.literalMeta, false);
+    assert.equal(globalThis.__OASIS_METADATA_EXECUTED__, false);
+  } finally {
+    delete globalThis.__OASIS_METADATA_EXECUTED__;
+  }
+});
+
 test('loadWorkflows precedence, builtin deep-research, save refuses symlinks', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wf-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-wf-home-'));
