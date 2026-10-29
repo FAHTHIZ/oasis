@@ -849,7 +849,7 @@ export function readInput(options = {}) {
           try {
             const result = await options.complete(state.text, state.cursor);
             hints = result && result.candidates && result.candidates.length
-              ? [DIM('Commands · Tab to complete · Enter to run', color), ...renderCandidates(result.candidates, -1, color)]
+              ? [DIM('Slash commands · Tab to complete · type to filter', color), ...renderCandidates(result.candidates, -1, color)]
               : [];
           } catch { hints = []; }
         } else if (!commandPrefix && !completion && hints.length && hints[0] && /Commands · Tab to complete/.test(stripAnsi(hints[0]))) {
