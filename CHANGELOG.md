@@ -16,7 +16,7 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 - Hardened native plugin rollback: uninstall restores the package and registry if settings updates fail. Version ordering handles hyphenated prerelease identifiers and large numeric core values; regression tests cover subagent grants. Current-main CI is pending.
 
-- Removed a case-colliding duplicate pull-request template, retained the richer lowercase canonical template, added a repository-wide case-only path collision regression test, and documented intentional exact-content copies used by static-site deployment and frozen evaluation snapshots. Audited all 37 non-main refs against main; six behind-only refs are confirmed cleanup candidates pending an authenticated branch-delete operation. No branch is claimed deleted.
+- Removed a case-colliding duplicate pull-request template, retained the richer lowercase canonical template, added a repository-wide case-only path collision regression test, and documented intentional exact-content copies used by static-site deployment and frozen evaluation snapshots. Refreshed the branch inventory for all 37 non-main refs and identified 22 retirement candidates; divergent feature/security branches remain preserved. No remote ref is claimed deleted because the available GitHub connection has no delete-ref operation.
 
 
 - Fixed native plugin capability exposure so explicitly granted agent definitions are included in the compatibility manifest; added semantic prerelease ordering and validation tests, and removed duplicate MCP coverage. Current-main CI is pending.
