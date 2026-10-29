@@ -80,7 +80,16 @@ Compare the two reports using the generated paths:
 
 ```sh
 node src/cli.mjs eval --compare /path/to/oasis-run.json /path/to/claude-code-run.json
+
+# Save a reusable JSON comparison and an offline HTML report:
+node src/cli.mjs eval --compare /path/to/oasis-run.json /path/to/claude-code-run.json \
+  --out ./eval-results/arena-comparison.json \
+  --html ./eval-results/arena-comparison.html
 ```
+
+The optional **--out** and **--html** flags create durable artifacts from the same comparison. The JSON file preserves the complete comparison structure for follow-up analysis. The standalone HTML report is responsive, keyboard-readable, works offline, escapes report-supplied labels, and includes headline metrics, task-by-task outcomes, run revisions, paired task wins/ties/losses, and interpretation guardrails. Existing output files must be regular files rather than symlinks; exported artifacts are written with owner-only permissions where the operating system supports POSIX file modes. Output paths must differ from each other and from the input run reports.
+
+The comparison includes **paired task outcomes**: for each matched task, it compares the two observed pass rates across that task's recorded trials and counts an A win, B win, or tie. This is descriptive only, not a statistical significance test. It also includes structured **caveats** when the matched sample has fewer than 50 tasks, any task has fewer than three trials, run revisions/fingerprints are missing, classifications are incomplete, or no large tasks are represented. Caveats are part of the JSON artifact and are visible in the HTML/terminal output so a small or unpinned run is not easily mistaken for a parity claim.
 
 The comparator now fingerprints each task's prompt, shared repository snapshot, reference patch, and external verifier. A same-named task with a different fingerprint is excluded from headline results; legacy reports without fingerprints are marked unverified. The comparator reports task-balanced pass rate, category-balanced pass rate, difficulty-balanced pass rate, per-task median time, cost when known, and per-task results. Category/difficulty metadata is read from `evals/tasks/metadata.json`, included in task fingerprints, and must match across reports; incompatible metadata is excluded instead of silently blended. Legacy reports without category metadata remain comparable by task ID/fingerprint but cannot produce a category- or difficulty-balanced headline score. Never compare different or modified task definitions in headline metrics.
 
