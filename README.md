@@ -1,14 +1,8 @@
-# OASIS
-
 <p align="center">
-  <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish. — open-source coding agent and local-first developer workspace" width="100%" />
+  <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish. A panoramic lime-green portal and reflective digital workspace for an open-source, local-first AI coding agent." width="100%" />
 </p>
 
-<p align="center"><strong>Code. Automate. Flourish.</strong></p>
-<p align="center">An open-source AI coding agent and local-first developer workspace.</p>
-<p align="center">CLI · Browser workspace · Multi-provider tools · MCP · Skills · Subagents</p>
-
-<p align="center"><a href="https://fahthiz.github.io/oasis/">Public homepage ↗</a> · <a href="docs/INSTALL.md">Install OASIS</a> · <a href="docs/NEXT_MILESTONE.md">Next milestone</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security/reliability audit</a> · <a href="docs/CURRENT_STATUS.md">Current status</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/PRODUCT_READINESS.md">Product readiness</a> · <a href="docs/CAPABILITY_GATES.md">Capability gates</a> · <a href="docs/CORE_MECHANICS_AUDIT.md">Core mechanics audit</a> · <a href="docs/BRANCH_AUDIT.md">Branch audit</a></p>
+<p align="center"><a href="https://fahthiz.github.io/oasis/">Homepage ↗</a> · <a href="docs/INSTALL.md">Install</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security &amp; reliability</a></p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
@@ -17,7 +11,9 @@
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22 or newer" /></a>
 </p>
 
-OASIS is an open-source AI coding agent and local-first developer workspace for multi-step software development. It can inspect a codebase, plan and apply focused changes, run approved shell commands and tests, and report what changed. Use the CLI coding assistant in your terminal or open the local browser workspace with `oasis web`. Connect supported model providers and extend the agent with Model Context Protocol (MCP) tools, reusable skills, hooks, bounded subagents, and a dependency-aware shared task board. See [Next milestone](docs/NEXT_MILESTONE.md) for the prioritized Alpha-readiness gate, and [Current status](docs/CURRENT_STATUS.md) for the implementation inventory, current CI evidence, and explicit limitations.
+OASIS is an open-source AI coding agent and local-first developer workspace for multi-step software development. It inspects codebases, plans and applies focused edits, runs approved shell commands and tests, and summarizes what changed. Use the CLI in your terminal or launch the browser workspace with `oasis web`; extend it with supported model providers, Model Context Protocol (MCP) tools, reusable skills, hooks, and bounded subagents.
+
+For the current implementation inventory and explicit limitations, see [Current status](docs/CURRENT_STATUS.md) and [Next milestone](docs/NEXT_MILESTONE.md).
 
 ## Get started
 
