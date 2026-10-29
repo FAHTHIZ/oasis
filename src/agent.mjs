@@ -2008,7 +2008,7 @@ async function runSubagent(parent, args, context, options) {
   const allowed = agent.tools ? new Set(agent.tools) : null;
   const definitions = (parent.toolDefinitions || TOOL_DEFINITIONS).filter((definition) => {
     const name = definition && definition.function && definition.function.name;
-    if (!name || name === 'task' || name === 'workflow' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    if (!name || name === 'task' || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
@@ -2785,7 +2785,9 @@ async function executeOneCallRaw(session, call, context, options) {
         session.hookMessages.push(...verdict.messages);
         if (verdict.blocked) throw new Error('A TaskCompleted hook kept ' + args.task_id + ' open: ' + (verdict.reason || 'no reason given'));
       }
-      result = await runSessionTool(session, name, args, { signal: options.signal });
+      result = await runSessionTool(session, name, args, { signal: options.signal, approval: options.isSubagent ? null : options.approval, env: callContext && callContext.env || options.env, hookOptions: hookOptions(session, options.env) });
+      // Later tool calls this turn resolve paths against the (possibly new) worktree root.
+      if ((name === 'enter_worktree' || name === 'exit_worktree') && context) context.root = session.root;
       // TaskCreated hooks run after creation and roll it back on a block.
       if (name === 'task_create' && result && result.task && hasHooks(session.hooks, 'TaskCreated')) {
         const verdict = await runHooks('TaskCreated', { session_id: session.sessionId || 'unsaved', task_id: result.task.id, task_subject: result.task.subject, task_description: result.task.description || '', ...(session.agentId ? { teammate_name: session.agentId } : {}) }, hookOptions(session, context.env));

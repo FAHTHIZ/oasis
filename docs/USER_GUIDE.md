@@ -795,6 +795,8 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- The model can move the session into an isolated git worktree mid-task with `enter_worktree` (new under `.oasis/worktrees/`, or an existing worktree of this repo; paths elsewhere ask first) and leave with `exit_worktree` (`keep`, or `remove`, which refuses while there are uncommitted changes or new commits unless `discard_changes` is set). Claude-style hooks see these as `EnterWorktree` / `ExitWorktree`.
+
 - `/auto-mode-setup` drafts `autoMode.environment` entries from this project (git remote owners, package registries in `.npmrc`/pip config, CI, Docker, Terraform, service hosts in `.env.example`), shows them, and after you confirm appends them after `"$defaults"` in your user settings.
 - `/autofix-pr [instructions]` works the current branch's pull request until it is green: it reads failing check logs and review comments, fixes and tests locally, pushes (never force), waits for the new checks, and repeats up to 5 rounds.
 
