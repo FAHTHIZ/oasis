@@ -52,7 +52,7 @@ export function summarizeAgentRun(job) {
   // return arbitrary assistant text, prompts, tool results, or command output.
   const visibleRunTypes = new Set([
     'started', 'approval_required', 'approval_resolved', 'cancel_requested',
-    'cancelled', 'failed', 'completed', 'worktree_ready', 'usage'
+    'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'usage'
   ]);
   const agentEvents = rawEvents
     .filter((event) => event && event.data && typeof event.data === 'object' &&
@@ -68,9 +68,10 @@ export function summarizeAgentRun(job) {
     'agent.stop_requested': 'stopping',
     'agent.completed': 'completed',
     'agent.failed': 'failed',
-    'agent.cancelled': 'cancelled'
+    'agent.cancelled': 'cancelled',
+    'agent.interrupted': 'interrupted'
   };
-  const approvalState = { requested: 0, resolved: 0, approved: 0, denied: 0, pending: 0 };
+  const approvalState = { requested: 0, resolved: 0, approved: 0, denied: 0, pending: 0, interrupted: 0 };
   let totalTokens = 0;
   let hasTokenUsage = false;
   const events = agentEvents.map((event) => {
@@ -99,6 +100,9 @@ export function summarizeAgentRun(job) {
         description = 'Cancellation requested';
       } else if (event.type === 'cancelled') {
         description = 'Run cancelled';
+      } else if (event.type === 'interrupted') {
+        description = 'Runtime restarted';
+        detail = 'Worker processes and pending approvals were not restored';
       } else if (event.type === 'failed') {
         description = 'Run failed';
         detail = monitorText(data.message || job.error, 500);
@@ -161,6 +165,22 @@ export function summarizeAgentRun(job) {
     };
   });
   const workerList = [...workers.values()].sort((a, b) => Date.parse(b.lastActivity || 0) - Date.parse(a.lastActivity || 0));
+  // An interrupted record is historical, not a live worker. Reflect the saved
+  // terminal state in worker/team/approval counts instead of stale live state.
+  if (job.status === 'interrupted') {
+    const last = rawEvents.at(-1);
+    const interruptedAt = monitorText((last && last.at) || job.updatedAt || job.createdAt, 40);
+    for (const worker of workerList) {
+      if (worker.status === 'running' || worker.status === 'stopping') {
+        worker.status = 'interrupted';
+        worker.detail = 'The runtime restarted; this worker process was not restored.';
+        if (interruptedAt) worker.lastActivity = interruptedAt;
+      }
+    }
+    for (const team of teams.values()) if (team.status !== 'closed') team.status = 'interrupted';
+    approvalState.interrupted = approvalState.pending;
+    approvalState.pending = 0;
+  }
   for (const team of teams.values()) {
     const members = workerList.filter((worker) => worker.teamId === team.id);
     team.memberCount = members.length;
