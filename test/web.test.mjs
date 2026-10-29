@@ -1124,8 +1124,8 @@ test('desktop provider setup stores the API key through the host callback, not c
       apiKey: key
     })
   });
-  assert.equal(response.status, 200, await response.text().catch(() => ''));
   const bodyText = await response.text();
+  assert.equal(response.status, 200, bodyText);
   assert.doesNotMatch(bodyText, new RegExp(key));
   assert.equal(captured.apiKey, key);
 
