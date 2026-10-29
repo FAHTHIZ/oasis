@@ -9,7 +9,7 @@ index 0f68f8791f5d6a05e9d3fc4e8c4101382beff271..00000000000000000000000000000000
  import path from 'node:path';
  import { getConfigDirectory } from './config.mjs';
  
-@@ -14,15 +14,22 @@ export async function loadMcpServers(options = {}) {
+@@ -14,14 +14,20 @@ export async function loadMcpServers(options = {}) {
    const configPath = options.configPath || getMcpConfigPath(options.env || process.env);
    try {
 +    const configInfo = await stat(configPath);
