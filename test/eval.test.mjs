@@ -52,6 +52,7 @@ test('eval suite validation requires no-op failure and reference-patch success',
   assert.equal(report.ok, true, JSON.stringify(report.results));
   assert.equal(report.total, 1);
   assert.equal(report.results[0].ok, true);
+  assert.match(report.results[0].taskFingerprint, /^[a-f0-9]{64}$/);
   assert.notEqual(report.results[0].noOpExitCode, 0);
   assert.equal(report.results[0].referenceExitCode, 0);
 });
@@ -266,6 +267,43 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
   assert.match(output.text, /unmatched task IDs are excluded/);
 });
 
+test('eval comparison excludes matching task IDs with incompatible task fingerprints', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const aPath = path.join(tmp, 'oasis-run.json');
+  const bPath = path.join(tmp, 'claude-run.json');
+  await writeFile(aPath, JSON.stringify({
+    label: 'OASIS',
+    results: [
+      { taskId: 'same-task', taskFingerprint: 'a'.repeat(64), status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
+      { taskId: 'changed-task', taskFingerprint: 'b'.repeat(64), status: 'passed', wallTimeMs: 150, costUSD: 0.01 },
+      { taskId: 'legacy-task', status: 'failed', wallTimeMs: 200, costUSD: 0.01 }
+    ]
+  }));
+  await writeFile(bPath, JSON.stringify({
+    label: 'Claude Code',
+    results: [
+      { taskId: 'same-task', taskFingerprint: 'a'.repeat(64), status: 'passed', wallTimeMs: 90, costUSD: 0.02 },
+      { taskId: 'changed-task', taskFingerprint: 'c'.repeat(64), status: 'passed', wallTimeMs: 140, costUSD: 0.02 },
+      { taskId: 'legacy-task', status: 'passed', wallTimeMs: 190, costUSD: 0.02 }
+    ]
+  }));
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand(['--compare', aPath, bPath], {
+    env: { ...process.env }, output
+  });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.comparison.commonTaskCount, 2);
+  assert.deepEqual(result.comparison.mismatchedFingerprints, ['changed-task']);
+  assert.deepEqual(result.comparison.unverifiedFingerprints, ['legacy-task']);
+  assert.equal(result.comparison.tasks.find((row) => row.taskId === 'same-task').fingerprintStatus, 'verified');
+  assert.equal(result.comparison.tasks.find((row) => row.taskId === 'legacy-task').fingerprintStatus, 'unverified-legacy');
+  assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 0.5);
+  assert.equal(result.comparison.metrics.b.taskBalancedPassRate, 1);
+  assert.match(output.text, /1\/2 verified; 1 mismatched task\(s\) excluded; 1 legacy\/unfingerprinted task\(s\) compared by ID only/);
+});
+
 test('eval comparison refuses unsafe files, invalid result rows and disjoint task sets', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
@@ -277,6 +315,9 @@ test('eval comparison refuses unsafe files, invalid result rows and disjoint tas
 
   await writeFile(bPath, JSON.stringify({ results: [{ taskId: '../bad', status: 'passed' }] }));
   await assert.rejects(compareEvalReports([aPath, bPath]), /invalid taskId/);
+
+  await writeFile(bPath, JSON.stringify({ results: [{ taskId: 'task-a', status: 'passed', taskFingerprint: 'not-a-sha256' }] }));
+  await assert.rejects(compareEvalReports([aPath, bPath]), /invalid taskFingerprint/);
 
   const linkPath = path.join(tmp, 'linked.json');
   await symlink(aPath, linkPath);
