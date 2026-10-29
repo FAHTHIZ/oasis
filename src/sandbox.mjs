@@ -25,24 +25,20 @@ function pathContains(parent, child) {
   return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
 }
 
-export function collectSensitivePaths(explicitWritable = [], env = process.env) {
+export function collectSensitivePaths(env = process.env) {
   const home = path.resolve(env.HOME || os.homedir());
   const configPath = path.resolve(env.OASIS_CONFIG_DIR || env.OASIS_HOME || path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'oasis'));
   const candidates = [...SENSITIVE_HOME_PATHS.map((item) => path.join(home, item)), configPath];
-  // Do not treat the workspace root itself as an explicit credential-access grant.
-  // A workspace can be the home directory; its broad write mount must not disable
-  // masking of ~/.ssh, ~/.aws, and other credential locations.
-  const explicitlyWritablePaths = explicitWritable.map((item) => path.resolve(item));
   const masked = [];
   for (const candidate of candidates) {
     let real;
     let info;
     try { real = realpathSync(candidate); info = statSync(real); } catch { continue; }
     const type = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null;
-    // Only an explicit grant that contains the sensitive path can opt it out of
-    // masking. A writable child inside a credential directory does not expose the
-    // entire credential directory.
-    if (!type || explicitlyWritablePaths.some((item) => pathContains(item, real))) continue;
+    if (!type) continue;
+    // Credential masking is independent of workspace and additional write grants.
+    // Broadly writable directories must not expose secrets as a side effect; the
+    // explicit, trusted maskSensitivePaths:false setting is the only opt-out.
     if (masked.some((item) => pathContains(item.path, real))) continue;
     masked.push({ path: real, type });
   }
@@ -95,7 +91,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
     network: Boolean(settings.sandbox.network),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
-    maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(additionalWritable),
+    maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
     writable
   };
 }

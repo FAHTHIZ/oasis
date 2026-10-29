@@ -41,11 +41,19 @@ test('credential masking remains active when the workspace is the home directory
   await writeFile(path.join(ssh, 'id_ed25519'), 'test secret');
 
   const env = { HOME: home, XDG_CONFIG_HOME: path.join(home, '.config') };
-  const masked = collectSensitivePaths([], env);
+  const masked = collectSensitivePaths(env);
   assert.ok(masked.some((item) => item.path === ssh), 'home workspace must not disable ~/.ssh masking');
 
-  const nestedWritable = collectSensitivePaths([path.join(ssh, 'project')], env);
-  assert.ok(nestedWritable.some((item) => item.path === ssh), 'a writable child must not expose its credential parent');
+});
+
+test('credential masking is independent of additional writable directory grants', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-sandbox-extra-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const ssh = path.join(home, '.ssh');
+  await mkdir(ssh, { recursive: true });
+  await writeFile(path.join(ssh, 'id_ed25519'), 'test secret');
+  const masked = collectSensitivePaths({ HOME: home });
+  assert.ok(masked.some((item) => item.path === ssh), 'credential roots stay masked even when the home directory is broadly writable');
 });
 
 test('bubblewrap overlays credential masks after writable mounts', () => {
