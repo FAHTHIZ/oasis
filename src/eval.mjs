@@ -560,6 +560,7 @@ function versionSupportsRestrictedMode(versionText) {
 }
 
 async function runClaudeCodeEval(config, options = {}) {
+  const output = options.output || process.stdout;
   if (!options.autoApprove) {
     throw new Error('Claude Code evaluation runs an external coding agent against disposable task copies. Review the task suite, then explicitly run oasis eval --claude-code --yes [--task ID] [--trials N].');
   }
