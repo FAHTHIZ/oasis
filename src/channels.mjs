@@ -132,9 +132,14 @@ export function relayInputPreview(input) {
   const parts = [];
   for (const [key, value] of Object.entries(input)) {
     let shown;
-    try { shown = typeof value === 'string' ? value : JSON.stringify(value); } catch { shown = '(value unserializable)'; }
-    if (shown === undefined) shown = '(value unserializable)';
-    parts.push(JSON.stringify(key) + ': ' + JSON.stringify(sanitizeRelayText(shown)));
+    if (/(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization)?|credential|password|passwd|secret|private[_-]?key|client[_-]?secret|token)/i.test(key)) {
+      shown = '[REDACTED]';
+    } else {
+      try { shown = typeof value === 'string' ? value : JSON.stringify(value); } catch { shown = '(value unserializable)'; }
+      if (shown === undefined) shown = '(value unserializable)';
+      shown = sanitizeRelayText(shown);
+    }
+    parts.push(JSON.stringify(key) + ': ' + JSON.stringify(shown));
   }
   return '{' + parts.join(', ') + '}';
 }
