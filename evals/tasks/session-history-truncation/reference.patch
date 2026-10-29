@@ -1,0 +1,74 @@
+diff --git a/src/sessions.mjs b/src/sessions.mjs
+--- a/src/sessions.mjs
++++ b/src/sessions.mjs
+@@ -42,1 +42,6 @@
+-  const messages = validateMessages(session.messages.slice(-MAX_MESSAGES));
++  const history = session.messages;
++  const messages = validateMessages(
++    history.length > MAX_MESSAGES
++      ? [history[0], ...history.slice(-(MAX_MESSAGES - 1))]
++      : history
++  );
+diff --git a/test/session-history.test.mjs b/test/session-history.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/test/session-history.test.mjs
+@@ -0,0 +1,58 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import os from 'node:os';
++import path from 'node:path';
++import { mkdtemp, mkdir, rm } from 'node:fs/promises';
++import { saveSession, loadSession } from '../src/sessions.mjs';
++
++async function makeFixture(t) {
++  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-session-history-test-'));
++  t.after(() => rm(dir, { recursive: true, force: true }));
++  const root = path.join(dir, 'workspace');
++  await mkdir(root);
++  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(dir, 'config') };
++  return { dir, root, env };
++}
++
++function makeSession(root, messages) {
++  return {
++    root,
++    config: {
++      protocol: 'openai-compatible',
++      baseURL: 'https://provider.example/v1',
++      model: 'fixture-model'
++    },
++    messages
++  };
++}
++
++test('saveSession preserves system context and newest messages beyond the limit', async (t) => {
++  const { root, env } = await makeFixture(t);
++  const messages = [
++    { role: 'system', content: 'authoritative system context' },
++    ...Array.from({ length: 150 }, (_, index) => ({
++      role: index % 2 === 0 ? 'user' : 'assistant',
++      content: 'message-' + index
++    }))
++  ];
++  const session = makeSession(root, messages);
++  const saved = await saveSession(session, { env });
++  const restored = await loadSession(root, saved.id, { env });
++
++  assert.equal(restored.messages.length, 120);
++  assert.equal(restored.messages[0].role, 'system');
++  assert.equal(restored.messages[0].content, 'authoritative system context');
++  assert.deepEqual(restored.messages.slice(1), messages.slice(-119));
++});
++
++test('saveSession leaves short histories unchanged', async (t) => {
++  const { root, env } = await makeFixture(t);
++  const messages = [
++    { role: 'system', content: 'system context' },
++    { role: 'user', content: 'question' },
++    { role: 'assistant', content: 'answer' }
++  ];
++  const saved = await saveSession(makeSession(root, messages), { env });
++  const restored = await loadSession(root, saved.id, { env });
++  assert.deepEqual(restored.messages, messages);
++});

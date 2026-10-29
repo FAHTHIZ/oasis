@@ -4,9 +4,9 @@
 
 This page records how to produce a reproducible, auditable comparison. It deliberately does not claim OASIS is faster, cheaper, or more accurate than Claude Code without completed runs on the same tasks.
 
-## What the current 31-task suite proves
+## What the current 32-task suite proves
 
-The repository has 31 deterministic evaluation fixtures under **evals/tasks/**. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. The `config-strict-integer-bounds` task is the first multi-file project regression: it fixes permissive configuration parsing and requires a dedicated regression-test file. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
+The repository has 32 deterministic evaluation fixtures under **evals/tasks/**. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. The `config-strict-integer-bounds` task is the first multi-file project regression: it fixes permissive configuration parsing and requires a dedicated regression-test file. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
 
 ### Added fixture catalogue
 
@@ -20,8 +20,9 @@ The repository has 31 deterministic evaluation fixtures under **evals/tasks/**. 
 | `ttl-cache` | Injected-clock expiry and oldest-insertion eviction at capacity |
 | `safe-archive-entry` | POSIX/Windows absolute paths, UNC paths, NULs, and traversal rejection |
 | `normalize-request-headers` | Case-insensitive lookup, whitespace trimming, and ambiguous record-key rejection |
+| `session-history-truncation` | Keep system context and the newest 119 messages when persisting long sessions |
 
-This is useful for checking evaluator integrity and a broader range of coding behaviors. One fixture now requires a coordinated production-code and regression-test change, but the suite is still **not** a representative real-world software-engineering benchmark: most tasks remain small and utility-level, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code. New runs record a top-level `sourceRevision` when a full Git commit SHA is available from `OASIS_SOURCE_REVISION`, `GITHUB_SHA`, or the checked-out repository's `git rev-parse HEAD`; packaged installs without repository metadata may report `null`. Comparison output surfaces revisions and labels missing revisions as unavailable.
+This is useful for checking evaluator integrity and a broader range of coding behaviors. Two fixtures now require coordinated production-code and regression-test changes (`config-strict-integer-bounds` and `session-history-truncation`), but the suite is still **not** a representative real-world software-engineering benchmark: most tasks remain small and utility-level, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code. New runs record a top-level `sourceRevision` when a full Git commit SHA is available from `OASIS_SOURCE_REVISION`, `GITHUB_SHA`, or the checked-out repository's `git rev-parse HEAD`; packaged installs without repository metadata may report `null`. Comparison output surfaces revisions and labels missing revisions as unavailable.
 
 ## Run the suite validator first
 
@@ -83,7 +84,7 @@ The comparator now fingerprints each task's prompt, shared repository snapshot, 
 4. Treat deterministic verifier outcomes as the success signal. Do not use a model to judge itself and do not count a task as passed just because the agent says done.
 5. Run three trials at minimum and publish every failure and timeout. Report both task-balanced pass rate and total trial counts.
 6. Report cost only when supported by per-run usage metadata or documented token rates. Subscription usage with no per-run dollar amount is **unknown**, not zero. OASIS's token-price setting produces an estimate and does not account for every cache/billing modifier; label it as an estimate.
-7. Do not claim "90%" or "at the same level as Claude Code" from this 31-task smoke suite. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
+7. Do not claim "90%" or "at the same level as Claude Code" from this 32-task smoke suite. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
 
 ## Result status
 
