@@ -103,15 +103,15 @@ try {
   await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-before.png'), fullPage: true });
   await page.locator('button[data-nav="agent"]').first().click();
+  // The starter cards belong to the empty-state UI, so test them before connecting.
+  await page.locator('[data-agent-example="Explain this project"]').click();
+  assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
   await page.locator('#agentTokenInput').fill(token);
   await page.locator('#agentConnectBtn').click();
   await page.waitForFunction(() => {
     const status = document.querySelector('#agentRuntimeState');
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
-
-  await page.locator('[data-agent-example="Explain this project"]').click();
-  assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
   try {
