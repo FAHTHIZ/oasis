@@ -8,7 +8,7 @@
 <p align="center">An open-source AI coding agent and local-first developer workspace.</p>
 <p align="center">CLI · Browser workspace · Multi-provider tools · MCP · Skills · Subagents</p>
 
-<p align="center"><a href="https://fahthiz.github.io/oasis/">Public homepage ↗</a> · <a href="docs/INSTALL.md">Install OASIS</a> · <a href="docs/NEXT_MILESTONE.md">Next milestone</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security/reliability audit</a> · <a href="docs/CURRENT_STATUS.md">Current status</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/PRODUCT_READINESS.md">Product readiness</a> · <a href="docs/CAPABILITY_GATES.md">Capability gates</a> · <a href="docs/BRANCH_AUDIT.md">Branch audit</a></p>
+<p align="center"><a href="https://fahthiz.github.io/oasis/">Public homepage ↗</a> · <a href="docs/INSTALL.md">Install OASIS</a> · <a href="docs/NEXT_MILESTONE.md">Next milestone</a> · <a href="docs/SECURITY_RELIABILITY_AUDIT.md">Security/reliability audit</a> · <a href="docs/CURRENT_STATUS.md">Current status</a> · <a href="docs/USER_GUIDE.md">User guide</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="docs/ROADMAP.md">Roadmap</a> · <a href="docs/PRODUCT_READINESS.md">Product readiness</a> · <a href="docs/CAPABILITY_GATES.md">Capability gates</a> · <a href="docs/CORE_MECHANICS_AUDIT.md">Core mechanics audit</a> · <a href="docs/BRANCH_AUDIT.md">Branch audit</a></p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
