@@ -2,19 +2,22 @@ import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
-const [html, robots, sitemap, icon, socialPreview, packageText, betaSticker, betaSeal, betaMark] = await Promise.all([
+const [html, robots, sitemap, icon, socialPreview, packageText, readme, licenseText, betaSticker, betaSeal, betaMark] = await Promise.all([
   read('../../site/index.html'),
   read('../../site/robots.txt'),
   read('../../site/sitemap.xml'),
   read('../../site/assets/oasis-icon.svg'),
   read('../../site/assets/oasis-social-preview.svg'),
   read('../../package.json'),
+  read('../../README.md'),
+  read('../../LICENSE'),
   read('../../assets/oasis-beta-sticker.svg'),
   read('../../assets/oasis-beta-seal.svg'),
   read('../../assets/oasis-beta-mark.svg')
 ]);
 
 const expectedUrl = 'https://fahthiz.github.io/oasis/';
+const expectedRepoUrl = 'https://github.com/FAHTHIZ/oasis.git';
 const expectedDescription = 'OASIS is an open-source AI coding agent. Bring your own model for local-first coding workflows, tools, and multi-step software work.';
 const required = [
   '<!doctype html>', '<html lang="en">', '<meta name="description"',
@@ -33,8 +36,8 @@ assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.i
 assert.ok(socialPreview.includes('OASIS beta') && socialPreview.includes('BETA · APACHE 2.0'), 'Social preview must advertise the current Beta stage.');
 assert.ok(html.includes('Beta · Open source · Apache-2.0'), 'Public homepage must show the Beta stage.');
 for (const [name, sticker] of [['wide beta sticker', betaSticker], ['round beta seal', betaSeal], ['compact beta mark', betaMark]]) {
-  assert.ok(sticker.startsWith('<svg') && sticker.includes('</svg>'), `${name} must be an SVG document.`);
-  assert.ok(sticker.includes('BETA'), `${name} must visibly identify the Beta stage.`);
+  assert.ok(sticker.startsWith('<svg') && sticker.includes('</svg>'), name + ' must be an SVG document.');
+  assert.ok(sticker.includes('BETA'), name + ' must visibly identify the Beta stage.');
 }
 assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
@@ -46,7 +49,22 @@ assert.ok(robots.includes('User-agent: *') && robots.includes('Allow: /'));
 assert.ok(robots.includes(expectedUrl + 'sitemap.xml'), 'robots.txt must advertise the sitemap.');
 assert.ok(sitemap.includes('<loc>' + expectedUrl + '</loc>'), 'Sitemap URL must match the canonical homepage.');
 assert.ok(icon.startsWith('<svg') && icon.includes('</svg>'), 'Homepage favicon must be SVG.');
+
 const pkg = JSON.parse(packageText);
+assert.equal(pkg.license, 'Apache-2.0', 'package.json must declare Apache-2.0 as the project license.');
+assert.equal(pkg.repository?.url, expectedRepoUrl, 'package.json must point to the canonical FAHTHIZ/oasis repository.');
 assert.ok(pkg.keywords.includes('ai-coding-agent') && pkg.keywords.includes('agent-skills') && pkg.keywords.includes('ollama'));
+assert.ok(!readme.includes('gtxnrg-ship-it/oasis'), 'README must not contain links to the old gtxnrg-ship-it/oasis repository.');
+assert.ok(readme.includes('https://github.com/FAHTHIZ/oasis') && readme.includes('license-Apache--2.0-blue.svg'), 'README must link to the canonical repository and show the Apache-2.0 badge.');
+assert.ok(readme.includes('Apache License 2.0 — see [LICENSE](LICENSE).'), 'README must explain where to find the Apache-2.0 license.');
+assert.ok(
+  licenseText.startsWith('                                 Apache License\n                           Version 2.0, January 2004') &&
+  licenseText.includes('TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION') &&
+  licenseText.includes('9. Accepting Warranty or Additional Liability.') &&
+  licenseText.includes('END OF TERMS AND CONDITIONS') &&
+  licenseText.includes('APPENDIX: How to apply the Apache License to your work.') &&
+  licenseText.includes('http://www.apache.org/licenses/LICENSE-2.0'),
+  'LICENSE must contain the full Apache License 2.0 text, including its terms and appendix.'
+);
 assert.ok(expectedDescription.length <= 160, 'Search description should fit a typical snippet length.');
-console.log('OASIS public-launch checks passed: landing page metadata, key links, sitemap, robots, favicon, and package discoverability.');
+console.log('OASIS public-launch checks passed: homepage metadata, links, Beta branding, canonical repo, and Apache-2.0 license consistency.');
