@@ -181,6 +181,41 @@ test('evaluation metadata is validated and becomes part of task fingerprints', a
   assert.match(invalid.results[0].error, /unknown category/);
 });
 
+test('eval tasks support reusable named repository snapshots with safe IDs', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  const snapshotsDir = path.join(tmp, 'snapshots');
+  await mkdir(tasksDir);
+  const taskDir = await createFixtureTask(tasksDir, 'shared-snapshot-task');
+  const taskRepo = path.join(taskDir, 'repo');
+  await rm(taskRepo, { recursive: true, force: true });
+  await mkdir(taskRepo);
+  await writeFile(path.join(taskRepo, 'BASE_SNAPSHOT'), 'fixture-repo\\n');
+
+  const snapshot = path.join(snapshotsDir, 'fixture-repo');
+  await mkdir(snapshot, { recursive: true });
+  await writeFile(path.join(snapshot, 'demo.txt'), 'old\\n');
+
+  const report = await validateEvaluationSuite({
+    tasksDir,
+    snapshotsDir,
+    env: { ...process.env }
+  });
+  assert.equal(report.ok, true, JSON.stringify(report.results));
+  assert.equal(report.results[0].id, 'shared-snapshot-task');
+  assert.equal(report.results[0].ok, true);
+
+  await writeFile(path.join(taskRepo, 'BASE_SNAPSHOT'), '../escape\\n');
+  const unsafe = await validateEvaluationSuite({
+    tasksDir,
+    snapshotsDir,
+    env: { ...process.env }
+  });
+  assert.equal(unsafe.ok, false);
+  assert.match(unsafe.results[0].error, /invalid shared repository snapshot ID/);
+});
+
 test('eval suite rejects a task whose verifier passes unchanged', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
