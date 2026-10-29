@@ -1965,6 +1965,17 @@ export function verificationIssues(state) {
   return issues;
 }
 
+export function appendLspUnavailableNotice(text, state) {
+  const changed = new Set(state && state.changedPaths instanceof Set ? state.changedPaths : []);
+  const unavailable = [...(state && state.lspVerificationByPath instanceof Map ? state.lspVerificationByPath.entries() : [])]
+    .filter(([file, result]) => changed.has(file) && result && result.status === 'unavailable')
+    .map(([file, result]) => file + (result.reason ? ': ' + String(result.reason).slice(0, 240) : ''));
+  if (!unavailable.length) return String(text || '');
+  return String(text || '').trimEnd() +
+    '\n\nLSP verification unavailable for ' + unavailable.join('; ') +
+    '. Any separate project checks are reported independently; this change was not verified by a language server.';
+}
+
 export function formatLspVerificationBlocker(issues) {
   const blockers = (Array.isArray(issues) ? issues : []).filter((issue) =>
     issue.startsWith('LSP verification unavailable') || issue.startsWith('LSP reports ')
@@ -3469,10 +3480,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
-      if (text && options.onText) await emitDisplayText(session, options, text);
+      const finalText = issues.length ? text : appendLspUnavailableNotice(text, verification);
+      assistantMessage.content = finalText;
+      if (finalText && options.onText) await emitDisplayText(session, options, finalText);
       pruneHistory(session);
       return {
-        text,
+        text: finalText,
         toolCalls: totalToolCalls,
         tokensUsed,
         tokenBudget,
