@@ -200,6 +200,23 @@ body.light .first-run-choice{background:#fff}
 .agent-example-prompt span{font-size:10px;font-weight:400;color:var(--muted);line-height:1.6}
 @media(max-width:1050px){.agent-example-prompts{grid-template-columns:minmax(0,1fr)}.agent-example-prompt{min-height:0}}
 @media(max-width:390px){.agent-example-prompt{min-height:44px;padding:11px}.agent-example-prompt span{font-size:10px}}
+
+/* Persistent model and usage status; costs are estimates only when the provider has known pricing. */
+.agent-status-bar{display:flex;align-items:center;gap:7px 14px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#ffffff03;color:var(--muted);font-size:10px;line-height:1.6}
+.agent-status-item{min-width:0;overflow-wrap:anywhere}
+.agent-status-item+ .agent-status-item:before{content:"·";color:var(--line);margin-right:12px}
+.agent-status-item[data-level="mid"]{color:#d8b95b}
+.agent-status-item[data-level="high"]{color:var(--danger);font-weight:700}
+.agent-activity-timeline{border:1px solid var(--line);border-radius:10px;background:#ffffff03;overflow:hidden}
+.agent-activity-timeline>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;min-height:42px;cursor:pointer;color:var(--text);font-size:11px;font-weight:700;list-style-position:inside}
+.agent-activity-count{color:var(--muted);font-size:10px;font-weight:400}
+.agent-activity-items{display:grid;gap:6px;padding:0 10px 10px;max-height:260px;overflow:auto}
+.agent-activity-empty{margin:4px 0;color:var(--muted);font-size:10px;line-height:1.6}
+.agent-activity-item{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#00000010}
+.agent-activity-item>summary{padding:7px 9px;cursor:pointer;font-size:10px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.agent-activity-item[open]>summary{color:var(--text);border-bottom:1px solid var(--line)}
+.agent-activity-detail{margin:0;padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;font:10px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+@media(max-width:390px){.agent-status-bar{gap:4px 8px;padding:8px 9px}.agent-status-item+ .agent-status-item:before{margin-right:7px}.agent-activity-timeline>summary{min-height:44px}.agent-activity-items{max-height:220px}}
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -273,6 +290,18 @@ body.light .first-run-choice{background:#fff}
     <div class="agent-chat-column" id="agentChatColumn" role="tabpanel" aria-labelledby="agentChatTab">
 <div class="panel agent-chat-panel">
     <div class="agent-chat-header"><div class="agent-model-summary"><span class="agent-runtime-state" id="agentRuntimeState" data-connected="false">Runtime not connected</span><button class="agent-model-pill" id="agentModelButton" type="button" data-nav="agent" data-scroll-target="provider-setup" title="Open model settings"><span class="agent-model-glyph" aria-hidden="true">◈</span><span class="agent-model-pill-copy"><strong id="agentModelName">Choose a model</strong><small id="agentModelDetail">Connect a runtime</small></span><span class="agent-model-chevron" aria-hidden="true">⌄</span></button></div><div class="agent-session-tools"><label class="sr-only" for="agentModeSelect">Permission mode</label><select id="agentModeSelect" title="Permission mode for this chat"><option value="default">Ask before changes</option><option value="acceptEdits">Auto-accept edits</option><option value="plan">Plan only</option><option value="auto">Auto (classifier decides)</option></select><label class="sr-only" for="agentHistorySelect">Saved chats</label><select id="agentHistorySelect" title="Open a saved chat" hidden><option value="">Saved chats…</option></select><span class="agent-context-meter" id="agentContextMeter" title="Context window use" hidden></span><button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button></div></div>
+    <div class="agent-status-bar" id="agentStatusBar" role="status" aria-live="polite" aria-label="Current model and usage">
+      <span class="agent-status-item" id="agentStatusModel">Model: not connected</span>
+      <span class="agent-status-item" id="agentStatusContext" data-level="low">Context: waiting for a session</span>
+      <span class="agent-status-item" id="agentStatusCost">Cost: unknown until the model is known</span>
+      <span class="agent-status-item" id="agentStatusBudget" hidden></span>
+    </div>
+    <details class="agent-activity-timeline" id="agentActivityTimeline">
+      <summary><span>Task activity</span><span class="agent-activity-count" id="agentActivityCount">0 events</span></summary>
+      <div class="agent-activity-items" id="agentActivityItems" role="log" aria-label="Task activity details">
+        <p class="agent-activity-empty">Activity appears here as Oasis reads files, runs checks, and makes changes.</p>
+      </div>
+    </details>
     <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
       <p>Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
       <div class="agent-example-prompts" aria-label="Example tasks">
@@ -480,7 +509,918 @@ if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventLis
 var agentToken=sessionStorage.getItem('oasis.web.token')||'',agentSessionId=sessionStorage.getItem('oasis.web.sessionId')||'',agentActiveJob=null,agentApprovalId=null,agentBusy=false,agentAssistantNodes=Object.create(null),activePtyId=null,activePtyOffset=0,oasisTerminal=null,oasisFitAddon=null,terminalInputQueue=Promise.resolve(),terminalFitTimer=null;
 async function agentLoadHistoryList(){var sel=document.getElementById('agentHistorySelect');if(!agentToken)return;try{var d=await agentApi('/api/sessions');var list=(d.sessions||[]).slice(0,30);sel.innerHTML='';var o=document.createElement('option');o.value='';o.textContent=list.length?'Saved chats ('+list.length+')':'No saved chats';sel.appendChild(o);list.forEach(function(s){var opt=document.createElement('option');opt.value=s.id;var when=s.updatedAt?new Date(s.updatedAt).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';opt.textContent=(s.title||'Untitled chat').slice(0,48)+(when?' · '+when:'');sel.appendChild(opt)});sel.value=list.some(function(s){return s.id===agentSessionId})?agentSessionId:'';sel.hidden=false}catch(e){sel.hidden=true}}
 async function agentOpenSession(id){if(!id||agentBusy)return;agentSessionId=id;sessionStorage.setItem('oasis.web.sessionId',id);try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(id));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});agentActivity('Saved chat reopened. Send a message to continue it.')}catch(e){agentActivity('Could not open that chat: '+e.message)}}
-function agentShowSessionState(d){var sel=document.getElementById('agentModeSelect');if(d.mode&&sel.querySelector('option[value="'+d.mode+'"]'))sel.value=d.mode;var m=document.getElementById('agentContextMeter');m.hidden=false;m.textContent='Context '+(d.contextPercent||0)+'% · '+Number(d.totalTokens||0).toLocaleString()+' tokens';m.title='~'+Number(d.contextTokens||0).toLocaleString()+' of '+Number(d.contextWindow||0).toLocaleString()+' context tokens'+(d.model?' · '+d.model:'');m.dataset.level=d.contextPercent>=80?'high':d.contextPercent>=50?'mid':'low'}
+function agentFormatUsd(value){var amount=Math.max(0,Number(value)||0);if(amount===0)return '$0.00';return amount<0.01?'
+function agentSetStatus(text,connected){var el=document.getElementById('agentRuntimeState');el.textContent=text;el.dataset.connected=connected?'true':'false'}
+function agentApi(url,options){options=options||{};var headers=Object.assign({},options.headers||{});if(agentToken)headers.Authorization='Bearer '+agentToken;if(options.body)headers['Content-Type']='application/json';return fetch(url,Object.assign({},options,{headers:headers,cache:'no-store'})).then(function(r){return r.json().catch(function(){return {error:'Invalid response from Oasis runtime'}}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data})})}
+
+function cloudRunNode(tag,className,text){var node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node}
+function agentCloudRunEmpty(message){var list=document.getElementById('cloudRunsList');list.replaceChildren(cloudRunNode('div','cloud-run-empty',message))}
+async function agentLoadCloudTasks(silent){
+  var status=document.getElementById('cloudRunsStatus'),list=document.getElementById('cloudRunsList');
+  if(!agentToken){status.textContent='Connect runtime';status.dataset.connected='false';agentCloudRunEmpty('Connect the runtime to load task history.');return}
+  try{
+    var response=await agentApi('/api/jobs'),jobs=Array.isArray(response.jobs)?response.jobs:[];
+    list.replaceChildren();status.textContent=jobs.length+' run'+(jobs.length===1?'':'s');status.dataset.connected='true';
+    if(!jobs.length){agentCloudRunEmpty('No saved runs yet. Start a coding task and it will appear here.');return}
+    jobs.forEach(function(job){
+      var row=cloudRunNode('div','cloud-run-row'),main=cloudRunNode('div','cloud-run-main');
+      var title=cloudRunNode('div','cloud-run-title',job.title||job.type||'Coding task');
+      var updated=job.updatedAt?new Date(job.updatedAt):null;
+      var meta=cloudRunNode('div','cloud-run-meta',(job.type||'agent')+' · '+(updated&&!Number.isNaN(updated.getTime())?updated.toLocaleString():'time unknown')+(job.workspaceName?' · '+job.workspaceName:'')+(Number.isFinite(job.eventCount)?' · '+job.eventCount+' events':''));
+      var state=cloudRunNode('span','cloud-run-status',String(job.status||'unknown').replace(/_/g,' '));state.dataset.status=job.status||'unknown';
+      var button=cloudRunNode('button','btn btn-secondary','View run');button.type='button';button.dataset.cloudRunId=job.id;
+      main.append(title,meta);row.append(main,state,button);list.appendChild(row)
+    })
+  }catch(error){
+    status.textContent='Unable to load';status.dataset.connected='false';
+    if(!silent){agentCloudRunEmpty('Task history could not be loaded. Reconnect to the local runtime and try again.');notify('Could not load task history: '+error.message)}
+  }
+}
+async function agentOpenCloudRun(id,titleFromList){
+  var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),heading=document.getElementById('cloudRunDetailTitle'),diffButton=document.getElementById('cloudRunDiffBtn');
+  try{
+    var task=await agentApi('/api/jobs/'+encodeURIComponent(id)+'?after=0');
+    heading.textContent=(task.title||titleFromList||'Task '+String(id).slice(0,8))+' · '+String(task.status||'unknown').replace(/_/g,' ');
+    var artifact=task.result&&task.result.isolatedWorktree;
+    var hasDiff=!!((artifact&&((artifact.changed&&(artifact.commit||artifact.commitSha))||(artifact.requiresReview&&artifact.path)))||(task.worktree&&['interrupted','error','cancelled'].includes(task.status)));
+    diffButton.hidden=!hasDiff;diffButton.dataset.cloudRunId=id;
+    document.getElementById('cloudRunDiffDetail').hidden=true;
+    events.replaceChildren();
+    (Array.isArray(task.events)?task.events:[]).slice(-120).forEach(function(event){
+      var row=cloudRunNode('div','cloud-run-event');
+      var label=String(event.type||'event').replace(/_/g,' ');
+      var info='';
+      var data=event.data&&typeof event.data==='object'?event.data:{};
+      if(typeof data.name==='string')info=data.name.slice(0,100);
+      else if(typeof data.tool==='string')info=data.tool.slice(0,100);
+      else if(typeof data.command==='string')info='Command: '+data.command.slice(0,100);
+      else if(event.type==='approval_required')info='Waiting for approval';
+      else if(event.type==='completed')info='Task finished';
+      else if(event.type==='failed')info='Task reported an error';
+      else if(event.type==='cancelled')info='Task was cancelled';
+      else if(event.type==='interrupted')info='Runtime restarted before the task finished';
+      else if(event.type==='usage'&&Number.isFinite(data.totalTokens))info=data.totalTokens+' tokens';
+      var timestamp=event.at?new Date(event.at):null;
+      row.append(cloudRunNode('strong','',label),cloudRunNode('small','',(timestamp&&!Number.isNaN(timestamp.getTime())?timestamp.toLocaleString():'')+(info?' · '+info:'')));
+      events.appendChild(row)
+    });
+    if(!events.childNodes.length)events.appendChild(cloudRunNode('div','cloud-run-empty','No saved events for this run.'));
+    detail.hidden=false
+  }catch(error){notify('Could not open task history: '+error.message)}
+}
+document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
+document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
+document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){
+  var id=this.dataset.cloudRunId;if(!id)return;
+  var heading=document.getElementById('cloudRunDiffTitle'),body=document.getElementById('cloudRunDiffText'),wrap=document.getElementById('cloudRunDiffDetail');
+  heading.textContent='Loading isolated changes…';body.textContent='';wrap.hidden=false;
+  try{var data=await agentApi('/api/jobs/'+encodeURIComponent(id)+'/diff');heading.textContent=(data.complete?'Committed preview':'Partial changes · review required')+' · '+(data.branch||'isolated task');body.textContent=(data.diff||'(No text diff available.)')+(data.truncated?'\n\n[Preview truncated at the safety limit.]':'')}
+  catch(error){heading.textContent='Diff unavailable';body.textContent=error.message}
+});
+document.getElementById('cloudRunDiffClose').addEventListener('click',function(){document.getElementById('cloudRunDiffDetail').hidden=true});
+document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true});
+
+function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
+function agentAppendMessage(role,text,jobId){var empty=document.getElementById('agentEmptyState');if(empty)empty.remove();var el=document.createElement('div');el.className='agent-message '+role;el.textContent=text||'';if(jobId)el.dataset.jobId=jobId;document.getElementById('agentMessages').appendChild(el);agentScroll();return el}
+function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if(!node){node=agentAppendMessage('assistant','',jobId);agentAssistantNodes[jobId]=node}node.textContent=String(text||'');agentScroll()}
+function agentActivity(text){
+  var root=document.getElementById('agentActivityTimeline'),items=document.getElementById('agentActivityItems'),count=document.getElementById('agentActivityCount');
+  if(!items||!root){agentAppendMessage('activity',text);return}
+  var empty=items.querySelector('.agent-activity-empty');if(empty)empty.remove();
+  var full=String(text||'Activity update').slice(0,6000),summaryText=full.split('\n')[0].slice(0,180);
+  var row=document.createElement('details');row.className='agent-activity-item';
+  var summary=document.createElement('summary');summary.textContent=summaryText||'Activity update';row.appendChild(summary);
+  if(full.length>summaryText.length||full.indexOf('\n')!==-1){var detail=document.createElement('pre');detail.className='agent-activity-detail';detail.textContent=full;row.appendChild(detail)}
+  items.appendChild(row);
+  while(items.children.length>100)items.removeChild(items.firstElementChild);
+  count.textContent=items.children.length+' event'+(items.children.length===1?'':'s');
+  root.setAttribute('aria-label','Task activity · '+items.children.length+' events');
+}
+function agentClearMessages(){
+  document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);
+  document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null;
+  var items=document.getElementById('agentActivityItems'),count=document.getElementById('agentActivityCount'),root=document.getElementById('agentActivityTimeline');
+  if(items){items.replaceChildren();var empty=document.createElement('p');empty.className='agent-activity-empty';empty.textContent='Activity appears here as Oasis reads files, runs checks, and makes changes.';items.appendChild(empty)}
+  if(count)count.textContent='0 events';if(root)root.open=false;
+}
+function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentIsolateWorktree').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy;if(!agentBusy&&agentToken)void agentLoadCloudTasks(true)}
+async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
+function agentDisconnect(){agentToken='';sessionStorage.removeItem('oasis.web.token');document.getElementById('agentTokenInput').value='';agentSetStatus('Runtime not connected',false);document.getElementById('agentModelName').textContent='Choose a model';document.getElementById('agentModelDetail').textContent='Connect a runtime';document.getElementById('agentConnectionHelp').textContent='Disconnected. Start or return to oasis web, then paste its token to reconnect.';notify('Runtime disconnected from this browser tab.')}
+var agentQuestionId=null,agentQuestionMulti=false;
+function agentShowQuestion(d){agentQuestionId=d.questionId;agentQuestionMulti=!!d.multiSelect;document.getElementById('agentQuestionHeader').textContent=d.header?d.header:'Oasis has a question';document.getElementById('agentQuestionText').textContent=d.question;var box=document.getElementById('agentQuestionOptions');box.innerHTML='';(d.options||[]).forEach(function(o){var b=document.createElement('button');b.type='button';b.className='agent-question-option';b.setAttribute('aria-pressed','false');var l=document.createElement('strong');l.textContent=o.label;b.appendChild(l);if(o.description){var s=document.createElement('span');s.textContent=o.description;b.appendChild(s)}b.addEventListener('click',function(){if(agentQuestionMulti){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')}else{void agentAnswerQuestion(o.label)}});box.appendChild(b)});document.getElementById('agentQuestionInput').value='';document.getElementById('agentQuestionSubmit').textContent=agentQuestionMulti?'Send selected':'Send';document.getElementById('agentQuestionCard').hidden=false;agentSetStatus('Waiting for your answer',true);agentScroll()}
+async function agentAnswerQuestion(answer){if(!agentActiveJob||!agentQuestionId)return;var id=agentQuestionId;try{await agentApi('/api/jobs/'+agentActiveJob+'/answer',{method:'POST',body:JSON.stringify({questionId:id,answer:answer})});document.getElementById('agentQuestionCard').hidden=true;agentQuestionId=null;if(answer)agentActivity('You answered: '+answer);agentSetStatus('Answer sent',true)}catch(e){notify('Could not send the answer: '+e.message)}}
+async function agentResolveApproval(approved,always){if(!agentActiveJob||!agentApprovalId)return;var id=agentApprovalId;document.getElementById('agentApproveBtn').disabled=true;document.getElementById('agentDenyBtn').disabled=true;try{await agentApi('/api/jobs/'+agentActiveJob+'/approval',{method:'POST',body:JSON.stringify({approvalId:id,approved:!!approved,always:!!always})});document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null;agentSetStatus(always?'Allowed for this session':(approved?'Action approved once':'Action denied'),true)}catch(e){notify('Could not submit approval: '+e.message)}finally{document.getElementById('agentApproveBtn').disabled=false;document.getElementById('agentDenyBtn').disabled=false}}
+async function agentStopJob(){if(!agentActiveJob||!agentBusy)return;var id=agentActiveJob,button=document.getElementById('agentStopBtn');button.disabled=true;agentSetStatus('Stopping task…',true);terminalStatus('Stopping command…');try{await agentApi('/api/jobs/'+id+'/cancel',{method:'POST'});agentActivity('Cancellation requested. Completed changes are not automatically rolled back.')}catch(e){notify('Could not stop the task: '+e.message);button.disabled=false}}
+document.getElementById('agentStopBtn').addEventListener('click',function(){void agentStopJob()});
+function agentProcessEvent(jobId,event){var d=event.data||{};if(event.type==='started'){if(d.isolation==='worktree'){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId')}else if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}}else if(event.type==='worktree_ready'){if(d.branch)agentActivity('Isolated branch ready for review: '+d.branch+(d.commit?' · '+d.commit:'')+'. Nothing was merged.');void agentLoadCloudTasks(true)}else if(event.type==='assistant_text'||event.type==='assistant_delta'){agentAssistantUpdate(jobId,d.text)}else if(event.type==='tool_start'){agentActivity((d.subagent?'['+d.subagent+'] ':'')+'Working: '+d.name+(d.detail?' '+d.detail:''))}else if(event.type==='command_output'){agentAssistantUpdate(jobId,d.text||'')}else if(event.type==='thinking'){agentActivity(d.effort?'Reasoning effort '+d.effort+' for this task':'Extended thinking on for this task (budget '+d.budget+' tokens)')}else if(event.type==='context_files'){agentActivity('Included '+(d.files||[]).map(function(f){return '@'+f}).join(', '))}else if(event.type==='tool_result'){agentActivity(d.name+' result: '+String(d.result||'').slice(0,1600))}else if(event.type==='cancel_requested'){agentSetStatus('Stopping task…',true)}else if(event.type==='cancelled'){agentActivity(d.message||'Task cancelled.');agentSetStatus('Cancelled',true);agentSetBusy(false);agentActiveJob=null;agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=(d.subagent?'['+d.subagent+'] ':'')+d.prompt;var ab=document.getElementById('agentAlwaysBtn');ab.hidden=!d.suggestion;ab.textContent=d.suggestion?'Always allow '+d.suggestion+' this session':'Always allow';document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);agentScroll()}else if(event.type==='question'){agentShowQuestion(d)}else if(event.type==='question_answered'){if(agentQuestionId===d.questionId){agentQuestionId=null;document.getElementById('agentQuestionCard').hidden=true}}else if(event.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(event.type==='completed'||event.type==='failed'||event.type==='cancelled'){document.getElementById('agentQuestionCard').hidden=true;agentQuestionId=null}if(event.type==='completed'){if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}if(d.text)agentAssistantUpdate(jobId,d.text);if(d.verificationIncomplete&&Array.isArray(d.verificationIssues)&&d.verificationIssues.length)agentActivity('Verification incomplete: '+d.verificationIssues.join('; '));agentSetStatus(d.finished?'Completed':'Stopped · review result',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='failed'){agentAssistantUpdate(jobId,'Oasis could not finish this turn: '+(d.message||'Unknown error'));agentAssistantNodes[jobId].classList.add('failed');agentSetStatus('Agent error',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='session_state'){agentShowSessionState(d);void agentLoadHistoryList()}else if(event.type==='usage'){if(document.getElementById('agentRuntimeState').textContent!=='Waiting for your approval')agentSetStatus('Working · step '+(d.step||'…'),true)}}
+async function agentPoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var s=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(s.events||[]).forEach(function(e){cursor=Math.max(cursor,e.id);agentProcessEvent(jobId,e)});if(s.status==='completed'||s.status==='error'||s.status==='cancelled'){if(s.status==='error'&&s.error){agentAssistantUpdate(jobId,'Oasis stopped: '+s.error);agentSetBusy(false);agentActiveJob=null;agentSetStatus('Agent error',true)}if(s.result&&s.result.isolatedWorktree){var wt=s.result.isolatedWorktree;agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';document.getElementById('agentIsolateWorktree').checked=false;if(wt&&wt.changed===false)agentActivity('The isolated run made no changes; its temporary worktree was removed.');else if(wt&&wt.branch&&!wt.committed)agentActivity('Review branch '+wt.branch+' is retained. Check Task history for its diff; nothing is merged automatically.');void agentLoadCloudTasks(true)}else if(s.result&&s.result.sessionId){agentSessionId=s.result.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}return}await new Promise(function(resolve){setTimeout(resolve,650)})}}catch(e){if(agentActiveJob===jobId){agentActivity('Connection interrupted: '+e.message+' Reconnect to check whether the task finished.');agentSetStatus('Connection interrupted',false);agentSetBusy(false);agentActiveJob=null}}}
+document.getElementById('agentConnectBtn').addEventListener('click',function(){void agentConnect(false)});
+document.getElementById('agentDisconnectBtn').addEventListener('click',agentDisconnect);
+document.getElementById('newAgentSessionBtn').addEventListener('click',function(){if(agentBusy){notify('Wait until the current task finishes.');return}agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();document.getElementById('agentHistorySelect').value='';agentActivity('New chat ready. The previous session remains saved on the runtime.');agentSetStatus(agentToken?'Connected':'Runtime not connected',!!agentToken)});
+document.getElementById('agentApproveBtn').addEventListener('click',function(){void agentResolveApproval(true)});document.getElementById('agentAlwaysBtn').addEventListener('click',function(){void agentResolveApproval(true,true)});
+document.getElementById('agentDenyBtn').addEventListener('click',function(){void agentResolveApproval(false)});
+document.getElementById('agentQuestionForm').addEventListener('submit',function(e){e.preventDefault();var typed=document.getElementById('agentQuestionInput').value.trim();var picked=[].slice.call(document.querySelectorAll('#agentQuestionOptions [aria-pressed="true"] strong')).map(function(n){return n.textContent});var answer=typed||picked.join(', ');if(answer)void agentAnswerQuestion(answer)});
+document.getElementById('agentQuestionSkip').addEventListener('click',function(){void agentAnswerQuestion('')});
+document.getElementById('agentHistorySelect').addEventListener('change',function(){if(this.value)void agentOpenSession(this.value)});
+document.getElementById('agentModeSelect').addEventListener('change',function(){if(agentBusy||!agentToken)return;document.getElementById('agentPrompt').value='/mode '+this.value;document.getElementById('agentForm').requestSubmit()});
+document.getElementById('agentForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;var message=document.getElementById('agentPrompt').value.trim(),isolated=document.getElementById('agentIsolateWorktree').checked;if(!message)return;if(!agentToken){agentSetStatus('Connect a runtime before sending',false);notify('Connect Oasis first.');return}if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';agentClearMessages()}agentAppendMessage('user',message);document.getElementById('agentPrompt').value='';agentSetBusy(true);agentSetStatus(isolated?'Preparing isolated Git worktree…':'Starting task…',true);try{var payload={message:message,sessionId:isolated?null:(agentSessionId||null)};if(isolated)payload.isolation='worktree';var d=await agentApi('/api/chat',{method:'POST',body:JSON.stringify(payload)});agentActiveJob=d.jobId;if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentActivity('Isolated worktree created'+(d.branch?' · '+d.branch:'')+'. The main checkout stays untouched.')}else{agentSessionId=d.sessionId||agentSessionId;if(agentSessionId)sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}agentAssistantUpdate(agentActiveJob,'Oasis is working…');void agentPoll(agentActiveJob)}catch(err){agentAppendMessage('assistant','Could not start the task: '+err.message);agentSetStatus('Unable to start task',false);agentSetBusy(false)}});
+
+function terminalStatus(text){document.getElementById('terminalStatus').textContent=text}
+function terminalAppend(text){var message=String(text||'');if(oasisTerminal){oasisTerminal.write(message+'\r\n');oasisTerminal.scrollToBottom();return}var out=document.getElementById('terminalOutput');out.textContent=(out.textContent+'\n'+message).slice(-24000);out.scrollTop=out.scrollHeight}
+async function terminalPoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var state=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(state.events||[]).forEach(function(e){cursor=Math.max(cursor,e.id);var d=e.data||{};if(e.type==='terminal_started'){terminalAppend('$ '+d.command+' '+JSON.stringify(d.args||[]));terminalStatus(d.interactive?'Preparing interactive terminal…':'Waiting for approval…')}else if(e.type==='terminal_pty_started'){activePtyId=d.id;activePtyOffset=0;document.getElementById('terminalPtyControls').hidden=false;terminalAppend('Interactive terminal connected · '+d.id);terminalStatus('Interactive · running');setTimeout(terminalFit,100);void terminalPtyPoll(d.id)}else if(e.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=d.prompt;document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);terminalStatus('Approval required');agentScroll()}else if(e.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(e.type==='terminal_output'){if(d.approved===false)terminalAppend(d.cancelled?'Cancelled before command start. '+(d.message||''):'Denied: no process was started. '+(d.message||''));else{if(d.output)terminalAppend(d.output);terminalAppend('Exit code: '+(d.exitCode===undefined||d.exitCode===null?'unavailable':d.exitCode)+(d.timedOut?' (timed out)':''))}terminalStatus(d.cancelled?'Stopping…':(d.approved===false?'Denied':('Finished · exit '+(d.exitCode===undefined||d.exitCode===null?'N/A':d.exitCode))))}else if(e.type==='cancel_requested'){terminalStatus('Stopping command…')}else if(e.type==='cancelled'){terminalAppend(d.message||'Command cancelled.');terminalStatus('Cancelled');agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(e.type==='failed'){terminalAppend('Blocked or failed: '+(d.message||'unknown error'));terminalStatus('Command failed');agentSetBusy(false);agentActiveJob=null}else if(e.type==='completed'){terminalStatus(d.approved===false?'Command denied':('Finished · exit '+(d.exitCode===undefined||d.exitCode===null?'N/A':d.exitCode)));agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}});if(state.status==='completed'||state.status==='error'||state.status==='cancelled'){agentSetBusy(false);agentActiveJob=null;return}await new Promise(function(resolve){setTimeout(resolve,600)})}}catch(e){if(agentActiveJob===jobId){terminalAppend('Runtime connection interrupted: '+e.message);terminalStatus('Connection interrupted');agentSetBusy(false);agentActiveJob=null}}}
+function terminalMount(){var host=document.getElementById('terminalXterm'),fallback=document.getElementById('terminalOutput');if(typeof Terminal==='undefined'||typeof FitAddon==='undefined'||!host){if(host)host.hidden=true;if(fallback)fallback.hidden=false;terminalStatus('Terminal renderer unavailable');return}try{oasisTerminal=new Terminal({cursorBlink:true,convertEol:true,scrollback:6000,fontSize:12,fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',allowProposedApi:false,theme:{background:'#090d0a',foreground:'#dbe8d7',cursor:'#9bff55',selectionBackground:'#294a34',black:'#090d0a',red:'#ff9c8d',green:'#9bff55',yellow:'#e8d18a',blue:'#93b7ff',magenta:'#d8a7ff',cyan:'#89ddd0',white:'#dbe8d7',brightBlack:'#66776a',brightRed:'#ffb7aa',brightGreen:'#b7ff87',brightYellow:'#f1dfac',brightBlue:'#b3ccff',brightMagenta:'#e5c1ff',brightCyan:'#acf1e6',brightWhite:'#ffffff'}});oasisFitAddon=new FitAddon.FitAddon();oasisTerminal.loadAddon(oasisFitAddon);oasisTerminal.open(host);oasisFitAddon.fit();oasisTerminal.onData(function(data){if(!activePtyId||!agentToken)return;var id=activePtyId;terminalInputQueue=terminalInputQueue.then(function(){return agentApi('/api/terminal/pty/input',{method:'POST',body:JSON.stringify({id:id,data:data})})}).catch(function(err){terminalStatus('Input failed · '+err.message)})});host.hidden=false;fallback.hidden=true;window.addEventListener('resize',function(){clearTimeout(terminalFitTimer);terminalFitTimer=setTimeout(terminalFit,180)})}catch(error){oasisTerminal=null;host.hidden=true;fallback.hidden=false;terminalStatus('Terminal renderer failed to load')}}
+function terminalFit(){if(!oasisTerminal||!oasisFitAddon)return;try{oasisFitAddon.fit();if(activePtyId)void terminalPtyAction('resize',{cols:oasisTerminal.cols,rows:oasisTerminal.rows})}catch{}}
+async function terminalPtyPoll(id){while(activePtyId===id&&agentToken){try{var data=await agentApi('/api/terminal/pty/read?id='+encodeURIComponent(id)+'&offset='+activePtyOffset+'&max_chars=12000&wait_seconds=3');if(data.truncated)terminalAppend('[Older terminal output was dropped to keep memory bounded.]');if(data.output){if(oasisTerminal)oasisTerminal.write(data.output);else terminalAppend(String(data.output))}activePtyOffset=data.nextOffset;if(data.state!=='running'&&data.state!=='stopping'){terminalStatus('Exited · code '+(data.exitCode===undefined?'unknown':data.exitCode));document.getElementById('terminalPtyControls').hidden=true;activePtyId=null;return}if(!data.output)await new Promise(function(resolve){setTimeout(resolve,100)})}catch(err){terminalAppend('Terminal connection interrupted: '+err.message);terminalStatus('Terminal connection interrupted');document.getElementById('terminalPtyControls').hidden=true;activePtyId=null;return}}}
+async function terminalPtyAction(action,body){if(!agentToken||!activePtyId){notify('Start an interactive terminal first.');return}try{return await agentApi('/api/terminal/pty/'+action,{method:'POST',body:JSON.stringify(Object.assign({id:activePtyId},body||{}))})}catch(err){terminalAppend('Terminal action failed: '+err.message);terminalStatus('Terminal action failed');return null}}
+terminalMount();
+document.getElementById('terminalMode').addEventListener('change',function(){var interactive=this.value==='interactive';document.getElementById('terminalRunBtn').textContent=interactive?'Start interactive session':'Run command';document.getElementById('terminalArgs').placeholder=interactive?'For example, [] for a REPL or ["--help"] for a tool':'Arguments as a JSON array of strings'});
+document.getElementById('terminalForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;if(!agentToken){notify('Connect a runtime first.');agentSetStatus('Runtime not connected',false);return}var interactive=document.getElementById('terminalMode').value==='interactive';if(interactive&&activePtyId){notify('Stop the current interactive session before starting another.');return}var command=document.getElementById('terminalCommand').value.trim(),args;try{args=JSON.parse(document.getElementById('terminalArgs').value||'[]');if(!Array.isArray(args)||args.some(function(a){return typeof a!=='string'}))throw new Error('Arguments must be a JSON array of strings.')}catch(err){notify('Invalid arguments: '+err.message);return}if(!command){notify('Enter an executable name first.');return}agentSetBusy(true);terminalStatus('Requesting approval…');try{var d=await agentApi('/api/terminal/command',{method:'POST',body:JSON.stringify({command:command,args:args,interactive:interactive})});agentActiveJob=d.jobId;void terminalPoll(d.jobId)}catch(err){terminalAppend('Could not start command: '+err.message);terminalStatus('Unable to start command');agentSetBusy(false)}});
+document.getElementById('terminalSendInputBtn').addEventListener('click',async function(){var field=document.getElementById('terminalInput'),text=field.value;if(!text){field.focus();return}var result=await terminalPtyAction('input',{data:text+'\\r'});if(result){field.value='';field.focus()}});
+document.getElementById('terminalInput').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('terminalSendInputBtn').click()}});
+document.getElementById('terminalInterruptBtn').addEventListener('click',async function(){var result=await terminalPtyAction('interrupt');if(result)terminalStatus('Sent Ctrl+C · '+result.state)});
+document.getElementById('terminalStopBtn').addEventListener('click',async function(){var result=await terminalPtyAction('stop');if(result){terminalAppend('Terminal stop requested.');terminalStatus('Stopping terminal…')}});
+document.getElementById('terminalClearBtn').addEventListener('click',function(){if(oasisTerminal)oasisTerminal.clear();else document.getElementById('terminalOutput').textContent='Output cleared.';terminalStatus('Ready')});
+
+
+function githubSetStatus(text,connected){var el=document.getElementById('githubStatus');el.textContent=text;el.dataset.connected=connected?'true':'false'}
+function githubRenderWorkspace(name){document.getElementById('githubHelp').textContent='Active agent workspace: '+name+'. GitHub repository files are local to the computer running Oasis.';agentSetStatus('Workspace · '+name,!!agentToken)}
+async function githubRefreshStatus(silent,loadRepos){if(!agentToken){githubSetStatus('Connect Oasis first',false);if(!silent)notify('Connect the Oasis runtime first.');return}try{var status=await agentApi('/api/github/status');if(!status.cliAvailable){githubSetStatus('GitHub CLI missing',false);document.getElementById('githubHelp').textContent=status.hint;document.getElementById('githubRepoSelect').replaceChildren(new Option('GitHub CLI not installed',''));return}if(!status.authenticated){githubSetStatus('Not signed in',false);document.getElementById('githubHelp').textContent=status.hint;document.getElementById('githubRepoSelect').replaceChildren(new Option('Run gh auth login first',''));return}githubSetStatus(status.account?'Connected · '+status.account:'Connected to GitHub',true);if(loadRepos)await githubLoadRepos(silent)}catch(e){githubSetStatus('Connection check failed',false);if(!silent)notify('GitHub check failed: '+e.message)}}
+async function githubLoadRepos(silent){if(!agentToken){notify('Connect the Oasis runtime first.');return}try{var data=await agentApi('/api/github/repos'),select=document.getElementById('githubRepoSelect');select.replaceChildren();if(!data.repositories.length){select.add(new Option('No repositories were returned',''));return}data.repositories.forEach(function(repo){var label=repo.nameWithOwner+(repo.isPrivate?' · private':' · public');select.add(new Option(label,repo.nameWithOwner))});document.getElementById('githubHelp').textContent='Showing up to '+data.limit+' repositories available to the GitHub CLI account. Clone / use switches the agent and command runner to that repository after your approval.';githubSetStatus('Repositories loaded',true)}catch(e){githubSetStatus('Repository list failed',false);if(!silent)notify('Could not list GitHub repositories: '+e.message)}}
+function githubWorkspaceSwitched(name){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();agentActivity('Workspace switched to '+name+'. Tell Oasis what to build; it will inspect this repository first.');githubRenderWorkspace(name);void githubRefreshStatus(true,true)}
+async function githubClonePoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var state=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(state.events||[]).forEach(function(event){cursor=Math.max(cursor,event.id);var d=event.data||{};if(event.type==='github_clone_started'){terminalAppend('GitHub: cloning '+d.repository+' into an Oasis-managed workspace…');terminalStatus('Waiting for approval')}else if(event.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=d.prompt;document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);terminalStatus('GitHub clone needs approval')}else if(event.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(event.type==='github_clone_result'){if(d.output)terminalAppend(d.output);if(d.exitCode!==undefined)terminalAppend('Clone exit code: '+d.exitCode);terminalStatus(d.exitCode===0?'Repository cloned':'Clone finished with an error')}else if(event.type==='failed'){terminalAppend('GitHub clone failed: '+(d.message||'unknown error'));terminalStatus('Clone failed')}});if(state.status==='completed'){var result=state.result||{};if(result.reused||result.exitCode===0){githubWorkspaceSwitched(result.workspaceName||result.repository||'repository');terminalAppend('Active workspace: '+(result.workspacePath||result.workspaceName||''));terminalStatus('Workspace ready')}else if(result.approved===false){terminalAppend(result.message||'Clone denied; no repository was downloaded.');terminalStatus('Clone denied')}else{terminalAppend(result.message||result.error||'GitHub clone failed. The previous workspace remains active.');terminalStatus('Clone failed')}agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true;return}if(state.status==='error'){terminalAppend('GitHub clone failed: '+(state.error||'unknown error'));terminalStatus('Clone failed');agentSetBusy(false);agentActiveJob=null;return}await new Promise(function(resolve){setTimeout(resolve,650)})}}catch(e){if(agentActiveJob===jobId){terminalAppend('GitHub connection interrupted: '+e.message);terminalStatus('Connection interrupted');agentSetBusy(false);agentActiveJob=null}}}
+document.getElementById('githubCheckBtn').addEventListener('click',function(){void githubRefreshStatus(false,false)});
+document.getElementById('githubRefreshBtn').addEventListener('click',function(){void githubRefreshStatus(false,true)});
+document.getElementById('githubCloneBtn').addEventListener('click',async function(){if(agentBusy)return;if(!agentToken){notify('Connect the Oasis runtime first.');return}var repo=document.getElementById('githubRepoSelect').value;if(!repo){notify('Choose a repository first.');return}agentSetBusy(true);terminalStatus('Requesting clone approval…');try{var d=await agentApi('/api/github/clone',{method:'POST',body:JSON.stringify({repository:repo})});if(d.reused){agentSetBusy(false);githubWorkspaceSwitched(d.workspaceName||repo);terminalAppend('Using existing workspace: '+(d.workspacePath||d.workspaceName||repo));terminalStatus('Workspace ready');return}agentActiveJob=d.jobId;void githubClonePoll(d.jobId)}catch(e){terminalAppend('Could not open repository: '+e.message);terminalStatus('Could not open repository');agentSetBusy(false);githubSetStatus('Connection or clone error',false)}});
+document.getElementById('githubResetWorkspaceBtn').addEventListener('click',async function(){if(agentBusy){notify('Wait until the current task finishes before changing workspaces.');return}if(!agentToken){notify('Connect the Oasis runtime first.');return}try{var d=await agentApi('/api/workspace/reset',{method:'POST',body:JSON.stringify({})});githubWorkspaceSwitched(d.workspaceName||'launch workspace');githubSetStatus('Launch workspace selected',true)}catch(e){notify('Could not switch workspace: '+e.message)}});
+
+function firstRunStatus(message,isError){var node=document.getElementById('firstRunStatus');node.textContent=message||'';node.dataset.error=isError?'true':'false';}
+function setProviderKeyHelp(){var preset=document.getElementById('providerPreset').value;var items={openai:['OpenAI','https://platform.openai.com/api-keys'],anthropic:['Anthropic','https://console.anthropic.com/settings/keys'],openrouter:['OpenRouter','https://openrouter.ai/keys'],gemini:['Google AI Studio','https://aistudio.google.com/app/apikey']};var node=document.getElementById('providerKeyHelp');node.replaceChildren();var info=items[preset];if(!info){node.textContent='For a custom endpoint, use that provider’s own key instructions. New desktop keys are encrypted with system secure storage.';return;}node.appendChild(document.createTextNode('Need a key? Get one from '));var link=document.createElement('a');link.href=info[1];link.target='_blank';link.rel='noopener noreferrer';link.textContent=info[0]+' official settings';node.appendChild(link);node.appendChild(document.createTextNode('. New desktop keys are encrypted with system secure storage.'));}
+async function firstRunCheckOllama(){document.getElementById('firstRunOllamaLink').hidden=true;firstRunStatus('Checking this computer for Ollama and installed models…',false);try{var result=await agentApi('/api/provider/local-models');if(result.available&&result.models&&result.models.length){var modelField=document.getElementById('providerModel');if(!modelField.value||modelField.value==='auto'||!result.models.includes(modelField.value))modelField.value=result.models[0];firstRunStatus('Ollama is running. Found '+result.models.length+' model'+(result.models.length===1?'':'s')+': '+result.models.join(', ')+'. The first model is selected; edit the model field before testing if needed.',false);}else{firstRunStatus(result.message||'Ollama is running but no models were found.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}catch(error){firstRunStatus('Could not check Ollama: '+error.message+' Connect the local runtime and try again.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}
+document.querySelectorAll('[data-first-run]').forEach(function(button){button.addEventListener('click',function(){var choice=button.getAttribute('data-first-run');var preset=choice==='api'?'openai':choice;var selector=document.getElementById('providerPreset');selector.value=preset;selector.dispatchEvent(new Event('change'));document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});if(choice==='api'){firstRunStatus('Choose your provider from the list, enter its API key in the masked field, then select Test & save provider.',false);document.getElementById('providerApiKey').focus();}else if(choice==='omniroute'){firstRunStatus('OmniRoute must be running on this computer first. In a terminal, run oasis setup and choose OmniRoute; then return here and test the connection. A shared/free gateway may be slower or limited.',false);document.getElementById('providerModel').focus();}else{firstRunCheckOllama();document.getElementById('providerModel').focus();}});});
+
+// Responsive chat/terminal layout. Divider adjustments are keyboard accessible and remembered.
+(function setupAgentExamples(){
+  var input=document.getElementById('agentPrompt');
+  if(!input)return;
+  document.querySelectorAll('[data-agent-example]').forEach(function(button){
+    button.addEventListener('click',function(){
+      input.value=button.getAttribute('data-agent-example')||'';
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      input.focus();
+    });
+  });
+})();
+(function setupAgentWorkspaceLayout(){
+  var grid=document.getElementById('agentWorkspaceGrid');
+  var chatTab=document.getElementById('agentChatTab');
+  var terminalTab=document.getElementById('agentTerminalTab');
+  var toggle=document.getElementById('agentTerminalToggle');
+  var divider=document.getElementById('agentSplitDivider');
+  if(!grid||!chatTab||!terminalTab||!toggle||!divider)return;
+  function saved(key){try{return localStorage.getItem(key)}catch{return null}}
+  function persist(key,value){try{localStorage.setItem(key,value)}catch{}}
+  function setPanel(name){
+    var panel=name==='terminal'?'terminal':'chat';
+    grid.dataset.activePanel=panel;
+    chatTab.setAttribute('aria-selected',String(panel==='chat'));
+    terminalTab.setAttribute('aria-selected',String(panel==='terminal'));
+    persist('oasis.agent.activePanel',panel);
+  }
+  function setVisible(visible){
+    grid.dataset.terminalVisible=String(!!visible);
+    toggle.textContent=visible?'Hide terminal':'Show terminal';
+    toggle.setAttribute('aria-expanded',String(!!visible));
+    persist('oasis.agent.terminalVisible',String(!!visible));
+    if(!visible)setPanel('chat');
+    if(visible&&window.matchMedia('(max-width: 780px)').matches)setPanel('terminal');
+  }
+  function setSplit(value){
+    var split=Math.max(35,Math.min(72,Number(value)||56));
+    grid.style.setProperty('--agent-chat-split',split+'%');
+    divider.setAttribute('aria-valuenow',String(Math.round(split)));
+    persist('oasis.agent.chatSplit',String(split));
+  }
+  function adjustSplit(clientX){
+    var bounds=grid.getBoundingClientRect();
+    if(bounds.width>0)setSplit((clientX-bounds.left)/bounds.width*100);
+  }
+  var initialVisible=saved('oasis.agent.terminalVisible')!=='false';
+  setVisible(initialVisible);
+  var initialPanel=saved('oasis.agent.activePanel');
+  if(initialVisible&&(initialPanel==='chat'||initialPanel==='terminal'))setPanel(initialPanel);
+  var initialSplit=Number(saved('oasis.agent.chatSplit'));
+  setSplit(Number.isFinite(initialSplit)&&initialSplit>=35&&initialSplit<=72?initialSplit:56);
+  chatTab.addEventListener('click',function(){setPanel('chat')});
+  terminalTab.addEventListener('click',function(){if(grid.dataset.terminalVisible==='false')setVisible(true);setPanel('terminal')});
+  toggle.addEventListener('click',function(){setVisible(grid.dataset.terminalVisible!=='true')});
+  var dragging=false;
+  divider.addEventListener('pointerdown',function(event){
+    if(window.matchMedia('(max-width: 780px)').matches||grid.dataset.terminalVisible!=='true')return;
+    dragging=true;divider.setPointerCapture(event.pointerId);adjustSplit(event.clientX);event.preventDefault();
+  });
+  divider.addEventListener('pointermove',function(event){if(dragging)adjustSplit(event.clientX)});
+  function finishDrag(){dragging=false}
+  divider.addEventListener('pointerup',finishDrag);
+  divider.addEventListener('pointercancel',finishDrag);
+  divider.addEventListener('lostpointercapture',finishDrag);
+  divider.addEventListener('keydown',function(event){
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    event.preventDefault();
+    var current=Number.parseFloat(getComputedStyle(grid).getPropertyValue('--agent-chat-split'))||56;
+    setSplit(current+(event.key==='ArrowRight'?5:-5));
+  });
+})();
+document.getElementById('providerProtocol').addEventListener('change',function(){var p=this.value;document.getElementById('providerBaseUrl').value=p==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1';document.getElementById('providerModel').value=p==='anthropic'?'claude-sonnet-5':(p==='openai-responses'?'gpt-6.1-sol':'');document.getElementById('providerApiKey').value='';document.getElementById('providerSetupStatus').textContent='Unsaved changes'});
+document.getElementById('providerPreset').addEventListener('change',function(){var presets={openai:{protocol:'openai-responses',baseURL:'https://api.openai.com/v1',model:'gpt-6.1-sol'},anthropic:{protocol:'anthropic',baseURL:'https://api.anthropic.com',model:'claude-sonnet-5'},openrouter:{protocol:'openai-compatible',baseURL:'https://openrouter.ai/api/v1',model:''},gemini:{protocol:'openai-compatible',baseURL:'https://generativelanguage.googleapis.com/v1beta/openai/',model:'gemini-3.8-flash'},ollama:{protocol:'openai-compatible',baseURL:'http://localhost:11434/v1',model:''},omniroute:{protocol:'openai-compatible',baseURL:'http://127.0.0.1:20128/v1',model:'auto'}};var selected=presets[this.value];if(!selected){setProviderKeyHelp();return;}document.getElementById('providerProtocol').value=selected.protocol;document.getElementById('providerBaseUrl').value=selected.baseURL;document.getElementById('providerModel').value=selected.model;document.getElementById('providerApiKey').value='';setProviderKeyHelp();});
+setProviderKeyHelp();
+ document.getElementById('providerSetupForm').addEventListener('submit',async function(e){e.preventDefault();if(!agentToken){notify('Connect the runtime before saving provider settings.');return}var button=document.getElementById('providerSaveBtn'),status=document.getElementById('providerSetupStatus'),apiKey=document.getElementById('providerApiKey').value;button.disabled=true;status.textContent='Testing model and tool calling, then saving locally…';try{var result=await agentApi('/api/provider/config',{method:'POST',body:JSON.stringify({protocol:document.getElementById('providerProtocol').value,baseURL:document.getElementById('providerBaseUrl').value.trim(),model:document.getElementById('providerModel').value.trim(),apiKey:apiKey})});document.getElementById('providerApiKey').value='';status.textContent='Provider responded · saving locally…';notify('Provider response verified. Saving settings locally…');await agentConnect(true);status.textContent='Verified · '+result.provider.model;notify('Provider tested successfully and settings were saved. The API key was not returned to the browser.')}catch(err){status.textContent='Verification failed · not saved';notify('Provider settings were not saved because verification failed: '+err.message)}finally{button.disabled=false}});
+
+/* Git URL extension import, inventory and removal. Only reviewed Markdown is imported. */
+var extensionInspection=null;
+var extensionBusy=false;
+function extensionEscape(value){return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
+function extensionStatus(message,isError){var node=document.getElementById('extensionInstallStatus');node.textContent=message||'';node.style.color=isError?'var(--danger)':'var(--muted)'}
+function extensionSetBusy(busy){extensionBusy=!!busy;['extensionInspectBtn','extensionInstallBtn','extensionMcpImportBtn','extensionCancelBtn','extensionRefreshBtn'].forEach(function(id){var el=document.getElementById(id);if(!el)return;var disabled=extensionBusy||(id==='extensionInstallBtn'&&(!extensionInspection||extensionInspection.data.canInstall===false||!!extensionInspection.data.treeTruncated))||(id==='extensionMcpImportBtn'&&(!extensionInspection||!extensionInspection.data.mcpImportPlan||(extensionInspection.data.mcpImportPlan.servers||[]).length===0||!document.querySelector('[data-extension-mcp-name]:checked')))||(id==='extensionCancelBtn'&&!extensionInspection);el.disabled=disabled;});}
+function extensionRenderInspection(data,url){
+  extensionInspection={data:data,url:url};
+  document.getElementById('extensionSummary').hidden=false;
+  document.getElementById('extensionRepoTitle').textContent=data.repository.fullName;
+  document.getElementById('extensionRepoDescription').textContent=data.repository.description||'No description provided.';
+  document.getElementById('extensionCount').textContent=String(data.importCount);
+  document.getElementById('extensionExecutableCount').textContent=String(data.executableFilesDetected);
+  document.getElementById('extensionLicense').textContent=data.repository.license||'Unknown';
+  document.getElementById('extensionCommitChip').textContent='Commit '+data.repository.commitSha.slice(0,12);
+  document.getElementById('extensionBranchChip').textContent='Default branch: '+data.repository.defaultBranch;
+  document.getElementById('extensionLimitChip').hidden=!data.limited&&!data.treeTruncated;
+  var compatibility=data.compatibility||{};
+  var formatChips=(compatibility.formats||[]).map(function(item){return '<span class="extension-chip '+(item.detected?'good':'')+'">'+extensionEscape(item.label)+(item.detected?' · detected':'')+'</span>'}).join('');
+  var componentRows=(compatibility.components||[]).map(function(item){var state=item.count?('Detected · '+item.count):'Not detected';return '<div class="extension-candidate"><span>'+extensionEscape(item.label)+'</span><span>'+extensionEscape(state)+' — '+extensionEscape(item.detail)+'</span></div>'}).join('');
+  var adapterRows=(compatibility.installPlan&&compatibility.installPlan.adapters||[]).map(function(adapter){var capabilities=(adapter.capabilities||[]).map(function(item){return '<div class="extension-candidate"><span>'+extensionEscape(item.id)+' · '+extensionEscape(item.status)+'</span><span>'+extensionEscape(item.detail)+'</span></div>'}).join('');return '<div class="extension-candidate"><strong>'+extensionEscape(adapter.label)+'</strong></div>'+capabilities}).join('');
+  document.getElementById('extensionCompatibility').innerHTML='<strong>Detected format: '+extensionEscape(compatibility.primaryFormat||'Unknown')+'</strong><div class="extension-meta">'+formatChips+'</div><p>'+extensionEscape(compatibility.warning||'Format detection is informational; only explicitly listed importable components are installed.')+'</p><div class="extension-candidates">'+componentRows+'</div>'+(adapterRows?'<strong>Normalized adapter plan</strong><p>Supported capabilities can be imported; inspect-only, review-required and unsupported capabilities remain inactive.</p><div class="extension-candidates">'+adapterRows+'</div>':'');
+  var mcpPlan=data.mcpImportPlan||{},mcpServers=mcpPlan.servers||[],mcpSkipped=mcpPlan.skipped||[];
+  var mcpRows=mcpServers.map(function(server){var envKeys=(server.sourceEnvKeys||[]).join(', ');return '<label class="extension-candidate"><input type="checkbox" data-extension-mcp-name="'+extensionEscape(server.name)+'"><span><strong>'+extensionEscape(server.sourceName||server.name)+'</strong><br>'+extensionEscape(server.command)+' '+extensionEscape(JSON.stringify(server.args||[]))+'<br><small>Saved disabled · '+extensionEscape(server.sourcePath||'manifest')+(envKeys?' · environment keys (names only): '+extensionEscape(envKeys):' · no environment values imported')+'</small></span></label>'}).join('');
+  var skippedRows=mcpSkipped.map(function(item){return '<div class="extension-candidate"><span>'+extensionEscape(item.name||item.sourcePath||'MCP declaration')+'</span><span>Not importable · '+extensionEscape(item.reason)+'</span></div>'}).join('');
+  var mcpNode=document.getElementById('extensionMcpImportPlan');
+  mcpNode.hidden=!mcpServers.length&&!mcpSkipped.length;
+  mcpNode.innerHTML=(mcpServers.length?'<strong>Reviewable MCP server proposals ('+mcpServers.length+')</strong><p>'+extensionEscape(mcpPlan.policy||'MCP configurations are only proposed for review.')+'</p><div class="extension-candidates">'+mcpRows+'</div>':'')+(skippedRows?'<p>Skipped declarations</p><div class="extension-candidates">'+skippedRows+'</div>':'');
+  var mcpButton=document.getElementById('extensionMcpImportBtn');
+  mcpButton.hidden=mcpServers.length===0;
+  mcpButton.textContent='Import selected MCP configs disabled ('+mcpServers.length+')';
+  mcpButton.disabled=mcpServers.length===0||!document.querySelector('[data-extension-mcp-name]:checked');
+  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub truncated its repository tree. A partial collection cannot be installed.':'')+(data.installationBlockedReason?' '+data.installationBlockedReason:'');
+  var commandRows=(data.commands||[]).map(function(command){return '<div class="extension-candidate"><span>/'+extensionEscape(command.alias)+'</span><span>'+extensionEscape(command.sourceFormat)+' · '+extensionEscape(command.sourcePath)+'</span></div>'}).join('');
+  document.getElementById('extensionCandidateList').innerHTML=(commandRows?'<strong>Callable Markdown commands after installation</strong><p>Type an alias into the Oasis chat. Arguments are literal text; imported instructions remain untrusted and tool approvals still apply.</p>'+commandRows:'')+(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':'')||'<div class="section-sub">No importable Markdown prompts were found. Detected native components are shown above but are not installed by this version.</div>';
+  document.getElementById('extensionInstallBtn').textContent=data.canInstall===false?'No compatible prompts to install':'Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');
+  document.getElementById('extensionInstallBtn').disabled=data.canInstall===false||!!data.treeTruncated;
+  if(data.treeTruncated) extensionStatus('Cannot install an incomplete listing. Use a smaller repository or a reviewed subset.',true);
+}
+async function extensionInspect(){
+  if(!agentToken){notify('Connect the Oasis runtime before inspecting repositories.');return}
+  var url=document.getElementById('extensionUrl').value.trim();
+  if(!url){notify('Paste a public GitHub repository URL first.');return}
+  extensionSetBusy(true);extensionStatus('Inspecting repository metadata, pinned commit, and importable Markdown files…');
+  try{var data=await agentApi('/api/extensions/inspect',{method:'POST',body:JSON.stringify({url:url})});extensionRenderInspection(data,url);extensionStatus('Review the repository and commit before installing.');}
+  catch(e){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+async function extensionInstall(){
+  if(!agentToken||!extensionInspection||extensionBusy)return;
+  if(extensionInspection.data.treeTruncated){extensionStatus('Installation blocked because GitHub returned an incomplete repository tree.',true);return}
+   if(extensionInspection.data.canInstall===false){extensionStatus(extensionInspection.data.installationBlockedReason||'This repository has no compatible Markdown prompts to install yet.',true);return}
+   var data=extensionInspection.data,url=extensionInspection.url,scope=document.getElementById('extensionScope').value;
+  var label=scope==='both'?'Oasis itself and the current project':(scope==='self'?'Oasis itself across projects':'the current project');
+  if(!window.confirm('Install '+data.importCount+' Markdown prompt files from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+' into '+label+'?\n\nNo repository code, scripts, dependencies, or MCP servers will be installed or executed.'))return;
+  extensionSetBusy(true);extensionStatus('Rechecking the repository revision and writing a staged import…');
+  try{var result=await agentApi('/api/extensions/install',{method:'POST',body:JSON.stringify({url:url,scope:scope,expectedCommit:data.repository.commitSha})});extensionStatus('Installed '+result.importedFiles+' Markdown prompt files from '+result.repository.fullName+'. No scripts were executed.');document.getElementById('extensionSummary').hidden=true;extensionInspection=null;await extensionRefreshInstalled();notify('Extension import completed and recorded.')}
+  catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+async function extensionImportMcpServers(){
+  if(!agentToken||!extensionInspection||extensionBusy)return;
+  var data=extensionInspection.data,url=extensionInspection.url;
+  var selected=Array.from(document.querySelectorAll('[data-extension-mcp-name]:checked')).map(function(node){return node.getAttribute('data-extension-mcp-name')});
+  if(!selected.length){extensionStatus('Select at least one supported MCP server proposal first.',true);return}
+  if(data.treeTruncated){extensionStatus('Import is blocked because the inspected repository tree was incomplete.',true);return}
+  if(!window.confirm('Import '+selected.length+' MCP server configuration(s) from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+'?\n\nThey will be saved DISABLED. No process will start. Manifest environment values are not copied; review and configure each server before enabling it.'))return;
+  extensionSetBusy(true);extensionStatus('Rechecking the pinned repository and saving selected MCP configurations disabled…');
+  try{
+    var result=await agentApi('/api/extensions/mcp-import',{method:'POST',body:JSON.stringify({url:url,expectedCommit:data.repository.commitSha,serverNames:selected})});
+    data.mcpImportPlan.servers=(data.mcpImportPlan.servers||[]).filter(function(server){return !selected.includes(server.name)});
+    extensionRenderInspection(data,url);
+    await mcpRefresh();
+    extensionStatus('Imported '+result.imported.length+' MCP configuration(s) as disabled. No process was started. Review environment settings, then enable trusted servers in Integrations.');
+    notify('MCP configurations imported disabled; none were started.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+
+async function extensionRefreshInstalled(){
+  var list=document.getElementById('installedExtensions');if(!list)return;
+  if(!agentToken){list.innerHTML='<div class="integration-empty">Connect the Oasis runtime to load the managed extension inventory.</div>';return}
+  try{var result=await agentApi('/api/extensions');var extensions=result.extensions||[];
+    list.innerHTML=extensions.length?extensions.map(function(item){var commands=(item.commands||[]).map(function(command){return '<span class="extension-chip">/'+extensionEscape(command.alias)+'</span>'}).join('');var rollbacks=(item.backups||[]).map(function(backup){return '<button class="btn btn-secondary" data-rollback-extension="'+extensionEscape(item.name)+'" data-rollback-scope="'+extensionEscape(item.scope)+'" data-rollback-commit="'+extensionEscape(backup.commitSha)+'" type="button">Rollback '+extensionEscape(backup.commitSha.slice(0,12))+'</button>'}).join('');return '<article class="extension-card"><div class="extension-card-head"><div class="extension-card-icon">⬡</div><div class="extension-card-main"><div class="extension-card-title">'+extensionEscape(item.name)+'</div><div class="extension-card-desc">'+extensionEscape(item.description||item.source)+'</div><div class="extension-meta"><span class="extension-chip good">'+extensionEscape(item.scope==='self'?'Oasis · all projects':'Current project')+'</span><span class="extension-chip">'+extensionEscape(String(item.importedFiles))+' skills · '+extensionEscape(String(item.preservedResources||0))+' resources</span><span class="extension-chip">'+extensionEscape(item.license||'Unknown license')+'</span><span class="extension-chip">Commit '+extensionEscape((item.commitSha||'').slice(0,12))+'</span>'+commands+'</div></div><div class="integration-controls"><button class="btn btn-secondary" data-update-extension="'+extensionEscape(item.name)+'" data-update-scope="'+extensionEscape(item.scope)+'" data-update-source="'+extensionEscape(item.source)+'" data-update-commit="'+extensionEscape(item.commitSha)+'" type="button">Update</button>'+rollbacks+'<button class="btn btn-danger" data-remove-extension="'+extensionEscape(item.name)+'" data-remove-scope="'+extensionEscape(item.scope)+'" type="button">Remove</button></div></div><div class="extension-warning">Imported instructions remain untrusted. '+extensionEscape(item.execution||'No code executed.')+'</div></article>'}).join(''):'<div class="integration-empty">No external extensions installed yet. Paste a GitHub collection above to bring your first specialist into Oasis.</div>';
+  }catch(e){list.innerHTML='<div class="integration-empty">Could not load extensions: '+extensionEscape(e.message)+'</div>'}
+}
+async function extensionUpdate(name,scope,source,oldCommit){
+  if(!agentToken||extensionBusy)return;
+  extensionSetBusy(true);
+  try{
+    extensionStatus('Reviewing the latest pinned revision before updating '+name+'…');
+    var data=await agentApi('/api/extensions/inspect',{method:'POST',body:JSON.stringify({url:source})});
+    extensionRenderInspection(data,source);
+    if(data.treeTruncated||data.canInstall===false){extensionStatus('Update blocked: repository tree is incomplete or has no supported Markdown prompts.',true);return}
+    if((data.repository.commitSha||'').toLowerCase()===String(oldCommit||'').toLowerCase()){
+      extensionStatus(name+' is already at the latest inspected commit.');
+      return;
+    }
+    if(!window.confirm('Update '+name+' ('+scope+') from '+String(oldCommit||'').slice(0,12)+' to '+data.repository.commitSha.slice(0,12)+'?\\n\\nOasis verifies installed file hashes first and retains the previous revision for rollback. Edited files block the update. No scripts or MCP servers are enabled.'))return;
+    extensionStatus('Verifying the installed files, staging the new revision, and keeping the previous version…');
+    var result=await agentApi('/api/extensions/update',{method:'POST',body:JSON.stringify({url:source,scope:scope,expectedCommit:data.repository.commitSha})});
+    if(result.alreadyCurrent){extensionStatus('Already current; no files changed.');return}
+    await extensionRefreshInstalled();
+    var backupText=(result.backups||[]).map(function(backup){return backup.scope+': '+backup.commitSha.slice(0,12)}).join(', ');
+    extensionStatus('Updated '+name+' to '+result.commitSha.slice(0,12)+'. Rollback available for '+backupText+'.');
+    notify('Extension updated with verified rollback history.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+
+async function extensionRemove(name,scope){
+  if(!agentToken)return;
+  if(!window.confirm('Remove the Oasis-managed '+name+' extension from '+(scope==='self'?'Oasis itself':'the current project')+'? Oasis will refuse to remove edited prompt files or unexpected contents.'))return;
+  try{var result=await agentApi('/api/extensions/remove',{method:'POST',body:JSON.stringify({name:name,scope:scope})});notify('Removed '+result.name+' from '+scope+'.');await extensionRefreshInstalled()}
+  catch(e){notify('Extension removal was blocked: '+e.message)}
+}
+async function extensionRollback(name,scope,commitSha){
+  if(!agentToken||extensionBusy)return;
+  if(!window.confirm('Restore '+name+' ('+scope+') to verified commit '+commitSha.slice(0,12)+'? The active version will be preserved as a new rollback backup.'))return;
+  extensionSetBusy(true);
+  try{
+    extensionStatus('Verifying rollback backup '+commitSha.slice(0,12)+'…');
+    var result=await agentApi('/api/extensions/rollback',{method:'POST',body:JSON.stringify({name:name,scope:scope,commitSha:commitSha})});
+    if(result.alreadyCurrent){extensionStatus(name+' is already at that revision.');return}
+    await extensionRefreshInstalled();
+    extensionStatus('Restored '+name+' to '+result.commitSha.slice(0,12)+'. The previous revision remains available in rollback history.');
+    notify('Extension rollback completed.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+document.getElementById('installedExtensions').addEventListener('click',function(e){
+  var update=e.target.closest('[data-update-extension]');
+  if(update){void extensionUpdate(update.getAttribute('data-update-extension'),update.getAttribute('data-update-scope'),update.getAttribute('data-update-source'),update.getAttribute('data-update-commit'));return}
+  var rollback=e.target.closest('[data-rollback-extension]');
+  if(rollback){void extensionRollback(rollback.getAttribute('data-rollback-extension'),rollback.getAttribute('data-rollback-scope'),rollback.getAttribute('data-rollback-commit'));return}
+  var remove=e.target.closest('[data-remove-extension]');
+  if(remove)void extensionRemove(remove.getAttribute('data-remove-extension'),remove.getAttribute('data-remove-scope'));
+});
+document.getElementById('extensionInspectForm').addEventListener('submit',function(e){e.preventDefault();void extensionInspect()});
+document.getElementById('extensionUrl').addEventListener('input',function(){if(extensionInspection&&this.value.trim()!==extensionInspection.url){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository URL changed. Inspect the new URL before installing.')}});
+document.getElementById('extensionInstallBtn').addEventListener('click',function(){void extensionInstall()});
+document.getElementById('extensionMcpImportBtn').addEventListener('click',function(){void extensionImportMcpServers()});
+document.getElementById('extensionMcpImportPlan').addEventListener('change',function(e){if(e.target.matches('[data-extension-mcp-name]'))extensionSetBusy(false)});
+document.getElementById('extensionCancelBtn').addEventListener('click',function(){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository review cancelled.')});
+document.getElementById('extensionRefreshBtn').addEventListener('click',function(){void extensionRefreshInstalled()});
+// Remove/update/rollback actions are delegated in the single listener above.
+
+/* Integration hub with live state where the host runtime supports it. */
+function integrationSetTab(name){
+  document.querySelectorAll('[data-integration-tab]').forEach(function(tab){var active=tab.getAttribute('data-integration-tab')===name;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false')});
+  document.querySelectorAll('.integration-pane').forEach(function(panel){panel.hidden=panel.id!=='integration-pane-'+name});
+}
+document.querySelectorAll('[data-integration-tab]').forEach(function(tab){tab.addEventListener('click',function(){integrationSetTab(tab.getAttribute('data-integration-tab'))})});
+async function integrationRefresh(){
+  if(!agentToken){document.getElementById('integrationRuntimeTitle').textContent='Runtime not connected';document.getElementById('integrationRuntimeHelp').textContent='Connect the local Oasis runtime to inspect provider, GitHub, and MCP status.';var ids=['connectorGithubStatus','integrationProviderStatus','integrationRuntimeStatus'];ids.forEach(function(id){var node=document.getElementById(id);node.classList.remove('connected');node.textContent='Connect runtime first'});return}
+  try{
+    var state=await agentApi('/api/status');
+    document.getElementById('integrationRuntimeTitle').textContent='Runtime connected · '+state.workspaceName;
+    document.getElementById('integrationRuntimeHelp').textContent=state.providerConfigured?'Model provider '+state.provider.model+' is configured on the host.':'Runtime is connected, but no model provider is configured yet.';
+    var p=document.getElementById('integrationProviderStatus');p.textContent=state.providerConfigured?'Configured · '+state.provider.model:'Not configured';p.classList.toggle('connected',!!state.providerConfigured);
+    document.getElementById('integrationProviderDescription').textContent=state.provider?'Active provider: '+state.provider.provider+' · '+state.provider.protocol+' · '+state.provider.model:'Choose a supported model endpoint in Provider settings.';
+    document.getElementById('integrationRuntimeStatus').textContent='Connected · local authenticated API';document.getElementById('integrationRuntimeStatus').classList.add('connected');
+  }catch(e){document.getElementById('integrationRuntimeTitle').textContent='Runtime unavailable';document.getElementById('integrationRuntimeHelp').textContent=e.message;['integrationProviderStatus','integrationRuntimeStatus'].forEach(function(id){document.getElementById(id).classList.remove('connected')})}
+  try{var gh=await agentApi('/api/github/status');var el=document.getElementById('connectorGithubStatus');el.textContent=gh.authenticated?'Connected · '+(gh.account||'host GitHub CLI'):(gh.cliAvailable?'GitHub CLI not signed in':'GitHub CLI not installed');el.classList.toggle('connected',!!gh.authenticated)}catch(e){document.getElementById('connectorGithubStatus').textContent='Status unavailable'}
+  try{await mcpRefresh()}catch(e){}
+}
+document.getElementById('connectorGithubCheck').addEventListener('click',function(){void integrationRefresh()});
+document.getElementById('integrationApiRefresh').addEventListener('click',function(){void integrationRefresh()});
+document.getElementById('mcpRefreshBtn').addEventListener('click',function(){void mcpRefresh()});
+var mcpEnvEditingName=null;
+async function mcpRefresh(){
+  var list=document.getElementById('mcpServerList');
+  if(!agentToken){list.innerHTML='<div class="integration-empty">Connect Oasis first to load the MCP configuration.</div>';return}
+  try{var data=await agentApi('/api/mcp');var servers=data.servers||[];
+    list.innerHTML=servers.length?servers.map(function(server){var origin=server.origin?'<small>Imported from '+extensionEscape(server.origin.repository)+' · '+extensionEscape((server.origin.commitSha||'').slice(0,12))+' · '+extensionEscape(server.origin.filePath)+'</small>':'';return '<div class="mcp-row"><div class="integration-icon">MCP</div><div class="mcp-row-main"><strong>'+extensionEscape(server.name)+' '+(server.enabled?'<span class="status-dot connected">Enabled</span>':'<span class="status-dot">Disabled</span>')+'</strong><small>'+extensionEscape(server.command)+' '+extensionEscape(JSON.stringify(server.args||[]))+'</small><small>Pass environment: '+extensionEscape((server.passEnv||[]).join(', ')||'none')+'</small>'+origin+'</div><button class="btn btn-secondary" data-mcp-env-edit="'+extensionEscape(server.name)+'" type="button">Env allowlist</button><button class="btn btn-secondary" data-mcp-toggle="'+extensionEscape(server.name)+'" type="button">'+(server.enabled?'Disable':'Enable')+'</button><button class="btn btn-danger" data-mcp-remove="'+extensionEscape(server.name)+'" type="button">Remove</button></div>'}).join(''):'<div class="integration-empty">No MCP servers configured. Add a trusted server below or run <code>oasis mcp list</code> in the host terminal.</div>';
+  }catch(e){list.innerHTML='<div class="integration-empty">Could not load MCP servers: '+extensionEscape(e.message)+'</div>'}
+}
+async function mcpSave(servers,confirmText){
+  if(!agentToken){notify('Connect Oasis before changing MCP servers.');return}
+  if(!window.confirm(confirmText+'\n\nEnabled MCP servers execute as local processes when new agent sessions start. Only continue for commands you trust.'))return false;
+  try{var result=await agentApi('/api/mcp',{method:'POST',body:JSON.stringify({servers:servers})});notify('MCP configuration saved. '+(result.servers||[]).length+' server(s) configured.');await mcpRefresh();return true}
+  catch(e){notify('Could not save MCP configuration: '+e.message);return false}
+}
+document.getElementById('mcpServerList').addEventListener('click',async function(e){
+  var toggle=e.target.closest('[data-mcp-toggle]'),remove=e.target.closest('[data-mcp-remove]'),editEnv=e.target.closest('[data-mcp-env-edit]');
+  if(!toggle&&!remove&&!editEnv)return;
+  if(!agentToken)return;
+  try{
+    var data=await agentApi('/api/mcp');
+    var trigger=toggle||remove||editEnv;
+    var name=trigger.getAttribute(toggle?'data-mcp-toggle':(remove?'data-mcp-remove':'data-mcp-env-edit'));
+    if(editEnv){
+      var current=(data.servers||[]).find(function(s){return s.name===name});if(!current)return;
+      mcpEnvEditingName=name;
+      document.getElementById('mcpEnvNames').value=(current.passEnv||[]).join(', ');
+      document.getElementById('mcpEnvDialogError').textContent='';
+      document.getElementById('mcpEnvDialog').showModal();
+      document.getElementById('mcpEnvNames').focus();
+      return;
+    }
+    var next=(data.servers||[]).filter(function(s){return !remove||s.name!==name}).map(function(s){return toggle&&s.name===name?Object.assign({},s,{enabled:!s.enabled}):s});
+    await mcpSave(next,(toggle?'Change enabled state for MCP server '+name+'?':'Remove MCP server '+name+' from configuration?'));
+  }catch(err){notify('Could not update MCP configuration: '+err.message)}
+});
+document.getElementById('mcpEnvCancel').addEventListener('click',function(){document.getElementById('mcpEnvDialog').close();mcpEnvEditingName=null});
+document.getElementById('mcpEnvForm').addEventListener('submit',async function(e){
+  e.preventDefault();if(!agentToken||!mcpEnvEditingName)return;
+  var entered=document.getElementById('mcpEnvNames').value.trim();
+  var variables=entered?entered.split(',').map(function(v){return v.trim()}):[];
+  if(variables.some(function(v){return !/^[A-Z_][A-Z0-9_]*$/.test(v)})||new Set(variables).size!==variables.length){
+    document.getElementById('mcpEnvDialogError').textContent='Use unique uppercase environment variable names only, such as API_TOKEN. Secret values are not accepted.';
+    return;
+  }
+  var name=mcpEnvEditingName;
+  try{
+    var data=await agentApi('/api/mcp');
+    var next=(data.servers||[]).map(function(server){return server.name===name?Object.assign({},server,{passEnv:variables}):server});
+    if(!next.some(function(server){return server.name===name})){throw new Error('The selected MCP server no longer exists.')}
+    var saved=await mcpSave(next,'Update the environment-variable allowlist for '+name+'? Only variable names will be saved; secret values stay in the Oasis host environment.');
+    if(saved){document.getElementById('mcpEnvDialog').close();mcpEnvEditingName=null}
+  }catch(err){document.getElementById('mcpEnvDialogError').textContent=err.message||'Could not update environment access.'}
+});
+document.getElementById('mcpAddForm').addEventListener('submit',async function(e){
+  e.preventDefault();if(!agentToken){notify('Connect Oasis first.');return}
+  var args, name=document.getElementById('mcpName').value.trim(),command=document.getElementById('mcpCommand').value.trim(),passEnv=document.getElementById('mcpPassEnv').value.split(',').map(function(v){return v.trim()}).filter(Boolean);
+  try{args=JSON.parse(document.getElementById('mcpArgs').value||'[]');if(!Array.isArray(args)||args.some(function(v){return typeof v!=='string'}))throw new Error('Arguments must be a JSON array of strings.')}catch(err){notify('Invalid MCP arguments: '+err.message);return}
+  try{var data=await agentApi('/api/mcp');if((data.servers||[]).some(function(v){return v.name===name})){notify('An MCP server with that name already exists.');return}await mcpSave((data.servers||[]).concat([{name:name,command:command,args:args,passEnv:passEnv,enabled:true}]),'Add the MCP server '+name+' using executable '+command+'?');document.getElementById('mcpAddForm').reset();document.getElementById('mcpArgs').value='[]'}catch(err){notify('Could not add MCP server: '+err.message)}
+});
+
+document.getElementById('agentTokenInput').value=agentToken;
+if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
+
+})();
+</script></body></html>+amount.toFixed(4):'
+function agentSetStatus(text,connected){var el=document.getElementById('agentRuntimeState');el.textContent=text;el.dataset.connected=connected?'true':'false'}
+function agentApi(url,options){options=options||{};var headers=Object.assign({},options.headers||{});if(agentToken)headers.Authorization='Bearer '+agentToken;if(options.body)headers['Content-Type']='application/json';return fetch(url,Object.assign({},options,{headers:headers,cache:'no-store'})).then(function(r){return r.json().catch(function(){return {error:'Invalid response from Oasis runtime'}}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data})})}
+
+function cloudRunNode(tag,className,text){var node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node}
+function agentCloudRunEmpty(message){var list=document.getElementById('cloudRunsList');list.replaceChildren(cloudRunNode('div','cloud-run-empty',message))}
+async function agentLoadCloudTasks(silent){
+  var status=document.getElementById('cloudRunsStatus'),list=document.getElementById('cloudRunsList');
+  if(!agentToken){status.textContent='Connect runtime';status.dataset.connected='false';agentCloudRunEmpty('Connect the runtime to load task history.');return}
+  try{
+    var response=await agentApi('/api/jobs'),jobs=Array.isArray(response.jobs)?response.jobs:[];
+    list.replaceChildren();status.textContent=jobs.length+' run'+(jobs.length===1?'':'s');status.dataset.connected='true';
+    if(!jobs.length){agentCloudRunEmpty('No saved runs yet. Start a coding task and it will appear here.');return}
+    jobs.forEach(function(job){
+      var row=cloudRunNode('div','cloud-run-row'),main=cloudRunNode('div','cloud-run-main');
+      var title=cloudRunNode('div','cloud-run-title',job.title||job.type||'Coding task');
+      var updated=job.updatedAt?new Date(job.updatedAt):null;
+      var meta=cloudRunNode('div','cloud-run-meta',(job.type||'agent')+' · '+(updated&&!Number.isNaN(updated.getTime())?updated.toLocaleString():'time unknown')+(job.workspaceName?' · '+job.workspaceName:'')+(Number.isFinite(job.eventCount)?' · '+job.eventCount+' events':''));
+      var state=cloudRunNode('span','cloud-run-status',String(job.status||'unknown').replace(/_/g,' '));state.dataset.status=job.status||'unknown';
+      var button=cloudRunNode('button','btn btn-secondary','View run');button.type='button';button.dataset.cloudRunId=job.id;
+      main.append(title,meta);row.append(main,state,button);list.appendChild(row)
+    })
+  }catch(error){
+    status.textContent='Unable to load';status.dataset.connected='false';
+    if(!silent){agentCloudRunEmpty('Task history could not be loaded. Reconnect to the local runtime and try again.');notify('Could not load task history: '+error.message)}
+  }
+}
+async function agentOpenCloudRun(id,titleFromList){
+  var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),heading=document.getElementById('cloudRunDetailTitle'),diffButton=document.getElementById('cloudRunDiffBtn');
+  try{
+    var task=await agentApi('/api/jobs/'+encodeURIComponent(id)+'?after=0');
+    heading.textContent=(task.title||titleFromList||'Task '+String(id).slice(0,8))+' · '+String(task.status||'unknown').replace(/_/g,' ');
+    var artifact=task.result&&task.result.isolatedWorktree;
+    var hasDiff=!!((artifact&&((artifact.changed&&(artifact.commit||artifact.commitSha))||(artifact.requiresReview&&artifact.path)))||(task.worktree&&['interrupted','error','cancelled'].includes(task.status)));
+    diffButton.hidden=!hasDiff;diffButton.dataset.cloudRunId=id;
+    document.getElementById('cloudRunDiffDetail').hidden=true;
+    events.replaceChildren();
+    (Array.isArray(task.events)?task.events:[]).slice(-120).forEach(function(event){
+      var row=cloudRunNode('div','cloud-run-event');
+      var label=String(event.type||'event').replace(/_/g,' ');
+      var info='';
+      var data=event.data&&typeof event.data==='object'?event.data:{};
+      if(typeof data.name==='string')info=data.name.slice(0,100);
+      else if(typeof data.tool==='string')info=data.tool.slice(0,100);
+      else if(typeof data.command==='string')info='Command: '+data.command.slice(0,100);
+      else if(event.type==='approval_required')info='Waiting for approval';
+      else if(event.type==='completed')info='Task finished';
+      else if(event.type==='failed')info='Task reported an error';
+      else if(event.type==='cancelled')info='Task was cancelled';
+      else if(event.type==='interrupted')info='Runtime restarted before the task finished';
+      else if(event.type==='usage'&&Number.isFinite(data.totalTokens))info=data.totalTokens+' tokens';
+      var timestamp=event.at?new Date(event.at):null;
+      row.append(cloudRunNode('strong','',label),cloudRunNode('small','',(timestamp&&!Number.isNaN(timestamp.getTime())?timestamp.toLocaleString():'')+(info?' · '+info:'')));
+      events.appendChild(row)
+    });
+    if(!events.childNodes.length)events.appendChild(cloudRunNode('div','cloud-run-empty','No saved events for this run.'));
+    detail.hidden=false
+  }catch(error){notify('Could not open task history: '+error.message)}
+}
+document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
+document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
+document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){
+  var id=this.dataset.cloudRunId;if(!id)return;
+  var heading=document.getElementById('cloudRunDiffTitle'),body=document.getElementById('cloudRunDiffText'),wrap=document.getElementById('cloudRunDiffDetail');
+  heading.textContent='Loading isolated changes…';body.textContent='';wrap.hidden=false;
+  try{var data=await agentApi('/api/jobs/'+encodeURIComponent(id)+'/diff');heading.textContent=(data.complete?'Committed preview':'Partial changes · review required')+' · '+(data.branch||'isolated task');body.textContent=(data.diff||'(No text diff available.)')+(data.truncated?'\n\n[Preview truncated at the safety limit.]':'')}
+  catch(error){heading.textContent='Diff unavailable';body.textContent=error.message}
+});
+document.getElementById('cloudRunDiffClose').addEventListener('click',function(){document.getElementById('cloudRunDiffDetail').hidden=true});
+document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true});
+
+function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
+function agentAppendMessage(role,text,jobId){var empty=document.getElementById('agentEmptyState');if(empty)empty.remove();var el=document.createElement('div');el.className='agent-message '+role;el.textContent=text||'';if(jobId)el.dataset.jobId=jobId;document.getElementById('agentMessages').appendChild(el);agentScroll();return el}
+function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if(!node){node=agentAppendMessage('assistant','',jobId);agentAssistantNodes[jobId]=node}node.textContent=String(text||'');agentScroll()}
+function agentActivity(text){agentAppendMessage('activity',text)}
+function agentClearMessages(){document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null}
+function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentIsolateWorktree').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy;if(!agentBusy&&agentToken)void agentLoadCloudTasks(true)}
+async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
+function agentDisconnect(){agentToken='';sessionStorage.removeItem('oasis.web.token');document.getElementById('agentTokenInput').value='';agentSetStatus('Runtime not connected',false);document.getElementById('agentModelName').textContent='Choose a model';document.getElementById('agentModelDetail').textContent='Connect a runtime';document.getElementById('agentConnectionHelp').textContent='Disconnected. Start or return to oasis web, then paste its token to reconnect.';notify('Runtime disconnected from this browser tab.')}
+var agentQuestionId=null,agentQuestionMulti=false;
+function agentShowQuestion(d){agentQuestionId=d.questionId;agentQuestionMulti=!!d.multiSelect;document.getElementById('agentQuestionHeader').textContent=d.header?d.header:'Oasis has a question';document.getElementById('agentQuestionText').textContent=d.question;var box=document.getElementById('agentQuestionOptions');box.innerHTML='';(d.options||[]).forEach(function(o){var b=document.createElement('button');b.type='button';b.className='agent-question-option';b.setAttribute('aria-pressed','false');var l=document.createElement('strong');l.textContent=o.label;b.appendChild(l);if(o.description){var s=document.createElement('span');s.textContent=o.description;b.appendChild(s)}b.addEventListener('click',function(){if(agentQuestionMulti){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')}else{void agentAnswerQuestion(o.label)}});box.appendChild(b)});document.getElementById('agentQuestionInput').value='';document.getElementById('agentQuestionSubmit').textContent=agentQuestionMulti?'Send selected':'Send';document.getElementById('agentQuestionCard').hidden=false;agentSetStatus('Waiting for your answer',true);agentScroll()}
+async function agentAnswerQuestion(answer){if(!agentActiveJob||!agentQuestionId)return;var id=agentQuestionId;try{await agentApi('/api/jobs/'+agentActiveJob+'/answer',{method:'POST',body:JSON.stringify({questionId:id,answer:answer})});document.getElementById('agentQuestionCard').hidden=true;agentQuestionId=null;if(answer)agentActivity('You answered: '+answer);agentSetStatus('Answer sent',true)}catch(e){notify('Could not send the answer: '+e.message)}}
+async function agentResolveApproval(approved,always){if(!agentActiveJob||!agentApprovalId)return;var id=agentApprovalId;document.getElementById('agentApproveBtn').disabled=true;document.getElementById('agentDenyBtn').disabled=true;try{await agentApi('/api/jobs/'+agentActiveJob+'/approval',{method:'POST',body:JSON.stringify({approvalId:id,approved:!!approved,always:!!always})});document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null;agentSetStatus(always?'Allowed for this session':(approved?'Action approved once':'Action denied'),true)}catch(e){notify('Could not submit approval: '+e.message)}finally{document.getElementById('agentApproveBtn').disabled=false;document.getElementById('agentDenyBtn').disabled=false}}
+async function agentStopJob(){if(!agentActiveJob||!agentBusy)return;var id=agentActiveJob,button=document.getElementById('agentStopBtn');button.disabled=true;agentSetStatus('Stopping task…',true);terminalStatus('Stopping command…');try{await agentApi('/api/jobs/'+id+'/cancel',{method:'POST'});agentActivity('Cancellation requested. Completed changes are not automatically rolled back.')}catch(e){notify('Could not stop the task: '+e.message);button.disabled=false}}
+document.getElementById('agentStopBtn').addEventListener('click',function(){void agentStopJob()});
+function agentProcessEvent(jobId,event){var d=event.data||{};if(event.type==='started'){if(d.isolation==='worktree'){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId')}else if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}}else if(event.type==='worktree_ready'){if(d.branch)agentActivity('Isolated branch ready for review: '+d.branch+(d.commit?' · '+d.commit:'')+'. Nothing was merged.');void agentLoadCloudTasks(true)}else if(event.type==='assistant_text'||event.type==='assistant_delta'){agentAssistantUpdate(jobId,d.text)}else if(event.type==='tool_start'){agentActivity((d.subagent?'['+d.subagent+'] ':'')+'Working: '+d.name+(d.detail?' '+d.detail:''))}else if(event.type==='command_output'){agentAssistantUpdate(jobId,d.text||'')}else if(event.type==='thinking'){agentActivity(d.effort?'Reasoning effort '+d.effort+' for this task':'Extended thinking on for this task (budget '+d.budget+' tokens)')}else if(event.type==='context_files'){agentActivity('Included '+(d.files||[]).map(function(f){return '@'+f}).join(', '))}else if(event.type==='tool_result'){agentActivity(d.name+' result: '+String(d.result||'').slice(0,1600))}else if(event.type==='cancel_requested'){agentSetStatus('Stopping task…',true)}else if(event.type==='cancelled'){agentActivity(d.message||'Task cancelled.');agentSetStatus('Cancelled',true);agentSetBusy(false);agentActiveJob=null;agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=(d.subagent?'['+d.subagent+'] ':'')+d.prompt;var ab=document.getElementById('agentAlwaysBtn');ab.hidden=!d.suggestion;ab.textContent=d.suggestion?'Always allow '+d.suggestion+' this session':'Always allow';document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);agentScroll()}else if(event.type==='question'){agentShowQuestion(d)}else if(event.type==='question_answered'){if(agentQuestionId===d.questionId){agentQuestionId=null;document.getElementById('agentQuestionCard').hidden=true}}else if(event.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(event.type==='completed'||event.type==='failed'||event.type==='cancelled'){document.getElementById('agentQuestionCard').hidden=true;agentQuestionId=null}if(event.type==='completed'){if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}if(d.text)agentAssistantUpdate(jobId,d.text);if(d.verificationIncomplete&&Array.isArray(d.verificationIssues)&&d.verificationIssues.length)agentActivity('Verification incomplete: '+d.verificationIssues.join('; '));agentSetStatus(d.finished?'Completed':'Stopped · review result',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='failed'){agentAssistantUpdate(jobId,'Oasis could not finish this turn: '+(d.message||'Unknown error'));agentAssistantNodes[jobId].classList.add('failed');agentSetStatus('Agent error',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='session_state'){agentShowSessionState(d);void agentLoadHistoryList()}else if(event.type==='usage'){if(document.getElementById('agentRuntimeState').textContent!=='Waiting for your approval')agentSetStatus('Working · step '+(d.step||'…'),true)}}
+async function agentPoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var s=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(s.events||[]).forEach(function(e){cursor=Math.max(cursor,e.id);agentProcessEvent(jobId,e)});if(s.status==='completed'||s.status==='error'||s.status==='cancelled'){if(s.status==='error'&&s.error){agentAssistantUpdate(jobId,'Oasis stopped: '+s.error);agentSetBusy(false);agentActiveJob=null;agentSetStatus('Agent error',true)}if(s.result&&s.result.isolatedWorktree){var wt=s.result.isolatedWorktree;agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';document.getElementById('agentIsolateWorktree').checked=false;if(wt&&wt.changed===false)agentActivity('The isolated run made no changes; its temporary worktree was removed.');else if(wt&&wt.branch&&!wt.committed)agentActivity('Review branch '+wt.branch+' is retained. Check Task history for its diff; nothing is merged automatically.');void agentLoadCloudTasks(true)}else if(s.result&&s.result.sessionId){agentSessionId=s.result.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}return}await new Promise(function(resolve){setTimeout(resolve,650)})}}catch(e){if(agentActiveJob===jobId){agentActivity('Connection interrupted: '+e.message+' Reconnect to check whether the task finished.');agentSetStatus('Connection interrupted',false);agentSetBusy(false);agentActiveJob=null}}}
+document.getElementById('agentConnectBtn').addEventListener('click',function(){void agentConnect(false)});
+document.getElementById('agentDisconnectBtn').addEventListener('click',agentDisconnect);
+document.getElementById('newAgentSessionBtn').addEventListener('click',function(){if(agentBusy){notify('Wait until the current task finishes.');return}agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();document.getElementById('agentHistorySelect').value='';agentActivity('New chat ready. The previous session remains saved on the runtime.');agentSetStatus(agentToken?'Connected':'Runtime not connected',!!agentToken)});
+document.getElementById('agentApproveBtn').addEventListener('click',function(){void agentResolveApproval(true)});document.getElementById('agentAlwaysBtn').addEventListener('click',function(){void agentResolveApproval(true,true)});
+document.getElementById('agentDenyBtn').addEventListener('click',function(){void agentResolveApproval(false)});
+document.getElementById('agentQuestionForm').addEventListener('submit',function(e){e.preventDefault();var typed=document.getElementById('agentQuestionInput').value.trim();var picked=[].slice.call(document.querySelectorAll('#agentQuestionOptions [aria-pressed="true"] strong')).map(function(n){return n.textContent});var answer=typed||picked.join(', ');if(answer)void agentAnswerQuestion(answer)});
+document.getElementById('agentQuestionSkip').addEventListener('click',function(){void agentAnswerQuestion('')});
+document.getElementById('agentHistorySelect').addEventListener('change',function(){if(this.value)void agentOpenSession(this.value)});
+document.getElementById('agentModeSelect').addEventListener('change',function(){if(agentBusy||!agentToken)return;document.getElementById('agentPrompt').value='/mode '+this.value;document.getElementById('agentForm').requestSubmit()});
+document.getElementById('agentForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;var message=document.getElementById('agentPrompt').value.trim(),isolated=document.getElementById('agentIsolateWorktree').checked;if(!message)return;if(!agentToken){agentSetStatus('Connect a runtime before sending',false);notify('Connect Oasis first.');return}if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';agentClearMessages()}agentAppendMessage('user',message);document.getElementById('agentPrompt').value='';agentSetBusy(true);agentSetStatus(isolated?'Preparing isolated Git worktree…':'Starting task…',true);try{var payload={message:message,sessionId:isolated?null:(agentSessionId||null)};if(isolated)payload.isolation='worktree';var d=await agentApi('/api/chat',{method:'POST',body:JSON.stringify(payload)});agentActiveJob=d.jobId;if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentActivity('Isolated worktree created'+(d.branch?' · '+d.branch:'')+'. The main checkout stays untouched.')}else{agentSessionId=d.sessionId||agentSessionId;if(agentSessionId)sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}agentAssistantUpdate(agentActiveJob,'Oasis is working…');void agentPoll(agentActiveJob)}catch(err){agentAppendMessage('assistant','Could not start the task: '+err.message);agentSetStatus('Unable to start task',false);agentSetBusy(false)}});
+
+function terminalStatus(text){document.getElementById('terminalStatus').textContent=text}
+function terminalAppend(text){var message=String(text||'');if(oasisTerminal){oasisTerminal.write(message+'\r\n');oasisTerminal.scrollToBottom();return}var out=document.getElementById('terminalOutput');out.textContent=(out.textContent+'\n'+message).slice(-24000);out.scrollTop=out.scrollHeight}
+async function terminalPoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var state=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(state.events||[]).forEach(function(e){cursor=Math.max(cursor,e.id);var d=e.data||{};if(e.type==='terminal_started'){terminalAppend('$ '+d.command+' '+JSON.stringify(d.args||[]));terminalStatus(d.interactive?'Preparing interactive terminal…':'Waiting for approval…')}else if(e.type==='terminal_pty_started'){activePtyId=d.id;activePtyOffset=0;document.getElementById('terminalPtyControls').hidden=false;terminalAppend('Interactive terminal connected · '+d.id);terminalStatus('Interactive · running');setTimeout(terminalFit,100);void terminalPtyPoll(d.id)}else if(e.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=d.prompt;document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);terminalStatus('Approval required');agentScroll()}else if(e.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(e.type==='terminal_output'){if(d.approved===false)terminalAppend(d.cancelled?'Cancelled before command start. '+(d.message||''):'Denied: no process was started. '+(d.message||''));else{if(d.output)terminalAppend(d.output);terminalAppend('Exit code: '+(d.exitCode===undefined||d.exitCode===null?'unavailable':d.exitCode)+(d.timedOut?' (timed out)':''))}terminalStatus(d.cancelled?'Stopping…':(d.approved===false?'Denied':('Finished · exit '+(d.exitCode===undefined||d.exitCode===null?'N/A':d.exitCode))))}else if(e.type==='cancel_requested'){terminalStatus('Stopping command…')}else if(e.type==='cancelled'){terminalAppend(d.message||'Command cancelled.');terminalStatus('Cancelled');agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(e.type==='failed'){terminalAppend('Blocked or failed: '+(d.message||'unknown error'));terminalStatus('Command failed');agentSetBusy(false);agentActiveJob=null}else if(e.type==='completed'){terminalStatus(d.approved===false?'Command denied':('Finished · exit '+(d.exitCode===undefined||d.exitCode===null?'N/A':d.exitCode)));agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}});if(state.status==='completed'||state.status==='error'||state.status==='cancelled'){agentSetBusy(false);agentActiveJob=null;return}await new Promise(function(resolve){setTimeout(resolve,600)})}}catch(e){if(agentActiveJob===jobId){terminalAppend('Runtime connection interrupted: '+e.message);terminalStatus('Connection interrupted');agentSetBusy(false);agentActiveJob=null}}}
+function terminalMount(){var host=document.getElementById('terminalXterm'),fallback=document.getElementById('terminalOutput');if(typeof Terminal==='undefined'||typeof FitAddon==='undefined'||!host){if(host)host.hidden=true;if(fallback)fallback.hidden=false;terminalStatus('Terminal renderer unavailable');return}try{oasisTerminal=new Terminal({cursorBlink:true,convertEol:true,scrollback:6000,fontSize:12,fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',allowProposedApi:false,theme:{background:'#090d0a',foreground:'#dbe8d7',cursor:'#9bff55',selectionBackground:'#294a34',black:'#090d0a',red:'#ff9c8d',green:'#9bff55',yellow:'#e8d18a',blue:'#93b7ff',magenta:'#d8a7ff',cyan:'#89ddd0',white:'#dbe8d7',brightBlack:'#66776a',brightRed:'#ffb7aa',brightGreen:'#b7ff87',brightYellow:'#f1dfac',brightBlue:'#b3ccff',brightMagenta:'#e5c1ff',brightCyan:'#acf1e6',brightWhite:'#ffffff'}});oasisFitAddon=new FitAddon.FitAddon();oasisTerminal.loadAddon(oasisFitAddon);oasisTerminal.open(host);oasisFitAddon.fit();oasisTerminal.onData(function(data){if(!activePtyId||!agentToken)return;var id=activePtyId;terminalInputQueue=terminalInputQueue.then(function(){return agentApi('/api/terminal/pty/input',{method:'POST',body:JSON.stringify({id:id,data:data})})}).catch(function(err){terminalStatus('Input failed · '+err.message)})});host.hidden=false;fallback.hidden=true;window.addEventListener('resize',function(){clearTimeout(terminalFitTimer);terminalFitTimer=setTimeout(terminalFit,180)})}catch(error){oasisTerminal=null;host.hidden=true;fallback.hidden=false;terminalStatus('Terminal renderer failed to load')}}
+function terminalFit(){if(!oasisTerminal||!oasisFitAddon)return;try{oasisFitAddon.fit();if(activePtyId)void terminalPtyAction('resize',{cols:oasisTerminal.cols,rows:oasisTerminal.rows})}catch{}}
+async function terminalPtyPoll(id){while(activePtyId===id&&agentToken){try{var data=await agentApi('/api/terminal/pty/read?id='+encodeURIComponent(id)+'&offset='+activePtyOffset+'&max_chars=12000&wait_seconds=3');if(data.truncated)terminalAppend('[Older terminal output was dropped to keep memory bounded.]');if(data.output){if(oasisTerminal)oasisTerminal.write(data.output);else terminalAppend(String(data.output))}activePtyOffset=data.nextOffset;if(data.state!=='running'&&data.state!=='stopping'){terminalStatus('Exited · code '+(data.exitCode===undefined?'unknown':data.exitCode));document.getElementById('terminalPtyControls').hidden=true;activePtyId=null;return}if(!data.output)await new Promise(function(resolve){setTimeout(resolve,100)})}catch(err){terminalAppend('Terminal connection interrupted: '+err.message);terminalStatus('Terminal connection interrupted');document.getElementById('terminalPtyControls').hidden=true;activePtyId=null;return}}}
+async function terminalPtyAction(action,body){if(!agentToken||!activePtyId){notify('Start an interactive terminal first.');return}try{return await agentApi('/api/terminal/pty/'+action,{method:'POST',body:JSON.stringify(Object.assign({id:activePtyId},body||{}))})}catch(err){terminalAppend('Terminal action failed: '+err.message);terminalStatus('Terminal action failed');return null}}
+terminalMount();
+document.getElementById('terminalMode').addEventListener('change',function(){var interactive=this.value==='interactive';document.getElementById('terminalRunBtn').textContent=interactive?'Start interactive session':'Run command';document.getElementById('terminalArgs').placeholder=interactive?'For example, [] for a REPL or ["--help"] for a tool':'Arguments as a JSON array of strings'});
+document.getElementById('terminalForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;if(!agentToken){notify('Connect a runtime first.');agentSetStatus('Runtime not connected',false);return}var interactive=document.getElementById('terminalMode').value==='interactive';if(interactive&&activePtyId){notify('Stop the current interactive session before starting another.');return}var command=document.getElementById('terminalCommand').value.trim(),args;try{args=JSON.parse(document.getElementById('terminalArgs').value||'[]');if(!Array.isArray(args)||args.some(function(a){return typeof a!=='string'}))throw new Error('Arguments must be a JSON array of strings.')}catch(err){notify('Invalid arguments: '+err.message);return}if(!command){notify('Enter an executable name first.');return}agentSetBusy(true);terminalStatus('Requesting approval…');try{var d=await agentApi('/api/terminal/command',{method:'POST',body:JSON.stringify({command:command,args:args,interactive:interactive})});agentActiveJob=d.jobId;void terminalPoll(d.jobId)}catch(err){terminalAppend('Could not start command: '+err.message);terminalStatus('Unable to start command');agentSetBusy(false)}});
+document.getElementById('terminalSendInputBtn').addEventListener('click',async function(){var field=document.getElementById('terminalInput'),text=field.value;if(!text){field.focus();return}var result=await terminalPtyAction('input',{data:text+'\\r'});if(result){field.value='';field.focus()}});
+document.getElementById('terminalInput').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('terminalSendInputBtn').click()}});
+document.getElementById('terminalInterruptBtn').addEventListener('click',async function(){var result=await terminalPtyAction('interrupt');if(result)terminalStatus('Sent Ctrl+C · '+result.state)});
+document.getElementById('terminalStopBtn').addEventListener('click',async function(){var result=await terminalPtyAction('stop');if(result){terminalAppend('Terminal stop requested.');terminalStatus('Stopping terminal…')}});
+document.getElementById('terminalClearBtn').addEventListener('click',function(){if(oasisTerminal)oasisTerminal.clear();else document.getElementById('terminalOutput').textContent='Output cleared.';terminalStatus('Ready')});
+
+
+function githubSetStatus(text,connected){var el=document.getElementById('githubStatus');el.textContent=text;el.dataset.connected=connected?'true':'false'}
+function githubRenderWorkspace(name){document.getElementById('githubHelp').textContent='Active agent workspace: '+name+'. GitHub repository files are local to the computer running Oasis.';agentSetStatus('Workspace · '+name,!!agentToken)}
+async function githubRefreshStatus(silent,loadRepos){if(!agentToken){githubSetStatus('Connect Oasis first',false);if(!silent)notify('Connect the Oasis runtime first.');return}try{var status=await agentApi('/api/github/status');if(!status.cliAvailable){githubSetStatus('GitHub CLI missing',false);document.getElementById('githubHelp').textContent=status.hint;document.getElementById('githubRepoSelect').replaceChildren(new Option('GitHub CLI not installed',''));return}if(!status.authenticated){githubSetStatus('Not signed in',false);document.getElementById('githubHelp').textContent=status.hint;document.getElementById('githubRepoSelect').replaceChildren(new Option('Run gh auth login first',''));return}githubSetStatus(status.account?'Connected · '+status.account:'Connected to GitHub',true);if(loadRepos)await githubLoadRepos(silent)}catch(e){githubSetStatus('Connection check failed',false);if(!silent)notify('GitHub check failed: '+e.message)}}
+async function githubLoadRepos(silent){if(!agentToken){notify('Connect the Oasis runtime first.');return}try{var data=await agentApi('/api/github/repos'),select=document.getElementById('githubRepoSelect');select.replaceChildren();if(!data.repositories.length){select.add(new Option('No repositories were returned',''));return}data.repositories.forEach(function(repo){var label=repo.nameWithOwner+(repo.isPrivate?' · private':' · public');select.add(new Option(label,repo.nameWithOwner))});document.getElementById('githubHelp').textContent='Showing up to '+data.limit+' repositories available to the GitHub CLI account. Clone / use switches the agent and command runner to that repository after your approval.';githubSetStatus('Repositories loaded',true)}catch(e){githubSetStatus('Repository list failed',false);if(!silent)notify('Could not list GitHub repositories: '+e.message)}}
+function githubWorkspaceSwitched(name){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();agentActivity('Workspace switched to '+name+'. Tell Oasis what to build; it will inspect this repository first.');githubRenderWorkspace(name);void githubRefreshStatus(true,true)}
+async function githubClonePoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var state=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(state.events||[]).forEach(function(event){cursor=Math.max(cursor,event.id);var d=event.data||{};if(event.type==='github_clone_started'){terminalAppend('GitHub: cloning '+d.repository+' into an Oasis-managed workspace…');terminalStatus('Waiting for approval')}else if(event.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=d.prompt;document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);terminalStatus('GitHub clone needs approval')}else if(event.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(event.type==='github_clone_result'){if(d.output)terminalAppend(d.output);if(d.exitCode!==undefined)terminalAppend('Clone exit code: '+d.exitCode);terminalStatus(d.exitCode===0?'Repository cloned':'Clone finished with an error')}else if(event.type==='failed'){terminalAppend('GitHub clone failed: '+(d.message||'unknown error'));terminalStatus('Clone failed')}});if(state.status==='completed'){var result=state.result||{};if(result.reused||result.exitCode===0){githubWorkspaceSwitched(result.workspaceName||result.repository||'repository');terminalAppend('Active workspace: '+(result.workspacePath||result.workspaceName||''));terminalStatus('Workspace ready')}else if(result.approved===false){terminalAppend(result.message||'Clone denied; no repository was downloaded.');terminalStatus('Clone denied')}else{terminalAppend(result.message||result.error||'GitHub clone failed. The previous workspace remains active.');terminalStatus('Clone failed')}agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true;return}if(state.status==='error'){terminalAppend('GitHub clone failed: '+(state.error||'unknown error'));terminalStatus('Clone failed');agentSetBusy(false);agentActiveJob=null;return}await new Promise(function(resolve){setTimeout(resolve,650)})}}catch(e){if(agentActiveJob===jobId){terminalAppend('GitHub connection interrupted: '+e.message);terminalStatus('Connection interrupted');agentSetBusy(false);agentActiveJob=null}}}
+document.getElementById('githubCheckBtn').addEventListener('click',function(){void githubRefreshStatus(false,false)});
+document.getElementById('githubRefreshBtn').addEventListener('click',function(){void githubRefreshStatus(false,true)});
+document.getElementById('githubCloneBtn').addEventListener('click',async function(){if(agentBusy)return;if(!agentToken){notify('Connect the Oasis runtime first.');return}var repo=document.getElementById('githubRepoSelect').value;if(!repo){notify('Choose a repository first.');return}agentSetBusy(true);terminalStatus('Requesting clone approval…');try{var d=await agentApi('/api/github/clone',{method:'POST',body:JSON.stringify({repository:repo})});if(d.reused){agentSetBusy(false);githubWorkspaceSwitched(d.workspaceName||repo);terminalAppend('Using existing workspace: '+(d.workspacePath||d.workspaceName||repo));terminalStatus('Workspace ready');return}agentActiveJob=d.jobId;void githubClonePoll(d.jobId)}catch(e){terminalAppend('Could not open repository: '+e.message);terminalStatus('Could not open repository');agentSetBusy(false);githubSetStatus('Connection or clone error',false)}});
+document.getElementById('githubResetWorkspaceBtn').addEventListener('click',async function(){if(agentBusy){notify('Wait until the current task finishes before changing workspaces.');return}if(!agentToken){notify('Connect the Oasis runtime first.');return}try{var d=await agentApi('/api/workspace/reset',{method:'POST',body:JSON.stringify({})});githubWorkspaceSwitched(d.workspaceName||'launch workspace');githubSetStatus('Launch workspace selected',true)}catch(e){notify('Could not switch workspace: '+e.message)}});
+
+function firstRunStatus(message,isError){var node=document.getElementById('firstRunStatus');node.textContent=message||'';node.dataset.error=isError?'true':'false';}
+function setProviderKeyHelp(){var preset=document.getElementById('providerPreset').value;var items={openai:['OpenAI','https://platform.openai.com/api-keys'],anthropic:['Anthropic','https://console.anthropic.com/settings/keys'],openrouter:['OpenRouter','https://openrouter.ai/keys'],gemini:['Google AI Studio','https://aistudio.google.com/app/apikey']};var node=document.getElementById('providerKeyHelp');node.replaceChildren();var info=items[preset];if(!info){node.textContent='For a custom endpoint, use that provider’s own key instructions. New desktop keys are encrypted with system secure storage.';return;}node.appendChild(document.createTextNode('Need a key? Get one from '));var link=document.createElement('a');link.href=info[1];link.target='_blank';link.rel='noopener noreferrer';link.textContent=info[0]+' official settings';node.appendChild(link);node.appendChild(document.createTextNode('. New desktop keys are encrypted with system secure storage.'));}
+async function firstRunCheckOllama(){document.getElementById('firstRunOllamaLink').hidden=true;firstRunStatus('Checking this computer for Ollama and installed models…',false);try{var result=await agentApi('/api/provider/local-models');if(result.available&&result.models&&result.models.length){var modelField=document.getElementById('providerModel');if(!modelField.value||modelField.value==='auto'||!result.models.includes(modelField.value))modelField.value=result.models[0];firstRunStatus('Ollama is running. Found '+result.models.length+' model'+(result.models.length===1?'':'s')+': '+result.models.join(', ')+'. The first model is selected; edit the model field before testing if needed.',false);}else{firstRunStatus(result.message||'Ollama is running but no models were found.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}catch(error){firstRunStatus('Could not check Ollama: '+error.message+' Connect the local runtime and try again.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}
+document.querySelectorAll('[data-first-run]').forEach(function(button){button.addEventListener('click',function(){var choice=button.getAttribute('data-first-run');var preset=choice==='api'?'openai':choice;var selector=document.getElementById('providerPreset');selector.value=preset;selector.dispatchEvent(new Event('change'));document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});if(choice==='api'){firstRunStatus('Choose your provider from the list, enter its API key in the masked field, then select Test & save provider.',false);document.getElementById('providerApiKey').focus();}else if(choice==='omniroute'){firstRunStatus('OmniRoute must be running on this computer first. In a terminal, run oasis setup and choose OmniRoute; then return here and test the connection. A shared/free gateway may be slower or limited.',false);document.getElementById('providerModel').focus();}else{firstRunCheckOllama();document.getElementById('providerModel').focus();}});});
+
+// Responsive chat/terminal layout. Divider adjustments are keyboard accessible and remembered.
+(function setupAgentExamples(){
+  var input=document.getElementById('agentPrompt');
+  if(!input)return;
+  document.querySelectorAll('[data-agent-example]').forEach(function(button){
+    button.addEventListener('click',function(){
+      input.value=button.getAttribute('data-agent-example')||'';
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      input.focus();
+    });
+  });
+})();
+(function setupAgentWorkspaceLayout(){
+  var grid=document.getElementById('agentWorkspaceGrid');
+  var chatTab=document.getElementById('agentChatTab');
+  var terminalTab=document.getElementById('agentTerminalTab');
+  var toggle=document.getElementById('agentTerminalToggle');
+  var divider=document.getElementById('agentSplitDivider');
+  if(!grid||!chatTab||!terminalTab||!toggle||!divider)return;
+  function saved(key){try{return localStorage.getItem(key)}catch{return null}}
+  function persist(key,value){try{localStorage.setItem(key,value)}catch{}}
+  function setPanel(name){
+    var panel=name==='terminal'?'terminal':'chat';
+    grid.dataset.activePanel=panel;
+    chatTab.setAttribute('aria-selected',String(panel==='chat'));
+    terminalTab.setAttribute('aria-selected',String(panel==='terminal'));
+    persist('oasis.agent.activePanel',panel);
+  }
+  function setVisible(visible){
+    grid.dataset.terminalVisible=String(!!visible);
+    toggle.textContent=visible?'Hide terminal':'Show terminal';
+    toggle.setAttribute('aria-expanded',String(!!visible));
+    persist('oasis.agent.terminalVisible',String(!!visible));
+    if(!visible)setPanel('chat');
+    if(visible&&window.matchMedia('(max-width: 780px)').matches)setPanel('terminal');
+  }
+  function setSplit(value){
+    var split=Math.max(35,Math.min(72,Number(value)||56));
+    grid.style.setProperty('--agent-chat-split',split+'%');
+    divider.setAttribute('aria-valuenow',String(Math.round(split)));
+    persist('oasis.agent.chatSplit',String(split));
+  }
+  function adjustSplit(clientX){
+    var bounds=grid.getBoundingClientRect();
+    if(bounds.width>0)setSplit((clientX-bounds.left)/bounds.width*100);
+  }
+  var initialVisible=saved('oasis.agent.terminalVisible')!=='false';
+  setVisible(initialVisible);
+  var initialPanel=saved('oasis.agent.activePanel');
+  if(initialVisible&&(initialPanel==='chat'||initialPanel==='terminal'))setPanel(initialPanel);
+  var initialSplit=Number(saved('oasis.agent.chatSplit'));
+  setSplit(Number.isFinite(initialSplit)&&initialSplit>=35&&initialSplit<=72?initialSplit:56);
+  chatTab.addEventListener('click',function(){setPanel('chat')});
+  terminalTab.addEventListener('click',function(){if(grid.dataset.terminalVisible==='false')setVisible(true);setPanel('terminal')});
+  toggle.addEventListener('click',function(){setVisible(grid.dataset.terminalVisible!=='true')});
+  var dragging=false;
+  divider.addEventListener('pointerdown',function(event){
+    if(window.matchMedia('(max-width: 780px)').matches||grid.dataset.terminalVisible!=='true')return;
+    dragging=true;divider.setPointerCapture(event.pointerId);adjustSplit(event.clientX);event.preventDefault();
+  });
+  divider.addEventListener('pointermove',function(event){if(dragging)adjustSplit(event.clientX)});
+  function finishDrag(){dragging=false}
+  divider.addEventListener('pointerup',finishDrag);
+  divider.addEventListener('pointercancel',finishDrag);
+  divider.addEventListener('lostpointercapture',finishDrag);
+  divider.addEventListener('keydown',function(event){
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    event.preventDefault();
+    var current=Number.parseFloat(getComputedStyle(grid).getPropertyValue('--agent-chat-split'))||56;
+    setSplit(current+(event.key==='ArrowRight'?5:-5));
+  });
+})();
+document.getElementById('providerProtocol').addEventListener('change',function(){var p=this.value;document.getElementById('providerBaseUrl').value=p==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1';document.getElementById('providerModel').value=p==='anthropic'?'claude-sonnet-5':(p==='openai-responses'?'gpt-6.1-sol':'');document.getElementById('providerApiKey').value='';document.getElementById('providerSetupStatus').textContent='Unsaved changes'});
+document.getElementById('providerPreset').addEventListener('change',function(){var presets={openai:{protocol:'openai-responses',baseURL:'https://api.openai.com/v1',model:'gpt-6.1-sol'},anthropic:{protocol:'anthropic',baseURL:'https://api.anthropic.com',model:'claude-sonnet-5'},openrouter:{protocol:'openai-compatible',baseURL:'https://openrouter.ai/api/v1',model:''},gemini:{protocol:'openai-compatible',baseURL:'https://generativelanguage.googleapis.com/v1beta/openai/',model:'gemini-3.8-flash'},ollama:{protocol:'openai-compatible',baseURL:'http://localhost:11434/v1',model:''},omniroute:{protocol:'openai-compatible',baseURL:'http://127.0.0.1:20128/v1',model:'auto'}};var selected=presets[this.value];if(!selected){setProviderKeyHelp();return;}document.getElementById('providerProtocol').value=selected.protocol;document.getElementById('providerBaseUrl').value=selected.baseURL;document.getElementById('providerModel').value=selected.model;document.getElementById('providerApiKey').value='';setProviderKeyHelp();});
+setProviderKeyHelp();
+ document.getElementById('providerSetupForm').addEventListener('submit',async function(e){e.preventDefault();if(!agentToken){notify('Connect the runtime before saving provider settings.');return}var button=document.getElementById('providerSaveBtn'),status=document.getElementById('providerSetupStatus'),apiKey=document.getElementById('providerApiKey').value;button.disabled=true;status.textContent='Testing model and tool calling, then saving locally…';try{var result=await agentApi('/api/provider/config',{method:'POST',body:JSON.stringify({protocol:document.getElementById('providerProtocol').value,baseURL:document.getElementById('providerBaseUrl').value.trim(),model:document.getElementById('providerModel').value.trim(),apiKey:apiKey})});document.getElementById('providerApiKey').value='';status.textContent='Provider responded · saving locally…';notify('Provider response verified. Saving settings locally…');await agentConnect(true);status.textContent='Verified · '+result.provider.model;notify('Provider tested successfully and settings were saved. The API key was not returned to the browser.')}catch(err){status.textContent='Verification failed · not saved';notify('Provider settings were not saved because verification failed: '+err.message)}finally{button.disabled=false}});
+
+/* Git URL extension import, inventory and removal. Only reviewed Markdown is imported. */
+var extensionInspection=null;
+var extensionBusy=false;
+function extensionEscape(value){return String(value==null?'':value).replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})}
+function extensionStatus(message,isError){var node=document.getElementById('extensionInstallStatus');node.textContent=message||'';node.style.color=isError?'var(--danger)':'var(--muted)'}
+function extensionSetBusy(busy){extensionBusy=!!busy;['extensionInspectBtn','extensionInstallBtn','extensionMcpImportBtn','extensionCancelBtn','extensionRefreshBtn'].forEach(function(id){var el=document.getElementById(id);if(!el)return;var disabled=extensionBusy||(id==='extensionInstallBtn'&&(!extensionInspection||extensionInspection.data.canInstall===false||!!extensionInspection.data.treeTruncated))||(id==='extensionMcpImportBtn'&&(!extensionInspection||!extensionInspection.data.mcpImportPlan||(extensionInspection.data.mcpImportPlan.servers||[]).length===0||!document.querySelector('[data-extension-mcp-name]:checked')))||(id==='extensionCancelBtn'&&!extensionInspection);el.disabled=disabled;});}
+function extensionRenderInspection(data,url){
+  extensionInspection={data:data,url:url};
+  document.getElementById('extensionSummary').hidden=false;
+  document.getElementById('extensionRepoTitle').textContent=data.repository.fullName;
+  document.getElementById('extensionRepoDescription').textContent=data.repository.description||'No description provided.';
+  document.getElementById('extensionCount').textContent=String(data.importCount);
+  document.getElementById('extensionExecutableCount').textContent=String(data.executableFilesDetected);
+  document.getElementById('extensionLicense').textContent=data.repository.license||'Unknown';
+  document.getElementById('extensionCommitChip').textContent='Commit '+data.repository.commitSha.slice(0,12);
+  document.getElementById('extensionBranchChip').textContent='Default branch: '+data.repository.defaultBranch;
+  document.getElementById('extensionLimitChip').hidden=!data.limited&&!data.treeTruncated;
+  var compatibility=data.compatibility||{};
+  var formatChips=(compatibility.formats||[]).map(function(item){return '<span class="extension-chip '+(item.detected?'good':'')+'">'+extensionEscape(item.label)+(item.detected?' · detected':'')+'</span>'}).join('');
+  var componentRows=(compatibility.components||[]).map(function(item){var state=item.count?('Detected · '+item.count):'Not detected';return '<div class="extension-candidate"><span>'+extensionEscape(item.label)+'</span><span>'+extensionEscape(state)+' — '+extensionEscape(item.detail)+'</span></div>'}).join('');
+  var adapterRows=(compatibility.installPlan&&compatibility.installPlan.adapters||[]).map(function(adapter){var capabilities=(adapter.capabilities||[]).map(function(item){return '<div class="extension-candidate"><span>'+extensionEscape(item.id)+' · '+extensionEscape(item.status)+'</span><span>'+extensionEscape(item.detail)+'</span></div>'}).join('');return '<div class="extension-candidate"><strong>'+extensionEscape(adapter.label)+'</strong></div>'+capabilities}).join('');
+  document.getElementById('extensionCompatibility').innerHTML='<strong>Detected format: '+extensionEscape(compatibility.primaryFormat||'Unknown')+'</strong><div class="extension-meta">'+formatChips+'</div><p>'+extensionEscape(compatibility.warning||'Format detection is informational; only explicitly listed importable components are installed.')+'</p><div class="extension-candidates">'+componentRows+'</div>'+(adapterRows?'<strong>Normalized adapter plan</strong><p>Supported capabilities can be imported; inspect-only, review-required and unsupported capabilities remain inactive.</p><div class="extension-candidates">'+adapterRows+'</div>':'');
+  var mcpPlan=data.mcpImportPlan||{},mcpServers=mcpPlan.servers||[],mcpSkipped=mcpPlan.skipped||[];
+  var mcpRows=mcpServers.map(function(server){var envKeys=(server.sourceEnvKeys||[]).join(', ');return '<label class="extension-candidate"><input type="checkbox" data-extension-mcp-name="'+extensionEscape(server.name)+'"><span><strong>'+extensionEscape(server.sourceName||server.name)+'</strong><br>'+extensionEscape(server.command)+' '+extensionEscape(JSON.stringify(server.args||[]))+'<br><small>Saved disabled · '+extensionEscape(server.sourcePath||'manifest')+(envKeys?' · environment keys (names only): '+extensionEscape(envKeys):' · no environment values imported')+'</small></span></label>'}).join('');
+  var skippedRows=mcpSkipped.map(function(item){return '<div class="extension-candidate"><span>'+extensionEscape(item.name||item.sourcePath||'MCP declaration')+'</span><span>Not importable · '+extensionEscape(item.reason)+'</span></div>'}).join('');
+  var mcpNode=document.getElementById('extensionMcpImportPlan');
+  mcpNode.hidden=!mcpServers.length&&!mcpSkipped.length;
+  mcpNode.innerHTML=(mcpServers.length?'<strong>Reviewable MCP server proposals ('+mcpServers.length+')</strong><p>'+extensionEscape(mcpPlan.policy||'MCP configurations are only proposed for review.')+'</p><div class="extension-candidates">'+mcpRows+'</div>':'')+(skippedRows?'<p>Skipped declarations</p><div class="extension-candidates">'+skippedRows+'</div>':'');
+  var mcpButton=document.getElementById('extensionMcpImportBtn');
+  mcpButton.hidden=mcpServers.length===0;
+  mcpButton.textContent='Import selected MCP configs disabled ('+mcpServers.length+')';
+  mcpButton.disabled=mcpServers.length===0||!document.querySelector('[data-extension-mcp-name]:checked');
+  document.getElementById('extensionSafetySummary').textContent=data.executionPolicy+(data.limited?' Only the first bounded set of prompt files can be imported.':'')+(data.treeTruncated?' GitHub truncated its repository tree. A partial collection cannot be installed.':'')+(data.installationBlockedReason?' '+data.installationBlockedReason:'');
+  var commandRows=(data.commands||[]).map(function(command){return '<div class="extension-candidate"><span>/'+extensionEscape(command.alias)+'</span><span>'+extensionEscape(command.sourceFormat)+' · '+extensionEscape(command.sourcePath)+'</span></div>'}).join('');
+  document.getElementById('extensionCandidateList').innerHTML=(commandRows?'<strong>Callable Markdown commands after installation</strong><p>Type an alias into the Oasis chat. Arguments are literal text; imported instructions remain untrusted and tool approvals still apply.</p>'+commandRows:'')+(data.files||[]).map(function(file){return '<div class="extension-candidate"><span>MD</span><span>'+extensionEscape(file.path)+'</span></div>'}).join('')+(data.importCount>80?'<div class="section-sub">Showing the first 80 file paths in this preview; the bounded importer may include more.</div>':'')||'<div class="section-sub">No importable Markdown prompts were found. Detected native components are shown above but are not installed by this version.</div>';
+  document.getElementById('extensionInstallBtn').textContent=data.canInstall===false?'No compatible prompts to install':'Install '+data.importCount+' reviewed prompt'+(data.importCount===1?'':'s');
+  document.getElementById('extensionInstallBtn').disabled=data.canInstall===false||!!data.treeTruncated;
+  if(data.treeTruncated) extensionStatus('Cannot install an incomplete listing. Use a smaller repository or a reviewed subset.',true);
+}
+async function extensionInspect(){
+  if(!agentToken){notify('Connect the Oasis runtime before inspecting repositories.');return}
+  var url=document.getElementById('extensionUrl').value.trim();
+  if(!url){notify('Paste a public GitHub repository URL first.');return}
+  extensionSetBusy(true);extensionStatus('Inspecting repository metadata, pinned commit, and importable Markdown files…');
+  try{var data=await agentApi('/api/extensions/inspect',{method:'POST',body:JSON.stringify({url:url})});extensionRenderInspection(data,url);extensionStatus('Review the repository and commit before installing.');}
+  catch(e){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+async function extensionInstall(){
+  if(!agentToken||!extensionInspection||extensionBusy)return;
+  if(extensionInspection.data.treeTruncated){extensionStatus('Installation blocked because GitHub returned an incomplete repository tree.',true);return}
+   if(extensionInspection.data.canInstall===false){extensionStatus(extensionInspection.data.installationBlockedReason||'This repository has no compatible Markdown prompts to install yet.',true);return}
+   var data=extensionInspection.data,url=extensionInspection.url,scope=document.getElementById('extensionScope').value;
+  var label=scope==='both'?'Oasis itself and the current project':(scope==='self'?'Oasis itself across projects':'the current project');
+  if(!window.confirm('Install '+data.importCount+' Markdown prompt files from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+' into '+label+'?\n\nNo repository code, scripts, dependencies, or MCP servers will be installed or executed.'))return;
+  extensionSetBusy(true);extensionStatus('Rechecking the repository revision and writing a staged import…');
+  try{var result=await agentApi('/api/extensions/install',{method:'POST',body:JSON.stringify({url:url,scope:scope,expectedCommit:data.repository.commitSha})});extensionStatus('Installed '+result.importedFiles+' Markdown prompt files from '+result.repository.fullName+'. No scripts were executed.');document.getElementById('extensionSummary').hidden=true;extensionInspection=null;await extensionRefreshInstalled();notify('Extension import completed and recorded.')}
+  catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+async function extensionImportMcpServers(){
+  if(!agentToken||!extensionInspection||extensionBusy)return;
+  var data=extensionInspection.data,url=extensionInspection.url;
+  var selected=Array.from(document.querySelectorAll('[data-extension-mcp-name]:checked')).map(function(node){return node.getAttribute('data-extension-mcp-name')});
+  if(!selected.length){extensionStatus('Select at least one supported MCP server proposal first.',true);return}
+  if(data.treeTruncated){extensionStatus('Import is blocked because the inspected repository tree was incomplete.',true);return}
+  if(!window.confirm('Import '+selected.length+' MCP server configuration(s) from '+data.repository.fullName+' at commit '+data.repository.commitSha.slice(0,12)+'?\n\nThey will be saved DISABLED. No process will start. Manifest environment values are not copied; review and configure each server before enabling it.'))return;
+  extensionSetBusy(true);extensionStatus('Rechecking the pinned repository and saving selected MCP configurations disabled…');
+  try{
+    var result=await agentApi('/api/extensions/mcp-import',{method:'POST',body:JSON.stringify({url:url,expectedCommit:data.repository.commitSha,serverNames:selected})});
+    data.mcpImportPlan.servers=(data.mcpImportPlan.servers||[]).filter(function(server){return !selected.includes(server.name)});
+    extensionRenderInspection(data,url);
+    await mcpRefresh();
+    extensionStatus('Imported '+result.imported.length+' MCP configuration(s) as disabled. No process was started. Review environment settings, then enable trusted servers in Integrations.');
+    notify('MCP configurations imported disabled; none were started.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+
+async function extensionRefreshInstalled(){
+  var list=document.getElementById('installedExtensions');if(!list)return;
+  if(!agentToken){list.innerHTML='<div class="integration-empty">Connect the Oasis runtime to load the managed extension inventory.</div>';return}
+  try{var result=await agentApi('/api/extensions');var extensions=result.extensions||[];
+    list.innerHTML=extensions.length?extensions.map(function(item){var commands=(item.commands||[]).map(function(command){return '<span class="extension-chip">/'+extensionEscape(command.alias)+'</span>'}).join('');var rollbacks=(item.backups||[]).map(function(backup){return '<button class="btn btn-secondary" data-rollback-extension="'+extensionEscape(item.name)+'" data-rollback-scope="'+extensionEscape(item.scope)+'" data-rollback-commit="'+extensionEscape(backup.commitSha)+'" type="button">Rollback '+extensionEscape(backup.commitSha.slice(0,12))+'</button>'}).join('');return '<article class="extension-card"><div class="extension-card-head"><div class="extension-card-icon">⬡</div><div class="extension-card-main"><div class="extension-card-title">'+extensionEscape(item.name)+'</div><div class="extension-card-desc">'+extensionEscape(item.description||item.source)+'</div><div class="extension-meta"><span class="extension-chip good">'+extensionEscape(item.scope==='self'?'Oasis · all projects':'Current project')+'</span><span class="extension-chip">'+extensionEscape(String(item.importedFiles))+' skills · '+extensionEscape(String(item.preservedResources||0))+' resources</span><span class="extension-chip">'+extensionEscape(item.license||'Unknown license')+'</span><span class="extension-chip">Commit '+extensionEscape((item.commitSha||'').slice(0,12))+'</span>'+commands+'</div></div><div class="integration-controls"><button class="btn btn-secondary" data-update-extension="'+extensionEscape(item.name)+'" data-update-scope="'+extensionEscape(item.scope)+'" data-update-source="'+extensionEscape(item.source)+'" data-update-commit="'+extensionEscape(item.commitSha)+'" type="button">Update</button>'+rollbacks+'<button class="btn btn-danger" data-remove-extension="'+extensionEscape(item.name)+'" data-remove-scope="'+extensionEscape(item.scope)+'" type="button">Remove</button></div></div><div class="extension-warning">Imported instructions remain untrusted. '+extensionEscape(item.execution||'No code executed.')+'</div></article>'}).join(''):'<div class="integration-empty">No external extensions installed yet. Paste a GitHub collection above to bring your first specialist into Oasis.</div>';
+  }catch(e){list.innerHTML='<div class="integration-empty">Could not load extensions: '+extensionEscape(e.message)+'</div>'}
+}
+async function extensionUpdate(name,scope,source,oldCommit){
+  if(!agentToken||extensionBusy)return;
+  extensionSetBusy(true);
+  try{
+    extensionStatus('Reviewing the latest pinned revision before updating '+name+'…');
+    var data=await agentApi('/api/extensions/inspect',{method:'POST',body:JSON.stringify({url:source})});
+    extensionRenderInspection(data,source);
+    if(data.treeTruncated||data.canInstall===false){extensionStatus('Update blocked: repository tree is incomplete or has no supported Markdown prompts.',true);return}
+    if((data.repository.commitSha||'').toLowerCase()===String(oldCommit||'').toLowerCase()){
+      extensionStatus(name+' is already at the latest inspected commit.');
+      return;
+    }
+    if(!window.confirm('Update '+name+' ('+scope+') from '+String(oldCommit||'').slice(0,12)+' to '+data.repository.commitSha.slice(0,12)+'?\\n\\nOasis verifies installed file hashes first and retains the previous revision for rollback. Edited files block the update. No scripts or MCP servers are enabled.'))return;
+    extensionStatus('Verifying the installed files, staging the new revision, and keeping the previous version…');
+    var result=await agentApi('/api/extensions/update',{method:'POST',body:JSON.stringify({url:source,scope:scope,expectedCommit:data.repository.commitSha})});
+    if(result.alreadyCurrent){extensionStatus('Already current; no files changed.');return}
+    await extensionRefreshInstalled();
+    var backupText=(result.backups||[]).map(function(backup){return backup.scope+': '+backup.commitSha.slice(0,12)}).join(', ');
+    extensionStatus('Updated '+name+' to '+result.commitSha.slice(0,12)+'. Rollback available for '+backupText+'.');
+    notify('Extension updated with verified rollback history.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+
+async function extensionRemove(name,scope){
+  if(!agentToken)return;
+  if(!window.confirm('Remove the Oasis-managed '+name+' extension from '+(scope==='self'?'Oasis itself':'the current project')+'? Oasis will refuse to remove edited prompt files or unexpected contents.'))return;
+  try{var result=await agentApi('/api/extensions/remove',{method:'POST',body:JSON.stringify({name:name,scope:scope})});notify('Removed '+result.name+' from '+scope+'.');await extensionRefreshInstalled()}
+  catch(e){notify('Extension removal was blocked: '+e.message)}
+}
+async function extensionRollback(name,scope,commitSha){
+  if(!agentToken||extensionBusy)return;
+  if(!window.confirm('Restore '+name+' ('+scope+') to verified commit '+commitSha.slice(0,12)+'? The active version will be preserved as a new rollback backup.'))return;
+  extensionSetBusy(true);
+  try{
+    extensionStatus('Verifying rollback backup '+commitSha.slice(0,12)+'…');
+    var result=await agentApi('/api/extensions/rollback',{method:'POST',body:JSON.stringify({name:name,scope:scope,commitSha:commitSha})});
+    if(result.alreadyCurrent){extensionStatus(name+' is already at that revision.');return}
+    await extensionRefreshInstalled();
+    extensionStatus('Restored '+name+' to '+result.commitSha.slice(0,12)+'. The previous revision remains available in rollback history.');
+    notify('Extension rollback completed.');
+  }catch(e){extensionStatus(e.message,true)}
+  finally{extensionSetBusy(false)}
+}
+document.getElementById('installedExtensions').addEventListener('click',function(e){
+  var update=e.target.closest('[data-update-extension]');
+  if(update){void extensionUpdate(update.getAttribute('data-update-extension'),update.getAttribute('data-update-scope'),update.getAttribute('data-update-source'),update.getAttribute('data-update-commit'));return}
+  var rollback=e.target.closest('[data-rollback-extension]');
+  if(rollback){void extensionRollback(rollback.getAttribute('data-rollback-extension'),rollback.getAttribute('data-rollback-scope'),rollback.getAttribute('data-rollback-commit'));return}
+  var remove=e.target.closest('[data-remove-extension]');
+  if(remove)void extensionRemove(remove.getAttribute('data-remove-extension'),remove.getAttribute('data-remove-scope'));
+});
+document.getElementById('extensionInspectForm').addEventListener('submit',function(e){e.preventDefault();void extensionInspect()});
+document.getElementById('extensionUrl').addEventListener('input',function(){if(extensionInspection&&this.value.trim()!==extensionInspection.url){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository URL changed. Inspect the new URL before installing.')}});
+document.getElementById('extensionInstallBtn').addEventListener('click',function(){void extensionInstall()});
+document.getElementById('extensionMcpImportBtn').addEventListener('click',function(){void extensionImportMcpServers()});
+document.getElementById('extensionMcpImportPlan').addEventListener('change',function(e){if(e.target.matches('[data-extension-mcp-name]'))extensionSetBusy(false)});
+document.getElementById('extensionCancelBtn').addEventListener('click',function(){extensionInspection=null;document.getElementById('extensionSummary').hidden=true;extensionStatus('Repository review cancelled.')});
+document.getElementById('extensionRefreshBtn').addEventListener('click',function(){void extensionRefreshInstalled()});
+// Remove/update/rollback actions are delegated in the single listener above.
+
+/* Integration hub with live state where the host runtime supports it. */
+function integrationSetTab(name){
+  document.querySelectorAll('[data-integration-tab]').forEach(function(tab){var active=tab.getAttribute('data-integration-tab')===name;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false')});
+  document.querySelectorAll('.integration-pane').forEach(function(panel){panel.hidden=panel.id!=='integration-pane-'+name});
+}
+document.querySelectorAll('[data-integration-tab]').forEach(function(tab){tab.addEventListener('click',function(){integrationSetTab(tab.getAttribute('data-integration-tab'))})});
+async function integrationRefresh(){
+  if(!agentToken){document.getElementById('integrationRuntimeTitle').textContent='Runtime not connected';document.getElementById('integrationRuntimeHelp').textContent='Connect the local Oasis runtime to inspect provider, GitHub, and MCP status.';var ids=['connectorGithubStatus','integrationProviderStatus','integrationRuntimeStatus'];ids.forEach(function(id){var node=document.getElementById(id);node.classList.remove('connected');node.textContent='Connect runtime first'});return}
+  try{
+    var state=await agentApi('/api/status');
+    document.getElementById('integrationRuntimeTitle').textContent='Runtime connected · '+state.workspaceName;
+    document.getElementById('integrationRuntimeHelp').textContent=state.providerConfigured?'Model provider '+state.provider.model+' is configured on the host.':'Runtime is connected, but no model provider is configured yet.';
+    var p=document.getElementById('integrationProviderStatus');p.textContent=state.providerConfigured?'Configured · '+state.provider.model:'Not configured';p.classList.toggle('connected',!!state.providerConfigured);
+    document.getElementById('integrationProviderDescription').textContent=state.provider?'Active provider: '+state.provider.provider+' · '+state.provider.protocol+' · '+state.provider.model:'Choose a supported model endpoint in Provider settings.';
+    document.getElementById('integrationRuntimeStatus').textContent='Connected · local authenticated API';document.getElementById('integrationRuntimeStatus').classList.add('connected');
+  }catch(e){document.getElementById('integrationRuntimeTitle').textContent='Runtime unavailable';document.getElementById('integrationRuntimeHelp').textContent=e.message;['integrationProviderStatus','integrationRuntimeStatus'].forEach(function(id){document.getElementById(id).classList.remove('connected')})}
+  try{var gh=await agentApi('/api/github/status');var el=document.getElementById('connectorGithubStatus');el.textContent=gh.authenticated?'Connected · '+(gh.account||'host GitHub CLI'):(gh.cliAvailable?'GitHub CLI not signed in':'GitHub CLI not installed');el.classList.toggle('connected',!!gh.authenticated)}catch(e){document.getElementById('connectorGithubStatus').textContent='Status unavailable'}
+  try{await mcpRefresh()}catch(e){}
+}
+document.getElementById('connectorGithubCheck').addEventListener('click',function(){void integrationRefresh()});
+document.getElementById('integrationApiRefresh').addEventListener('click',function(){void integrationRefresh()});
+document.getElementById('mcpRefreshBtn').addEventListener('click',function(){void mcpRefresh()});
+var mcpEnvEditingName=null;
+async function mcpRefresh(){
+  var list=document.getElementById('mcpServerList');
+  if(!agentToken){list.innerHTML='<div class="integration-empty">Connect Oasis first to load the MCP configuration.</div>';return}
+  try{var data=await agentApi('/api/mcp');var servers=data.servers||[];
+    list.innerHTML=servers.length?servers.map(function(server){var origin=server.origin?'<small>Imported from '+extensionEscape(server.origin.repository)+' · '+extensionEscape((server.origin.commitSha||'').slice(0,12))+' · '+extensionEscape(server.origin.filePath)+'</small>':'';return '<div class="mcp-row"><div class="integration-icon">MCP</div><div class="mcp-row-main"><strong>'+extensionEscape(server.name)+' '+(server.enabled?'<span class="status-dot connected">Enabled</span>':'<span class="status-dot">Disabled</span>')+'</strong><small>'+extensionEscape(server.command)+' '+extensionEscape(JSON.stringify(server.args||[]))+'</small><small>Pass environment: '+extensionEscape((server.passEnv||[]).join(', ')||'none')+'</small>'+origin+'</div><button class="btn btn-secondary" data-mcp-env-edit="'+extensionEscape(server.name)+'" type="button">Env allowlist</button><button class="btn btn-secondary" data-mcp-toggle="'+extensionEscape(server.name)+'" type="button">'+(server.enabled?'Disable':'Enable')+'</button><button class="btn btn-danger" data-mcp-remove="'+extensionEscape(server.name)+'" type="button">Remove</button></div>'}).join(''):'<div class="integration-empty">No MCP servers configured. Add a trusted server below or run <code>oasis mcp list</code> in the host terminal.</div>';
+  }catch(e){list.innerHTML='<div class="integration-empty">Could not load MCP servers: '+extensionEscape(e.message)+'</div>'}
+}
+async function mcpSave(servers,confirmText){
+  if(!agentToken){notify('Connect Oasis before changing MCP servers.');return}
+  if(!window.confirm(confirmText+'\n\nEnabled MCP servers execute as local processes when new agent sessions start. Only continue for commands you trust.'))return false;
+  try{var result=await agentApi('/api/mcp',{method:'POST',body:JSON.stringify({servers:servers})});notify('MCP configuration saved. '+(result.servers||[]).length+' server(s) configured.');await mcpRefresh();return true}
+  catch(e){notify('Could not save MCP configuration: '+e.message);return false}
+}
+document.getElementById('mcpServerList').addEventListener('click',async function(e){
+  var toggle=e.target.closest('[data-mcp-toggle]'),remove=e.target.closest('[data-mcp-remove]'),editEnv=e.target.closest('[data-mcp-env-edit]');
+  if(!toggle&&!remove&&!editEnv)return;
+  if(!agentToken)return;
+  try{
+    var data=await agentApi('/api/mcp');
+    var trigger=toggle||remove||editEnv;
+    var name=trigger.getAttribute(toggle?'data-mcp-toggle':(remove?'data-mcp-remove':'data-mcp-env-edit'));
+    if(editEnv){
+      var current=(data.servers||[]).find(function(s){return s.name===name});if(!current)return;
+      mcpEnvEditingName=name;
+      document.getElementById('mcpEnvNames').value=(current.passEnv||[]).join(', ');
+      document.getElementById('mcpEnvDialogError').textContent='';
+      document.getElementById('mcpEnvDialog').showModal();
+      document.getElementById('mcpEnvNames').focus();
+      return;
+    }
+    var next=(data.servers||[]).filter(function(s){return !remove||s.name!==name}).map(function(s){return toggle&&s.name===name?Object.assign({},s,{enabled:!s.enabled}):s});
+    await mcpSave(next,(toggle?'Change enabled state for MCP server '+name+'?':'Remove MCP server '+name+' from configuration?'));
+  }catch(err){notify('Could not update MCP configuration: '+err.message)}
+});
+document.getElementById('mcpEnvCancel').addEventListener('click',function(){document.getElementById('mcpEnvDialog').close();mcpEnvEditingName=null});
+document.getElementById('mcpEnvForm').addEventListener('submit',async function(e){
+  e.preventDefault();if(!agentToken||!mcpEnvEditingName)return;
+  var entered=document.getElementById('mcpEnvNames').value.trim();
+  var variables=entered?entered.split(',').map(function(v){return v.trim()}):[];
+  if(variables.some(function(v){return !/^[A-Z_][A-Z0-9_]*$/.test(v)})||new Set(variables).size!==variables.length){
+    document.getElementById('mcpEnvDialogError').textContent='Use unique uppercase environment variable names only, such as API_TOKEN. Secret values are not accepted.';
+    return;
+  }
+  var name=mcpEnvEditingName;
+  try{
+    var data=await agentApi('/api/mcp');
+    var next=(data.servers||[]).map(function(server){return server.name===name?Object.assign({},server,{passEnv:variables}):server});
+    if(!next.some(function(server){return server.name===name})){throw new Error('The selected MCP server no longer exists.')}
+    var saved=await mcpSave(next,'Update the environment-variable allowlist for '+name+'? Only variable names will be saved; secret values stay in the Oasis host environment.');
+    if(saved){document.getElementById('mcpEnvDialog').close();mcpEnvEditingName=null}
+  }catch(err){document.getElementById('mcpEnvDialogError').textContent=err.message||'Could not update environment access.'}
+});
+document.getElementById('mcpAddForm').addEventListener('submit',async function(e){
+  e.preventDefault();if(!agentToken){notify('Connect Oasis first.');return}
+  var args, name=document.getElementById('mcpName').value.trim(),command=document.getElementById('mcpCommand').value.trim(),passEnv=document.getElementById('mcpPassEnv').value.split(',').map(function(v){return v.trim()}).filter(Boolean);
+  try{args=JSON.parse(document.getElementById('mcpArgs').value||'[]');if(!Array.isArray(args)||args.some(function(v){return typeof v!=='string'}))throw new Error('Arguments must be a JSON array of strings.')}catch(err){notify('Invalid MCP arguments: '+err.message);return}
+  try{var data=await agentApi('/api/mcp');if((data.servers||[]).some(function(v){return v.name===name})){notify('An MCP server with that name already exists.');return}await mcpSave((data.servers||[]).concat([{name:name,command:command,args:args,passEnv:passEnv,enabled:true}]),'Add the MCP server '+name+' using executable '+command+'?');document.getElementById('mcpAddForm').reset();document.getElementById('mcpArgs').value='[]'}catch(err){notify('Could not add MCP server: '+err.message)}
+});
+
+document.getElementById('agentTokenInput').value=agentToken;
+if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
+
+})();
+</script></body></html>+amount.toFixed(2)}
+function agentShowSessionState(d){
+  var sel=document.getElementById('agentModeSelect');if(d.mode&&sel.querySelector('option[value="'+d.mode+'"]'))sel.value=d.mode;
+  var percent=Math.max(0,Number(d.contextPercent)||0),model=String(d.model||'unknown model');
+  var m=document.getElementById('agentContextMeter');m.hidden=false;m.textContent='Context '+percent+'% · '+Number(d.totalTokens||0).toLocaleString()+' tokens';m.title='~'+Number(d.contextTokens||0).toLocaleString()+' of '+Number(d.contextWindow||0).toLocaleString()+' context tokens'+(d.model?' · '+d.model:'');m.dataset.level=percent>=90?'high':percent>=50?'mid':'low';
+  var modelNode=document.getElementById('agentStatusModel');modelNode.textContent='Model: '+model;modelNode.title=model;
+  var contextNode=document.getElementById('agentStatusContext');contextNode.textContent='Context: '+percent+'% · '+Number(d.contextTokens||0).toLocaleString()+' / '+Number(d.contextWindow||0).toLocaleString()+' tokens';contextNode.dataset.level=percent>=90?'high':percent>=50?'mid':'low';
+  var costNode=document.getElementById('agentStatusCost');costNode.textContent=d.costKnown?'Estimated cost: '+agentFormatUsd(d.costUsd)+(d.localModel?' · local model':''):'Cost: unknown for this model';costNode.title=d.costKnown?'Estimate based on known model pricing; your provider may bill differently.':'No matching price is known. Configure a pricing override to estimate usage.';
+  var budgetNode=document.getElementById('agentStatusBudget');
+  if(Number(d.budgetUsd)>0){var bPercent=Number.isFinite(d.budgetPercent)?Math.max(0,Math.round(d.budgetPercent)):null;budgetNode.hidden=false;budgetNode.dataset.level=d.budgetLevel||'unknown';budgetNode.textContent=bPercent===null?'Budget: '+agentFormatUsd(d.budgetUsd):'Budget: '+agentFormatUsd(d.costUsd)+' / '+agentFormatUsd(d.budgetUsd)+' ('+bPercent+'%)';budgetNode.title='Budget warning at 50% and 90% of the configured estimate.';if(bPercent!==null&&bPercent>=90)budgetNode.textContent='⚠ Budget nearly reached · '+bPercent+'%';}
+  else{budgetNode.hidden=true;budgetNode.textContent='';}
+}
 function agentSetStatus(text,connected){var el=document.getElementById('agentRuntimeState');el.textContent=text;el.dataset.connected=connected?'true':'false'}
 function agentApi(url,options){options=options||{};var headers=Object.assign({},options.headers||{});if(agentToken)headers.Authorization='Bearer '+agentToken;if(options.body)headers['Content-Type']='application/json';return fetch(url,Object.assign({},options,{headers:headers,cache:'no-store'})).then(function(r){return r.json().catch(function(){return {error:'Invalid response from Oasis runtime'}}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data})})}
 
