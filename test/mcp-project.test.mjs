@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { loadProjectMcpServers, McpHttpClient, expandVariables } from '../src/mcp-project.mjs';
-import { connectMcpServers, closeMcpClients, mcpToolDefinitions } from '../src/mcp.mjs';
+import { McpServerClient, connectMcpServers, closeMcpClients, mcpToolDefinitions } from '../src/mcp.mjs';
 import { createSession, closeSession } from '../src/agent.mjs';
 import { setWorkspaceTrust } from '../src/settings.mjs';
 
@@ -20,6 +20,33 @@ const STDIO_SERVER = [
   "    if (m.method === 'tools/call') result = { content: [{ type: 'text', text: 'got ' + process.env.PROJECT_TOKEN }] };",
   "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\\n'); } });"
 ].join('\n');
+
+const TREE_SERVER = [
+  "const { spawn } = require('node:child_process');",
+  "const fs = require('node:fs');",
+  "const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+  "fs.writeFileSync(process.argv[1], String(grandchild.pid));",
+  "let buffer = ''; process.stdin.setEncoding('utf8');",
+  "process.stdin.on('data', (chunk) => { buffer += chunk; let i; while ((i = buffer.indexOf('\\\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1); let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue; let result = {}; if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} } }; if (m.method === 'tools/list') result = { tools: [] }; process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\\\\n'); } });"
+].join('\\n');
+
+async function processIsAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (error) {
+    if (error.code === 'ESRCH') return false;
+    if (error.code === 'EPERM') return true;
+    throw error;
+  }
+}
+
+async function waitForProcessExit(pid, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await processIsAlive(pid))) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return !(await processIsAlive(pid));
+}
 
 async function tmp(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-mcpp-'));
@@ -54,6 +81,28 @@ test('.mcp.json stdio servers start with expanded env; bad entries are reported'
   const out = await client.callTool('whoami', {}, { autoApprove: true });
   assert.equal(out.content, 'got s3cret');
   assert.equal(mcpToolDefinitions(mcp.clients).definitions[0].function.name, 'mcp_my-server_whoami');
+});
+
+
+
+test('closing a stdio MCP client terminates its spawned process tree', { skip: process.platform === 'win32' }, async (t) => {
+  const root = await tmp(t);
+  const pidFile = path.join(root, 'grandchild.pid');
+  const client = new McpServerClient({
+    name: 'tree',
+    command: process.execPath,
+    args: ['-e', TREE_SERVER, pidFile],
+    passEnv: [],
+    enabled: true
+  }, { root, env: process.env });
+  t.after(() => client.close());
+
+  await client.start();
+  const grandchildPid = Number((await readFile(pidFile, 'utf8')).trim());
+  assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0, 'fixture should start a grandchild');
+  client.close();
+
+  assert.equal(await waitForProcessExit(grandchildPid), true, 'closing MCP must not leave its descendant running');
 });
 
 test('Streamable HTTP client rejects oversized JSON responses, including misleading lengths', async (t) => {
