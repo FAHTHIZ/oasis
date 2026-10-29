@@ -44,7 +44,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
-import { stopLspClients } from './lsp.mjs';
+import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
@@ -1892,6 +1892,41 @@ function isCompleteFileRead(args, result) {
     Number(result.totalLines) >= 1;
 }
 
+
+const AUTO_LSP_EDIT_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
+
+function successfulMutation(name, result) {
+  if (!result || typeof result !== 'object' || result.error) return false;
+  if (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') return result.changed === true;
+  return name === 'write_file' && typeof result.writtenBytes === 'number';
+}
+
+function lspCallOptions(session, callContext, options) {
+  return {
+    session,
+    settings: session.settings || {},
+    approval: callContext && callContext.approval || options.approval,
+    autoApprove: Boolean(callContext && callContext.autoApprove),
+    ruleAllowed: Boolean(callContext && callContext.ruleAllowed),
+    env: callContext && callContext.env || options.env || process.env,
+    signal: options.signal
+  };
+}
+
+// Use a baseline only when this session already has an active, previously
+// approved server. A cold start is left to the post-edit check, so a denial or
+// unavailable binary cannot cause a duplicate prompt before the edit.
+async function activeLspBaseline(session, file, callContext, options) {
+  const server = serverForFile(file, session.settings || {});
+  if (!server || !(session.lspClients instanceof Map) || !session.lspClients.has(server.name)) return null;
+  try {
+    const current = await runLsp(session.root, { operation: 'diagnostics', path: file }, lspCallOptions(session, callContext, options));
+    return Array.isArray(current.diagnostics) ? current.diagnostics : null;
+  } catch {
+    return null;
+  }
+}
+
 function verificationIssues(state) {
   if (!state.changedPaths.size) return [];
   const changed = [...state.changedPaths];
@@ -1901,6 +1936,14 @@ function verificationIssues(state) {
   }
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
+  }
+  for (const [file, result] of state.lspVerificationByPath || []) {
+    if (!changed.includes(file)) continue;
+    if (result.status === 'unavailable') {
+      issues.push('LSP verification unavailable for ' + file + ': ' + String(result.reason || 'no diagnostic result'));
+    } else if (Array.isArray(result.newErrors) && result.newErrors.length) {
+      issues.push('LSP reports ' + result.newErrors.length + ' new or unclassified error(s) in ' + file);
+    }
   }
   return issues;
 }
@@ -2849,6 +2892,9 @@ async function executeOneCall(session, call, context, options) {
 async function executeOneCallRaw(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
+  let lspVerificationPath = null;
+  let lspBaselineDiagnostics = null;
+  let fileMutationResult = null;
   let attemptedArgs = null;
   let callContext = null;
   if (options.onToolStart) options.onToolStart({ name, call, args: safeToolArguments(call.function && call.function.arguments) });
@@ -2934,8 +2980,13 @@ async function executeOneCallRaw(session, call, context, options) {
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
       result = await callMappedMcpTool(session, name, args, callContext);
     } else {
+      if (AUTO_LSP_EDIT_TOOLS.has(name) && typeof args.path === 'string' && serverForFile(args.path, session.settings || {})) {
+        lspVerificationPath = args.path;
+        lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, callContext, options);
+      }
       if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
       result = await executeTool(name, args, callContext);
+      if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
       if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext.env || process.env });
     }
@@ -2944,6 +2995,14 @@ async function executeOneCallRaw(session, call, context, options) {
       if (!session.nestedMemoryLoaded) session.nestedMemoryLoaded = new Set();
       const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: callContext.env || process.env }).catch(() => []);
       if (nested.length) result.directoryInstructions = 'Project instructions for this folder (follow them for files here):\n' + nested.map((item) => '--- ' + item.path + ' ---\n' + item.text).join('\n\n');
+    }
+    if (fileMutationResult && lspVerificationPath) {
+      const lspVerification = await verifyEditedFileWithLsp(session.root, fileMutationResult.path || lspVerificationPath, {
+        ...lspCallOptions(session, callContext, options),
+        baselineDiagnostics: lspBaselineDiagnostics
+      });
+      if (result && typeof result === 'object') result = { ...result, lspVerification };
+      else result = { output: String(result ?? ''), lspVerification };
     }
     if (debugEnabled('tools')) debugLog('tools', name + ' ' + (result && result.error ? 'error: ' + String(result.error).slice(0, 300) : 'ok'), args);
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
@@ -3144,7 +3203,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let tokensUsed = Number(compaction.tokensUsed || 0);
   let lastToolOutcome = null;
   let loopBreakMessage = '';
-  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, nudgeUsed: false };
+  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lspVerificationByPath: new Map(), nudgeUsed: false };
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
@@ -3238,6 +3297,25 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
     if (!calls.length) {
       const issues = verificationIssues(verification);
+      const lspBlockers = issues.filter((issue) => issue.startsWith('LSP verification unavailable') || issue.startsWith('LSP reports '));
+      if (lspBlockers.length && verification.nudgeUsed) {
+        const blockedText = 'Verification incomplete: Oasis cannot report this change as verified because the LSP gate is still blocked.\n' +
+          lspBlockers.map((issue) => '- ' + issue).join('\n') +
+          (text ? '\n\nLatest assistant note (not verified): ' + text.slice(0, 1800) : '');
+        assistantMessage.content = blockedText;
+        if (options.onText) await emitDisplayText(session, options, blockedText);
+        pruneHistory(session);
+        return {
+          text: blockedText,
+          toolCalls: totalToolCalls,
+          tokensUsed,
+          tokenBudget,
+          finished: false,
+          verificationIncomplete: true,
+          verificationIssues: issues,
+          budgetExceeded: tokensUsed > tokenBudget
+        };
+      }
       if (issues.length && !verification.nudgeUsed) {
         verification.nudgeUsed = true;
         session.messages.push({
@@ -3405,10 +3483,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         name === 'write_file' && typeof result.writtenBytes === 'number' ||
         name === 'delete_file' && result.deleted === true
       )) {
-        verification.changedPaths.add(normalizeReviewPath(result.path));
+        const changedPath = normalizeReviewPath(result.path);
+        verification.changedPaths.add(changedPath);
+        verification.lspVerificationByPath.delete(changedPath);
         verification.diffReviewedAll = false;
         verification.diffReviewedPaths.clear();
         verification.lastVerificationExitCode = null;
+      }
+      if (result && result.lspVerification && result.lspVerification.path) {
+        verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
       }
       session.messages.push({
         role: 'tool',
