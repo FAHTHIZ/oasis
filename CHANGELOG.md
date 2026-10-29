@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- LSP completion responses now explicitly disclose when language-server diagnostics were unavailable even if independent checks passed; `/diagnostics` directs the agent to collect both LSP and project-checker results and report Errors, Warnings, Information, and Verification unavailable separately.
+
 - Hardened GitHub Action completion wording so an incomplete verification result is not described as finished successfully; added a focused status test.
 - Updated path-scoped memory coverage to assert matching-only on-demand loading, restored the reviewer style's evidence-first wording, and made the `/audit` test fixture self-contained. Latest full-suite validation is still pending.
 
