@@ -112,6 +112,33 @@ test('readInput drives a fake TTY: typing, Tab completion, and submit', async ()
   assert.match(written, /\x1b\[\?2004h/);
 });
 
+test('Ctrl+K opens a searchable command palette and inserts a choice without running it', async () => {
+  const input = new PassThrough();
+  input.isTTY = true; input.setRawMode = () => {}; input.isRaw = false;
+  const output = new PassThrough();
+  output.columns = 80; output.rows = 24;
+  let written = '';
+  output.on('data', (chunk) => { written += chunk; });
+  const pending = readInput({
+    input, output, color: false, prompt: '> ', env: { OASIS_SAFE_MODE: '1' },
+    onCommandPalette: async () => [
+      { label: '/doctor', description: 'Diagnose setup problems', value: '/doctor', category: 'Commands' },
+      { label: '/help', description: 'Show the command list', value: '/help', category: 'Commands' },
+      { label: 'Resume recent session', description: 'Open saved work', value: '/resume abcdef0123456789abcdef01', category: 'Recent sessions' }
+    ]
+  });
+  input.write('\x0b');
+  input.write('help\r\r');
+  const result = await pending;
+  assert.equal(result.type, 'submit');
+  assert.equal(result.text, '/help');
+  assert.match(written, /OASIS COMMAND PALETTE/);
+  assert.match(written, /Search: help/);
+  assert.match(written, /Added \/help to the prompt/);
+  assert.match(written, /\x1b\[\?1049h/);
+  assert.match(written, /\x1b\[\?1049l/);
+});
+
 test('completion offers slash commands at the start and @files with fuzzy matching', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-complete-'));
   await mkdir(path.join(root, 'src'));
