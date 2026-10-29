@@ -50,7 +50,7 @@ Oasis is a Node.js ESM application. src/cli.mjs starts terminal/headless workflo
 
 ### 2. Dynamic workflows and /audit
 
-- **Progress (2026-10-29):** added `src/workflows/audit.js` and `/audit`. Four isolated read-only reviewers return a fixed finding schema; findings dedupe by normalized file/line/title; up to four high/critical findings are independently checked; the result separates verified and unverified findings and reports failed reviewers without discarding other results. Focused orchestration tests have been added; current-head CI is pending. Worker timeout/cancellation/resource-limit acceptance remains open.
+- **Progress (2026-10-29):** added `src/workflows/audit.js` and `/audit`. Four isolated read-only reviewers return a fixed finding schema; findings dedupe by normalized file/line/title; up to four high/critical findings are independently checked; the result separates verified and unverified findings and reports failed reviewers without discarding other results. The `/audit` command test now creates its own explicit state instead of depending on an unrelated helper. Current-head CI is pending. Worker timeout/cancellation/resource-limit acceptance remains open.
 
 - **Existing equivalent:** src/workflows.mjs and src/workflow-sandbox.mjs support schema-checked agent, parallel, pipeline and phase primitives. src/agent-tasks.mjs supports bounded background workers. A built-in accepted /audit workflow is not established.
 - **Affected files:** src/workflows.mjs, src/workflow-sandbox.mjs, src/slash.mjs, src/subagents.mjs, workflow tests, docs/SLASH_COMMANDS_AND_SKILLS.md, docs/USER_GUIDE.md.
