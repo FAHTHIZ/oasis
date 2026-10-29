@@ -2683,7 +2683,8 @@ async function main() {
       const dir = await fetchPluginArchive(url);
       // fetchPluginArchive may return the plugin's single top-level subfolder;
       // register its actual temporary extraction root so cleanup removes the parent too.
-      TEMPORARY_PLUGIN_DIRS.add(path.basename(dir).startsWith('oasis-plugin-url-') ? dir : path.dirname(dir));
+      const parent = path.dirname(dir);
+      TEMPORARY_PLUGIN_DIRS.add(path.basename(parent).startsWith('oasis-plugin-url-') ? parent : dir);
       process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, dir].filter(Boolean).join(path.delimiter);
     }
   }
