@@ -35,6 +35,7 @@ function statusOf(record) {
 export class PtySessionManager {
   constructor({ loadPty = () => import('node-pty'), maxSessions = MAX_ACTIVE_SESSIONS, bufferLimit = DEFAULT_BUFFER_CHARS, idFactory, killGraceMs = 1500 } = {}) {
     this.loadPty = loadPty;
+    this.signalTree = signalProcessTree;
     this.maxSessions = safeInteger(maxSessions, MAX_ACTIVE_SESSIONS, 1, MAX_ACTIVE_SESSIONS);
     this.bufferLimit = safeInteger(bufferLimit, DEFAULT_BUFFER_CHARS, 1024, 4 * 1024 * 1024);
     this.killGraceMs = safeInteger(killGraceMs, 1500, 10, 10000);
