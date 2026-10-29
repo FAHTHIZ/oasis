@@ -6,7 +6,20 @@ This page records how to produce a reproducible, auditable comparison. It delibe
 
 ## What the current 30-task suite proves
 
-The repository has 30 deterministic evaluation fixtures under **evals/tasks/**. Eight new fixtures cover bounded request-body parsing, same-origin redirects, transient provider retries, log redaction, pagination validation, TTL caching, archive path validation, and case-insensitive request headers. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
+The repository has 30 deterministic evaluation fixtures under **evals/tasks/**. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
+
+### Added fixture catalogue
+
+| Fixture | Independent acceptance focus |
+|---|---|
+| `http-body-limit` | UTF-8 byte counting, bounded JSON bodies, oversized and malformed payloads |
+| `same-origin-redirect` | Relative redirect resolution, HTTP(S)-only destinations, origin and credential checks |
+| `transient-provider-retry` | Transient status allowlist and strict maximum-attempt behavior |
+| `secret-log-redaction` | Bearer credentials and sensitive key/value assignments without losing safe text |
+| `bounded-pagination` | Strict integer parsing, safe offsets, and bounded page sizes |
+| `ttl-cache` | Injected-clock expiry and oldest-insertion eviction at capacity |
+| `safe-archive-entry` | POSIX/Windows absolute paths, UNC paths, NULs, and traversal rejection |
+| `normalize-request-headers` | Case-insensitive lookup, whitespace trimming, and ambiguous record-key rejection |
 
 This is useful for checking evaluator integrity and a broader range of narrow coding behaviors. The additional fixtures have independent external verifiers, but the suite is still **not** a representative real-world software-engineering benchmark: tasks are small, largely utility-level changes over one codebase, and their reference solutions exist in the repository. Do not market the suite's pass rate as parity with Claude Code.
 
@@ -68,7 +81,7 @@ The comparator now fingerprints each task's prompt, shared repository snapshot, 
 4. Treat deterministic verifier outcomes as the success signal. Do not use a model to judge itself and do not count a task as passed just because the agent says done.
 5. Run three trials at minimum and publish every failure and timeout. Report both task-balanced pass rate and total trial counts.
 6. Report cost only when supported by per-run usage metadata or documented token rates. Subscription usage with no per-run dollar amount is **unknown**, not zero. OASIS's token-price setting produces an estimate and does not account for every cache/billing modifier; label it as an estimate.
-7. Do not claim "90%" or "at the same level as Claude Code" from this 22-task smoke suite. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
+7. Do not claim "90%" or "at the same level as Claude Code" from this 30-task smoke suite. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
 
 ## Result status
 
