@@ -208,6 +208,26 @@ const INTERPRETER_EVAL_FLAGS = {
   osascript: ['-e'], Rscript: ['-e'], rscript: ['-e'], julia: ['-e', '--eval']
 };
 
+const CODE_EXECUTION_TOOLS = new Set([
+  ...Object.keys(INTERPRETER_EVAL_FLAGS).map((name) => name.toLowerCase()),
+  'npx', 'pnpm', 'npm', 'yarn', 'corepack', 'bunx',
+  'pytest', 'tox', 'uv', 'poetry', 'pipenv', 'pip',
+  'cargo', 'go', 'make', 'gmake', 'just', 'task',
+  'gradle', 'mvn', 'mvnw', 'dotnet', 'java', 'composer', 'phpunit',
+  'jest', 'vitest', 'mocha', 'tsx', 'ts-node', 'vite', 'next', 'astro',
+  'webpack', 'parcel', 'turbo', 'nx', 'rush', 'lerna', 'gulp', 'grunt',
+  'rollup', 'svelte-kit'
+]);
+
+const INFORMATION_ONLY_FLAGS = new Set(['--version', '-version', '-v', '--help', '-h', '-?']);
+
+function isInformationOnlyInvocation(base, args) {
+  const values = args.map((arg) => String(arg).toLowerCase());
+  if (values.length === 1 && INFORMATION_ONLY_FLAGS.has(values[0])) return true;
+  if (base === 'go' && values.length === 1 && values[0] === 'version') return true;
+  return false;
+}
+
 export function executableBase(command) {
   return path.basename(String(command || '')).toLowerCase().replace(/\.(exe|cmd|bat|com)$/, '');
 }
@@ -296,6 +316,16 @@ export function analyzeCommand(command, args = [], depth = 0) {
   if (evalFlags) {
     const hit = args.find((a) => evalFlags.includes(String(a).split('=')[0]) || /^-[a-zA-Z]*c$/.test(a) && evalFlags.includes('-c'));
     if (hit) return { highRisk: 'runs inline code (' + base + ' ' + hit + ')', effective: { base, args } };
+  }
+  // Inline evaluation is handled above, but executing a script file or project
+  // runner can execute repository-controlled code too. Automatic approval should
+  // not silently lower this risk to an ordinary command.
+  if ((CODE_EXECUTION_TOOLS.has(base) || /^python\d+(\.\d+)?$/.test(base)) &&
+      !isInformationOnlyInvocation(base, args)) {
+    return {
+      highRisk: 'executes interpreter code, repository-controlled scripts, or project-provided runners',
+      effective: { base, args }
+    };
   }
   if (base === 'find' && args.some((a) => ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprintf', '-fls'].includes(a))) {
     return { highRisk: 'find can delete files or execute programs', effective: { base, args } };

@@ -10,7 +10,10 @@ const nonPublicIpv6 = [
   '100:0:0:1::1',          // IANA dummy prefix: 100:0:0:1::/64
   'fe00::1',                // Reserved IPv6 space outside global unicast
   'fec1::1',                // Deprecated site-local space: fec0::/10
-  '5f00::1'                 // SRv6 special-purpose space, not globally reachable
+  '5f00::1',                // SRv6 special-purpose space, not globally reachable
+  '2001:5::1',              // IANA 2001::/23 protocol-assignment space
+  '2001:100::1',            // Middle of the same special-purpose block
+  '2001:1ff::1'             // Upper edge of the same special-purpose block
 ];
 
 test('all network-facing features consistently block non-public IPv6 destinations', async () => {
