@@ -1,6 +1,6 @@
 # Oasis OSS — Detailed User Guide
 
-For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](CURRENT_STATUS.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
+For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](CURRENT_STATUS.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
 ---
 
@@ -900,7 +900,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 - Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions. Parallel subagents (the `task` tool) run in separate contexts, but they share one workspace, so Oasis does not resolve conflicting edits between them; give parallel agents separate files, read-only work, or `"isolation": "worktree"` so each one gets its own branch.
 - The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
 - GitHub connection currently reuses GitHub CLI authentication (`gh auth login`) on the host; embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, creating repositories, branch/push/PR workflows, and fine-grained GitHub App scopes are not implemented yet.
-- The Terminal panel is an argv-based command runner, not a full interactive PTY: shell chaining, shell interpreters, TUI programs, and interactive prompts are not supported by the web bridge yet.
+- The browser Terminal panel supports a PTY-backed interactive path with bundled xterm.js rendering when the optional native dependency is available. The lifecycle is not yet validated across all operating systems, and Termux/native PTY support remains experimental; see [the Alpha-confidence milestone](NEXT_MILESTONE.md).
 - Browser projects/tasks/notes still use browser local storage and do not sync with the CLI workspace. Agent sessions are stored separately in the user-level Oasis session directory.
 - GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
 
@@ -930,7 +930,7 @@ The resulting terminal id can be used with:
 
 Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
 
-The native `node-pty` component is an optional dependency. See [Install OASIS](INSTALL.md) for supported platforms and native build prerequisites. The CLI session API does not yet mean the browser workspace has a full terminal emulator.
+The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [Alpha-confidence milestone](NEXT_MILESTONE.md) for current platform limitations.
 
 ## Clearing local data
 
