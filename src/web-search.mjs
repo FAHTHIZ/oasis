@@ -323,11 +323,45 @@ export async function webSearch(args = {}, options = {}) {
   const strategy = ['auto', 'single', 'federated'].includes(requested) ? requested : 'auto';
   const configured = searchBackends(env);
 
-  if (strategy === 'single' || (strategy === 'auto' && configured.length <= 1)) {
-    const provider = configured.length === 1 ? configured[0] : (configured.length > 1 ? searchBackend(env) : 'duckduckgo');
+  if (strategy === 'single') {
+    const preferred = searchBackend(env);
+    const provider = configured.length === 0 ? 'duckduckgo' : (configured.includes(preferred) ? preferred : configured[0]);
     const result = await webSearchUsingOne(provider, query, limit, allowed, blocked, env, fetchImpl);
     result.requestedStrategy = strategy;
     return result;
+  }
+  if (strategy === 'auto' && configured.length === 1) {
+    let primary;
+    let primaryFailure = null;
+    try {
+      primary = await webSearchUsingOne(configured[0], query, limit, allowed, blocked, env, fetchImpl);
+    } catch (error) {
+      primaryFailure = { provider: configured[0], error: safeProviderError(error) };
+      primary = { query, backend: configured[0], strategy: 'single', providers: [], providerErrors: [], results: [], note: 'Configured search provider failed.' };
+    }
+    if (primary.results.length) {
+      primary.requestedStrategy = strategy;
+      return primary;
+    }
+    try {
+      const fallback = await searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl);
+      if (fallback.results.length) {
+        return {
+          query, backend: 'duckduckgo', strategy: 'single-fallback', requestedStrategy: strategy,
+          providers: ['duckduckgo'], providerErrors: primaryFailure ? [primaryFailure] : [],
+          results: fallback.results,
+          note: 'The configured provider returned no results; DuckDuckGo fallback results are untrusted and should be verified.'
+        };
+      }
+      if (fallback.error) primaryFailure = primaryFailure || { provider: 'duckduckgo', error: fallback.error };
+    } catch (error) {
+      primaryFailure = primaryFailure || { provider: 'duckduckgo', error: safeProviderError(error) };
+    }
+    return {
+      ...primary, requestedStrategy: strategy,
+      providerErrors: [...(primary.providerErrors || []), ...(primaryFailure ? [primaryFailure] : [])],
+      note: 'No results. Check provider credentials, quotas, network access, or try another query.'
+    };
   }
   if (!configured.length) {
     const result = await webSearchUsingOne('duckduckgo', query, limit, allowed, blocked, env, fetchImpl);
