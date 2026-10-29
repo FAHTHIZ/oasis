@@ -1004,3 +1004,21 @@ test('browser chat answers ask_user_question cards and the model sees the answer
   assert.equal(snapshot.result.text, 'Going with Postgres');
   assert.equal(requests.length, 2);
 });
+
+
+test('browser job history API lists persisted tasks and requires authentication', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const denied = await fetch(base + '/api/jobs');
+  assert.equal(denied.status, 401);
+  const response = await fetch(base + '/api/jobs', { headers: { authorization: 'Bearer ' + app.token } });
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.deepEqual(await response.json(), { jobs: [] });
+});
