@@ -72,7 +72,7 @@ test('channel entries, message formatting and relay text sanitizing', () => {
     nested: { clientSecret: 'nested-secret-value' }
   });
   assert.doesNotMatch(preview, /private-value|bearer-secret|super-secret-value|nested-secret-value/);
-  assert.match(preview, /"apiKey": "\\[REDACTED\\]"/);
+  assert.match(preview, /"apiKey": "\[REDACTED\]"/);
 });
 
 test('an opted-in channel server pushes <channel> messages and its instructions reach the prompt', async (t) => {
