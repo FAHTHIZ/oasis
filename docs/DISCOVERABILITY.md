@@ -30,7 +30,7 @@ One-time setup is documented in [PUBLIC_LAUNCH.md](PUBLIC_LAUNCH.md): create the
 - **Product name:** OASIS
 - **Tagline:** Code. Automate. Flourish.
 - **Product description:** Open-source AI coding agent and local-first developer workspace
-- **License:** MIT
+- **Project license:** Apache-2.0
 - **Install command:** `npm install -g git+https://github.com/FAHTHIZ/oasis.git#main`
 
 ## README badges
@@ -38,7 +38,7 @@ One-time setup is documented in [PUBLIC_LAUNCH.md](PUBLIC_LAUNCH.md): create the
 Keep the top-of-README proof factual and maintainable:
 
 - Quality-check badge: reflects the actual GitHub Actions workflow.
-- MIT license badge: reflects `LICENSE`.
+- Apache-2.0 license badge: reflects `LICENSE`.
 - Node.js badge: reflects the documented Node.js 22+ runtime requirement.
 - Homepage badge: links to the landing page deployed by the launch workflow.
 

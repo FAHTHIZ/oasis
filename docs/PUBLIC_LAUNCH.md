@@ -52,4 +52,4 @@ The homepage field is set to the actual URL returned by the deployment action, n
 
 The landing page includes a descriptive title, search snippet, canonical URL, Open Graph metadata, `robots.txt`, and an XML sitemap. These foundations help discovery but do not guarantee search rankings or instant traffic. Once the page is public, add it to Google Search Console to monitor indexing.
 
-Keep repository badges factual: quality checks, MIT license, and Node.js runtime. Add release/download/trending/benchmark badges only when there is a genuine release, verified data, or measured result to support them.
+Keep repository badges factual: quality checks, Apache-2.0 license, and Node.js runtime. Add release/download/trending/benchmark badges only when there is a genuine release, verified data, or measured result to support them.
