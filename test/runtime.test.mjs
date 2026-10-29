@@ -1052,6 +1052,25 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.ok(compactions[0].afterChars < compactions[0].beforeChars);
 });
 
+test('large command output keeps its beginning, ending, exit code and truncation marker', async (t) => {
+  const root = await temporaryDirectory('oasis-output-bounds-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const script = [
+    "process.stdout.write('BEGIN-MARKER\\n');",
+    "for (let i = 0; i < 5000; i++) process.stdout.write('LINE-' + i + ' ' + 'x'.repeat(30) + '\\n');",
+    "process.stdout.write('END-MARKER\\n');"
+  ].join('\\n');
+  await writeFile(path.join(root, 'output-fixture.mjs'), script);
+  const result = await runWorkspaceCommand(root, process.execPath, ['output-fixture.mjs'], { autoApprove: true, timeoutSeconds: 10 });
+
+  assert.equal(result.exitCode, 0, result.stderr);
+  assert.equal(result.stdoutTruncated, true);
+  assert.match(result.stdout, /BEGIN-MARKER/);
+  assert.match(result.stdout, /END-MARKER/);
+  assert.match(result.stdout, /OASIS omitted \\d+ characters from the middle/);
+  assert.doesNotMatch(result.stdout, /LINE-2000/);
+});
+
 test('agent stops after the same tool call returns the same result three times', async (t) => {
   const root = await temporaryDirectory('oasis-loop-breaker-');
   t.after(() => rm(root, { recursive: true, force: true }));
