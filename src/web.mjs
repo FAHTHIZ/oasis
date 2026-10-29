@@ -17,6 +17,7 @@ import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
+import { createCloudTaskStore } from './cloud-task-store.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume', 'init']);
@@ -180,6 +181,7 @@ export function createOasisWebServer(options = {}) {
   const ptyManager = options.ptyManager || new PtySessionManager();
   const ptySession = { ptyManager, background: new Map() };
   const jobs = new Map();
+  const taskStore = createCloudTaskStore(root, { env });
   const busySessions = new Set();
   const startingSessions = new Set();
   let reservedJobSlots = 0;
@@ -187,6 +189,7 @@ export function createOasisWebServer(options = {}) {
   function emit(job, type, data = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
+    taskStore.schedule(job, 250);
   }
 
   // meta (from the agent) can offer "always allow <rule> this session"; that
@@ -1032,18 +1035,52 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
-    const jobMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})$/i);
+    if (req.method === 'GET' && pathname === '/api/jobs') {
+      const stored = await taskStore.list({ limit: 100 });
+      const summaries = new Map(stored.map((item) => [item.id, item]));
+      for (const job of jobs.values()) {
+        const lastEvent = job.events.at(-1);
+        summaries.set(job.id, {
+          id: job.id,
+          type: job.type || 'agent',
+          title: String(job.title || job.type || 'Coding task').slice(0, 160),
+          status: job.status,
+          createdAt: job.createdAt,
+          updatedAt: lastEvent && lastEvent.at || job.createdAt,
+          sessionId: job.sessionId || null,
+          workspaceName: path.basename(activeRoot),
+          eventCount: job.events.length,
+          error: job.error || null
+        });
+      }
+      json(res, 200, { jobs: [...summaries.values()].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 100) });
+      return;
+    }
+
+    const jobMatch = pathname.match(/^\\/api\\/jobs\\/([a-f0-9-]{36})$/i);
     if (req.method === 'GET' && jobMatch) {
-      const job = jobs.get(jobMatch[1]);
-      if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
       const after = Math.max(0, Number.parseInt(parsedUrl.searchParams.get('after') || '0', 10) || 0);
+      const job = jobs.get(jobMatch[1]);
+      if (job) {
+        json(res, 200, {
+          id: job.id,
+          status: job.status,
+          events: job.events.filter((event) => event.id > after),
+          nextEventId: job.nextEventId,
+          result: job.result,
+          error: job.error
+        });
+        return;
+      }
+      const saved = await taskStore.get(jobMatch[1]);
+      if (!saved) { json(res, 404, { error: 'Job not found or expired.' }); return; }
       json(res, 200, {
-        id: job.id,
-        status: job.status,
-        events: job.events.filter((event) => event.id > after),
-        nextEventId: job.nextEventId,
-        result: job.result,
-        error: job.error
+        id: saved.id,
+        status: saved.status,
+        events: saved.events.filter((event) => event.id > after),
+        nextEventId: saved.nextEventId,
+        result: saved.result,
+        error: saved.error
       });
       return;
     }
@@ -1121,6 +1158,7 @@ export function createOasisWebServer(options = {}) {
       activeSessions.clear();
       try { ptyManager.closeAll(); } catch {}
       if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      await taskStore.flush([...jobs.values()]);
     }
   };
 }
