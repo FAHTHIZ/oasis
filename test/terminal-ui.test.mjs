@@ -167,6 +167,11 @@ test('banner, footer, and mode cycling', () => {
   assert.match(footerFor({ mode: 'plan', color: false }), /plan mode on/);
   assert.match(footerFor({ text: '!ls', color: false }), /shell mode/);
   assert.equal(footerFor({ mode: 'default', color: false }), '');
+  const metrics = footerFor({ model: 'qwen2.5-coder:3b', contextPercent: 91, costLabel: '$0.90', budgetUsd: 1, spentUsd: 0.91, color: false });
+  assert.match(metrics, /model qwen2\.5-coder:3b/);
+  assert.match(metrics, /! context 91%/);
+  assert.match(metrics, /cost \$0\.90 \/ \$1\.00 budget/);
+  assert.match(metrics, /! budget 91% used/);
 });
 
 test('! shell mode runs the command and returns output for context', async () => {
