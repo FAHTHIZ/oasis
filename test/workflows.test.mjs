@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, writeFile, readFile, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { runBuiltinCommand } from '../src/slash.mjs';
+import { runBuiltinCommand, BUILTIN_COMMANDS } from '../src/slash.mjs';
 import { loadCustomCommands } from '../src/commands.mjs';
 import { runWorkflow, parseWorkflowScript, loadWorkflows, saveWorkflow } from '../src/workflows.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
