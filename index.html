@@ -502,7 +502,7 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
 <script>
 (function(){
 'use strict';
-var KEY='oasis.oss.workspace.v1',state={projects:[],tasks:[],notes:'',lastSaved:null},currentView='agent',toastTimer=null,currentProjectActionId=null;
+var KEY='oasis.oss.workspace.v1',state={projects:[],tasks:[],notes:'',lastSaved:null},currentView='agent',toastTimer=null,currentProjectActionId=null;var agentMonitorSelectedId=null,agentMonitorRefreshBusy=false;
 var seed={projects:[{id:'p-welcome',name:'A new beginning',description:'A gentle place to collect the work that matters.',symbol:'✦',status:'active'},{id:'p-build',name:'Something you’re building',description:'Give a meaningful project a clear next step.',symbol:'◇',status:'active'}],tasks:[{id:'t-first',title:'Write down the outcome I want',projectId:'p-welcome',priority:'high',done:false},{id:'t-second',title:'Choose one small next action',projectId:'p-build',priority:'normal',done:false},{id:'t-third',title:'Celebrate something already finished',projectId:'p-welcome',priority:'low',done:true}],notes:'Welcome to Oasis.\n\nUse this page to think on paper. Write the idea, question, or decision you want to remember.\n\nA helpful next step:\n- What does success look like?\n- What is the smallest useful action?\n- What can wait until later?'};
 function uid(prefix){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)}
 function today(){return new Date().toISOString().slice(0,10)}
@@ -520,8 +520,8 @@ function renderStats(){var open=state.tasks.filter(function(t){return !t.done}).
 function renderDashboard(){var ps=state.projects.filter(function(p){return p.status!=='completed'}).slice(0,3),ts=state.tasks.filter(function(t){return !t.done}).slice(0,4);document.getElementById('dashboardProjects').innerHTML=ps.length?ps.map(projectHTML).join(''):'<div class="panel empty-state">✦<br>No projects yet. Create one to give your work a home.</div>';document.getElementById('dashboardTasks').innerHTML=ts.length?ts.map(taskHTML).join(''):'<div class="empty-state">☼<br>Nothing urgent here. Take a breath, or add a next step.</div>'}
 function renderProjects(){var q=document.getElementById('projectSearch').value.toLowerCase(),f=document.getElementById('projectFilter').value;var list=state.projects.filter(function(p){return (p.name+' '+p.description).toLowerCase().includes(q)&&(f==='all'||(f==='completed'?p.status==='completed':p.status!=='completed'))});document.getElementById('allProjects').innerHTML=list.length?list.map(projectHTML).join(''):'<div class="panel empty-state">◇<br>No projects match. Create one or adjust your search.</div>'}
 function renderTasks(){var q=(document.getElementById('taskSearch').value||document.getElementById('globalSearch').value||'').toLowerCase(),f=document.getElementById('taskFilter').value;var list=state.tasks.filter(function(t){var p=project(t.projectId),match=(t.title+' '+(p?p.name:'')).toLowerCase().includes(q),status=f==='all'||(f==='done'?t.done:f==='high'?(!t.done&&t.priority==='high'):!t.done);return match&&status});var rank={high:0,normal:1,low:2};list.sort(function(a,b){if(a.done!==b.done)return a.done?1:-1;return (rank[a.priority]===undefined?1:rank[a.priority])-(rank[b.priority]===undefined?1:rank[b.priority])});document.getElementById('allTasks').innerHTML=list.length?list.map(taskHTML).join(''):'<div class="empty-state">✓<br>No tasks here. A little space can be a good thing.</div>'}
-function render(){renderStats();renderDashboard();renderProjects();renderTasks();var editor=document.getElementById('notesEditor');if(editor&&editor.value!==state.notes)editor.value=state.notes;document.querySelectorAll('[data-nav]').forEach(function(b){if(b.classList.contains('nav-btn'))b.classList.toggle('active',b.getAttribute('data-nav')===currentView)});document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('active',v.id==='view-'+currentView)});document.getElementById('crumbPage').textContent=({home:'Overview',projects:'Projects',tasks:'Tasks',notes:'Notes',agent:'Coding workspace',extensions:'Extensions',integrations:'Integrations'})[currentView]||'Overview'}
-function navigate(v){if(!['home','projects','tasks','notes','agent','extensions','integrations'].includes(v))return;currentView=v;render();var activeNav=document.querySelector('.nav-btn.active');if(activeNav&&activeNav.scrollIntoView)activeNav.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});window.scrollTo({top:0,behavior:'smooth'});if(v==='extensions')void extensionRefreshInstalled();if(v==='integrations')void integrationRefresh()}
+function render(){renderStats();renderDashboard();renderProjects();renderTasks();var editor=document.getElementById('notesEditor');if(editor&&editor.value!==state.notes)editor.value=state.notes;document.querySelectorAll('[data-nav]').forEach(function(b){if(b.classList.contains('nav-btn'))b.classList.toggle('active',b.getAttribute('data-nav')===currentView)});document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('active',v.id==='view-'+currentView)});document.getElementById('crumbPage').textContent=({home:'Overview',projects:'Projects',tasks:'Tasks',notes:'Notes',agent:'Coding workspace',extensions:'Extensions',integrations:'Integrations',monitor:'Agent run monitor'})[currentView]||'Overview'}
+function navigate(v){if(!['home','projects','tasks','notes','agent','monitor','extensions','integrations'].includes(v))return;currentView=v;render();var activeNav=document.querySelector('.nav-btn.active');if(activeNav&&activeNav.scrollIntoView)activeNav.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});window.scrollTo({top:0,behavior:'smooth'});if(v==='extensions')void extensionRefreshInstalled();if(v==='integrations')void integrationRefresh();if(v==='monitor')void agentLoadMonitor(true)}
 function addTask(title,pid,priority){title=(title||'').trim();if(!title){notify('Give the task a short name first.');return false}state.tasks.unshift({id:uid('task'),title:title.slice(0,160),projectId:pid===undefined?((state.projects[0]&&state.projects[0].id)||''):pid,priority:priority||'normal',done:false,createdAt:today()});save();render();notify('Task added. One step at a time.');return true}
 function addProject(){var dialog=document.getElementById('projectDialog');dialog.showModal();document.getElementById('projectName').focus()}
 function addTaskDialog(){var select=document.getElementById('taskProject');select.innerHTML='<option value="">Unassigned</option>'+state.projects.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'}).join('');if(state.projects[0])select.value=state.projects[0].id;document.getElementById('taskPriority').value='normal';var dialog=document.getElementById('taskDialog');dialog.showModal();document.getElementById('taskTitle').focus()}
@@ -687,6 +687,118 @@ async function agentLoadCloudTasks(silent){
     if(!silent){agentCloudRunEmpty('Task history could not be loaded. Reconnect to the local runtime and try again.');notify('Could not load task history: '+error.message)}
   }
 }
+function agentMonitorDate(value){
+  var date=value?new Date(value):null;
+  return date&&!Number.isNaN(date.getTime())?date.toLocaleString():'Time unavailable';
+}
+function agentMonitorStatus(text){
+  var tag=cloudRunNode('span','agent-monitor-pill',String(text||'unknown').replace(/_/g,' '));
+  tag.dataset.status=String(text||'unknown');
+  return tag;
+}
+function agentRenderMonitorDetail(run){
+  var heading=document.getElementById('agentMonitorDetailTitle');
+  var meta=document.getElementById('agentMonitorDetailMeta');
+  var workers=document.getElementById('agentMonitorWorkers');
+  var events=document.getElementById('agentMonitorEvents');
+  if(!run){
+    heading.textContent='Worker activity';
+    meta.textContent='Select a run to inspect its workers and event timeline.';
+    workers.replaceChildren(cloudRunNode('div','cloud-run-empty','No run selected.'));
+    events.replaceChildren(cloudRunNode('div','cloud-run-empty','Select a run to inspect saved worker activity.'));
+    return;
+  }
+  heading.textContent=(run.title||'Coding task')+' · '+String(run.status||'unknown').replace(/_/g,' ');
+  meta.textContent=(run.workspaceName||'Workspace')+' · Started '+agentMonitorDate(run.createdAt)+' · '+Number(run.workerCount||0)+' workers · '+Number(run.teamCount||0)+' teams'+(run.isolation==='worktree'?' · isolated worktree':'');
+  workers.replaceChildren();
+  if(!Array.isArray(run.workers)||!run.workers.length){
+    workers.appendChild(cloudRunNode('div','cloud-run-empty','No subagent lifecycle events were recorded for this run.'));
+  }else{
+    run.workers.forEach(function(worker){
+      var card=cloudRunNode('div','agent-monitor-worker');
+      var top=cloudRunNode('div','agent-monitor-worker-title');
+      var title=cloudRunNode('span','',String(worker.id||'agent')+' · '+String(worker.description||'Worker'));
+      top.append(title,agentMonitorStatus(worker.status));
+      card.appendChild(top);
+      var tags=cloudRunNode('div','agent-monitor-pills');
+      if(worker.teamId)tags.appendChild(agentMonitorStatus(worker.teamId));
+      if(worker.taskId)tags.appendChild(agentMonitorStatus(worker.taskId));
+      if(tags.childNodes.length)card.appendChild(tags);
+      if(worker.detail)card.appendChild(cloudRunNode('div','agent-monitor-worker-detail',worker.detail));
+      card.appendChild(cloudRunNode('div','agent-monitor-worker-detail','Last activity · '+agentMonitorDate(worker.lastActivity)));
+      workers.appendChild(card);
+    });
+  }
+  events.replaceChildren();
+  if(!Array.isArray(run.events)||!run.events.length){
+    events.appendChild(cloudRunNode('div','cloud-run-empty','No saved worker activity yet. Start or resume a run that uses subagents to populate this timeline.'));
+    return;
+  }
+  run.events.slice().reverse().forEach(function(event){
+    var row=cloudRunNode('div','agent-monitor-event');
+    var dot=cloudRunNode('span','agent-monitor-event-dot');
+    var content=cloudRunNode('div','agent-monitor-event-content');
+    var label=String(event.type||'agent.event').replace(/^agent\./,'').replace(/^team\./,'team ').replace(/^task\./,'task ').replace(/[._]/g,' ');
+    content.appendChild(cloudRunNode('strong','',label+(event.description?' · '+event.description:'')));
+    var line=agentMonitorDate(event.at)+' · '+(event.actor||'main')+(event.teamId?' · '+event.teamId:'')+(event.agentId?' · '+event.agentId:'');
+    content.appendChild(cloudRunNode('small','',line));
+    if(event.detail)content.appendChild(cloudRunNode('small','',event.detail));
+    row.append(dot,content);events.appendChild(row);
+  });
+}
+async function agentLoadMonitor(silent){
+  if(agentMonitorRefreshBusy)return;
+  var status=document.getElementById('agentMonitorRunStatus');
+  var list=document.getElementById('agentMonitorRunList');
+  if(!agentToken){
+    status.textContent='Connect the runtime to inspect saved runs.';
+    list.replaceChildren(cloudRunNode('div','cloud-run-empty','Connect the Oasis runtime from the Agent view first.'));
+    document.getElementById('agentMonitorStats').replaceChildren();
+    agentRenderMonitorDetail(null);
+    return;
+  }
+  agentMonitorRefreshBusy=true;
+  try{
+    var response=await agentApi('/api/agent-monitor');
+    var runs=Array.isArray(response.runs)?response.runs:[];
+    var totalWorkers=runs.reduce(function(n,run){return n+Number(run.runningWorkers||0)},0);
+    var totalTeams=runs.reduce(function(n,run){return n+Number(run.teamCount||0)},0);
+    document.getElementById('agentMonitorStats').replaceChildren(
+      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Runs loaded'),cloudRunNode('strong','',String(runs.length)));return n})(),
+      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Active workers'),cloudRunNode('strong','',String(totalWorkers)));return n})(),
+      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Teams observed'),cloudRunNode('strong','',String(totalTeams)));return n})()
+    );
+    status.textContent=(response.total||runs.length)+' saved runs · refreshed '+new Date().toLocaleTimeString();
+    list.replaceChildren();
+    if(!runs.length){
+      list.appendChild(cloudRunNode('div','cloud-run-empty','No saved runs yet. Start a coding task in the Agent view.'));
+      agentMonitorSelectedId=null;
+      agentRenderMonitorDetail(null);
+      return;
+    }
+    if(!runs.some(function(run){return run.id===agentMonitorSelectedId}))agentMonitorSelectedId=runs[0].id;
+    runs.forEach(function(run){
+      var button=cloudRunNode('button','agent-monitor-run');
+      button.type='button';
+      button.setAttribute('aria-pressed',run.id===agentMonitorSelectedId?'true':'false');
+      var top=cloudRunNode('div','agent-monitor-run-top');
+      top.append(cloudRunNode('span','agent-monitor-run-title',run.title||'Coding task'),agentMonitorStatus(run.status));
+      var meta=cloudRunNode('div','agent-monitor-run-meta',(run.workspaceName||'Workspace')+' · '+agentMonitorDate(run.updatedAt));
+      var pills=cloudRunNode('div','agent-monitor-pills');
+      pills.append(agentMonitorStatus((run.runningWorkers||0)+' active workers'),agentMonitorStatus((run.workerCount||0)+' workers'),agentMonitorStatus((run.teamCount||0)+' teams'));
+      button.append(top,meta,pills);
+      button.addEventListener('click',function(){agentMonitorSelectedId=run.id;list.querySelectorAll('[data-monitor-selected]').forEach(function(item){item.setAttribute('aria-pressed','false')});button.setAttribute('aria-pressed','true');agentRenderMonitorDetail(run)});
+      button.dataset.monitorSelected=run.id;
+      list.appendChild(button);
+    });
+    agentRenderMonitorDetail(runs.find(function(run){return run.id===agentMonitorSelectedId})||runs[0]);
+  }catch(error){
+    status.textContent='Unable to load saved runs';
+    if(!silent)notify('Could not load agent run monitor: '+error.message);
+    if(!list.childNodes.length)list.appendChild(cloudRunNode('div','cloud-run-empty','Run monitor could not be loaded. Reconnect to the local runtime and refresh.'));
+  }finally{agentMonitorRefreshBusy=false}
+}
+
 async function agentOpenCloudRun(id,titleFromList){
   var detail=document.getElementById('cloudRunDetail'),events=document.getElementById('cloudRunEvents'),heading=document.getElementById('cloudRunDetailTitle'),diffButton=document.getElementById('cloudRunDiffBtn');
   try{
@@ -720,6 +832,8 @@ async function agentOpenCloudRun(id,titleFromList){
   }catch(error){notify('Could not open task history: '+error.message)}
 }
 document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
+document.getElementById('agentMonitorRefreshBtn').addEventListener('click',function(){void agentLoadMonitor(false)});
+window.setInterval(function(){if(currentView==='monitor'&&agentToken)void agentLoadMonitor(true)},5000);
 document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
 document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){
   var id=this.dataset.cloudRunId;if(!id)return;
@@ -737,7 +851,7 @@ function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if
 function agentActivity(text){agentAppendMessage('activity',text)}
 function agentClearMessages(){document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null}
 function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=!agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentIsolateWorktree').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy;if(!agentBusy&&agentToken)void agentLoadCloudTasks(true)}
-async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
+async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);void agentLoadMonitor(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
 function agentDisconnect(){agentToken='';sessionStorage.removeItem('oasis.web.token');document.getElementById('agentTokenInput').value='';agentSetStatus('Runtime not connected',false);document.getElementById('agentModelName').textContent='Choose a model';document.getElementById('agentModelDetail').textContent='Connect a runtime';document.getElementById('agentConnectionHelp').textContent='Disconnected. Start or return to oasis web, then paste its token to reconnect.';notify('Runtime disconnected from this browser tab.')}
 var agentQuestionId=null,agentQuestionMulti=false;
 function agentShowQuestion(d){agentQuestionId=d.questionId;agentQuestionMulti=!!d.multiSelect;document.getElementById('agentQuestionHeader').textContent=d.header?d.header:'Oasis has a question';document.getElementById('agentQuestionText').textContent=d.question;var box=document.getElementById('agentQuestionOptions');box.innerHTML='';(d.options||[]).forEach(function(o){var b=document.createElement('button');b.type='button';b.className='agent-question-option';b.setAttribute('aria-pressed','false');var l=document.createElement('strong');l.textContent=o.label;b.appendChild(l);if(o.description){var s=document.createElement('span');s.textContent=o.description;b.appendChild(s)}b.addEventListener('click',function(){if(agentQuestionMulti){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')}else{void agentAnswerQuestion(o.label)}});box.appendChild(b)});document.getElementById('agentQuestionInput').value='';document.getElementById('agentQuestionSubmit').textContent=agentQuestionMulti?'Send selected':'Send';document.getElementById('agentQuestionCard').hidden=false;agentSetStatus('Waiting for your answer',true);agentScroll()}
