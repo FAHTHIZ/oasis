@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -71,6 +72,44 @@ function runProcess(command, args, options = {}) {
   });
 }
 
+async function fingerprintSnapshot(source) {
+  const hash = createHash('sha256');
+  async function walk(directory, relative = '') {
+    const entries = await readdir(directory, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const rel = relative ? relative + '/' + entry.name : entry.name;
+      if (entry.isSymbolicLink()) throw new Error('Refusing to fingerprint a snapshot containing a symbolic link: ' + rel);
+      if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
+      if (isSensitiveName(entry.name)) continue;
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        hash.update('dir\0' + rel + '\0');
+        await walk(full, rel);
+      } else if (entry.isFile()) {
+        const bytes = await readFile(full);
+        hash.update('file\0' + rel + '\0' + bytes.length + '\0');
+        hash.update(bytes);
+      }
+    }
+  }
+  await walk(source);
+  return hash.digest('hex');
+}
+
+async function fingerprintTask(id, taskText, patch, verifierPath, snapshotDir) {
+  const snapshotHash = await fingerprintSnapshot(snapshotDir);
+  const verifier = await readFile(verifierPath);
+  return createHash('sha256')
+    .update('oasis-eval-task-v1\0')
+    .update(id + '\0')
+    .update(taskText + '\0')
+    .update(patch + '\0')
+    .update(verifier)
+    .update('\0' + snapshotHash)
+    .digest('hex');
+}
+
 async function assertTaskShape(taskDir) {
   const id = path.basename(taskDir);
   if (!safeId(id)) throw new Error('Invalid evaluation task ID: ' + id);
@@ -119,7 +158,8 @@ async function assertTaskShape(taskDir) {
       throw new Error(id + ': reference.patch contains an unsafe or sensitive file path');
     }
   }
-  return { id, taskDir, repoDir: snapshotDir, taskPath, taskText, patchPath, verifierPath };
+  const taskFingerprint = await fingerprintTask(id, taskText, patch, verifierPath, snapshotDir);
+  return { id, taskDir, repoDir: snapshotDir, taskPath, taskText, patchPath, verifierPath, taskFingerprint };
 }
 
 async function listTaskDirectories(tasksDir = DEFAULT_TASKS_DIR) {
@@ -223,7 +263,7 @@ export async function validateEvaluationSuite(options = {}) {
       if (reference.exitCode !== 0) {
         throw new Error('Reference patch failed its verifier: ' + (reference.output || 'exit code ' + reference.exitCode));
       }
-      results.push({ id: task.id, ok: true, noOpExitCode: noOp.exitCode, referenceExitCode: reference.exitCode });
+      results.push({ id: task.id, ok: true, noOpExitCode: noOp.exitCode, referenceExitCode: reference.exitCode, taskFingerprint: task.taskFingerprint });
     } catch (error) {
       results.push({ id: path.basename(dir), ok: false, error: error.message || String(error) });
     } finally {
@@ -275,8 +315,13 @@ async function readComparisonRun(filePath) {
       else if (['failed', 'fail', 'failure', 'error'].includes(status)) passed = false;
       else throw new Error('Result row ' + (index + 1) + ' must have passed=true/false or a recognized status in ' + String(filePath));
     }
+    const fingerprint = row.taskFingerprint ?? row.fingerprint ?? null;
+    if (fingerprint !== null && (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint))) {
+      throw new Error('Result row ' + (index + 1) + ' has an invalid taskFingerprint in ' + String(filePath));
+    }
     return {
       taskId,
+      taskFingerprint: fingerprint,
       passed,
       wallTimeMs: comparisonMetric(row.wallTimeMs ?? row.durationMs),
       costUSD: comparisonMetric(row.costUSD ?? row.costUsd)
@@ -316,14 +361,42 @@ export async function compareEvalReports(paths, options = {}) {
   const [left, right] = await Promise.all(paths.map(readComparisonRun));
   const leftIds = new Set(left.results.map((item) => item.taskId));
   const rightIds = new Set(right.results.map((item) => item.taskId));
-  const commonIds = [...leftIds].filter((id) => rightIds.has(id)).sort();
-  if (!commonIds.length) throw new Error('The reports have no matching task IDs; use the same task IDs for a fair comparison.');
+  const matchingIds = [...leftIds].filter((id) => rightIds.has(id)).sort();
+  const fingerprintFor = (results, taskId) => {
+    const rows = results.filter((item) => item.taskId === taskId);
+    if (!rows.length || rows.some((row) => !row.taskFingerprint)) return null;
+    const fingerprints = [...new Set(rows.map((row) => row.taskFingerprint))];
+    return fingerprints.length === 1 ? fingerprints[0] : 'inconsistent';
+  };
+  const mismatchedFingerprints = [];
+  const unverifiedFingerprints = [];
+  const commonIds = matchingIds.filter((taskId) => {
+    const leftFingerprint = fingerprintFor(left.results, taskId);
+    const rightFingerprint = fingerprintFor(right.results, taskId);
+    if (leftFingerprint === 'inconsistent' || rightFingerprint === 'inconsistent' ||
+        (leftFingerprint && rightFingerprint && leftFingerprint !== rightFingerprint)) {
+      mismatchedFingerprints.push(taskId);
+      return false;
+    }
+    if (!leftFingerprint || !rightFingerprint) unverifiedFingerprints.push(taskId);
+    return true;
+  });
+  if (!commonIds.length) {
+    throw new Error('The reports have no matching task IDs with compatible task fingerprints; use identical prompts, snapshots and verifiers.');
+  }
 
-  const taskRows = commonIds.map((taskId) => ({
-    taskId,
-    left: summarizeComparisonTask(left.results.filter((item) => item.taskId === taskId)),
-    right: summarizeComparisonTask(right.results.filter((item) => item.taskId === taskId))
-  }));
+  const taskRows = commonIds.map((taskId) => {
+    const leftFingerprint = fingerprintFor(left.results, taskId);
+    const rightFingerprint = fingerprintFor(right.results, taskId);
+    const verified = Boolean(leftFingerprint && leftFingerprint === rightFingerprint);
+    return {
+      taskId,
+      taskFingerprint: verified ? leftFingerprint : null,
+      fingerprintStatus: verified ? 'verified' : 'unverified-legacy',
+      left: summarizeComparisonTask(left.results.filter((item) => item.taskId === taskId)),
+      right: summarizeComparisonTask(right.results.filter((item) => item.taskId === taskId))
+    };
+  });
   const mean = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const summarizeMatched = (side) => ({
     taskBalancedPassRate: mean(taskRows.map((row) => row[side].passRate)),
@@ -341,6 +414,8 @@ export async function compareEvalReports(paths, options = {}) {
     comparedAt: new Date().toISOString(),
     sources: [{ label: left.label, file: path.basename(left.source) }, { label: right.label, file: path.basename(right.source) }],
     commonTaskCount: commonIds.length,
+    mismatchedFingerprints,
+    unverifiedFingerprints,
     onlyInA: [...leftIds].filter((id) => !rightIds.has(id)).sort(),
     onlyInB: [...rightIds].filter((id) => !leftIds.has(id)).sort(),
     metrics: {
@@ -367,6 +442,7 @@ export async function compareEvalReports(paths, options = {}) {
     'A: ' + left.label + ' [' + path.basename(left.source) + ']',
     'B: ' + right.label + ' [' + path.basename(right.source) + ']',
     'Common tasks: ' + commonIds.length + ' | A-only: ' + comparison.onlyInA.length + ' | B-only: ' + comparison.onlyInB.length,
+    'Task fingerprints: ' + taskRows.filter((row) => row.fingerprintStatus === 'verified').length + '/' + taskRows.length + ' verified; ' + mismatchedFingerprints.length + ' mismatched task(s) excluded; ' + unverifiedFingerprints.length + ' legacy/unfingerprinted task(s) compared by ID only.',
     'Task-balanced pass rate: A ' + pct(leftMetrics.taskBalancedPassRate) + ' | B ' + pct(rightMetrics.taskBalancedPassRate) +
       ' | Delta ' + (deltaPp >= 0 ? '+' : '') + deltaPp.toFixed(1) + ' percentage points',
     'Median per-task time: A ' + ms(leftMetrics.medianTaskWallTimeMs) + ' | B ' + ms(rightMetrics.medianTaskWallTimeMs),
@@ -625,6 +701,7 @@ async function runClaudeCodeEval(config, options = {}) {
       const passed = !errorText && verification.exitCode === 0;
       trials.push({
         taskId: task.id,
+        taskFingerprint: task.taskFingerprint,
         trial,
         status: passed ? 'passed' : 'failed',
         passed,
@@ -794,7 +871,7 @@ export async function runEvalCommand(args = [], options = {}) {
         const costUSD = costEstimate(usage.inputTokens, usage.outputTokens, inputRate, outputRate);
         const passed = !errorText && Boolean(agentResult && agentResult.finished) && verification.exitCode === 0;
         trials.push({
-          taskId: task.id, trial,
+          taskId: task.id, taskFingerprint: task.taskFingerprint, trial,
           status: passed ? 'passed' : 'failed',
           model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL,
           maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null,
