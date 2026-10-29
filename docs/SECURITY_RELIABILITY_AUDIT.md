@@ -114,6 +114,14 @@ The shared IP policy previously covered selected subranges of IANA's 2001::/23 s
 
 **Regression coverage:** shared-network tests cover addresses near the start, middle, and end of that block.
 
+### NAT64-encoded private destinations
+
+The shared address classifier initially handled IPv4-mapped IPv6 addresses but not IPv4-IPv6 translation prefixes. A local service could be reachable through NAT64 even though the outer IPv6 address did not match ordinary private IPv6 ranges.
+
+**Fix:** the well-known `64:ff9b::/96` translation prefix now applies the IPv4 private/special-address policy to the embedded IPv4 destination. The local-use `64:ff9b:1::/48` prefix is rejected outright because it is not globally reachable.
+
+**Regression coverage:** `test/network-safety.test.mjs` covers NAT64-encoded RFC1918 and link-local destinations across network entry points while checking that a public embedded IPv4 address remains eligible.
+
 ### Browser handling of public IPv6 literals
 
 The browser request filter also treated every hostname without a dot as a local/single-label hostname, which unintentionally blocked public IPv6 literals. It now distinguishes IP literals with Node's isIP before applying the single-label DNS hostname rule, and passes IP literals through the shared classifier.

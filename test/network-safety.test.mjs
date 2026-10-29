@@ -13,7 +13,10 @@ const nonPublicIpv6 = [
   '5f00::1',                // SRv6 special-purpose space, not globally reachable
   '2001:5::1',              // IANA 2001::/23 protocol-assignment space
   '2001:100::1',            // Middle of the same special-purpose block
-  '2001:1ff::1'             // Upper edge of the same special-purpose block
+  '2001:1ff::1',            // Upper edge of the same special-purpose block
+  '64:ff9b::a00:1',         // NAT64-encoded RFC1918 destination
+  '64:ff9b::a9fe:a9fe',     // NAT64-encoded link-local metadata destination
+  '64:ff9b:1::1'            // Local-use NAT64 translation prefix
 ];
 
 test('all network-facing features consistently block non-public IPv6 destinations', async () => {
@@ -70,7 +73,7 @@ test('all network-facing features consistently block non-public IPv6 destination
 });
 
 test('shared IP policy continues to allow ordinary public IPv4 and IPv6 addresses', async () => {
-  for (const url of ['https://93.184.216.34/resource', 'https://[2606:4700:4700::1111]/resource']) {
+  for (const url of ['https://93.184.216.34/resource', 'https://[2606:4700:4700::1111]/resource', 'https://[64:ff9b::808:808]/resource']) {
     let called = false;
     await fetchPublicUrl(url, {
       requestImpl: async () => {
