@@ -128,22 +128,36 @@ test('native plugin exposes granted agent definitions to the loader only when gr
   assert.equal((await pluginSkills([plugin])).length,0);
 });
 
-test('native plugin updates compare prerelease identifiers using semantic version ordering',async t=>{
+test('native plugin updates compare prerelease identifiers and large core values semantically',async t=>{
   const {pkg,env}=await setup(t);
   await writePackage(pkg,{version:'1.0.0-beta.2',permissions:['commands']});
   await installNativePlugin(pkg,{env,grantedPermissions:['commands']});
-  await writePackage(pkg,{version:'1.0.0-beta.10',permissions:['commands']});
-  const prerelease=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
-  assert.equal(prerelease.installed,true);
-  assert.equal(prerelease.version,'1.0.0-beta.10');
-  await writePackage(pkg,{version:'1.0.0',permissions:['commands']});
-  const stable=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
-  assert.equal(stable.installed,true);
-  assert.equal(stable.version,'1.0.0');
+  for (const version of ['1.0.0-beta.10','1.0.0-beta-rc.2','1.0.0-beta-rc.10','1.0.0']) {
+    await writePackage(pkg,{version,permissions:['commands']});
+    const update=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
+    assert.equal(update.installed,true,version);
+    assert.equal(update.version,version);
+  }
+  const huge='999999999999999999999.0.0';
+  await writePackage(pkg,{version:huge,permissions:['commands']});
+  const largeCore=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
+  assert.equal(largeCore.installed,true);
+  assert.equal(largeCore.version,huge);
   await writePackage(pkg,{version:'1.0.0-beta.99',permissions:['commands']});
   await assert.rejects(installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']}),/must increase the plugin version/);
   await writePackage(pkg,{version:'1.0.0-01',permissions:['commands']});
-  await assert.rejects(validateNativePluginPackage(pkg),/semantic MAJOR\.MINOR\.PATCH/);
+  await assert.rejects(validateNativePluginPackage(pkg),/semantic MAJOR\\.MINOR\\.PATCH/);
+});
+
+test('native plugin uninstall restores its package and registry when settings updates fail',async t=>{
+  const {pkg,env}=await setup(t);await writePackage(pkg);
+  const installed=await installNativePlugin(pkg,{env,grantedPermissions:['commands']});
+  const settingsFile=path.join(env.OASIS_CONFIG_DIR,'settings.json');
+  await rm(settingsFile,{force:true});
+  await mkdir(settingsFile,{recursive:true});
+  await assert.rejects(uninstallNativePlugin('review-helper',{env}),/Refusing unsafe or oversized JSON file/);
+  assert.ok((await readFile(path.join(installed.installPath,'plugin.json'),'utf8')).includes('review-helper'));
+  assert.equal((await listNativePlugins({env})).length,1);
 });
 
 test('native plugin uninstall removes registry entry and local package',async t=>{
