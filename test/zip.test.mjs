@@ -62,7 +62,7 @@ const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 const minimalPluginZip = () => makeStoredZip([{ name: '.claude-plugin/plugin.json', content: '{"name":"fixture"}' }]);
 
 test('ZIP reader rejects traversal, absolute, drive, NUL, and ambiguous backslash paths', () => {
-  for (const name of ['../escape.txt', '/absolute.txt', 'C:/outside.txt', 'nested/../../escape', 'folder\\..\\escape.txt']) {
+  for (const name of ['../escape.txt', '/absolute.txt', 'C:/outside.txt', 'nested/../../escape', 'folder\\..\\escape.txt', 'file.txt:secret', 'CON.txt', 'trailing.', 'trailing ', 'bad?name.txt']) {
     assert.throws(() => readZipEntries(makeStoredZip([{ name, content: 'nope' }])), /unsafe or ambiguous path|escapes the destination/, name);
   }
   assert.throws(() => readZipEntries(makeStoredZip([{ name: 'nul' + String.fromCharCode(0) + 'name.txt', content: 'nope' }])), /unsafe or ambiguous path/);
