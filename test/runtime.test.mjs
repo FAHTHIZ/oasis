@@ -2000,18 +2000,47 @@ for (const fixture of [
 }
 
 
-test('workspace commands stop their child process when the parent signal is aborted', async (t) => {
+test('workspace command cancellation also stops descendants holding inherited pipes', async (t) => {
   const tmp = await temporaryDirectory('oasis-cancel-command-');
   t.after(() => rm(tmp, { recursive: true, force: true }));
   const controller = new AbortController();
-  const running = runWorkspaceCommand(tmp, process.execPath, ['-e', 'setTimeout(() => {}, 20000)'], {
+  const pidFile = path.join(tmp, 'grandchild.pid');
+  const code = [
+    "const fs=require('node:fs');",
+    "const {spawn}=require('node:child_process');",
+    "const child=spawn(process.execPath,['-e','setTimeout(()=>{},20000)'],{stdio:'inherit'});",
+    "fs.writeFileSync(" + JSON.stringify(pidFile) + ",String(child.pid));",
+    "setInterval(()=>{},1000);"
+  ].join('');
+  const running = runWorkspaceCommand(tmp, process.execPath, ['-e', code], {
     autoApprove: true,
     approval: async () => true,
+    ruleAllowed: true,
     timeoutSeconds: 30,
     signal: controller.signal
   });
-  setTimeout(() => controller.abort(), 100);
-  const result = await running;
+  // Wait until the descendant exists so this exercises process-tree cleanup,
+  // not just the race where cancellation arrives before the first process starts.
+  for (let i = 0; i < 100; i++) {
+    try { await access(pidFile); break; } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  let pid = null;
+  try { pid = Number(await readFile(pidFile, 'utf8')); } catch {}
+  assert.ok(Number.isInteger(pid) && pid > 0, 'the fixture descendant should start');
+  controller.abort();
+  let guard;
+  const result = await Promise.race([
+    running,
+    new Promise((resolve) => { guard = setTimeout(() => resolve(null), 6000); })
+  ]);
+  clearTimeout(guard);
+  if (!result && pid) {
+    // Clean up the fixture even if the regression returns in the future.
+    try { process.kill(pid, 'SIGKILL'); } catch {}
+    await Promise.race([running, new Promise((resolve) => setTimeout(resolve, 1000))]);
+  }
+  assert.ok(result, 'cancellation should not hang while a descendant holds inherited output pipes');
   assert.equal(result.cancelled, true);
-  assert.ok(result.signal || result.exitCode !== 0, 'The child process should be stopped rather than complete normally.');
+  assert.ok(result.signal || result.exitCode !== 0, 'The parent process should be stopped rather than complete normally.');
 });
