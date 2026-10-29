@@ -3,15 +3,119 @@
 // so several agents can edit in parallel without touching the user's checkout.
 // Afterwards its changes are committed on that branch for review and merge.
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { randomBytes } from 'node:crypto';
 import { appendFile, lstat, mkdir, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { runHooks, hasHooks } from './hooks.mjs';
 
-const execFileAsync = promisify(execFile);
+const MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024;
+const GIT_KILL_GRACE_MS = 750;
 export const WORKTREE_DIR = path.join('.oasis', 'worktrees');
+
+// Run no-shell child processes with bounded output and process-tree cleanup.
+// Exported for focused lifecycle regression tests; production callers pass Git.
+export function runWorktreeCommand(command, args, options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const env = options.env || process.env;
+  const timeoutMs = Number.isSafeInteger(options.timeout) && options.timeout > 0 ? options.timeout : 20000;
+  const signal = options.signal;
+  return new Promise((resolve) => {
+    let child;
+    let timer = null;
+    let killTimer = null;
+    let stdout = '';
+    let stderr = '';
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let settled = false;
+    let interrupted = false;
+    let timedOut = false;
+    let cancelled = false;
+    let outputExceeded = false;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      // Keep escalation armed after interruption: a leader can exit before a
+      // descendant that inherited a pipe or ignored SIGTERM.
+      if (!interrupted && killTimer) clearTimeout(killTimer);
+      if (signal) signal.removeEventListener('abort', abort);
+      resolve({ ...result, stdout: stdout.trim(), stderr: stderr.trim() });
+    };
+    const terminate = (kind) => {
+      if (settled || interrupted) return;
+      interrupted = true;
+      timedOut = kind === 'timeout';
+      cancelled = kind === 'cancel';
+      outputExceeded = kind === 'output';
+      signalProcessTree(child, 'SIGTERM');
+      killTimer = setTimeout(() => {
+        killTimer = null;
+        signalProcessTree(child, 'SIGKILL');
+      }, GIT_KILL_GRACE_MS);
+      killTimer.unref?.();
+      if (timedOut) {
+        stderr = (stderr + '\\nGit command timed out after ' + timeoutMs + 'ms.').trim();
+        finish({ exitCode: 124, timedOut: true });
+      } else if (cancelled) {
+        stderr = (stderr + '\\nGit command was cancelled.').trim();
+        finish({ exitCode: 130, cancelled: true });
+      } else {
+        stderr = (stderr + '\\nGit command output exceeded 4 MiB.').trim();
+        finish({ exitCode: 125, outputExceeded: true });
+      }
+    };
+    const collect = (stream, chunk) => {
+      if (settled) return;
+      const isStdout = stream === 'stdout';
+      const currentBytes = isStdout ? stdoutBytes : stderrBytes;
+      if (currentBytes + chunk.byteLength > MAX_GIT_OUTPUT_BYTES) {
+        const remaining = Math.max(0, MAX_GIT_OUTPUT_BYTES - currentBytes);
+        const text = remaining ? chunk.subarray(0, remaining).toString('utf8') : '';
+        if (isStdout) { stdout += text; stdoutBytes += remaining; }
+        else { stderr += text; stderrBytes += remaining; }
+        terminate('output');
+        return;
+      }
+      if (isStdout) { stdout += chunk.toString('utf8'); stdoutBytes += chunk.byteLength; }
+      else { stderr += chunk.toString('utf8'); stderrBytes += chunk.byteLength; }
+    };
+
+    try {
+      child = spawn(command, args, {
+        cwd, env, shell: false, windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...processTreeSpawnOptions()
+      });
+    } catch (error) {
+      finish({ exitCode: 127, error: error.message, errorCode: error.code });
+      return;
+    }
+    timer = setTimeout(() => terminate('timeout'), timeoutMs);
+    timer.unref?.();
+    child.stdout.on('data', (chunk) => collect('stdout', chunk));
+    child.stderr.on('data', (chunk) => collect('stderr', chunk));
+    child.on('error', (error) => finish({
+      exitCode: 127, error: error.message, errorCode: error.code,
+      ...(timedOut ? { timedOut: true } : {}),
+      ...(cancelled ? { cancelled: true } : {})
+    }));
+    child.on('close', (code) => finish({
+      exitCode: timedOut ? 124 : cancelled ? 130 : outputExceeded ? 125 : (code ?? 1),
+      ...(timedOut ? { timedOut: true } : {}),
+      ...(cancelled ? { cancelled: true } : {}),
+      ...(outputExceeded ? { outputExceeded: true } : {})
+    }));
+    if (signal) {
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    }
+    function abort() { terminate('cancel'); }
+  });
+}
 
 function within(base, target) {
   const relative = path.relative(base, target);
@@ -42,8 +146,18 @@ function gitEnv(env = process.env) {
 }
 
 async function git(cwd, args, env, timeout = 20000) {
-  const { stdout } = await execFileAsync('git', args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024, env: gitEnv(env) });
-  return stdout.trim();
+  const result = await runWorktreeCommand('git', args, { cwd, timeout, env: gitEnv(env) });
+  if (result.exitCode !== 0) {
+    const detail = result.stderr || result.error || ('Git exited with code ' + result.exitCode + '.');
+    const error = new Error(detail);
+    error.code = result.timedOut ? 'ETIMEDOUT' : result.errorCode || result.exitCode;
+    error.stdout = result.stdout;
+    error.stderr = result.stderr;
+    if (result.timedOut) error.timedOut = true;
+    if (result.cancelled) error.cancelled = true;
+    throw error;
+  }
+  return result.stdout.trim();
 }
 
 export function worktreeSlug(text) {
@@ -259,16 +373,7 @@ function validateOasisBranch(value) {
 }
 
 async function commandResult(root, args, env, timeout = 30000) {
-  const result = await execFileAsync('git', args, {
-    cwd: root, env: gitEnv(env), timeout, maxBuffer: 4 * 1024 * 1024
-  }).then(({ stdout, stderr }) => ({
-    exitCode: 0, stdout: String(stdout || '').trim(), stderr: String(stderr || '').trim()
-  })).catch((error) => ({
-    exitCode: Number.isInteger(Number(error.code)) ? Number(error.code) : 127,
-    stdout: String(error.stdout || '').trim(),
-    stderr: String(error.stderr || error.message || '').trim()
-  }));
-  return result;
+  return runWorktreeCommand('git', args, { cwd: root, env: gitEnv(env), timeout });
 }
 
 function nameList(value) {
