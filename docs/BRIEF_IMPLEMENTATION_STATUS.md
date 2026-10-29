@@ -1,7 +1,7 @@
 # Implementation status for the app and UI/UX briefs
 
 **Checked:** 29 October 2026  
-**Scope:** Compare `EVA_APP_BRIEF.md` and `EVA_UI_UX_BRIEF.md` with source files and the checked-in CI configuration. This is a source review, not a claim that all journeys were manually tested. “Implemented” means visible in code or covered by an existing automated check; it does not imply full cross-platform release readiness.
+**Scope:** Compare `EVA_APP_BRIEF.md` and `EVA_UI_UX_BRIEF.md` with source files and the checked-in CI configuration. This is a source review, not a claim that all journeys were manually tested. “Implemented” means visible in code or covered by an existing automated check; it does not imply full cross-platform release readiness. The issue templates, PR checklist, VS Code changelog, QUICKSTART and CONTRIBUTING files were already present before this review; they are not counted as new additions.
 
 ## Product and first-run
 
@@ -53,7 +53,7 @@
 | Activity/run timeline and cancellation/approval safety | **Implemented in core flows** | Run monitor and automated tests cover event history, denial and cancellation; consistency of approval wording remains open. |
 | 390px E2E screenshots | **Automated coverage exists** | Workflow uploads desktop and phone-width screenshots as artifacts; review and real-phone testing are still needed. |
 | 44px tap targets and keyboard-only full journey | **Not fully verified** | Responsive styling exists; no complete touch-target/keyboard audit was run. |
-| Clear “Local only” trust banner | **Partial / verify exact copy** | Runtime is local-hosted by default; explicit, always-visible banner wording needs a focused check. |
+| Clear “Local only” trust banner | **Implemented in code; needs UI review** | Root `index.html` now says “Local only by default,” explains that the runtime is not open to the public internet by default, and warns not to share the runtime token. `scripts/check-site.mjs` asserts these strings. |
 | Secure phone pairing | **Not implemented** | Design note exists at `docs/PHONE_CONNECT_SECURITY.md`. Do not start implementation until the user has read it and the opt-in, token, revocation, TLS and approval requirements are agreed. |
 
 ## VS Code-family integration
