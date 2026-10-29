@@ -338,6 +338,7 @@ export async function runBuiltinCommand(name, argument, state) {
         for (const prompt of client.prompts || []) lines.push('    /mcp__' + name + '__' + prompt.name + (prompt.arguments && prompt.arguments.length ? ' ' + prompt.arguments.map((arg) => arg.required ? '<' + arg.name + '>' : '[' + arg.name + ']').join(' ') : '') + (prompt.description ? '  ' + String(prompt.description).slice(0, 120) : ''));
       }
       for (const failure of failures) lines.push(failure.name + ' - not connected: ' + failure.error);
+      if (session && session.mcpConnecting) lines.push('(more servers still connecting in the background; MCP_CONNECTION_NONBLOCKING is on)');
       if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
       return { output: lines.join('\n') };
     }

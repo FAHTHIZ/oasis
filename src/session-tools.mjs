@@ -46,11 +46,13 @@ export const SESSION_TOOL_DEFINITIONS = [
       failure_scenario: { type: 'string', description: 'Concrete input or sequence that triggers it and what goes wrong.' },
       fix: { type: 'string' } }, required: ['file', 'summary', 'failure_scenario'] } },
       summary: { type: 'string', description: 'One or two sentences on the overall result.' } }, ['findings']),
+  fn('wait_for_mcp_servers', 'Wait for MCP servers that are still connecting in the background, then list which servers are ready or failed. Call it before using an MCP tool that is not in your tool list yet.',
+    { timeout_seconds: { type: 'integer', minimum: 1, maximum: 120, description: 'Default 30.' } }),
   ...SHARED_TASK_TOOL_DEFINITIONS
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['report_findings', 'schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
+export const SESSION_READ_ONLY_TOOLS = ['wait_for_mcp_servers', 'report_findings', 'schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
@@ -275,6 +277,7 @@ export async function runSessionTool(session, name, args, options = {}) {
     case 'enter_plan_mode': return enterPlanMode(session, args);
     case 'schedule_wakeup': return scheduleWakeup(session, args);
     case 'report_findings': return reportFindings(session, args);
+    case 'wait_for_mcp_servers': return waitForMcpServers(session, args, options);
     case 'enter_worktree': return enterWorktree(session, args, options);
     case 'exit_worktree': return exitWorktree(session, args, options);
     case 'notify': return notifyUser(args, options.notify || {});
@@ -400,4 +403,24 @@ export function formatFindings(findings, { color = false } = {}) {
     if (item.fix) lines.push('   Fix: ' + item.fix.replace(/\n+/g, ' '));
     return lines.join('\n');
   }).join('\n');
+}
+
+// WaitForMcpServers: block until background MCP connections settle (or a timeout).
+export async function waitForMcpServers(session, args = {}, options = {}) {
+  const seconds = Math.min(120, Math.max(1, Math.round(Number(args.timeout_seconds) || 30)));
+  let timedOut = false;
+  if (session.mcpConnecting) {
+    let timer;
+    await Promise.race([
+      session.mcpConnecting,
+      new Promise((resolve) => { timer = setTimeout(() => { timedOut = true; resolve(); }, seconds * 1000); }),
+      ...(options.signal ? [new Promise((resolve) => options.signal.addEventListener('abort', resolve, { once: true }))] : [])
+    ]);
+    clearTimeout(timer);
+  }
+  // The connection callback already queued a reminder; this result says the same, so drop the duplicate.
+  if (!timedOut && Array.isArray(session.asyncHookFeedback)) session.asyncHookFeedback = session.asyncHookFeedback.filter((item) => !String(item).startsWith('MCP servers '));
+  const ready = session.mcpClients ? [...session.mcpClients.keys()] : [];
+  const failed = (session.mcpFailures || []).map((item) => ({ name: item.name, error: String(item.error).slice(0, 300) }));
+  return { still_connecting: Boolean(session.mcpConnecting), ...(timedOut ? { timed_out_after_seconds: seconds } : {}), ready, failed, tools: session.mcpToolMap ? [...session.mcpToolMap.keys()].slice(0, 200) : [] };
 }
