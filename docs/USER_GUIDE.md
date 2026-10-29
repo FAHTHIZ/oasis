@@ -1000,3 +1000,12 @@ Outside a terminal, or in scripts, use these forms:
 The keys match `settings.json`.
 
 Verbose output (`--verbose`, `"verbose": true`, or `/config set verbose on`) prints each tool's output, dimmed, under its call: command stdout and stderr, file reads, and search results. It is capped at 400 lines per call; Ctrl+O still shows the full transcript. `"autoCompactEnabled": false` (compatible-format key) turns automatic compaction off for new sessions.
+
+
+## LSP verification and context estimates
+
+Oasis can use configured language servers for post-edit diagnostics and symbol navigation. TypeScript/JavaScript support uses built-in server discovery; TypeScript 5/6 installations typically need \`typescript-language-server\` and a project or global TypeScript installation, while supported newer TypeScript releases may provide a native \`--lsp --stdio\` server. Other languages depend on their configured server command and supported extensions.
+
+A post-edit result distinguishes diagnostics from server availability. If a configured server cannot start or return diagnostics, Oasis reports verification as unavailable; it must not label that LSP check as clean. \`/diagnostics\` separates diagnostics from build/test output, and \`/fix\` must not claim success while new or unclassified LSP errors remain.
+
+\`/context all\` shows approximate system, memory, skill, local-tool, MCP-schema, history, file-result, command-output and largest-message costs. Categories can overlap because some items are already embedded in the system prompt or conversation. Provider-specific tokenization and hidden request metadata are unavailable to Oasis, so these are estimates rather than billing-grade counts.
