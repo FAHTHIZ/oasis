@@ -67,3 +67,10 @@ Run `npm test` for focused and broader Node tests, and `npm run check` for the r
 - `/artifact add NAME TYPE DETAILS` records a `timeline`, `command`, `file`, `test`, `error`, `hypothesis`, or `rollback` entry. `/artifact goal NAME TEXT` sets the task goal.
 - `/artifact list`, `/artifact open NAME`, `/artifact stop NAME`, and `/artifact delete NAME` manage artifact lifecycle.
 - Pages refresh locally every five seconds. Data is stored under the Oasis user config directory, not in the repository. No remote assets/scripts are loaded; common tokens/passwords/private keys are redacted before storage.
+
+
+## Native Oasis plugin packages
+
+A native plugin is a local directory with root `plugin.json` using `schemaVersion: 1`. It can bundle namespaced commands, skills, subagents, hooks, MCP server config and source files, plus metadata and a version. Example component paths are `commands/review.md`, `skills/review/SKILL.md`, `agents/reviewer.md`, `hooks/hooks.json`, `.mcp.json`, and `mcp/server.mjs`; list bundled server/hook source paths in `mcpFiles` and `hookFiles`.
+
+Use `/plugin-package validate PATH` before install, then `/plugin-package install PATH --grant commands,skills` with only capabilities explicitly approved. Unapproved component files are not copied into the active install. Commands are namespaced as `/plugin-name:command` through Oasis's existing loader. Updates require a higher version; permission/request changes display a diff and no files change until you repeat with `--accept-permission-diff`. This initial native format installs local paths only; `/plugin` remains the marketplace adapter.

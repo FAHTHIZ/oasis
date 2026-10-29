@@ -668,6 +668,32 @@ export async function runBuiltinCommand(name, argument, state) {
       const locks = await listIdeLocks(env);
       return { output: 'No IDE bridge found for this folder.' + (locks.length ? ' Running bridges: ' + locks.map((lock) => (lock.ideName || 'IDE') + ' [' + (lock.workspaceFolders || []).join(', ') + ']').join('; ') + '.' : '') + ' Install the extension with: oasis ide install, then open this folder in VS Code.' };
     }
+    case 'plugin-package': {
+      const { parseNativePluginPackageArguments, validateNativePluginPackage, installNativePlugin, uninstallNativePlugin, listNativePlugins } = await import('./native-plugins.mjs');
+      let parsed;
+      try { parsed = parseNativePluginPackageArguments(argument, root); } catch (error) { return { output: error.message }; }
+      const [target] = parsed.positionals;
+      if (parsed.action === 'list') {
+        const items = await listNativePlugins({ env });
+        return { output: items.length ? items.map(item => item.name + '@' + item.version + '\n  granted: ' + (item.grantedPermissions.join(', ') || 'none') + '\n  requested: ' + (item.requestedPermissions.join(', ') || 'none')).join('\n') : 'No native Oasis plugins installed.' };
+      }
+      if (parsed.action === 'validate') {
+        const item = await validateNativePluginPackage(target);
+        return { output: 'Valid native plugin package: ' + item.name + '@' + item.version + '\n  requested permissions: ' + item.requestedPermissions.join(', ') + '\n  commands: ' + item.components.commands.join(', ') + '\n  skills: ' + item.components.skills.join(', ') + '\n  agents: ' + item.components.agents.join(', ') + '\n  hooks: ' + item.components.hooks + '\n  hook files: ' + item.components.hookFiles.join(', ') + '\n  MCP servers: ' + item.components.mcpServers.join(', ') + '\n  MCP files: ' + item.components.mcpFiles.join(', ') };
+      }
+      if (parsed.action === 'install' || parsed.action === 'update') {
+        const result = await installNativePlugin(target, { env, grantedPermissions: parsed.grantedPermissions, update: parsed.action === 'update', acceptPermissionDiff: parsed.acceptPermissionDiff });
+        if (result.needsApproval) return { output: ['Permission changes require explicit confirmation before updating ' + result.id + '.', 'Version: ' + result.fromVersion + ' -> ' + result.toVersion, 'Granted permissions added: ' + (result.permissionDiff.added.join(', ') || 'none'), 'Granted permissions removed: ' + (result.permissionDiff.removed.join(', ') || 'none'), 'Newly requested: ' + (result.permissionDiff.requestedAdded.join(', ') || 'none'), 'No longer requested: ' + (result.permissionDiff.requestedRemoved.join(', ') || 'none'), 'Review the package, then repeat the update with --grant ' + result.grants.join(',') + ' --accept-permission-diff. No files were changed.'].join('\n') };
+        return { output: (parsed.action === 'install' ? 'Installed' : 'Updated') + ' and enabled ' + result.id + '@' + result.version + '.\n  granted: ' + result.grantedPermissions.join(', ') + '\n  commands: ' + result.components.commands.join(', ') + '\n  skills: ' + result.components.skills.join(', ') + '\n  agents: ' + result.components.agents.join(', ') + '\n  hooks: ' + (result.components.hooks || 'not granted') + '\n  hook files: ' + result.components.hookFiles.join(', ') + '\n  MCP: ' + (result.components.mcpServers || 'not granted') + '\n  MCP files: ' + result.components.mcpFiles.join(', ') + '\nStart a new session to load the plugin.' };
+      }
+      if (parsed.action === 'uninstall' || parsed.action === 'remove') {
+        if (!target) return { output: 'Usage: /plugin-package uninstall NAME' };
+        const result = await uninstallNativePlugin(target, { env });
+        if (session && session.toolDefinitions) session.pluginReloadRequired = true;
+        return { output: 'Uninstalled native plugin ' + result.name + '. Open sessions already running its hooks/MCP clients should be closed before continuing.' };
+      }
+      return { output: 'Usage: /plugin-package [list|validate LOCAL-PATH|install LOCAL-PATH --grant CAPABILITIES|update LOCAL-PATH --grant CAPABILITIES --accept-permission-diff|uninstall NAME]' };
+    }
     case 'plugin':
     case 'plugins': {
       const { pluginCli } = await import('./claude-plugins.mjs');
