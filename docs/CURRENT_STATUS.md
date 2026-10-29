@@ -1,7 +1,7 @@
 # OASIS current implementation status
 
 **Audit date:** October 29, 2026  
-**Code baseline:** [`02feecc610f5775279b827a51744bc244e725068`](https://github.com/FAHTHIZ/oasis/commit/02feecc610f5775279b827a51744bc244e725068) (before this documentation commit)  
+**Code baseline:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286) (before this documentation refresh)  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist.
@@ -10,27 +10,27 @@ This is the repository-grounded status page. It separates shipped implementation
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-The present bottleneck is **release confidence, not raw feature count**. The earlier verified main baseline passed Quality Checks and desktop packaging but failed homepage/repository validation on the FileChanged hook test. The runtime/test patches now wait for a fresh CI result on current main: the hook test synchronizes on message delivery, command/hook cancellation uses process-tree termination, and URL fetching blocks additional special-purpose addresses. OASIS still has no apples-to-apples coding-task benchmark against Claude Code; its 21 evaluation fixtures are a smoke suite of mostly small tasks.
+The latest main-branch CI signal is consistent: Quality Checks, homepage/repository validation, and the desktop build matrix all passed on the same code revision. The hook-message timing assertion is corrected, and recent hardening covers process-tree cancellation, OAuth DNS pinning, plugin archive SSRF/ZIP boundaries, API-key helper caching/timeouts, and URL-address filtering. OASIS still has no apples-to-apples coding-task benchmark against Claude Code; its 21 evaluation fixtures remain a smoke suite of mostly small tasks.
 
 ## Verified repository and CI snapshot
 
-**Current code baseline before this documentation update:** `02feecc610f5775279b827a51744bc244e725068` (October 29, 2026).
+**Current code baseline before this documentation refresh:** `a044ed403091a2fb885ff796bd364f010a13e286` (October 29, 2026).
 
 | Evidence | Latest verified result |
 | --- | --- |
 | Runtime modules | 61 `.mjs` modules under `src/` after adding the process-tree termination helper |
-| Test layout | 47 `*.test.mjs` specifications plus a shared helper in the prior file inventory |
-| Node test suite | **549 passed, 0 failed** in prior green baseline [Quality Checks run 40795987277](https://github.com/FAHTHIZ/oasis/actions/runs/40795987277); updated cancellation/SSRF regression tests await current-main CI |
+| Test layout | 49 `*.test.mjs` specifications plus shared helpers |
+| Node test suite | **570 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40804769809](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809) |
 | Evaluation-fixture validation | **21/21 valid**; a small regression/smoke suite, not a full coding benchmark |
 | Node runtime matrix | Node.js 22, 24 and 26 passed in the latest Quality Checks run |
 | Native PTY check | Real interactive-process smoke test passed on Linux / Node.js 22; this is not proof of Windows/macOS/Termux support |
 | Browser E2E | Linux Chromium authenticated chat smoke test passed, including a workspace write/read cycle |
 | Package integrity | Production-package checks passed in the latest Quality Checks run |
-| Desktop packaging | [Build OASIS desktop installers run 40795987139](https://github.com/FAHTHIZ/oasis/actions/runs/40795987139) passed |
-| Homepage/repository validation | Prior baseline [run 40795987174](https://github.com/FAHTHIZ/oasis/actions/runs/40795987174) failed on the `FileChanged` test; a bounded message-delivery wait is committed, with current verification pending in [run 40798160822](https://github.com/FAHTHIZ/oasis/actions/runs/40798160822) |
+| Desktop packaging | [Build OASIS desktop installers run 40804769799](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux |
+| Homepage/repository validation | [Homepage/repository validation run 40804769832](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832) passed on the same code revision as Quality Checks and desktop packaging |
 | Release maturity | Package version `0.3.0`; CI can build desktop installers, but the current installers are unsigned and first-run behavior is not yet proven across all supported operating systems |
 
-The earlier publishing failure has a targeted synchronization fix committed, but the current-main rerun is not yet verified. Latest runs: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40798160831), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40798160822), and [desktop build](https://github.com/FAHTHIZ/oasis/actions/runs/40798160813). The quality browser smoke test runs in Linux Chromium; it does not establish Android/Termux, Windows/macOS PTY lifecycle, real-device TLS, cross-browser or live-cloud-provider readiness.
+All three required workflows passed on the same code revision: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832), and [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799). The browser smoke test runs in Linux Chromium; it does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
 
 ## What the code currently provides
 
@@ -101,7 +101,7 @@ Repository-level verification also covers `index.html`, `manifest.webmanifest`, 
 
 Prioritized by the risk they pose to release confidence and everyday usefulness—not by how exciting or visible a new feature would be.
 
-1. **Make CI deterministic and uniformly green.** The `FileChanged` test now waits for the hook's message delivery rather than checking after an earlier log-file side effect. The process-tree and URL-range fixes also added tests; current-main workflows must pass before these changes count as verified.
+1. **Keep CI deterministic and expand regression depth.** The `FileChanged` test now waits for hook-message delivery; the latest full test matrix passes on Node 22/24/26. Continue repeated focused runs and add supported-OS process lifecycle coverage.
 2. **Measure real coding outcomes.** The 21-task suite is too small and too utility-heavy to measure repository-level software work. Build a reproducible OASIS-vs-Claude Code task suite with pinned repos/models where possible, acceptance tests, repeated trials, costs/timing, and reviewed diffs.
 3. **Validate product journeys across platforms.** The Linux/Node 22 PTY smoke and Linux Chromium chat smoke are useful, but they do not prove native PTY cleanup on Windows/macOS or first-run/update/uninstall behavior for every desktop installer. Termux remains experimental for PTY.
 4. **Finish multi-agent lifecycle visibility.** Teams, leases, activity events, bounded worktree dispatch, and tmux panes exist. The remaining gaps are a visual agent/run monitor, durable pause/resume across process restarts, cross-session messaging, and conflict-aware integration. Avoid claiming self-coordinating persistent teams.
@@ -117,15 +117,15 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 - Third-party plugin imports are safety-reviewed subsets; detection does not mean full runtime compatibility.
 - History compaction is heuristic. Long sessions still need provider-by-provider and long-horizon evaluation for continuity.
 - The browser command panel has a PTY-backed path with a bundled xterm.js renderer. The web runtime supports HTTPS with user-provided certificate/key files for non-loopback access; broader terminal lifecycle and real-device TLS validation remain open.
-- The current hardening revision's Quality Checks, publishing validation and desktop-build workflows were in progress at audit time; the prior publishing failure is documented above. Passing CI does not establish a full security audit, real-device support, cross-platform usability or equivalence with Claude Code's code quality.
+- The latest Quality Checks, publishing validation and desktop-build matrix all passed on the same code revision. Passing CI does not establish a full security audit, real-device support, cross-platform usability or equivalence with Claude Code's code quality.
 
 ## Source references
 
-- [Code baseline before this documentation update](https://github.com/FAHTHIZ/oasis/commit/02feecc610f5775279b827a51744bc244e725068)
-- [Prior verified Quality Checks baseline](https://github.com/FAHTHIZ/oasis/actions/runs/40795987277)
-- [Current-main Quality Checks — pending at audit time](https://github.com/FAHTHIZ/oasis/actions/runs/40798160831)
-- [Current-main publishing validation — pending at audit time](https://github.com/FAHTHIZ/oasis/actions/runs/40798160822)
-- [Current-main desktop build — pending at audit time](https://github.com/FAHTHIZ/oasis/actions/runs/40798160813)
+- [Code baseline before this documentation refresh](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286)
+- [Latest Quality Checks — passed](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809)
+- [Latest homepage/repository validation — passed](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832)
+- [Latest desktop build matrix — passed](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799)
+
 - [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md)
 - [Alpha-confidence milestone](NEXT_MILESTONE.md)
 - [Claude Code agent/workflow documentation](https://code.claude.com/docs/en/agents)
