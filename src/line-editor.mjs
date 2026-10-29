@@ -511,7 +511,7 @@ export function readInput(options = {}) {
       if (!palette) return [];
       const query = String(palette.query || '').trim().toLowerCase();
       if (!query) return palette.items.map((item, index) => ({ item, index, score: index }));
-      const words = query.split(/\\s+/).filter(Boolean);
+      const words = query.split(/\s+/).filter(Boolean);
       const matched = [];
       for (const [index, item] of palette.items.entries()) {
         const haystack = [item.label, item.description, item.category, item.value].join(' ').toLowerCase();
@@ -560,16 +560,16 @@ export function readInput(options = {}) {
           const category = item.category ? '[' + item.category + '] ' : '';
           const detail = item.description ? ' — ' + item.description : '';
           const line = truncateToWidth(prefix + category + item.label + detail, width);
-          lines.push(entry.index === matches[palette.selected].index && color ? '\\x1b[7m' + line + '\\x1b[27m' : line);
+          lines.push(entry.index === matches[palette.selected].index && color ? '\x1b[7m' + line + '\x1b[27m' : line);
         }
       }
       lines.push(truncateToWidth(' Enter select · ↑↓ move · type to search · Ctrl+U clear · Esc close', width));
       while (lines.length < height) lines.push('');
-      output.write('\\x1b[H\\x1b[2J' + lines.slice(0, height).join('\\r\\n'));
+      output.write('\x1b[H\x1b[2J' + lines.slice(0, height).join('\r\n'));
     };
     const closePalette = (chosen = null) => {
       palette = null;
-      if (paletteScreen) { output.write('\\x1b[?1049l'); paletteScreen = false; }
+      if (paletteScreen) { output.write('\x1b[?1049l'); paletteScreen = false; }
       previousCursorRow = 0;
       if (chosen && chosen.value) {
         state = insertText(state, chosen.value);
@@ -588,14 +588,14 @@ export function readInput(options = {}) {
         const items = source.slice(0, 500).filter((item) =>
           item && typeof item.label === 'string' && typeof item.value === 'string' && item.value.length <= 1000
         ).map((item) => ({
-          label: item.label.replace(/[\\r\\n\\0]/g, ' ').slice(0, 160),
-          value: item.value.replace(/[\\r\\n\\0]/g, ' ').slice(0, 1000),
-          description: String(item.description || '').replace(/[\\r\\n\\0]/g, ' ').slice(0, 220),
-          category: String(item.category || 'Commands').replace(/[\\r\\n\\0]/g, ' ').slice(0, 40)
+          label: item.label.replace(/[\r\n\0]/g, ' ').slice(0, 160),
+          value: item.value.replace(/[\r\n\0]/g, ' ').slice(0, 1000),
+          description: String(item.description || '').replace(/[\r\n\0]/g, ' ').slice(0, 220),
+          category: String(item.category || 'Commands').replace(/[\r\n\0]/g, ' ').slice(0, 40)
         }));
         palette = { items, query: '', selected: 0 };
         paletteScreen = true;
-        output.write('\\x1b[?1049h');
+        output.write('\x1b[?1049h');
         drawPalette();
       } catch (error) {
         palette = null;
@@ -616,7 +616,7 @@ export function readInput(options = {}) {
       else if (key.name === 'pageDown') palette.selected += Math.max(1, Math.min(12, (output.rows || 24) - 7));
       else if (key.name === 'backspace' || key.name === 'killWord') palette.query = Array.from(palette.query).slice(0, -1).join('');
       else if (key.name === 'killStart' || key.stroke === 'ctrl+u') palette.query = '';
-      else if (key.name === 'char' && key.text && !/[\\r\\n\\0]/.test(key.text)) {
+      else if (key.name === 'char' && key.text && !/[\r\n\0]/.test(key.text)) {
         if (palette.query.length < 160) palette.query += key.text;
         palette.selected = 0;
       }
