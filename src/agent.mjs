@@ -3310,8 +3310,20 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
     refreshTodoPrompt(session);
-    // Background-agent notices and messages sent to this agent arrive between steps.
-    const notice = [step > 0 ? drainInbox(session) : '', pendingTruncationNotice].filter(Boolean).join('\n\n');
+    // Local team notices and cross-session messages are delivered only at model-decision
+    // boundaries. Cross-session content is labeled as untrusted data and never invokes tools.
+    let crossSessionNotice = '';
+    if (!options.isSubagent && session && session.root && session.activeSessionId) {
+      try {
+        const messaging = await import('./session-messaging.mjs');
+        const incoming = await messaging.readSessionInbox(session, {
+          env: options.env || process.env,
+          allowBusy: true
+        });
+        crossSessionNotice = incoming.map((message) => messaging.formatSessionMessage(message)).join('\n\n');
+      } catch { /* Messaging is optional; a storage failure must not break an ordinary coding turn. */ }
+    }
+    const notice = [step > 0 ? drainInbox(session) : '', crossSessionNotice, pendingTruncationNotice].filter(Boolean).join('\n\n');
     pendingTruncationNotice = '';
     if (notice) {
       const last = session.messages[session.messages.length - 1];
