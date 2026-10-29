@@ -47,6 +47,12 @@ Without the optional OS sandbox, an approved test, build, or project script can 
 - Non-loopback listeners require TLS certificate/key files by default. Oasis enforces TLS 1.2 or newer and, on POSIX hosts, rejects TLS private-key files whose permissions grant group/other access. Unencrypted HTTP on a non-loopback address requires the explicit `--allow-insecure-lan` opt-in and prints a warning. Certificate provisioning, trust installation on phones, reverse-proxy guidance, and real-device TLS tests remain follow-up work.
 - The service worker must not cache `/api/*` responses because Cache Storage does not isolate entries by bearer Authorization header. It caches only the static app shell.
 
+### Multi-agent run monitor
+
+The browser run monitor is an observer over the existing agent registry and cloud task history, not a second scheduler. `recordAgentEvent` publishes bounded lifecycle metadata through a failure-isolated observer; workers capture their originating run ID so completion and failure events are not reassigned to a later prompt. `GET /api/agent-monitor` returns summaries for recent coding-agent jobs through the same bearer-token-protected API boundary as other browser runtime endpoints. The page shows worker/team statuses and a redacted lifecycle timeline; it does not expose the prompt or full conversation.
+
+The existing `src/cloud-task-store.mjs` stores sanitized job events beneath the user's private Oasis configuration directory and marks jobs interrupted if the runtime restarts. This preserves the run record, **not** the live Node.js worker process, in-memory team registry, or pending approval state. The current view cannot restore an interrupted worker, pause/resume orchestration across restarts, resolve worktree conflicts, or merge branches. Treat this as a first visibility slice until the current-main quality and browser E2E workflows pass.
+
 ## GitHub connection and workspace switching
 
 - The browser UI reuses the host's GitHub CLI login instead of collecting a personal token in the page. The runtime exposes fixed read-only commands for `gh auth status` and `gh api user/repos`; it does not accept arbitrary GitHub CLI arguments from the browser.
