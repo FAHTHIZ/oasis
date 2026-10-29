@@ -20,6 +20,8 @@ const required = [
   'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
   'id="githubRepoSelect"', 'id="githubCloneBtn"', 'id="githubCheckBtn"', '/api/github/clone',
   'id="exportBtn"', 'id="importFile"', 'localStorage', 'id="providerSetupForm"', 'id="providerProtocol"', 'id="providerBaseUrl"', 'id="providerModel"', 'id="providerApiKey"',
+  'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"',
+  'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
   'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
@@ -39,6 +41,15 @@ const packageManifest = JSON.parse(packageText);
 for (const requiredAsset of ['index.html', 'manifest.webmanifest', 'sw.js', 'assets/']) {
   assert.ok(packageManifest.files.includes(requiredAsset), 'Installable CLI package must include ' + requiredAsset + ' for oasis web.');
 }
+const desktopMain = await read('../desktop/main.mjs');
+const webRuntime = await read('../src/web.mjs');
+const secureSecrets = await read('../desktop/secure-secrets.mjs');
+assert.ok(desktopMain.includes('onProviderConfig: persistProviderSecret'), 'Desktop provider setup must use encrypted key storage.');
+assert.ok(secureSecrets.includes('safeStorage.encryptString'), 'Desktop secret storage must encrypt API keys.');
+assert.ok(webRuntime.includes("pathname === '/api/provider/local-models'"), 'The first-run wizard needs local model discovery.');
+assert.ok(webRuntime.includes("http://127.0.0.1:11434/api/tags"), 'Ollama discovery must use a fixed local endpoint.');
+assert.ok(webRuntime.includes("if (!isLoopbackClient(req))"), 'Local model discovery must be limited to loopback clients.');
+
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'OASIS — Coding Agent Workspace');
 assert.equal(manifest.short_name, 'OASIS');
