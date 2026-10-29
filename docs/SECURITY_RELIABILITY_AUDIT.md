@@ -223,5 +223,5 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Finding:** portable global skills and global-extension skills compared a canonicalized root (`realpath`, often `/private/var/...` on macOS) with an uncanonicalized target path (often `/var/...`). Legitimate files under a temporary or home directory could be rejected on macOS. Two credential-masking tests also compared canonical result paths with noncanonical temporary paths, causing false failures.
 
-**Fix added on main:** containment checks now compare lexical root-to-target paths first, then independently compare canonical real paths after checking that the target itself is not a symlink. This preserves the symlink-escape guard while accepting macOS path aliases. The sandbox tests compare the real canonical credential path. Cross-platform CI will verify the fix.
+**Fix added on main:** containment checks now accept either matching lexical paths or matching canonical-root aliases for the initial check, then independently compare canonical real paths after checking that the target itself is not a symlink. This preserves the symlink-escape guard while accepting macOS path aliases. The sandbox tests compare the real canonical credential path. Cross-platform CI will verify the fix.
 
