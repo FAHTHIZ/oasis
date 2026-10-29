@@ -25,7 +25,7 @@ function pathContains(parent, child) {
   return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
 }
 
-function collectSensitivePaths(explicitWritable = [], env = process.env) {
+export function collectSensitivePaths(explicitWritable = [], env = process.env) {
   const home = path.resolve(env.HOME || os.homedir());
   const configPath = path.resolve(env.OASIS_CONFIG_DIR || env.OASIS_HOME || path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'oasis'));
   const candidates = [...SENSITIVE_HOME_PATHS.map((item) => path.join(home, item)), configPath];
