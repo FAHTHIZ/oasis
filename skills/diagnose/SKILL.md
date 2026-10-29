@@ -3,7 +3,9 @@ name: diagnose
 description: Analyze a concrete error, log, failing output, or screenshot and separate evidence from hypotheses.
 ---
 
-# Purpose
+# Diagnose skill
+
+## Purpose
 Explain what a failure indicates and identify the next useful diagnostic step without silently changing the project.
 
 ## Inputs
