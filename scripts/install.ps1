@@ -1,7 +1,7 @@
 # What this script does:
 # 1. Checks for Node.js 22 or newer.
 # 2. Offers to install Node.js with winget only after asking first.
-# 3. Installs the pinned OASIS v0.3.0 release under your user profile.
+# 3. Installs the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0) under your user profile.
 # 4. Runs oasis doctor and opens first-run provider setup.
 # It does not request administrator rights, upload files, or send telemetry.
 [CmdletBinding()]
