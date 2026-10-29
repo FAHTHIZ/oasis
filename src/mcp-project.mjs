@@ -228,6 +228,7 @@ export class McpHttpClient {
     this.sessionId = null;
     this.nextId = 1;
     this.closed = false;
+    this.activeRequests = new Set();
     this.host = options.host || null;
   }
 
@@ -260,10 +261,13 @@ export class McpHttpClient {
   }
 
   async _post(message, timeoutMs = 30000, retried = false) {
+    if (this.closed) throw new Error('MCP server session closed.');
     const extra = await this._helperHeaders(false);
+    if (this.closed) throw new Error('MCP server session closed.');
     const helperAuth = Object.keys(extra).some((key) => key.toLowerCase() === 'authorization');
     const authorization = this.explicitAuth || helperAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
     const controller = new AbortController();
+    this.activeRequests.add(controller);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await this.fetch(this.config.url, {
@@ -308,9 +312,13 @@ export class McpHttpClient {
       if (matched.error) throw new Error(matched.error.message || 'MCP request failed.');
       return matched.result || {};
     } catch (error) {
+      if (this.closed && controller.signal.aborted) throw new Error('MCP server session closed.');
       if (error.name === 'AbortError') throw new Error('MCP request to ' + this.config.name + ' timed out.');
       throw error;
-    } finally { clearTimeout(timer); }
+    } finally {
+      clearTimeout(timer);
+      this.activeRequests.delete(controller);
+    }
   }
 
   _request(method, params = {}, timeoutMs) {
@@ -350,6 +358,8 @@ export class McpHttpClient {
   close() {
     if (this.closed) return;
     this.closed = true;
+    for (const controller of this.activeRequests) controller.abort();
+    this.activeRequests.clear();
     if (this.sessionId) {
       this.fetch(this.config.url, { method: 'DELETE', headers: { ...this.config.headers, 'mcp-session-id': this.sessionId } }).catch(() => {});
     }

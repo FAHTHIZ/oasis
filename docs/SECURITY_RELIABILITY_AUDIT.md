@@ -8,6 +8,15 @@ This is an initial source-level security/reliability pass, not a penetration tes
 
 ## Concrete findings fixed on main
 
+## Closing an HTTP MCP session did not cancel in-flight requests
+
+**Finding:** the Streamable HTTP client aborted requests only when their individual timeout elapsed. Calling `close()` sent the session DELETE but left pending fetches and SSE response readers active until they completed or timed out. This could keep work alive after session teardown and delay recovery.
+
+**Fix committed:** the HTTP client now tracks active request abort controllers, aborts them during close, rejects requests that reach the network stage after closure, and removes controllers on every completion path. A close-triggered abort is reported as a closed session rather than being mislabelled as a timeout.
+
+**Regression coverage:** a fake HTTP transport holds a request open until its signal aborts; the test closes the client and verifies the in-flight operation is cancelled.
+
+
 ### MCP stdio shutdown could orphan descendants, and request timeouts were silent
 
 **Finding:** the stdio MCP client launched its server outside OASIS's dedicated process group and closed only the immediate child. A server-spawned descendant could therefore keep running after the MCP connection closed. Separately, an expired stdio request was removed from the pending map and rejected locally without the protocol cancellation notification, leaving a cooperative server unaware that the result was no longer wanted.
