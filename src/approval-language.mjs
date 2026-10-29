@@ -9,7 +9,8 @@ export function redactApprovalSecrets(value) {
   return String(value == null ? '' : value)
     .replace(/\b(?:sk-ant-[A-Za-z0-9_-]{12,}|sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '[redacted secret]')
     .replace(/(\b(?:authorization|proxy-authorization)\s*[:=]\s*(?:bearer\s+)?)[^\s"'\x60,;]+/gi, '$1[redacted]')
-    .replace(/(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|token)\b\s*[:=]\s*["']?)[^"'\s,;]+/gi, '$1[redacted]');
+    .replace(/(--?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|token|authorization)\s+)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]')
+    .replace(/(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|token)\b["']?\s*[:=]\s*["']?)[^"'\s,;]+/gi, '$1[redacted]');
 }
 
 function safeLabel(value, fallback = 'the requested item') {
@@ -59,7 +60,7 @@ export function formatApprovalMessage(prompt, meta = {}) {
   } else {
     const normalized = original.replace(/\s+/g, ' ').slice(0, 1800);
     message = 'OASIS is asking permission to take this action:\n' + (normalized || 'The action details were not provided.');
-    risky = /\b(?:delete|remove|install|uninstall|overwrite|cannot be undone|high risk|format|drop database|sudo|rm\s+-rf)\b/i.test(original);
+    risky = /\b(?:delete|remove|install|uninstall|overwrite|cannot be undone|high risk|format|drop database|sudo|rm\s+-rf|start the local.*gateway|detached background process|expose the local api)\b/i.test(original);
   }
 
   if (risky) message = 'WARNING — RISKY ACTION\n' + message;
