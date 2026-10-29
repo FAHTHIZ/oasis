@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Native Oasis plugins now validate author/license/minimum version metadata, support `subagents/` manifests, and can be installed or validated from local folders and explicit HTTPS/SSH/file Git URLs. Remote sources use bounded non-shell Git cloning and are removed after staging; no package scripts run automatically. Tests and current-head CI validation are tracked separately.
+
 - Simplified the invalid-version regression assertion and removed duplicated native-plugin verification wording; current-main CI remains the release gate.
 
 - Hardened native plugin rollback: uninstall restores the package and registry if settings updates fail. Version ordering handles hyphenated prerelease identifiers and large numeric core values; regression tests cover subagent grants. Current-main CI is pending.
