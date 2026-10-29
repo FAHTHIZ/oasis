@@ -58,7 +58,7 @@ diff --git a/src/cli.mjs b/src/cli.mjs
 +    baseURL = (await rl.question(basePrompt)).trim() || providerDefaults.baseURL;
 +    const defaultModel = providerDefaults.model;
      const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (required for a compatible endpoint): ';
-@@ -124,4 +127,3 @@ async function configureProvider() {
+@@ -124,5 +127,4 @@ async function configureProvider() {
    protocol = validateProtocol(protocol);
    baseURL = validateBaseUrl(baseURL);
 -  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
