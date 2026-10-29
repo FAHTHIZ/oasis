@@ -852,7 +852,7 @@ export function readInput(options = {}) {
               ? [DIM('Slash commands · Tab to complete · type to filter', color), ...renderCandidates(result.candidates, -1, color)]
               : [];
           } catch { hints = []; }
-        } else if (!commandPrefix && !completion && hints.length && hints[0] && /Commands · Tab to complete/.test(stripAnsi(hints[0]))) {
+        } else if (!commandPrefix && !completion && hints.length && hints[0] && /Slash commands · Tab to complete/.test(stripAnsi(hints[0]))) {
           hints = [];
         }
         draw();
