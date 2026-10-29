@@ -20,7 +20,7 @@ Work directly on `main` in small, reviewable commits. Update this document and t
 - [ ] Required workflows exercise the same intended validation commands without masking failures or relying on retry-only suppression.
 - [ ] Documentation identifies the exact commit for any historical evidence and distinguishes it from current results.
 
-Historical evidence: [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) and [homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on code commit `5a53756` (594 tests, 22 fixtures, Node 22/24/26, PTY and browser E2E). Later hardening and audit commits changed the repository after that run. The current-main quality workflow must pass after those changes, and desktop packaging must be verified on the same revision before Gate 0 can close.
+Last fully verified implementation baseline before this follow-up: [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072) passed on `caf604d` (643 tests, 33 fixtures, Node 22/24/26, PTY, browser E2E and Ubuntu/macOS/Windows security regressions); [publishing validation run 40854882012](https://github.com/FAHTHIZ/oasis/actions/runs/40854882012) and [desktop packaging/release run 40854882048](https://github.com/FAHTHIZ/oasis/actions/runs/40854882048) passed on the same revision. The strict budget parsing and process-tree follow-up in the current commit requires the same workflows to pass before Gate 0 closes.
 
 **Acceptance:** link each required workflow to the same commit SHA and record any unsupported platform path explicitly.
 

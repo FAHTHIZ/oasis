@@ -25,7 +25,7 @@ Before release, use [the branch audit](BRANCH_AUDIT.md) to retire already-merged
 
 ### P1 — Benchmark real coding work
 
-The 22 current evaluation fixtures are small and heavily utility-focused. Expand the suite to at least 30 tasks across pinned repository snapshots:
+The 33 current evaluation fixtures are useful regression tasks but remain small and heavily utility-focused. Expand the suite to at least 50 representative tasks across pinned repository snapshots:
 
 - Multi-file bug fixes with regression tests and explicit acceptance criteria.
 - Existing-codebase navigation and questions whose answers can be checked against source.
@@ -71,4 +71,4 @@ A release is ready only when all required CI workflows pass on the same commit, 
 **Immediate priority:** stabilize the required quality matrix, expand the eval suite beyond utility smoke tests, and then implement the durable/visible agent lifecycle. Do not declare OASIS finished while those gates remain open.
 
 
-The latest quality run on `5a53756` passed 594 Node tests across Node.js 22, 24 and 26, validated 22 fixtures, passed the PTY smoke test, and passed browser E2E. Homepage/repository validation also passed on the same code commit. The desktop packaging matrix was not reverified on this revision.
+The last fully verified implementation baseline before the follow-up fixes, `caf604d`, passed 643 Node tests across Node.js 22, 24 and 26, validated 33 fixtures, passed the PTY smoke test and browser E2E, and passed cross-platform security, publishing and Windows/macOS/Linux desktop packaging on the same SHA. The current follow-up adds strict model-budget parsing and process-tree cleanup and must pass its own same-SHA workflow matrix.

@@ -98,11 +98,16 @@ export function validateBaseUrl(raw) {
   return raw.replace(/\/+$/, '');
 }
 
-function clampInteger(value, fallback, min, max) {
+function strictInteger(value) {
   const raw = typeof value === 'number' ? value : String(value ?? '').trim();
-  if (typeof raw === 'string' && !/^[+-]?\d+$/.test(raw)) return fallback;
+  if (typeof raw === 'string' && !/^[+-]?\d+$/.test(raw)) return null;
   const parsed = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isSafeInteger(parsed)) return fallback;
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function clampInteger(value, fallback, min, max) {
+  const parsed = strictInteger(value);
+  if (parsed === null) return fallback;
   return Math.min(max, Math.max(min, parsed));
 }
 
@@ -141,8 +146,19 @@ export async function loadConfig(options = {}) {
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
   // apiKeyHelper (settings or OASIS_API_KEY_HELPER) supplies the key at request time when none is set.
   const apiKeyHelper = !apiKey && !cloud && !localEndpoint && env.OASIS_API_KEY_HELPER ? String(env.OASIS_API_KEY_HELPER) : '';
+  const normalizedSaved = { ...saved };
+  for (const [key, min, max] of [
+    ['contextWindow', 4000, 2000000],
+    ['thinkingBudget', 1024, 64000],
+    ['maxOutputTokens', 1024, 128000]
+  ]) {
+    if (!Object.hasOwn(saved, key)) continue;
+    const value = strictInteger(saved[key]);
+    if (value === null || value < min || value > max) delete normalizedSaved[key];
+    else normalizedSaved[key] = value;
+  }
   return {
-    ...saved, protocol, baseURL, model, apiKey, configPath, ...(apiKeyHelper ? { apiKeyHelper } : {}),
+    ...normalizedSaved, protocol, baseURL, model, apiKey, configPath, ...(apiKeyHelper ? { apiKeyHelper } : {}),
     configured: Boolean(apiKey) || Boolean(apiKeyHelper) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)),
     maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, 60, 1, 400),
     maxToolCalls: clampInteger(env.OASIS_MAX_TOOL_CALLS || saved.maxToolCalls, 300, 1, 2000),
@@ -166,15 +182,15 @@ export async function saveConfig(config, options = {}) {
     maxTokens: clampInteger(config.maxTokens, 2000000, 10000, 20000000),
     maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
   };
-  const contextWindow = Number.parseInt(config.contextWindow, 10);
-  if (Number.isInteger(contextWindow) && contextWindow >= 4000 && contextWindow <= 2000000) safe.contextWindow = contextWindow;
+  const contextWindow = strictInteger(config.contextWindow);
+  if (contextWindow !== null && contextWindow >= 4000 && contextWindow <= 2000000) safe.contextWindow = contextWindow;
   if (config.vision === false) safe.vision = false;
   if (config.promptCache === false) safe.promptCache = false;
-  const thinkingBudget = Number.parseInt(config.thinkingBudget, 10);
-  if (Number.isInteger(thinkingBudget) && thinkingBudget >= 1024 && thinkingBudget <= 64000) safe.thinkingBudget = thinkingBudget;
+  const thinkingBudget = strictInteger(config.thinkingBudget);
+  if (thinkingBudget !== null && thinkingBudget >= 1024 && thinkingBudget <= 64000) safe.thinkingBudget = thinkingBudget;
   if (config.requireReadBeforeEdit === false || config.requireReadBeforeEdit === 'strict') safe.requireReadBeforeEdit = config.requireReadBeforeEdit;
-  const maxOutputTokens = Number.parseInt(config.maxOutputTokens, 10);
-  if (Number.isInteger(maxOutputTokens) && maxOutputTokens >= 1024 && maxOutputTokens <= 128000) safe.maxOutputTokens = maxOutputTokens;
+  const maxOutputTokens = strictInteger(config.maxOutputTokens);
+  if (maxOutputTokens !== null && maxOutputTokens >= 1024 && maxOutputTokens <= 128000) safe.maxOutputTokens = maxOutputTokens;
   if (['minimal', 'low', 'medium', 'high'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
   if (!safe.model) throw new Error('The model name cannot be empty.');
   await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });

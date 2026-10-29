@@ -1,6 +1,6 @@
 // Permission rules, permission modes, and command risk analysis.
 //
-// Rule syntax follows Claude Code so existing settings can be reused:
+// Permission rules accept familiar tool(specifier) forms so existing settings can migrate easily; OASIS applies its own policy and enforcement.
 //   run_command(npm test:*)   prefix match on the command line ("npm test", "npm test -- --watch")
 //   run_command(git status)   exact command line
 //   edit_file(src/**)         glob over workspace-relative paths

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, writeFile, readFile, rm, mkdir, access } from 'node:fs/promises';
 import { analyzeCommand, PermissionPolicy, parseRule, ruleMatches, suggestRule } from '../src/permissions.mjs';
 import { runWorkspaceCommand, executeTool } from '../src/tools.mjs';
-import { grepWorkspace, multiEditFile, shellCommandBlocked } from '../src/power-tools.mjs';
+import { grepWorkspace, multiEditFile, shellCommandBlocked, startBackgroundProcess, killBackgroundEntry } from '../src/power-tools.mjs';
 import { detectSandbox, resolveSandbox, wrapCommand, macProfile } from '../src/sandbox.mjs';
 
 async function tmp(prefix = 'oasis-power-') { return await mkdtemp(path.join(os.tmpdir(), prefix)); }
@@ -135,6 +135,46 @@ test('background commands start, stream output, and can be killed', async (t) =>
   assert.equal(killed.killed, true);
   const list = await executeTool('list_background', {}, { root: dir, session });
   assert.equal(list.processes[0].status, 'killed');
+});
+
+test('power-tool background cancellation kills descendants that outlive the leader', async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const childPidPath = path.join(dir, 'descendant.pid');
+  const source = [
+    "const { spawn } = require('node:child_process');",
+    "const fs = require('node:fs');",
+    "const child = spawn(process.execPath, ['-e', 'process.on(\"SIGTERM\", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+    "fs.writeFileSync(process.env.OASIS_TEST_CHILD_PID_FILE, String(child.pid));",
+    "setInterval(() => {}, 1000);"
+  ].join('\n');
+  const registry = new Map();
+  const started = startBackgroundProcess(registry, { command: process.execPath, args: ['-e', source] }, {
+    cwd: dir,
+    env: { ...process.env, OASIS_TEST_CHILD_PID_FILE: childPidPath },
+    display: 'process-tree regression fixture'
+  });
+  const entry = registry.get(started.id);
+  assert.ok(entry);
+  t.after(() => { if (entry.status === 'running') killBackgroundEntry(entry); });
+  let descendantPid = 0;
+  const startDeadline = Date.now() + 5000;
+  while (!descendantPid && Date.now() < startDeadline) {
+    try { descendantPid = Number((await readFile(childPidPath, 'utf8')).trim()); } catch {}
+    if (!descendantPid) await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.ok(descendantPid > 0, 'the descendant should publish its PID before cancellation');
+  assert.equal(killBackgroundEntry(entry), true);
+
+  const processExists = (pid) => {
+    try { process.kill(pid, 0); return true; }
+    catch (error) { return error && error.code === 'EPERM'; }
+  };
+  const stopDeadline = Date.now() + 6000;
+  while (processExists(descendantPid) && Date.now() < stopDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(processExists(descendantPid), false, 'the descendant must be gone even though the leader exits first');
 });
 
 test('shell guard blocks obviously destructive shell lines', () => {

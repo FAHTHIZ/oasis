@@ -1,14 +1,14 @@
-# Benchmark audit and next steps
+# OASIS evaluation suite: audit and next steps
 
 **Audit date:** October 29, 2026  
-**Scope:** the 33 checked-in evaluation fixtures, evaluator/verification design, report metadata, and readiness for a fair Claude Code comparison.  
+**Scope:** the 33 checked-in evaluation fixtures, evaluator/verification design, report metadata, and readiness for reproducible external benchmarking.  
 **Status:** static audit completed; no authenticated live head-to-head run has been performed in this audit.
 
 ## Finding
 
 OASIS has a useful evaluator foundation, but the current suite is better described as a deterministic smoke/regression suite than a competitive coding benchmark. The task validator has meaningful integrity checks: each task has a non-empty prompt, a reference patch and an external verifier; the no-op baseline must fail; the reference patch must apply and pass; task fingerprints include the prompt, shared snapshot, reference patch and verifier. The evaluator also uses disposable task workspaces, rejects symlinks and sensitive patch paths, and compares task-balanced outcomes only when task IDs overlap.
 
-The main limitation is task representativeness, not simply task count. The 33-task suite clusters around isolated helper functions, parsing and boundary behavior. There is useful security and configuration coverage, but relatively little evidence of sustained work in an existing codebase: multi-file features, debugging after failing tests, architecture-aware changes, regression recovery, cancellation/resume, or broad changes spanning several modules. Two tasks now require coordinated source and regression-test changes; the new `provider-setup-preserves-config` task spans configuration logic, CLI setup behavior, and tests. This is a first step, not enough integration coverage to support broad parity claims. The existing suite should not be marketed as proof of parity with Claude Code.
+The main limitation is task representativeness, not simply task count. The 33-task suite clusters around isolated helper functions, parsing and boundary behavior. There is useful security and configuration coverage, but relatively little evidence of sustained work in an existing codebase: multi-file features, debugging after failing tests, architecture-aware changes, regression recovery, cancellation/resume, or broad changes spanning several modules. Two tasks now require coordinated source and regression-test changes; the new `provider-setup-preserves-config` task spans configuration logic, CLI setup behavior, and tests. This is a first step, not enough integration coverage to support strong claims about OASIS's real-world task-solving performance. Evaluation should measure outcomes that matter to OASIS users; any external agent is an optional reference, not the product's finish line.
 
 ## Current coverage inventory
 
@@ -48,7 +48,7 @@ Task categories and difficulty are now maintained in `evals/tasks/metadata.json`
 
 ### P1 — Expand task representativeness
 
-Add and validate at least 24 additional tasks beyond the new provider-setup integration task before promoting the suite as a serious coding benchmark. Prioritize:
+Add and validate at least 17 additional representative tasks to reach a minimum of 50 before promoting the suite as a serious coding benchmark. Prioritize:
 
 - Existing-code bug fixes with regression tests across 2–5 files.
 - Feature work that follows existing architecture and preserves API compatibility.

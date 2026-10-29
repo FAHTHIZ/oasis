@@ -23,6 +23,7 @@
 // Starting a language server runs a local program, so it needs approval once per
 // server per session unless commands are auto-approved or a rule allows `lsp`.
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, realpath, access } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -92,7 +93,7 @@ export class LspClient {
   }
 
   start() {
-    this.child = spawn(this.command, this.args, { cwd: this.cwd, env: this.env, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    this.child = spawn(this.command, this.args, { cwd: this.cwd, env: this.env, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, ...processTreeSpawnOptions() });
     this.child.stdout.on('data', (chunk) => this.onData(chunk));
     this.child.stderr.on('data', (chunk) => { this.stderr = (this.stderr + chunk).slice(-4000); });
     this.child.stdin.on('error', () => {});
@@ -102,7 +103,14 @@ export class LspClient {
       this.pending.clear();
     };
     this.child.on('error', (error) => fail('Language server ' + this.name + ' failed to start: ' + error.message));
-    this.child.on('exit', (code, signal) => fail('Language server ' + this.name + ' exited (' + (signal || code) + ')' + (this.stderr.trim() ? ': ' + this.stderr.trim().split('\n').slice(-3).join(' ') : '')));
+    this.child.on('exit', (code, signal) => {
+      fail('Language server ' + this.name + ' exited (' + (signal || code) + ')' + (this.stderr.trim() ? ': ' + this.stderr.trim().split('\n').slice(-3).join(' ') : ''));
+      // Some language servers delegate to worker processes. Clean the process
+      // group even when the server leader exits before its descendants.
+      signalProcessTree(this.child, 'SIGTERM');
+      const killTimer = setTimeout(() => signalProcessTree(this.child, 'SIGKILL'), 750);
+      killTimer.unref?.();
+    });
   }
 
   onData(chunk) {
@@ -235,11 +243,18 @@ export class LspClient {
   }
 
   stop() {
-    if (this.closed) return;
+    if (this.closed) {
+      signalProcessTree(this.child, 'SIGKILL');
+      return;
+    }
     try {
       const shutdown = this.request('shutdown', null, 2000).catch(() => {});
-      shutdown.finally(() => { this.notify('exit', null); setTimeout(() => { try { this.child.kill('SIGKILL'); } catch {} }, 500).unref?.(); });
-    } catch { try { this.child.kill('SIGKILL'); } catch {} }
+      shutdown.finally(() => {
+        this.notify('exit', null);
+        const timer = setTimeout(() => signalProcessTree(this.child, 'SIGKILL'), 500);
+        timer.unref?.();
+      });
+    } catch { signalProcessTree(this.child, 'SIGKILL'); }
     this.closed = true;
   }
 }

@@ -797,14 +797,21 @@ function toAnthropicRequest(messages, options = {}) {
   return { system: system ? String(system.content || '') : '', messages: merged };
 }
 
-// Output-token limits. Claude Code defaults to a 32k output window on current
-// Claude models (CLAUDE_CODE_MAX_OUTPUT_TOKENS overrides it). Older models with
+// Output-token limits. OASIS uses a conservative model-based default with an
+// optional environment/configuration override. Older models with
 // smaller caps get a conservative default; a provider 400 that names the real
 // cap lowers it for the rest of the session instead of failing the turn.
 const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
 const MODERN_32K_MODELS = /claude|gpt-5|\bo[1-9](-|$)|gpt-4\.1|gemini-(2|3)|deepseek|qwen3|kimi|glm-4\.[5-9]|grok-[3-9]/i;
+function strictConfiguredInteger(value) {
+  const raw = typeof value === 'number' ? value : String(value ?? '').trim();
+  if (typeof raw === 'string' && !/^\d+$/.test(raw)) return 0;
+  const parsed = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 export function maxOutputTokensFor(config = {}, env = process.env) {
-  const configured = Number.parseInt(env.OASIS_MAX_OUTPUT_TOKENS || env.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0, 10) || 0;
+  const configured = strictConfiguredInteger(env.OASIS_MAX_OUTPUT_TOKENS || env.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0);
   if (configured > 0) return Math.max(1024, Math.min(128000, configured));
   const model = String(config.model || '');
   if (LEGACY_8K_MODELS.test(model) && !/claude-3-7|claude-3\.7/i.test(model)) return 8192;
@@ -843,7 +850,7 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
   if (/\bultrathink\b|\bthink (?:harder|intensely|super hard|really hard|very hard)\b/.test(text)) budget = 31999;
   else if (/\bmegathink\b|\bthink (?:hard|deeply|a lot|more)\b/.test(text)) budget = 10000;
   else if (/\bthink\b/.test(text) && /\b(?:think (?:about|through|carefully|step)|please think|let'?s think)\b/.test(text)) budget = 4000;
-  const configured = Number.parseInt(env.OASIS_THINKING_BUDGET || env.MAX_THINKING_TOKENS || config.thinkingBudget || 0, 10) || 0;
+  const configured = strictConfiguredInteger(env.OASIS_THINKING_BUDGET || env.MAX_THINKING_TOKENS || config.thinkingBudget || 0);
   budget = Math.max(budget, configured);
   if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return 0;
   return budget ? Math.max(1024, Math.min(budget, 64000)) : 0;
@@ -1407,7 +1414,7 @@ async function requestCompletionRaw(session, options = {}) {
   } else {
     endpoint = openAIEndpoint(config.baseURL);
     // Compatible gateways differ on max_tokens support, so only send it when configured.
-    const explicitChatLimit = session.outputTokenCap || Number.parseInt(providerEnv.OASIS_MAX_OUTPUT_TOKENS || providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0, 10) || 0;
+    const explicitChatLimit = session.outputTokenCap || strictConfiguredInteger(providerEnv.OASIS_MAX_OUTPUT_TOKENS || providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS || config.maxOutputTokens || 0);
     if (explicitChatLimit) outputLimit = explicitChatLimit;
     bodyObject = {
       model: config.model,
@@ -3063,7 +3070,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (mentioned.errors.length) userContent += '\n\n<mcp-resource-errors>\n' + mentioned.errors.join('\n') + '\n</mcp-resource-errors>';
   }
   if (!options.isSubagent && session.mcpConnecting) userContent += '\n\n<system-reminder>Some MCP servers are still connecting in the background; their tools are not in your list yet. If the task needs them, call wait_for_mcp_servers first.</system-reminder>';
-  // "ultracode" in a prompt (or the ultracode setting) asks for a dynamic workflow, as in Claude Code.
+  // The OASIS ultracode keyword/setting requests a dynamic, model-directed workflow.
   if (!options.isSubagent && !options.planOnly && (/\bultracode\b/i.test(request) || session.ultracode) && session.toolDefinitions.some((tool) => tool.function.name === 'workflow')) {
     userContent += '\n\n<system-reminder>Ultracode: plan this task as a dynamic workflow. Write a workflow script that fans the work out to agents (pipeline/parallel, phases, schema for results you process), run it with the workflow tool, then verify and report its result. Size it to the task.</system-reminder>';
   }

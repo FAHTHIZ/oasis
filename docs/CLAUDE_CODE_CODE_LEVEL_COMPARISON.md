@@ -5,9 +5,9 @@
 **Claude Code release artifact inspected:** [@anthropic-ai/claude-code 2.1.312](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/)  
 **Method:** inspect OASIS source, registered tools, tests, task fixtures and CI configuration; compare these with files shipped in Claude Code's official public release and official public repository. This is a code-evidence audit, not a claim of measured product parity.
 
-## Executive verdict: OASIS on its own merits
+## Executive verdict: OASIS on its own merits: OASIS on its own merits
 
-OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.
+OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.
 
 That establishes **broad architectural and capability overlap** with Claude Code. It does **not** establish equal success rate, patch quality, speed, reliability or security. Those are behavioral outcomes that need controlled evaluation.
 

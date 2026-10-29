@@ -1,4 +1,4 @@
-// Additional agent tools that close common gaps with Claude Code:
+// Additional OASIS tools for deeper repository work and interactive process control:
 //   grep           regex search (ripgrep when available, JS fallback) with globs, context, and modes
 //   multi_edit     several exact-string edits to one file, applied atomically
 //   command_output read new output from a background process
@@ -15,6 +15,7 @@ import { snapshotFile } from './backups.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_OUTPUT = 24 * 1024;
@@ -56,7 +57,7 @@ export const SHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'run_
 export const POWERSHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'powershell', description: 'Run a PowerShell command in the workspace (pwsh 7+, or Windows PowerShell 5.1). Use it for Windows-native work, PowerShell scripts and cmdlets. Profiles are not loaded. Requires approval unless a PowerShell(...) permission rule allows it.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'PowerShell command' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120' }, run_in_background: { type: 'boolean', description: 'Start without waiting; read with command_output' } }, required: ['command'] } } };
 export const POWER_TOOL_NAMES = new Set(['grep', 'multi_edit', 'notebook_edit', 'command_output', 'kill_command', 'list_background', 'run_shell', 'powershell']);
 
-// Like Claude Code: on by default on Windows (CLAUDE_CODE_USE_POWERSHELL_TOOL=0 turns it off),
+// PowerShell is enabled by default on Windows (CLAUDE_CODE_USE_POWERSHELL_TOOL=0 turns it off),
 // opt-in elsewhere with CLAUDE_CODE_USE_POWERSHELL_TOOL=1 (or OASIS_POWERSHELL=1) and pwsh on PATH.
 export function findPowerShell(env = process.env, platform = process.platform) {
   const flag = env.CLAUDE_CODE_USE_POWERSHELL_TOOL ?? env.OASIS_POWERSHELL;
@@ -256,7 +257,7 @@ export function startBackgroundProcess(registry, launch, options) {
   const running = [...registry.values()].filter((item) => item.status === 'running');
   if (running.length >= MAX_BACKGROUND_PROCESSES) throw new Error('Too many background processes are running (' + MAX_BACKGROUND_PROCESSES + '). Stop one with kill_command first.');
   const id = 'bg_' + randomUUID().slice(0, 8);
-  const child = spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+  const child = spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
   const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: '', readOffset: 0, dropped: 0, startedAt: new Date().toISOString(), child, sandboxed: options.sandboxed };
   const append = (chunk) => {
     entry.output += chunk.toString();
@@ -297,12 +298,14 @@ export function killBackgroundEntry(entry) { return killEntry(entry); }
 
 function killEntry(entry) {
   if (!entry || entry.status !== 'running') return false;
-  try {
-    if (process.platform !== 'win32' && entry.pid) process.kill(-entry.pid, 'SIGTERM');
-    else entry.child.kill('SIGTERM');
-  } catch { try { entry.child.kill('SIGTERM'); } catch {} }
-  const timer = setTimeout(() => { try { if (process.platform !== 'win32') process.kill(-entry.pid, 'SIGKILL'); else entry.child.kill('SIGKILL'); } catch {} }, 1500);
-  timer.unref?.();
+  signalProcessTree(entry.child, 'SIGTERM');
+  clearTimeout(entry.killTimer);
+  entry.killTimer = setTimeout(() => {
+    entry.killTimer = null;
+    // Keep escalation after the leader exits: descendants may ignore SIGTERM.
+    signalProcessTree(entry.child, 'SIGKILL');
+  }, 1500);
+  entry.killTimer.unref?.();
   entry.status = 'killed';
   return true;
 }
@@ -363,8 +366,8 @@ async function runShell(root, args, context, flavor = 'sh') {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
-    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
-    const kill = () => { try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch {} };
+    const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+    const kill = () => { signalProcessTree(child, 'SIGKILL'); };
     const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutSeconds * 1000);
     const onAbort = () => kill();
     if (context.signal) context.signal.addEventListener('abort', onAbort, { once: true });

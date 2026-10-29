@@ -6,7 +6,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 - A CLI evaluation runner executes reviewed reference tasks in disposable copies and records pass/fail, tokens, elapsed time, and optional estimated cost.
 - The CI quality gate validates task fixtures by requiring the unchanged workspace to fail and the reference patch to pass.
-- The starter suite contains 21 small tasks. Most are standalone utility exercises, so it is a smoke benchmark and not yet a reliable score for full-project coding quality.
+- The current suite contains 33 tasks (16 labelled small and 17 medium). Most exercise isolated helpers, parsing, and boundaries, so it is a regression/smoke benchmark—not a reliable measure of full-project coding quality.
 - The runner is not an OS sandbox. Temporary directories and --yes do not provide isolation from host privileges or network access.
 
 ## Shipped foundations
@@ -46,7 +46,7 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 
 ## Next milestone — Alpha confidence and end-to-end reliability
 
-The latest required main-branch checks are green on one code revision: 570 tests pass across Node 22/24/26, the `FileChanged` hook regression is covered, homepage/repository validation passes, and Windows/macOS/Linux desktop packaging succeeds. The Alpha-confidence milestone remains open for repeated focused reliability checks, broader supported-OS user journeys, and a reproducible coding-outcome benchmark.
+The last fully verified implementation revision before the follow-up fixes, `caf604d`, passed 643 tests on Node 22/24/26, validated 33 fixtures, and passed Linux PTY/browser E2E, cross-platform security regressions, publishing validation, and Windows/macOS/Linux desktop packaging on the same SHA. The strict model-budget and process-tree follow-up in the current commit needs its own same-SHA workflow result. The Alpha-confidence milestone remains open for representative coding outcomes, broader supported-OS journeys and release confidence.
 
 Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md), and see [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for fixes made and security boundaries that remain. The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. The CI consistency sub-gate is now satisfied; the broader release-confidence milestone remains open until the remaining user journeys, platform limitations and benchmark criteria are addressed.
 
@@ -68,7 +68,7 @@ These priorities follow from the current integration inventory and readiness fin
 - Add end-to-end coverage for approval/denial, cancellation, recovery/resume, worktree conflicts, and browser PTY interaction.
 - Verify first launch and a small edit/test task on each OS claimed as supported. Treat Android/Termux as experimental until tested.
 - Document TLS behavior, sandbox defaults, provider setup, unsigned installers and platform limits truthfully.
-- Expand the 21-task smoke suite into at least 25–30 representative, reviewed repository tasks and publish reproducible OASIS-versus-compatible ecosystem results where the same model can be pinned.
+- Expand the 33-task smoke suite to at least 50 representative, reviewed repository tasks and publish reproducible outcome reports against explicit OASIS acceptance criteria. External product comparisons may be used as optional evidence, but they do not define the roadmap.
 - Publish a versioned Alpha only when the acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md) are satisfied; successful packaging alone is not sufficient.
 
 ## Milestone 2 — provider and tool ecosystem
@@ -109,8 +109,8 @@ These priorities follow from the current integration inventory and readiness fin
 
 ## Deliberate non-claims
 
-OASIS is not yet at compatible ecosystem feature parity, and no apples-to-apples task benchmark demonstrates equal coding outcomes. The tested baseline is meaningful for a local-first single-machine coding agent, but it does not establish release maturity across every OS.
+OASIS's third-party ecosystem coverage is incomplete, and no apples-to-apples task benchmark yet establishes its performance on broad repository work. The tested baseline is meaningful for a local-first single-machine coding agent, but does not establish release maturity across every OS.
 
-Current boundaries: the PTY/xterm path still needs broader cross-platform lifecycle testing; multi-agent task dispatch and named teams remain session-scoped without a durable visual run monitor or cross-session team service; branches are not merged automatically; embedded GitHub OAuth is not implemented; the general remote/mobile control lifecycle is incomplete; third-party plugin compatibility is feature-by-feature rather than universal; the optional sandbox is disabled by default and has no Windows implementation; native Gemini and JetBrains support remain gaps; desktop installers are unsigned; browser dashboard data does not fully sync with the CLI; and context compaction is a best-effort heuristic. The 21 fixture suite is only a smoke benchmark.
+Current boundaries: the PTY/xterm path still needs broader cross-platform lifecycle testing; multi-agent task dispatch and named teams remain session-scoped without a durable visual run monitor or cross-session team service; branches are not merged automatically; embedded GitHub OAuth is not implemented; the general remote/mobile control lifecycle is incomplete; third-party plugin compatibility is feature-by-feature rather than universal; the optional sandbox is disabled by default and has no Windows implementation; native Gemini and JetBrains support remain gaps; desktop installers are unsigned; browser dashboard data does not fully sync with the CLI; and context compaction is a best-effort heuristic. The 33-task suite is only a smoke/regression benchmark.
 
 See [NEXT_MILESTONE.md](NEXT_MILESTONE.md) for the prioritized acceptance gate, [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risks, [CURRENT_STATUS.md](CURRENT_STATUS.md) for verification evidence, and [PRODUCT_READINESS.md](PRODUCT_READINESS.md) for the release-readiness gates.

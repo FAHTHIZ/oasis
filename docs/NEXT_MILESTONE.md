@@ -2,7 +2,7 @@
 
 **Status checked:** October 29, 2026  
 **Code snapshot audited before the latest main changes:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca)  
-**Latest fully verified code baseline:** [`5a537564a9817cf879afa636f8517825866c74f3`](https://github.com/FAHTHIZ/oasis/commit/5a537564a9817cf879afa636f8517825866c74f3), [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171): 594 tests, 22 fixtures, Node 22/24/26, Linux PTY and browser E2E passed. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code commit.  
+**Last fully verified implementation baseline before the follow-up patches in this commit:** [`caf604dde436139e98113feaa4ebfce6afd2c885`](https://github.com/FAHTHIZ/oasis/commit/caf604dde436139e98113feaa4ebfce6afd2c885), [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072): 643 tests, 33 fixtures, Node 22/24/26, Linux PTY and browser E2E passed. [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40854882012) and [Windows/macOS/Linux desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/40854882048) passed on the same SHA.
 **Purpose:** prioritize OASIS-owned reliability, coding quality, safety, and release readiness based on what is implemented and verifiable.
 
 ## Decision
@@ -13,11 +13,11 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-The isolated-worktree, durable task-history, public-fetch and federated-search/query-planning changes are included in code commit `5a53756`, whose [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) passed 594 tests, 22/22 fixtures, the Node 22/24/26 matrix, PTY and browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code commit. Keep remaining priorities focused on measurable coding outcomes and end-to-end reliability, not feature count.
+The isolated-worktree, durable task-history, public-fetch and federated-search/query-planning changes are included in code commit `5a53756`, whose [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) passed 643 tests, 33/33 fixtures, the Node 22/24/26 matrix, PTY and browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code commit. Keep remaining priorities focused on measurable coding outcomes and end-to-end reliability, not feature count.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
-| Latest verified code Quality Checks | [Run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) passed: 594 tests, Node 22/24/26, 22 validated fixtures, Linux PTY smoke and browser E2E | Includes isolated worktrees, durable task history and current search/query-planning code. |
+| Last fully verified Quality Checks baseline | [Run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072) passed: 643 tests, Node 22/24/26, 33 validated fixtures, Linux PTY, browser E2E and cross-platform security regressions | Publishing and desktop packaging also passed on the same `caf604d` revision; follow-up process/config changes still need fresh verification. |
 | Current desktop build | [Run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. | Platform packaging passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
 | Current publishing validation | [Run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed | The repository/public-site checks passed on comparator code revision `268862c`. |
 
@@ -61,7 +61,7 @@ The benchmark is specifically about **core mechanics**, not ecosystem breadth. F
 
 - [x] Added `oasis eval --compare <run-a.json> <run-b.json>` to compare repeated-trial reports over common task IDs, including task-balanced pass rates, median per-task time, mean cost per trial, and unmatched-task lists. External reports must be normalized; the command does not run compatible ecosystem or validate external results.
 
-The 22 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 25–30 representative tasks** across multiple repository snapshots:
+The 33 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 50 representative tasks** across multiple repository snapshots:
 
 - Bug fixes with regression tests.
 - Multi-file features and refactors.
