@@ -32,14 +32,15 @@ function scrubEnvironment(env = process.env) {
   return safe;
 }
 
-function capture(output, chunk) {
-  return (output + chunk.toString('utf8')).slice(-OUTPUT_LIMIT);
+function capture(output, chunk, limit = OUTPUT_LIMIT) {
+  return (output + chunk.toString('utf8')).slice(-limit);
 }
 
 function runProcess(command, args, options = {}) {
   const cwd = options.cwd || process.cwd();
   const env = options.env || scrubEnvironment();
   const timeoutMs = Math.max(1000, Number(options.timeoutMs) || DEFAULT_TIMEOUT_MS);
+  const outputLimit = Math.max(1024, Number(options.outputLimit) || OUTPUT_LIMIT);
   return new Promise((resolve) => {
     let child;
     let stdout = '';
@@ -50,7 +51,7 @@ function runProcess(command, args, options = {}) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ ...result, stdout, stderr, output: (stdout + (stderr ? '\n' + stderr : '')).slice(-OUTPUT_LIMIT) });
+      resolve({ ...result, stdout, stderr, output: (stdout + (stderr ? '\n' + stderr : '')).slice(-outputLimit) });
     };
     const timer = setTimeout(() => {
       timedOut = true;
@@ -60,8 +61,8 @@ function runProcess(command, args, options = {}) {
     }, timeoutMs);
     try {
       child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
-      child.stdout.on('data', (chunk) => { stdout = capture(stdout, chunk); });
-      child.stderr.on('data', (chunk) => { stderr = capture(stderr, chunk); });
+      child.stdout.on('data', (chunk) => { stdout = capture(stdout, chunk, outputLimit); });
+      child.stderr.on('data', (chunk) => { stderr = capture(stderr, chunk, outputLimit); });
       child.on('error', (error) => finish({ exitCode: 127, signal: null, error: error.message, timedOut }));
       child.on('close', (code, signal) => finish({ exitCode: timedOut ? 124 : (code ?? 1), signal, timedOut }));
     } catch (error) {
@@ -388,7 +389,11 @@ export async function compareEvalReports(paths, options = {}) {
 }
 
 function parseArgs(args) {
-  const config = { validate: false, task: null, trials: 3, help: false, compare: null };
+  const config = {
+    validate: false, task: null, trials: 3, help: false, compare: null,
+    claudeCode: false, model: null, maxTurns: 30, timeoutSeconds: 600,
+    budgetUSD: null, claudeOptionsUsed: false
+  };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--validate') { config.validate = true; continue; }
@@ -396,6 +401,34 @@ function parseArgs(args) {
       if (config.compare) throw new Error('--compare may be specified only once.');
       if (!args[i + 1] || !args[i + 2]) throw new Error('--compare requires two JSON report paths.');
       config.compare = [args[++i], args[++i]];
+      continue;
+    }
+    if (arg === '--claude-code') { config.claudeCode = true; continue; }
+    if (arg === '--model') {
+      if (!args[i + 1] || args[i + 1].startsWith('-')) throw new Error('--model requires a Claude Code model name or alias.');
+      config.model = args[++i];
+      config.claudeOptionsUsed = true;
+      continue;
+    }
+    if (arg === '--max-turns') {
+      const value = Number(args[++i]);
+      if (!Number.isInteger(value) || value < 1 || value > 200) throw new Error('--max-turns must be an integer from 1 to 200.');
+      config.maxTurns = value;
+      config.claudeOptionsUsed = true;
+      continue;
+    }
+    if (arg === '--timeout-seconds') {
+      const value = Number(args[++i]);
+      if (!Number.isInteger(value) || value < 30 || value > 3600) throw new Error('--timeout-seconds must be an integer from 30 to 3600.');
+      config.timeoutSeconds = value;
+      config.claudeOptionsUsed = true;
+      continue;
+    }
+    if (arg === '--budget-usd') {
+      const value = Number(args[++i]);
+      if (!Number.isFinite(value) || value <= 0 || value > 1000) throw new Error('--budget-usd must be greater than 0 and no more than 1000.');
+      config.budgetUSD = value;
+      config.claudeOptionsUsed = true;
       continue;
     }
     if (arg === '--help' || arg === '-h') { config.help = true; continue; }
@@ -413,8 +446,14 @@ function parseArgs(args) {
     throw new Error('Unknown oasis eval option: ' + arg);
   }
   if (config.task && !safeId(config.task)) throw new Error('Task IDs may contain lowercase letters, numbers, and hyphens.');
-  if (config.validate && (config.task || config.trials !== 3 || config.compare)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials or --compare.');
-  if (config.compare && (config.task || config.trials !== 3)) throw new Error('--compare cannot be combined with --task or --trials.');
+  if (config.claudeOptionsUsed && !config.claudeCode) {
+    throw new Error('--model, --max-turns, --timeout-seconds and --budget-usd require --claude-code.');
+  }
+  if (config.claudeCode && (config.validate || config.compare)) {
+    throw new Error('--claude-code cannot be combined with --validate or --compare.');
+  }
+  if (config.validate && (config.task || config.trials !== 3 || config.compare || config.claudeCode)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials, --compare or --claude-code.');
+  if (config.compare && (config.task || config.trials !== 3 || config.claudeCode)) throw new Error('--compare cannot be combined with --task, --trials or --claude-code.');
   return config;
 }
 
@@ -427,6 +466,236 @@ function readPrice(value) {
 function costEstimate(inputTokens, outputTokens, inputRate, outputRate) {
   if (inputRate === null || outputRate === null) return null;
   return Math.round(((inputTokens * inputRate + outputTokens * outputRate) / 1000000) * 1000000) / 1000000;
+}
+
+
+function finiteMetric(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === '') continue;
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  return null;
+}
+
+function sumUsageRecords(modelUsage, keys) {
+  if (!modelUsage || typeof modelUsage !== 'object' || Array.isArray(modelUsage)) return null;
+  const records = Object.values(modelUsage).filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+  if (!records.length || !records.some((record) => keys.some((key) => record[key] !== undefined && record[key] !== null))) return null;
+  return records.reduce((sum, record) => sum + (finiteMetric(...keys.map((key) => record[key])) || 0), 0);
+}
+
+/** Parse the JSON object emitted by Claude Code print mode without guessing missing metrics. */
+export function parseClaudeCodeOutput(rawOutput) {
+  let payload;
+  try {
+    payload = JSON.parse(String(rawOutput || '').trim());
+  } catch (error) {
+    throw new Error('Claude Code did not return a valid JSON result: ' + error.message);
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Claude Code JSON result must be an object.');
+  }
+
+  const usage = payload.usage && typeof payload.usage === 'object' ? payload.usage : {};
+  const modelUsage = payload.modelUsage || payload.model_usage || null;
+  const inputTokens = finiteMetric(
+    sumUsageRecords(modelUsage, ['inputTokens', 'input_tokens']),
+    usage.input_tokens, usage.inputTokens, payload.input_tokens, payload.inputTokens
+  );
+  const outputTokens = finiteMetric(
+    sumUsageRecords(modelUsage, ['outputTokens', 'output_tokens']),
+    usage.output_tokens, usage.outputTokens, payload.output_tokens, payload.outputTokens
+  );
+  const modelCosts = sumUsageRecords(modelUsage, ['costUSD', 'cost_usd', 'total_cost_usd']);
+  const costUSD = finiteMetric(payload.total_cost_usd, payload.totalCostUSD, payload.costUSD, payload.cost_usd,
+    usage.total_cost_usd, usage.costUSD, modelCosts);
+  const model = typeof payload.model === 'string' && payload.model.trim()
+    ? payload.model.trim()
+    : modelUsage && typeof modelUsage === 'object' && !Array.isArray(modelUsage)
+      ? Object.keys(modelUsage).filter(Boolean).sort().join(', ') || null
+      : null;
+  const resultText = typeof payload.result === 'string' ? payload.result
+    : typeof payload.message === 'string' ? payload.message
+      : typeof payload.error === 'string' ? payload.error : '';
+  const numTurns = finiteMetric(payload.num_turns, payload.numTurns);
+  return {
+    model,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens,
+    costUSD,
+    durationMs: finiteMetric(payload.duration_ms, payload.durationMs),
+    numTurns,
+    result: resultText,
+    isError: payload.is_error === true || payload.isError === true || payload.subtype === 'error'
+  };
+}
+
+export function buildClaudeCodeArgs(config, prompt) {
+  const args = [
+    '-p',
+    '--output-format', 'json',
+    '--no-session-persistence',
+    '--restricted',
+    '--permission-mode', 'dontAsk',
+    '--max-turns', String(config.maxTurns || 30),
+    '--tools', 'Read,Edit,Write,Glob,Grep,Bash',
+    '--allowedTools',
+    'Read', 'Edit', 'Write', 'Glob', 'Grep',
+    'Bash(npm test *)', 'Bash(npm run check *)',
+    'Bash(git diff *)', 'Bash(git status *)'
+  ];
+  if (config.model) args.push('--model', config.model);
+  if (config.budgetUSD !== null && config.budgetUSD !== undefined) args.push('--max-budget-usd', String(config.budgetUSD));
+  args.push(prompt);
+  return args;
+}
+
+function versionSupportsRestrictedMode(versionText) {
+  const match = String(versionText || '').match(/\b(\d+)\.(\d+)\.(\d+)\b/);
+  if (!match) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  return major > 2 || (major === 2 && minor > 1) || (major === 2 && minor === 1 && patch >= 248);
+}
+
+async function runClaudeCodeEval(config, options = {}) {
+  if (!options.autoApprove) {
+    throw new Error('Claude Code evaluation runs an external coding agent against disposable task copies. Review the task suite, then explicitly run oasis eval --claude-code --yes [--task ID] [--trials N].');
+  }
+  const env = options.env || process.env;
+  const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
+  const allDirs = await listTaskDirectories(tasksDir);
+  const selectedDirs = config.task ? allDirs.filter((dir) => path.basename(dir) === config.task) : allDirs;
+  if (!selectedDirs.length) throw new Error(config.task ? 'No evaluation task named "' + config.task + '" was found.' : 'No evaluation tasks were found in ' + tasksDir);
+
+  const command = String(env.OASIS_CLAUDE_CODE_BIN || 'claude');
+  const runCli = options.claudeRunner || ((args, runnerOptions) => runProcess(command, args, runnerOptions));
+  const versionResult = await runCli(['--version'], {
+    cwd: APP_ROOT, env, timeoutMs: 15000, outputLimit: 20000
+  });
+  if (versionResult.exitCode !== 0 || versionResult.timedOut || versionResult.error) {
+    throw new Error('Could not start the Claude Code CLI (' + command + '). Install Claude Code, ensure it is on PATH, and sign in. ' +
+      (versionResult.error || versionResult.output || 'CLI version check failed.'));
+  }
+  const cliVersion = String(versionResult.stdout || '').trim().split(/\r?\n/).slice(0, 2).join(' ').slice(0, 120);
+  if (!versionSupportsRestrictedMode(cliVersion)) {
+    throw new Error('Claude Code ' + (cliVersion || '(unknown version)') + ' is too old or unrecognized. This benchmark requires Claude Code v2.1.248 or newer for restricted mode.');
+  }
+
+  const startedAt = new Date().toISOString();
+  const trials = [];
+  for (const dir of selectedDirs) {
+    const task = await assertTaskShape(dir);
+    for (let trial = 1; trial <= config.trials; trial++) {
+      const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-claude-eval-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const trialStarted = Date.now();
+      let errorText = null;
+      let cliResult = null;
+      let parsed = null;
+      let verification = { exitCode: 1, output: 'Agent did not complete.' };
+      try {
+        await copySnapshot(task.repoDir, workspace);
+        const prompt = task.taskText.trim() + '\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.';
+        cliResult = await runCli(buildClaudeCodeArgs(config, prompt), {
+          cwd: workspace,
+          env,
+          timeoutMs: config.timeoutSeconds * 1000,
+          outputLimit: 1024 * 1024
+        });
+        try {
+          parsed = parseClaudeCodeOutput(cliResult.stdout);
+        } catch (error) {
+          errorText = error.message || String(error);
+        }
+        if (!errorText && cliResult.timedOut) errorText = 'Claude Code exceeded the ' + config.timeoutSeconds + '-second task timeout.';
+        if (!errorText && cliResult.error) errorText = cliResult.error;
+        if (!errorText && cliResult.exitCode !== 0) {
+          errorText = 'Claude Code exited with code ' + cliResult.exitCode + (cliResult.output ? ': ' + cliResult.output.slice(-2000) : '');
+        }
+        if (!errorText && parsed && parsed.isError) errorText = parsed.result || 'Claude Code reported an error.';
+        if (!errorText) verification = await runVerifier(task, workspace, env);
+      } catch (error) {
+        errorText = error.message || String(error);
+      }
+
+      const elapsedMs = Date.now() - trialStarted;
+      const passed = !errorText && verification.exitCode === 0;
+      trials.push({
+        taskId: task.id,
+        trial,
+        status: passed ? 'passed' : 'failed',
+        passed,
+        model: parsed && parsed.model ? parsed.model : config.model || null,
+        inputTokens: parsed ? parsed.inputTokens : null,
+        outputTokens: parsed ? parsed.outputTokens : null,
+        totalTokens: parsed ? parsed.totalTokens : null,
+        costUSD: parsed ? parsed.costUSD : null,
+        wallTimeMs: elapsedMs,
+        cliVersion,
+        finished: !errorText,
+        toolCalls: parsed ? parsed.numTurns : null,
+        verification: { exitCode: verification.exitCode, output: verification.output },
+        error: errorText
+      });
+      output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
+        ' · ' + (trials[trials.length - 1].totalTokens === null ? 'tokens n/a' : trials[trials.length - 1].totalTokens + ' tokens') +
+        ' · ' + elapsedMs + ' ms' +
+        (trials[trials.length - 1].costUSD === null ? ' · cost n/a' : ' · $' + trials[trials.length - 1].costUSD.toFixed(6)) +
+        (errorText ? ' · ' + errorText.slice(0, 240) : '') + '\n');
+      await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  const passedCount = trials.filter((item) => item.status === 'passed').length;
+  const durations = trials.map((item) => item.wallTimeMs).sort((a, b) => a - b);
+  const middle = Math.floor(durations.length / 2);
+  const medianTimeMs = durations.length
+    ? (durations.length % 2 ? durations[middle] : Math.round((durations[middle - 1] + durations[middle]) / 2))
+    : null;
+  const knownCosts = trials.length > 0 && trials.every((item) => item.costUSD !== null);
+  const totalCostUSD = knownCosts
+    ? Math.round(trials.reduce((sum, item) => sum + item.costUSD, 0) * 1000000) / 1000000
+    : null;
+  const costPerPassedTaskUSD = passedCount > 0 && totalCostUSD !== null
+    ? Math.round((totalCostUSD / passedCount) * 1000000) / 1000000
+    : null;
+  const observedModels = [...new Set(trials.map((item) => item.model).filter(Boolean))].sort();
+  const modelLabel = config.model || (observedModels.length ? observedModels.join(', ') : 'model not reported by CLI');
+  const summary = {
+    label: 'Claude Code ' + cliVersion + ' (' + modelLabel + ')',
+    runId: startedAt.replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    taskCount: selectedDirs.length,
+    taskIds: selectedDirs.map((dir) => path.basename(dir)),
+    trialsPerTask: config.trials,
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    passRate: trials.length ? passedCount / trials.length : 0,
+    passed: passedCount,
+    failed: trials.length - passedCount,
+    medianTimeMs,
+    totalCostUSD,
+    costPerPassedTaskUSD,
+    provider: {
+      model: modelLabel,
+      protocol: 'claude-code-cli',
+      cliVersion,
+      maxTurns: config.maxTurns,
+      timeoutSeconds: config.timeoutSeconds,
+      budgetUSD: config.budgetUSD
+    },
+    pricing: {
+      note: 'Cost is taken only from Claude Code CLI JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free.'
+    }
+  };
+  const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
+  output.write('Claude Code eval result: ' + resultPath + '\n');
+  output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
+  output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
+  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
 }
 
 async function saveResults(results, metadata, options = {}) {
@@ -456,11 +725,13 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] --yes\n  oasis eval --compare <run-a.json> <run-b.json>\n\n');
-    output.write('Evaluation execution runs model-generated code in disposable copies. It is not OS-sandboxed. Review the task suite and only run with --yes in a controlled workspace.\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json>\n\n');
+    output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
   if (config.compare) return await compareEvalReports(config.compare, { output });
+
+  if (config.claudeCode) return await runClaudeCodeEval(config, { ...options, env, tasksDir, output });
 
   if (config.validate) {
     const report = await validateEvaluationSuite({ tasksDir, env });
