@@ -1927,7 +1927,7 @@ async function activeLspBaseline(session, file, callContext, options) {
   }
 }
 
-function verificationIssues(state) {
+export function verificationIssues(state) {
   if (!state.changedPaths.size) return [];
   const changed = [...state.changedPaths];
   const issues = [];
@@ -1946,6 +1946,16 @@ function verificationIssues(state) {
     }
   }
   return issues;
+}
+
+export function formatLspVerificationBlocker(issues) {
+  const blockers = (Array.isArray(issues) ? issues : []).filter((issue) =>
+    issue.startsWith('LSP verification unavailable') || issue.startsWith('LSP reports ')
+  );
+  if (!blockers.length) return null;
+  return 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\n' +
+    blockers.map((issue) => '- ' + issue).join('\n') +
+    '\nFix or explicitly resolve these diagnostics, then run verification again.';
 }
 
 
@@ -3297,11 +3307,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
     if (!calls.length) {
       const issues = verificationIssues(verification);
-      const lspBlockers = issues.filter((issue) => issue.startsWith('LSP verification unavailable') || issue.startsWith('LSP reports '));
-      if (lspBlockers.length && verification.nudgeUsed) {
-        const blockedText = 'Verification incomplete: Oasis cannot report this change as verified because the LSP gate is still blocked.\n' +
-          lspBlockers.map((issue) => '- ' + issue).join('\n') +
-          (text ? '\n\nLatest assistant note (not verified): ' + text.slice(0, 1800) : '');
+      const blockedText = verification.nudgeUsed ? formatLspVerificationBlocker(issues) : null;
+      if (blockedText) {
         assistantMessage.content = blockedText;
         if (options.onText) await emitDisplayText(session, options, blockedText);
         pruneHistory(session);
