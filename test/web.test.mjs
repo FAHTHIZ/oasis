@@ -7,11 +7,39 @@ import { execFileSync } from 'node:child_process';
 import { request as httpsRequest } from 'node:https';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { createCloudTaskStore } from '../src/cloud-task-store.mjs';
+import { createWorktree, finishWorktree } from '../src/worktrees.mjs';
 import { createOasisWebServer, startOasisWebServer, toolDetail, summarizeToolResult, summarizeAgentRun } from '../src/web.mjs';
 import { saveConfig } from '../src/config.mjs';
 
 async function tempDir() {
   return await mkdtemp(path.join(os.tmpdir(), 'oasis-web-test-'));
+}
+
+async function createSavedWorktreeTask(root, env) {
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.name', 'Oasis Web Test');
+  git('config', 'user.email', 'oasis-web-test@example.invalid');
+  await writeFile(path.join(root, 'shared.txt'), 'original\n');
+  git('add', '-A');
+  git('commit', '-qm', 'initial');
+  const worktree = await createWorktree(root, 'browser merge fixture', { env });
+  await writeFile(path.join(worktree.path, 'shared.txt'), 'agent change\n');
+  const artifact = await finishWorktree(root, worktree, { env, skipHooks: true, message: 'browser test change' });
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const store = createCloudTaskStore(root, { env });
+  await store.save({
+    id, status: 'completed', type: 'agent', title: 'Reviewable isolated change',
+    createdAt: now, workspaceName: path.basename(root), workspaceRoot: root, executionRoot: root,
+    worktreePath: worktree.relative, worktreeBranch: worktree.branch, worktreeBaseCommit: worktree.base,
+    result: { isolatedWorktree: { ...artifact, baseCommit: worktree.base, changed: true, requiresReview: false, error: null } },
+    events: [{ id: 1, type: 'completed', at: now, data: { finished: true } }],
+    nextEventId: 2, error: null
+  });
+  return { id, worktree, artifact };
 }
 
 test('browser activity details and tool results redact credential values before sending them to the UI', () => {
@@ -1295,4 +1323,74 @@ test('Ollama discovery cannot be used by a non-loopback client', async (t) => {
     headers: { authorization: 'Bearer ' + app.token, origin: 'http://attacker.example' }
   });
   assert.equal(response.status, 421);
+});
+
+
+test('browser monitor only merges a committed isolated worktree after an explicit current review', async (t) => {
+  const root = await tempDir();
+  const home = await tempDir();
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'config') };
+  const fixture = await createSavedWorktreeTask(root, env);
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]);
+  });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const previewResponse = await fetch(base + '/api/jobs/' + fixture.id + '/diff', { headers });
+  assert.equal(previewResponse.status, 200, await previewResponse.clone().text());
+  const preview = await previewResponse.json();
+  assert.equal(preview.complete, true);
+  assert.equal(preview.mergeReview.canMerge, true, JSON.stringify(preview.mergeReview));
+  assert.equal(preview.mergeReview.branchHead, fixture.artifact.commitSha);
+
+  const mergeResponse = await fetch(base + '/api/jobs/' + fixture.id + '/merge', {
+    method: 'POST', headers,
+    body: JSON.stringify({ expectedHead: preview.mergeReview.head, expectedBranchHead: preview.mergeReview.branchHead })
+  });
+  assert.equal(mergeResponse.status, 200, await mergeResponse.clone().text());
+  const merged = await mergeResponse.json();
+  assert.equal(merged.merged, true);
+  assert.equal(merged.branch, fixture.worktree.branch);
+  assert.equal(await readFile(path.join(root, 'shared.txt'), 'utf8'), 'agent change\n');
+  const savedResponse = await fetch(base + '/api/jobs/' + fixture.id + '?after=0', { headers });
+  const saved = await savedResponse.json();
+  assert.ok(saved.events.some((event) => event.type === 'worktree_merged'));
+  const secondPreview = await fetch(base + '/api/jobs/' + fixture.id + '/diff', { headers });
+  const second = await secondPreview.json();
+  assert.equal(second.mergeReview.canMerge, false, 'an already integrated task must not remain mergeable');
+});
+
+test('browser worktree merge rejects a main-branch change made after diff review', async (t) => {
+  const root = await tempDir();
+  const home = await tempDir();
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'config') };
+  const fixture = await createSavedWorktreeTask(root, env);
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]);
+  });
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const previewResponse = await fetch(base + '/api/jobs/' + fixture.id + '/diff', { headers });
+  assert.equal(previewResponse.status, 200, await previewResponse.clone().text());
+  const preview = await previewResponse.json();
+  assert.equal(preview.mergeReview.canMerge, true);
+  await writeFile(path.join(root, 'main-only.txt'), 'changed after review\n');
+  execFileSync('git', ['add', '-A'], { cwd: root, stdio: 'pipe' });
+  execFileSync('git', ['commit', '-qm', 'main changed after review'], { cwd: root, stdio: 'pipe' });
+  const mergeResponse = await fetch(base + '/api/jobs/' + fixture.id + '/merge', {
+    method: 'POST', headers,
+    body: JSON.stringify({ expectedHead: preview.mergeReview.head, expectedBranchHead: preview.mergeReview.branchHead })
+  });
+  assert.equal(mergeResponse.status, 409);
+  assert.match((await mergeResponse.json()).error, /changed after review|refresh the diff/i);
+  assert.equal(await readFile(path.join(root, 'shared.txt'), 'utf8'), 'original\n');
+  assert.equal(await readFile(path.join(root, 'main-only.txt'), 'utf8'), 'changed after review\n');
 });

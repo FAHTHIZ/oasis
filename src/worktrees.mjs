@@ -343,6 +343,7 @@ export async function mergeWorktree(root, branchValue, options = {}) {
   const branch = validateOasisBranch(branchValue);
   const inspection = await inspectWorktree(root, branch, { env });
   if (options.expectedHead && inspection.head !== options.expectedHead) throw new Error('The main branch changed after review; inspect again.');
+  if (options.expectedBranchHead && inspection.branch_head !== options.expectedBranchHead) throw new Error('The agent branch changed after review; inspect again.');
   if (!inspection.main_worktree_clean) throw new Error('Merge blocked: the main checkout has uncommitted changes.');
   if (!inspection.agent_worktree_clean) throw new Error('Merge blocked: the agent worktree has uncommitted changes.');
   if (!inspection.current_branch) throw new Error('Merge blocked: the main checkout is detached.');
@@ -354,7 +355,7 @@ export async function mergeWorktree(root, branchValue, options = {}) {
   const latestHead = await git(root, ['rev-parse', 'HEAD'], env);
   const latestStatus = await git(root, ['status', '--porcelain=v1', '--untracked-files=all'], env);
   if (latestHead !== inspection.head || latestStatus) throw new Error('The main checkout changed during merge preparation; inspect again.');
-  const result = await commandResult(root, ['merge', '--no-ff', '--no-edit', '-m', 'Merge OASIS worktree: ' + branch, branch], env, 60000);
+  const result = await commandResult(root, ['merge', '--no-ff', '--no-edit', '-m', 'Merge OASIS worktree: ' + branch, inspection.branch_head], env, 60000);
   if (result.exitCode !== 0) {
     const mergeHead = await commandResult(root, ['rev-parse', '--verify', 'MERGE_HEAD'], env);
     if (mergeHead.exitCode === 0) await commandResult(root, ['merge', '--abort'], env, 30000);
