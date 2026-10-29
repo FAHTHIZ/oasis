@@ -461,7 +461,7 @@ export const SHORTCUTS_HELP = [
 export function readInput(options = {}) {
   const input = options.input || process.stdin;
   const output = options.output || process.stdout;
-  const color = options.color !== false && !process.env.NO_COLOR;
+  const color = options.color !== false && !process.env.NO_COLOR && process.env.OASIS_AX_SCREEN_READER !== '1' && process.env.CLAUDE_AX_SCREEN_READER !== '1';
   const history = options.history || [];
   const columns = () => output.columns || 80;
   return new Promise((resolve) => {
