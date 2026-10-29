@@ -28,7 +28,7 @@ test('Windows OAuth browser launch passes URL as an argument without cmd.exe', (
 });
 
 // A fake MCP server that is also its own OAuth authorization server.
-async function fakeServer(t, { expiresIn = 3600 } = {}) {
+async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1' } = {}) {
   const state = { codes: new Map(), tokens: new Set(), refreshes: 0, registered: [], authorizeParams: null, tokenRequests: [] };
   let base;
   const server = createServer(async (req, res) => {
@@ -77,7 +77,7 @@ async function fakeServer(t, { expiresIn = 3600 } = {}) {
     res.writeHead(404).end();
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  base = 'http://127.0.0.1:' + server.address().port;
+  base = 'http://' + urlHost + ':' + server.address().port;
   t.after(() => server.close());
   return { base, state };
 }
@@ -100,6 +100,13 @@ test('WWW-Authenticate parsing and discovery through protected-resource metadata
   assert.equal(found.tokenEndpoint, base + '/token');
   assert.equal(found.registrationEndpoint, base + '/register');
   assert.deepEqual(found.scopes, ['tools.read']);
+});
+
+test('OAuth loopback hostnames are pinned to an explicit loopback address', async (t) => {
+  const { base } = await fakeServer(t, { urlHost: 'localhost' });
+  const found = await discoverOAuth(base + '/mcp');
+  assert.equal(found.tokenEndpoint, base + '/token');
+  assert.equal(found.registrationEndpoint, base + '/register');
 });
 
 test('OAuth discovery refuses redirects and bounds metadata bodies', async () => {
