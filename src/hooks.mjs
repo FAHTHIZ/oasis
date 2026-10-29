@@ -26,7 +26,7 @@ import { spawn } from 'node:child_process';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
 
-export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'FileChanged', 'ConfigChange', 'WorktreeCreate', 'WorktreeRemove', 'TeammateIdle', 'Setup', 'Elicitation', 'ElicitationResult'];
+export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'FileChanged', 'ConfigChange', 'WorktreeCreate', 'WorktreeRemove', 'TeammateIdle', 'Setup', 'Elicitation', 'ElicitationResult', 'MessageDisplay'];
 export const HOOK_TYPES = ['command', 'http', 'mcp_tool', 'prompt', 'agent'];
 
 const TOOL_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest', 'PermissionDenied']);
@@ -244,6 +244,7 @@ function defaultTimeout(hook, event) {
   if (hook.type === 'agent') return 60;
   if (event === 'UserPromptSubmit' || event === 'PreModelSwitch' || event === 'PostModelSwitch') return 30;
   if (event === 'SessionEnd') return 2;
+  if (event === 'MessageDisplay') return 10;
   return 600;
 }
 
@@ -383,6 +384,7 @@ export async function runHooks(event, payload, options = {}) {
       if (event === 'PostToolUse' && specific.updatedToolOutput !== undefined) result.updatedToolOutput = specific.updatedToolOutput;
       if (event === 'PostToolUse' && specific.updatedMCPToolOutput !== undefined && result.updatedToolOutput === undefined) result.updatedToolOutput = specific.updatedMCPToolOutput;
       if (event === 'PermissionDenied' && specific.retry === true) result.retry = true;
+      if (event === 'MessageDisplay' && typeof specific.displayContent === 'string') result.displayContent = specific.displayContent;
       if ((event === 'Elicitation' || event === 'ElicitationResult') && typeof specific.action === 'string') result.hookSpecific = { action: specific.action, content: specific.content };
       if (['SessionStart', 'CwdChanged', 'FileChanged'].includes(event) && Array.isArray(specific.watchPaths)) result.watchPaths = [...(result.watchPaths || []), ...specific.watchPaths.filter((item) => typeof item === 'string')];
       // PermissionRequest: {"hookSpecificOutput": {"decision": {"behavior": "allow"|"deny", "message"}}}; deny wins.
