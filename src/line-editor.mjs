@@ -844,7 +844,7 @@ export function readInput(options = {}) {
       if (!done) {
         // Keep the small slash-command menu visible while a command name is typed.
         // Tab still performs the existing completion; Enter still submits the prompt.
-        const commandPrefix = state.text.startsWith('/') && !/\\s/.test(state.text) && state.cursor === state.text.length;
+        const commandPrefix = state.text.startsWith('/') && !/\s/.test(state.text) && state.cursor === state.text.length;
         if (commandPrefix && options.complete && !completion && action !== 'escape' && action !== 'submit') {
           try {
             const result = await options.complete(state.text, state.cursor);
