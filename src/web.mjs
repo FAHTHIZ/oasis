@@ -15,7 +15,7 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { expandFileMentions } from './commands.mjs';
-import { visionEnabled } from './images.mjs';
+import { visionEnabled, imageInputCapability } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
@@ -624,9 +624,23 @@ export function createOasisWebServer(options = {}) {
         if (!importedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
           session.webOptions = session.webOptions || {};
           session.webUsage = session.webUsage || createUsageTracker();
-          const blockedBypass = slash[1].toLowerCase() === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
-          const terminalOnly = ['copy', 'sandbox', 'loop', 'cd'].includes(slash[1].toLowerCase()) || (slash[1].toLowerCase() === 'mcp' && /^login\b/i.test(String(slash[2] || '').trim()));
-          const handled = terminalOnly ? { output: '/' + slash[1].toLowerCase() + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
+          const slashName = slash[1].toLowerCase();
+          const blockedBypass = slashName === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
+          const terminalOnly = ['copy', 'sandbox', 'loop', 'cd'].includes(slashName) || (slashName === 'mcp' && /^login\b/i.test(String(slash[2] || '').trim()));
+          let commandArgument = String(slash[2] || '').trim();
+          // Slash-command routing creates a new prompt, so expand explicit file
+          // mentions from the arguments first; otherwise /diagnose @screenshot.png
+          // would reach the model as plain text without the attachment.
+          if (['init', 'plan', 'fix', 'diagnose'].includes(slashName) && commandArgument.includes('@')) {
+            const capability = imageInputCapability(session.config || {}, env);
+            const expanded = await expandFileMentions(taskRoot, commandArgument, { images: capability.status === 'supported' }).catch(() => null);
+            if (expanded && expanded.files.length) {
+              commandArgument = expanded.text;
+              images = expanded.images || [];
+              emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
+            }
+          }
+          const handled = terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
