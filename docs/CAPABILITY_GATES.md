@@ -7,6 +7,8 @@
 
 A capability is complete only when its behavior is implemented, covered by automated tests where feasible, and verified on the supported environments. A UI control, manifest adapter, unit test count, successful package build, or model-provider connection alone is not proof of end-to-end readiness.
 
+For the mechanic-level source audit and the controlled comparison plan, see [Core mechanics audit](CORE_MECHANICS_AUDIT.md). Treat the shared model/tool loop as architectural similarity, not a parity score. Keep implementation evidence, behavior benchmarks, and any conclusions about source-code provenance separate.
+
 Work directly on `main` in small, reviewable commits. Update this document and the implementation status as evidence changes. Never claim a green release gate from an older commit.
 
 ## Gate 0 — Current-main integrity
