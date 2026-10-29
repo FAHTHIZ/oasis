@@ -63,8 +63,8 @@ export function readZipEntries(buffer) {
     if (parts.some((part) => part === '..')) throw new Error('Zip entry escapes the destination: ' + rawName);
     if (!name || name.includes(String.fromCharCode(0)) || name.startsWith('/') || /^[a-z]:/i.test(name) ||
         parts.some((part, i) => part === '.' || (!part && i !== parts.length - 1) ||
-          /[<>:"|?*\\x00-\\x1f]/.test(part) || /[. ]$/.test(part) ||
-          /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/i.test(part))) {
+          /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) ||
+          /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(part))) {
       throw new Error('Zip entry has an unsafe or ambiguous path: ' + rawName);
     }
     // Reject duplicate/case-colliding paths so extraction is deterministic on
