@@ -3,7 +3,7 @@
 **Audit date:** 2026-10-29  
 **Repository:** https://github.com/FAHTHIZ/oasis  
 **Branch audited:** main  
-**Audited commit:** 2324f5054e5db223270b8f93124848e377140e32
+**Verification rule:** use the exact `head_sha` reported by the linked Quality workflow; this status file does not pin itself to a potentially stale commit SHA.
 
 This inventory separates code presence from verified behavior. A feature is **verified on current HEAD** only when its relevant tests or quality checks have passed against the exact audited commit. Historical CI results, existing tests, documentation, and source inspection are not substitutes for a fresh run.
 
