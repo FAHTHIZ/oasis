@@ -161,11 +161,12 @@ export async function runBuiltinCommand(name, argument, state) {
   switch (name) {
     case 'help': {
       const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
-      // Put the eight useful starting commands first. Other built-ins are still
-      // listed below, grouped by purpose, so this remains a complete reference.
+      // Keep the six deliberate core workflows first; the full command set remains
+      // available below, grouped by purpose, without creating a second palette system.
       const groups = [
-        { title: 'Getting started', commands: ['help', 'setup', 'status', 'plan', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'review', 'diagnostics', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
+        { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
+        { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
+        { title: 'Working', commands: ['clear', 'compact', 'diagnostics', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
