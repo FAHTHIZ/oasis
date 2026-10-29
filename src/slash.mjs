@@ -57,6 +57,7 @@ export const BUILTIN_COMMANDS = {
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
+  audit: 'Run isolated security, performance, test-coverage, and dependency reviewers, then merge and verify findings (/audit [path-or-scope])',
   tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks stop ID)',
   workflows: 'List workflow runs and saved workflows (/workflows, /workflows ID, stop ID, save ID [--user])',
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
@@ -490,6 +491,17 @@ export async function runBuiltinCommand(name, argument, state) {
       if (session && session.mcpConnecting) lines.push('(more servers still connecting in the background; MCP_CONNECTION_NONBLOCKING is on)');
       if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
       return { output: lines.join('\n') };
+    }
+    case 'audit': {
+      const scope = String(argument || '.').trim() || '.';
+      return {
+        output: 'Starting the bounded read-only audit workflow. Reviewers run in isolated contexts; the final report separates verified and unverified findings. Scope: ' + scope,
+        prompt: [
+          'Run the built-in workflow named "audit" through the workflow tool, with action "run", name "audit", and args set to ' + JSON.stringify(scope) + '.',
+          'Do not replace the workflow with a single-agent review. The workflow runs security, performance, test-coverage, and dependency reviewers in isolated read-only contexts, deduplicates findings, verifies up to four high/critical findings, and bounds the final report.',
+          'Render only the merged report returned by the workflow. Keep verified and unverified findings separate, sort by severity then confidence, include path/line evidence and a concrete fix, and report any failed reviewer as partial coverage. Never present an unverified finding as confirmed.'
+        ].join('\n')
+      };
     }
     case 'ultrareview':
       if (session) session.reportedFindings = undefined;
