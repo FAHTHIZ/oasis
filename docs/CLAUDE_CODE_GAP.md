@@ -91,6 +91,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | Headless stream extras | `--include-hook-events` (hook_started/hook_response), `--forward-subagent-text` (subagent assistant lines with `parent_tool_use_id`), `--prompt-suggestions` (`prompt_suggestion` line), `--exclude-dynamic-system-prompt-sections`, `tool_use` lines carry the call `id` | Done |
 | `claude auth`, `setup-token`, `agents --json`, `ultrareview` | `oasis auth status\|login\|logout` (JSON with Claude's `authMethod` values and `configDirectory`, exit 1 when signed out, `--api-key-stdin`), `oasis setup-token` (CI key guidance; OASIS uses provider keys, not Anthropic OAuth), `oasis agents --json [--all] [--cwd]`, `oasis ultrareview [target] --json --timeout --post` | Done |
 | `--betas`, `--system-prompt-snapshot`, `--ide`, `--ax-screen-reader`, `--tmux` | Implemented. Snapshot default is `off` (OASIS has always rebuilt on resume); `on` reuses the recorded prompt until compaction. `--teammate-mode tmux\|iterm2` is not implemented: teammates run in-process | Partial |
+| `/setup-bedrock`, `/setup-vertex`, `/bug`/`/feedback`, `/login`/`/logout`, `/new` `/reset` `/quit` `/routines`, `/run` `/verify` `/workflow-authoring` `/plugin-authoring` skills | Wizards detect credentials/region/project/pins and save to user settings `env` after confirmation; `/bug` drafts a prefilled GitHub issue (nothing sent) | Done |
 
 ## Ranked next improvements
 

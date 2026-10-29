@@ -12,8 +12,8 @@
 // A saved workflow is a .js file whose first statement is `export const meta = { name, description }`.
 // Locations: .claude/workflows/ and .oasis/workflows/ (project, closest wins), ~/.claude/workflows/
 // and ~/.oasis/workflows/ (personal), plugin workflows/ directories (/plugin:name), and built-ins.
-// Runs are resumable in the same session: completed agents return their saved result until the
-// first agent whose prompt changed (or that failed) — from then on every agent runs again.
+// Runs are resumable: an agent call whose prompt and options match a completed call from the
+// previous run returns the saved result; failed, stopped or changed calls run again.
 import vm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
