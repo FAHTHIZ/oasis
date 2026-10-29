@@ -60,3 +60,4 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 ## 0.3.0
 
 See the Git history and [release page](https://github.com/FAHTHIZ/oasis/releases) for changes included in the existing package version.
+- Added `docs/REMOTE_RUNNER_DESIGN.md`, a security-first design for local, self-hosted and future optional managed execution; no runner implementation is claimed.
