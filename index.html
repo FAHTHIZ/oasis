@@ -200,6 +200,25 @@ body.light .first-run-choice{background:#fff}
 .agent-example-prompt span{font-size:10px;font-weight:400;color:var(--muted);line-height:1.6}
 @media(max-width:1050px){.agent-example-prompts{grid-template-columns:minmax(0,1fr)}.agent-example-prompt{min-height:0}}
 @media(max-width:390px){.agent-example-prompt{min-height:44px;padding:11px}.agent-example-prompt span{font-size:10px}}
+
+.command-palette-dialog{width:min(720px,calc(100% - 24px));max-width:720px}
+.command-palette-card{gap:13px}
+.command-palette-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.command-palette-heading .modal-help{margin:3px 0 0}
+.command-palette-badge{flex:0 0 auto;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--muted);font-size:10px;font-weight:750;white-space:nowrap}
+#commandPaletteSearch{height:47px;font-size:14px;background:#0b140f;border-color:#496451}
+.command-palette-results{display:grid;gap:4px;max-height:min(48vh,420px);overflow:auto;overscroll-behavior:contain}
+.command-palette-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;width:100%;border:1px solid transparent;border-radius:10px;background:transparent;padding:10px 12px;text-align:left;color:var(--text);min-width:0}
+.command-palette-result:hover,.command-palette-result[aria-selected="true"]{background:#9BFF5514;border-color:#9BFF5555}
+.command-palette-result-label{font-size:12px;font-weight:740;min-width:0;overflow-wrap:anywhere}
+.command-palette-result-category{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);white-space:nowrap}
+.command-palette-result-description{grid-column:1/-1;font-size:10px;line-height:1.55;color:var(--muted)}
+.command-palette-empty{font-size:12px;padding:20px 12px;text-align:center;color:var(--muted)}
+.command-palette-help{font-size:10px;line-height:1.6;color:var(--muted);margin:0}
+body.light #commandPaletteSearch{background:#fff}
+body.light .command-palette-result:hover,body.light .command-palette-result[aria-selected="true"]{background:#e9f3e1;border-color:#b8d3a6}
+@media(max-width:480px){.command-palette-card{padding:17px}.command-palette-results{max-height:52vh}.command-palette-result{padding:11px 10px;min-height:54px}.command-palette-result-category{font-size:8px}}
+
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -212,7 +231,7 @@ body.light .first-run-choice{background:#fff}
 </nav></div>
 <div class="sidebar-bottom"><div class="local-card"><div class="local-title"><span class="dot"></span>Saved on this device</div><p>Your workspace stays in this browser. Export a backup before clearing browser data or switching devices.</p></div><div class="sidebar-foot">OASIS OSS · A little more room to think.</div></div>
 </aside>
-<main class="main"><header class="topbar"><div class="crumb"><span>Workspace</span><span>›</span><strong id="crumbPage">Overview</strong></div><div class="top-actions"><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label><button class="icon-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">☼</button><button class="icon-btn" id="exportBtn" aria-label="Export workspace backup" title="Export backup">↥</button><button class="icon-btn" id="importBtn" aria-label="Import workspace backup" title="Import backup">↧</button><span class="avatar" aria-label="Personal workspace">OS</span></div></header>
+<main class="main"><header class="topbar"><div class="crumb"><span>Workspace</span><span>›</span><strong id="crumbPage">Overview</strong></div><div class="top-actions"><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label><button class="icon-btn" id="commandPaletteButton" type="button" aria-label="Open command palette" title="Search actions (Ctrl+K or ?)">⌘</button><button class="icon-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">☼</button><button class="icon-btn" id="exportBtn" aria-label="Export workspace backup" title="Export backup">↥</button><button class="icon-btn" id="importBtn" aria-label="Import workspace backup" title="Import backup">↧</button><span class="avatar" aria-label="Personal workspace">OS</span></div></header>
 <div class="content">
 <section class="view active" id="view-home">
 <div class="intro-row"><div><div class="eyebrow" id="todayLabel">YOUR STUDIO</div><h1 class="page-title">Make room for your best work.</h1><p class="page-subtitle">A quieter home for the things you’re building. Keep the next step visible, and let the rest wait.</p></div><button class="btn btn-primary" id="newTaskTop">＋ New task</button></div>
@@ -424,6 +443,16 @@ body.light .first-run-choice{background:#fff}
   </div>
 </section>
 </div><footer class="footer-note"><span>Made for focus, not noise.</span><span>OASIS · Your data stays in this browser.</span></footer></main></div>
+<dialog class="modal command-palette-dialog" id="commandPaletteDialog" aria-labelledby="commandPaletteTitle" aria-describedby="commandPaletteHelp">
+  <div class="modal-card command-palette-card">
+    <div class="command-palette-heading"><div><h2 class="modal-heading" id="commandPaletteTitle">Command palette</h2><p class="modal-help">Search pages, workspace actions, model setup and agent starters.</p></div><span class="command-palette-badge">Ctrl+K</span></div>
+    <label class="sr-only" for="commandPaletteSearch">Search commands and actions</label>
+    <input id="commandPaletteSearch" type="search" placeholder="Search commands and actions…" autocomplete="off" spellcheck="false">
+    <div class="command-palette-results" id="commandPaletteResults" role="listbox" aria-label="Command palette results" aria-live="polite"></div>
+    <p class="command-palette-help" id="commandPaletteHelp">↑ / ↓ to move · Enter to select · Esc to close · Press ? anywhere outside a text field to open</p>
+    <div class="modal-actions"><button type="button" class="btn btn-secondary" id="commandPaletteClose">Close</button></div>
+  </div>
+</dialog>
 <dialog class="modal" id="projectDialog" aria-labelledby="projectDialogTitle"><form class="modal-card" id="projectForm"><h2 class="modal-heading" id="projectDialogTitle">Create a project</h2><p class="modal-help">Give this piece of work a name and a little context.</p><label for="projectName">Project name<input id="projectName" name="name" maxlength="90" required autocomplete="off" placeholder="e.g. Launch my portfolio"></label><label for="projectDescription">Description <span>(optional)</span><textarea id="projectDescription" name="description" maxlength="220" placeholder="What are you making?"></textarea></label><div class="modal-actions"><button type="button" class="btn btn-secondary" id="cancelProject">Cancel</button><button type="submit" class="btn btn-primary">Create project</button></div></form></dialog>
 <dialog class="modal" id="taskDialog" aria-labelledby="taskDialogTitle"><form class="modal-card" id="taskForm"><h2 class="modal-heading" id="taskDialogTitle">Add a task</h2><p class="modal-help">Make the next step concrete and manageable.</p><label for="taskTitle">Task name<input id="taskTitle" name="title" maxlength="160" required autocomplete="off" placeholder="What needs to happen next?"></label><label for="taskProject">Project<select id="taskProject" name="projectId"><option value="">Unassigned</option></select></label><label for="taskPriority">Priority<select id="taskPriority" name="priority"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select></label><div class="modal-actions"><button type="button" class="btn btn-secondary" id="cancelTask">Cancel</button><button type="submit" class="btn btn-primary">Add task</button></div></form></dialog>
 <dialog class="modal" id="manageProjectDialog" aria-labelledby="manageProjectTitle"><div class="modal-card"><h2 class="modal-heading" id="manageProjectTitle">Manage project</h2><p class="modal-help" id="manageProjectDescription">Choose what to do with this project.</p><div class="modal-actions" style="justify-content:stretch;flex-wrap:wrap"><button type="button" class="btn btn-secondary" id="reopenProjectAction">Reopen</button><button type="button" class="btn btn-secondary" id="completeProjectAction">Mark complete</button><button type="button" class="btn btn-danger" id="deleteProjectAction">Delete</button><button type="button" class="btn btn-secondary" id="cancelManageProject">Cancel</button></div></div></dialog>
@@ -458,6 +487,116 @@ function addProject(){var dialog=document.getElementById('projectDialog');dialog
 function addTaskDialog(){var select=document.getElementById('taskProject');select.innerHTML='<option value="">Unassigned</option>'+state.projects.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'}).join('');if(state.projects[0])select.value=state.projects[0].id;document.getElementById('taskPriority').value='normal';var dialog=document.getElementById('taskDialog');dialog.showModal();document.getElementById('taskTitle').focus()}
 function exportBackup(){var data={app:'OASIS',schemaVersion:1,exportedAt:new Date().toISOString(),projects:state.projects,tasks:state.tasks,notes:state.notes},blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='oasis-workspace-backup-'+today()+'.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);notify('Workspace backup exported.')}
 function importBackup(file){if(!file)return;var reader=new FileReader();reader.onload=function(){try{var d=JSON.parse(String(reader.result||''));if(!d||!Array.isArray(d.projects)||!Array.isArray(d.tasks)||typeof d.notes!=='string')throw new Error('Invalid format');if(!window.confirm('Replace this browser workspace with the imported backup? Export current data first if you want to keep it.'))return;state={projects:d.projects.filter(function(p){return p&&typeof p.id==='string'&&typeof p.name==='string'}).map(function(p){return {id:p.id,name:p.name,description:String(p.description||''),symbol:String(p.symbol||'◇'),status:p.status==='completed'?'completed':'active',createdAt:String(p.createdAt||'')}}),tasks:d.tasks.filter(function(t){return t&&typeof t.id==='string'&&typeof t.title==='string'}).map(function(t){return {id:t.id,title:t.title,projectId:String(t.projectId||''),priority:['low','normal','high'].includes(t.priority)?t.priority:'normal',done:!!t.done,createdAt:String(t.createdAt||'')}}),notes:d.notes,lastSaved:null};save();render();notify('Workspace backup imported.')}catch(e){notify('That file is not a valid Oasis backup.')}document.getElementById('importFile').value=''};reader.onerror=function(){notify('The selected file could not be read.');document.getElementById('importFile').value=''};reader.readAsText(file)}
+
+// Searchable, keyboard-accessible workspace palette. Selecting a row only
+// navigates or prepares a prompt; agent work is never sent automatically.
+var commandPaletteDialog=document.getElementById('commandPaletteDialog');
+var commandPaletteSearch=document.getElementById('commandPaletteSearch');
+var commandPaletteResults=document.getElementById('commandPaletteResults');
+var commandPaletteMatches=[];
+var commandPaletteSelected=0;
+function commandPaletteItems(){
+  return [
+    {id:'nav-home',label:'Open overview',description:'Dashboard, projects in motion and next steps',category:'Navigate',keywords:'home dashboard start',run:function(){navigate('home')}},
+    {id:'nav-projects',label:'Open projects',description:'Browse and manage project cards',category:'Navigate',keywords:'project repo workspace',run:function(){navigate('projects')}},
+    {id:'nav-tasks',label:'Open tasks',description:'Review open and completed tasks',category:'Navigate',keywords:'todo queue plan',run:function(){navigate('tasks')}},
+    {id:'nav-notes',label:'Open notes',description:'Open the local workspace notes editor',category:'Navigate',keywords:'memo scratchpad',run:function(){navigate('notes')}},
+    {id:'nav-agent',label:'Open coding workspace',description:'Chat, provider settings, terminal and GitHub controls',category:'Navigate',keywords:'agent model terminal coding',run:function(){navigate('agent')}},
+    {id:'nav-extensions',label:'Open extensions',description:'Browse available extension and skill sources',category:'Navigate',keywords:'skills plugins',run:function(){navigate('extensions')}},
+    {id:'nav-integrations',label:'Open integrations',description:'Review runtime and connector options',category:'Navigate',keywords:'mcp connector server',run:function(){navigate('integrations')}},
+    {id:'project-new',label:'Create a project',description:'Open the new-project form',category:'Workspace',keywords:'add project',run:function(){navigate('projects');window.setTimeout(addProject,100)}},
+    {id:'task-new',label:'Add a task',description:'Open the task form',category:'Workspace',keywords:'new todo next step',run:function(){navigate('tasks');window.setTimeout(addTaskDialog,100)}},
+    {id:'backup-export',label:'Export workspace backup',description:'Download the projects, tasks and notes in this browser',category:'Workspace',keywords:'backup download export data',run:function(){document.getElementById('exportBtn').click()}},
+    {id:'theme-toggle',label:'Toggle light / dark theme',description:'Switch the workspace appearance',category:'Settings',keywords:'appearance theme color',run:function(){document.getElementById('themeToggle').click()}},
+    {id:'provider-setup',label:'Model provider setup',description:'Choose an API provider, local Ollama or a gateway',category:'Settings',keywords:'model api key ollama omniroute',run:function(){navigate('agent');window.setTimeout(function(){var el=document.querySelector('.provider-setup');if(el)el.scrollIntoView({block:'start'});var first=document.getElementById('providerPreset');if(first)first.focus()},100)}},
+    {id:'first-run',label:'First-run model choices',description:'Review API key, free gateway and local-model setup paths',category:'Settings',keywords:'first run setup model install',run:function(){navigate('agent');window.setTimeout(function(){var el=document.getElementById('firstRunWizard');if(el){el.hidden=false;el.scrollIntoView({block:'start'})}},100)}},
+    {id:'github-settings',label:'GitHub repository settings',description:'Connect GitHub CLI and select a workspace repository',category:'Settings',keywords:'clone repository github git',run:function(){navigate('agent');window.setTimeout(function(){var el=document.querySelector('.github-panel');if(el)el.scrollIntoView({block:'start'});var btn=document.getElementById('githubCheckBtn');if(btn)btn.focus()},100)}},
+    {id:'terminal-open',label:'Open terminal panel',description:'Switch to the terminal inside the coding workspace',category:'Workspace',keywords:'run command shell process console',run:function(){navigate('agent');window.setTimeout(function(){var tab=document.getElementById('agentTerminalTab');if(tab)tab.click();var el=document.getElementById('agentWorkspaceGrid');if(el)el.scrollIntoView({block:'start'})},100)}},
+    {id:'new-agent-chat',label:'Start a new agent chat',description:'Keep saved sessions, but begin a clean conversation',category:'Workspace',keywords:'new session clear conversation',run:function(){navigate('agent');window.setTimeout(function(){var btn=document.getElementById('newAgentSessionBtn');if(btn)btn.click()},100)}},
+    {id:'starter-explain',label:'Explain this project',description:'Fill the agent prompt with a read-first request',category:'Agent starters',keywords:'understand repository code walkthrough',run:function(){prepareAgentPrompt('Explain this project')}},
+    {id:'starter-find-bug',label:'Find a bug',description:'Ask for an inspection and a suggested fix before editing',category:'Agent starters',keywords:'debug error defect bugfix',run:function(){prepareAgentPrompt('Find a bug')}},
+    {id:'starter-tests',label:'Write tests',description:'Ask for missing test coverage without running the task yet',category:'Agent starters',keywords:'testing coverage regression',run:function(){prepareAgentPrompt('Write tests')}},
+    {id:'keyboard-help',label:'Keyboard shortcuts',description:'Ctrl+K or ? opens this palette; arrows move and Enter selects',category:'Help',keywords:'help keys keyboard shortcuts',run:function(){notify('Palette: Ctrl+K or ? opens search · ↑/↓ moves · Enter selects · Esc closes. Selection only navigates or fills a prompt.');}}
+  ];
+}
+function prepareAgentPrompt(prompt){
+  navigate('agent');
+  if(agentBusy){notify('Wait until the current task finishes before replacing the prompt.');return}
+  window.setTimeout(function(){var input=document.getElementById('agentPrompt');if(input){input.value=prompt;input.focus();input.dispatchEvent(new Event('input',{bubbles:true}))}},80);
+}
+function commandPaletteScore(item,query){
+  var haystack=(item.label+' '+item.description+' '+item.category+' '+(item.keywords||'')).toLowerCase();
+  var terms=String(query||'').trim().toLowerCase().split(/\\s+/).filter(Boolean);
+  var score=0;
+  for(var ti=0;ti<terms.length;ti++){
+    var term=terms[ti],at=haystack.indexOf(term);
+    if(at>=0){score+=at+(at===0?0:5);continue}
+    var pos=0,gaps=0;
+    for(var ci=0;ci<term.length;ci++){
+      var found=haystack.indexOf(term.charAt(ci),pos);
+      if(found<0)return Infinity;
+      gaps+=found-pos;pos=found+1;
+    }
+    score+=25+gaps;
+  }
+  return score;
+}
+function commandPaletteRender(){
+  var items=commandPaletteItems().map(function(item,index){return {item:item,index:index,score:commandPaletteScore(item,commandPaletteSearch.value)}})
+    .filter(function(entry){return Number.isFinite(entry.score)})
+    .sort(function(a,b){return a.score-b.score||a.index-b.index});
+  commandPaletteMatches=items.map(function(entry){return entry.item});
+  commandPaletteSelected=Math.max(0,Math.min(commandPaletteSelected,Math.max(0,commandPaletteMatches.length-1)));
+  commandPaletteResults.replaceChildren();
+  if(!items.length){
+    var empty=document.createElement('div');empty.className='command-palette-empty';empty.textContent='No matches. Try another word.';commandPaletteResults.appendChild(empty);return;
+  }
+  items.forEach(function(entry,index){
+    var item=entry.item,button=document.createElement('button');
+    button.type='button';button.className='command-palette-result';button.setAttribute('role','option');
+    button.setAttribute('aria-selected',String(index===commandPaletteSelected));button.setAttribute('data-palette-id',item.id);
+    var label=document.createElement('span');label.className='command-palette-result-label';label.textContent=item.label;
+    var category=document.createElement('span');category.className='command-palette-result-category';category.textContent=item.category;
+    var description=document.createElement('span');description.className='command-palette-result-description';description.textContent=item.description;
+    button.append(label,category,description);
+    button.addEventListener('mouseenter',function(){commandPaletteSelected=index;commandPaletteRender()});
+    button.addEventListener('click',function(){commandPaletteChoose(item.id)});
+    commandPaletteResults.appendChild(button);
+  });
+  var selected=commandPaletteResults.querySelector('[aria-selected="true"]');
+  if(selected&&selected.scrollIntoView)selected.scrollIntoView({block:'nearest'});
+}
+function commandPaletteChoose(id){
+  var item=commandPaletteItems().find(function(entry){return entry.id===id});
+  if(!item)return;
+  commandPaletteDialog.close();
+  item.run();
+}
+function commandPaletteOpen(){
+  if(commandPaletteDialog.open)return;
+  commandPaletteSearch.value='';commandPaletteSelected=0;commandPaletteRender();
+  commandPaletteDialog.showModal();commandPaletteSearch.focus();
+}
+document.getElementById('commandPaletteButton').addEventListener('click',commandPaletteOpen);
+document.getElementById('commandPaletteClose').addEventListener('click',function(){commandPaletteDialog.close()});
+commandPaletteSearch.addEventListener('input',function(){commandPaletteSelected=0;commandPaletteRender()});
+document.addEventListener('keydown',function(event){
+  if(commandPaletteDialog.open){
+    if(event.key==='Escape'){event.preventDefault();commandPaletteDialog.close();return}
+    if(event.key==='ArrowDown'){event.preventDefault();commandPaletteSelected=(commandPaletteSelected+1)%Math.max(1,commandPaletteMatches.length);commandPaletteRender();return}
+    if(event.key==='ArrowUp'){event.preventDefault();commandPaletteSelected=(commandPaletteSelected-1+Math.max(1,commandPaletteMatches.length))%Math.max(1,commandPaletteMatches.length);commandPaletteRender();return}
+    if(event.key==='Enter'&&!event.isComposing){event.preventDefault();var item=commandPaletteMatches[commandPaletteSelected];if(item)commandPaletteChoose(item.id);return}
+    return;
+  }
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+    event.preventDefault();commandPaletteOpen();return;
+  }
+  var target=event.target;
+  var isTextEntry=target&&(target.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+  if(event.key==='?'&&!isTextEntry&&!event.ctrlKey&&!event.metaKey&&!event.altKey){
+    event.preventDefault();commandPaletteOpen();
+  }
+});
 document.addEventListener('click',function(e){var nav=e.target.closest('[data-nav]');if(nav){e.preventDefault();var nextView=nav.getAttribute('data-nav'),scrollTarget=nav.getAttribute('data-scroll-target');navigate(nextView);if(scrollTarget){window.setTimeout(function(){var targetNode=document.querySelector('.'+scrollTarget)||document.getElementById(scrollTarget);if(targetNode)targetNode.scrollIntoView({behavior:'smooth',block:'start'})},120)}return}var toggle=e.target.closest('[data-toggle-task]');if(toggle){var t=state.tasks.find(function(x){return x.id===toggle.getAttribute('data-toggle-task')});if(t){t.done=!!toggle.checked;save();render()}return}var remove=e.target.closest('[data-delete-task]');if(remove){var id=remove.getAttribute('data-delete-task');if(window.confirm('Delete this task?')){state.tasks=state.tasks.filter(function(t){return t.id!==id});save();render();notify('Task deleted.')}return}var manage=e.target.closest('[data-project-action]');if(manage){var p=project(manage.getAttribute('data-project-action'));if(!p)return;currentProjectActionId=p.id;document.getElementById('manageProjectTitle').textContent=p.name;document.getElementById('manageProjectDescription').textContent='Choose an action for this project.';document.getElementById('reopenProjectAction').hidden=p.status!=='completed';document.getElementById('completeProjectAction').hidden=p.status==='completed';document.getElementById('manageProjectDialog').showModal();return}});
 document.getElementById('completeProjectAction').addEventListener('click',function(){var p=project(currentProjectActionId);if(p){p.status='completed';save();render();notify('Project marked complete.')}document.getElementById('manageProjectDialog').close()});
 document.getElementById('reopenProjectAction').addEventListener('click',function(){var p=project(currentProjectActionId);if(p){p.status='active';save();render();notify('Project reopened.')}document.getElementById('manageProjectDialog').close()});
