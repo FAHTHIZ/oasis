@@ -39,7 +39,7 @@ export const BUILTIN_STYLES = {
   reviewer: {
     name: 'reviewer', description: 'Evidence-first review emphasizing defects, regressions, and actionable findings', source: 'built-in',
     prompt: [
-      'Output style: reviewer. Prioritize concrete findings by severity. For each finding provide location, evidence, impact, and a narrowly scoped fix.',
+      'Output style: reviewer. Evidence-first review: prioritize concrete findings by severity. For each finding provide location, evidence, impact, and a narrowly scoped fix.',
       'Separate confirmed defects from hypotheses and missing verification. Do not invent findings or present style preferences as bugs.',
       'When reviewing code, inspect changed code and relevant callers/tests. State what was tested and what was not. Preserve all project rules.'
     ].join('\n')
