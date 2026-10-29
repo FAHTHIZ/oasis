@@ -34,6 +34,9 @@ test('MCP configuration loading rejects duplicate names and excessive server cou
   const servers = Array.from({ length: 41 }, (_, index) => ({ ...server, name: 'server' + index }));
   await writeFile(configPath, JSON.stringify({ schemaVersion: 1, servers }));
   await assert.rejects(loadMcpServers({ configPath }), /supports up to 40 servers/);
+
+  await writeFile(configPath, ' '.repeat(1024 * 1024 + 1));
+  await assert.rejects(loadMcpServers({ configPath }), /larger than 1 MiB/);
 });
 
 test('configuration validates HTTPS provider URLs and permits loopback HTTP', () => {
