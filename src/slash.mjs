@@ -342,11 +342,13 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: lines.join('\n') };
     }
     case 'ultrareview':
+      if (session) session.reportedFindings = undefined;
       return { output: 'Starting a deep code review of ' + describeReviewTarget('ultra ' + argument) + '.', prompt: reviewPrompt('review', 'ultra ' + argument) };
     case 'review':
     case 'security-review': {
       const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
       if (custom.has(name)) return null; // A project or user command with this name wins.
+      if (session) session.reportedFindings = undefined; // Each review reports its own findings.
       return { output: 'Starting ' + (name === 'review' ? 'a code review' : 'a security review') + ' of ' + describeReviewTarget(argument) + '.', prompt: reviewPrompt(name, argument) };
     }
     case 'export': {
@@ -1112,7 +1114,7 @@ export function reviewPrompt(kind, argument = '') {
       : 'Then merge duplicates and verify every candidate with an independent verifier subagent per finding (in parallel) that tries to disprove it by reading the code and, where practical, running a test or a small script. Keep only findings the verifier confirms.');
   }
   steps.push(limit);
-  steps.push('Organize the result as: Summary (one or two sentences), then Findings, each with severity (critical/high/medium/low), file:line, what goes wrong and when, and the fix. If nothing is wrong, say so plainly.');
+  steps.push('Record the final, confirmed findings with ONE report_findings call (file, line, severity critical/high/medium/low, category, summary, failure_scenario: the concrete input or sequence that breaks, and fix); pass findings: [] if nothing is wrong. Then reply with a one- or two-sentence summary instead of repeating the list. If report_findings is unavailable, list each finding with severity, file:line, what goes wrong and when, and the fix.');
   if (options.fix) steps.push('After the report, fix every confirmed finding with the smallest correct change, run the relevant tests, and list what you changed.');
   else steps.push('Do not modify any files; this is a read-only review.');
   if (options.comment) steps.push(/^#?\d+$/.test(target)

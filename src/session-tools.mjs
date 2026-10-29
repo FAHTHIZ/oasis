@@ -37,11 +37,20 @@ export const SESSION_TOOL_DEFINITIONS = [
     { action: { type: 'string', enum: ['keep', 'remove'] }, discard_changes: { type: 'boolean' } }, ['action']),
   fn('schedule_wakeup', 'Only during a self-paced /loop: choose when the loop runs its prompt again. Pick delay_seconds from what you are waiting on (60 to 3600; short for fast-moving work like a build, long for slow external events). Set stop to true when the task is done or no longer needs checking, which ends the loop.',
     { delay_seconds: { type: 'integer', minimum: 60, maximum: 3600 }, reason: { type: 'string', description: 'One line shown to the user, e.g. "CI usually takes ~8 minutes".' }, stop: { type: 'boolean' } }, ['reason']),
+  fn('report_findings', 'Record the confirmed findings of a code review in structured form, in one call, most severe first. The user sees them rendered and headless/JSON callers receive them as data. Use only for verified problems, not suggestions.',
+    { findings: { type: 'array', items: { type: 'object', properties: {
+      file: { type: 'string' }, line: { type: 'integer', minimum: 1 }, end_line: { type: 'integer', minimum: 1 },
+      severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
+      category: { type: 'string', description: 'e.g. correctness, security, performance, data-loss, concurrency, compatibility' },
+      summary: { type: 'string', description: 'One line: what is wrong.' },
+      failure_scenario: { type: 'string', description: 'Concrete input or sequence that triggers it and what goes wrong.' },
+      fix: { type: 'string' } }, required: ['file', 'summary', 'failure_scenario'] } },
+      summary: { type: 'string', description: 'One or two sentences on the overall result.' } }, ['findings']),
   ...SHARED_TASK_TOOL_DEFINITIONS
 ];
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
-export const SESSION_READ_ONLY_TOOLS = ['schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
+export const SESSION_READ_ONLY_TOOLS = ['report_findings', 'schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
@@ -265,6 +274,7 @@ export async function runSessionTool(session, name, args, options = {}) {
     case 'monitor_command': return monitorCommand(session, args, options);
     case 'enter_plan_mode': return enterPlanMode(session, args);
     case 'schedule_wakeup': return scheduleWakeup(session, args);
+    case 'report_findings': return reportFindings(session, args);
     case 'enter_worktree': return enterWorktree(session, args, options);
     case 'exit_worktree': return exitWorktree(session, args, options);
     case 'notify': return notifyUser(args, options.notify || {});
@@ -349,4 +359,45 @@ export function scheduleWakeup(session, args) {
   const clamped = Math.min(3600, Math.max(60, seconds));
   session.loopWakeup = { delayMs: clamped * 1000, reason };
   return { delay_seconds: clamped, message: 'Next run in ' + (clamped % 60 === 0 ? clamped / 60 + 'm' : clamped + 's') + '.' + (clamped !== seconds ? ' (clamped to 60-3600 seconds)' : '') };
+}
+
+const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+// ReportFindings: structured review output. Repeated calls merge; duplicates (same file, line, summary) are dropped.
+export function reportFindings(session, args) {
+  if (!Array.isArray(args.findings)) throw new Error('findings must be an array (use [] when nothing is wrong).');
+  const clean = (value, max) => String(value == null ? '' : value).trim().slice(0, max);
+  const list = Array.isArray(session.reportedFindings) ? session.reportedFindings : [];
+  let added = 0;
+  for (const raw of args.findings.slice(0, 200)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const finding = { file: clean(raw.file, 500), summary: clean(raw.summary, 500), failure_scenario: clean(raw.failure_scenario, 4000) };
+    if (!finding.file || !finding.summary) throw new Error('Each finding needs file and summary.');
+    const line = Math.floor(Number(raw.line));
+    if (line >= 1) finding.line = line;
+    const end = Math.floor(Number(raw.end_line));
+    if (end >= (finding.line || 1) && finding.line) finding.end_line = end;
+    const severity = clean(raw.severity, 20).toLowerCase();
+    finding.severity = severity in SEVERITY_ORDER ? severity : 'medium';
+    if (raw.category) finding.category = clean(raw.category, 60).toLowerCase();
+    if (raw.fix) finding.fix = clean(raw.fix, 4000);
+    if (list.some((item) => item.file === finding.file && item.line === finding.line && item.summary === finding.summary)) continue;
+    list.push(finding); added += 1;
+  }
+  list.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+  session.reportedFindings = list;
+  if (args.summary) session.findingsSummary = clean(args.summary, 2000);
+  return { recorded: added, total: list.length, message: list.length ? 'Recorded ' + added + ' finding(s); ' + list.length + ' in this session. Now give the user a short summary; the findings are shown to them already.' : 'Recorded: no findings.' };
+}
+
+export function formatFindings(findings, { color = false } = {}) {
+  if (!Array.isArray(findings) || !findings.length) return 'No findings.';
+  const paint = { critical: '31;1', high: '31', medium: '33', low: '36' };
+  return findings.map((item, index) => {
+    const where = item.file + (item.line ? ':' + item.line + (item.end_line && item.end_line !== item.line ? '-' + item.end_line : '') : '');
+    const tag = '[' + item.severity + (item.category ? ' / ' + item.category : '') + ']';
+    const lines = [(index + 1) + '. ' + (color ? '\x1b[' + paint[item.severity] + 'm' + tag + '\x1b[0m' : tag) + ' ' + where + ' - ' + item.summary];
+    if (item.failure_scenario) lines.push('   When: ' + item.failure_scenario.replace(/\n+/g, ' '));
+    if (item.fix) lines.push('   Fix: ' + item.fix.replace(/\n+/g, ' '));
+    return lines.join('\n');
+  }).join('\n');
 }
