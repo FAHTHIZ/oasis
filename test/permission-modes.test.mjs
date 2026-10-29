@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import { normalizePermissionMode } from '../src/permission-modes.mjs';
@@ -56,6 +58,31 @@ test('/mode accepts aliases but stores canonical mode semantics', async () => {
   const unknown = await runBuiltinCommand('mode', 'unsafe-mode', state);
   assert.match(unknown.output, /Unknown mode/);
   assert.equal(session.permissions.mode, 'acceptEdits');
+});
+
+test('CLI --permission-mode accepts aliases and rejects unknown values', async (t) => {
+  const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-cli-home-'));
+  t.after(async () => { const { rm } = await import('node:fs/promises'); await rm(home, { recursive: true, force: true }); });
+  const run = (args) => new Promise((resolve) => {
+    const child = spawn(process.execPath, [cli, ...args], {
+      env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis') },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    child.stderr.on('data', (chunk) => { output += chunk; });
+    child.on('close', (code) => resolve({ code, output }));
+  });
+  for (const alias of ['manual', 'accept-edits']) {
+    const result = await run(['--permission-mode', alias, '--help']);
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /Usage:/);
+    assert.doesNotMatch(result.output, /--permission-mode must be one of/);
+  }
+  const invalid = await run(['--permission-mode', 'unsafe-mode', '--help']);
+  assert.notEqual(invalid.code, 0);
+  assert.match(invalid.output, /aliases: manual, accept-edits/);
 });
 
 test('layered settings normalize defaultMode aliases in user settings', async () => {
