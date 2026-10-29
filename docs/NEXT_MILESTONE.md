@@ -90,23 +90,26 @@ For the controlled coding benchmark:
 - [ ] Keep Android/Termux explicitly experimental for native PTY until its supported path is tested; do not imply that a Linux CI run proves phone compatibility.
 - [ ] Document the signing status honestly. Until signing is configured, label installers as unsigned and explain how to verify that downloads came from the official repository.
 
-### P4 — Then pursue the next competitive differentiator
+### P4 — Close the multi-agent lifecycle gap
 
-After the Alpha gate is green, prioritize **persistent, observable multi-agent work across sessions**:
+**Initial monitor slice implemented on current `main`; CI verification pending.** The browser's new Run monitor lists recent coding-agent runs, reconstructs worker/team status from lifecycle events, and shows a saved event timeline. The server authenticates the endpoint, redacts emitted event metadata and routes later background-worker events to the run that launched that worker. The service worker now invalidates the old static shell.
 
-1. A visual agent/run monitor with clear task, worker, branch, approval, cost and failure status.
-2. Recoverable orchestration: pause/resume after restart, durable task history, cancellation propagation and idempotent recovery.
-3. Cross-session messaging and deliberate integration of worktree branches, with conflict previews and explicit human approval. Do not auto-merge by default.
-4. Only then, remote/mobile control with a security model for identity, trusted devices, workspace isolation, reconnects and audit logs.
+The next steps are deliberately in order:
 
-This is the highest-leverage next feature area because OASIS already has subagents, task leases, named teams, activity events and bounded dispatch. The missing value is a reliable, observable lifecycle—not simply spawning more agents.
+1. Verify the monitor's source, unit/regression tests, authenticated API and browser journey on the latest main SHA. Fix any failure rather than weakening assertions.
+2. Persist orchestration state, not just the event trail: durable task dependencies, worker identities, claim leases and recovery state with explicit schema/versioning.
+3. Add safe pause/resume and cancellation propagation, including honest interrupted states after restart. Never pretend a process that was killed by restart has resumed.
+4. Add per-worker review, conflicting-diff previews and deliberate human-approved worktree integration. Do not auto-merge by default.
+5. Only after the local lifecycle is reliable, revisit cross-device/remote control with identity, trusted-device enrollment, workspace isolation, reconnects and audit logs.
+
+The monitor is a first deliverable, not a claim of full durable teams. The missing value remains a reliable, recoverable lifecycle—not simply spawning more agents.
 
 ## Product readiness scorecard
 
 | Area | Current state | Acceptance gate |
 | --- | --- | --- |
-| Coding outcomes | The 22-task evaluation suite is a small helper-focused smoke suite; it does not measure repository-scale quality. | Expand to 30+ maintained tasks with pinned workspaces, deterministic acceptance checks, repeated runs, recorded failures, time, cost, and regression review. |
-| Agent lifecycle | Subagents, task leases, peer messaging, session-local teams and worktree-isolated dispatch exist. | Add a durable run ledger, visible task/worker state, reliable pause/resume/cancel, recovery after restart and conflict-aware integration. |
+| Coding outcomes | The 33-task evaluation suite is a small helper-focused smoke suite; it does not measure repository-scale quality. | Expand to at least 50 maintained tasks with pinned workspaces, deterministic acceptance checks, repeated runs, recorded failures, time, cost, and regression review. |
+| Agent lifecycle | Subagents, task leases, peer messaging, session-local teams and worktree-isolated dispatch exist. | Verify the current visual monitor first, then add durable orchestration state, safe pause/resume/cancel, restart recovery and conflict-aware integration. |
 | Safety | Workspace/path checks, approvals, secret filtering and optional Linux/macOS sandboxing exist. Windows OS isolation is not implemented. | Reduce secret exposure, validate platform storage/ACL behavior, and ship an explicit per-platform isolation support matrix. |
 | Browser / PTY | Local authenticated browser workspace and a PTY-backed terminal path exist. | Verify full launch, input, resize, stream, cancellation, teardown and no-orphan-process behavior on supported platforms. |
 | Distribution | Desktop build workflows exist; installers remain unsigned. | Validate first launch, update and uninstall on each supported OS, configure signing, and document release provenance. |
