@@ -100,7 +100,7 @@ export function ifAccepts(condition, event, payload) {
 function hookEnvironment(baseEnv, root) {
   const env = {};
   for (const [key, value] of Object.entries(baseEnv || process.env)) {
-    if (/(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION)/i.test(key)) continue;
+    if (/(?:API[_-]?KEY|ACCESS[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION)/i.test(key)) continue;
     env[key] = value;
   }
   env.OASIS_PROJECT_DIR = root;
