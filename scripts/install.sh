@@ -2,7 +2,7 @@
 # What this script does:
 # 1. Checks for Node.js 22 or newer.
 # 2. Offers supported Node.js installation steps and asks before changing anything.
-# 3. Installs the pinned OASIS v0.3.0 release in your user directory.
+# 3. Installs the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0).
 # 4. Runs oasis doctor and opens first-run provider setup.
 # It does not request administrator rights, upload files, or send telemetry.
 set -eu
