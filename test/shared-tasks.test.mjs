@@ -96,3 +96,54 @@ test('shared board validates limits, blocks unauthorized status transitions and 
   assert.equal(restored.tasks[0].worktreeCommit, '0123456789abcdef0123456789abcdef01234567');
   assert.equal(restored.nextId, 3);
 });
+
+test('task checkpoints survive restoration when a worker lease is reset', () => {
+  const session = { sharedTasks: createSharedTaskStore(), agentId: 'agent_7' };
+  const created = runSharedTaskTool(session, 'task_create', { subject: 'Refactor provider retry handling' });
+  assert.ok(SHARED_TASK_TOOL_NAMES.has('task_checkpoint'));
+  runSharedTaskTool(session, 'task_claim', { task_id: created.task.id, lease_seconds: 60 });
+  const saved = runSharedTaskTool(session, 'task_checkpoint', {
+    task_id: created.task.id,
+    summary: 'Updated retry policy in src/provider.mjs. Authorization: Bearer super-secret-token',
+    completed_steps: ['Added transient-error classification'],
+    next_steps: ['Add tests for 429 and timeout cases'],
+    touched_files: ['src/provider.mjs', 'test/provider.test.mjs'],
+    tests_run: ['node --test test/provider.test.mjs — 8 passed']
+  });
+  assert.equal(saved.saved, true);
+  assert.doesNotMatch(saved.task.checkpoint.summary, /super-secret-token/);
+  assert.match(saved.task.checkpoint.summary, /REDACTED/);
+
+  const restored = sanitizeSharedTaskStore(session.sharedTasks);
+  assert.equal(restored.tasks[0].status, 'pending');
+  assert.equal(restored.tasks[0].claimedBy, '');
+  assert.equal(restored.tasks[0].claimExpiresAt, null);
+  assert.equal(restored.tasks[0].checkpoint.summary, saved.task.checkpoint.summary);
+  assert.deepEqual(restored.tasks[0].checkpoint.nextSteps, ['Add tests for 429 and timeout cases']);
+
+  const replacement = { sharedTasks: restored, agentId: 'agent_8' };
+  const view = runSharedTaskTool(replacement, 'task_get', { task_id: created.task.id });
+  assert.equal(view.task.checkpoint.touched_files.length, 2);
+  assert.equal(view.task.checkpoint.tests_run[0], 'node --test test/provider.test.mjs — 8 passed');
+  const claim = runSharedTaskTool(replacement, 'task_claim', { task_id: created.task.id });
+  assert.equal(claim.task.claimed_by, 'agent_8');
+  assert.equal(claim.task.checkpoint.summary, saved.task.checkpoint.summary);
+});
+
+test('task checkpoints require the active claimant and enforce bounds', () => {
+  const session = { sharedTasks: createSharedTaskStore(), agentId: 'agent_1' };
+  const created = runSharedTaskTool(session, 'task_create', { subject: 'Improve workspace safety' });
+  assert.throws(() => runSharedTaskTool(session, 'task_checkpoint', {
+    task_id: created.task.id, summary: 'Not claimed yet'
+  }), /Claim task_1 before saving/);
+  runSharedTaskTool(session, 'task_claim', { task_id: created.task.id });
+  assert.throws(() => runSharedTaskTool(session, 'task_checkpoint', {
+    task_id: created.task.id, summary: 'x'.repeat(2001)
+  }), /must be at most 2000 characters/);
+  assert.throws(() => runSharedTaskTool(session, 'task_checkpoint', {
+    task_id: created.task.id, summary: 'Valid summary', next_steps: Array(21).fill('next')
+  }), /at most 20 items/);
+  assert.throws(() => runSharedTaskTool({ sharedTasks: session.sharedTasks, agentId: 'agent_2' }, 'task_checkpoint', {
+    task_id: created.task.id, summary: 'A different agent should not overwrite this'
+  }), /Only the active claimant may checkpoint/);
+});
