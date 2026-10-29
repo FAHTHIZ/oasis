@@ -1201,7 +1201,10 @@ function isPrivateAddress(address) {
       value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') ||
       value.startsWith('fec') || value.startsWith('ff') ||
       // Reserved/transition IPv6 ranges should not be used to bypass URL-fetch policy.
-      value.startsWith('2001:0:') || value.startsWith('2001:db8:') || value.startsWith('2002:');
+      value.startsWith('2001:0:') || value.startsWith('2001:1:') || value.startsWith('2001:2:') ||
+      value.startsWith('2001:3:') || value.startsWith('2001:4:112:') || value.startsWith('2001:10:') ||
+      value.startsWith('2001:20:') || value.startsWith('2001:db8:') || value.startsWith('2002:') ||
+      value.startsWith('64:ff9b:') || value.startsWith('3fff:');
   }
   return true;
 }
