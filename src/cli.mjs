@@ -400,14 +400,30 @@ async function configureProvider(root = process.cwd(), options = {}) {
       baseURL = selected.baseURL;
       model = selected.model;
       if (presetName === 'ollama') {
-        const detected = await discoverLocalOllamaModels();
+        let detected = await discoverLocalOllamaModels();
         if (detected.available && detected.models.length) {
           stdout.write('Ollama is running. Installed models: ' + detected.models.join(', ') + '\n');
           model = detected.models[0];
         } else {
-          stdout.write(detected.message + '\n');
-          stdout.write('Then install a model with: ollama pull <model-name>\n');
-          model = '';
+          // Keep the setup flow alive so a beginner can install/start Ollama in
+          // another terminal and retry instead of being forced to guess an ID.
+          while (!detected.available || !detected.models.length) {
+            stdout.write(detected.message + '\n');
+            stdout.write('Install/start Ollama from https://ollama.com/download. If it is running but has no model, use another terminal to run: ollama pull <model-name>\n');
+            const answer = (await rl.question('Enter a model ID to continue, press Enter to check again, or type later to stop: ')).trim();
+            if (/^(?:later|skip|cancel)$/i.test(answer)) {
+              throw new Error('Local model setup was stopped. No provider settings were changed. Install and start Ollama, then run oasis setup again.');
+            }
+            if (answer) {
+              model = answer;
+              break;
+            }
+            detected = await discoverLocalOllamaModels();
+          }
+          if (detected.available && detected.models.length) {
+            stdout.write('Ollama is running. Installed models: ' + detected.models.join(', ') + '\n');
+            model = detected.models[0];
+          }
         }
       }
       if (presetName !== 'omniroute') {
