@@ -27,3 +27,7 @@ The runtime sanitizer calls `redactApprovalSecrets` before its channel-specific 
 Before this fix, the main-branch test run reported **680 passing and 1 failing test out of 681**. The failure was the stale channel-redaction expectation in `test/channels.test.mjs`; both the desktop and homepage publishing workflows stopped during their test-validation step. Linux, macOS and Windows security/runtime regression jobs had passed on that revision.
 
 The commit containing these changes triggers fresh GitHub Actions checks. The post-fix result must be read from those new runs; this document does not assume they pass just because the assertion was corrected.
+
+### Remove duplicate desktop persistence assertion
+
+While applying the desktop-save regression correction, `test/desktop-package.test.mjs` ended up asserting the same host callback twice. One copy now checks the distinct non-desktop `saveConfig` fallback instead. The suite therefore checks both intended persistence routes rather than spending an assertion on duplicate coverage.
