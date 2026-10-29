@@ -27,8 +27,7 @@ const required = [
   'id="agentEmptyState"', 'data-agent-example="Explain this project"', 'data-agent-example="Find a bug"', 'data-agent-example="Write tests"',
   "document.getElementById('agentStopBtn').disabled=!agentBusy",
   'function exportBackup()', 'function importBackup(file)',
-  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
-  'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
+  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
 ];
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
