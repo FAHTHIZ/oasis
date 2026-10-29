@@ -16,6 +16,7 @@
 // server declares the capability, and settings do not set channelsEnabled: false.
 // Everything else is dropped silently, as in Claude Code.
 import { randomInt } from 'node:crypto';
+import { redactApprovalSecrets } from './approval-language.mjs';
 import { pushBackgroundEvent } from './monitors.mjs';
 
 const MAX_CONTENT = 8000;
@@ -116,6 +117,7 @@ export function sanitizeRelayText(value) {
     .replace(/[\u202a-\u202e\u2066-\u2069\u200b-\u200f\u2060\ufeff]/g, '')
     .replace(/[\u2018\u2019\u201c\u201d\u2039\u203a\uff1c\uff1e\u276e\u276f]/g, (c) => ({ '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"' }[c] || ''))
     .replace(/\s+/g, ' ').trim();
+  text = redactApprovalSecrets(text);
   for (const pattern of SECRET_PATTERNS) text = text.replace(pattern, '[REDACTED]');
   const points = [...text];
   if (points.length > MAX_PREVIEW_FIELD) {
