@@ -6,11 +6,7 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 - Updated CI concurrency so rapid pushes no longer cancel an in-flight main quality check, publishing validation, or desktop build. Superseded PR runs remain cancellable; a regression test covers all three workflows. Verification of this change is pending.
 
-- Hardened task-history event data preservation for unusual input keys and added a focused persistence regression test. Current-head CI is pending.
-
-
-- Hardened local task-history serialization so special JSON property names are preserved as inert data; added a focused persistence regression test. Source and test are committed on main; current-head CI is pending.
-
+- Hardened task-history event sanitization for unusual JSON keys and added one focused persistence regression test. Current-head CI is pending.
 
 - Native Oasis plugins now validate author/license/minimum version metadata, support `subagents/` manifests, and can be installed or validated from local folders and explicit HTTPS/SSH/file Git URLs. Remote sources use bounded non-shell Git cloning and are removed after staging; no package scripts run automatically. Tests and current-head CI validation are tracked separately.
 
