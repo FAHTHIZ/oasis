@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runLsp, stopLspClients, locateSymbol, serverForFile } from '../src/lsp.mjs';
+import { runLsp, stopLspClients, locateSymbol, serverForFile, verifyEditedFileWithLsp } from '../src/lsp.mjs';
 import { TOOL_DEFINITIONS } from '../src/tools.mjs';
 import { loadSettings } from '../src/settings.mjs';
 
@@ -93,6 +93,52 @@ test('definition, references, hover, symbols and diagnostics through a language 
   } finally {
     await stopLspClients(session);
   }
+});
+
+test('post-edit verification collects diagnostics and identifies new errors', async () => {
+  const { root, settings } = await project();
+  const session = { settings };
+  const options = { session, settings, autoApprove: true };
+  try {
+    await writeFile(path.join(root, 'main.fake'), 'helper();\nconst value = 1;\n');
+    const baseline = await runLsp(root, { operation: 'diagnostics', path: 'main.fake' }, options);
+    assert.equal(baseline.summary.errors, 0);
+
+    // Simulate an edit that introduces a TypeScript-like source error, then run
+    // the same post-edit verifier used by the agent execution loop.
+    await writeFile(path.join(root, 'main.fake'), 'helper();\nconst value = BAD;\n');
+    const result = await verifyEditedFileWithLsp(root, 'main.fake', {
+      ...options,
+      baselineDiagnostics: baseline.diagnostics
+    });
+    assert.equal(result.status, 'issues');
+    assert.equal(result.baselineKnown, true);
+    assert.equal(result.newErrors.length, 1);
+    assert.equal(result.newErrors[0].code, 'X1');
+    assert.equal(result.newErrors[0].line, 2);
+  } finally {
+    await stopLspClients(session);
+  }
+});
+
+test('post-edit verification reports LSP startup failure without throwing', async () => {
+  const { root } = await project();
+  const settings = {
+    lspServers: {
+      broken: {
+        command: path.join(root, 'missing-language-server'),
+        args: [],
+        extensions: ['.fake']
+      }
+    }
+  };
+  const result = await verifyEditedFileWithLsp(root, 'main.fake', {
+    session: { settings },
+    settings,
+    autoApprove: true
+  });
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.reason, /spawn|ENOENT|language server|failed|closed|initialize/i);
 });
 
 test('starting a server needs approval once per session', async () => {
