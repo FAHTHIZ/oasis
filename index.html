@@ -140,6 +140,51 @@ body.light .first-run-choice{background:#fff}
 @media(max-width:950px){.first-run-options{grid-template-columns:minmax(0,1fr)}.first-run-choice{min-height:0;padding:13px}.first-run-arrow{margin-left:auto}}
 @media(max-width:390px){.first-run-wizard{padding:15px}.first-run-choice{gap:8px}.first-run-choice small{font-size:10px}}
 
+
+/* Chat and terminal stay side by side on wide screens and become tabs on phones. */
+#view-agent.active{display:flex;flex-direction:column;gap:16px}
+#view-agent.active>.intro-row{order:0;margin-bottom:0}
+#view-agent.active>.first-run-wizard{order:1;margin:0}
+#view-agent.active>.agent-setup{order:2;margin:0}
+#view-agent.active>.agent-workspace-toolbar{order:3;margin:0}
+#view-agent.active>.agent-workspace-grid{order:4;margin:0}
+#view-agent.active>.provider-setup{order:5;margin:0}
+#view-agent.active>.github-panel{order:6;margin:0}
+#view-agent.active>.cloud-runs-panel{order:7;margin:0}
+.agent-workspace-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.agent-workspace-tabs{display:flex;gap:6px;align-items:center}
+.agent-workspace-tab{border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:#ffffff05;color:var(--muted);font-size:12px;font-weight:700;min-height:38px}
+.agent-workspace-tab[aria-selected="true"]{color:var(--accent);border-color:#9BFF5555;background:#9BFF5514}
+.agent-workspace-grid{--agent-chat-split:56%;display:grid;grid-template-columns:minmax(0,var(--agent-chat-split)) 8px minmax(280px,1fr);gap:0;align-items:stretch;min-width:0}
+.agent-chat-column,.agent-terminal-column{min-width:0;min-height:0}
+#view-agent.active .agent-workspace-grid .agent-chat-panel{display:flex;flex-direction:column;height:min(72vh,860px);min-height:460px;margin:0}
+#view-agent.active .agent-chat-panel .agent-messages{flex:1;min-height:0;max-height:none}
+#view-agent.active .agent-workspace-grid .agent-terminal{display:flex;flex-direction:column;height:min(72vh,860px);min-height:460px;margin:0}
+#view-agent.active .agent-terminal .panel-pad{flex:1;min-height:0;overflow:auto}
+.agent-split-divider{position:relative;display:flex;align-items:stretch;justify-content:center;cursor:col-resize;touch-action:none;outline-offset:-1px}
+.agent-split-divider:before{content:"";display:block;width:2px;border-radius:99px;background:var(--line);transition:background .15s,width .15s}
+.agent-split-divider:hover:before,.agent-split-divider:focus-visible:before{width:4px;background:var(--accent)}
+.agent-workspace-grid[data-terminal-visible="false"]{grid-template-columns:minmax(0,1fr)}
+.agent-workspace-grid[data-terminal-visible="false"] .agent-split-divider,.agent-workspace-grid[data-terminal-visible="false"] .agent-terminal-column{display:none}
+@media(max-width:780px){
+  #view-agent.active>.agent-workspace-toolbar{order:3}
+  .agent-workspace-toolbar{gap:8px}
+  .agent-workspace-tabs{width:100%}
+  .agent-workspace-tab{flex:1}
+  .agent-terminal-toggle{display:none}
+  .agent-workspace-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+  .agent-workspace-grid .agent-split-divider{display:none}
+  .agent-workspace-grid[data-active-panel="chat"] .agent-terminal-column{display:none}
+  .agent-workspace-grid[data-active-panel="terminal"] .agent-chat-column{display:none}
+  .agent-workspace-grid[data-terminal-visible="false"] .agent-terminal-column{display:none}
+  #view-agent.active .agent-workspace-grid .agent-chat-panel{height:65vh;min-height:440px}
+  #view-agent.active .agent-workspace-grid .agent-terminal{height:auto;min-height:0}
+  .agent-workspace-grid .agent-terminal-column .panel-pad{padding:12px}
+}
+@media(max-width:390px){
+  .agent-workspace-tab{padding:8px 10px;min-height:44px}
+  .agent-workspace-grid .terminal-xterm{height:270px}
+}
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -202,15 +247,26 @@ body.light .first-run-choice{background:#fff}
     </div>
     <p class="agent-help" id="agentConnectionHelp">Start <code>oasis web</code> in the terminal for the project you want to work on, then paste its one-time connection token. The token is held in this browser tab's session storage, not in workspace notes.</p>
   </div>
-  <div class="panel agent-chat-panel">
+  <div class="agent-workspace-toolbar" aria-label="Agent workspace panels">
+    <div class="agent-workspace-tabs" role="tablist" aria-label="Chat or terminal">
+      <button class="agent-workspace-tab" id="agentChatTab" type="button" role="tab" aria-selected="true" aria-controls="agentChatColumn">Chat</button>
+      <button class="agent-workspace-tab" id="agentTerminalTab" type="button" role="tab" aria-selected="false" aria-controls="agentTerminalColumn">Terminal</button>
+    </div>
+    <button class="btn btn-secondary agent-terminal-toggle" id="agentTerminalToggle" type="button" aria-controls="agentTerminalColumn" aria-expanded="true">Hide terminal</button>
+  </div>
+  <div class="agent-workspace-grid" id="agentWorkspaceGrid" data-active-panel="chat" data-terminal-visible="true">
+    <div class="agent-chat-column" id="agentChatColumn" role="tabpanel" aria-labelledby="agentChatTab">
+<div class="panel agent-chat-panel">
     <div class="agent-chat-header"><div class="agent-model-summary"><span class="agent-runtime-state" id="agentRuntimeState" data-connected="false">Runtime not connected</span><button class="agent-model-pill" id="agentModelButton" type="button" data-nav="agent" data-scroll-target="provider-setup" title="Open model settings"><span class="agent-model-glyph" aria-hidden="true">◈</span><span class="agent-model-pill-copy"><strong id="agentModelName">Choose a model</strong><small id="agentModelDetail">Connect a runtime</small></span><span class="agent-model-chevron" aria-hidden="true">⌄</span></button></div><div class="agent-session-tools"><label class="sr-only" for="agentModeSelect">Permission mode</label><select id="agentModeSelect" title="Permission mode for this chat"><option value="default">Ask before changes</option><option value="acceptEdits">Auto-accept edits</option><option value="plan">Plan only</option><option value="auto">Auto (classifier decides)</option></select><label class="sr-only" for="agentHistorySelect">Saved chats</label><select id="agentHistorySelect" title="Open a saved chat" hidden><option value="">Saved chats…</option></select><span class="agent-context-meter" id="agentContextMeter" title="Context window use" hidden></span><button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button></div></div>
     <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">Connect a runtime, then tell Oasis what you want to build.</div></div>
     <div class="agent-approval" id="agentApprovalCard" hidden><h3>Approval required</h3><p id="agentApprovalPrompt"></p><div class="agent-buttons"><button class="btn btn-secondary" id="agentDenyBtn" type="button">Deny once</button><button class="btn btn-primary" id="agentApproveBtn" type="button">Approve once</button><button class="btn btn-secondary" id="agentAlwaysBtn" type="button" hidden>Always allow</button></div></div>
     <div class="agent-approval agent-question" id="agentQuestionCard" hidden><h3 id="agentQuestionHeader">Oasis has a question</h3><p id="agentQuestionText"></p><div class="agent-question-options" id="agentQuestionOptions"></div><form class="agent-question-custom" id="agentQuestionForm"><label class="sr-only" for="agentQuestionInput">Your own answer</label><input id="agentQuestionInput" maxlength="2000" placeholder="Or type your own answer" autocomplete="off"><button class="btn btn-primary" type="submit" id="agentQuestionSubmit">Send</button><button class="btn btn-secondary" type="button" id="agentQuestionSkip">Skip</button></form></div>
     <div class="agent-compose"><form id="agentForm"><label class="sr-only" for="agentPrompt">Describe what you want Oasis to do</label><textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Build a settings page, inspect the project first, implement it, and run the relevant tests…" required></textarea><label class="worktree-toggle" for="agentIsolateWorktree"><input id="agentIsolateWorktree" type="checkbox"><span><strong>Isolated Git worktree</strong><small>Keep edits on a separate review branch. Requires a clean Git workspace. Nothing is merged automatically.</small></span></label><div class="agent-buttons agent-compose-actions"><button class="btn btn-primary" id="agentSendBtn" type="submit">Send ↑</button><button class="btn btn-secondary" id="agentStopBtn" type="button" hidden>Stop</button></div></form><small>Commands, package installs, file deletion, and plugin installation wait for your approval. This runs code as your operating-system user; it is not an OS sandbox. Do not expose this HTTP server to the public Internet.</small></div>
   </div>
-
-  <div class="panel agent-terminal">
+    </div>
+    <div class="agent-split-divider" id="agentSplitDivider" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="72" aria-valuenow="56" tabindex="0" aria-label="Resize chat and terminal panels"></div>
+    <div class="agent-terminal-column" id="agentTerminalColumn" role="tabpanel" aria-labelledby="agentTerminalTab">
+<div class="panel agent-terminal">
     <div class="agent-chat-header"><span><strong>Terminal</strong> · command runner</span><span id="terminalStatus">Ready when runtime is connected</span></div>
     <div class="panel-pad">
       <form id="terminalForm" class="agent-terminal-form">
@@ -227,7 +283,8 @@ body.light .first-run-choice{background:#fff}
       <p class="agent-help">Every process passes the existing command-safety and approval checks. Interactive terminal sessions support live output, input, resize, Ctrl+C and stop. Full-screen terminal emulation and the no-terminal desktop installer are still separate gaps.</p>
     </div>
   </div>
-
+    </div>
+  </div>
 
 <div class="panel github-panel">
   <div class="agent-chat-header"><span><strong>GitHub</strong> · repositories and workspaces</span><span id="githubStatus" class="github-state" data-connected="false">Not checked</span></div>
@@ -531,6 +588,68 @@ function firstRunStatus(message,isError){var node=document.getElementById('first
 function setProviderKeyHelp(){var preset=document.getElementById('providerPreset').value;var items={openai:['OpenAI','https://platform.openai.com/api-keys'],anthropic:['Anthropic','https://console.anthropic.com/settings/keys'],openrouter:['OpenRouter','https://openrouter.ai/keys'],gemini:['Google AI Studio','https://aistudio.google.com/app/apikey']};var node=document.getElementById('providerKeyHelp');node.replaceChildren();var info=items[preset];if(!info){node.textContent='For a custom endpoint, use that provider’s own key instructions. New desktop keys are encrypted with system secure storage.';return;}node.appendChild(document.createTextNode('Need a key? Get one from '));var link=document.createElement('a');link.href=info[1];link.target='_blank';link.rel='noopener noreferrer';link.textContent=info[0]+' official settings';node.appendChild(link);node.appendChild(document.createTextNode('. New desktop keys are encrypted with system secure storage.'));}
 async function firstRunCheckOllama(){document.getElementById('firstRunOllamaLink').hidden=true;firstRunStatus('Checking this computer for Ollama and installed models…',false);try{var result=await agentApi('/api/provider/local-models');if(result.available&&result.models&&result.models.length){var modelField=document.getElementById('providerModel');if(!modelField.value||modelField.value==='auto'||!result.models.includes(modelField.value))modelField.value=result.models[0];firstRunStatus('Ollama is running. Found '+result.models.length+' model'+(result.models.length===1?'':'s')+': '+result.models.join(', ')+'. The first model is selected; edit the model field before testing if needed.',false);}else{firstRunStatus(result.message||'Ollama is running but no models were found.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}catch(error){firstRunStatus('Could not check Ollama: '+error.message+' Connect the local runtime and try again.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}
 document.querySelectorAll('[data-first-run]').forEach(function(button){button.addEventListener('click',function(){var choice=button.getAttribute('data-first-run');var preset=choice==='api'?'openai':choice;var selector=document.getElementById('providerPreset');selector.value=preset;selector.dispatchEvent(new Event('change'));document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});if(choice==='api'){firstRunStatus('Choose your provider from the list, enter its API key in the masked field, then select Test & save provider.',false);document.getElementById('providerApiKey').focus();}else if(choice==='omniroute'){firstRunStatus('OmniRoute must be running on this computer first. In a terminal, run oasis setup and choose OmniRoute; then return here and test the connection. A shared/free gateway may be slower or limited.',false);document.getElementById('providerModel').focus();}else{firstRunCheckOllama();document.getElementById('providerModel').focus();}});});
+
+// Responsive chat/terminal layout. Divider adjustments are keyboard accessible and remembered.
+(function setupAgentWorkspaceLayout(){
+  var grid=document.getElementById('agentWorkspaceGrid');
+  var chatTab=document.getElementById('agentChatTab');
+  var terminalTab=document.getElementById('agentTerminalTab');
+  var toggle=document.getElementById('agentTerminalToggle');
+  var divider=document.getElementById('agentSplitDivider');
+  if(!grid||!chatTab||!terminalTab||!toggle||!divider)return;
+  function saved(key){try{return localStorage.getItem(key)}catch{return null}}
+  function persist(key,value){try{localStorage.setItem(key,value)}catch{}}
+  function setPanel(name){
+    var panel=name==='terminal'?'terminal':'chat';
+    grid.dataset.activePanel=panel;
+    chatTab.setAttribute('aria-selected',String(panel==='chat'));
+    terminalTab.setAttribute('aria-selected',String(panel==='terminal'));
+    persist('oasis.agent.activePanel',panel);
+  }
+  function setVisible(visible){
+    grid.dataset.terminalVisible=String(!!visible);
+    toggle.textContent=visible?'Hide terminal':'Show terminal';
+    toggle.setAttribute('aria-expanded',String(!!visible));
+    persist('oasis.agent.terminalVisible',String(!!visible));
+    if(!visible)setPanel('chat');
+    if(visible&&window.matchMedia('(max-width: 780px)').matches)setPanel('terminal');
+  }
+  function setSplit(value){
+    var split=Math.max(35,Math.min(72,Number(value)||56));
+    grid.style.setProperty('--agent-chat-split',split+'%');
+    divider.setAttribute('aria-valuenow',String(Math.round(split)));
+    persist('oasis.agent.chatSplit',String(split));
+  }
+  function adjustSplit(clientX){
+    var bounds=grid.getBoundingClientRect();
+    if(bounds.width>0)setSplit((clientX-bounds.left)/bounds.width*100);
+  }
+  var initialVisible=saved('oasis.agent.terminalVisible')!=='false';
+  setVisible(initialVisible);
+  var initialPanel=saved('oasis.agent.activePanel');
+  if(initialVisible&&(initialPanel==='chat'||initialPanel==='terminal'))setPanel(initialPanel);
+  var initialSplit=Number(saved('oasis.agent.chatSplit'));
+  setSplit(Number.isFinite(initialSplit)&&initialSplit>=35&&initialSplit<=72?initialSplit:56);
+  chatTab.addEventListener('click',function(){setPanel('chat')});
+  terminalTab.addEventListener('click',function(){if(grid.dataset.terminalVisible==='false')setVisible(true);setPanel('terminal')});
+  toggle.addEventListener('click',function(){setVisible(grid.dataset.terminalVisible!=='true')});
+  var dragging=false;
+  divider.addEventListener('pointerdown',function(event){
+    if(window.matchMedia('(max-width: 780px)').matches||grid.dataset.terminalVisible!=='true')return;
+    dragging=true;divider.setPointerCapture(event.pointerId);adjustSplit(event.clientX);event.preventDefault();
+  });
+  divider.addEventListener('pointermove',function(event){if(dragging)adjustSplit(event.clientX)});
+  function finishDrag(){dragging=false}
+  divider.addEventListener('pointerup',finishDrag);
+  divider.addEventListener('pointercancel',finishDrag);
+  divider.addEventListener('lostpointercapture',finishDrag);
+  divider.addEventListener('keydown',function(event){
+    if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+    event.preventDefault();
+    var current=Number.parseFloat(getComputedStyle(grid).getPropertyValue('--agent-chat-split'))||56;
+    setSplit(current+(event.key==='ArrowRight'?5:-5));
+  });
+})();
 document.getElementById('providerProtocol').addEventListener('change',function(){var p=this.value;document.getElementById('providerBaseUrl').value=p==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1';document.getElementById('providerModel').value=p==='anthropic'?'claude-sonnet-5':(p==='openai-responses'?'gpt-6.1-sol':'');document.getElementById('providerApiKey').value='';document.getElementById('providerSetupStatus').textContent='Unsaved changes'});
 document.getElementById('providerPreset').addEventListener('change',function(){var presets={openai:{protocol:'openai-responses',baseURL:'https://api.openai.com/v1',model:'gpt-6.1-sol'},anthropic:{protocol:'anthropic',baseURL:'https://api.anthropic.com',model:'claude-sonnet-5'},openrouter:{protocol:'openai-compatible',baseURL:'https://openrouter.ai/api/v1',model:''},gemini:{protocol:'openai-compatible',baseURL:'https://generativelanguage.googleapis.com/v1beta/openai/',model:'gemini-3.8-flash'},ollama:{protocol:'openai-compatible',baseURL:'http://localhost:11434/v1',model:''},omniroute:{protocol:'openai-compatible',baseURL:'http://127.0.0.1:20128/v1',model:'auto'}};var selected=presets[this.value];if(!selected){setProviderKeyHelp();return;}document.getElementById('providerProtocol').value=selected.protocol;document.getElementById('providerBaseUrl').value=selected.baseURL;document.getElementById('providerModel').value=selected.model;document.getElementById('providerApiKey').value='';setProviderKeyHelp();});
 setProviderKeyHelp();
