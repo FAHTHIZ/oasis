@@ -1,16 +1,16 @@
-# OASIS vs Claude Code — current gap analysis
+# OASIS vs Claude Code — capability comparison and next priority
 
-**Comparison audited:** October 28, 2026  
-**OASIS implementation baseline:** [`1da39af90f36629a706e0d452c1b5d5bbaeccc44`](https://github.com/FAHTHIZ/oasis/commit/1da39af90f36629a706e0d452c1b5d5bbaeccc44)  
-**Verification:** the new dispatcher and hook-policy regression tests are included in this baseline; its CI run was pending when this note was updated. The prior green baseline passed 328 Node tests, 21/21 evaluation fixtures, the Node.js 22/24/26 matrix, and authenticated browser chat E2E. Do not treat prior results as validation of the new dispatcher. See [Current status](CURRENT_STATUS.md).
+**Comparison audited:** October 29, 2026  
+**OASIS implementation baseline:** [`eeb5e7ee623ed18dc9c7fcca79b9ebd0503e25c4`](https://github.com/FAHTHIZ/oasis/commit/eeb5e7ee623ed18dc9c7fcca79b9ebd0503e25c4)  
+**Verification snapshot:** [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40795987277) and [desktop build](https://github.com/FAHTHIZ/oasis/actions/runs/40795987139) passed. [Homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40795987174) failed the `FileChanged` hook test on the same commit; investigate before calling the overall release gate green. See [Current status](CURRENT_STATUS.md) and [Next milestone](NEXT_MILESTONE.md).
 
-This comparison is based on the current OASIS source tree and the current official Claude Code documentation linked at the end. Feature similarity does not prove equivalent coding quality, speed, reliability, or safety.
+This compares documented capability and source-level implementation, not blind task outcomes. Feature similarity does not prove equal coding quality, speed, reliability, safety, or operating-system support. The current OASIS test/eval suite does not provide an apples-to-apples Claude Code benchmark.
 
 ## Verdict
 
-OASIS already implements a broad share of the **single-machine CLI coding loop**: multi-step tool calling, workspace file operations, approvals, context handling, Git tools, subagents, MCP, hooks, skills, saved sessions, headless mode and an SDK. It also has model-provider flexibility and a local browser workspace.
+OASIS now covers a broad portion of the **local coding-agent workflow**: multi-step tool calling, scoped file operations, approvals, checkpoints/rewind, Git and test tools, multiple hosted and local model routes, MCP, hooks, skills, a broad Claude Code plugin-format compatibility layer, subagents, session-local teams/task dispatch, headless mode and an SDK. It also has a local browser workspace, a PTY/xterm path, a VS Code-family extension, a GitHub Action, a Chrome browser tool, and a desktop packaging pipeline.
 
-It is **not** a drop-in Claude Code replacement across all workflows, and it is not yet at full feature parity. A real PTY session API and browser xterm.js rendering are now in place, but process cleanup and cross-platform validation are incomplete. Other major gaps include multi-agent team coordination, IDE/Chrome/cloud/mobile integrations, unsigned desktop packaging, no embedded GitHub OAuth, a partial extension-compatibility layer, no Windows sandbox, and no native Gemini adapter.
+The most important remaining gap is **trustworthy end-to-end reliability and measured coding performance**, not another round of CLI option parity. On the current main commit, Quality Checks and desktop packaging pass while the publishing validation workflow fails one hook test. The current 21-fixture suite is a smoke test, not a coding leaderboard. After that release-confidence gate, the highest-value capability gaps are a visual/persistent agent lifecycle, cross-session coordination, secure remote/mobile control, broader cross-platform PTY verification, JetBrains support, and stronger platform sandboxing.
 
 ## Side-by-side capability check
 
@@ -44,7 +44,7 @@ This still is not full Claude Code agent-team or dynamic-workflow parity:
 
 The agent lifecycle emits a bounded, session-local activity timeline through `agent_events`, including worker starts/completions/failures/cancellations, team lifecycle, and queued peer/parent messages. Shared task claims can be renewed through `task_renew`; failed or cancelled dispatched workers now release their task lease immediately. This closes the first model-directed dispatch milestone, but not autonomous scheduling, persistent workflows, a visual monitor, or conflict repair.
 
-## Core-loop parity sprint (October 28, 2026)
+## Core-loop parity notes (through October 29, 2026)
 
 These changes close gaps in the everyday agent loop — the part users notice first when switching from Claude Code. Each item ships with regression tests.
 
@@ -105,55 +105,61 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 
 ## Ranked next improvements
 
-This order is intentionally ranked by impact and architectural leverage rather than ease.
+Ranked by downstream user value. Release confidence is the first priority even though it is not a feature that appears in a capability checklist.
 
-### 1. Real PTY and terminal lifecycle — implementation started, not closed
+### 1. Alpha confidence and end-to-end reliability — next milestone
 
-The CLI agent now supports a persistent PTY session API over the optional `node-pty` component. An approved `run_command` call can set `interactive=true`, then `terminal_read`, `terminal_input`, `terminal_resize`, `terminal_interrupt`, `terminal_stop`, and `terminal_list` manage the session. The manager bounds captured output and input, retains incremental offsets, tracks exit codes, caps active sessions, and closes sessions when OASIS closes.
+Fix and reproduce the currently failing `FileChanged` test in homepage/repository validation; Quality Checks passed on the same main commit. Treat this as an unresolved test/runtime/workflow discrepancy until root-caused, not as a confirmed flake. Align validation commands and require Quality Checks, homepage validation, and desktop builds to pass on the same commit. Update stale security and terminal docs at the same time. Detailed tasks and acceptance criteria are in [NEXT_MILESTONE.md](NEXT_MILESTONE.md).
 
-The gap is not closed yet. The first native integration smoke test targets Linux/Node 22; Windows/macOS compatibility, child-process-tree cleanup, robust reconnection semantics, browser terminal transport and UI, and a beginner-friendly signed installer are still missing. The native dependency is optional to preserve CLI usability when local compilation fails. Closure requires native PTY tests on supported operating systems, deterministic cancellation and cleanup tests, permission/sandbox enforcement tests, interactive fixtures, bounded output verification and browser/CLI end-to-end behavior.
+### 2. Measure OASIS against Claude Code on real tasks
 
-### 2. Automated team dispatch and visibility
+The current 21 evaluation fixtures validate the harness but mostly exercise small isolated tasks. Add reviewed bug-fix, multi-file feature, refactor, codebase-question, recovery, approval/cancellation and long-context tasks. Pin source revisions and model identifiers where possible, run repeated trials for stochastic tasks, verify changes with tests, compare human-reviewed diffs, and publish cost/latency and failures. No current test count establishes parity.
 
-Lease-based claiming/renewal, peer messaging, named teams, lifecycle events, and approval-gated worktree merge are implemented. `dispatch_ready_tasks` launches bounded waves in separate worktrees; opt-in automatic chaining fills freed slots but records prerequisite branch/commit provenance and defers dependent tasks until upstream commits are integrated into the main checkout. Failure/cancellation or incomplete work pauses chaining, and no branch is merged automatically. Remaining work is persistence across process restarts, visual monitoring, cross-session coordination, and richer conflict-aware review; this is not a claim that agents self-coordinate autonomously.
+### 3. Persistent, observable agent work
 
-### 3. IDE integration — VS Code family shipped
+OASIS has a session-local task board, exclusive claims/renewal/release, peer messages, named teams, worker events, bounded worktree dispatch and tmux panes. The remaining gap is a polished visual monitor plus durable orchestration: recoverable jobs after restart, cross-session messaging, cancellation/retry semantics, and conflict-aware branch integration. Claude Code documents Agent View, agent teams, dynamic workflows and cross-session messaging; agent teams are documented as experimental. Do not equate OASIS's task board with complete parity in these areas.
 
-The VS Code extension (`ide/vscode`, installed with `oasis ide install`) provides an authenticated local bridge, selection context, diff review for edit approvals, diagnostics and open-file tools, and session launch/continue commands. The chat panel (activity bar view and editor tab) shipped too, driven by `control_request`/`control_response` messages on stdio. Remaining: JetBrains plugin on the same RPC methods, and Marketplace publishing.
+### 4. Secure remote and cross-surface lifecycle
 
-### 4. Remote and cross-surface lifecycle
+Claude Code documents Remote Control for continuing local sessions from another device, as well as web/desktop/mobile and other integrations. OASIS has a local browser workspace and desktop packages, but not an equivalent managed remote session service. Before exposing remote execution, design authentication, trusted devices, scope boundaries, workspace isolation, approvals, reconnect/recovery, revocation and audit logs. A network listener alone is not Remote Control parity.
 
-Cloud/remote sessions, mobile steering, desktop, Chrome and Slack require process lifecycle, authentication, access scopes, workspace isolation, auditability and resumable jobs. A LAN-accessible `oasis web` server is not equivalent to those hosted services.
+### 5. Platform and safety gaps
 
-### 5. Remaining platform and ecosystem gaps
+- Test native PTY process-tree cleanup and interactive behavior on each OS OASIS actually claims to support; Linux/Node 22 passing is only one platform cell.
+- Keep Windows OS sandboxing on the gap list. The optional sandbox is disabled by default and targets Linux/macOS.
+- The VS Code/Cursor/Windsurf extension exists; JetBrains integration and Marketplace distribution remain future work.
+- Desktop builds currently succeed but are unsigned. Either configure signing or clearly publish the unsigned state and verification instructions.
+- A native Gemini provider adapter remains a provider gap; current support for other providers and compatible endpoints should be described accurately.
+- Continue testing third-party Claude-format plugins individually; compatibility is not a promise that every plugin, managed policy, marketplace workflow or lifecycle extension works unchanged.
 
-A native Gemini adapter; Windows sandboxing; Windows Credential Manager for sensitive plugin options.
+### 6. Terminal and polish work after the gate
 
-### 6. Terminal experience polish
-
-Vim mode shipped (`/vim`, `editorMode`, with operators, motions, text objects, counts, registers and `.` repeat). Customizable keybindings (Claude Code's `keybindings.json`), the Ctrl+G external editor and the Ctrl+S prompt stash also shipped. Themes shipped too (`/theme`, the six Claude Code presets plus `auto`, `~/.claude/themes/*.json` custom themes and plugin themes). Theme hot-reload shipped as well. The Ctrl+O full-screen transcript pager shipped too, and permission prompts are now select dialogs bound through the `Confirmation`/`Select` keybinding contexts. Model, theme and color pickers shipped on the same dialog (`ModelPicker`/`ThemePicker` contexts). The `/config` settings pane is done (see the table). These matter, but do not close the PTY, agent coordination or surface-access gaps above.
+Vim mode, themes, customizable keybindings, transcript paging, the settings pane and the browser xterm.js renderer are already present. Remaining terminal work should be driven by test evidence: process cleanup, browser E2E, reconnect behavior and cross-platform support—not another cosmetic pass before the core reliability gate is green.
 
 ## What OASIS already does well
 
-- MIT-licensed source and user choice across hosted and local model providers.
-- Local-first CLI plus an authenticated browser agent without requiring OASIS model credentials to be shared with the browser.
-- Built-in coding-agent regression fixtures and opt-in OpenTelemetry export.
-- A broad tool layer for workspace editing, LSP/diagnostics, MCP, skills, hooks, notebooks, PDFs, Git and worktrees.
-- Shared dependency-aware session task board, now present and tested, with honest documented limits.
-- Bounded agent/team activity timeline, queryable by agent or team, to make coordination and failures auditable within a session.
+- MIT-licensed, local-first architecture and meaningful choice across hosted and local model providers.
+- A tested coding-agent tool loop with approvals, scoped file operations, Git, diagnostics, checkpoints and cost/budget controls.
+- Broad extension primitives: MCP, hooks, skills, session memory and Claude Code plugin-format compatibility.
+- A useful base for multi-agent work: task dependencies and claims, peer messages, named teams, activity events, and worktree-isolated bounded dispatch.
+- Local browser and IDE surfaces, with a desktop packaging path and GitHub Action.
+- Quality CI covers Node.js 22/24/26, package integrity, Linux/Node 22 native PTY smoke, and Linux Chromium browser chat.
 
 ## Evaluation and readiness caveats
 
-- The **328 passing tests** demonstrate tested code paths, not 328 user-level end-to-end workflows.
-- The **21 evaluation fixtures** are a smoke suite of small tasks, mostly standalone utilities. They are not a full-repository benchmark or an apples-to-apples Claude Code comparison.
-- The authenticated browser E2E job is Linux Chromium; it does not establish mobile/Termux, Windows, cross-browser, real-device TLS, or live-cloud-provider readiness.
-- The optional OS sandbox is disabled by default and currently targets Linux/macOS. Approved code can run with host privileges when it is off.
-- History compaction is bounded and heuristic, so long-horizon continuity still requires evaluation across providers and long coding tasks.
+- The latest Quality Checks workflow reports **549 passing Node tests and 21/21 valid evaluation fixtures**. Tests indicate covered code paths, not the same number of user-level end-to-end workflows.
+- The publishing validation workflow failed the `FileChanged` hook test on the same main commit that passed Quality Checks. The discrepancy is open; do not describe all CI as green until resolved.
+- The authenticated browser E2E job runs in Linux Chromium. It does not establish Windows/macOS browser PTY behavior, Android/Termux support, live cloud provider reliability, or real-device TLS onboarding.
+- Desktop build success does not prove signed installers, successful first launch, update/uninstall behavior or accessibility on each platform.
+- The optional OS sandbox is disabled by default and currently targets Linux/macOS; commands can run with host privileges when it is off.
+- Context compaction is heuristic. Long-horizon continuity still needs evaluation over longer, representative coding sessions.
 
-## Official Claude Code sources checked October 28, 2026
+## Official Claude Code sources checked October 29, 2026
 
-- [Run agents in parallel](https://code.claude.com/docs/en/agents) — subagents, agent view, agent teams, dynamic workflows and projects.
-- [Agent teams](https://code.claude.com/docs/en/agent-teams) — shared task lists, task claims, teammate messaging, experimental status and known limitations.
-- [Platforms and integrations](https://code.claude.com/docs/en/platforms) — CLI, Desktop, VS Code, JetBrains, web, mobile, Chrome, Slack and CI/CD.
-- [Commands](https://code.claude.com/docs/en/commands) — workflow commands including `/batch`, agent workflows, review and session controls.
-- [Claude Code release changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) — implementation/release changes should be re-checked before each future parity audit.
+- [Run agents in parallel](https://code.claude.com/docs/en/agents) — subagents, Agent View, agent teams, dynamic workflows and worktrees.
+- [Extend Claude Code](https://code.claude.com/docs/en/features-overview) — skills, MCP, hooks, code intelligence, plugins and marketplaces.
+- [Remote Control](https://code.claude.com/docs/en/remote-control) — remote access to a running local session from a browser or mobile app.
+- [Best practices](https://code.claude.com/docs/en/best-practices) — verification, planning, context management, permissions and parallel work.
+- [Claude Code power-user tips](https://support.claude.com/en/articles/14554000-claude-code-power-user-tips) — recent official recommendations for verification, parallel sessions, planning and remote workflows.
+- [Claude Code Code Review](https://support.claude.com/en/articles/14233555-set-up-code-review-for-claude-code) — managed multi-agent review and workflow scope.
+
