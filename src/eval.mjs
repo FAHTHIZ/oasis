@@ -388,10 +388,16 @@ export async function compareEvalReports(paths, options = {}) {
 }
 
 function parseArgs(args) {
-  const config = { validate: false, task: null, trials: 3, help: false };
+  const config = { validate: false, task: null, trials: 3, help: false, compare: null };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--validate') { config.validate = true; continue; }
+    if (arg === '--compare') {
+      if (config.compare) throw new Error('--compare may be specified only once.');
+      if (!args[i + 1] || !args[i + 2]) throw new Error('--compare requires two JSON report paths.');
+      config.compare = [args[++i], args[++i]];
+      continue;
+    }
     if (arg === '--help' || arg === '-h') { config.help = true; continue; }
     if (arg === '--task') {
       if (!args[i + 1]) throw new Error('--task requires an evaluation task ID.');
@@ -407,7 +413,8 @@ function parseArgs(args) {
     throw new Error('Unknown oasis eval option: ' + arg);
   }
   if (config.task && !safeId(config.task)) throw new Error('Task IDs may contain lowercase letters, numbers, and hyphens.');
-  if (config.validate && (config.task || config.trials !== 3)) throw new Error('--validate runs the complete suite; do not combine it with --task or --trials.');
+  if (config.validate && (config.task || config.trials !== 3 || config.compare)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials or --compare.');
+  if (config.compare && (config.task || config.trials !== 3)) throw new Error('--compare cannot be combined with --task or --trials.');
   return config;
 }
 
@@ -449,10 +456,12 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] --yes\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] --yes\n  oasis eval --compare <run-a.json> <run-b.json>\n\n');
     output.write('Evaluation execution runs model-generated code in disposable copies. It is not OS-sandboxed. Review the task suite and only run with --yes in a controlled workspace.\n');
     return { ok: true };
   }
+  if (config.compare) return await compareEvalReports(config.compare, { output });
+
   if (config.validate) {
     const report = await validateEvaluationSuite({ tasksDir, env });
     printValidation(report, output);
@@ -550,7 +559,8 @@ export async function runEvalCommand(args = [], options = {}) {
   const summary = {
     runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt, completedAt: new Date().toISOString(),
-    taskCount: selectedDirs.length, trialsPerTask: config.trials,
+    taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
     passRate: trials.length ? passedCount / trials.length : 0,
     passed: passedCount, failed: trials.length - passedCount,
     medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
