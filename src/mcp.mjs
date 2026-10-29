@@ -104,7 +104,7 @@ export async function saveMcpServers(servers, options = {}) {
 function safeEnvironment(server, source = process.env, extra = {}) {
   const env = {};
   for (const [key, value] of Object.entries(source)) {
-    if (/(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i.test(key)) continue;
+    if (/(?:API[_-]?KEY|ACCESS[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i.test(key)) continue;
     if (key === 'OASIS_COMMAND_ENV_ALLOWLIST') continue;
     env[key] = value;
   }
