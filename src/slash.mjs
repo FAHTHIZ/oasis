@@ -133,6 +133,12 @@ export const SKILL_COMMANDS = Object.freeze({
   rollback: { skill: 'rollback', mode: 'explicit-restore-confirmation', summary: 'Preview and restore the latest tracked file checkpoint after a second-step confirmation.' }
 });
 
+function loadSkillInstruction(command) {
+  const skill = SKILL_COMMANDS[command] && SKILL_COMMANDS[command].skill;
+  if (!skill) throw new Error('No portable skill is registered for /' + command + '.');
+  return 'Load the portable ' + skill + ' skill first with load_skill({ name: ' + JSON.stringify(skill) + ' }). ';
+}
+
 function formatNumber(value) {
   return Number(value || 0).toLocaleString('en-US');
 }
@@ -192,14 +198,14 @@ export async function runBuiltinCommand(name, argument, state) {
       const focus = String(argument || '').trim();
       return {
         output: 'Preview: inspect project structure, documentation, scripts, tests, and existing instructions; then create or carefully merge OASIS.md. No file changes occur until the agent proposes a change through the existing workspace tools and approvals.',
-        prompt: 'Load the portable init skill first with load_skill({ name: "init" }). Inspect this workspace read-only and use source files and scripts as evidence. Create or carefully update OASIS.md with project purpose, architecture and key paths, setup and verification commands, conventions, and safety constraints. Preserve useful existing human-authored guidance. Do not guess facts, copy secrets, install anything, or bypass existing approval, snapshot, or file-state protections. Use normal workspace tools and approval prompts before changing files. ' + (focus ? 'User focus: ' + focus : 'Use the project itself to determine the most useful guide content.')
+        prompt: loadSkillInstruction('init') + 'Inspect this workspace read-only and use source files and scripts as evidence. Create or carefully update OASIS.md with project purpose, architecture and key paths, setup and verification commands, conventions, and safety constraints. Preserve useful existing human-authored guidance. Do not guess facts, copy secrets, install anything, or bypass existing approval, snapshot, or file-state protections. Use normal workspace tools and approval prompts before changing files. ' + (focus ? 'User focus: ' + focus : 'Use the project itself to determine the most useful guide content.')
       };
     }
     case 'plan': {
       if (!String(argument || '').trim()) return { output: 'Usage: /plan Describe the task to plan. This command is read-only and will not edit files or run project commands.' };
       return {
         output: 'Preview: inspect relevant source and tests, then return an ordered implementation plan with file targets, risks, and verification steps. No files, installs, or project commands will be changed or run.',
-        prompt: 'Load the portable plan skill first with load_skill({ name: "plan" }). Create an implementation plan for the following task. Inspect project instructions, source, call sites, and tests using read-only tools only. Do not edit files, install packages, make network requests, or run project commands. Return ordered steps, likely files, acceptance criteria, risks, unknowns, and verification for each step. Task: ' + String(argument).trim(),
+        prompt: loadSkillInstruction('plan') + 'Create an implementation plan for the following task. Inspect project instructions, source, call sites, and tests using read-only tools only. Do not edit files, install packages, make network requests, or run project commands. Return ordered steps, likely files, acceptance criteria, risks, unknowns, and verification for each step. Task: ' + String(argument).trim(),
         planOnly: true
       };
     }
@@ -207,7 +213,7 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!String(argument || '').trim()) return { output: 'Usage: /fix Describe the bug or provide its error/reproduction steps. Nothing has been changed.' };
       return {
         output: 'Preview: inspect the bug, reproduce it where possible, add a focused regression test, make the smallest correct fix, and rerun relevant checks. File edits, commands, installs, and network actions remain subject to existing OASIS approvals and snapshots.',
-        prompt: 'Load the portable debugging skill with load_skill({ name: "debugging" }) before proceeding. Reproduce and fix only the reported bug: ' + String(argument).trim() + '\n\nInspect first, distinguish evidence from hypotheses, add a regression test where practical, use minimal edits, and verify with relevant tests. Use OASIS tools so normal approval, workspace validation, snapshots, and stale-file checks apply. Do not install dependencies, access the network, or change unrelated files without separate approval. Report exact checks and results; never claim an unrun test passed.'
+        prompt: loadSkillInstruction('fix') + 'Reproduce and fix only the reported bug: ' + String(argument).trim() + '\n\nInspect first, distinguish evidence from hypotheses, add a regression test where practical, use minimal edits, and verify with relevant tests. Use OASIS tools so normal approval, workspace validation, snapshots, and stale-file checks apply. Do not install dependencies, access the network, or change unrelated files without separate approval. Report exact checks and results; never claim an unrun test passed.'
       };
     }
     case 'diagnose': {
@@ -219,7 +225,7 @@ export async function runBuiltinCommand(name, argument, state) {
         : '';
       return {
         output: 'Preview: analyze the supplied evidence, trace likely causes, and identify the next useful diagnostic step. This is read-only; it will not attempt a fix.' + (imageMentioned ? '\nImage input status: ' + capability.status + '. ' + capability.reason : ''),
-        prompt: 'Load the portable diagnose skill first with load_skill({ name: "diagnose" }). Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\n\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
+        prompt: loadSkillInstruction('diagnose') + 'Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\n\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
       };
     }
     case 'rollback': {
@@ -1282,7 +1288,7 @@ export function reviewPrompt(kind, argument = '') {
   }
   const lenses = { low: 0, medium: 0, high: 3, xhigh: 5, max: 5, ultra: 5 }[options.effort];
   const limit = options.maxFindings === Infinity ? 'Report every confirmed finding.' : 'Report at most ' + (options.maxFindings || (options.effort === 'low' ? 5 : 10)) + ' findings, most severe first' + (options.maxFindings ? '.' : ', and say how many lower-severity ones you left out.');
-  const steps = ['Load the portable code-review skill with load_skill({ name: "code-review" }) and follow its evidence-first workflow.', gather, 'Review correctness, security boundaries, performance, accessibility, and missing regression coverage. Treat current changes as read-only unless --fix was explicitly requested.'];
+  const steps = [loadSkillInstruction('review') + 'follow its evidence-first workflow.', gather, 'Review correctness, security boundaries, performance, accessibility, and missing regression coverage. Treat current changes as read-only unless --fix was explicitly requested.'];
   if (options.effort === 'low') steps.push('Do one quick pass over the diff and flag only obvious bugs.');
   else if (!lenses) steps.push('Read the surrounding code when the diff alone is not enough, and check each suspected bug against the code before reporting it.');
   else {
