@@ -31,6 +31,24 @@ jobs:
       - name: Verify installable CLI package contents
         run: npm pack --dry-run
 
+  cross-platform-security:
+    name: Security and runtime regression tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install production dependencies
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Run security, filesystem, and process lifecycle regressions
+        run: node --test test/permissions.test.mjs test/network-safety.test.mjs test/secure-store.test.mjs test/sandbox.test.mjs test/runtime.test.mjs
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
     runs-on: ubuntu-latest
