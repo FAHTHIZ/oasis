@@ -65,7 +65,35 @@ test('ZIP reader rejects traversal, absolute, drive, NUL, and ambiguous backslas
   for (const name of ['../escape.txt', '/absolute.txt', 'C:/outside.txt', 'nested/../../escape', 'folder\\..\\escape.txt']) {
     assert.throws(() => readZipEntries(makeStoredZip([{ name, content: 'nope' }])), /unsafe or ambiguous path/, name);
   }
-  assert.throws(() => readZipEntries(makeStoredZip([{ name: 'nul\\0name.txt', content: 'nope' }])), /unsafe or ambiguous path/);
+  assert.throws(() => readZipEntries(makeStoredZip([{ name: 'nul' + String.fromCharCode(0) + 'name.txt', content: 'nope' }])), /unsafe or ambiguous path/);
+});
+
+test('ZIP reader rejects duplicate, case-colliding, and size-mismatched entries', () => {
+  assert.throws(
+    () => readZipEntries(makeStoredZip([
+      { name: 'Readme.md', content: 'one' },
+      { name: 'README.md', content: 'two' }
+    ])),
+    /duplicate or case-colliding paths/
+  );
+  const archive = makeStoredZip([{ name: 'declared.txt', content: 'small' }]);
+  const eocd = archive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const centralOffset = archive.readUInt32LE(eocd + 16);
+  archive.writeUInt32LE(99, centralOffset + 24);
+  assert.throws(() => readZipEntries(archive), /size does not match its declared size/);
+});
+
+test('ZIP extraction refuses a symlinked destination or an existing symlink parent', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-zip-links-'));
+  const outside = path.join(root, 'outside');
+  const destination = path.join(root, 'destination');
+  const linked = path.join(destination, 'linked');
+  await import('node:fs/promises').then((fs) => fs.mkdir(outside));
+  await import('node:fs/promises').then((fs) => fs.mkdir(destination));
+  await import('node:fs/promises').then((fs) => fs.symlink(outside, linked, 'dir'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await assert.rejects(extractZip(makeStoredZip([{ name: 'linked/escape.txt', content: 'bad' }]), destination), /symbolic links/);
+  await assert.rejects(extractZip(minimalPluginZip(), linked), /real directory/);
 });
 
 test('plugin archive downloads reject file URLs, public HTTP, and metadata/private IPs before fetching', async () => {
