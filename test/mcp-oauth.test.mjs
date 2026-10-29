@@ -183,6 +183,10 @@ test('OAuth discovery never fetches private-network resource metadata URLs', asy
   const found = await discoverOAuth(origin + '/mcp', { fetch: fetchImpl, lookupImpl });
   assert.equal(found.tokenEndpoint, origin + '/token');
   assert.equal(requests.some((url) => url.includes('169.254.169.254')), false);
+  await assert.rejects(
+    discoverOAuth(origin + '/mcp', { fetch: fetchImpl, lookupImpl: async () => [{ address: '0:0:0:0:0:ffff:7f00:1', family: 6 }] }),
+    /resolves to a private or special-purpose address/
+  );
 });
 
 test('a server that needs sign-in fails with clear advice, then works after oasis mcp login', async (t) => {
