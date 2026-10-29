@@ -454,6 +454,10 @@ test('eval comparison exports private JSON and self-contained escaped HTML repor
   ];
   await writeFile(aPath, JSON.stringify({ label: 'OASIS', sourceRevision: 'a'.repeat(40), results: rowsA }));
   await writeFile(bPath, JSON.stringify({ label: '<script>alert(1)</script>', sourceRevision: 'b'.repeat(40), results: rowsB }));
+  // Existing regular artifacts are replaced atomically, not left partially written.
+  await mkdir(path.dirname(jsonPath), { recursive: true });
+  await writeFile(jsonPath, 'stale JSON report\n');
+  await writeFile(htmlPath, 'stale HTML report\n');
   const output = { text: '', write(value) { this.text += String(value); } };
   const result = await runEvalCommand([
     '--compare', aPath, bPath, '--out', jsonPath, '--html', htmlPath
