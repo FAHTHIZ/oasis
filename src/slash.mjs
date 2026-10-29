@@ -18,7 +18,7 @@ import { listAgentTeams } from './agent-tasks.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
-export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug' };
+export const COMMAND_ALIASES = { peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'bug', 'install-github-action': 'install-github-app' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -31,6 +31,8 @@ export const BUILTIN_COMMANDS = {
   cost: 'Show token usage for this session',
   usage: 'Show token usage for this session (same as /cost)',
   effort: 'Show or set reasoning effort for this session (/effort [low|medium|high|max|auto])',
+  'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
+  fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id])',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + ')',
   permissions: 'Show permission rules, mode, and sandbox',
@@ -380,6 +382,32 @@ export async function runBuiltinCommand(name, argument, state) {
       return await runBuiltinCommand('rewind', argument || '1', state);
     case 'branch':
       return await runBuiltinCommand('fork', argument, state);
+    case 'install-github-app': {
+      const install = await import('./github-install.mjs');
+      const words = String(argument || '').split(/\s+/).filter(Boolean);
+      const trigger = words.find((word) => word.startsWith('@'));
+      const plan = await install.githubInstallPlan(root, session ? session.config : {}, { trigger });
+      const text = install.describeInstallPlan(plan);
+      if (plan.exists && !words.includes('force')) return { output: text + '\nNothing written. Run /install-github-app force to replace the existing workflow.' };
+      const confirmed = words.includes('save') || words.includes('force') || (typeof state.confirm === 'function' && await state.confirm(text + '\nWrite the workflow file?'));
+      if (!confirmed) return { output: text + '\nNothing written. Run /install-github-app save to write it.' };
+      return { output: text + '\n' + await install.writeInstallPlan(plan) };
+    }
+    case 'fast': {
+      const { fastModeRequest } = await import('./model-aliases.mjs');
+      const current = Boolean(session && session.fastMode);
+      const want = !argument ? !current : /^(on|true|1|yes)$/i.test(argument) ? true : /^(off|false|0|no)$/i.test(argument) ? false : null;
+      if (want === null) return { output: 'Usage: /fast [on|off]' };
+      if (want && /^(1|true)$/i.test(String((env || process.env).CLAUDE_CODE_DISABLE_FAST_MODE || ''))) return { output: 'Fast mode is disabled by CLAUDE_CODE_DISABLE_FAST_MODE.' };
+      if (session) session.fastMode = want;
+      const { updateUserSettings } = await import('./settings.mjs');
+      await updateUserSettings((settings) => { if (want) settings.fastMode = true; else delete settings.fastMode; return settings; }, env || process.env).catch(() => {});
+      if (!want) return { output: 'Fast mode off.' };
+      const config = session && session.config;
+      const anthropic = config && config.protocol === 'anthropic';
+      const supported = config && fastModeRequest(config.model);
+      return { output: 'Fast mode on' + (anthropic && supported ? ' for ' + config.model + '. Output is faster and billed at the higher fast-mode rate.' : '. It takes effect only with the Anthropic API on Opus 5.5, Opus 5 or Opus 4.8' + (config ? ' (current: ' + config.protocol + ' / ' + config.model + ')' : '') + '; switch with /model opus.') };
+    }
     case 'effort': {
       const { EFFORT_LEVELS, applyEffort } = await import('./agent.mjs');
       const current = sessionOptions.effort || 'auto';

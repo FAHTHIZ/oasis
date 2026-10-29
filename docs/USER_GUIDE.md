@@ -795,6 +795,9 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- `/fast [on|off]` toggles fast mode: on Opus 5.5, Opus 5 and Opus 4.8 through the Anthropic API, requests carry `speed: "fast"` (plus the `fast-mode-2026-02-01` beta for Opus 5 / 4.8) for faster output at the higher fast-mode price. The choice is saved as `fastMode` in user settings; other models and cloud providers ignore it, and `CLAUDE_CODE_DISABLE_FAST_MODE=1` turns it off.
+- `/install-github-app [@trigger] [save|force]` (alias `/install-github-action`) writes `.github/workflows/oasis.yml` for the Oasis GitHub Action using your current provider and model, pre-allows your project's test/lint/build commands, and prints the `gh secret set OASIS_API_KEY` step. `/share` is an alias for `/bug`.
+
 - Agent teams in tmux: with `--teammate-mode tmux` (or the default `auto` when Oasis runs inside tmux; also the `teammateMode` setting or `OASIS_TEAMMATE_MODE`), each team member launched with `team_id` gets its own tiled tmux pane showing its prompt, messages, tool calls and final status. Teammates still run inside the lead process, so messaging and permissions are unchanged. Use `--teammate-mode in-process` to turn panes off.
 
 - Set `MCP_CONNECTION_NONBLOCKING=true` (or `OASIS_MCP_NONBLOCKING=1`, or `"mcpNonBlocking": true` in settings) to start sessions without waiting for MCP servers. Their tools appear once connected, the model gets a reminder when they are ready, `/mcp` shows that servers are still connecting, and the model can call `wait_for_mcp_servers` (hooks: `WaitForMcpServers`) before it needs one.

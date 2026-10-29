@@ -6,7 +6,7 @@ import { estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
-import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
+import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
 
 function withResolvedModel(config, env, planMode) {
   if (!config || !isModelAlias(config.model)) return config;
@@ -545,6 +545,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
   session.ultracode = loadedSettings.ultracode === true;
+  session.fastMode = loadedSettings.fastMode === true;
   session.teammateMode = env.OASIS_TEAMMATE_MODE || loadedSettings.teammateMode || 'auto';
   if (dynamicSections && !restore) session.pendingDynamicContext = dynamicSections.join('\n\n');
   if (loadedSettings.autoCompactEnabled === false && config && config.autoCompactPercent === undefined) config.autoCompactPercent = 0;
@@ -1326,11 +1327,15 @@ async function requestCompletionRaw(session, options = {}) {
     const { apiKeyFromHelper } = await import('./api-key-helper.mjs');
     apiKey = await apiKeyFromHelper(config.apiKeyHelper, { env: providerEnv, cwd: session.root, refresh: Boolean(options.refreshApiKey) });
   }
+  let fastRequest = null;
   if (nativeAnthropic) {
     if (apiKey && !cloudAnthropic) headers['x-api-key'] = apiKey;
     if (!cloudAnthropic) headers['anthropic-version'] = '2023-06-01';
     // --betas / ANTHROPIC_BETAS: extra beta headers (API key users, as in Claude Code).
     const betas = [...(Array.isArray(config.betas) ? config.betas : []), ...String(providerEnv.ANTHROPIC_BETAS || '').split(',')].map((item) => String(item).trim()).filter(Boolean);
+    // /fast: only the first-party API supports it; other models ignore the toggle.
+    fastRequest = session.fastMode && !cloudAnthropic && !/^(1|true)$/i.test(String(providerEnv.CLAUDE_CODE_DISABLE_FAST_MODE || '')) ? fastModeRequest(config.model) : null;
+    if (fastRequest && fastRequest.beta) betas.push(fastRequest.beta);
     if (betas.length && !cloudAnthropic) headers['anthropic-beta'] = [...new Set(betas)].join(',');
   } else if (apiKey) {
     headers.authorization = 'Bearer ' + apiKey;
@@ -1359,7 +1364,8 @@ async function requestCompletionRaw(session, options = {}) {
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       system: converted.system,
       messages: converted.messages,
-      ...(availableTools.length ? { tools: anthropicTools, tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {})
+      ...(availableTools.length ? { tools: anthropicTools, tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {}),
+      ...(fastRequest ? { speed: 'fast' } : {})
     };
     if (cloudAnthropic) bodyObject = cloudBody(config.protocol, bodyObject);
   } else if (nativeResponses) {
