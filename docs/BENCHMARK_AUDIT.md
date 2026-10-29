@@ -1,28 +1,33 @@
 # Benchmark audit and next steps
 
 **Audit date:** October 29, 2026  
-**Scope:** the 31 checked-in evaluation fixtures, evaluator/verification design, report metadata, and readiness for a fair Claude Code comparison.  
+**Scope:** the 32 checked-in evaluation fixtures, evaluator/verification design, report metadata, and readiness for a fair Claude Code comparison.  
 **Status:** static audit completed; no authenticated live head-to-head run has been performed in this audit.
 
 ## Finding
 
 OASIS has a useful evaluator foundation, but the current suite is better described as a deterministic smoke/regression suite than a competitive coding benchmark. The task validator has meaningful integrity checks: each task has a non-empty prompt, a reference patch and an external verifier; the no-op baseline must fail; the reference patch must apply and pass; task fingerprints include the prompt, shared snapshot, reference patch and verifier. The evaluator also uses disposable task workspaces, rejects symlinks and sensitive patch paths, and compares task-balanced outcomes only when task IDs overlap.
 
-The main limitation is task representativeness, not simply task count. The 31-task suite clusters around isolated helper functions, parsing and boundary behavior. There is useful security and configuration coverage, but relatively little evidence of sustained work in an existing codebase: multi-file features, debugging after failing tests, architecture-aware changes, regression recovery, cancellation/resume, or broad changes spanning several modules. One task explicitly requires a source change plus a new regression-test file. The existing suite should not be marketed as proof of parity with Claude Code.
+The main limitation is task representativeness, not simply task count. The 32-task suite clusters around isolated helper functions, parsing and boundary behavior. There is useful security and configuration coverage, but relatively little evidence of sustained work in an existing codebase: multi-file features, debugging after failing tests, architecture-aware changes, regression recovery, cancellation/resume, or broad changes spanning several modules. One task explicitly requires a source change plus a new regression-test file. The existing suite should not be marketed as proof of parity with Claude Code.
 
 ## Current coverage inventory
 
 The task IDs fall into these approximate areas:
 
-| Area | Tasks | What the current coverage can tell us |
+| Category | Tasks | What the current coverage can tell us |
 |---|---:|---|
-| Small helpers and data-shape utilities | 13 | Useful signal on precise implementation of bounded, deterministic functions; low evidence for broader repository understanding. |
-| Input, network, path and credential boundaries | 12 | Useful regression signal for secure parsing, URL/path boundaries, and redaction; does not prove end-to-end security or sandbox strength. |
-| Context, token/cost estimation, retry and cache behavior | 4 | Checks selected agent-adjacent utilities, not long-context planning quality or real provider recovery. |
-| Configuration integration | 2 | Adds persistence/configuration behavior; still too small to represent normal multi-file engineering work. |
-| **Total** | **31** | Good smoke/regression foundations; insufficient by itself for competitive capability claims. |
+| agent-operations | 2 | Initial author-assigned category; task results remain visible individually. |
+| configuration-integration | 3 | Initial author-assigned category; task results remain visible individually. |
+| context-and-cost | 4 | Initial author-assigned category; task results remain visible individually. |
+| data-structures | 2 | Initial author-assigned category; task results remain visible individually. |
+| input-validation | 8 | Initial author-assigned category; task results remain visible individually. |
+| network-safety | 4 | Initial author-assigned category; task results remain visible individually. |
+| secret-handling | 3 | Initial author-assigned category; task results remain visible individually. |
+| security-boundaries | 2 | Initial author-assigned category; task results remain visible individually. |
+| utility-logic | 4 | Initial author-assigned category; task results remain visible individually. |
+| **Total** | **32** | Initial taxonomy for analysis, not evidence of balanced real-world engineering coverage. |
 
-Treat this categorization as a planning aid, not a benchmark result. Task counts do not imply equal difficulty, importance, or statistical weight.
+Task categories and difficulty are now maintained in `evals/tasks/metadata.json`. The manifest has 32 tasks with difficulty counts small: 16, medium: 16. The labels are initial author estimates, not calibrated measurements. Metadata is fingerprinted; comparisons reject conflicting labels and report category-/difficulty-balanced pass rates only when every matched task is classified consistently. Those balance metrics complement—never replace—the visible task-level outcomes.
 
 ## Reproducibility and fairness gaps
 

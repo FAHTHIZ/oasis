@@ -97,7 +97,45 @@ async function fingerprintSnapshot(source) {
   return hash.digest('hex');
 }
 
-async function fingerprintTask(id, taskText, patch, verifierPath, snapshotDir) {
+async function loadTaskMetadata(taskDir, taskId) {
+  const metadataPath = path.join(path.dirname(taskDir), 'metadata.json');
+  const info = await lstat(metadataPath).catch((error) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (!info) {
+    return {
+      category: 'uncategorized',
+      difficulty: 'unspecified',
+      rationale: 'No task metadata manifest is configured.'
+    };
+  }
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error('Task metadata manifest must be a regular, non-symlink file.');
+  if (info.size > 1024 * 1024) throw new Error('Task metadata manifest exceeds the 1 MiB limit.');
+  let manifest;
+  try { manifest = JSON.parse(await readFile(metadataPath, 'utf8')); }
+  catch (error) { throw new Error('Task metadata manifest is invalid JSON: ' + error.message); }
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest) ||
+      manifest.schemaVersion !== 1 || !manifest.categories || typeof manifest.categories !== 'object' ||
+      Array.isArray(manifest.categories) || !Array.isArray(manifest.difficulties) ||
+      !manifest.tasks || typeof manifest.tasks !== 'object' || Array.isArray(manifest.tasks)) {
+    throw new Error('Task metadata manifest must use schemaVersion 1 with categories, difficulties, and tasks.');
+  }
+  const entry = manifest.tasks[taskId];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(taskId + ': task metadata is missing from the manifest.');
+  if (typeof entry.category !== 'string' || !Object.prototype.hasOwnProperty.call(manifest.categories, entry.category)) {
+    throw new Error(taskId + ': task metadata references an unknown category.');
+  }
+  if (typeof entry.difficulty !== 'string' || !manifest.difficulties.includes(entry.difficulty)) {
+    throw new Error(taskId + ': task metadata references an unknown difficulty.');
+  }
+  if (typeof entry.rationale !== 'string' || !entry.rationale.trim() || entry.rationale.length > 1000) {
+    throw new Error(taskId + ': task metadata rationale must be a non-empty string no longer than 1000 characters.');
+  }
+  return { category: entry.category, difficulty: entry.difficulty, rationale: entry.rationale };
+}
+
+async function fingerprintTask(id, taskText, patch, verifierPath, snapshotDir, metadata) {
   const snapshotHash = await fingerprintSnapshot(snapshotDir);
   const verifier = await readFile(verifierPath);
   return createHash('sha256')
@@ -107,6 +145,7 @@ async function fingerprintTask(id, taskText, patch, verifierPath, snapshotDir) {
     .update(patch + '\0')
     .update(verifier)
     .update('\0' + snapshotHash)
+    .update('\0' + JSON.stringify(metadata))
     .digest('hex');
 }
 
@@ -158,8 +197,9 @@ async function assertTaskShape(taskDir) {
       throw new Error(id + ': reference.patch contains an unsafe or sensitive file path');
     }
   }
-  const taskFingerprint = await fingerprintTask(id, taskText, patch, verifierPath, snapshotDir);
-  return { id, taskDir, repoDir: snapshotDir, taskPath, taskText, patchPath, verifierPath, taskFingerprint };
+  const metadata = await loadTaskMetadata(taskDir, id);
+  const taskFingerprint = await fingerprintTask(id, taskText, patch, verifierPath, snapshotDir, metadata);
+  return { id, taskDir, repoDir: snapshotDir, taskPath, taskText, patchPath, verifierPath, taskFingerprint, ...metadata };
 }
 
 async function listTaskDirectories(tasksDir = DEFAULT_TASKS_DIR) {
@@ -263,7 +303,7 @@ export async function validateEvaluationSuite(options = {}) {
       if (reference.exitCode !== 0) {
         throw new Error('Reference patch failed its verifier: ' + (reference.output || 'exit code ' + reference.exitCode));
       }
-      results.push({ id: task.id, ok: true, noOpExitCode: noOp.exitCode, referenceExitCode: reference.exitCode, taskFingerprint: task.taskFingerprint });
+      results.push({ id: task.id, category: task.category, difficulty: task.difficulty, ok: true, noOpExitCode: noOp.exitCode, referenceExitCode: reference.exitCode, taskFingerprint: task.taskFingerprint });
     } catch (error) {
       results.push({ id: path.basename(dir), ok: false, error: error.message || String(error) });
     } finally {
@@ -319,10 +359,20 @@ async function readComparisonRun(filePath) {
     if (fingerprint !== null && (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint))) {
       throw new Error('Result row ' + (index + 1) + ' has an invalid taskFingerprint in ' + String(filePath));
     }
+    const category = row.category ?? null;
+    if (category !== null && (typeof category !== 'string' || !/^[a-z][a-z0-9-]{0,39}$/.test(category))) {
+      throw new Error('Result row ' + (index + 1) + ' has an invalid category in ' + String(filePath));
+    }
+    const difficulty = row.difficulty ?? null;
+    if (difficulty !== null && (typeof difficulty !== 'string' || !['small', 'medium', 'large', 'unspecified'].includes(difficulty))) {
+      throw new Error('Result row ' + (index + 1) + ' has an invalid difficulty in ' + String(filePath));
+    }
     return {
       taskId,
       taskFingerprint: fingerprint,
       passed,
+      category,
+      difficulty,
       wallTimeMs: comparisonMetric(row.wallTimeMs ?? row.durationMs),
       costUSD: comparisonMetric(row.costUSD ?? row.costUsd)
     };
@@ -339,10 +389,16 @@ function summarizeComparisonTask(trials) {
   const costs = trials.map((trial) => trial.costUSD);
   const durations = trials.map((trial) => trial.wallTimeMs);
   const passed = trials.filter((trial) => trial.passed).length;
+  const metadataValue = (field) => {
+    const values = [...new Set(trials.map((trial) => trial[field]))];
+    return values.length === 1 ? values[0] : 'inconsistent';
+  };
   return {
     trials: trials.length,
     passed,
     passRate: passed / trials.length,
+    category: metadataValue('category'),
+    difficulty: metadataValue('difficulty'),
     medianWallTimeMs: comparisonMedian(durations),
     meanCostUSD: costs.length && costs.every((cost) => cost !== null)
       ? Math.round(costs.reduce((sum, cost) => sum + cost, 0) / costs.length * 1e9) / 1e9
@@ -373,7 +429,27 @@ export async function compareEvalReports(paths, options = {}) {
   };
   const mismatchedFingerprints = [];
   const unverifiedFingerprints = [];
+  const mismatchedMetadata = [];
+  const metadataForTask = (results, taskId) => {
+    const rows = results.filter((item) => item.taskId === taskId);
+    const value = (field) => {
+      const values = [...new Set(rows.map((row) => row[field]))];
+      return values.length === 1 ? values[0] : 'inconsistent';
+    };
+    return { category: value('category'), difficulty: value('difficulty') };
+  };
   const commonIds = matchingIds.filter((taskId) => {
+    const leftMetadata = metadataForTask(left.results, taskId);
+    const rightMetadata = metadataForTask(right.results, taskId);
+    const metadataConflicts =
+      leftMetadata.category === 'inconsistent' || rightMetadata.category === 'inconsistent' ||
+      leftMetadata.difficulty === 'inconsistent' || rightMetadata.difficulty === 'inconsistent' ||
+      (leftMetadata.category && rightMetadata.category && leftMetadata.category !== rightMetadata.category) ||
+      (leftMetadata.difficulty && rightMetadata.difficulty && leftMetadata.difficulty !== rightMetadata.difficulty);
+    if (metadataConflicts) {
+      mismatchedMetadata.push(taskId);
+      return false;
+    }
     const leftFingerprint = fingerprintFor(left.results, taskId);
     const rightFingerprint = fingerprintFor(right.results, taskId);
     if (leftFingerprint === 'inconsistent' || rightFingerprint === 'inconsistent' ||
@@ -392,17 +468,48 @@ export async function compareEvalReports(paths, options = {}) {
     const leftFingerprint = fingerprintFor(left.results, taskId);
     const rightFingerprint = fingerprintFor(right.results, taskId);
     const verified = Boolean(leftFingerprint && leftFingerprint === rightFingerprint);
+    const left = summarizeComparisonTask(left.results.filter((item) => item.taskId === taskId));
+    const right = summarizeComparisonTask(right.results.filter((item) => item.taskId === taskId));
     return {
       taskId,
+      category: left.category && left.category !== 'inconsistent' ? left.category : (right.category === 'inconsistent' ? null : right.category),
+      difficulty: left.difficulty && left.difficulty !== 'inconsistent' ? left.difficulty : (right.difficulty === 'inconsistent' ? null : right.difficulty),
       taskFingerprint: verified ? leftFingerprint : null,
       fingerprintStatus: verified ? 'verified' : 'unverified-legacy',
-      left: summarizeComparisonTask(left.results.filter((item) => item.taskId === taskId)),
-      right: summarizeComparisonTask(right.results.filter((item) => item.taskId === taskId))
+      left,
+      right
     };
   });
   const mean = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const makeBreakdown = (field) => {
+    const labels = [...new Set(taskRows.map((row) => row[field] || 'uncategorized'))].sort();
+    return labels.map((label) => {
+      const group = taskRows.filter((row) => (row[field] || 'uncategorized') === label);
+      return {
+        [field]: label,
+        taskCount: group.length,
+        aPassRate: mean(group.map((row) => row.left.passRate)),
+        bPassRate: mean(group.map((row) => row.right.passRate))
+      };
+    });
+  };
+  const categoryBreakdown = makeBreakdown('category');
+  const difficultyBreakdown = makeBreakdown('difficulty');
+  const completeCategories = taskRows.every((row) =>
+    row.category && row.category !== 'uncategorized' &&
+    row.left.category === row.category && row.right.category === row.category
+  );
+  const completeDifficulties = taskRows.every((row) =>
+    row.difficulty && row.difficulty !== 'unspecified' &&
+    row.left.difficulty === row.difficulty && row.right.difficulty === row.difficulty
+  );
+  const balancedPassRate = (breakdown, side, complete) => complete
+    ? mean(breakdown.map((row) => row[side === 'left' ? 'aPassRate' : 'bPassRate']))
+    : null;
   const summarizeMatched = (side) => ({
     taskBalancedPassRate: mean(taskRows.map((row) => row[side].passRate)),
+    categoryBalancedPassRate: balancedPassRate(categoryBreakdown, side, completeCategories),
+    difficultyBalancedPassRate: balancedPassRate(difficultyBreakdown, side, completeDifficulties),
     medianTaskWallTimeMs: comparisonMedian(taskRows.map((row) => row[side].medianWallTimeMs)),
     meanCostPerTrialUSD: taskRows.every((row) => row[side].meanCostUSD !== null)
       ? mean(taskRows.map((row) => row[side].meanCostUSD))
@@ -418,7 +525,10 @@ export async function compareEvalReports(paths, options = {}) {
     sources: [{ label: left.label, file: path.basename(left.source), revision: left.sourceRevision }, { label: right.label, file: path.basename(right.source), revision: right.sourceRevision }],
     commonTaskCount: commonIds.length,
     mismatchedFingerprints,
+    mismatchedMetadata,
     unverifiedFingerprints,
+    categoryBreakdown,
+    difficultyBreakdown,
     onlyInA: [...leftIds].filter((id) => !rightIds.has(id)).sort(),
     onlyInB: [...rightIds].filter((id) => !leftIds.has(id)).sort(),
     metrics: {
@@ -429,7 +539,11 @@ export async function compareEvalReports(paths, options = {}) {
         medianTaskWallTimeMs: leftMetrics.medianTaskWallTimeMs === null || rightMetrics.medianTaskWallTimeMs === null
           ? null : rightMetrics.medianTaskWallTimeMs - leftMetrics.medianTaskWallTimeMs,
         meanCostPerTrialUSD: leftMetrics.meanCostPerTrialUSD === null || rightMetrics.meanCostPerTrialUSD === null
-          ? null : rightMetrics.meanCostPerTrialUSD - leftMetrics.meanCostPerTrialUSD
+          ? null : rightMetrics.meanCostPerTrialUSD - leftMetrics.meanCostPerTrialUSD,
+        categoryBalancedPassRatePercentagePoints: leftMetrics.categoryBalancedPassRate === null || rightMetrics.categoryBalancedPassRate === null
+          ? null : (rightMetrics.categoryBalancedPassRate - leftMetrics.categoryBalancedPassRate) * 100,
+        difficultyBalancedPassRatePercentagePoints: leftMetrics.difficultyBalancedPassRate === null || rightMetrics.difficultyBalancedPassRate === null
+          ? null : (rightMetrics.difficultyBalancedPassRate - leftMetrics.difficultyBalancedPassRate) * 100
       }
     },
     tasks: taskRows
@@ -445,17 +559,22 @@ export async function compareEvalReports(paths, options = {}) {
     'A: ' + left.label + ' [' + path.basename(left.source) + ']' + (left.sourceRevision ? ' (revision ' + left.sourceRevision + ')' : ' (revision unavailable)'),
     'B: ' + right.label + ' [' + path.basename(right.source) + ']' + (right.sourceRevision ? ' (revision ' + right.sourceRevision + ')' : ' (revision unavailable)'),
     'Common tasks: ' + commonIds.length + ' | A-only: ' + comparison.onlyInA.length + ' | B-only: ' + comparison.onlyInB.length,
-    'Task fingerprints: ' + taskRows.filter((row) => row.fingerprintStatus === 'verified').length + '/' + taskRows.length + ' verified; ' + mismatchedFingerprints.length + ' mismatched task(s) excluded; ' + unverifiedFingerprints.length + ' legacy/unfingerprinted task(s) compared by ID only.',
+    'Task fingerprints: ' + taskRows.filter((row) => row.fingerprintStatus === 'verified').length + '/' + taskRows.length + ' verified; ' + mismatchedFingerprints.length + ' fingerprint-mismatched task(s) excluded; ' + mismatchedMetadata.length + ' metadata-mismatched task(s) excluded; ' + unverifiedFingerprints.length + ' legacy/unfingerprinted task(s) compared by ID only.',
     'Task-balanced pass rate: A ' + pct(leftMetrics.taskBalancedPassRate) + ' | B ' + pct(rightMetrics.taskBalancedPassRate) +
       ' | Delta ' + (deltaPp >= 0 ? '+' : '') + deltaPp.toFixed(1) + ' percentage points',
+    'Category-balanced pass rate: A ' + pct(leftMetrics.categoryBalancedPassRate) + ' | B ' + pct(rightMetrics.categoryBalancedPassRate),
+    'Difficulty-balanced pass rate: A ' + pct(leftMetrics.difficultyBalancedPassRate) + ' | B ' + pct(rightMetrics.difficultyBalancedPassRate),
     'Median per-task time: A ' + ms(leftMetrics.medianTaskWallTimeMs) + ' | B ' + ms(rightMetrics.medianTaskWallTimeMs),
     'Mean cost per task/trial: A ' + usd(leftMetrics.meanCostPerTrialUSD) + ' | B ' + usd(rightMetrics.meanCostPerTrialUSD),
     '',
+    'Category breakdown: ' + categoryBreakdown.map((row) => row.category + ' (' + row.taskCount + ' tasks)').join(', '),
+    'Difficulty breakdown: ' + difficultyBreakdown.map((row) => row.difficulty + ' (' + row.taskCount + ' tasks)').join(', '),
+    '',
     'Task-level outcomes',
-    'Task | A pass rate | B pass rate | A median time | B median time | A mean cost | B mean cost'
+    'Task | Category | Difficulty | A pass rate | B pass rate | A median time | B median time | A mean cost | B mean cost'
   ];
   for (const row of taskRows) {
-    lines.push(row.taskId + ' | ' + row.left.passed + '/' + row.left.trials + ' (' + pct(row.left.passRate) + ')' +
+    lines.push(row.taskId + ' | ' + (row.category || 'uncategorized') + ' | ' + (row.difficulty || 'unspecified') + ' | ' + row.left.passed + '/' + row.left.trials + ' (' + pct(row.left.passRate) + ')' +
       ' | ' + row.right.passed + '/' + row.right.trials + ' (' + pct(row.right.passRate) + ')' +
       ' | ' + ms(row.left.medianWallTimeMs) + ' | ' + ms(row.right.medianWallTimeMs) +
       ' | ' + usd(row.left.meanCostUSD) + ' | ' + usd(row.right.meanCostUSD));
@@ -725,6 +844,8 @@ async function runClaudeCodeEval(config, options = {}) {
       trials.push({
         taskId: task.id,
         taskFingerprint: task.taskFingerprint,
+        category: task.category,
+        difficulty: task.difficulty,
         trial,
         status: passed ? 'passed' : 'failed',
         passed,
@@ -816,7 +937,7 @@ async function saveResults(results, metadata, options = {}) {
 function printValidation(report, output = process.stdout) {
   output.write('Oasis eval suite validation\n');
   for (const result of report.results) {
-    output.write((result.ok ? '  PASS ' : '  FAIL ') + result.id + (result.error ? ': ' + result.error : '') + '\n');
+    output.write((result.ok ? '  PASS ' : '  FAIL ') + result.id + (result.category ? ' [' + result.category + '/' + (result.difficulty || 'unspecified') + ']' : '') + (result.error ? ': ' + result.error : '') + '\n');
   }
   output.write('Validated ' + report.results.length + ' task(s): ' + report.results.filter((item) => item.ok).length + ' passed, ' + report.results.filter((item) => !item.ok).length + ' failed.\n');
   if (report.error) output.write(report.error + '\n');
@@ -916,7 +1037,7 @@ export async function runEvalCommand(args = [], options = {}) {
         const costUSD = costEstimate(usage.inputTokens, usage.outputTokens, inputRate, outputRate);
         const passed = !errorText && Boolean(agentResult && agentResult.finished) && verification.exitCode === 0;
         trials.push({
-          taskId: task.id, taskFingerprint: task.taskFingerprint, trial,
+          taskId: task.id, taskFingerprint: task.taskFingerprint, category: task.category, difficulty: task.difficulty, trial,
           status: passed ? 'passed' : 'failed',
           model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL,
           maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null,

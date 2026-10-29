@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "categories": {
+    "agent-operations": "Retry, budgets, and control-flow behavior used by agents.",
+    "configuration-integration": "Reading, validating, persisting, and applying configuration.",
+    "context-and-cost": "Token accounting, context sizing, session history, and cost estimation.",
+    "data-structures": "Matching, caching, pagination, and bounded collections.",
+    "input-validation": "Strict parsing and normalization of untrusted or user-supplied values.",
+    "network-safety": "URLs, redirects, provider endpoints, and bounded network payloads.",
+    "secret-handling": "Credential filtering, sensitive paths, and log redaction.",
+    "security-boundaries": "Filesystem paths, archive entry names, and traversal protections.",
+    "utility-logic": "Deterministic helper behavior and text transformations."
+  },
+  "difficulties": [
+    "small",
+    "medium",
+    "large"
+  ],
+  "tasks": {
+    "bounded-pagination": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Strict integers and bounded page offsets."
+    },
+    "bounded-tool-batch": {
+      "category": "agent-operations",
+      "difficulty": "small",
+      "rationale": "Bounded tool batch sizes and limits."
+    },
+    "clamp-integer": {
+      "category": "utility-logic",
+      "difficulty": "small",
+      "rationale": "Deterministic integer clamping."
+    },
+    "config-output-token-limit": {
+      "category": "configuration-integration",
+      "difficulty": "medium",
+      "rationale": "Validate configuration-backed model output limits."
+    },
+    "config-strict-integer-bounds": {
+      "category": "configuration-integration",
+      "difficulty": "medium",
+      "rationale": "Coordinated config parsing and regression-test changes."
+    },
+    "dedupe-names": {
+      "category": "utility-logic",
+      "difficulty": "small",
+      "rationale": "Stable name deduplication."
+    },
+    "estimate-responses-context": {
+      "category": "context-and-cost",
+      "difficulty": "small",
+      "rationale": "Context size estimation from usage-like inputs."
+    },
+    "estimate-task-cost": {
+      "category": "context-and-cost",
+      "difficulty": "small",
+      "rationale": "Token-price arithmetic and missing-price handling."
+    },
+    "glob-match": {
+      "category": "data-structures",
+      "difficulty": "medium",
+      "rationale": "Pattern matching across glob tokens."
+    },
+    "http-body-limit": {
+      "category": "network-safety",
+      "difficulty": "medium",
+      "rationale": "Streaming UTF-8 byte limits and JSON error paths."
+    },
+    "loopback-url": {
+      "category": "network-safety",
+      "difficulty": "small",
+      "rationale": "Loopback URL detection and local endpoint rules."
+    },
+    "mcp-config-bounds": {
+      "category": "configuration-integration",
+      "difficulty": "medium",
+      "rationale": "Bounds and shape validation for MCP configuration."
+    },
+    "normalize-package-name": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Package identifiers without shell fragments or paths."
+    },
+    "normalize-request-headers": {
+      "category": "input-validation",
+      "difficulty": "medium",
+      "rationale": "Case normalization and ambiguous header handling."
+    },
+    "normalize-token-usage": {
+      "category": "context-and-cost",
+      "difficulty": "small",
+      "rationale": "Normalization of token usage records."
+    },
+    "parse-boolean-flag": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Strict boolean flag parsing."
+    },
+    "parse-tool-input-object": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Reject invalid tool argument shapes."
+    },
+    "read-range-bounds": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Bound line ranges and offsets."
+    },
+    "safe-archive-entry": {
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "rationale": "Reject traversal, absolute, drive, and ambiguous archive paths."
+    },
+    "safe-relative-path": {
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "rationale": "Normalize and reject unsafe relative path inputs."
+    },
+    "safe-task-id": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Safe identifiers for benchmark task paths."
+    },
+    "same-origin-redirect": {
+      "category": "network-safety",
+      "difficulty": "medium",
+      "rationale": "Resolve and validate redirect targets and origins."
+    },
+    "scrub-secret-env": {
+      "category": "secret-handling",
+      "difficulty": "medium",
+      "rationale": "Filter secret-bearing environment variables."
+    },
+    "secret-log-redaction": {
+      "category": "secret-handling",
+      "difficulty": "medium",
+      "rationale": "Redact credentials without damaging safe log text."
+    },
+    "sensitive-path": {
+      "category": "secret-handling",
+      "difficulty": "medium",
+      "rationale": "Recognize sensitive file and directory names."
+    },
+    "session-history-truncation": {
+      "category": "context-and-cost",
+      "difficulty": "medium",
+      "rationale": "Preserve useful conversation history while enforcing a size limit."
+    },
+    "slice-lines": {
+      "category": "utility-logic",
+      "difficulty": "small",
+      "rationale": "Stable line slicing with explicit bounds."
+    },
+    "transient-provider-retry": {
+      "category": "agent-operations",
+      "difficulty": "medium",
+      "rationale": "Bounded retries for transient provider responses."
+    },
+    "truncate-tool-output": {
+      "category": "utility-logic",
+      "difficulty": "small",
+      "rationale": "Bounded tool-output truncation."
+    },
+    "ttl-cache": {
+      "category": "data-structures",
+      "difficulty": "medium",
+      "rationale": "Expiry and capacity behavior of a TTL cache."
+    },
+    "validate-provider-url": {
+      "category": "network-safety",
+      "difficulty": "medium",
+      "rationale": "Provider URL scheme, host, and credential checks."
+    },
+    "validate-todo-list": {
+      "category": "input-validation",
+      "difficulty": "small",
+      "rationale": "Validation of a structured TODO-list input."
+    }
+  }
+}
