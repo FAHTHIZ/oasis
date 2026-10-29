@@ -79,6 +79,7 @@ function printHelp() {
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
     '  oasis -p PROMPT --bare        Skip project instructions, skills, hooks, MCP, and memory',
+    '  oasis --calm                 No animations; use stable, finished-line output',
     '  oasis --plugin-url URL        Load a plugin .zip from a URL for this session (repeatable)',
     '  oasis --safe-mode             Start with customizations off (CLAUDE.md, skills, hooks, MCP, plugins, commands, themes, keybindings)',
     '  oasis --restricted            No command/network tools, only managed + --settings settings, no bypassPermissions',
@@ -2562,6 +2563,7 @@ async function main() {
       continue;
     }
     if (arg === '--bare') { SESSION_OPTIONS.bare = true; continue; }
+    if (arg === '--calm') { SESSION_OPTIONS.calm = true; process.env.OASIS_NO_ANIMATION = '1'; continue; }
     // --safe-mode: troubleshooting start without customizations (CLAUDE.md, skills, hooks, MCP, plugins,
     // custom commands, keybindings, themes, status line). Model, built-in tools and permissions stay.
     if (arg === '--safe-mode') { SESSION_OPTIONS.safeMode = true; process.env.OASIS_SAFE_MODE = '1'; process.env.CLAUDE_CODE_SAFE_MODE = '1'; continue; }
