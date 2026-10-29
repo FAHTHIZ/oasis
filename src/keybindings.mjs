@@ -148,22 +148,21 @@ function chain(context) {
  *   null              not bound: use the editor's built-in handling
  */
 export function resolveBinding(bindings, context, sequence) {
+  // Resolve each scope before falling through to outer scopes. A chord prefix
+  // in Chat must win over an exact Global shortcut (for example, a user's
+  // "ctrl+k ctrl+s") so new global shortcuts do not steal the first stroke.
   for (const name of chain(context)) {
     const map = bindings.contexts[name];
     if (!map) continue;
     if (map.has(sequence)) {
       const action = map.get(sequence);
-      if (action === null) {
-        // Unbound here; an outer context may still bind it.
-        continue;
+      if (action !== null) return { action };
+      // Explicit unbinding lets an outer context still bind the exact stroke.
+    } else {
+      for (const [chord, action] of map) {
+        if (action !== null && chord.startsWith(sequence + ' ')) return { prefix: true };
       }
-      return { action };
     }
-  }
-  for (const name of chain(context)) {
-    const map = bindings.contexts[name];
-    if (!map) continue;
-    for (const [chord, action] of map) if (action !== null && chord.startsWith(sequence + ' ')) return { prefix: true };
   }
   for (const name of chain(context)) {
     const map = bindings.contexts[name];
