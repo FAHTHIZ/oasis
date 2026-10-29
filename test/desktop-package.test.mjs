@@ -51,7 +51,7 @@ test('desktop stores API keys through Electron OS-backed encryption rather than 
   assert.match(desktopSecrets, /decryptString/);
   assert.match(desktopSecrets, /secure storage is unavailable/i);
   assert.match(webRuntime, /onProviderConfig/);
-  assert.match(webRuntime, /apiKey: ''/);
+  assert.match(webRuntime, /await options\.onProviderConfig\(\{ protocol, baseURL, model, apiKey \}\)/);
 });
 
 test('local model discovery is loopback-only and uses a fixed Ollama endpoint', () => {
