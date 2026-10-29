@@ -210,7 +210,7 @@ export async function runBuiltinCommand(name, argument, state) {
         ...(startup > 15000 ? ['Warning: startup context is over 15,000 tokens before your messages. Disconnect unused tools or trim long project instructions.'] : []),
         'These are estimates. Tool schemas and hidden provider metadata can change the real count.',
         'Oasis compacts automatically at about 60% of the window. Override the window with contextWindow in the provider config or OASIS_CONTEXT_WINDOW. Use /compact to summarize now.'
-      ].join('\\n') };
+      ].join('\n') };
     }
     case 'teams': {
       if (!session) return { output: 'Start a session first; named agent teams are session-local.' };
