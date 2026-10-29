@@ -60,8 +60,10 @@ This remains an agent running code. The verifier is kept outside the disposable 
 In a separate run, configure OASIS to use the model/provider configuration you want to compare:
 
 ```sh
-node src/cli.mjs eval --trials 3 --yes
+node src/cli.mjs eval --trials 3 --timeout-seconds 600 --yes
 ```
+
+Both OASIS and Claude Code modes accept **--timeout-seconds** (30–3600 seconds; default 600). The OASIS runner aborts the model turn and closes session-owned processes when the deadline fires; this is cooperative cancellation, not an OS-level sandbox guarantee for arbitrary third-party tools. The Claude Code runner applies the same budget to the CLI process. Setup and the independent verifier are outside the agent deadline, although the reported wall time includes workspace setup and verification.
 
 The runner writes JSON reports in the OASIS config directory under **eval-results/** by default. You can select a different destination using **OASIS_EVAL_RESULTS_DIR**.
 
