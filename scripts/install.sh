@@ -8,7 +8,7 @@
 set -eu
 
 OASIS_VERSION="v0.3.0"
-OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/refs/tags/${OASIS_VERSION}.tar.gz"
+OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/27efc103994c26cab2331bb7037167372ceaa787.tar.gz"
 OASIS_PREFIX="${OASIS_INSTALL_PREFIX:-$HOME/.local}"
 OASIS_BIN="$OASIS_PREFIX/bin/oasis"
 ASSUME_YES=0
@@ -77,7 +77,7 @@ fi
 say "npm is ready: $(npm --version)."
 say "Git is optional for this archive-based install."
 say "OASIS will be installed for your user in: $OASIS_PREFIX"
-say "The installer uses the fixed release $OASIS_VERSION; it does not download the moving main branch."
+say "The installer uses the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0); it does not download the moving main branch."
 if ask_yes_no "May I install OASIS $OASIS_VERSION in that folder using npm?"; then
   npm install --global --prefix "$OASIS_PREFIX" "$OASIS_ARCHIVE"
 else
