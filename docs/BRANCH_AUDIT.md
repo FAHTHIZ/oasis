@@ -1,0 +1,44 @@
+# OASIS branch audit
+
+**Audit date:** 2026-10-29  
+**Canonical destination:** `main`  
+**Scope:** the 28 non-main branch tips visible during this audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
+
+## Decisions
+
+| Branch | Decision | Evidence and next action |
+| --- | --- | --- |
+| `cloud-engine/maturity-foundation` | **Keep temporarily; port selectively** | PR #23 contains useful new durable task history, isolated worktree execution, diff review, and restart recovery. Its quality-check run passed on the branch, but the branch is 50 commits ahead and 260 behind the audited main, and GitHub reports it is not mergeable. Do not force-merge stale `web.mjs` / `index.html` changes over current runtime work. Port/rebase the feature in reviewable slices and rerun current-main checks. |
+| `fix/preserve-current-provider-on-setup-20261027` | **Retire after CI** | The behavior was ported directly to main in commits `6459bff`, `d02f327`, and `b85f0b1`: setup now infers the selected configured provider, fresh guided setup still defaults to OmniRoute, and regression tests cover known/custom endpoints. PR #22 is stale and conflicts with current main. Wait for current-main CI before deleting the branch and closing the duplicate PR. |
+| `docs/alpha-confidence-milestone-2026-10-29` | **Retire** | PR #27 is closed and not merged. The useful status/milestone content is represented in the main docs; its old comparison-only document is intentionally not being reintroduced as product identity. |
+| `security/bound-mcp-oauth-metadata` | **Retire after security regression checks** | The current `src/mcp-oauth.mjs` contains the bounded metadata timeout/response-size handling and pinned DNS lookup logic. PR #26 is closed and its security work has been superseded in main. |
+| `security/public-fetch-ssrf-hardening` | **Retire after security regression checks** | Current main contains private/special-purpose address checks, DNS answer pinning, response-size bounds, and related regression coverage. PR #25 is closed; compare against the live main code before any future security refactor. |
+| `feat/context-ordering-todo` | **Retire after quick source check** | PR #1 is closed. The current main already has `src/context.mjs`, `todo_write`, context compaction and ordered tool handling from later work. Confirm no unique fix remains before deleting. |
+| `feat/workspace-extensions-integration-hub` | **Retire** | The extension/integration hub was merged through PRs #3 and #4. The current main contains `src/extensions.mjs` and the associated runtime/UI work; the later duplicate PR #5 is closed unmerged. |
+| `fix/omniroute-setup-default-20261027` | **Retire** | This is an older sibling of `fix/omniroute-setup-default-latest`; PR #19 merged the selected default behavior and current main still defaults new users to OmniRoute. |
+| `fix/guided-onboarding-entrypoints` | **Retire** | The branch is behind main with no unique file diff in the comparison against main. |
+| `fix/web-job-capacity-guard-20261027` | **Retire** | The branch is behind main with no unique file diff in the comparison against main. |
+| `fix/web-job-capacity-main-20261027` | **Retire** | The branch is behind main with no unique file diff in the comparison against main. |
+| `feat/eval-harness` | **Retire** | The evaluation harness landed through PR #2; the branch is behind main with no unique file diff. |
+| `chore/public-launch-metadata` | **Retire** | Public launch/site checks landed through merged PR #24. |
+| `feat/first-run-guided-onboarding` | **Retire** | Merged through PR #7. |
+| `feat/mid-turn-context-compaction-20261027` | **Retire** | Merged through PR #17. |
+| `feat/omniroute-chat-bootstrap` | **Retire** | Merged through PR #6. |
+| `feat/openhands-agent-server-bridge` | **Retire** | Merged through PR #11. |
+| `feat/ordered-tools-context-checklists-20261027` | **Retire** | Merged through PR #14. |
+| `feat/parallel-readonly-specialists-20261027` | **Retire** | Merged through PR #21. |
+| `feat/provider-transient-retries` | **Retire** | Merged through PR #10. |
+| `fix/browser-session-start-lock-20261027` | **Retire** | Merged through PR #16. |
+| `fix/omniroute-setup-default-latest` | **Retire** | Merged through PR #19. |
+| `fix/verification-command-detection` | **Retire** | Merged through PR #9. |
+| `fix/verification-gate-completeness` | **Retire** | Merged through PR #8. |
+| `fix/web-job-capacity` | **Retire** | Merged through PR #15. |
+| `test/browser-chat-tool-lifecycle` | **Retire** | Merged through PR #12. |
+| `test/browser-e2e-smoke-20261027` | **Retire** | Merged through PR #18. |
+| `test/browser-e2e-tool-cycle-20261027` | **Retire** | Merged through PR #20. |
+
+## Cleanup rule
+
+Keep `main` as the sole long-lived integration branch. Remove a branch only after its useful diff is either present on main or explicitly rejected. Merged feature branches do not need to remain as permanent branches: their commits remain reachable from the default branch after deletion. The cloud-engine branch is the only identified branch with a substantial, not-yet-integrated capability set; the provider-setup change has been ported and is awaiting a green main-branch verification run.
+
+This document records the audit and decisions; it does not itself delete remote branches or establish that current-main CI is green.
