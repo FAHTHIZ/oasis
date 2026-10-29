@@ -12,6 +12,9 @@ test('remote package execution and high-impact project runner verbs are high-ris
     ['npm', ['run', 'deploy']],
     ['pnpm', ['run', 'release']],
     ['yarn', ['run', 'publish']],
+    ['npm', ['--prefix', './app', 'run', 'deploy']],
+    ['pnpm', ['--dir', './app', 'exec', 'deploy-tool']],
+    ['yarn', ['--cwd', './app', 'run', 'publish']],
     ['cargo', ['run', '--release']],
     ['go', ['run', './cmd/deploy']],
     ['make', ['deploy']]
@@ -42,6 +45,16 @@ test('ordinary scripts and common test/check runners retain normal risk', () => 
     const result = analyzeCommand(command, args);
     assert.equal(result.blocked, undefined, command + ' ' + args.join(' '));
     assert.equal(result.highRisk, undefined, command + ' ' + args.join(' ') + ' should be normal risk');
+  }
+});
+
+test('publishing remains blocked when package-manager options precede the verb', () => {
+  for (const [command, args] of [
+    ['npm', ['--prefix', './app', 'publish']],
+    ['pnpm', ['--dir', './app', 'publish']],
+    ['yarn', ['--cwd', './app', 'publish']]
+  ]) {
+    assert.match(analyzeCommand(command, args).blocked || '', /Publishing a package is blocked/);
   }
 });
 
