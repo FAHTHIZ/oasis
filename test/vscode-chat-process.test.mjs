@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { friendlyStartError } = require('../ide/vscode/src/chat-process.js');
+const { friendlyStartError, isPotentiallyDestructiveAction } = require('../ide/vscode/src/chat-process.js');
 
 test('VS Code explains when the OASIS command is missing', () => {
   const message = friendlyStartError({ code: 'ENOENT', message: 'spawn oasis ENOENT' }, 'oasis');
@@ -26,4 +26,14 @@ test('unexpected startup errors include a next step and doctor hint', () => {
   assert.match(message, /custom-oasis/);
   assert.match(message, /Check the command setting/i);
   assert.match(message, /oasis doctor/);
+});
+
+test('approval warning detects likely destructive actions without flagging routine reads', () => {
+  assert.equal(isPotentiallyDestructiveAction('run_command: rm -rf build'), true);
+  assert.equal(isPotentiallyDestructiveAction('run_command: rm -fr build'), true);
+  assert.equal(isPotentiallyDestructiveAction('Delete the generated folder'), true);
+  assert.equal(isPotentiallyDestructiveAction('DROP TABLE sessions'), true);
+  assert.equal(isPotentiallyDestructiveAction('npm test'), false);
+  assert.equal(isPotentiallyDestructiveAction('read file src/index.js'), false);
+  assert.equal(isPotentiallyDestructiveAction(''), false);
 });
