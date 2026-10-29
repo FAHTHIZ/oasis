@@ -64,6 +64,12 @@ See [the evaluation protocol](BENCHMARKS.md) and [benchmark audit](BENCHMARK_AUD
 
 **Close it when:** additional platform-specific tests cover leader-exits-first behavior, cancellation, timeout, inherited-pipe cleanup and LSP/background process shutdown on Windows, macOS and Linux.
 
+### P1 — Bound persisted session and backup reads
+
+**Progress:** saved-session loading/listing and backup-manifest reads now use bounded descriptor reads, reject non-regular/symlink files, and cap manifests at 64 KiB. Backup restore validates POSIX and Windows separators, drive paths, UNC paths, NULs, and traversal segments. Adversarial tests cover oversize records, session symlinks, and Windows-style traversal; current-main CI is pending.
+
+**Remaining work:** these controls bound allocations and reduce symlink exposure but cannot eliminate every filesystem race, particularly on platforms without `O_NOFOLLOW`.
+
 ### P1 — Reduce filesystem race exposure
 
 **Gap:** canonical path checks, symlink rejection and snapshots reduce risk, but ordinary path-based Node operations do not provide a formal TOCTOU guarantee when an attacker can concurrently replace path components.
