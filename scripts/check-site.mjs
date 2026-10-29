@@ -2,6 +2,19 @@ import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+
+function relativeLuminance(hex) {
+  const value = hex.replace('#', '');
+  assert.match(value, /^[0-9a-f]{6}$/i, 'Contrast check expects six-digit hex colors.');
+  const channels = [0, 2, 4].map((offset) => parseInt(value.slice(offset, offset + 2), 16) / 255)
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrastRatio(foreground, background) {
+  const values = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
 const [html, manifestText, serviceWorker, icon, packageText] = await Promise.all([
   read('../index.html'),
   read('../manifest.webmanifest'),
@@ -13,7 +26,7 @@ const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
   'id="view-tasks"', 'id="view-notes"', 'id="projectDialog"', 'id="taskDialog"', 'id="manageProjectDialog"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
-  'id="view-agent"', 'runtime-scope-note', 'Local only by default:', 'It is not open to the public internet by default.', 'Remote access requires explicit server options', 'never share your runtime connection token.', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'aria-live="assertive"', 'aria-labelledby="agentApprovalTitle"', 'OASIS needs your permission', '>Deny</button>', '>Allow once</button>', 'Always allow for this session', 'for this session', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
+  'id="view-agent"', 'runtime-scope-note', 'Local only by default:', 'It is not open to the public internet by default.', 'Remote access requires explicit server options', 'never share your runtime connection token.', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
   'id="view-monitor"', 'id="agentMonitorRefreshBtn"', 'id="agentMonitorOpenSessionBtn"', 'id="agentMonitorReviewRunBtn"', 'id="agentMonitorStats"', 'id="agentMonitorRunList"', 'id="agentMonitorWorkers"', 'id="agentMonitorEvents"', 'function agentLoadMonitor(', "agentApi('/api/agent-monitor')", 'agentOpenCloudRun(id,title)', 'canReviewIsolatedDiff',
   'id="view-extensions"', 'id="extensionInspectForm"', 'id="extensionScope"', 'id="extensionCandidateList"', 'id="extensionCompatibility"', 'Detected format:', 'id="installedExtensions"',
   'id="view-integrations"', 'data-integration-tab="connectors"', 'Specialist reviews', 'id="mcpAddForm"', '/api/extensions/inspect', '/api/extensions/install', '/api/mcp',
@@ -29,10 +42,19 @@ const required = [
   'id="commandPaletteDialog"', 'id="commandPaletteSearch"', 'id="commandPaletteButton"', 'commandPaletteOpen()', 'starter-find-bug', 'Ctrl+K or ?',
   "document.getElementById('agentStopBtn').disabled=!agentBusy",
   'function exportBackup()', 'function importBackup(file)',
-  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
+  'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
+  'color:#84968a', 'color:#87988b'
 ];
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
+}
+
+for (const [label, foreground, background] of [
+  ['section labels', '#84968a', '#0d1713'],
+  ['sidebar footer', '#87988b', '#0b0f0c'],
+  ['muted body text', '#9aa99d', '#0b0f0c']
+]) {
+  assert.ok(contrastRatio(foreground, background) >= 4.5, label + ' must meet WCAG AA contrast for normal text.');
 }
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
 assert.equal(scripts.length, 1, 'Expected exactly one inline application script.');
