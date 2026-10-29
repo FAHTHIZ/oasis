@@ -498,7 +498,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
       if (custom.has(name)) return null; // A project or user command with this name wins.
       if (session) session.reportedFindings = undefined; // Each review reports its own findings.
-      return { output: 'Starting ' + (name === 'review' ? 'a code review' : 'a security review') + ' of ' + describeReviewTarget(argument) + '.', prompt: reviewPrompt(name, argument) };
+      return { output: 'Preview: ' + (name === 'review' ? 'review the diff for correctness, security, performance, accessibility, and regression-test gaps' : 'review pending changes for security risks') + '. ' + (name === 'review' && !parseReviewArgs(argument).fix ? 'Read-only; no files will be changed.' : name === 'review' ? 'The explicit --fix option allows focused corrections after findings are reported.' : 'Read-only; no files will be changed.') + ' Target: ' + describeReviewTarget(argument) + '.', prompt: reviewPrompt(name, argument) };
     }
     case 'export': {
       if (!session || session.messages.length <= 1) return { output: 'Nothing to export yet.' };
