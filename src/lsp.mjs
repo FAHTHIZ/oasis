@@ -586,7 +586,7 @@ function isSeverity(item, severity) {
 export async function verifyEditedFileWithLsp(root, file, options = {}) {
   const settings = options.settings || options.session && options.session.settings || {};
   const server = serverForFile(file, settings);
-  if (!server) return { status: 'unavailable', path: file, reason: 'No language server is configured for this file type.' };
+  if (!server) return { status: 'not_applicable', path: file, blocking: false, reason: 'No language server is configured for this file type.' };
   try {
     const checked = await runLsp(root, { operation: 'diagnostics', path: file }, options);
     const diagnostics = Array.isArray(checked.diagnostics) ? checked.diagnostics : [];
@@ -618,11 +618,21 @@ export async function verifyEditedFileWithLsp(root, file, options = {}) {
       ...(baselineKnown ? {} : { note: 'No pre-edit LSP baseline was available; remaining diagnostics are conservatively treated as new until reviewed.' })
     };
   } catch (error) {
+    const reason = String(error && error.message || error).slice(0, 600);
+    const customServer = Boolean(settings.lspServers && Object.values(settings.lspServers).some((spec) =>
+      spec && Array.isArray(spec.extensions) && spec.extensions.map((ext) => String(ext).toLowerCase()).includes(path.extname(file).toLowerCase())
+    ));
+    // A missing optional built-in executable is not a new diagnostic. Keep the
+    // unavailable status visible, while the independent project-check gate remains
+    // responsible for deciding whether this edit can be considered verified.
+    const missingOptionalServer = !customServer &&
+      /No [^\\s]+ language server found\\./i.test(reason);
     return {
       status: 'unavailable',
+      blocking: !missingOptionalServer,
       path: file,
       server: server.name,
-      reason: String(error && error.message || error).slice(0, 600)
+      reason
     };
   }
 }
