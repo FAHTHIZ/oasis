@@ -47,6 +47,8 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 
 ### P2 — Prove coding ability with a reproducible benchmark
 
+The benchmark is specifically about **core mechanics**, not ecosystem breadth. Follow the [Core mechanics audit](CORE_MECHANICS_AUDIT.md): evaluate repository understanding, action selection, edits, test/debug recovery, verification honesty, context continuity, and unintended changes on identical pinned tasks. Do not infer source-code provenance or parity from the shared agent-loop shape.
+
 - [x] Added `oasis eval --compare <run-a.json> <run-b.json>` to compare repeated-trial reports over common task IDs, including task-balanced pass rates, median per-task time, mean cost per trial, and unmatched-task lists. External reports must be normalized; the command does not run compatible ecosystem or validate external results.
 
 The 22 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 25–30 representative tasks** across multiple repository snapshots:
