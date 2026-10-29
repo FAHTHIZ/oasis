@@ -139,7 +139,7 @@ test('task checkpoints require the active claimant and enforce bounds', () => {
   runSharedTaskTool(session, 'task_claim', { task_id: created.task.id });
   assert.throws(() => runSharedTaskTool(session, 'task_checkpoint', {
     task_id: created.task.id, summary: 'x'.repeat(2001)
-  }), /must be at most 2000 characters/);
+  }), /2000 characters or fewer/);
   assert.throws(() => runSharedTaskTool(session, 'task_checkpoint', {
     task_id: created.task.id, summary: 'Valid summary', next_steps: Array(21).fill('next')
   }), /at most 20 items/);
