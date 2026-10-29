@@ -207,19 +207,19 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!String(argument || '').trim()) return { output: 'Usage: /fix Describe the bug or provide its error/reproduction steps. Nothing has been changed.' };
       return {
         output: 'Preview: inspect the bug, reproduce it where possible, add a focused regression test, make the smallest correct fix, and rerun relevant checks. File edits, commands, installs, and network actions remain subject to existing OASIS approvals and snapshots.',
-        prompt: 'Load the portable debugging skill with load_skill({ name: "debugging" }) before proceeding. Reproduce and fix only the reported bug: ' + String(argument).trim() + '\\n\\nInspect first, distinguish evidence from hypotheses, add a regression test where practical, use minimal edits, and verify with relevant tests. Use OASIS tools so normal approval, workspace validation, snapshots, and stale-file checks apply. Do not install dependencies, access the network, or change unrelated files without separate approval. Report exact checks and results; never claim an unrun test passed.'
+        prompt: 'Load the portable debugging skill with load_skill({ name: "debugging" }) before proceeding. Reproduce and fix only the reported bug: ' + String(argument).trim() + '\n\nInspect first, distinguish evidence from hypotheses, add a regression test where practical, use minimal edits, and verify with relevant tests. Use OASIS tools so normal approval, workspace validation, snapshots, and stale-file checks apply. Do not install dependencies, access the network, or change unrelated files without separate approval. Report exact checks and results; never claim an unrun test passed.'
       };
     }
     case 'diagnose': {
       if (!String(argument || '').trim()) return { output: 'Usage: /diagnose Paste an error/log/output or provide a file path and observed failure. For screenshots, attach the image or provide its path. Nothing has been changed.' };
       const capability = imageInputCapability(session && session.config || {}, env);
-      const imageMentioned = /(?:screenshot|image|picture|photo|\\.(?:png|jpe?g|gif|webp)\\b|@[^\\s]+\\.(?:png|jpe?g|gif|webp)\\b)/i.test(String(argument));
+      const imageMentioned = /(?:screenshot|image|picture|photo|\.(?:png|jpe?g|gif|webp)\b|@[^\s]+\.(?:png|jpe?g|gif|webp)\b)/i.test(String(argument));
       const imageNote = imageMentioned
-        ? '\\nImage capability preflight: ' + capability.status.toUpperCase() + ' — ' + capability.reason + ' Do not claim visual analysis unless image data is actually attached and the active model accepts it.'
+        ? '\nImage capability preflight: ' + capability.status.toUpperCase() + ' — ' + capability.reason + ' Do not claim visual analysis unless image data is actually attached and the active model accepts it.'
         : '';
       return {
-        output: 'Preview: analyze the supplied evidence, trace likely causes, and identify the next useful diagnostic step. This is read-only; it will not attempt a fix.' + (imageMentioned ? '\\nImage input status: ' + capability.status + '. ' + capability.reason : ''),
-        prompt: 'Load the portable diagnose skill first with load_skill({ name: "diagnose" }). Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\\n\\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
+        output: 'Preview: analyze the supplied evidence, trace likely causes, and identify the next useful diagnostic step. This is read-only; it will not attempt a fix.' + (imageMentioned ? '\nImage input status: ' + capability.status + '. ' + capability.reason : ''),
+        prompt: 'Load the portable diagnose skill first with load_skill({ name: "diagnose" }). Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\n\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
       };
     }
     case 'rollback': {
@@ -242,11 +242,11 @@ export async function runBuiltinCommand(name, argument, state) {
           'Before restoring, OASIS will preserve the current contents of eligible files in its local recovery-backup store.',
           'Type /rollback confirm to apply this exact preview. A changed checkpoint requires a new preview.',
           'Limit: shell-command side effects, dependency installs, network operations, and untracked external changes are not reversed.'
-        ].join('\\n') };
+        ].join('\n') };
       }
       if (confirmWord !== 'confirm') return { output: 'Usage: /rollback to preview the latest checkpoint, then /rollback confirm to restore it. No files were changed.' };
       const pending = session.pendingSkillRollback;
-      if (!pending || pending.createdAt !== currentTurn.createdAt || pending.prompt !== currentTurn.prompt || pending.files.join('\\0') !== currentFiles.join('\\0')) {
+      if (!pending || pending.createdAt !== currentTurn.createdAt || pending.prompt !== currentTurn.prompt || pending.files.join('\0') !== currentFiles.join('\0')) {
         session.pendingSkillRollback = null;
         return { output: 'The preview is missing or the latest checkpoint changed. No files were changed; run /rollback to preview again.' };
       }
@@ -273,7 +273,7 @@ export async function runBuiltinCommand(name, argument, state) {
       lines.push('  Recovery copies: ' + (recovery.length ? recovery.map((item) => item.relativePath + ' [' + item.id + ']').join(', ') : '(no current file contents needed backing up)'));
       lines.push('  Conversation history was not rewound.');
       lines.push('  Shell-command side effects, installs, network activity, and changes not captured by file tools were not reversed.');
-      return { output: lines.join('\\n'), rollback: { restored: result.restored, deleted: result.deleted, skipped: result.skipped, recovery } };
+      return { output: lines.join('\n'), rollback: { restored: result.restored, deleted: result.deleted, skipped: result.skipped, recovery } };
     }
     case 'commands': {
       const custom = await loadCustomCommands(root, { env });
@@ -1282,7 +1282,7 @@ export function reviewPrompt(kind, argument = '') {
   }
   const lenses = { low: 0, medium: 0, high: 3, xhigh: 5, max: 5, ultra: 5 }[options.effort];
   const limit = options.maxFindings === Infinity ? 'Report every confirmed finding.' : 'Report at most ' + (options.maxFindings || (options.effort === 'low' ? 5 : 10)) + ' findings, most severe first' + (options.maxFindings ? '.' : ', and say how many lower-severity ones you left out.');
-  const steps = [gather, 'Look for correctness bugs only: things that will break, misbehave or lose data. Skip style, naming and refactoring suggestions (that is /simplify).'];
+  const steps = ['Load the portable code-review skill with load_skill({ name: "code-review" }) and follow its evidence-first workflow.', gather, 'Review correctness, security boundaries, performance, accessibility, and missing regression coverage. Treat current changes as read-only unless --fix was explicitly requested.'];
   if (options.effort === 'low') steps.push('Do one quick pass over the diff and flag only obvious bugs.');
   else if (!lenses) steps.push('Read the surrounding code when the diff alone is not enough, and check each suspected bug against the code before reporting it.');
   else {
