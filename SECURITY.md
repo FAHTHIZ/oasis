@@ -30,3 +30,6 @@ Please do not publish exploitable details in a public issue. Contact the reposit
 ## Supported versions
 
 Only the latest version on the default branch is currently maintained. A formal release policy will be added when versioned releases exist.
+
+When OS sandboxing is explicitly enabled but unavailable, OASIS refuses to run commands without isolation. Make the configured OS sandbox available or deliberately disable the sandbox setting to use the separate approval-based execution mode.
+
