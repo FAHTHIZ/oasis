@@ -108,7 +108,7 @@ function oauthSafetyForServer(serverUrl, lookupImpl = lookup) {
     const parsed = new URL(serverUrl);
     if (isLoopbackUrl(parsed.toString())) localOrigin = parsed.origin;
   } catch {}
-  return { localOrigin, lookupImpl };
+  return { localOrigin, lookupImpl, resolvedAddresses: new Map() };
 }
 
 async function requireSafeEndpoint(url, label, safety = {}) {
@@ -121,6 +121,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   }
   if (local) {
     if (!safety.localOrigin || safety.localOrigin !== parsed.origin) throw new Error(label + ' cannot target a different loopback origin.');
+    if (hostname === 'localhost') safety.resolvedAddresses?.set(hostname, [{ address: '127.0.0.1', family: 4 }]);
     return parsed.toString();
   }
   const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
@@ -138,6 +139,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   if (!records.length || records.some((record) => privateAddress(record.address))) {
     throw new Error(label + ' resolves to a private or special-purpose address.');
   }
+  safety.resolvedAddresses?.set(host, records.map((record) => ({ address: record.address, family: record.family || isIP(record.address) })));
   return parsed.toString();
 }
 
@@ -176,12 +178,106 @@ async function readJsonBody(response, maxBytes = MAX_OAUTH_METADATA_BYTES) {
   catch { return null; }
 }
 
+function normalizedHostname(url) {
+  return new URL(url).hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
+}
+
+// The standard fetch implementation resolves hostnames again when it connects.
+// For OAuth endpoints, that would reopen a DNS-rebinding window after the safety
+// check. Resolve once, validate every answer, then pin the actual socket lookup to
+// that exact approved address set. Injected fetch implementations remain available
+// for deterministic tests and embedders.
+async function fetchPinned(url, options = {}, safety = {}, maxBytes = MAX_OAUTH_METADATA_BYTES) {
+  const parsed = new URL(url);
+  const hostname = normalizedHostname(url);
+  let addresses = safety.resolvedAddresses && safety.resolvedAddresses.get(hostname);
+  if (!addresses && hostname === 'localhost' && safety.localOrigin === parsed.origin) {
+    addresses = [{ address: '127.0.0.1', family: 4 }];
+  }
+  const transport = parsed.protocol === 'https:' ? httpsRequest : httpRequest;
+  return await new Promise((resolve, reject) => {
+    let settled = false;
+    let total = 0;
+    const chunks = [];
+    const finish = (error, response) => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolve(response);
+    };
+    const requestOptions = {
+      protocol: parsed.protocol,
+      hostname,
+      port: parsed.port || undefined,
+      method: options.method || 'GET',
+      path: parsed.pathname + parsed.search,
+      headers: options.headers || {},
+      signal: options.signal
+    };
+    if (addresses && addresses.length && !isIP(hostname)) {
+      requestOptions.lookup = (_host, lookupOptions, callback) => {
+        if (typeof lookupOptions === 'function') {
+          callback = lookupOptions;
+          lookupOptions = {};
+        }
+        if (lookupOptions && lookupOptions.all) callback(null, addresses);
+        else callback(null, addresses[0].address, addresses[0].family);
+      };
+    }
+    let request;
+    try {
+      request = transport(parsed, requestOptions, (incoming) => {
+        const headers = new Headers();
+        for (const [name, raw] of Object.entries(incoming.headers || {})) {
+          if (raw === undefined) continue;
+          if (Array.isArray(raw)) for (const value of raw) headers.append(name, String(value));
+          else headers.set(name, String(raw));
+        }
+        const status = incoming.statusCode || 502;
+        const declared = Number(headers.get('content-length') || 0);
+        if (Number.isFinite(declared) && declared > maxBytes) {
+          finish(null, new Response(null, { status, headers }));
+          incoming.destroy();
+          return;
+        }
+        incoming.on('data', (chunk) => {
+          if (settled) return;
+          total += chunk.length;
+          if (total > maxBytes) {
+            finish(null, new Response(null, { status, headers }));
+            incoming.destroy();
+            return;
+          }
+          chunks.push(Buffer.from(chunk));
+        });
+        incoming.on('error', (error) => finish(error));
+        incoming.on('end', () => {
+          if (settled) return;
+          const body = Buffer.concat(chunks, total);
+          finish(null, new Response(body.length ? body : null, { status, headers }));
+        });
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    request.on('error', (error) => finish(error));
+    request.setTimeout(OAUTH_METADATA_TIMEOUT_MS, () => request.destroy(new Error('OAuth request timed out.')));
+    request.end(options.body === undefined ? undefined : options.body);
+  });
+}
+
+async function safeOAuthFetch(fetchImpl, url, options = {}, safety = {}, maxBytes = MAX_OAUTH_METADATA_BYTES) {
+  if (fetchImpl !== globalThis.fetch) return await fetchImpl(url, { ...options, redirect: 'manual' });
+  return await fetchPinned(url, { ...options, redirect: 'manual' }, safety, maxBytes);
+}
+
 async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAUTH_METADATA_BYTES, safety = {}) {
   await requireSafeEndpoint(url, 'OAuth request URL', safety);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(url, { ...options, redirect: 'manual', signal: controller.signal });
+    const response = await safeOAuthFetch(fetchImpl, url, { ...options, signal: controller.signal }, safety, maxBytes);
     // Do not let discovery, registration or token exchange silently cross hosts via redirects.
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel().catch(() => {});
@@ -220,13 +316,13 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
     try {
-      const probe = await fetchImpl(serverUrl, {
+      const probe = await safeOAuthFetch(fetchImpl, serverUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }),
         redirect: 'manual',
         signal: controller.signal
-      });
+      }, safety, MAX_OAUTH_METADATA_BYTES);
       if (probe.status === 401) resourceMetadataUrl = parseWwwAuthenticate(probe.headers.get('www-authenticate')).resource_metadata || null;
       await probe.body?.cancel().catch(() => {});
     } catch {}
