@@ -37,7 +37,7 @@ test('every core command maps to a portable skill with the required section stru
   const required = ['## Purpose', '## Inputs', '## Workflow', '## Required provider capabilities', '## Permissions', '## Success criteria'];
   for (const skill of new Set(Object.values(SKILL_COMMANDS).map((item) => item.skill))) {
     const content = await readFile(new URL('../skills/' + skill + '/SKILL.md', import.meta.url), 'utf8');
-    assert.match(content, new RegExp('^---\\nname: ' + skill + '\\n', 'm'), skill + ' front matter');
+    assert.ok(content.startsWith('---\nname: ' + skill + '\n'), skill + ' front matter');
     for (const heading of required) assert.ok(content.includes(heading), skill + ' is missing ' + heading);
   }
 });
@@ -62,7 +62,7 @@ test('terminal slash completion puts the six core workflows first', async () => 
 
 test('review prompt loads the portable code-review skill', () => {
   const prompt = reviewPrompt('review', '');
-  assert.match(prompt, /load_skill\\(\\{ name: "code-review" \\}\\)/);
+  assert.ok(prompt.includes('load_skill({ name: "code-review" })'));
   assert.match(prompt, /accessibility/i);
   assert.match(prompt, /read-only/i);
 });
