@@ -1959,6 +1959,61 @@ export function formatLspVerificationBlocker(issues) {
 }
 
 
+function verificationCommandKind(command, args) {
+  const executable = executableName(command);
+  const argv = (Array.isArray(args) ? args : []).map((item) => String(item || '').toLowerCase());
+  const taskTokens = [argv[0], argv[0] === 'run' ? argv[1] : '', argv[0] === 'exec' || argv[0] === 'x' || argv[0] === 'dlx'
+    ? argv.slice(1).find((item) => VERIFICATION_RUNNERS.has(executableName(item))) || ''
+    : ''].filter(Boolean);
+  const testRunners = new Set(['pytest', 'vitest', 'jest', 'mocha', 'tap', 'ava', 'phpunit']);
+  const lintRunners = new Set(['eslint', 'prettier', 'ruff', 'flake8', 'stylelint', 'shellcheck', 'golangci-lint', 'swiftlint']);
+  const typeCheckRunners = new Set(['tsc', 'pyright', 'mypy', 'phpstan']);
+  if (argv.includes('--test') || testRunners.has(executable) || argv.some((item) => testRunners.has(executableName(item))) ||
+      taskTokens.some((item) => item === 'test' || item === 'tests' || item.startsWith('test:'))) return 'test';
+  if (lintRunners.has(executable) || argv.some((item) => lintRunners.has(executableName(item))) ||
+      taskTokens.some((item) => item === 'lint' || item.startsWith('lint:'))) return 'lint';
+  if (typeCheckRunners.has(executable) || argv.some((item) => typeCheckRunners.has(executableName(item))) ||
+      taskTokens.some((item) => ['typecheck', 'type-check', 'types'].includes(item))) return 'type-check';
+  if (taskTokens.some((item) => ['build', 'compile', 'compileall', 'package', 'verify'].includes(item))) return 'build';
+  return 'check';
+}
+
+function verificationSummary(state) {
+  const changedPaths = [...state.changedPaths];
+  const diffReviewed = changedPaths.length === 0 || state.diffReviewedAll ||
+    changedPaths.every((item) => state.diffReviewedPaths.has(item));
+  const checkRequired = changedPaths.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
+  const lastCheck = state.lastVerificationKind
+    ? {
+        kind: state.lastVerificationKind,
+        exitCode: Number.isInteger(state.lastVerificationExitCode) ? state.lastVerificationExitCode : null,
+        passed: state.lastVerificationExitCode === 0
+      }
+    : null;
+  const lsp = [...(state.lspVerificationByPath || new Map()).entries()]
+    .filter(([file]) => changedPaths.includes(file))
+    .map(([file, result]) => ({
+      path: file,
+      status: result && result.status === 'unavailable'
+        ? 'unavailable'
+        : result && Array.isArray(result.newErrors) && result.newErrors.length
+          ? 'errors'
+          : 'clean',
+      newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0
+    }));
+  const issues = verificationIssues(state);
+  return {
+    required: changedPaths.length > 0,
+    changedPaths,
+    diffReviewed,
+    checkRequired,
+    lastCheck,
+    lsp,
+    complete: issues.length === 0,
+    issues
+  };
+}
+
 const SPECIALIST_ROLES = {
   'code-review': 'Review likely regressions, correctness, edge cases, compatibility, and maintainability. Prioritize actionable findings supported by specific paths and line numbers.',
   'security-review': 'Review trust boundaries, authorization, path traversal, input validation, injection, secrets handling, network boundaries, and unsafe side effects. Report only concrete risks supported by repository evidence.',
@@ -3213,7 +3268,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let tokensUsed = Number(compaction.tokensUsed || 0);
   let lastToolOutcome = null;
   let loopBreakMessage = '';
-  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lspVerificationByPath: new Map(), nudgeUsed: false };
+  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
@@ -3368,6 +3423,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         finished: issues.length === 0,
         verificationIncomplete: issues.length > 0,
         verificationIssues: issues,
+        verification: verificationSummary(verification),
         budgetExceeded: tokensUsed > tokenBudget
       };
     }
@@ -3391,7 +3447,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         tokensUsed,
         tokenBudget,
         finished: false,
-        tokenLimitReached: true
+        tokenLimitReached: true,
+        verification: verificationSummary(verification)
       };
     }
 
@@ -3483,6 +3540,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const args = safeToolArguments(call.function && call.function.arguments);
         if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
           verification.lastVerificationExitCode = result.exitCode;
+          verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
         }
       }
       if (result && result.path && (
@@ -3496,6 +3554,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.diffReviewedAll = false;
         verification.diffReviewedPaths.clear();
         verification.lastVerificationExitCode = null;
+        verification.lastVerificationKind = null;
       }
       if (result && result.lspVerification && result.lspVerification.path) {
         verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
@@ -3551,7 +3610,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         tokensUsed,
         tokenBudget,
         finished: false,
-        limitReached: true
+        limitReached: true,
+        verification: verificationSummary(verification)
       };
     }
   }
@@ -3566,7 +3626,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   } catch (error) {
     const text = 'Oasis reached its tool-step limit and could not get a final provider summary: ' + error.message;
     pruneHistory(session);
-    return { text, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, limitReached: true };
+    return { text, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, limitReached: true, verification: verificationSummary(verification) };
   }
   const baseFinalText = typeof final.content === 'string' ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
   const finalIssues = verificationIssues(verification);
@@ -3586,6 +3646,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     limitReached: true,
     verificationIncomplete: finalIssues.length > 0,
     verificationIssues: finalIssues,
+    verification: verificationSummary(verification),
     budgetExceeded: tokensUsed > tokenBudget
   };
 }

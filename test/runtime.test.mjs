@@ -1186,6 +1186,13 @@ test('post-edit verification gate asks for diff review and a passing check befor
 
   assert.equal(result.finished, true);
   assert.equal(result.verificationIncomplete, false);
+  assert.equal(result.verification.required, true);
+  assert.deepEqual(result.verification.changedPaths, ['src/example.mjs']);
+  assert.equal(result.verification.diffReviewed, true);
+  assert.equal(result.verification.checkRequired, true);
+  assert.deepEqual(result.verification.lastCheck, { kind: 'test', exitCode: 0, passed: true });
+  assert.equal(result.verification.complete, true);
+  assert.deepEqual(result.verification.issues, []);
   assert.equal(requests, 5);
   assert.equal(result.toolCalls, 3);
   assert.ok(payloads[2].messages.some((message) =>
@@ -1235,6 +1242,11 @@ test('post-edit verification gate reports when the model ignores required review
   const result = await runAgentTurn(session, 'Change the example module value.');
   assert.equal(result.finished, false);
   assert.equal(result.verificationIncomplete, true);
+  assert.equal(result.verification.complete, false);
+  assert.equal(result.verification.diffReviewed, false);
+  assert.equal(result.verification.checkRequired, true);
+  assert.equal(result.verification.lastCheck, null);
+  assert.deepEqual(result.verification.changedPaths, ['src/example.js']);
   assert.match(result.verificationIssues.join('; '), /diff has not been reviewed/);
   assert.match(result.verificationIssues.join('; '), /no relevant test/);
   assert.equal(requests, 3, 'the gate should nudge once, then report any remaining gaps');

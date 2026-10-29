@@ -86,3 +86,8 @@ Every task must include a pinned base snapshot, prompt, allowed tools, budget/ti
 - [ ] Re-run all required workflows after the final code and documentation changes.
 
 **Release decision:** OASIS is ready for a release only when the applicable gates above have current evidence. This is a living checklist; passing one gate does not imply that all other gates or competitive coding outcomes are complete.
+
+
+## Structured verification evidence
+
+The runtime turn result exposes a structured `verification` summary for CLI, browser, and API consumers: changed paths, whether the diff was reviewed, whether a check is required, the last recognized check's coarse type and exit code, available LSP outcomes for changed files, gate completion, and outstanding issues. It deliberately omits raw command arguments and output so verification status can be shown without copying potentially sensitive command-line content into another log. Any new file edit clears the last-check evidence and invalidates prior diff-review and per-file diagnostic state.
