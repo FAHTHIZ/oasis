@@ -7,6 +7,8 @@
 
 This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist.
 
+The mechanic-level source comparison is documented in [Core mechanics audit](CORE_MECHANICS_AUDIT.md). It traces the OASIS execution loop and identifies explicit external-format compatibility separately from generic agent-loop design. It does not claim a Claude Code source-to-source diff or performance parity; a repeated, task-level head-to-head benchmark remains required.
+
 ## Executive assessment
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
