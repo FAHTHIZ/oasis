@@ -894,8 +894,9 @@ export async function runBuiltinCommand(name, argument, state) {
         tip || 'Startup tips are disabled. Set OASIS_TIP=on or remove OASIS_NO_TIPS to show them again.',
         '',
         'Useful starting points: /plan for risky work, /context for token estimates, /cost for usage, /undo to roll back, and /keys for shortcuts.'
-      ].join('\\n') };
+      ].join('\n') };
     }
+    case 'keys':
     case 'keybindings': {
       const { SHORTCUTS_HELP } = await import('./line-editor.mjs');
       const kb = await import('./keybindings.mjs');
