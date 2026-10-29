@@ -208,11 +208,15 @@ function tokenEntry(body, base) {
   };
 }
 
-export function openInBrowser(url, { env = process.env, platform = process.platform } = {}) {
+export function openInBrowser(url, { env = process.env, platform = process.platform, spawnImpl = spawn } = {}) {
   if (env.OASIS_NO_BROWSER === '1') return false;
-  const [command, args] = platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]] : ['xdg-open', [url]];
+  // Do not route an OAuth URL through cmd.exe. The URL contains query-string
+  // ampersands by design; cmd /c start would interpret unquoted metacharacters
+  // as command separators. explorer.exe opens the URL through the OS handler
+  // without introducing a command shell.
+  const [command, args] = platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['explorer.exe', [url]] : ['xdg-open', [url]];
   try {
-    const child = spawn(command, args, { stdio: 'ignore', detached: true });
+    const child = spawnImpl(command, args, { shell: false, stdio: 'ignore', detached: true, windowsHide: true });
     child.on('error', () => {});
     child.unref();
     return true;
