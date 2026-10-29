@@ -70,6 +70,9 @@ export function summarizeAgentRun(job) {
     const teamId = monitorText(data.team_id, 100);
     const description = monitorText(data.description, 200);
     const detail = monitorText(data.detail, 500);
+    if (teamId && !teams.has(teamId)) {
+      teams.set(teamId, { id: teamId, name: teamId, status: 'active', lastActivity: event.at || data.at || '' });
+    }
     if (type.startsWith('team.')) {
       const id = teamId || description;
       if (id) {
@@ -1373,11 +1376,12 @@ export function createOasisWebServer(options = {}) {
           status: job.status, createdAt: job.createdAt,
           updatedAt: lastEvent && lastEvent.at || job.createdAt,
           sessionId: job.sessionId || null,
-          workspaceName: path.basename(activeRoot),
+          workspaceName: job.workspaceName || path.basename(job.workspaceRoot || activeRoot),
           eventCount: job.events.length, error: job.error || null
         });
       }
       const recent = [...summaries.values()]
+        .filter((item) => item.type === 'agent')
         .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))
         .slice(0, 50);
       const runs = await Promise.all(recent.map(async (summary) => {
