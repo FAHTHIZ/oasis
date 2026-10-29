@@ -629,7 +629,7 @@ export function readInput(options = {}) {
       if (done) return;
       done = true;
       hints = [];
-      if (paletteScreen) { output.write('\\x1b[?1049l'); paletteScreen = false; palette = null; }
+      if (paletteScreen) { output.write('\x1b[?1049l'); paletteScreen = false; palette = null; }
       if (result.type === 'submit') draw(true);
       else { state = { ...state, text: '' }; draw(true); }
       output.write('\r\n\x1b[?2004l');
