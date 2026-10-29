@@ -43,7 +43,8 @@
     "prepack": "node scripts/vendor-terminal.mjs",
     "desktop:dev": "electron desktop/main.mjs",
     "desktop:dir": "electron-builder --dir --publish never",
-    "desktop:dist": "electron-builder --publish never"
+    "desktop:dist": "electron-builder --publish never",
+    "bench:search": "node scripts/bench-web-search.mjs"
   },
   "repository": {
     "type": "git",
