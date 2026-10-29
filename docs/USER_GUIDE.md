@@ -795,6 +795,8 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- Agent teams in tmux: with `--teammate-mode tmux` (or the default `auto` when Oasis runs inside tmux; also the `teammateMode` setting or `OASIS_TEAMMATE_MODE`), each team member launched with `team_id` gets its own tiled tmux pane showing its prompt, messages, tool calls and final status. Teammates still run inside the lead process, so messaging and permissions are unchanged. Use `--teammate-mode in-process` to turn panes off.
+
 - Set `MCP_CONNECTION_NONBLOCKING=true` (or `OASIS_MCP_NONBLOCKING=1`, or `"mcpNonBlocking": true` in settings) to start sessions without waiting for MCP servers. Their tools appear once connected, the model gets a reminder when they are ready, `/mcp` shows that servers are still connecting, and the model can call `wait_for_mcp_servers` (hooks: `WaitForMcpServers`) before it needs one.
 
 - Reviews (`/review`, `/security-review`, `/ultrareview`, `oasis ultrareview`) record confirmed problems with the `report_findings` tool: file, line, severity, category, summary, failure scenario and fix. The CLI renders them as a `[findings]` list, and `-p --output-format json` / `oasis ultrareview --json` results carry them as `findings` (plus `findings_summary`). Hooks see the tool as `ReportFindings`.

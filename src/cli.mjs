@@ -154,6 +154,7 @@ function printHelp() {
     '  --system-prompt-snapshot on|off  On resume, reuse the recorded system prompt (on) or rebuild it (off, default)',
     '  --ide                         Connect to a running IDE on startup',
     '  --ax-screen-reader            Plain, screen-reader friendly output (no colors or decoration)',
+    '  --teammate-mode MODE          Agent-team display: auto (tmux panes when inside tmux), in-process, tmux',
     '  --tmux                        With -w, run the session in its own tmux session or window',
     '  --include-hook-events         Stream hook_started/hook_response events for every hook (stream-json)',
     '  --forward-subagent-text       Stream subagent text as assistant messages tagged parent_tool_use_id',
@@ -2606,6 +2607,12 @@ async function main() {
     if (arg === '--plan') { headless.planOnly = true; continue; }
     if (arg === '--tmux' || arg === '--tmux=classic') { SESSION_OPTIONS.tmux = true; continue; }
     if (arg === '--ide') { process.env.OASIS_IDE = 'auto'; continue; }
+    if (arg === '--teammate-mode' || arg.startsWith('--teammate-mode=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!['auto', 'in-process', 'tmux'].includes(String(value))) throw new Error('--teammate-mode must be auto, in-process or tmux.');
+      process.env.OASIS_TEAMMATE_MODE = value;
+      continue;
+    }
     if (arg === '--ax-screen-reader') { process.env.OASIS_AX_SCREEN_READER = '1'; continue; }
     if (arg === '--betas') {
       const values = [];
