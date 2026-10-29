@@ -48,7 +48,7 @@ jobs:
       - name: Install production dependencies
         run: npm install --omit=dev --no-audit --no-fund
       - name: Run security, filesystem, and process lifecycle regressions
-        run: node --test test/permissions.test.mjs test/network-safety.test.mjs test/secure-store.test.mjs test/sandbox.test.mjs test/runtime.test.mjs
+        run: node --test test/permissions.test.mjs test/network-safety.test.mjs test/secure-store.test.mjs test/sandbox.test.mjs test/sandbox-enforcement.test.mjs test/runtime.test.mjs
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
     runs-on: ubuntu-latest
