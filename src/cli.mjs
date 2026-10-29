@@ -39,7 +39,11 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
+import { formatApprovalMessage } from './approval-language.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
+import { estimateTokens, contextWindowSize } from './context.mjs';
+import { formatUsd, priceFor } from './pricing.mjs';
+import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -355,6 +359,7 @@ async function configureOmniRoute(root = process.cwd()) {
   return result;
 }
 
+
 async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
   stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
@@ -378,7 +383,9 @@ async function configureProvider(root = process.cwd(), options = {}) {
     const defaultPreset = options.defaultPreset === undefined
       ? inferSetupProviderPreset(currentConfig)
       : resolveSetupProviderPreset(options.defaultPreset);
-    presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / foundry / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
+    presetName = options.skipPresetPrompt
+      ? defaultPreset
+      : (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / foundry / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'bedrock' || protocol === 'vertex' || protocol === 'foundry' ? defaultCloudBaseURL(protocol, process.env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
@@ -392,10 +399,21 @@ async function configureProvider(root = process.cwd(), options = {}) {
       protocol = selected.protocol;
       baseURL = selected.baseURL;
       model = selected.model;
+      if (presetName === 'ollama') {
+        const detected = await discoverLocalOllamaModels();
+        if (detected.available && detected.models.length) {
+          stdout.write('Ollama is running. Installed models: ' + detected.models.join(', ') + '\n');
+          model = detected.models[0];
+        } else {
+          stdout.write(detected.message + '\n');
+          stdout.write('Then install a model with: ollama pull <model-name>\n');
+          model = '';
+        }
+      }
       if (presetName !== 'omniroute') {
         baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
-        const modelPrompt = selected.model ? 'Model name [' + selected.model + ']: ' : 'Model name (exact model ID required): ';
-        model = (await rl.question(modelPrompt)).trim() || selected.model;
+        const modelPrompt = model ? 'Model name [' + model + ']: ' : 'Model name (exact model ID required, after installing a model): ';
+        model = (await rl.question(modelPrompt)).trim() || model;
       }
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
@@ -444,19 +462,29 @@ async function ensureModelProviderSetup(root, options = {}) {
 
   if (options.announce !== false) {
     stdout.write('\nNo model connection is configured yet.\n');
-    stdout.write('Oasis can set one up now. OmniRoute is the recommended starting point if you do not already have a provider key; free routes depend on upstream availability and limits.\n');
+    stdout.write('OASIS is the workspace; the model you choose is its brain. Choose one way to connect.\n');
   }
+  stdout.write('\n  1. I have an API key (OpenAI, Anthropic, OpenRouter, Gemini, or a custom provider)\n');
+  stdout.write('  2. Use a free gateway (OmniRoute; it can be slow or limited)\n');
+  stdout.write('  3. Use a model on this computer (Ollama; smaller models may be weaker)\n');
+  stdout.write('  4. Set this up later\n');
   let answer;
-  try { answer = (await askLine('Start guided setup now? [Y/n] ')).trim().toLowerCase(); }
+  try { answer = (await askLine('Choose [1/2/3/4] (default 2): ')).trim().toLowerCase() || '2'; }
   catch { return false; }
-  if (['n', 'no', 'skip', 'later'].includes(answer)) {
-    stdout.write('Setup skipped. Run oasis setup later; install/startup is also available through the interactive terminal prompt.\n');
+  if (['4', 'later', 'n', 'no', 'skip'].includes(answer)) {
+    stdout.write('Setup skipped. Run oasis setup when you are ready.\n');
+    return false;
+  }
+  const choices = { '1': 'openai', '2': 'omniroute', '3': 'ollama' };
+  const preset = choices[answer];
+  if (!preset) {
+    stdout.write('Choose 1, 2, 3, or 4. No setup was run. Start Oasis again or run oasis setup.\n');
     return false;
   }
   try {
-    await configureProvider(root, { defaultPreset: 'omniroute' });
+    await configureProvider(root, { defaultPreset: preset, skipPresetPrompt: true });
   } catch (error) {
-    stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Retry with oasis setup.\n');
+    stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
   }
   try { return Boolean((await loadConfig()).configured); } catch { return false; }
 }
@@ -628,16 +656,17 @@ async function askApproval(prompt, forceInteractive, meta) {
 }
 
 async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
-  if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + String(prompt).split('\n')[0] + '\n'); return false; }
+  const approval = formatApprovalMessage(prompt, meta || {});
+  if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
   try {
-    stdout.write('\nPermission request\n' + prompt + '\n');
+    stdout.write('\n' + approval.message + '\n');
     const offerAlways = meta && meta.suggestion && !forceInteractive;
     if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
       // Claude Code-style dialog: arrows/j/k + Enter, 1-3, y/n/a, Esc; rebindable via the Confirmation context.
       const { selectDialog } = await import('./select-dialog.mjs');
-      const options = [{ label: 'Yes', value: true, hotkey: 'yes' }];
-      if (offerAlways) options.push({ label: "Yes, and don't ask again this session for " + meta.suggestion, value: 'always', hotkey: 'always' });
+      const options = [{ label: 'Allow once', value: true, hotkey: 'yes' }];
+      if (offerAlways) options.push({ label: 'Always allow this session for ' + meta.suggestion, value: 'always', hotkey: 'always' });
       options.push({ label: 'No', value: false, hotkey: 'no' });
       stdout.write('Do you want to proceed?\n');
       const paused = turnKeys;
@@ -645,7 +674,7 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal }); }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
-    const answer = (await askLine(offerAlways ? 'Proceed? [y]es / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Proceed? [y/N] ', signal)).trim().toLowerCase();
+    const answer = (await askLine(offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Allow once? [y/N] ', signal)).trim().toLowerCase();
     if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
     return ['y', 'yes'].includes(answer);
   } catch {
@@ -1912,7 +1941,17 @@ async function readMainInput(root, session, state) {
     color,
     vim: editorModeFor(session) === 'vim',
     prompt: (editor) => promptFor(editor.text, color),
-    footer: (editor) => footerFor({ text: editor.text, mode: currentMode(), color }),
+    footer: (editor) => {
+      const model = session && session.config && session.config.model || '';
+      const contextPercent = session && Array.isArray(session.messages)
+        ? estimateTokens(session.messages) / Math.max(1, contextWindowSize(session.config, process.env)) * 100
+        : null;
+      const spentUsd = session && typeof session.costUsd === 'number' ? session.costUsd : null;
+      const budgetUsd = session && Number(session.maxBudgetUsd) > 0 ? Number(session.maxBudgetUsd) : Number(SESSION_OPTIONS.maxBudgetUsd) || 0;
+      const priced = session && session.config ? priceFor(model, { config: session.config, overrides: session.pricing || {}, env: process.env }) : null;
+      const costLabel = session ? (priced ? formatUsd(spentUsd == null ? 0 : spentUsd) : 'unknown') : '';
+      return footerFor({ text: editor.text, mode: currentMode(), color, model, contextPercent, costLabel, budgetUsd, spentUsd });
+    },
     complete: state.completer,
     onShiftTab: async () => {
       const mode = nextMode(currentMode(), { allowBypass: Boolean(SESSION_OPTIONS.allowBypass) });

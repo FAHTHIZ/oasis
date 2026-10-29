@@ -8,10 +8,20 @@ import { KeyDecoder, createEditorState, applyKey, layoutFrame, stringWidth, comm
 import { createCompleter, rankFuzzy } from '../src/completion.mjs';
 import { loadHistory, appendHistory } from '../src/input-history.mjs';
 import { renderMarkdown, MarkdownStream, renderDiff, highlightCode } from '../src/markdown.mjs';
-import { logoFrame, footerFor, nextMode, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
+import { logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
 
 const keys = (raw) => new KeyDecoder().feed(raw);
 const typeAll = (state, raw) => { for (const key of keys(raw)) state = applyKey(state, key).state; return state; };
+
+test('startup tips rotate daily and can be disabled', () => {
+  const first = startupTip({}, 1);
+  const nextDay = startupTip({}, 86_400_001);
+  assert.ok(first);
+  assert.ok(nextDay);
+  assert.notEqual(first, nextDay);
+  assert.equal(startupTip({ OASIS_TIP: 'off' }, 1), '');
+  assert.equal(startupTip({ OASIS_NO_TIPS: '1' }, 1), '');
+});
 
 test('key decoder understands arrows, modifiers, shift+enter, and bracketed paste across chunks', () => {
   assert.deepEqual(keys('\x1b[A\x1b[B\x1b[1;5C\x1b[Z').map((k) => k.name), ['up', 'down', 'wordRight', 'shiftTab']);
@@ -167,6 +177,11 @@ test('banner, footer, and mode cycling', () => {
   assert.match(footerFor({ mode: 'plan', color: false }), /plan mode on/);
   assert.match(footerFor({ text: '!ls', color: false }), /shell mode/);
   assert.equal(footerFor({ mode: 'default', color: false }), '');
+  const metrics = footerFor({ model: 'qwen2.5-coder:3b', contextPercent: 91, costLabel: '$0.90', budgetUsd: 1, spentUsd: 0.91, color: false });
+  assert.match(metrics, /model qwen2\.5-coder:3b/);
+  assert.match(metrics, /! context 91%/);
+  assert.match(metrics, /cost \$0\.90 \/ \$1\.00 budget/);
+  assert.match(metrics, /! budget 91% used/);
 });
 
 test('! shell mode runs the command and returns output for context', async () => {

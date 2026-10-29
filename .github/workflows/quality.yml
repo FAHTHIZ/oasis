@@ -52,6 +52,21 @@ jobs:
         run: node --test test/permissions.test.mjs test/network-safety.test.mjs test/secure-store.test.mjs test/sandbox.test.mjs test/sandbox-enforcement.test.mjs
       - name: Verify portable global skill path regression
         run: node --test --test-name-pattern="portable project and global Agent Skills" test/runtime.test.mjs
+  clean-environment-tests:
+    name: Tests with a clean environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install production dependencies
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Run tests without inherited environment variables
+        run: mkdir -p /tmp/h1 && env -i PATH="$PATH" HOME=/tmp/h1 node --test test/*.test.mjs
+
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
     runs-on: ubuntu-latest
@@ -86,3 +101,11 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run authenticated browser chat smoke test
         run: node .github/scripts/browser-e2e.mjs
+      - name: Upload desktop and phone-width screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oasis-browser-e2e-screenshots
+          path: artifacts/browser-e2e/
+          if-no-files-found: warn
+          retention-days: 14

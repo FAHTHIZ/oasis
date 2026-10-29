@@ -30,7 +30,17 @@ async function setup() {
 test('new commands are listed in /help', async () => {
   for (const name of ['usage', 'undo', 'effort', 'copy', 'fork', 'branch', 'skills', 'config', 'doctor', 'release-notes']) assert.ok(BUILTIN_COMMANDS[name], name);
   const { state } = await setup();
-  assert.match((await runBuiltinCommand('help', '', state)).output, /\/effort/);
+  const output = (await runBuiltinCommand('help', '', state)).output;
+  assert.match(output, /\/effort/);
+  assert.match(output, /Getting started:/);
+  assert.match(output, /Working:/);
+  assert.match(output, /Safety:/);
+  assert.match(output, /Settings:/);
+  assert.match(output, /More commands:/);
+  const firstGroup = output.split('Working:')[0].split('\n').filter((line) => /^  \/[a-z-]+\s/.test(line)).map((line) => line.trim().split(/\s+/)[0]);
+  assert.deepEqual(firstGroup, ['/help', '/setup', '/status', '/plan', '/doctor', '/context', '/cost', '/undo']);
+  const listed = [...output.matchAll(/^  \/([a-z-]+)\s/gm)].map((match) => match[1]);
+  assert.equal(new Set(listed).size, Object.keys(BUILTIN_COMMANDS).length, 'Every built-in command should appear once in the grouped help.');
 });
 
 test('/effort sets and restores reasoning effort and thinking budget', async () => {
