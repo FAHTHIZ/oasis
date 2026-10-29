@@ -160,7 +160,7 @@ async function readJsonBody(req) {
   return value;
 }
 
-function summarizeToolResult(result) {
+export function summarizeToolResult(result) {
   let text;
   try { text = JSON.stringify(result); } catch { text = String(result); }
   text = redactApprovalSecrets(text);
