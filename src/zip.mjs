@@ -1,7 +1,7 @@
 // Minimal, dependency-free ZIP reader for plugin archives (--plugin-url). Supports stored and
 // deflated entries (what `zip`, GitHub archive downloads and most tools produce). Paths that
 // would escape the destination, symlinks and absurdly large archives are rejected.
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -73,9 +73,9 @@ export function readZipEntries(buffer) {
 export async function extractZip(buffer, destination) {
   const root = path.resolve(destination);
   await mkdir(root, { recursive: true });
-  const rootInfo = await (await import('node:fs/promises')).lstat(root);
+  const rootInfo = await lstat(root);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('ZIP destination must be a real directory, not a symbolic link.');
-  const realRoot = await (await import('node:fs/promises')).realpath(root);
+  const realRoot = await realpath(root);
   const files = [];
   const ensureSafeParents = async (target, includeTarget = false) => {
     const stop = includeTarget ? target : path.dirname(target);
@@ -87,7 +87,7 @@ export async function extractZip(buffer, destination) {
     for (const part of relative.split(path.sep).filter(Boolean)) {
       cursor = path.join(cursor, part);
       try {
-        const info = await (await import('node:fs/promises')).lstat(cursor);
+        const info = await lstat(cursor);
         if (info.isSymbolicLink()) throw new Error('ZIP extraction refuses to write through symbolic links: ' + cursor);
         if (!info.isDirectory() && cursor !== target) throw new Error('ZIP path component is not a directory: ' + cursor);
       } catch (error) {
@@ -100,6 +100,7 @@ export async function extractZip(buffer, destination) {
     if (target !== realRoot && !target.startsWith(realRoot + path.sep)) throw new Error('Zip entry escapes the destination: ' + entry.name);
     await ensureSafeParents(target);
     if (entry.directory) {
+      await ensureSafeParents(target, true);
       await mkdir(target, { recursive: true });
       await ensureSafeParents(target, true);
       continue;
