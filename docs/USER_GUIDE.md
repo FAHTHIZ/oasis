@@ -795,6 +795,8 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- `/loop PROMPT` with no interval is self-paced: after each run the model calls `schedule_wakeup` with `delay_seconds` (60 to 3600) and a reason, or `stop: true` to end the loop when the work is done. If it never calls it, the loop falls back to 10 minutes. `/loop 5m PROMPT` keeps a fixed interval.
+
 - The model can move the session into an isolated git worktree mid-task with `enter_worktree` (new under `.oasis/worktrees/`, or an existing worktree of this repo; paths elsewhere ask first) and leave with `exit_worktree` (`keep`, or `remove`, which refuses while there are uncommitted changes or new commits unless `discard_changes` is set). Claude-style hooks see these as `EnterWorktree` / `ExitWorktree`.
 
 - `/auto-mode-setup` drafts `autoMode.environment` entries from this project (git remote owners, package registries in `.npmrc`/pip config, CI, Docker, Terraform, service hosts in `.env.example`), shows them, and after you confirm appends them after `"$defaults"` in your user settings.

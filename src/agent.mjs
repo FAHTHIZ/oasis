@@ -1294,7 +1294,8 @@ async function requestCompletionRaw(session, options = {}) {
   const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex' || config.protocol === 'foundry';
   const providerEnv = options.env || session.providerEnv || process.env;
   const nativeResponses = config.protocol === 'openai-responses';
-  const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS);
+  // schedule_wakeup only exists while a self-paced /loop is running.
+  const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS).filter((tool) => tool.function.name !== 'schedule_wakeup' || Boolean(session.selfPacedLoop));
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
   let apiKey = config.apiKey;
   if (!apiKey && config.apiKeyHelper) {
@@ -2008,7 +2009,7 @@ async function runSubagent(parent, args, context, options) {
   const allowed = agent.tools ? new Set(agent.tools) : null;
   const definitions = (parent.toolDefinitions || TOOL_DEFINITIONS).filter((definition) => {
     const name = definition && definition.function && definition.function.name;
-    if (!name || name === 'task' || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    if (!name || name === 'task' || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');

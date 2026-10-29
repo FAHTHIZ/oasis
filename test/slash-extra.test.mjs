@@ -115,7 +115,7 @@ test('/skills, /config, /doctor and /release-notes report useful information', a
 test('/loop parses intervals and counts', async () => {
   const { parseLoopArgs, formatInterval } = await import('../src/slash.mjs');
   assert.deepEqual(parseLoopArgs('5m x3 check the deploy'), { intervalMs: 300000, times: 3, prompt: 'check the deploy' });
-  assert.deepEqual(parseLoopArgs('run tests'), { intervalMs: 600000, times: null, prompt: 'run tests' });
+  assert.deepEqual(parseLoopArgs('run tests'), { intervalMs: 600000, times: null, prompt: 'run tests', selfPaced: true });
   assert.match(parseLoopArgs('2s ping').error, /shortest/);
   assert.match(parseLoopArgs('5m').error, /Usage/);
   assert.equal(formatInterval(7200000), '2h');

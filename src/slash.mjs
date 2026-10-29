@@ -61,7 +61,7 @@ export const BUILTIN_COMMANDS = {
   branch: 'Fork the conversation (same as /fork)',
   skills: 'List available skills',
   remember: 'Save what is worth keeping from this conversation to auto memory (/remember [focus])',
-  loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT)',
+  loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT); omit the interval to let the model pace itself',
   cd: 'Switch the workspace to another directory and start a fresh conversation (/cd PATH)',
   sandbox: 'Show or change the OS sandbox for this session (/sandbox [on|off|network on|network off])',
   config: 'Settings pane (theme, model, mode, editor, output style, verbose, auto-compact, memory...); /config list | get KEY | set KEY VALUE',
@@ -867,7 +867,7 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'loop': {
       const parsed = parseLoopArgs(argument);
       if (parsed.error) return { output: parsed.error };
-      return { output: '[loop] Running every ' + formatInterval(parsed.intervalMs) + (parsed.times ? ', ' + parsed.times + ' times' : '') + '. Press Ctrl+C to stop.', loop: parsed };
+      return { output: '[loop] ' + (parsed.selfPaced ? 'Self-paced: the model picks each next run (1m-1h) or stops when done' : 'Running every ' + formatInterval(parsed.intervalMs)) + (parsed.times ? ', ' + parsed.times + ' times' : '') + '. Press Ctrl+C to stop.', loop: parsed };
     }
     case 'cd': {
       if (!argument) return { output: 'Workspace: ' + root + '\nUsage: /cd PATH' };
@@ -1150,6 +1150,8 @@ export function parseLoopArgs(argument) {
   let intervalMs = 10 * 60000;
   let times = null;
   const interval = parts[0] && parts[0].match(/^(\d+(?:\.\d+)?)([smh])$/i);
+  // No interval: self-paced. The model picks each next wake with schedule_wakeup (default 10m if it does not).
+  const selfPaced = !interval;
   if (interval) { intervalMs = Math.round(Number(interval[1]) * UNIT_MS[interval[2].toLowerCase()]); parts.shift(); }
   const count = parts[0] && parts[0].match(/^x(\d{1,3})$/i);
   if (count) { times = Number(count[1]); parts.shift(); }
@@ -1158,7 +1160,7 @@ export function parseLoopArgs(argument) {
   if (intervalMs < 10000) return { error: 'The shortest loop interval is 10s.' };
   if (intervalMs > 24 * 3600000) return { error: 'The longest loop interval is 24h.' };
   if (times !== null && times < 1) return { error: 'The run count must be at least 1.' };
-  return { intervalMs, times, prompt };
+  return selfPaced ? { intervalMs, times, prompt, selfPaced: true } : { intervalMs, times, prompt };
 }
 
 export function formatInterval(ms) {
