@@ -709,7 +709,7 @@ function agentRenderMonitorDetail(run){
     return;
   }
   heading.textContent=(run.title||'Coding task')+' · '+String(run.status||'unknown').replace(/_/g,' ');
-  meta.textContent=(run.workspaceName||'Workspace')+' · Started '+agentMonitorDate(run.createdAt)+' · '+Number(run.workerCount||0)+' workers · '+Number(run.teamCount||0)+' teams'+(run.isolation==='worktree'?' · isolated worktree':'');
+  meta.textContent=(run.workspaceName||'Workspace')+' · Started '+agentMonitorDate(run.createdAt)+' · '+Number(run.workerCount||0)+' workers · '+Number(run.teamCount||0)+' teams'+(run.isolation==='worktree'?' · isolated worktree':'')+(run.branch?' · branch '+run.branch:'');
   workers.replaceChildren();
   if(!Array.isArray(run.workers)||!run.workers.length){
     workers.appendChild(cloudRunNode('div','cloud-run-empty','No subagent lifecycle events were recorded for this run.'));
@@ -786,6 +786,8 @@ async function agentLoadMonitor(silent){
       var meta=cloudRunNode('div','agent-monitor-run-meta',(run.workspaceName||'Workspace')+' · '+agentMonitorDate(run.updatedAt));
       var pills=cloudRunNode('div','agent-monitor-pills');
       pills.append(agentMonitorStatus((run.runningWorkers||0)+' active workers'),agentMonitorStatus((run.workerCount||0)+' workers'),agentMonitorStatus((run.teamCount||0)+' teams'));
+      if(run.approvals&&run.approvals.pending)pills.appendChild(agentMonitorStatus(run.approvals.pending+' approval pending'));
+      if(run.approvals&&Number.isFinite(run.approvals.totalTokens))pills.appendChild(agentMonitorStatus(run.approvals.totalTokens.toLocaleString()+' tokens'));
       button.append(top,meta,pills);
       button.addEventListener('click',function(){agentMonitorSelectedId=run.id;list.querySelectorAll('[data-monitor-selected]').forEach(function(item){item.setAttribute('aria-pressed','false')});button.setAttribute('aria-pressed','true');agentRenderMonitorDetail(run)});
       button.dataset.monitorSelected=run.id;
