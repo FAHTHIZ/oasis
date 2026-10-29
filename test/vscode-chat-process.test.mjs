@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { friendlyStartError, isPotentiallyDestructiveAction } = require('../ide/vscode/src/chat-process.js');
+const { friendlyStartError, friendlyExitError, isPotentiallyDestructiveAction } = require('../ide/vscode/src/chat-process.js');
 
 test('VS Code explains when the OASIS command is missing', () => {
   const message = friendlyStartError({ code: 'ENOENT', message: 'spawn oasis ENOENT' }, 'oasis');
@@ -36,4 +36,14 @@ test('approval warning detects likely destructive actions without flagging routi
   assert.equal(isPotentiallyDestructiveAction('npm test'), false);
   assert.equal(isPotentiallyDestructiveAction('read file src/index.js'), false);
   assert.equal(isPotentiallyDestructiveAction(''), false);
+});
+
+test('nonzero CLI exits offer a next step instead of only a code', () => {
+  const message = friendlyExitError(1, 'Error: provider request failed\n    at processTask (node:internal/process/task_queues:95:5)\n    at runAgent (/app/src/agent.mjs:20:3)');
+  assert.match(message, /stopped with exit code 1/i);
+  assert.match(message, /provider request failed/);
+  assert.match(message, /oasis doctor/);
+  assert.match(message, /try again/i);
+  assert.doesNotMatch(message, /at processTask/);
+  assert.doesNotMatch(message, /at runAgent/);
 });
