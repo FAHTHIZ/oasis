@@ -166,13 +166,16 @@ async function validateArchiveTarget(rawUrl, lookupImpl = lookup) {
     return { url: parsed, addresses };
   }
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
-      host.endsWith('.internal') || host.endsWith('.home.arpa') || host === 'metadata.google.internal' || !host.includes('.')) {
-    throw new Error('--plugin-url cannot target a local, internal, or single-label hostname.');
+      host.endsWith('.internal') || host.endsWith('.home.arpa') || host === 'metadata.google.internal') {
+    throw new Error('--plugin-url cannot target a local or internal hostname.');
   }
+  // Classify IP literals before the single-label hostname rule so IPv6 literals
+  // are checked by the shared SSRF policy rather than mistaken for hostnames.
   if (isIP(host)) {
     if (blockedAddress(host)) throw new Error('--plugin-url cannot target private or special-purpose IP addresses.');
     return { url: parsed, addresses: null };
   }
+  if (!host.includes('.')) throw new Error('--plugin-url cannot target a single-label hostname.');
   let records;
   try { records = await lookupImpl(host, { all: true, verbatim: true }); }
   catch { throw new Error('--plugin-url hostname could not be safely resolved.'); }
