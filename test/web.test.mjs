@@ -1022,3 +1022,61 @@ test('browser job history API lists persisted tasks and requires authentication'
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual(await response.json(), { jobs: [] });
 });
+
+
+test('browser task history survives runtime restart and exposes completed runs', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  let app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  let base = 'http://127.0.0.1:' + app.port;
+  const start = await fetch(base + '/api/terminal/command', {
+    method: 'POST', headers, body: JSON.stringify({ command: process.execPath, args: ['--version'] })
+  });
+  assert.equal(start.status, 202, await start.clone().text());
+  const { jobId } = await start.json();
+  let approval = null;
+  let snapshot;
+  for (let i = 0; i < 60 && !approval; i++) {
+    snapshot = await (await fetch(base + '/api/jobs/' + jobId, { headers })).json();
+    approval = snapshot.events.find((event) => event.type === 'approval_required') || null;
+    if (!approval) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.ok(approval, 'the command must wait for an approval decision');
+  const allowed = await fetch(base + '/api/jobs/' + jobId + '/approval', {
+    method: 'POST', headers, body: JSON.stringify({ approvalId: approval.data.approvalId, approved: true })
+  });
+  assert.equal(allowed.status, 200);
+
+  for (let i = 0; i < 80; i++) {
+    snapshot = await (await fetch(base + '/api/jobs/' + jobId, { headers })).json();
+    if (snapshot.status === 'completed') break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(snapshot.status, 'completed');
+  assert.equal(snapshot.result.exitCode, 0);
+
+  await app.close();
+  app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789'
+  });
+  base = 'http://127.0.0.1:' + app.port;
+  const listResponse = await fetch(base + '/api/jobs', { headers: { authorization: 'Bearer ' + app.token } });
+  assert.equal(listResponse.status, 200);
+  const list = await listResponse.json();
+  const saved = list.jobs.find((task) => task.id === jobId);
+  assert.ok(saved, 'completed job should remain in local task history after restart');
+  assert.equal(saved.status, 'completed');
+  const detailResponse = await fetch(base + '/api/jobs/' + jobId, { headers: { authorization: 'Bearer ' + app.token } });
+  assert.equal(detailResponse.status, 200);
+  const detail = await detailResponse.json();
+  assert.equal(detail.status, 'completed');
+  assert.ok(detail.events.length > 0);
+});

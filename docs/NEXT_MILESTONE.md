@@ -49,7 +49,7 @@ Verified main-branch hardening now also includes OAuth DNS pinning, stricter plu
 
 - [x] Added `oasis eval --compare <run-a.json> <run-b.json>` to compare repeated-trial reports over common task IDs, including task-balanced pass rates, median per-task time, mean cost per trial, and unmatched-task lists. External reports must be normalized; the command does not run compatible ecosystem or validate external results.
 
-The 21 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 25–30 representative tasks** across multiple repository snapshots:
+The 22 existing fixtures are a useful starter suite, not a serious competitive score. Expand the harness to **at least 25–30 representative tasks** across multiple repository snapshots:
 
 - Bug fixes with regression tests.
 - Multi-file features and refactors.
@@ -91,7 +91,7 @@ This is the highest-leverage next feature area because OASIS already has subagen
 
 | Area | Current state | Acceptance gate |
 | --- | --- | --- |
-| Coding outcomes | The 21-task evaluation suite is a small helper-focused smoke suite; it does not measure repository-scale quality. | Expand to 30+ maintained tasks with pinned workspaces, deterministic acceptance checks, repeated runs, recorded failures, time, cost, and regression review. |
+| Coding outcomes | The 22-task evaluation suite is a small helper-focused smoke suite; it does not measure repository-scale quality. | Expand to 30+ maintained tasks with pinned workspaces, deterministic acceptance checks, repeated runs, recorded failures, time, cost, and regression review. |
 | Agent lifecycle | Subagents, task leases, peer messaging, session-local teams and worktree-isolated dispatch exist. | Add a durable run ledger, visible task/worker state, reliable pause/resume/cancel, recovery after restart and conflict-aware integration. |
 | Safety | Workspace/path checks, approvals, secret filtering and optional Linux/macOS sandboxing exist. Windows OS isolation is not implemented. | Reduce secret exposure, validate platform storage/ACL behavior, and ship an explicit per-platform isolation support matrix. |
 | Browser / PTY | Local authenticated browser workspace and a PTY-backed terminal path exist. | Verify full launch, input, resize, stream, cancellation, teardown and no-orphan-process behavior on supported platforms. |

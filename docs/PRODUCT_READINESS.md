@@ -25,7 +25,7 @@ Before release, use [the branch audit](BRANCH_AUDIT.md) to retire already-merged
 
 ### P1 — Benchmark real coding work
 
-The 21 current evaluation fixtures are small and heavily utility-focused. Expand the suite to at least 30 tasks across pinned repository snapshots:
+The 22 current evaluation fixtures are small and heavily utility-focused. Expand the suite to at least 30 tasks across pinned repository snapshots:
 
 - Multi-file bug fixes with regression tests and explicit acceptance criteria.
 - Existing-codebase navigation and questions whose answers can be checked against source.
@@ -69,3 +69,6 @@ The project already has subagents, task leases, peer messaging, session-local te
 A release is ready only when all required CI workflows pass on the same commit, high-value user journeys have end-to-end coverage, advertised OS paths have been tested, evaluation results are reproducible, known security limitations are visible, and release artifacts have a clear verification story.
 
 **Immediate priority:** stabilize the required quality matrix, expand the eval suite beyond utility smoke tests, and then implement the durable/visible agent lifecycle. Do not declare OASIS finished while those gates remain open.
+
+
+The latest completed quality run on `b52f36a19a8bc8512a76fe9dc9c99299f41dadec` passed 579 Node tests across Node.js 22, 24 and 26, validated 22 fixtures, and passed browser E2E. The desktop packaging matrix for that commit was still in progress. The workspace-lock and restart-persistence regression tests are newer work and require their own verification.

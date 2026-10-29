@@ -11,7 +11,7 @@ This is the repository-grounded status page. It separates shipped implementation
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-The last fully recorded quality baseline, comparator revision `268862c`, passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, a Linux PTY smoke test and browser E2E. [Homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) also passed for that earlier revision. These results are useful baseline evidence, not proof that later commits pass. The main branch has since received a provider-setup behavior fix and regression tests; current-head CI must pass before those changes are treated as verified. `oasis eval --compare` compares saved reports, but the 21 existing fixtures remain mostly small helper tasks rather than a representative repository-level coding benchmark.
+The last fully recorded quality baseline, comparator revision `268862c`, passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, a Linux PTY smoke test and browser E2E. [Homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) also passed for that earlier revision. These results are useful baseline evidence, not proof that later commits pass. The main branch has since received a provider-setup behavior fix and regression tests; current-head CI must pass before those changes are treated as verified. `oasis eval --compare` compares saved reports, but the 22 existing fixtures remain mostly small helper tasks rather than a representative repository-level coding benchmark.
 
 ## Verified repository and CI snapshot
 
@@ -84,19 +84,21 @@ All three required workflows passed together on the historical comparator code r
 - Browser GitHub access reuses the host's GitHub CLI login (`gh auth login`); it is not embedded GitHub OAuth or a GitHub App integration.
 - The static public site is served through GitHub Pages. It is not a desktop/mobile app or a remote cloud-agent service.
 
+- The browser now includes a Run history panel backed by `GET /api/jobs`, with bounded local task summaries and retrieval of saved tasks after runtime restart. Records remain on the host under the private OASIS configuration directory, with atomic writes, size limits, and common credential redaction; this is not hosted compute or cross-device sync. This commit adds a restart-persistence end-to-end test and workspace-lock tests; current-head CI must pass before these additions are considered verified.
+
 ## Code inventory
 
-All 59 files listed here are in `src/` and participate in the shipped codebase. This categorization is for navigation, not a guarantee that every combination is end-to-end tested.
+All 60 files listed here are in `src/` and participate in the shipped codebase. This categorization is for navigation, not a guarantee that every combination is end-to-end tested.
 
 | Subsystem | Source modules |
 | --- | --- |
-| Agent loop, coordination, sessions, memory and recovery | `agent.mjs`, `agent-tasks.mjs`, `auto-memory.mjs`, `auto-mode.mjs`, `backups.mjs`, `checkpoints.mjs`, `context.mjs`, `memory.mjs`, `session-tools.mjs`, `sessions.mjs`, `shared-tasks.mjs`, `subagents.mjs` |
+| Agent loop, coordination, sessions, memory and recovery | `agent.mjs`, `agent-tasks.mjs`, `auto-memory.mjs`, `auto-mode.mjs`, `backups.mjs`, `checkpoints.mjs`, `context.mjs`, `memory.mjs`, `session-tools.mjs`, `sessions.mjs`, `cloud-task-store.mjs`, `shared-tasks.mjs`, `subagents.mjs` |
 | CLI and interaction | `cli.mjs`, `clipboard-path.mjs`, `clipboard.mjs`, `commands.mjs`, `completion.mjs`, `headless.mjs`, `input-history.mjs`, `line-editor.mjs`, `markdown.mjs`, `output-styles.mjs`, `slash.mjs`, `status-line.mjs`, `terminal-ui.mjs`, `update.mjs` |
 | Configuration, policy and safety | `config.mjs`, `doctor.mjs`, `hooks.mjs`, `permissions.mjs`, `sandbox.mjs`, `settings.mjs` |
 | Workspace tools, Git and verification | `diagnostics.mjs`, `eval.mjs`, `git-tools.mjs`, `images.mjs`, `installer.mjs`, `json-schema.mjs`, `lsp.mjs`, `notebook.mjs`, `pdf.mjs`, `power-tools.mjs`, `pricing.mjs`, `tools.mjs`, `worktrees.mjs` |
 | Providers, protocols and integrations | `cloud-providers.mjs`, `extensions.mjs`, `github-action.mjs`, `mcp-auth-commands.mjs`, `mcp-extras.mjs`, `mcp-oauth.mjs`, `mcp-project.mjs`, `mcp-serve.mjs`, `mcp.mjs`, `plugins.mjs`, `sdk.mjs`, `telemetry.mjs`, `web-search.mjs`, `web.mjs` |
 
-Repository-level verification also covers `index.html`, `manifest.webmanifest`, `sw.js`, the public landing page and its metadata checks, `action.yml`, CI workflows, 15 bundled skill guides, the test suite and 21 evaluation fixtures.
+Repository-level verification also covers `index.html`, `manifest.webmanifest`, `sw.js`, the public landing page and its metadata checks, `action.yml`, CI workflows, 15 bundled skill guides, the test suite and 22 evaluation fixtures.
 
 ## Highest-impact remaining gaps
 
@@ -137,5 +139,3 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 The agent runtime now has a real PTY session manager wired into the approved `run_command` path. Set `interactive=true` to start a persistent interactive session; `terminal_read`, `terminal_input`, `terminal_resize`, `terminal_interrupt`, `terminal_stop`, and `terminal_list` control it. The manager bounds captured output and input, limits active sessions, tracks exit status, supports incremental reads and stops sessions when the parent OASIS session closes. The native `node-pty` binding is optional and lazy-loaded; ordinary commands keep working if it is unavailable.
 
 This is **partial terminal and desktop-install groundwork, not completion of the whole gap**. The browser now has an xterm.js renderer connected to authenticated PTY routes. Native PTY integration is tested on Linux/Node 22. Process-tree termination was added for command/hook timeout and cancellation, but Windows/macOS behavior and cross-platform process cleanup remain open until CI/runtime verification confirms them. Desktop install packaging is scaffolded for Windows, macOS and Linux, but platform build artifacts must pass and signing credentials are not configured, so a verified signed release has not shipped.
-
-- The authenticated browser API now exposes `GET /api/jobs` for bounded task summaries and can retrieve a saved task by ID after a runtime restart. Task history is stored locally under the private OASIS configuration directory, with atomic writes, size limits, and common credential redaction; it is local host history, not a managed cloud service or cross-device sync. This backend capability is newly ported and remains subject to current-main CI and follow-up UI/recovery tests.
