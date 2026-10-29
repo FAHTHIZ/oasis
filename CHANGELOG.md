@@ -4,6 +4,9 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Implemented the requested built-in response styles (default, concise, explanatory, architect, reviewer) and the /style command while retaining /output-style compatibility. Added style-switching tests for one-active-style and preserving project instructions; CI verification pending.
+- Corrected path-scoped rules so frontmatter-scoped instructions stay out of base memory and load only for matching paths. Added safe glob matching and broad-to-specific/user-to-project rule ordering tests; CI verification pending.
+
 - Added canonical permission-mode normalization across settings, `PermissionPolicy`, `/mode`, and `--permission-mode`. `manual` maps to `default`; `accept-edits` and `accept_edits` map to `acceptEdits`. This is an alias-only change; no new permission bypass was added. Current-head CI is pending.
 
 - Updated STATUS.md directly on main to use four evidence/maturity categories and to keep current-head verification unclaimed until fresh checks pass on the exact revision. Added a focused verification matrix; this is a documentation/status change, not a test result.
