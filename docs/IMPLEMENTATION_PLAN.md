@@ -81,6 +81,8 @@ Oasis is a Node.js ESM application. src/cli.mjs starts terminal/headless workflo
 
 ### 5. Permissions and deterministic policy
 
+- **Progress (2026-10-29):** added `src/permission-modes.mjs` as the canonical alias layer. Settings, `PermissionPolicy`, `/mode`, and `--permission-mode` normalize `manual` to `default` and `accept-edits` / `accept_edits` to `acceptEdits`; unknown modes are rejected. Regression tests cover canonicalization, slash commands, policy setter behavior, CLI parsing and user settings. The change is not complete until current-head Quality checks pass; managed/project precedence and comprehensive enforcement invariants remain open.
+
 - **Existing equivalent:** src/permissions.mjs evaluates rules and command risks; src/settings.mjs merges settings; src/hooks.mjs supports blocking PreToolUse; /mode and /permissions exist.
 - **Affected files:** src/permissions.mjs, src/settings.mjs, src/hooks.mjs, src/tools.mjs, src/agent.mjs, src/slash.mjs, permission/hook tests and security docs.
 - **Minimum viable implementation:** stable aliases/semantics for plan, manual, accept-edits and auto. Precedence is managed/organization > project > user > mode defaults; deny/protected-path rules always win. Validate policy before tool execution. Destructive recursive delete, force push, remote script piped to shell, secret edits, destructive DB operations and deployment default to deny or approval.
