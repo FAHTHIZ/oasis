@@ -91,3 +91,7 @@ Every task must include a pinned base snapshot, prompt, allowed tools, budget/ti
 ## Structured verification evidence
 
 The runtime turn result exposes a structured `verification` summary for CLI, browser, and API consumers: changed paths, whether the diff was reviewed, whether a check is required, the last recognized check's coarse type and exit code, available LSP outcomes for changed files, gate completion, and outstanding issues. It deliberately omits raw command arguments and output so verification status can be shown without copying potentially sensitive command-line content into another log. Any new file edit clears the last-check evidence and invalidates prior diff-review and per-file diagnostic state.
+
+### Optional language-server evidence
+
+Language-server diagnostics are additive verification evidence. Newly introduced or unclassified LSP errors remain completion blockers. If an optional language server is unavailable but a recognized test, lint, build, or type-check passed after the latest code edit and the diff was reviewed, the missing server is shown in the structured status but does not override that independent evidence. If no recognized check passed, unavailable LSP remains a blocker. The UI reports per-file states and counts without copying raw diagnostic text into status messages.
