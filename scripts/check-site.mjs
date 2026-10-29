@@ -24,6 +24,7 @@ const required = [
   'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
   'aria-label="Resize chat and terminal panels"', 'oasis.agent.chatSplit', 'ArrowLeft', 'ArrowRight',
+  'id="agentEmptyState"', 'data-agent-example="Explain this project"', 'data-agent-example="Find a bug"', 'data-agent-example="Write tests"',
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')",
   'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
