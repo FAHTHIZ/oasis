@@ -2027,8 +2027,8 @@ test('workspace command cancellation also stops descendants holding inherited pi
   }
   let pid = null;
   try { pid = Number(await readFile(pidFile, 'utf8')); } catch {}
-  assert.ok(Number.isInteger(pid) && pid > 0, 'the fixture descendant should start');
   controller.abort();
+  assert.ok(Number.isInteger(pid) && pid > 0, 'the fixture descendant should start');
   let guard;
   const result = await Promise.race([
     running,
