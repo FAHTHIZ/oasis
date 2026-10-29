@@ -157,7 +157,7 @@ function blockedAddress(address) {
 async function validateArchiveTarget(rawUrl, lookupImpl = lookup) {
   let parsed;
   try { parsed = new URL(rawUrl); } catch { throw new Error('--plugin-url needs a valid public HTTP or HTTPS URL.'); }
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('--plugin-url accepts HTTP(S) URLs only; local file URLs are blocked.');
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('--plugin-url needs an http(s) URL; local file URLs are blocked.');
   if (parsed.username || parsed.password) throw new Error('--plugin-url must not contain embedded credentials.');
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   const local = isLoopbackUrl(parsed.toString());
