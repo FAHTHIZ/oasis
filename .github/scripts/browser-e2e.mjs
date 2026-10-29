@@ -216,6 +216,27 @@ try {
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
 
+  // Saved-chat recovery must reopen the parent chat without restarting workers.
+  await page.locator('button[data-nav="monitor"]').click();
+  await page.locator('#agentMonitorRunList .agent-monitor-run').first().waitFor({ state: 'visible', timeout: timeoutMs });
+  await page.waitForFunction(() => {
+    const heading = document.querySelector('#agentMonitorDetailTitle')?.textContent || '';
+    const button = document.querySelector('#agentMonitorOpenSessionBtn');
+    return heading.includes('Run the browser end-to-end fixture and report its result.') && button && !button.hidden;
+  }, null, { timeout: timeoutMs });
+  assert.equal(await page.locator('#agentMonitorOpenSessionBtn').innerText(), 'Open saved chat',
+    'A completed workspace run should offer its saved parent chat, not a worker-resume action.');
+  await page.locator('#agentMonitorOpenSessionBtn').click();
+  await page.waitForFunction(() => {
+    const agentView = document.querySelector('#view-agent');
+    const users = [...document.querySelectorAll('#agentMessages .agent-message.user')];
+    const assistants = [...document.querySelectorAll('#agentMessages .agent-message.assistant')];
+    return agentView?.classList.contains('active') &&
+      users.some((element) => element.textContent.includes('Run the browser end-to-end fixture and report its result.')) &&
+      assistants.some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.'));
+  }, null, { timeout: timeoutMs });
+  console.log('PASS saved-chat recovery: the monitor reopened the saved parent conversation without restarting a worker.');
+
   // A running task can be stopped while it is blocked at a command approval.
   await page.locator('#agentPrompt').fill('Run the cancellation fixture command after getting my approval.');
   await page.locator('#agentSendBtn').click();
