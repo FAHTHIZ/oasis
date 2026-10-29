@@ -4,7 +4,7 @@ import { showErrorWithCopy } from '../desktop/error-dialog.mjs';
 
 function harness(response = 1, clipboardError = false) {
   const calls = [];
-  const dialog = { async showMessageBox(window, options) { calls.push({ window, options }); return { response }; } };
+  const dialog = { async showMessageBox(windowOrOptions, maybeOptions) { const options = maybeOptions || windowOrOptions; const window = maybeOptions ? windowOrOptions : undefined; calls.push({ window, options }); return { response }; } };
   const clipboard = { writeText(value) { if (clipboardError) throw new Error('clipboard unavailable'); calls.push({ copiedText: value }); } };
   return { calls, dialog, clipboard };
 }
