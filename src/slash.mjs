@@ -80,6 +80,8 @@ export const BUILTIN_COMMANDS = {
   bug: 'Report a bug: drafts a GitHub issue with your report and environment details (nothing is sent until you open the link) (/bug [report] [--with-transcript])',
   'setup-bedrock': 'Configure Amazon Bedrock: detects AWS credentials, region and model pins, then saves them to user settings (/setup-bedrock [region=R] [profile=P] [model=ID] [sonnet=ID] [haiku=ID] [opus=ID] [save])',
   'setup-vertex': 'Configure Google Vertex AI: detects gcloud project, credentials, region and model pins, then saves them to user settings (/setup-vertex [project=ID] [region=R] [model=ID] [save])',
+  'auto-mode-setup': 'Draft autoMode.environment entries (trusted repos, registries, CI, infrastructure) from this project, review them, and save to user settings',
+  'autofix-pr': 'Watch the current branch\'s pull request and push fixes for failing CI checks and review comments until it is green (/autofix-pr [extra instructions])',
   login: 'Connect a model provider (runs oasis auth login / setup)',
   logout: 'Remove the stored provider API key',
   'skill-doctor': 'Show each skill\'s context cost and recent usage so you can turn off unused ones (/skill-doctor [DAYS])',
@@ -579,6 +581,37 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!confirmed) return { output: text + '\nNothing saved. Run /' + name + ' ' + (argument ? argument + ' ' : '') + 'save to write them.' };
       const file = await setup.saveCloudSetup(plan, env);
       return { output: text + '\nSaved to ' + file + '. Restart OASIS to use ' + (provider === 'bedrock' ? 'Amazon Bedrock' : 'Vertex AI') + (plan.problems.length ? ' after fixing the problems above' : '') + '.' };
+    }
+    case 'auto-mode-setup': {
+      const { draftAutoModeEnvironment } = await import('./auto-mode.mjs');
+      const { updateUserSettings, userSettingsPath } = await import('./settings.mjs');
+      const drafted = await draftAutoModeEnvironment(root);
+      if (!drafted.length) return { output: 'Found nothing project-specific to add (no remotes, registries, CI or infrastructure config). The default environment stays in place; edit autoMode.environment in ' + userSettingsPath(env) + ' to add trusted hosts by hand.' };
+      const text = 'Drafted autoMode.environment entries (added after "$defaults"):\n' + drafted.map((line) => '  - ' + line).join('\n');
+      const save = /(^|\s)(save|--yes|-y)(\s|$)/.test(argument);
+      const confirmed = save || (typeof state.confirm === 'function' && await state.confirm(text + '\nSave to your user settings?'));
+      if (!confirmed) return { output: text + '\nNothing saved. Run /auto-mode-setup save to write them, or copy the lines you want.' };
+      await updateUserSettings((settings) => {
+        const autoMode = settings.autoMode && typeof settings.autoMode === 'object' ? settings.autoMode : {};
+        const current = Array.isArray(autoMode.environment) ? autoMode.environment : ['$defaults'];
+        const merged = [...(current.includes('$defaults') ? [] : ['$defaults']), ...current];
+        for (const line of drafted) if (!merged.includes(line)) merged.push(line);
+        settings.autoMode = { ...autoMode, environment: merged };
+        return settings;
+      }, env);
+      return { output: text + '\nSaved to ' + userSettingsPath(env) + '. Check the result with oasis auto-mode config.' };
+    }
+    case 'autofix-pr': {
+      const extra = argument ? '\nExtra instructions from the user: ' + argument : '';
+      return { output: 'Watching the pull request for this branch and fixing CI failures and review comments.', prompt: [
+        'Autofix the pull request for the current branch until it is green.' + extra,
+        '1. Find the PR: `gh pr view --json number,url,headRefName,statusCheckRollup,reviewDecision`. If there is none, stop and say so.',
+        '2. Collect what needs fixing: failing checks (`gh pr checks`, then `gh run view RUN_ID --log-failed` for each failed run) and unresolved review comments (`gh api repos/{owner}/{repo}/pulls/NUMBER/comments` and `gh pr view NUMBER --comments`).',
+        '3. Fix each real problem with the smallest correct change. Reproduce failing tests locally first and rerun them after the fix. Skip comments that are questions or that you disagree with; reply to those instead of changing code.',
+        '4. Commit with a message naming what was fixed and push to the PR branch (never force-push, never push to the default branch).',
+        '5. Wait for the new checks: use the Monitor tool or `gh pr checks --watch` with a timeout, then repeat from step 2. Stop after 5 rounds, when everything passes, or when the remaining failures are unrelated to this PR (flaky or infrastructure); explain which.',
+        '6. Report the PR URL, what you fixed in each round, and anything left for the user.'
+      ].join('\n') };
     }
     case 'logout': {
       const { authLogout } = await import('./auth-cli.mjs');

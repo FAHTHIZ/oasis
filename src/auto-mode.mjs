@@ -184,3 +184,37 @@ export async function classifyAction(state, request, evaluate, options = {}) {
 export function newAutoModeState() {
   return { blockedInRow: 0, blockedTotal: 0, checked: 0, log: [] };
 }
+
+// /auto-mode-setup (Claude Code): draft autoMode.environment entries from the project — git
+// remotes, package registries, CI, container and cloud config — for review before saving.
+export async function draftAutoModeEnvironment(root) {
+  const { readFile, readdir } = await import('node:fs/promises');
+  const { spawnSync } = await import('node:child_process');
+  const pathMod = (await import('node:path')).default;
+  const read = (file) => readFile(pathMod.join(root, file), 'utf8').catch(() => '');
+  const entries = [];
+  const remotes = spawnSync('git', ['remote', '-v'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+  const orgs = new Set();
+  for (const line of String(remotes.stdout || '').split('\n')) {
+    const match = /(?:@|:\/\/)([^/:\s]+)[:/]([^/\s]+)\/([^\s]+?)(?:\.git)?\s/.exec(line + ' ');
+    if (match) orgs.add(match[1] + '/' + match[2]);
+  }
+  if (orgs.size) entries.push('Source control: ' + [...orgs].map((org) => org + '/*').join(', ') + ' (the workspace remotes and other repositories of the same owner).');
+  const registries = new Set();
+  for (const match of (await read('.npmrc')).matchAll(/registry\s*=\s*(\S+)/g)) registries.add(match[1]);
+  for (const match of ((await read('pip.conf')) + (await read('requirements.txt')) + (await read('pyproject.toml'))).matchAll(/(?:index-url|extra-index-url|url)\s*=?\s*"?(https?:\/\/[^\s"]+)/g)) if (!/pypi\.org|github\.com/.test(match[1])) registries.add(match[1]);
+  if (registries.size) entries.push('Package registries: ' + [...registries].join(', ') + ' (declared by the project).');
+  const workflows = await readdir(pathMod.join(root, '.github', 'workflows')).catch(() => []);
+  if (workflows.length) entries.push('CI: GitHub Actions workflows in .github/workflows (' + workflows.slice(0, 6).join(', ') + '); reading run logs with gh is routine.');
+  if (await read('.gitlab-ci.yml')) entries.push('CI: GitLab CI (.gitlab-ci.yml).');
+  const compose = (await read('docker-compose.yml')) || (await read('compose.yaml')) || (await read('docker-compose.yaml'));
+  if (compose || await read('Dockerfile')) entries.push('Local containers: Docker builds and the docker compose services defined in this repo run on this machine only.');
+  const terraform = (await readdir(root).catch(() => [])).filter((name) => name.endsWith('.tf'));
+  const tfText = (await Promise.all(terraform.slice(0, 10).map(read))).join('\n');
+  const buckets = [...tfText.matchAll(/bucket\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+  if (terraform.length) entries.push('Infrastructure as code: Terraform in this repo' + (buckets.length ? ' (state/buckets: ' + [...new Set(buckets)].slice(0, 5).join(', ') + ')' : '') + '; plan is routine, apply is a production change.');
+  const env = (await read('.env.example')) + (await read('.env.sample'));
+  const hosts = [...env.matchAll(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)].map((m) => m[1]).filter((host) => !/localhost|example\.com/.test(host));
+  if (hosts.length) entries.push('Services the app talks to (from .env.example): ' + [...new Set(hosts)].slice(0, 8).join(', ') + '.');
+  return entries;
+}
