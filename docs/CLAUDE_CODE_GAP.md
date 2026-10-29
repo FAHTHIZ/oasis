@@ -101,6 +101,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | `/fast`, `/install-github-app`, `/share` | Fast mode sends `speed: "fast"` (and the beta header where needed) on supported Opus models and persists; the GitHub app installer writes the Action workflow and prints the secret step (it does not install a GitHub App — Oasis uses the workflow token) | Done |
 | `MessageDisplay` hook | Display-only rewrite via `displayContent`, 10s default timeout; one batch per message (Claude batches by line interactively) | Done |
 | MCP `headersHelper` | Dynamic headers for HTTP MCP servers from a command; refreshed on 401; overrides static headers and OAuth | Done |
+| Plugin `defaultEnabled` / `dependencies` | Unset plugins follow `defaultEnabled` (default true); dependencies auto-enable transitively; missing ones reported | Done (version constraints not checked) |
 
 ## Ranked next improvements
 
