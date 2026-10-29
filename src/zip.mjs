@@ -41,8 +41,9 @@ export function readZipEntries(buffer) {
     // literal character on POSIX. Normalize before checking containment.
     const name = rawName.replace(/\\/g, '/');
     const parts = name.split('/');
+    if (parts.some((part) => part === '..')) throw new Error('Zip entry escapes the destination: ' + rawName);
     if (!name || name.includes(String.fromCharCode(0)) || name.startsWith('/') || /^[a-z]:/i.test(name) ||
-        parts.some((part, i) => part === '.' || part === '..' || (!part && i !== parts.length - 1))) {
+        parts.some((part, i) => part === '.' || (!part && i !== parts.length - 1))) {
       throw new Error('Zip entry has an unsafe or ambiguous path: ' + rawName);
     }
     // Reject duplicate/case-colliding paths so extraction is deterministic on
@@ -157,7 +158,7 @@ function blockedAddress(address) {
 async function validateArchiveTarget(rawUrl, lookupImpl = lookup) {
   let parsed;
   try { parsed = new URL(rawUrl); } catch { throw new Error('--plugin-url needs a valid public HTTP or HTTPS URL.'); }
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('--plugin-url needs an http(s) URL; local file URLs are blocked.');
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('--plugin-url accepts HTTP(S) URLs only (http/https); local file URLs are blocked.');
   if (parsed.username || parsed.password) throw new Error('--plugin-url must not contain embedded credentials.');
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   const local = isLoopbackUrl(parsed.toString());
