@@ -2,14 +2,50 @@
 //
 // Linux: bubblewrap (bwrap). The host filesystem is mounted read-only, the
 //   workspace (and configured extra directories) are writable, /tmp is a private
-//   tmpfs, PID namespace is isolated, and the network is unshared unless enabled.
+//   tmpfs, PID namespace is isolated, and network is unshared unless enabled.
+//   Common host credential paths are masked when detected; this is defense in depth,
+//   not complete filesystem-read isolation.
 // macOS: sandbox-exec with a profile that denies file writes outside the
 //   workspace and temp folders and, unless enabled, denies network access.
 // Other platforms report the sandbox as unavailable; Oasis then falls back to
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { spawnSync } from 'node:child_process';
+import { realpathSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+const SENSITIVE_HOME_PATHS = [
+  '.ssh', '.aws', '.azure', '.kube', '.docker', '.gnupg',
+  '.claude', '.codex', '.netrc', '.npmrc', '.git-credentials', '.pgpass',
+  path.join('.config', 'gcloud'), path.join('.config', 'gh'), path.join('.config', 'oasis')
+];
+
+function pathContains(parent, child) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
+}
+
+function pathsOverlap(left, right) {
+  return pathContains(left, right) || pathContains(right, left);
+}
+
+function collectSensitivePaths(root, writable, env = process.env) {
+  const home = path.resolve(env.HOME || os.homedir());
+  const configPath = path.resolve(env.OASIS_CONFIG_DIR || env.OASIS_HOME || path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'oasis'));
+  const candidates = [...SENSITIVE_HOME_PATHS.map((item) => path.join(home, item)), configPath];
+  const writablePaths = [path.resolve(root || process.cwd()), ...writable.map((item) => path.resolve(item))];
+  const masked = [];
+  for (const candidate of candidates) {
+    let real;
+    let info;
+    try { real = realpathSync(candidate); info = statSync(real); } catch { continue; }
+    const type = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null;
+    if (!type || writablePaths.some((item) => pathsOverlap(item, real))) continue;
+    if (masked.some((item) => pathsOverlap(item.path, real))) continue;
+    masked.push({ path: real, type });
+  }
+  return masked;
+}
 
 let cachedProbe = null;
 
@@ -47,6 +83,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
   const probe = detectSandbox(force);
+  const writable = [root, ...((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir))];
   return {
     enabled: true,
     available: probe.available,
@@ -54,7 +91,9 @@ export function resolveSandbox(settings = {}, root, force = false) {
     reason: probe.reason,
     network: Boolean(settings.sandbox.network),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
-    writable: [root, ...((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir))]
+    maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
+    maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(root, writable),
+    writable
   };
 }
 
@@ -68,6 +107,7 @@ export function macProfile(sandbox) {
     '(version 1)',
     '(allow default)',
     '(deny file-write*)',
+    ...((sandbox.maskedPaths || []).map((item) => '(deny file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
     '(allow file-write* ' + writable.map((dir) => '(subpath ' + seatbeltString(dir) + ')').join(' ') + ' (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr") (regex #"^/dev/tty"))',
     sandbox.network ? '' : '(deny network*) (allow network* (remote unix-socket))'
   ].join('\n');
@@ -78,6 +118,10 @@ export function wrapCommand(command, args, sandbox, cwd) {
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
+    for (const item of sandbox.maskedPaths || []) {
+      if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
+      else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);
+    }
     for (const dir of sandbox.writable) wrapped.push('--bind', dir, dir);
     if (!sandbox.network) wrapped.push('--unshare-net');
     wrapped.push('--chdir', cwd, '--', command, ...args);
