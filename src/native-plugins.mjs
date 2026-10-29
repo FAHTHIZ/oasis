@@ -153,10 +153,13 @@ function validVersion(version) {
   );
 }
 function parseVersion(version) {
-  const [core, prerelease] = String(version).split('-', 2);
+  const text = String(version);
+  const separator = text.indexOf('-');
+  const core = separator === -1 ? text : text.slice(0, separator);
+  const prerelease = separator === -1 ? null : text.slice(separator + 1);
   return {
-    core: core.split('.').map(Number),
-    prerelease: prerelease === undefined ? null : prerelease.split('.')
+    core: core.split('.').map(BigInt),
+    prerelease: prerelease === null ? null : prerelease.split('.')
   };
 }
 function comparePrereleaseIdentifier(a, b) {
@@ -306,7 +309,7 @@ export async function installNativePlugin(source,options={}){
     await rm(stage,{recursive:true,force:true}).catch(()=>{});
     throw error;
   }
-  return {installed:true,id,name:validated.manifest.name,version:validated.manifest.version,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:grants.includes('agents')?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
+  return {installed:true,id,name:validated.manifest.name,version:validated.manifest.version,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:(grants.includes('agents')||grants.includes('subagents'))?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
 }
 export async function uninstallNativePlugin(name,options={}){
   const env=options.env||process.env;
@@ -321,10 +324,20 @@ export async function uninstallNativePlugin(name,options={}){
   if(!within(root,target)||target===root)throw new Error('Refusing to remove a plugin outside the native plugin directory.');
   const info=await lstat(target);
   if(!info.isDirectory()||info.isSymbolicLink())throw new Error('Refusing to remove an unsafe plugin directory.');
-  await rm(target,{recursive:true,force:true});
-  delete registry[id];
-  await writeRegistry(env,registry);
-  await updateUserEnablement(env,id,false);
+  const backup = target + '.uninstall-' + randomUUID();
+  const previousRegistry = { ...registry };
+  await rename(target, backup);
+  try {
+    delete registry[id];
+    await writeRegistry(env, registry);
+    await updateUserEnablement(env, id, false);
+    await rm(backup, { recursive: true, force: true });
+  } catch (error) {
+    await rename(backup, target).catch(() => {});
+    await writeRegistry(env, previousRegistry).catch(() => {});
+    await updateUserEnablement(env, id, true).catch(() => {});
+    throw error;
+  }
   return {name:slug,id};
 }
 export async function listNativePlugins(options={}){
