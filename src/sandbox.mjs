@@ -98,7 +98,14 @@ export function resolveSandbox(settings = {}, root, force = false) {
 }
 
 function seatbeltString(value) {
-  return '"' + String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  const text = String(value);
+  // Paths are embedded in SBPL source. Control characters (especially CR/LF)
+  // could terminate a quoted literal and inject additional policy expressions.
+  // Refuse ambiguous paths rather than trying to escape profile-language syntax.
+  if (/[\\u0000-\\u001f\\u007f\\u2028\\u2029]/u.test(text)) {
+    throw new Error('Sandbox paths cannot contain control characters.');
+  }
+  return '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
 export function macProfile(sandbox) {
