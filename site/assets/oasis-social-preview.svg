@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
 <title id="title">OASIS — Open-source AI coding agent</title>
-<desc id="desc">OASIS alpha, an open-source AI coding agent. Bring your own model. Inspect, edit, and verify software in a local-first workspace.</desc>
+<desc id="desc">OASIS beta, an open-source AI coding agent. Bring your own model. Inspect, edit, and verify software in a local-first workspace.</desc>
 <defs>
   <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0f0c"/><stop offset=".55" stop-color="#14271b"/><stop offset="1" stop-color="#233b29"/></linearGradient>
   <linearGradient id="lime" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d4ff7a"/><stop offset="1" stop-color="#76e64b"/></linearGradient>
@@ -12,7 +12,7 @@
 <path d="M72 78h54l34 34-34 34H72l34-34z" fill="none" stroke="url(#lime)" stroke-width="5" stroke-linejoin="round"/>
 <text x="184" y="126" fill="#f2f5ee" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="42" font-weight="800" letter-spacing="6">OASIS</text>
 <rect x="880" y="82" width="230" height="43" rx="21.5" fill="#9bff5517" stroke="#9bff5577"/>
-<circle cx="906" cy="103.5" r="5" fill="#9bff55"/><text x="923" y="110" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="2">ALPHA · APACHE 2.0</text>
+<circle cx="906" cy="103.5" r="5" fill="#9bff55"/><text x="923" y="110" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="2">BETA · APACHE 2.0</text>
 <text x="74" y="263" fill="#f2f5ee" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="800" letter-spacing="-1.8">Open-source AI coding agent.</text>
 <text x="76" y="333" fill="#9bff55" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="50" font-weight="750" letter-spacing="-1">Bring your own model.</text>
 <text x="78" y="384" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="23">Local-first tools to inspect code, make changes, and prove the fix.</text>

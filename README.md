@@ -8,9 +8,16 @@
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
   <a href="https://fahthiz.github.io/oasis/"><img src="https://img.shields.io/badge/homepage-OASIS-9BFF55?style=flat" alt="OASIS public homepage" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache License 2.0" /></a>
-  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Alpha software" />
+  <img src="https://img.shields.io/badge/status-beta-9BFF55.svg?style=flat" alt="Beta software" />
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22 or newer" /></a>
 </p>
+
+
+<p align="center">
+  <img src="assets/oasis-beta-sticker.svg" alt="OASIS now in beta sticker" width="430" />
+  <img src="assets/oasis-beta-seal.svg" alt="OASIS beta seal sticker" width="150" />
+</p>
+<p align="center"><a href="assets/oasis-beta-sticker.svg">Wide sticker SVG</a> · <a href="assets/oasis-beta-seal.svg">Round seal SVG</a> · <a href="assets/oasis-beta-mark.svg">Compact beta mark SVG</a></p>
 
 OASIS is an open-source AI coding agent. Bring your own model. OASIS is a local-first developer workspace for multi-step software development: it inspects codebases, plans and applies focused edits, runs approved shell commands and tests, and summarizes what changed. Use the CLI in your terminal or launch the browser workspace with `oasis web`; extend it with supported model providers, Model Context Protocol (MCP) tools, reusable skills, hooks, and bounded subagents.
 
@@ -18,7 +25,7 @@ For the current implementation inventory and explicit limitations, see [root sta
 
 ## Get started
 
-**OASIS is alpha software.** The desktop app is the easiest path for people who do not want a terminal; the CLI is for developers and automation.
+**OASIS is now in beta.** Some platform and release-readiness gaps remain; see [current status and limitations](docs/CURRENT_STATUS.md). The desktop app is the easiest path for people who do not want a terminal; the CLI is for developers and automation.
 
 **Desktop app (no terminal required)**
 
@@ -35,7 +42,7 @@ npm install --global https://github.com/FAHTHIZ/oasis/archive/refs/heads/main.ta
 oasis
 ```
 
-The first-run setup helps choose a provider. OASIS does not include a model or API subscription; your selected provider must support tool calling. Review [current status and limitations](docs/CURRENT_STATUS.md) before using OASIS on important work.
+The first-run setup helps choose a provider. OASIS does not include a model or API subscription; your selected provider must support tool calling.
 
 ## Try it
 
