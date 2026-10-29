@@ -368,7 +368,20 @@ const PACKAGE_MANAGER_VALUE_OPTIONS = new Set([
   '--cpu', '--os', '--libc', '--loglevel', '--fetch-retries', '--fetch-timeout',
   '--node-options', '--maxsockets', '--dir', '-c', '--config', '--store-dir',
   '--global-dir', '--package-import-method', '--network-concurrency', '--cwd',
-  '--cache-folder', '--modules-folder', '--ignore-path', '--network-timeout', '--mutex'
+  '--cache-folder', '--modules-folder', '--ignore-path', '--network-timeout', '--mutex',
+  '--tag', '--access', '--otp', '--scope', '--workspace-prefix', '--reporter',
+  '--lockfile-dir', '--hoist-pattern', '--modules-dir', '--use-yarnrc', '--har'
+]);
+
+const PACKAGE_MANAGER_BOOLEAN_FLAGS = new Set([
+  '--silent', '-s', '--quiet', '-q', '--global', '-g', '--offline',
+  '--prefer-offline', '--no-audit', '--no-fund', '--ignore-scripts',
+  '--save-exact', '-e', '--production', '--dry-run', '--json', '--recursive', '-r',
+  '--workspace-root', '--no-optional', '--prefer-online', '--strict-peer-deps',
+  '--no-strict-peer-deps', '--no-verify', '--no-progress', '--frozen-lockfile',
+  '--lockfile-only', '--no-lockfile', '--unsafe-perm', '--yes', '-y', '--force', '-f',
+  '--verbose', '--no-emoji', '--emoji', '--ignore-engines', '--immutable',
+  '--immutable-cache', '--check-cache', '--inline-builds'
 ]);
 
 function packageManagerAction(args) {
@@ -381,7 +394,7 @@ function packageManagerAction(args) {
     }
     if (PACKAGE_MANAGER_VALUE_OPTIONS.has(value)) { index += 1; continue; }
     if (value.startsWith('--') && value.includes('=')) continue;
-    if (value.startsWith('-')) continue;
+    if (value.startsWith('-')) return { verb: null, rest: [], uncertain: true };
     return { verb: value, rest: values.slice(index + 1) };
   }
   return null;
@@ -391,6 +404,7 @@ function projectRunnerRisk(base, args) {
   const values = args.map((arg) => String(arg).toLowerCase());
   const first = values[0] || '';
   const packageAction = ['npm', 'pnpm', 'yarn'].includes(base) ? packageManagerAction(args) : null;
+  if (packageAction?.uncertain) return true;
   const action = packageAction?.verb || first;
   const actionArgs = packageAction?.rest || values.slice(1);
   const scriptName = actionArgs[0] || '';
@@ -489,7 +503,11 @@ export function analyzeCommand(command, args = [], depth = 0) {
     }
     if (sub === 'branch' && args.some((a) => a === '-D')) return { highRisk: 'force-deletes a branch', effective: { base, args } };
   }
-  if (['npm', 'pnpm', 'yarn'].includes(base) && packageManagerAction(args)?.verb === 'publish') return { blocked: 'Publishing a package is blocked by default.' };
+  if (['npm', 'pnpm', 'yarn'].includes(base)) {
+    const action = packageManagerAction(args);
+    if (action?.uncertain) return { blocked: 'Unrecognized package-manager option ordering is blocked by default.' };
+    if (action?.verb === 'publish') return { blocked: 'Publishing a package is blocked by default.' };
+  }
   if (base === 'gh' && lowered[0] === 'repo' && lowered[1] === 'delete') return { blocked: 'Deleting a remote repository is blocked by default.' };
   if (joined.includes('rm -rf') || joined.includes('rm -fr') || joined.includes('format c:')) return { blocked: 'The command contains a destructive operation and is blocked.' };
   if (['apt', 'apt-get', 'dnf', 'yum', 'pacman', 'brew', 'winget', 'choco', 'snap', 'zypper', 'apk'].includes(base) && /\b(remove|purge|uninstall|autoremove|erase)\b/.test(joined)) {
