@@ -2,7 +2,7 @@
 
 **Status: design note only. Phone pairing and remote access are not implemented by this document.**
 
-OASIS currently keeps the browser workspace local to the computer. Connecting a phone would expand the trust boundary: someone who can reach the service may be able to read project context, request edits, or ask the agent to run commands. Treat this as a security-sensitive feature, not just a networking option.
+The browser workspace defaults to loopback access, but the CLI also has explicit options for non-loopback access with TLS and an opt-in for insecure LAN HTTP. Those existing network options are not a phone-pairing system. Connecting a phone through a dedicated pairing flow would expand the trust boundary: someone who can reach the service may be able to read project context, request edits, or ask the agent to run commands. Treat this as a security-sensitive feature, not just a networking option.
 
 ## Assets to protect
 
@@ -46,4 +46,4 @@ Do not implement or announce phone pairing until the core safety brief is comple
 
 ## Not covered
 
-This note is not a penetration test, a complete security audit, or approval to expose the current local server remotely. The current local-only behavior should remain the default.
+This note is not a penetration test, a complete security audit, or approval to expose the server remotely. Keep loopback as the default. Existing non-loopback CLI options must remain explicit and documented; they must not be mistaken for secure phone pairing.
