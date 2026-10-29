@@ -138,6 +138,16 @@ export async function publishChanges({ root, trigger, context, request, summary 
   return { changed: true, branch, pullRequest, files: status.split('\n').length };
 }
 
+export function actionStatus(result, published, summary) {
+  if (result && result.is_error) return 'ran into a problem (' + result.subtype + ').';
+  if (/^Verification incomplete:/im.test(String(summary || ''))) {
+    return published && published.changed
+      ? 'pushed changes, but verification is incomplete.'
+      : 'verification is incomplete.';
+  }
+  return published && published.changed ? 'finished and pushed changes.' : 'finished.';
+}
+
 export async function runAction(options = {}) {
   const env = options.env || process.env;
   const root = path.resolve(options.root || env.GITHUB_WORKSPACE || process.cwd());
@@ -220,7 +230,7 @@ export async function runAction(options = {}) {
   if (publishError) details.push('Could not push the changes: ' + publishError);
   if (result.permission_denials && result.permission_denials.length) details.push('<details><summary>' + result.permission_denials.length + ' action(s) were not allowed</summary>\n\n' + result.permission_denials.map((item) => '- ' + (item.tool_name || 'tool') + ': ' + item.detail).join('\n') + '\n</details>');
   if (runUrl) details.push('[View the run](' + runUrl + ')');
-  const status = result.is_error ? 'ran into a problem (' + result.subtype + ').' : published.changed ? 'finished and pushed changes.' : 'finished.';
+  const status = actionStatus(result, published, summary);
   const body = commentBody(status, details);
   if (progress && progress.id) await request('PATCH', '/repos/' + repository + '/issues/comments/' + progress.id, { body }).catch((error) => log('Could not update the comment: ' + error.message));
   else if (trigger.number) await request('POST', '/repos/' + repository + '/issues/' + trigger.number + '/comments', { body }).catch((error) => log('Could not post the comment: ' + error.message));
