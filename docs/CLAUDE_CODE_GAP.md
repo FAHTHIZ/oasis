@@ -1,8 +1,8 @@
 # OASIS vs Claude Code — capability comparison and next priority
 
 **Comparison audited:** October 29, 2026  
-**OASIS code baseline before this documentation update:** [`02feecc610f5775279b827a51744bc244e725068`](https://github.com/FAHTHIZ/oasis/commit/02feecc610f5775279b827a51744bc244e725068)  
-**Verification snapshot:** prior baseline [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40795987277) and [desktop build](https://github.com/FAHTHIZ/oasis/actions/runs/40795987139) passed; prior [homepage validation](https://github.com/FAHTHIZ/oasis/actions/runs/40795987174) failed the `FileChanged` hook assertion. The hook test, process-tree cancellation and URL-fetch range checks are patched on current main; new Quality Checks ([run 40798160831](https://github.com/FAHTHIZ/oasis/actions/runs/40798160831)), publishing validation ([run 40798160822](https://github.com/FAHTHIZ/oasis/actions/runs/40798160822)) and desktop build ([run 40798160813](https://github.com/FAHTHIZ/oasis/actions/runs/40798160813)) were pending at audit time. See [Current status](CURRENT_STATUS.md), [Next milestone](NEXT_MILESTONE.md) and [Security/reliability audit](SECURITY_RELIABILITY_AUDIT.md).
+**OASIS code baseline before this documentation update:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286)  
+**Verification snapshot:** [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809) passed with 570 tests on Node 22/24/26 and 21 valid evaluation fixtures; [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832) passed; and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux. The installers remain unsigned and platform first-run/update/uninstall behavior is not fully validated. See [Current status](CURRENT_STATUS.md), [Next milestone](NEXT_MILESTONE.md) and [Security/reliability audit](SECURITY_RELIABILITY_AUDIT.md).
 
 This compares documented capability and source-level implementation, not blind task outcomes. Feature similarity does not prove equal coding quality, speed, reliability, safety, or operating-system support. The current OASIS test/eval suite does not provide an apples-to-apples Claude Code benchmark.
 
@@ -10,7 +10,7 @@ This compares documented capability and source-level implementation, not blind t
 
 OASIS now covers a broad portion of the **local coding-agent workflow**: multi-step tool calling, scoped file operations, approvals, checkpoints/rewind, Git and test tools, multiple hosted and local model routes, MCP, hooks, skills, a broad Claude Code plugin-format compatibility layer, subagents, session-local teams/task dispatch, headless mode and an SDK. It also has a local browser workspace, a PTY/xterm path, a VS Code-family extension, a GitHub Action, a Chrome browser tool, and a desktop packaging pipeline.
 
-The most important remaining gap is **trustworthy end-to-end reliability and measured coding performance**, not another round of CLI option parity. The prior publishing-validation failure has a targeted synchronization fix, and command/process-tree cancellation plus URL-fetch address coverage have been hardened; the fresh main-branch CI result is still required to verify those patches. The current 21-fixture suite is a smoke test, not a coding leaderboard. After that release-confidence gate, the highest-value capability gaps are a visual/persistent agent lifecycle, cross-session coordination, secure remote/mobile control, broader cross-platform PTY verification, JetBrains support, and stronger platform sandboxing.
+The latest CI gate is green across tests, publishing validation and desktop packaging. The most important remaining gap is now **measured coding performance and broader product-level end-to-end reliability**, not another round of CLI option parity. The 21-fixture suite remains a smoke test, not a coding leaderboard. After that release-confidence gate, the highest-value capability gaps are a visual/persistent agent lifecycle, cross-session coordination, secure remote/mobile control, broader cross-platform PTY verification, JetBrains support, and stronger platform sandboxing.
 
 ## Side-by-side capability check
 
@@ -147,8 +147,8 @@ Vim mode, themes, customizable keybindings, transcript paging, the settings pane
 
 ## Evaluation and readiness caveats
 
-- The prior verified Quality Checks baseline reported **549 passing Node tests and 21/21 valid evaluation fixtures**. The current main revision adds regression coverage for child-process descendants and special-purpose URL ranges; its updated test result was pending at audit time.
-- The previous publishing-validation workflow failed the `FileChanged` hook test; the test synchronization fix is committed, but do not describe all CI as green until the current run passes.
+- The latest verified Quality Checks run reported **570 passing Node tests and 21/21 valid evaluation fixtures** on Node 22/24/26. Regression coverage now includes child-process descendants, URL ranges, OAuth DNS pinning, plugin archive URL/ZIP boundaries and API-key helper isolation.
+- The previous publishing-validation failure was traced to an assertion that observed a hook log before the hook response message was delivered. The bounded wait-for-message fix now passes the publishing workflow.
 - The authenticated browser E2E job runs in Linux Chromium. It does not establish Windows/macOS browser PTY behavior, Android/Termux support, live cloud provider reliability, or real-device TLS onboarding.
 - Desktop build success does not prove signed installers, successful first launch, update/uninstall behavior or accessibility on each platform.
 - The optional OS sandbox is disabled by default and currently targets Linux/macOS; commands can run with host privileges when it is off.
