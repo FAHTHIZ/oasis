@@ -85,7 +85,7 @@ export function isPrivateBrowserRequest(rawUrl) {
   // HTTP(S)-only host checks below. Data URLs remain non-network content.
   if (parsed.protocol === 'file:' || parsed.protocol === 'about:') return true;
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') ||
       host === 'metadata' || host === 'metadata.google.internal' || (!host.includes('.') && isIP(host) === 0)) return true;
