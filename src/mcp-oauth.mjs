@@ -78,8 +78,10 @@ function privateIPv4(address) {
 
 function mappedIPv4(address) {
   const value = String(address || '').toLowerCase();
-  if (!value.startsWith('::ffff:')) return null;
-  const tail = value.slice(7);
+  let tail;
+  if (value.startsWith('::ffff:')) tail = value.slice(7);
+  else if (/^(?:0{1,4}:){5}ffff:/i.test(value)) tail = value.replace(/^(?:0{1,4}:){5}ffff:/i, '');
+  else return null;
   if (isIP(tail) === 4) return tail;
   const parts = tail.split(':');
   if (parts.length !== 2 || parts.some((part) => !/^[a-f0-9]{1,4}$/.test(part))) return null;
