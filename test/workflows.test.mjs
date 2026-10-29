@@ -20,6 +20,12 @@ const audits = await pipeline(found.files, (file) => agent('AUDIT ' + file, { la
 log('audited', audits.length)
 return audits.filter(Boolean)`;
 
+test('workflow sandbox pumps pending jobs for plain workflow results', async () => {
+  const result = await runWorkflow({ source: 'return 42', runAgent: async () => '' });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.result, 42);
+});
+
 test('runWorkflow: schema, pipeline nulls failures, resume reuses completed agents', async () => {
   let calls = 0;
   const first = await runWorkflow({ source: SCRIPT, runAgent: async ({ prompt }) => { calls++; if (prompt.startsWith('LIST')) return '{"files":["a","b","c"]}'; if (prompt.endsWith(' b')) throw new Error('boom'); return 'ok ' + prompt; } });
