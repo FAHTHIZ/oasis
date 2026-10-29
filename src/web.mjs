@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
-import { formatApprovalMessage } from './approval-language.mjs';
+import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { access, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -46,6 +46,7 @@ export function toolDetail(name, args = {}) {
   else if (name === 'run_shell' || name === 'powershell') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
+  detail = redactApprovalSecrets(detail);
   return detail.length > 160 ? detail.slice(0, 157) + '...' : detail;
 }
 
@@ -162,6 +163,7 @@ async function readJsonBody(req) {
 function summarizeToolResult(result) {
   let text;
   try { text = JSON.stringify(result); } catch { text = String(result); }
+  text = redactApprovalSecrets(text);
   return text.length > 5000 ? text.slice(0, 5000) + '… [truncated]' : text;
 }
 
