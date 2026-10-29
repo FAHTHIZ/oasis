@@ -251,6 +251,20 @@ body.light .command-palette-result:hover,body.light .command-palette-result[aria
 @media(max-width:900px){.agent-monitor-grid{grid-template-columns:1fr}.agent-monitor-events{max-height:420px}}
 @media(max-width:480px){.agent-monitor-stats{gap:7px}.agent-monitor-stat{padding:10px}.agent-monitor-stat strong{font-size:19px}.agent-monitor-stat span{font-size:9px}.agent-monitor-actions{width:100%;justify-content:flex-start}.agent-monitor-actions .btn{flex:1}}
 
+
+/* Core slash-command suggestions: compact, keyboard-first, and non-executing. */
+.skill-command-menu{position:fixed;z-index:12000;width:min(460px,calc(100vw - 24px));max-height:min(340px,55vh);overflow:auto;display:grid;gap:4px;padding:8px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);box-shadow:0 22px 64px #0007;backdrop-filter:blur(16px)}
+.skill-command-menu[hidden]{display:none!important}
+.skill-command-menu-heading{display:flex;align-items:center;justify-content:space-between;padding:5px 8px 8px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.skill-command-menu-heading kbd{font:10px ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-radius:5px;padding:3px 5px;letter-spacing:0}
+.skill-command-option{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:10px 11px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.skill-command-option:hover,.skill-command-option[aria-selected="true"]{border-color:color-mix(in srgb,var(--accent) 48%,var(--line));background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.skill-command-copy{display:grid;gap:3px;min-width:0}
+.skill-command-name{font:700 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent)}
+.skill-command-description{font-size:11px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.skill-command-mode{white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:4px 7px;color:var(--muted);font-size:9px;font-weight:750}
+.skill-command-menu-footer{padding:7px 8px 3px;border-top:1px solid var(--line);color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:520px){.skill-command-menu{max-height:45vh}.skill-command-option{gap:7px;padding:9px}.skill-command-mode{font-size:8px;padding:3px 5px}}
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -1233,4 +1247,126 @@ document.getElementById('agentTokenInput').value=agentToken;
 if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
 
 })();
+</script>
+<script id="oasis-core-slash-suggestions">
+
+(function oasisCoreSlashSuggestions(){
+  var input=document.getElementById('agentPrompt');
+  if(!input)return;
+  var commands=[
+    {name:'init',description:'Inspect the project and create or update OASIS.md.',mode:'Edits after approval'},
+    {name:'plan',description:'Inspect relevant code and tests, then produce an ordered plan.',mode:'Read-only'},
+    {name:'fix',description:'Reproduce one bug, make a focused fix, and verify it.',mode:'Edits after approval'},
+    {name:'diagnose',description:'Analyze error text, logs, failing output, or a screenshot.',mode:'Read-only'},
+    {name:'review',description:'Review the current diff for correctness, security, performance, accessibility, and tests.',mode:'Read-only by default'},
+    {name:'rollback',description:'Preview the latest file checkpoint; a second confirmation is required to restore it.',mode:'Restore confirmation'}
+  ];
+  var menu=document.createElement('div');
+  menu.id='oasisCoreSlashMenu';
+  menu.className='skill-command-menu';
+  menu.hidden=true;
+  menu.setAttribute('role','listbox');
+  menu.setAttribute('aria-label','Core OASIS slash commands');
+  document.body.appendChild(menu);
+  input.setAttribute('aria-autocomplete','list');
+  input.setAttribute('aria-controls',menu.id);
+  input.setAttribute('aria-expanded','false');
+  var matches=[];
+  var selected=0;
+  function close(){
+    menu.hidden=true;
+    input.setAttribute('aria-expanded','false');
+    input.removeAttribute('aria-activedescendant');
+  }
+  function position(){
+    var rect=input.getBoundingClientRect();
+    var width=Math.min(460,Math.max(240,window.innerWidth-24));
+    menu.style.width=width+'px';
+    var height=Math.min(menu.scrollHeight||280,Math.min(340,window.innerHeight*.55));
+    var below=window.innerHeight-rect.bottom;
+    var top=below>=height+12?rect.bottom+8:Math.max(12,rect.top-height-8);
+    menu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-width-12))+'px';
+    menu.style.top=top+'px';
+  }
+  function choose(item){
+    input.value='/'+item.name+(item.name==='rollback'?'':' ');
+    input.focus();
+    try{input.setSelectionRange(input.value.length,input.value.length)}catch(_){}
+    close();
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  function render(){
+    var match=input.value.match(/^\/([a-z0-9-]*)$/i);
+    if(!match){close();return}
+    var query=match[1].toLowerCase();
+    matches=commands.filter(function(item){return item.name.indexOf(query)===0});
+    if(!matches.length){close();return}
+    selected=0;
+    menu.replaceChildren();
+    var heading=document.createElement('div');
+    heading.className='skill-command-menu-heading';
+    var label=document.createElement('span');
+    label.textContent='Core workflows';
+    var shortcut=document.createElement('kbd');
+    shortcut.textContent='↑ ↓  ·  Enter';
+    heading.append(label,shortcut);
+    menu.appendChild(heading);
+    matches.forEach(function(item,index){
+      var button=document.createElement('button');
+      button.type='button';
+      button.className='skill-command-option';
+      button.id='oasisCoreSlashOption'+index;
+      button.setAttribute('role','option');
+      button.setAttribute('aria-selected',String(index===selected));
+      var copy=document.createElement('span');
+      copy.className='skill-command-copy';
+      var name=document.createElement('span');
+      name.className='skill-command-name';
+      name.textContent='/'+item.name;
+      var description=document.createElement('span');
+      description.className='skill-command-description';
+      description.textContent=item.description;
+      copy.append(name,description);
+      var mode=document.createElement('span');
+      mode.className='skill-command-mode';
+      mode.textContent=item.mode;
+      button.append(copy,mode);
+      button.addEventListener('mouseenter',function(){selected=index;syncSelection()});
+      button.addEventListener('pointerdown',function(event){event.preventDefault();choose(item)});
+      menu.appendChild(button);
+    });
+    var footer=document.createElement('div');
+    footer.className='skill-command-menu-footer';
+    footer.textContent='Selecting a command only inserts it. Submitting shows its action preview; file edits and commands still use OASIS approvals.';
+    menu.appendChild(footer);
+    menu.hidden=false;
+    input.setAttribute('aria-expanded','true');
+    syncSelection();
+    position();
+  }
+  function syncSelection(){
+    Array.prototype.forEach.call(menu.querySelectorAll('[role="option"]'),function(option,index){
+      option.setAttribute('aria-selected',String(index===selected));
+    });
+    var active=menu.querySelector('#oasisCoreSlashOption'+selected);
+    if(active){
+      input.setAttribute('aria-activedescendant',active.id);
+      if(active.scrollIntoView)active.scrollIntoView({block:'nearest'});
+    }
+  }
+  input.addEventListener('input',render);
+  input.addEventListener('keydown',function(event){
+    if(menu.hidden||!matches.length)return;
+    if(event.key==='ArrowDown'){event.preventDefault();selected=(selected+1)%matches.length;syncSelection();return}
+    if(event.key==='ArrowUp'){event.preventDefault();selected=(selected-1+matches.length)%matches.length;syncSelection();return}
+    if(event.key==='Enter'&&!event.isComposing){event.preventDefault();choose(matches[selected]);return}
+    if(event.key==='Escape'){event.preventDefault();close()}
+  });
+  document.addEventListener('pointerdown',function(event){if(event.target!==input&&!menu.contains(event.target))close()});
+  var form=document.getElementById('agentForm');
+  if(form)form.addEventListener('submit',close);
+  window.addEventListener('resize',function(){if(!menu.hidden)position()});
+  window.addEventListener('scroll',function(){if(!menu.hidden)position()},true);
+})();
+
 </script></body></html>
