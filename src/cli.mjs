@@ -377,6 +377,16 @@ async function configureProvider(root = process.cwd(), options = {}) {
     vertex: { protocol: 'vertex', baseURL: defaultCloudBaseURL('vertex', process.env), model: process.env.ANTHROPIC_MODEL || '' },
     foundry: { protocol: 'foundry', baseURL: (() => { try { return defaultCloudBaseURL('foundry', process.env); } catch { return ''; } })() || 'https://RESOURCE.services.ai.azure.com/anthropic', model: process.env.ANTHROPIC_MODEL || process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '' }
   };
+  const chooseApiPreset = async (preferredPreset) => {
+    stdout.write('\nChoose your API-key provider:\n');
+    stdout.write('  1. OpenAI\n  2. Anthropic\n  3. OpenRouter\n  4. Gemini\n  5. Other / compatible endpoint\n');
+    const preferred = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', custom: '5' })[preferredPreset] || '1';
+    const answer = (await rl.question('Choose [1/2/3/4/5] (default ' + preferred + '): ')).trim().toLowerCase() || preferred;
+    const providers = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'custom' };
+    const selected = providers[answer] || (['openai', 'anthropic', 'openrouter', 'gemini', 'custom'].includes(answer) ? answer : '');
+    if (!selected) throw new Error('Choose a number from 1 to 5 for the API-key provider.');
+    return selected;
+  };
   try {
     const currentConfig = options.defaultPreset === undefined
       ? await loadConfig().catch(() => null)
@@ -385,7 +395,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
       ? inferSetupProviderPreset(currentConfig)
       : resolveSetupProviderPreset(options.defaultPreset);
     if (options.skipPresetPrompt) {
-      presetName = defaultPreset;
+      presetName = options.chooseKeyProvider ? await chooseApiPreset(defaultPreset) : defaultPreset;
     } else {
       stdout.write('\nChoose how you want to connect OASIS:\n');
       stdout.write('  1. I have an API key\n');
@@ -405,13 +415,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
       } else if (answer === '3') {
         presetName = 'ollama';
       } else if (answer === '1') {
-        stdout.write('\\nChoose your API-key provider:\\n');
-        stdout.write('  1. OpenAI\\n  2. Anthropic\\n  3. OpenRouter\\n  4. Gemini\\n  5. Other / compatible endpoint\\n');
-        const keyDefault = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', custom: '5' })[defaultPreset] || '1';
-        const keyAnswer = (await rl.question('Choose [1/2/3/4/5] (default ' + keyDefault + '): ')).trim().toLowerCase() || keyDefault;
-        const keyProviders = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'custom' };
-        presetName = keyProviders[keyAnswer] || (directPresets.includes(keyAnswer) ? keyAnswer : '');
-        if (!presetName) throw new Error('Choose a number from 1 to 5 for the API-key provider.');
+        presetName = await chooseApiPreset(defaultPreset);
       } else if (answer === '4') {
         stdout.write('\\nChoose an advanced provider:\\n');
         stdout.write('  1. AWS Bedrock\\n  2. Google Vertex AI\\n  3. Microsoft Foundry\\n  4. Custom / compatible endpoint\\n');
@@ -536,7 +540,7 @@ async function ensureModelProviderSetup(root, options = {}) {
     return false;
   }
   try {
-    await configureProvider(root, { defaultPreset: preset, skipPresetPrompt: true });
+    await configureProvider(root, { defaultPreset: preset, skipPresetPrompt: true, chooseKeyProvider: preset === 'openai' });
   } catch (error) {
     stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
   }
