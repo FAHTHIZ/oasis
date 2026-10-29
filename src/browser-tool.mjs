@@ -172,7 +172,7 @@ async function setupPage(state, page, context) {
   return tab;
 }
 
-async function ensureBrowser(session, env) {
+async function ensureBrowser(session, env, context) {
   if (session.browserState && session.browserState.tabs.length && !session.browserState.tabs[session.browserState.active].page.closed) return session.browserState;
   if (session.browserState) await closeBrowser(session);
   const port = Number(env.OASIS_CHROME_PORT || 0);
@@ -236,7 +236,7 @@ export async function executeBrowserTool(args, context = {}) {
   const env = context.env || process.env;
   const action = String(args.action || '');
   if (action === 'close') { await closeBrowser(session); return { closed: true }; }
-  const state = await ensureBrowser(session, env);
+  const state = await ensureBrowser(session, env, context);
   let tab = state.tabs[state.active];
   const page = tab.page;
   switch (action) {
