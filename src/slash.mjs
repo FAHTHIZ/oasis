@@ -161,7 +161,13 @@ export async function runBuiltinCommand(name, argument, state) {
   if (!state.sessionOptions) state.sessionOptions = sessionOptions;
   switch (name) {
     case 'help': {
-      const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
+      const loadedCustom = await loadCustomCommands(root, { env }).catch(() => new Map());
+      // Built-in commands win over same-named custom commands; do not show a
+      // duplicate help entry that the dispatcher would resolve to the built-in.
+      const custom = new Map([...loadedCustom].filter(([name, command]) =>
+        !Object.hasOwn(BUILTIN_COMMANDS, name) &&
+        !Object.hasOwn(BUILTIN_COMMANDS, command && command.name)
+      ));
       // Keep the six deliberate core workflows first; the full command set remains
       // available below, grouped by purpose, without creating a second palette system.
       const groups = [
