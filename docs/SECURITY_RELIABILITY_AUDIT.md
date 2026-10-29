@@ -187,3 +187,11 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Comparison note:** Anthropic's public `sandbox-runtime` provides a useful reference for OS-level filesystem and network confinement. OASIS's current sandbox remains a smaller optional implementation and should not be described as feature-equivalent to that runtime until equivalent adversarial and platform tests exist.
 
+## Follow-up hardening: credential masking when the workspace is the home directory
+
+**Finding:** the sandbox credential masker treated the workspace root as an explicit writable-directory grant. If a user selected their home directory as the workspace, the overlap check omitted every credential path beneath it, so sandboxed commands could read those files even though credential masking was enabled. The bubblewrap mount order also placed masks before writable binds, allowing a broad writable bind to hide a mask.
+
+**Fix added on main:** credential masking now distinguishes the workspace root from explicitly added directories, only lets an explicit grant containing a sensitive path opt that path out, and mounts writable roots before overlaying credential masks. A writable child under a credential directory no longer opts the entire parent directory out of masking. Regression tests cover a home-directory workspace, nested writable paths, and bubblewrap mount ordering.
+
+**Verification boundary:** this is source-level hardening until the current main commit's Quality Checks pass; CI cannot establish macOS Seatbelt enforcement by itself, and native macOS sandbox behavior still needs platform-specific runtime tests.
+
