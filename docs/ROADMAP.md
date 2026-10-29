@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against code baseline [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the competitor-specific comparison is [PRODUCT_READINESS.md](PRODUCT_READINESS.md).
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Last verified: October 29, 2026**, against code baseline [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the project-owned readiness plan is [Product readiness](PRODUCT_READINESS.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -59,7 +59,7 @@ Once the Alpha-confidence gate is complete, prioritize:
 3. **Platform gaps:** JetBrains integration; validated native PTY/process cleanup across supported systems; Windows sandbox and credential storage; native Gemini adapter; desktop signing or explicit unsigned-package handling.
 4. **Ecosystem hardening:** test real third-party plugin compatibility, lifecycle boundaries, marketplace trust/update/rollback and provider failure recovery. Don't present a detected or importable extension as fully compatible without tests.
 
-These priorities follow from the [compatible ecosystem comparison](PRODUCT_READINESS.md). Do not treat an accessible local web server as a replacement for a secure hosted session service.
+These priorities follow from the current integration inventory and readiness findings in [Product readiness](PRODUCT_READINESS.md). Do not treat an accessible local web server as a replacement for a secure hosted session service.
 
 ## Milestone 1 — Alpha release gate
 
@@ -73,7 +73,7 @@ These priorities follow from the [compatible ecosystem comparison](PRODUCT_READI
 
 ## Milestone 2 — provider and tool ecosystem
 
-- **Current extension gap:** OASIS has a broad native compatible ecosystem plugin-format path, including marketplaces, core plugin manifests, commands, agents, skills, hooks, MCP servers, multiple source types, and supporting settings. This is not a guarantee that every third-party or enterprise plugin works unchanged. The separate Claude/Codex/Gemini import adapters are intentionally safety-reviewed: detected capabilities are classified, imported command prompts remain untrusted, MCP proposals are disabled until approved, and unsupported hooks/scripts/lifecycle actions do not silently execute. Track feature-specific gaps and evidence in [PRODUCT_READINESS.md](PRODUCT_READINESS.md).
+- **Current extension gap:** OASIS has a broad native compatible ecosystem plugin-format path, including marketplaces, core plugin manifests, commands, agents, skills, hooks, MCP servers, multiple source types, and supporting settings. This is not a guarantee that every third-party or enterprise plugin works unchanged. External model-CLI and agent-configuration import adapters are intentionally safety-reviewed: detected capabilities are classified, imported command prompts remain untrusted, MCP proposals are disabled until approved, and unsupported hooks/scripts/lifecycle actions do not silently execute. Track feature-specific gaps and evidence in [PRODUCT_READINESS.md](PRODUCT_READINESS.md).
 - **Progress:** portable Agent Skills preserve bounded text references/assets and expose them through manifest-verified, traversal-safe read access; scripts remain inactive.
 - **Progress:** extension inspection now emits a versioned, normalized adapter/install plan for detected compatible ecosystem, Codex, Gemini CLI, and portable Agent Skills layouts. Each capability is explicitly classified as supported, inspect-only, review-required, unsupported, or not detected. The CLI and browser show the plan before install approval.
 - **Progress:** recognized Markdown slash-command instructions from compatible ecosystem plugin/command layouts can be imported as ordinary untrusted Oasis skill prompts. Oasis does not register native slash-command aliases, argument interpolation, or TOML command behavior; those remain inactive.
@@ -113,4 +113,4 @@ OASIS is not yet at compatible ecosystem feature parity, and no apples-to-apples
 
 Current boundaries: the PTY/xterm path still needs broader cross-platform lifecycle testing; multi-agent task dispatch and named teams remain session-scoped without a durable visual run monitor or cross-session team service; branches are not merged automatically; embedded GitHub OAuth is not implemented; the general remote/mobile control lifecycle is incomplete; third-party plugin compatibility is feature-by-feature rather than universal; the optional sandbox is disabled by default and has no Windows implementation; native Gemini and JetBrains support remain gaps; desktop installers are unsigned; browser dashboard data does not fully sync with the CLI; and context compaction is a best-effort heuristic. The 21 fixture suite is only a smoke benchmark.
 
-See [NEXT_MILESTONE.md](NEXT_MILESTONE.md) for the prioritized acceptance gate, [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risks, [CURRENT_STATUS.md](CURRENT_STATUS.md) for verification evidence, and [PRODUCT_READINESS.md](PRODUCT_READINESS.md) for the source-backed capability comparison.
+See [NEXT_MILESTONE.md](NEXT_MILESTONE.md) for the prioritized acceptance gate, [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risks, [CURRENT_STATUS.md](CURRENT_STATUS.md) for verification evidence, and [PRODUCT_READINESS.md](PRODUCT_READINESS.md) for the release-readiness gates.
