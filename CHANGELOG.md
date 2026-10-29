@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Added JSON and self-contained offline HTML exports for Arena comparisons, including paired per-task wins/ties/losses and sample/provenance caveats; report writes are atomic and refuse symlink destinations.
+- Added structured post-edit verification evidence to agent results and surfaced it in the CLI/browser: changed files, diff-review state, latest recognized check result, LSP status and blockers. Missing optional LSP tooling is disclosed without substituting for a real code check.
 - Added post-edit LSP verification for source edits where a language server is configured, including baseline-aware diagnostics and explicit unavailable states when a server does not answer.
 - Added a completion blocker for new or unclassified LSP errors and focused tests for TypeScript-style diagnostics, diagnostic timeouts, startup failure, and the /fix gate. Full current-head checks remain pending.
 - Added a built-in `/audit` workflow that runs isolated security, performance, test-coverage and dependency reviewers, merges duplicate findings, verifies up to four high/critical findings, and separates verified from unverified results. Worker timeout/cancellation stress coverage and full current-head validation remain open.
