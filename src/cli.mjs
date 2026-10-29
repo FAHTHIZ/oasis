@@ -2681,7 +2681,9 @@ async function main() {
     const { fetchPluginArchive } = await import('./zip.mjs');
     for (const url of SESSION_OPTIONS.pluginUrls) {
       const dir = await fetchPluginArchive(url);
-      TEMPORARY_PLUGIN_DIRS.add(dir);
+      // fetchPluginArchive may return the plugin's single top-level subfolder;
+      // register its actual temporary extraction root so cleanup removes the parent too.
+      TEMPORARY_PLUGIN_DIRS.add(path.basename(dir).startsWith('oasis-plugin-url-') ? dir : path.dirname(dir));
       process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, dir].filter(Boolean).join(path.delimiter);
     }
   }
