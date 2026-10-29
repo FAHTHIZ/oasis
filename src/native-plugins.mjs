@@ -10,7 +10,7 @@ const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_COMPONENT_BYTES = 256 * 1024;
 const PLUGIN_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const COMMAND_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
+const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 function safeRelative(input, label) {
   if (typeof input !== 'string' || !input || input.includes('\\') || path.posix.isAbsolute(input)) throw new Error(label + ' must be a relative POSIX path.');
@@ -67,7 +67,7 @@ async function validatePackage(source) {
   try{manifest=JSON.parse(await readFile(manifestFile,'utf8'));}catch(error){throw new Error('Invalid plugin.json: '+error.message);}
   if(!manifest||typeof manifest!=='object'||Array.isArray(manifest)||manifest.schemaVersion!==1)throw new Error('plugin.json needs schemaVersion: 1.');
   if(typeof manifest.name!=='string'||!PLUGIN_NAME.test(manifest.name))throw new Error('Plugin name must be lowercase kebab-case (max 63 characters).');
-  if(typeof manifest.version!=='string'||!VERSION.test(manifest.version))throw new Error('Plugin version must be semantic MAJOR.MINOR.PATCH.');
+  if(typeof manifest.version!=='string'||!validVersion(manifest.version))throw new Error('Plugin version must be semantic MAJOR.MINOR.PATCH.');
   if(typeof manifest.description!=='string'||!manifest.description.trim()||manifest.description.length>500)throw new Error('Plugin description is required and limited to 500 characters.');
   if(!Array.isArray(manifest.permissions)||manifest.permissions.some(p=>!CAPABILITIES.has(p))||new Set(manifest.permissions).size!==manifest.permissions.length)throw new Error('permissions must be a unique array of commands, skills, agents, hooks, and/or mcp.');
   const files=new Map();
@@ -134,8 +134,47 @@ async function validatePackage(source) {
   for(const [capability,used] of Object.entries(declared))if(used&&!manifest.permissions.includes(capability))throw new Error('plugin.json uses '+capability+' but does not request that permission.');
   return {root,manifest,files,components,declared};
 }
-function versionParts(version){return String(version).split('-')[0].split('.').map(Number);}
-function compareVersion(a,b){const left=versionParts(a),right=versionParts(b);for(let i=0;i<3;i++){if(left[i]>right[i])return 1;if(left[i]<right[i])return -1;}return 0;}
+function validVersion(version) {
+  const match = VERSION.exec(version);
+  if (!match) return false;
+  const prerelease = match[4];
+  return !prerelease || prerelease.split('.').every((identifier) =>
+    !/^\d+$/.test(identifier) || identifier === '0' || !identifier.startsWith('0')
+  );
+}
+function parseVersion(version) {
+  const [core, prerelease] = String(version).split('-', 2);
+  return {
+    core: core.split('.').map(Number),
+    prerelease: prerelease === undefined ? null : prerelease.split('.')
+  };
+}
+function comparePrereleaseIdentifier(a, b) {
+  if (a === b) return 0;
+  const aNumeric = /^\d+$/.test(a), bNumeric = /^\d+$/.test(b);
+  if (aNumeric && bNumeric) {
+    const left = BigInt(a), right = BigInt(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  }
+  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
+  return a < b ? -1 : 1;
+}
+function compareVersion(a, b) {
+  const left = parseVersion(a), right = parseVersion(b);
+  for (let i = 0; i < 3; i++) {
+    if (left.core[i] > right.core[i]) return 1;
+    if (left.core[i] < right.core[i]) return -1;
+  }
+  if (left.prerelease === null && right.prerelease === null) return 0;
+  if (left.prerelease === null) return 1;
+  if (right.prerelease === null) return -1;
+  const count = Math.min(left.prerelease.length, right.prerelease.length);
+  for (let i = 0; i < count; i++) {
+    const compared = comparePrereleaseIdentifier(left.prerelease[i], right.prerelease[i]);
+    if (compared !== 0) return compared;
+  }
+  return left.prerelease.length < right.prerelease.length ? -1 : left.prerelease.length > right.prerelease.length ? 1 : 0;
+}
 function registryPath(env){return path.join(pluginHome(env),'installed_plugins.json');}
 function nativeRoot(env){return path.join(getConfigDirectory(env),'native-plugins');}
 async function readRegistry(env){const plugins=await readInstalledPlugins(env);return {...plugins};}
@@ -153,6 +192,7 @@ function compatibilityManifest(manifest,grants,components){
   const out={name:manifest.name,version:manifest.version,description:manifest.description,defaultEnabled:true};
   if(allowed.has('commands'))out.commands=Object.fromEntries(components.commands.map(command=>[command.name,{source:command.source,description:command.description,argumentHint:command.argumentHint}]));
   if(allowed.has('skills'))out.skills=components.skills;
+  if(allowed.has('agents'))out.agents=components.agents;
   if(allowed.has('hooks')&&components.hooks)out.hooks=components.hooks;
   if(allowed.has('mcp')&&components.mcp)out.mcpServers=components.mcp;
   return out;

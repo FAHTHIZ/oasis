@@ -88,22 +88,40 @@ test('native plugin rejects unsafe component paths and unrequested grants',async
   await assert.rejects(installNativePlugin(pkg,{env,grantedPermissions:['commands','mcp']}),/did not request the mcp permission/);
 });
 
+test('native plugin exposes granted agent definitions to the loader only when granted',async t=>{
+  const {root,pkg,env}=await setup(t);await writePackage(pkg);
+  await installNativePlugin(pkg,{env,grantedPermissions:['agents']});
+  const plugins=await loadEnabledPlugins(root,{env});const plugin=plugins.find(item=>item.id==='review-helper@oasis-native');
+  assert.ok(plugin);
+  assert.deepEqual((await pluginAgents([plugin],{env,root})).map(agent=>agent.name),['review-helper:reviewer']);
+  assert.equal((await pluginCommands([plugin],{env,root})).length,0);
+  assert.equal((await pluginSkills([plugin])).length,0);
+});
+
+test('native plugin updates compare prerelease identifiers using semantic version ordering',async t=>{
+  const {pkg,env}=await setup(t);
+  await writePackage(pkg,{version:'1.0.0-beta.2',permissions:['commands']});
+  await installNativePlugin(pkg,{env,grantedPermissions:['commands']});
+  await writePackage(pkg,{version:'1.0.0-beta.10',permissions:['commands']});
+  const prerelease=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
+  assert.equal(prerelease.installed,true);
+  assert.equal(prerelease.version,'1.0.0-beta.10');
+  await writePackage(pkg,{version:'1.0.0',permissions:['commands']});
+  const stable=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
+  assert.equal(stable.installed,true);
+  assert.equal(stable.version,'1.0.0');
+  await writePackage(pkg,{version:'1.0.0-beta.99',permissions:['commands']});
+  await assert.rejects(installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']}),/must increase the plugin version/);
+  await writePackage(pkg,{version:'1.0.0-01',permissions:['commands']});
+  await assert.rejects(validateNativePluginPackage(pkg),/semantic MAJOR\.MINOR\.PATCH/);
+});
+
 test('native plugin uninstall removes registry entry and local package',async t=>{
   const {pkg,env}=await setup(t);await writePackage(pkg);
   const result=await installNativePlugin(pkg,{env,grantedPermissions:['commands']});
   await uninstallNativePlugin('review-helper',{env});
   await assert.rejects(readFile(path.join(result.installPath,'plugin.json'),'utf8'),/ENOENT/);
   assert.deepEqual(await listNativePlugins({env}),[]);
-});
-
-test('granting MCP explicitly bundles the server code and rewrites permissioned server paths',async t=>{
-  const {root,pkg,env}=await setup(t);await writePackage(pkg);
-  const installed=await installNativePlugin(pkg,{env,grantedPermissions:['mcp']});
-  assert.ok((await readFile(path.join(installed.installPath,'mcp/server.mjs'),'utf8')).includes('local bundled MCP server'));
-  const plugins=await loadEnabledPlugins(root,{env});const plugin=plugins.find(item=>item.id==='review-helper@oasis-native');
-  const [server]=await pluginMcpServers([plugin],{env,root});
-  assert.match(server.mcpServers.example.args[0],/native-plugins[\\/]review-helper[\\/]mcp[\\/]server.mjs/);
-  assert.equal((await pluginCommands([plugin],{env,root})).length,0);
 });
 
 test('granting MCP explicitly bundles server code and resolves its local path',async t=>{

@@ -53,7 +53,7 @@ The list above records implementation evidence only; it does not certify securit
 
 ## Implemented on main; verification pending
 
-The native plugin increment adds local plugin.json packages, allowlisted component copying, explicit grants, integration with the existing namespaced command/skill/agent/hook/MCP loader, conflict rejection, versioned updates and permission-diff confirmation. Tests cover install, permission isolation, unrequested grants, conflicts, updates, MCP bundle paths and uninstall. This remains unverified until the exact current-main Quality workflow passes.
+The native plugin increment adds local plugin.json packages, allowlisted component copying, explicit grants, integration with the existing namespaced command/skill/agent/hook/MCP loader, conflict rejection, versioned updates and permission-diff confirmation. Tests cover install, permission isolation, unrequested grants, conflicts, updates, MCP bundle paths and uninstall. Additional regression tests now cover granted agent-loader visibility and semantic prerelease ordering; duplicate MCP coverage was removed. This remains unverified until the exact current-main Quality workflow passes.
 
 The current main increment adds the requested built-in output styles and /style command, and changes path-scoped rule loading so path-frontmatter rules are excluded from base project memory and attached only to matching file operations. Focused regression tests were added for style switching, preservation of project rules, path matching, non-matching files, unsafe paths and user/project conflict ordering. These changes remain **implemented but not yet verified on current HEAD** until the Quality Checks workflow passes on the exact commit.
 

@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Fixed native plugin capability exposure so explicitly granted agent definitions are included in the compatibility manifest; added semantic prerelease ordering and validation tests, and removed duplicate MCP coverage. Current-main CI is pending.
+
 - Added native local plugin packages using root `plugin.json`, allowlisted bundled commands/skills/agents/hooks/MCP server files, explicit permissions, namespaced commands, conflict checks, versioned updates and permission-diff previews/confirmation. Tests cover installation, permission isolation, unrequested grants, conflicts, updates, MCP paths and uninstall; current-head CI pending.
 
 - LSP completion responses now explicitly disclose when language-server diagnostics were unavailable even if independent checks passed; `/diagnostics` directs the agent to collect both LSP and project-checker results and report Errors, Warnings, Information, and Verification unavailable separately.
