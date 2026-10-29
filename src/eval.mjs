@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,7 +38,7 @@ function capture(output, chunk, limit = OUTPUT_LIMIT) {
   return (output + chunk.toString('utf8')).slice(-limit);
 }
 
-function runProcess(command, args, options = {}) {
+export function runEvalProcess(command, args, options = {}) {
   const cwd = options.cwd || process.cwd();
   const env = options.env || scrubEnvironment();
   const timeoutMs = Math.max(1000, Number(options.timeoutMs) || DEFAULT_TIMEOUT_MS);
@@ -48,20 +49,25 @@ function runProcess(command, args, options = {}) {
     let stderr = '';
     let timedOut = false;
     let settled = false;
+    let killTimer = null;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(killTimer);
       resolve({ ...result, stdout, stderr, output: (stdout + (stderr ? '\n' + stderr : '')).slice(-outputLimit) });
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGTERM'); } catch {}
-      const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 1000);
+      signalProcessTree(child, 'SIGTERM');
+      killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1000);
       killTimer.unref?.();
     }, timeoutMs);
     try {
-      child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true });
+      child = spawn(command, args, {
+        cwd, env, stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true,
+        ...processTreeSpawnOptions()
+      });
       child.stdout.on('data', (chunk) => { stdout = capture(stdout, chunk, outputLimit); });
       child.stderr.on('data', (chunk) => { stderr = capture(stderr, chunk, outputLimit); });
       child.on('error', (error) => finish({ exitCode: 127, signal: null, error: error.message, timedOut }));
@@ -244,7 +250,7 @@ async function runVerifier(task, workspace, env, timeoutMs = 60000) {
   const args = task.verifierPath.endsWith('.mjs')
     ? [task.verifierPath, workspace, task.taskDir]
     : [task.verifierPath, workspace, task.taskDir];
-  const result = await runProcess(command, args, {
+  const result = await runEvalProcess(command, args, {
     cwd: workspace,
     env: scrubEnvironment(env),
     timeoutMs
@@ -255,15 +261,15 @@ async function runVerifier(task, workspace, env, timeoutMs = 60000) {
 async function applyReferencePatch(task, workspace, env) {
   // The disposable copy intentionally excludes the source repository's .git directory.
   // Initialize a throwaway repo so git apply has consistent work-tree semantics.
-  const initialized = await runProcess('git', ['init', '--quiet'], {
+  const initialized = await runEvalProcess('git', ['init', '--quiet'], {
     cwd: workspace, env: scrubEnvironment(env), timeoutMs: 20000
   });
   if (initialized.exitCode !== 0) return { ...initialized, stage: 'git-init' };
-  const check = await runProcess('git', ['apply', '--check', '--whitespace=error', task.patchPath], {
+  const check = await runEvalProcess('git', ['apply', '--check', '--whitespace=error', task.patchPath], {
     cwd: workspace, env: scrubEnvironment(env), timeoutMs: 20000
   });
   if (check.exitCode !== 0) return { ...check, stage: 'check' };
-  const apply = await runProcess('git', ['apply', '--whitespace=error', task.patchPath], {
+  const apply = await runEvalProcess('git', ['apply', '--whitespace=error', task.patchPath], {
     cwd: workspace, env: scrubEnvironment(env), timeoutMs: 20000
   });
   return { ...apply, stage: 'apply' };
@@ -671,7 +677,7 @@ async function detectSourceRevision(env = process.env) {
   const explicit = String(env.OASIS_SOURCE_REVISION || env.GITHUB_SHA || '').trim();
   if (/^[a-f0-9]{40}$/i.test(explicit)) return explicit.toLowerCase();
 
-  const result = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
+  const result = await runEvalProcess('git', ['rev-parse', '--verify', 'HEAD'], {
     cwd: APP_ROOT,
     env: scrubEnvironment(env),
     timeoutMs: 3000,
@@ -789,7 +795,7 @@ async function runClaudeCodeEval(config, options = {}) {
   if (!selectedDirs.length) throw new Error(config.task ? 'No evaluation task named "' + config.task + '" was found.' : 'No evaluation tasks were found in ' + tasksDir);
 
   const command = String(env.OASIS_CLAUDE_CODE_BIN || 'claude');
-  const runCli = options.claudeRunner || ((args, runnerOptions) => runProcess(command, args, runnerOptions));
+  const runCli = options.claudeRunner || ((args, runnerOptions) => runEvalProcess(command, args, runnerOptions));
   const versionResult = await runCli(['--version'], {
     cwd: APP_ROOT, env, timeoutMs: 15000, outputLimit: 20000
   });

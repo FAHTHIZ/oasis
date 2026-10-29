@@ -20,7 +20,7 @@ Work directly on `main` in small, reviewable commits. Update this document and t
 - [ ] Required workflows exercise the same intended validation commands without masking failures or relying on retry-only suppression.
 - [ ] Documentation identifies the exact commit for any historical evidence and distinguishes it from current results.
 
-Latest code verification: [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) and [homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on code commit `5a53756` (594 tests, 22 fixtures, Node 22/24/26, PTY and browser E2E). Desktop packaging was not reverified on this same revision; Gate 0 remains open until all required workflows pass on one code commit.
+Historical evidence: [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) and [homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on code commit `5a53756` (594 tests, 22 fixtures, Node 22/24/26, PTY and browser E2E). Later hardening and audit commits changed the repository after that run. The current-main quality workflow must pass after those changes, and desktop packaging must be verified on the same revision before Gate 0 can close.
 
 **Acceptance:** link each required workflow to the same commit SHA and record any unsupported platform path explicitly.
 
@@ -37,7 +37,7 @@ Latest code verification: [Quality Checks run 40818083171](https://github.com/FA
 
 ## Gate 2 — Representative coding evaluation
 
-The existing 22 fixtures are a utility-focused smoke suite, not a representative coding-quality score. Expand the maintained suite to at least 30 tasks across pinned repository snapshots, including:
+The current 33 fixtures are a utility-focused regression/smoke suite, not a representative coding-quality score. Expand the maintained suite to at least 50 representative tasks across pinned repository snapshots, including:
 
 - [ ] Repository navigation and source-grounded questions.
 - [ ] Multi-file feature implementation and refactoring.

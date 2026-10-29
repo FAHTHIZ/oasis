@@ -6,7 +6,7 @@
 
 ## Executive finding
 
-At the level of the core coding loop, OASIS and Claude Code occupy the same design family: a model reasons over repository context, requests tools, receives tool results, and repeats until it can answer or reaches a stopping condition. That shared shape is expected for tool-using coding agents; it does **not**, by itself, establish copied source code or equal task quality.
+The core model/tool/result loop is a common design pattern for tool-using systems, not a product identity. OASIS has its own implementation, provider strategy, local-first workspace, task coordination, workflows, integrations, and roadmap. Claude Code is included here only as a public external reference for the specific comparison requested; nothing in this report makes imitation or feature-count parity an OASIS goal.
 
 OASIS's implementation is visible in this repository. Its main loop is in [src/agent.mjs](../src/agent.mjs#L2998-L3395), tool definitions and execution are in [src/tools.mjs](../src/tools.mjs), and regression tests are in [test/runtime.test.mjs](../test/runtime.test.mjs#L905-L1457). Claude Code's official architecture guide describes the corresponding gather-context → take-action → verify-results loop in [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works#the-agentic-loop).
 
@@ -14,7 +14,7 @@ OASIS's implementation is visible in this repository. Its main loop is in [src/a
 
 ## Follow one task through the engine
 
-The right unit of comparison is the same task, at the same repository snapshot, with the same acceptance criteria—not a list of product features.
+When an external comparison is useful, the right unit is the same task, at the same repository snapshot, with the same acceptance criteria—not a list of product features. OASIS's own release gates remain correctness, reliability, safety, usability, and proven user value.
 
 1. **Build working context.** createSession() assembles session configuration, instructions, tools, settings, permissions, hooks, memory, and optional agents. runAgentTurnRaw() adds the user request and can recall saved memory before requesting a model response. See [src/agent.mjs](../src/agent.mjs#L342-L605) and [src/agent.mjs](../src/agent.mjs#L3014-L3079).
 2. **Ask the model for its next step.** requestCompletion() adapts the session to the configured provider protocol. The model can return text, tool calls, or both. OASIS supports several provider protocols; using the same model/provider in both products is necessary to reduce model-versus-harness confounding in a benchmark.

@@ -41,9 +41,15 @@ async function modelServer(t, { parent, child }) {
 }
 
 function gate() { let open; const promise = new Promise((resolve) => { open = resolve; }); return { promise, open }; }
-async function until(check, ms = 5000) {
+async function until(check, ms = 5000, onTimeout = null) {
   const start = Date.now();
-  while (!check()) { if (Date.now() - start > ms) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 10)); }
+  while (!check()) {
+    if (Date.now() - start > ms) {
+      const detail = typeof onTimeout === 'function' ? '; ' + onTimeout() : '';
+      throw new Error('timed out' + detail);
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
 
 test('background task returns at once, reports back on the next turn, and can be resumed with context', async (t) => {
@@ -452,7 +458,9 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
   await until(() => {
     const tasks = session.sharedTasks.tasks;
     return ['task_1', 'task_3'].every((id) => tasks.find((task) => task.id === id)?.status === 'completed');
-  });
+  }, 15000, () => 'first wave did not complete; tasks=' + JSON.stringify(session.sharedTasks.tasks) +
+    '; agents=' + JSON.stringify([...session.agentTasks.agents.values()].map(summarizeAgent)) +
+    '; events=' + JSON.stringify(agentEvents(session, { limit: 30 }).events));
 
   // Assert the dispatcher's effect through task/agent registries rather than a
   // provider-specific string serialization of the tool result.
@@ -469,7 +477,10 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
   const second = await runAgentTurn(session, 'dispatch the next wave', { autoApprove: true, env, approval: async () => true });
   assert.equal(second.text, 'dispatch wave finished');
   assert.equal(session.agentTasks.dispatchInFlight, false, 'dispatch guard is released before the next wave');
-  await until(() => session.sharedTasks.tasks.find((task) => task.id === 'task_2')?.status === 'completed');
+  await until(() => session.sharedTasks.tasks.find((task) => task.id === 'task_2')?.status === 'completed', 15000,
+    () => 'dependent task did not complete; task=' + JSON.stringify(session.sharedTasks.tasks.find((task) => task.id === 'task_2')) +
+      '; agents=' + JSON.stringify([...session.agentTasks.agents.values()].map(summarizeAgent)) +
+      '; events=' + JSON.stringify(agentEvents(session, { limit: 30 }).events));
   assert.equal(session.agentTasks.agents.size, 3);
   assert.equal(session.agentTasks.agents.get('agent_3').sharedTaskId, 'task_2');
   assert.ok(childRequests.some((request) => text(request.messages).includes('You have been assigned shared task task_2')));

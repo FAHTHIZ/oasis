@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { saveConfig } from '../src/config.mjs';
-import { compareEvalReports, runEvalCommand, validateEvaluationSuite } from '../src/eval.mjs';
+import { compareEvalReports, runEvalCommand, runEvalProcess, validateEvaluationSuite } from '../src/eval.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
 // enforcement is covered by test/file-state.test.mjs.
@@ -41,6 +41,30 @@ async function createFixtureTask(tasksDir, id = 'fixture-task') {
   ].join('\n'));
   return taskDir;
 }
+
+test('evaluation subprocess timeout terminates descendants that inherit output pipes', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('The process-group assertion is POSIX-specific; Windows uses taskkill tree termination.');
+    return;
+  }
+  const startedAt = Date.now();
+  const source = [
+    "const { spawn } = require('node:child_process');",
+    "spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 6500); setInterval(() => {}, 250);'], { stdio: 'inherit' });",
+    "process.stdout.write('descendant-started\\n');",
+    "setInterval(() => {}, 250);"
+  ].join('\\n');
+  const result = await runEvalProcess(process.execPath, ['-e', source], {
+    env: { PATH: process.env.PATH || '' },
+    timeoutMs: 1000,
+    outputLimit: 2048
+  });
+  const elapsedMs = Date.now() - startedAt;
+  assert.equal(result.timedOut, true);
+  assert.equal(result.exitCode, 124);
+  assert.match(result.output, /descendant-started/);
+  assert.ok(elapsedMs < 4500, 'the evaluator should terminate the process group instead of waiting for a child-held pipe (elapsed ' + elapsedMs + 'ms)');
+});
 
 test('eval suite validation requires no-op failure and reference-patch success', async (t) => {
   const tmp = await temporaryDirectory();
