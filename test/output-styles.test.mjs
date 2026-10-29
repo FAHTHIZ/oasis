@@ -19,7 +19,7 @@ async function workspace(t) {
 test('built-in and custom output styles load and swap cleanly in the system prompt', async (t) => {
   const { root, env } = await workspace(t);
   const styles = await loadOutputStyles(root, { env, home: env.HOME });
-  assert.deepEqual(Object.keys(styles).sort(), ['default', 'explanatory', 'learning', 'pirate']);
+  assert.deepEqual(Object.keys(styles).sort(), ['architect', 'concise', 'default', 'explanatory', 'learning', 'pirate', 'reviewer']);
   assert.equal(styles.pirate.source, 'project');
   let prompt = systemPromptWithStyle('BASE', styles.explanatory);
   assert.match(prompt, /<output-style name="explanatory">[\s\S]*Insight/);
@@ -27,6 +27,12 @@ test('built-in and custom output styles load and swap cleanly in the system prom
   assert.doesNotMatch(prompt, /explanatory/);
   assert.match(prompt, /friendly pirate/);
   assert.equal(systemPromptWithStyle(prompt, styles.default), 'BASE');
+  for (const name of ['concise', 'explanatory', 'architect', 'reviewer']) {
+    const switched = systemPromptWithStyle(systemPromptWithStyle('BASE\nPROJECT RULE: preserve API', styles.explanatory), styles[name]);
+    assert.match(switched, /PROJECT RULE: preserve API/, 'style switching must preserve project instructions');
+    assert.match(switched, new RegExp('<output-style name="' + name + '">'));
+    assert.equal((switched.match(/<output-style name=/g) || []).length, 1, 'only one style may be active');
+  }
 });
 
 test('/output-style lists and switches a live session; settings pick the default style', async (t) => {
@@ -40,8 +46,14 @@ test('/output-style lists and switches a live session; settings pick the default
   const sessionOptions = {};
   const listed = await runBuiltinCommand('output-style', '', { root, env, session, sessionOptions });
   assert.match(listed.output, /\* learning/);
+  assert.match(listed.output, /concise/);
+  assert.match(listed.output, /architect/);
+  assert.match(listed.output, /reviewer/);
   assert.match(listed.output, /pirate .*Talk like a pirate \[project\]/);
-  await runBuiltinCommand('output-style', 'pirate', { root, env, session, sessionOptions });
+  await runBuiltinCommand('style', 'reviewer', { root, env, session, sessionOptions });
+  assert.equal(session.outputStyle, 'reviewer');
+  assert.match(session.baseSystemPrompt, /Evidence-first review/);
+  await runBuiltinCommand('style', 'pirate', { root, env, session, sessionOptions });
   assert.equal(session.outputStyle, 'pirate');
   assert.equal(sessionOptions.outputStyle, 'pirate');
   assert.doesNotMatch(session.messages[0].content, /TODO\(human\)/);

@@ -51,7 +51,8 @@ export const BUILTIN_COMMANDS = {
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
-  'output-style': 'Show or switch the output style (/output-style [default|explanatory|learning|custom])',
+  style: 'List or switch the active response style (/style [default|concise|explanatory|architect|reviewer])',
+  'output-style': 'Legacy alias: list or switch response styles (/output-style NAME)',
   todos: 'Show the current todo list',
   memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
@@ -543,6 +544,7 @@ export async function runBuiltinCommand(name, argument, state) {
       for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + describeHook(hook));
       return { output: lines.join('\n') };
     }
+    case 'style':
     case 'output-style': {
       const styles = await loadOutputStyles(root, { env });
       const current = session && session.outputStyle || sessionOptions.outputStyle || 'default';

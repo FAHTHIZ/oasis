@@ -94,11 +94,11 @@ export async function loadMemory(root, options = {}) {
   const env = options.env || process.env;
   const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
   const rules = [...await loadRules(path.join(claudeHome, 'rules'), 'user'), ...await loadRules(path.join(path.resolve(root), '.claude', 'rules'), 'project', path.resolve(root))];
+  // Scoped instructions are deliberately excluded from base memory to keep the prompt small.
   for (const rule of rules) {
-    if (seen.has(rule.real)) continue;
+    if (rule.paths.length || seen.has(rule.real)) continue;
     seen.add(rule.real);
-    const scope = rule.paths.length ? ' (applies when working on files matching ' + rule.paths.join(', ') + ')' : '';
-    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + scope + ' ---\n' + rule.body.slice(0, PER_FILE_LIMIT));
+    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + rule.body.slice(0, PER_FILE_LIMIT));
   }
   return parts.join('\n\n').slice(0, MAX_TOTAL);
 }
@@ -178,9 +178,12 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
   if (env.OASIS_DISABLE_NESTED_MEMORY === '1' || typeof filePath !== 'string' || !filePath) return [];
   const workspace = await realpath(root).catch(() => path.resolve(root));
   const target = path.resolve(workspace, filePath);
+  const targetRelativeNative = path.relative(workspace, target);
+  if (targetRelativeNative.startsWith('..') || path.isAbsolute(targetRelativeNative)) return [];
+  const targetRelative = targetRelativeNative.split(path.sep).join('/');
   const relative = path.relative(workspace, path.dirname(target));
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return [];
-  const parts = relative.split(path.sep).filter(Boolean).slice(0, 30);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return [];
+  const parts = relative ? relative.split(path.sep).filter(Boolean).slice(0, 30) : [];
   const found = [];
   let budget = options.maxChars || 12000;
   for (let i = 1; i <= parts.length; i++) {
@@ -204,5 +207,40 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
       } catch {}
     }
   }
+  // Load path-frontmatter rules only for a specific matching file, never globally.
+  const envHome = options.home || env.HOME || os.homedir();
+  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(envHome, '.claude');
+  const scoped = [
+    ...await loadRules(path.join(claudeHome, 'rules'), 'user'),
+    ...await loadRules(path.join(workspace, '.claude', 'rules'), 'project', workspace)
+  ].filter((rule) => rule.paths.length && rule.paths.some((pattern) => rulePathMatches(pattern, targetRelative)));
+  scoped.sort((a, b) => ruleSpecificity(a) - ruleSpecificity(b) || (a.scope === b.scope ? a.name.localeCompare(b.name) : a.scope === 'user' ? -1 : 1));
+  for (const rule of scoped) {
+    const key = 'scoped-rule:' + rule.real + ':' + targetRelative;
+    if (loaded.has(key)) continue;
+    loaded.add(key);
+    found.push({ path: '.claude/rules/' + rule.name, text: '[Path-scoped ' + rule.scope + ' rule matching ' + targetRelative + ']\n' + rule.body.slice(0, PER_FILE_LIMIT) });
+  }
   return found;
+}
+
+function ruleSpecificity(rule) {
+  return Math.max(0, ...rule.paths.map((pattern) => pattern.replace(/[*?]/g, '').length));
+}
+
+export function rulePathMatches(pattern, relativePath) {
+  const p = String(pattern || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  const file = String(relativePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!p || p.startsWith('/') || p.split('/').includes('..')) return false;
+  let source = '^';
+  for (let i = 0; i < p.length; i++) {
+    const char = p[i];
+    if (char === '*' && p[i + 1] === '*') {
+      i++;
+      if (p[i + 1] === '/') { i++; source += '(?:.*/)?'; } else source += '.*';
+    } else if (char === '*') source += '[^/]*';
+    else if (char === '?') source += '[^/]';
+    else source += '^$+?.()|[]{}'.includes(char) || char === '\\' ? '\\' + char : char;
+  }
+  try { return new RegExp(source + '$').test(file); } catch { return false; }
 }

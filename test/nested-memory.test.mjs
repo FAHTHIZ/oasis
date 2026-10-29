@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { nestedMemoryFor } from '../src/memory.mjs';
+import { nestedMemoryFor, loadMemory, rulePathMatches } from '../src/memory.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
@@ -43,4 +43,39 @@ test('reading a file attaches that folder\'s CLAUDE.md to the tool result', asyn
   assert.match(tools[0].content, /PKG RULE/);
   assert.match(tools[0].content, /API RULE/);
   assert.doesNotMatch(tools[1].content, /PKG RULE/);
+});
+
+
+test('path-scoped rules are excluded from base memory and loaded only for matching paths', async (t) => {
+  const root = await fixture();
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-scoped-home-'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(home, { recursive: true, force: true })));
+  const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis'), OASIS_DISABLE_PARENT_MEMORY: '1' };
+  await mkdir(path.join(root, '.claude', 'rules'), { recursive: true });
+  await writeFile(path.join(root, '.claude', 'rules', 'typescript.md'), '---\npaths: ["pkg/api/**/*.ts", "pkg/api/*.js"]\n---\nSCOPED API RULE: keep compatibility');
+  await writeFile(path.join(root, '.claude', 'rules', 'global.md'), 'UNSCOPED RULE: use tests first');
+  const base = await loadMemory(root, { env, home });
+  assert.match(base, /UNSCOPED RULE/);
+  assert.doesNotMatch(base, /SCOPED API RULE/);
+  const matched = await nestedMemoryFor(root, 'pkg/api/a.js', new Set(), { env, home });
+  assert.ok(matched.some((item) => /SCOPED API RULE/.test(item.text)));
+  const nonmatched = await nestedMemoryFor(root, 'pkg/b.js', new Set(), { env, home });
+  assert.ok(!nonmatched.some((item) => /SCOPED API RULE/.test(item.text)));
+});
+
+test('path-scoped rules support safe glob matching and deterministic conflict ordering', async (t) => {
+  assert.equal(rulePathMatches('src/**/*.ts', 'src/app/main.ts'), true);
+  assert.equal(rulePathMatches('src/**/*.ts', 'src/main.js'), false);
+  assert.equal(rulePathMatches('../secrets/**', 'src/main.ts'), false);
+  const root = await fixture();
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-scoped-conflicts-'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(home, { recursive: true, force: true })));
+  const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), OASIS_CONFIG_DIR: path.join(home, '.config', 'oasis'), OASIS_DISABLE_PARENT_MEMORY: '1' };
+  await mkdir(path.join(home, '.claude', 'rules'), { recursive: true });
+  await mkdir(path.join(root, '.claude', 'rules'), { recursive: true });
+  await writeFile(path.join(home, '.claude', 'rules', 'base.md'), '---\npaths: ["pkg/**/*.js"]\n---\nUSER BROAD RULE');
+  await writeFile(path.join(root, '.claude', 'rules', 'specific.md'), '---\npaths: ["pkg/api/*.js"]\n---\nPROJECT SPECIFIC RULE');
+  const rules = await nestedMemoryFor(root, 'pkg/api/a.js', new Set(), { env, home });
+  const text = rules.map((item) => item.text).join('\n');
+  assert.ok(text.indexOf('USER BROAD RULE') < text.indexOf('PROJECT SPECIFIC RULE'));
 });

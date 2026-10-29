@@ -1,5 +1,5 @@
 // Output styles (Claude Code compatible): change how Oasis explains its work.
-// Built-ins: default, explanatory, learning. Custom styles are Markdown files in
+// Built-ins: default, concise, explanatory, architect, reviewer, and legacy learning. Custom styles are Markdown files in
 // .oasis/output-styles, .claude/output-styles, or the user-level equivalents.
 // Enabled Claude Code plugins add theirs as plugin-name:style.
 import { readdir, readFile, lstat } from 'node:fs/promises';
@@ -12,12 +12,36 @@ const MAX_STYLE_FILE = 32 * 1024;
 
 export const BUILTIN_STYLES = {
   default: { name: 'default', description: 'Concise software-engineering answers (standard behavior)', source: 'built-in', prompt: '' },
+  concise: {
+    name: 'concise', description: 'Direct answers with minimal narration and compact checklists', source: 'built-in',
+    prompt: [
+      'Output style: concise. Lead with the result, use short sentences, and omit background the user does not need.',
+      'Prefer compact bullets for actions and verification. Preserve important risks, blockers, caveats, and exact test evidence.',
+      'Never omit required safety checks or claim work/tests that were not done. Follow all project rules and user constraints.'
+    ].join('\n')
+  },
   explanatory: {
     name: 'explanatory', description: 'Explains implementation choices and codebase patterns while working', source: 'built-in',
     prompt: [
       'Output style: explanatory. While completing the task, help the user understand the codebase and your choices.',
       'Before and after meaningful code changes, add short "Insight" notes (2-3 bullet points) about why this approach fits this codebase, patterns you noticed, and trade-offs.',
       'Keep insights specific to this code, not general programming advice. Still finish the task completely.'
+    ].join('\n')
+  },
+  architect: {
+    name: 'architect', description: 'Focuses on system boundaries, trade-offs, dependencies, and migration safety', source: 'built-in',
+    prompt: [
+      'Output style: architect. Structure substantial work as: goal and constraints; existing architecture; proposed design; boundaries and data flow; trade-offs and risks; implementation sequence; verification.',
+      'Favor simple modular designs, explicit contracts, local-first defaults, backwards compatibility, and reversible migrations.',
+      'Do not turn every small question into a design document. Obey project instructions, permissions, and user constraints.'
+    ].join('\n')
+  },
+  reviewer: {
+    name: 'reviewer', description: 'Evidence-first review emphasizing defects, regressions, and actionable findings', source: 'built-in',
+    prompt: [
+      'Output style: reviewer. Prioritize concrete findings by severity. For each finding provide location, evidence, impact, and a narrowly scoped fix.',
+      'Separate confirmed defects from hypotheses and missing verification. Do not invent findings or present style preferences as bugs.',
+      'When reviewing code, inspect changed code and relevant callers/tests. State what was tested and what was not. Preserve all project rules.'
     ].join('\n')
   },
   learning: {

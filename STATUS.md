@@ -42,14 +42,18 @@ The list above records implementation evidence only; it does not certify securit
 ## Not implemented or not yet meeting the requested acceptance criteria
 
 - **Durable cross-session messaging:** /notify and /inbox with structured safe messages, busy-target queues, rate limits, loop prevention, read/dismiss state and a hard guarantee that messages cannot execute commands in the receiving session.
-- **Path-scoped rules:** frontmatter path matching and conditional loading only for matching workspace paths, with conflicts handled deterministically.
-- **Complete built-in output styles:** a single active style among default, concise, explanatory, architect and reviewer, switchable/listable through /style, while preserving project rules.
+- **Path-scoped rules:** matching-only loading, safe glob matching and deterministic broad-to-specific/user-to-project ordering are implemented on main; current-head tests are pending.
+- **Complete built-in output styles:** the requested built-ins and /style command are implemented on main, with legacy /output-style compatibility. Fresh test results are pending; do not count as verified until CI passes.
 - **Native plugin package:** plugin.json, bundled skills/hooks/subagents/MCP servers/metadata, namespaced /plugin-name:command commands, explicit permission grants and visible permission diffs during updates.
 - **Local-only investigation artifacts:** /artifact <name> creating a live local investigation page with goal, timeline, commands, changed files, tests, errors, hypotheses and rollback points; local-only defaults, secret redaction and cleanup.
 - A general Oasis-owned local/self-hosted/managed runner with authenticated event streaming, approval pauses, cancellation, workspace allowlists, revocation and retention.
 - Guaranteed diagnostic coverage for every edit/language, and a /fix gate that always blocks success when new diagnostics remain or verification fails.
 - Guaranteed queued user steering before the next model decision, or full checkpoint/process isolation for every fork.
 - Production readiness, security certification, platform parity, signed installers or competitive coding quality.
+
+## Implemented on main; verification pending
+
+The current main increment adds the requested built-in output styles and /style command, and changes path-scoped rule loading so path-frontmatter rules are excluded from base project memory and attached only to matching file operations. Focused regression tests were added for style switching, preservation of project rules, path matching, non-matching files, unsafe paths and user/project conflict ordering. These changes remain **implemented but not yet verified on current HEAD** until the Quality Checks workflow passes on the exact commit.
 
 ## Current-head verification plan
 
