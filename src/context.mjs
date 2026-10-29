@@ -201,6 +201,13 @@ function compactionFingerprint(messages) {
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex');
 }
 
+export function compactionPreviewIsCurrent(session, preview) {
+  const messages = Array.isArray(session && session.messages) ? session.messages : [];
+  return Boolean(preview && typeof preview.fingerprint === 'string' &&
+    preview.messageCount === messages.length &&
+    preview.fingerprint === compactionFingerprint(messages));
+}
+
 export function createCompactionPreview(session, focus = '') {
   const messages = Array.isArray(session && session.messages) ? session.messages : [];
   const history = messages.slice(1);
