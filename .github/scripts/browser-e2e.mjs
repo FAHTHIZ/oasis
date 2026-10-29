@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { startOasisWebServer } from '../../src/web.mjs';
@@ -10,6 +11,14 @@ import { saveConfig } from '../../src/config.mjs';
 const timeoutMs = 15_000;
 const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-browser-e2e-'));
 const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config') };
+// The isolated-diff E2E uses a real, clean Git repository. Runtime state lives
+// outside the tracked project files so the isolation precondition remains real.
+await writeFile(path.join(root, '.gitignore'), 'config/\nfirst-run-config/\n');
+execFileSync('git', ['init', '--quiet'], { cwd: root });
+execFileSync('git', ['config', 'user.name', 'OASIS Browser E2E'], { cwd: root });
+execFileSync('git', ['config', 'user.email', 'oasis-browser-e2e@example.test'], { cwd: root });
+execFileSync('git', ['add', '.gitignore'], { cwd: root });
+execFileSync('git', ['commit', '--quiet', '-m', 'Browser E2E workspace baseline'], { cwd: root });
 const token = 'oasis-browser-e2e-token-0123456789';
 const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(), 'artifacts', 'browser-e2e');
 await mkdir(screenshotDir, { recursive: true });
@@ -101,11 +110,33 @@ try {
           }
         }]
       };
+    } else if (completionCalls === 7) {
+      assistantMessage = {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_browser_e2e_worktree_write',
+          type: 'function',
+          function: {
+            name: 'write_file',
+            arguments: JSON.stringify({
+              path: 'review-e2e-output.txt',
+              content: 'Created in the isolated worktree for diff review.\n'
+            })
+          }
+        }]
+      };
+    } else if (completionCalls === 8) {
+      finishReason = 'stop';
+      assistantMessage = {
+        role: 'assistant',
+        content: 'Isolated worktree fixture completed successfully. The review branch is ready.'
+      };
     } else {
       finishReason = 'stop';
       assistantMessage = {
         role: 'assistant',
-        content: 'The cancellation fixture unexpectedly advanced to another model turn.'
+        content: 'Unexpected extra browser E2E model request.'
       };
     }
 
@@ -216,6 +247,13 @@ try {
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
 
+  // Commit the output from the preceding non-isolated file test so the real
+  // worktree run begins from a clean user workspace, as required in production.
+  execFileSync('git', ['add', 'browser-e2e-output.txt'], { cwd: root });
+  execFileSync('git', ['commit', '--quiet', '-m', 'Commit browser chat fixture output'], { cwd: root });
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '',
+    'The primary checkout must be clean before creating an isolated worktree.');
+
   // Saved-chat recovery must reopen the parent chat without restarting workers.
   await page.locator('button[data-nav="monitor"]').click();
   const originalRun = page.locator('#agentMonitorRunList .agent-monitor-run')
@@ -249,6 +287,49 @@ try {
   await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''), null, { timeout: timeoutMs });
   assert.equal(completionCalls, 6, 'Cancellation must abort the task before another model request.');
   await assert.rejects(readFile(path.join(root, 'cancel-e2e-side-effect.txt')), { code: 'ENOENT' });
+
+  // The isolated run should create a committed branch artifact without changing
+  // the primary checkout, then the monitor should open that exact diff for review.
+  const mainHeadBeforeWorktree = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '',
+    'The primary checkout must be clean before starting the isolated task.');
+  await page.locator('#agentIsolateWorktree').check();
+  await page.locator('#agentPrompt').fill('Run the isolated worktree fixture and prepare changes for review.');
+  await page.locator('#agentSendBtn').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
+    .some((element) => element.textContent.includes('Isolated worktree fixture completed successfully.')),
+  null, { timeout: timeoutMs });
+  await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
+  assert.equal(completionCalls, 8, 'The isolated task should write one file and then complete with one final model response.');
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
+    'Finishing isolated work must not advance the primary branch.');
+  assert.ok(execFileSync('git', ['branch', '--list', 'oasis/*'], { cwd: root, encoding: 'utf8' }).trim(),
+    'The isolated change must remain on a separate review branch.');
+  await assert.rejects(readFile(path.join(root, 'review-e2e-output.txt')), { code: 'ENOENT' });
+
+  await page.locator('button[data-nav="monitor"]').click();
+  const isolatedRun = page.locator('#agentMonitorRunList .agent-monitor-run')
+    .filter({ hasText: 'Run the isolated worktree fixture and prepare changes for review.' });
+  await isolatedRun.waitFor({ state: 'visible', timeout: timeoutMs });
+  await isolatedRun.click();
+  await page.waitForFunction(() => {
+    const button = document.querySelector('#agentMonitorReviewRunBtn');
+    return button && !button.hidden;
+  }, null, { timeout: timeoutMs });
+  await page.locator('#agentMonitorReviewRunBtn').click();
+  await page.waitForFunction(() => {
+    const wrap = document.querySelector('#cloudRunDiffDetail');
+    const heading = document.querySelector('#cloudRunDiffTitle')?.textContent || '';
+    const diff = document.querySelector('#cloudRunDiffText')?.textContent || '';
+    return wrap && !wrap.hidden && heading.includes('Committed preview') &&
+      diff.includes('review-e2e-output.txt') && diff.includes('Created in the isolated worktree for diff review.');
+  }, null, { timeout: timeoutMs });
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
+    'Opening the isolated diff must not merge the worktree or change the main branch.');
+  await page.locator('#cloudRunDiffClose').click();
+  await page.locator('#cloudRunDetailClose').click();
+  console.log('PASS isolated-diff review: Run Monitor opened the committed branch diff and left the main checkout untouched.');
+
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
   await page.locator('#agentSplitDivider').focus();
   const splitBefore = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');

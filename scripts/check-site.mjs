@@ -64,6 +64,8 @@ assert.ok(e2e.includes("page.keyboard.press('Control+k')"), 'Browser E2E must ex
 assert.ok(e2e.includes('Selecting a starter must not send a message.'), 'Browser palette selection must not automatically send an agent task.');
 assert.ok(e2e.includes('Saved-chat recovery must reopen the parent chat without restarting workers.'), 'Browser E2E must verify saved-chat recovery does not imply worker resurrection.');
 assert.ok(e2e.includes('#agentMonitorOpenSessionBtn'), 'Browser E2E must exercise the run monitor saved-chat control.');
+assert.ok(e2e.includes('PASS isolated-diff review:'), 'Browser E2E must verify the run monitor can open the isolated worktree diff.');
+assert.ok(e2e.includes('#agentMonitorReviewRunBtn'), 'Browser E2E must exercise the worktree review action from Run Monitor.');
 
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'OASIS — Coding Agent Workspace');
