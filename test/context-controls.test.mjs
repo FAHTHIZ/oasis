@@ -8,6 +8,7 @@ import {
   addMustPreserve,
   appendMustPreserveContext,
   createCompactionPreview,
+  compactionPreviewIsCurrent,
   sanitizeMustPreserve
 } from '../src/context.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
@@ -81,6 +82,27 @@ test('/compact previews first and cancel leaves history untouched; preserve reco
   const cancelled = await runBuiltinCommand('compact', 'cancel', state);
   assert.match(cancelled.output, /history is unchanged/);
   assert.equal(JSON.stringify(session.messages), original);
+
+  await runBuiltinCommand('compact', 'preview API compatibility', state);
+  session.messages[1].content = 'The conversation changed while the preview was open.';
+  const changed = JSON.stringify(session.messages);
+  const stale = await runBuiltinCommand('compact', 'confirm', state);
+  assert.match(stale.output, /conversation changed after this preview/i);
+  assert.equal(JSON.stringify(session.messages), changed, 'stale confirmation must not mutate history');
+  assert.equal(session.pendingCompactionPreview, undefined);
+});
+
+test('compaction preview becomes stale when conversation history changes', () => {
+  const session = {
+    messages: [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'Keep src/api.ts backwards compatible.' }
+    ]
+  };
+  const preview = createCompactionPreview(session, 'API compatibility');
+  assert.equal(compactionPreviewIsCurrent(session, preview), true);
+  session.messages[1].content = 'Actually, remove the old API.';
+  assert.equal(compactionPreviewIsCurrent(session, preview), false);
 });
 
 test('must-preserve records survive session save and resume', async () => {
