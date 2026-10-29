@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { clearApiKeyHelperCache, runApiKeyHelper } from '../src/api-key-helper.mjs';
+import { apiKeyFromHelper, clearApiKeyHelperCache, helperTtl, runApiKeyHelper } from '../src/api-key-helper.mjs';
 import { loadSettings } from '../src/settings.mjs';
 import { loadConfig } from '../src/config.mjs';
 
@@ -54,4 +54,38 @@ test('apiKeyHelper is read from settings and makes the config usable', async () 
   const config = await loadConfig({ env: { ...env, OASIS_BASE_URL: 'https://api.example.com/v1', OASIS_MODEL: 'x', OASIS_API_KEY_HELPER: 'echo k' } });
   assert.equal(config.apiKeyHelper, 'echo k');
   assert.equal(config.configured, true);
+});
+
+test('apiKeyHelper cache is scoped to cwd and environment', { skip: process.platform === 'win32' }, async (t) => {
+  clearApiKeyHelperCache();
+  const oneDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-key-helper-one-'));
+  const twoDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-key-helper-two-'));
+  t.after(async () => {
+    clearApiKeyHelperCache();
+    await Promise.all([
+      rm(oneDir, { recursive: true, force: true }),
+      rm(twoDir, { recursive: true, force: true })
+    ]);
+  });
+  const command = 'printf "%s" "$OASIS_HELPER_TEST_VALUE"';
+  const one = await apiKeyFromHelper(command, {
+    cwd: oneDir,
+    env: { ...process.env, OASIS_HELPER_TEST_VALUE: 'credential-one' }
+  });
+  const two = await apiKeyFromHelper(command, {
+    cwd: twoDir,
+    env: { ...process.env, OASIS_HELPER_TEST_VALUE: 'credential-two' }
+  });
+  assert.equal(one, 'credential-one');
+  assert.equal(two, 'credential-two');
+});
+
+test('apiKeyHelper timeout rejects after terminating its process tree', { skip: process.platform === 'win32' }, async () => {
+  await assert.rejects(runApiKeyHelper('sleep 30', { timeoutMs: 40 }), /apiKeyHelper timed out/);
+});
+
+test('apiKeyHelper TTL falls back to its default for invalid values', () => {
+  assert.equal(helperTtl({}), 5 * 60 * 1000);
+  assert.equal(helperTtl({ OASIS_API_KEY_HELPER_TTL_MS: '0' }), 5 * 60 * 1000);
+  assert.equal(helperTtl({ OASIS_API_KEY_HELPER_TTL_MS: '1200' }), 1200);
 });
