@@ -120,6 +120,14 @@ The browser request filter also treated every hostname without a dot as a local/
 
 **Regression coverage:** test/browser-tool.test.mjs asserts that the public IPv6 fixture is allowed while loopback and private/special-purpose literals remain blocked.
 
+### Cloud-provider credential-context isolation
+
+Google Cloud and Microsoft Foundry token helpers previously kept a single module-level token for up to 45 minutes. In an embedded process that uses more than one cloud profile or project, a later request could receive the previously cached identity's token.
+
+**Fix:** token caches are now keyed by the relevant local CLI profile, credentials-file path, tenant/account and project/resource context. Expired entries are removed on read, and caches have a bounded entry count. Explicit access tokens supplied through the supported environment variables still take precedence over cached CLI credentials.
+
+**Regression coverage:** test/cloud-providers.test.mjs switches between two fake Google and two fake Azure credential contexts, verifies that each gets its own token, and confirms the cache is reused only within the same context. The tests validate application cache selection, not the external cloud CLIs' account selection.
+
 ## High-impact risks that remain open
 
 1. **Approved commands still inherit the user's authority.** The optional Linux/macOS sandbox is disabled by default; no Windows sandbox or general container isolation is implemented. Permission prompts are consent gates, not OS isolation.
