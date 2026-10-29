@@ -138,20 +138,30 @@ test('background commands start, stream output, and can be killed', async (t) =>
 });
 
 test('power-tool background cancellation kills descendants that outlive the leader', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('The process-group escalation assertion requires Linux /proc process-state inspection.');
+    return;
+  }
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const childPidPath = path.join(dir, 'descendant.pid');
+  const childReadyPath = path.join(dir, 'descendant.ready');
+  const childSource = [
+    "process.on('SIGTERM', () => {});",
+    "require('node:fs').writeFileSync(process.env.OASIS_TEST_CHILD_READY_FILE, 'ready');",
+    "setInterval(() => {}, 1000);"
+  ].join('\n');
   const source = [
     "const { spawn } = require('node:child_process');",
     "const fs = require('node:fs');",
-    "const child = spawn(process.execPath, ['-e', 'process.on(\"SIGTERM\", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
-    "fs.writeFileSync(process.env.OASIS_TEST_CHILD_PID_FILE, String(child.pid));",
+    "const child = spawn(process.execPath, ['-e', " + JSON.stringify(childSource) + "], { stdio: 'ignore', env: process.env });",
+    "const publishPid = setInterval(() => { if (fs.existsSync(process.env.OASIS_TEST_CHILD_READY_FILE)) { clearInterval(publishPid); fs.writeFileSync(process.env.OASIS_TEST_CHILD_PID_FILE, String(child.pid)); } }, 10);",
     "setInterval(() => {}, 1000);"
   ].join('\n');
   const registry = new Map();
   const started = startBackgroundProcess(registry, { command: process.execPath, args: ['-e', source] }, {
     cwd: dir,
-    env: { ...process.env, OASIS_TEST_CHILD_PID_FILE: childPidPath },
+    env: { ...process.env, OASIS_TEST_CHILD_PID_FILE: childPidPath, OASIS_TEST_CHILD_READY_FILE: childReadyPath },
     display: 'process-tree regression fixture'
   });
   const entry = registry.get(started.id);
@@ -163,18 +173,29 @@ test('power-tool background cancellation kills descendants that outlive the lead
     try { descendantPid = Number((await readFile(childPidPath, 'utf8')).trim()); } catch {}
     if (!descendantPid) await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  assert.ok(descendantPid > 0, 'the descendant should publish its PID before cancellation');
+  assert.ok(descendantPid > 0, 'the child must install its SIGTERM handler before its PID is published');
+  assert.equal(await readFile(childReadyPath, 'utf8'), 'ready');
+  const killStarted = Date.now();
   assert.equal(killBackgroundEntry(entry), true);
 
-  const processExists = (pid) => {
-    try { process.kill(pid, 0); return true; }
-    catch (error) { return error && error.code === 'EPERM'; }
+  const processRunning = async (pid) => {
+    try {
+      const stat = await readFile('/proc/' + pid + '/stat', 'utf8');
+      const end = stat.lastIndexOf(')');
+      const state = stat.slice(end + 2, end + 3);
+      return state !== 'Z';
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return false;
+      try { process.kill(pid, 0); return true; }
+      catch (signalError) { return signalError && signalError.code === 'EPERM'; }
+    }
   };
   const stopDeadline = Date.now() + 6000;
-  while (processExists(descendantPid) && Date.now() < stopDeadline) {
+  while (await processRunning(descendantPid) && Date.now() < stopDeadline) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  assert.equal(processExists(descendantPid), false, 'the descendant must be gone even though the leader exits first');
+  assert.ok(Date.now() - killStarted >= 1300, 'the descendant should ignore SIGTERM and require the SIGKILL escalation');
+  assert.equal(await processRunning(descendantPid), false, 'the descendant must be gone after process-tree escalation');
 });
 
 test('shell guard blocks obviously destructive shell lines', () => {
