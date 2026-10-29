@@ -135,15 +135,42 @@ export async function awsCredentials(env) {
 
 // ---------- Google access token ----------
 
-let cachedGoogleToken = null;
+const googleTokenCache = new Map();
+const azureTokenCache = new Map();
+const MAX_TOKEN_CACHE_ENTRIES = 16;
+
+function credentialContextKey(env, keys) {
+  return JSON.stringify(keys.map((key) => [key, String(env && env[key] || '')]));
+}
+
+function getCachedToken(cache, key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expires <= Date.now()) { cache.delete(key); return null; }
+  return entry.token;
+}
+
+function storeCachedToken(cache, key, token) {
+  if (!cache.has(key) && cache.size >= MAX_TOKEN_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, { token, expires: Date.now() + 45 * 60 * 1000 });
+}
 
 export async function googleAccessToken(env, runGcloud = defaultGcloud) {
   const direct = env.OASIS_VERTEX_ACCESS_TOKEN || env.GOOGLE_OAUTH_ACCESS_TOKEN;
   if (direct) return direct;
-  if (cachedGoogleToken && cachedGoogleToken.expires > Date.now()) return cachedGoogleToken.token;
+  const key = credentialContextKey(env, [
+    'HOME', 'CLOUDSDK_CONFIG', 'CLOUDSDK_ACTIVE_CONFIG_NAME', 'CLOUDSDK_CORE_ACCOUNT',
+    'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_CLOUD_PROJECT',
+    'ANTHROPIC_VERTEX_PROJECT_ID', 'CLOUD_ML_REGION', 'GOOGLE_CLOUD_REGION'
+  ]);
+  const cached = getCachedToken(googleTokenCache, key);
+  if (cached) return cached;
   const token = (await runGcloud(env)).trim();
   if (!token) throw new Error('gcloud returned no access token. Run gcloud auth application-default login, or set GOOGLE_OAUTH_ACCESS_TOKEN.');
-  cachedGoogleToken = { token, expires: Date.now() + 45 * 60 * 1000 };
+  storeCachedToken(googleTokenCache, key, token);
   return token;
 }
 
@@ -156,14 +183,17 @@ function defaultGcloud(env) {
 
 // ---------- Microsoft Entra ID token (Foundry) ----------
 
-let cachedAzureToken = null;
-
 export async function azureAccessToken(env, runAz = defaultAz) {
   if (env.ANTHROPIC_FOUNDRY_AUTH_TOKEN) return env.ANTHROPIC_FOUNDRY_AUTH_TOKEN;
-  if (cachedAzureToken && cachedAzureToken.expires > Date.now()) return cachedAzureToken.token;
+  const key = credentialContextKey(env, [
+    'HOME', 'AZURE_CONFIG_DIR', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID',
+    'AZURE_CLIENT_ID', 'ANTHROPIC_FOUNDRY_RESOURCE', 'ANTHROPIC_FOUNDRY_BASE_URL'
+  ]);
+  const cached = getCachedToken(azureTokenCache, key);
+  if (cached) return cached;
   const token = (await runAz(env)).trim();
   if (!token) throw new Error('az returned no access token. Run az login, or set ANTHROPIC_FOUNDRY_API_KEY or ANTHROPIC_FOUNDRY_AUTH_TOKEN.');
-  cachedAzureToken = { token, expires: Date.now() + 45 * 60 * 1000 };
+  storeCachedToken(azureTokenCache, key, token);
   return token;
 }
 

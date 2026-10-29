@@ -4,7 +4,7 @@ import http from 'node:http';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { signAwsRequest, awsCredentials, cloudEndpoint, cloudBody, googleAccessToken, cloudProtocolFromEnv } from '../src/cloud-providers.mjs';
+import { signAwsRequest, awsCredentials, cloudEndpoint, cloudBody, googleAccessToken, azureAccessToken, cloudProtocolFromEnv } from '../src/cloud-providers.mjs';
 import { loadConfig, validateProtocol } from '../src/config.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 
@@ -169,4 +169,24 @@ test('a Foundry turn streams the standard Messages API with x-api-key or an Entr
   await runAgentTurn(bearer, 'hi', { env: { ...process.env, ANTHROPIC_FOUNDRY_API_KEY: 'azkey', ANTHROPIC_FOUNDRY_AUTH_TOKEN: 'entra' }, onDelta });
   assert.equal(requests[1].headers.authorization, 'Bearer entra');
   assert.equal(requests[1].headers['x-api-key'], undefined);
+});
+
+
+test('Google and Azure token caches are scoped to credential and profile context', async () => {
+  const calls = { googleA: 0, googleB: 0, azureA: 0, azureB: 0 };
+  const googleA = { CLOUDSDK_CONFIG: '/profiles/google-a', CLOUDSDK_CORE_ACCOUNT: 'a@example.invalid', ANTHROPIC_VERTEX_PROJECT_ID: 'project-a' };
+  const googleB = { CLOUDSDK_CONFIG: '/profiles/google-b', CLOUDSDK_CORE_ACCOUNT: 'b@example.invalid', ANTHROPIC_VERTEX_PROJECT_ID: 'project-b' };
+  assert.equal(await googleAccessToken(googleA, async () => { calls.googleA++; return 'google-token-a\n'; }), 'google-token-a');
+  assert.equal(await googleAccessToken(googleB, async () => { calls.googleB++; return 'google-token-b\n'; }), 'google-token-b');
+  assert.equal(await googleAccessToken(googleA, async () => { calls.googleA++; return 'wrong-google-token\n'; }), 'google-token-a');
+  assert.equal(calls.googleA, 1);
+  assert.equal(calls.googleB, 1);
+
+  const azureA = { AZURE_CONFIG_DIR: '/profiles/azure-a', AZURE_TENANT_ID: 'tenant-a', ANTHROPIC_FOUNDRY_RESOURCE: 'resource-a' };
+  const azureB = { AZURE_CONFIG_DIR: '/profiles/azure-b', AZURE_TENANT_ID: 'tenant-b', ANTHROPIC_FOUNDRY_RESOURCE: 'resource-b' };
+  assert.equal(await azureAccessToken(azureA, async () => { calls.azureA++; return 'azure-token-a\n'; }), 'azure-token-a');
+  assert.equal(await azureAccessToken(azureB, async () => { calls.azureB++; return 'azure-token-b\n'; }), 'azure-token-b');
+  assert.equal(await azureAccessToken(azureA, async () => { calls.azureA++; return 'wrong-azure-token\n'; }), 'azure-token-a');
+  assert.equal(calls.azureA, 1);
+  assert.equal(calls.azureB, 1);
 });
