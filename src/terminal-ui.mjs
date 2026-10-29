@@ -278,8 +278,8 @@ export function footerFor({
 function formatCompactUsd(value) {
   const amount = Number(value) || 0;
   if (amount === 0) return '$0.00';
-  return amount < 0.01 ? '
-
+  return amount < 0.01 ? '$' + amount.toFixed(4) : '$' + amount.toFixed(2);
+}
 export const MODE_CYCLE = ['default', 'acceptEdits', 'plan', 'auto'];
 
 export function nextMode(current, { allowBypass = false } = {}) {
