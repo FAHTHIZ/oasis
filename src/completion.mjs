@@ -5,6 +5,7 @@ import path from 'node:path';
 import { sensitivePath, walkFiles } from './tools.mjs';
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.hg', '.svn', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv', 'venv', 'target']);
+const PRIMARY_SKILL_COMMANDS = ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'];
 
 export function tokenAt(text, cursor) {
   let start = cursor;
@@ -92,7 +93,14 @@ export function createCompleter({ root, commands = async () => [] }) {
         seen.add(name);
         candidates.push({ value: '/' + name, display: '/' + name, description: item.description || '' });
       }
-      candidates.sort((a, b) => a.value.length - b.value.length || a.value.localeCompare(b.value));
+      candidates.sort((a, b) => {
+        if (!needle) {
+          const ai = PRIMARY_SKILL_COMMANDS.indexOf(a.value.slice(1));
+          const bi = PRIMARY_SKILL_COMMANDS.indexOf(b.value.slice(1));
+          if (ai !== bi) return (ai < 0 ? Number.MAX_SAFE_INTEGER : ai) - (bi < 0 ? Number.MAX_SAFE_INTEGER : bi);
+        }
+        return a.value.length - b.value.length || a.value.localeCompare(b.value);
+      });
       return { start, end, candidates };
     }
     return null;
