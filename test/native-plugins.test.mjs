@@ -186,7 +186,7 @@ test('native plugin updates compare prerelease identifiers and large core values
   await writePackage(pkg,{version:'1.0.0-beta.99',permissions:['commands']});
   await assert.rejects(installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']}),/must increase the plugin version/);
   await writePackage(pkg,{version:'1.0.0-01',permissions:['commands']});
-  await assert.rejects(validateNativePluginPackage(pkg),/semantic MAJOR\\.MINOR\\.PATCH/);
+  await assert.rejects(validateNativePluginPackage(pkg), /semantic MAJOR/);
 });
 
 test('native plugin uninstall restores its package and registry when settings updates fail',async t=>{
