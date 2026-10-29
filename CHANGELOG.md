@@ -4,6 +4,9 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Pinned the branch-deletion workflow's checkout and Node setup actions to exact commit SHAs, and added a regression test ensuring cleanup-policy tests must pass before the deletion step can run.
+
+
 - Refreshed the branch audit against main SHA db3d49c8729f8dc6e264dad294e878aeca0eed08: 40 non-main refs, 18 exact merged-PR heads, three additional behind-only refs, and four exact reviewed/superseded heads are eligible for guarded retirement. The cleanup workflow now runs the branch-cleanup, installer-hash and path-collision regression tests before attempting deletion. Current action and quality results remain pending.
 
 
