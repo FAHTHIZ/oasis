@@ -1,0 +1,54 @@
+name: Installer checks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: oasis-installers-${{ github.ref }
+  cancel-in-progress: true
+
+jobs:
+  unix-installer:
+    name: Unix installer (${{ matrix.os })
+    runs-on: ${{ matrix.os }
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install supported Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check installer syntax
+        run: sh -n scripts/install.sh
+      - name: Install pinned release and run doctor
+        run: sh scripts/install.sh --yes --skip-setup
+      - name: Check installed command version
+        run: "$HOME/.local/bin/oasis --version"
+      - name: Check installed environment
+        run: "$HOME/.local/bin/oasis doctor"
+
+  windows-installer:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install supported Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned release and run doctor
+        shell: pwsh
+        run: ./scripts/install.ps1 -Yes -SkipSetup
+      - name: Check installed command version
+        shell: pwsh
+        run: '& "$env:LOCALAPPDATA/OASIS/oasis.cmd" --version'
+      - name: Check installed environment
+        shell: pwsh
+        run: '& "$env:LOCALAPPDATA/OASIS/oasis.cmd" doctor'
