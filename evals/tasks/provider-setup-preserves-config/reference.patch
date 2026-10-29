@@ -43,21 +43,22 @@ diff --git a/src/cli.mjs b/src/cli.mjs
 +  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '', model: '' }));
 +  const defaults = getProviderSetupDefaults(existing);
    const rl = createInterface({ input: stdin, output: stdout });
-@@ -108,7 +110,7 @@ async function configureProvider() {
+@@ -108,8 +110,9 @@ async function configureProvider() {
    let protocol, baseURL, model;
    try {
 -    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default openai-responses): ')).trim().toLowerCase();
 -    protocol = validateProtocol(selected || 'openai-responses');
-+    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default ' + defaults.protocol + '): ')).trim().toLowerCase();
-+    protocol = validateProtocol(selected || defaults.protocol);
-     const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
+-    const defaultBase = protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
 -    baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
 -    const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
-+    const basePrompt = 'Base URL' + (defaults.baseURL ? ' [' + defaults.baseURL + ']' : '') + ': ';
-+    baseURL = (await rl.question(basePrompt)).trim() || defaults.baseURL || defaultBase;
-+    const defaultModel = defaults.model;
++    const selected = (await rl.question('Protocol [openai-responses / anthropic / openai-compatible] (default ' + defaults.protocol + '): ')).trim().toLowerCase();
++    protocol = validateProtocol(selected || defaults.protocol);
++    const providerDefaults = protocol === defaults.protocol ? defaults : getProviderSetupDefaults({ protocol });
++    const basePrompt = 'Base URL' + (providerDefaults.baseURL ? ' [' + providerDefaults.baseURL + ']' : '') + ': ';
++    baseURL = (await rl.question(basePrompt)).trim() || providerDefaults.baseURL;
++    const defaultModel = providerDefaults.model;
      const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (required for a compatible endpoint): ';
-@@ -125,3 +127,2 @@ async function configureProvider() {
+@@ -124,4 +127,3 @@ async function configureProvider() {
    protocol = validateProtocol(protocol);
    baseURL = validateBaseUrl(baseURL);
 -  const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
