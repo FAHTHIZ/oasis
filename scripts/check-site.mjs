@@ -62,6 +62,8 @@ assert.ok(e2e.includes('Denying the delete approval must leave the file intact.'
 assert.ok(e2e.includes('Cancellation must abort the task before another model request.'), 'Browser E2E must verify cancellation interrupts a pending task.');
 assert.ok(e2e.includes("page.keyboard.press('Control+k')"), 'Browser E2E must exercise the browser command palette.');
 assert.ok(e2e.includes('Selecting a starter must not send a message.'), 'Browser palette selection must not automatically send an agent task.');
+assert.ok(e2e.includes('Saved-chat recovery must reopen the parent chat without restarting workers.'), 'Browser E2E must verify saved-chat recovery does not imply worker resurrection.');
+assert.ok(e2e.includes('#agentMonitorOpenSessionBtn'), 'Browser E2E must exercise the run monitor saved-chat control.');
 
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest.name, 'OASIS — Coding Agent Workspace');
