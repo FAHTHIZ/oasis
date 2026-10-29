@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { debugLog } from './debug-log.mjs';
-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, chmod, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient } from './mcp-project.mjs';
@@ -18,6 +18,8 @@ export function getMcpConfigPath(env = process.env) {
 export async function loadMcpServers(options = {}) {
   const configPath = options.configPath || getMcpConfigPath(options.env || process.env);
   try {
+    const configInfo = await stat(configPath);
+    if (configInfo.size > 1024 * 1024) throw new Error('MCP configuration is larger than 1 MiB.');
     const parsed = JSON.parse(await readFile(configPath, 'utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.servers)) {
       throw new Error('MCP configuration has an invalid shape.');
