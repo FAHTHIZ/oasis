@@ -4,6 +4,8 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Hardened persisted session and backup storage: session loads/listings use bounded descriptor reads, symlinked sessions are rejected/omitted, backup manifests are capped at 64 KiB, and restore rejects POSIX/Windows absolute paths and traversal segments. Added adversarial storage regressions; current-main CI is pending.
+
 - Hardened isolated worktree Git subprocesses: no-shell spawning, 4 MiB per-stream output bounds, explicit timeout results, and process-tree TERM/KILL escalation now apply to worktree creation, diff inspection and merge preflight. Added a child/grandchild timeout regression; current-main CI is pending.
 
 - Hardened HTTP MCP header helpers: stdout uses a strict 64 KiB byte cap, stderr retention is bounded, the production timeout is fixed at 10 seconds, and overflow/timeout/client shutdown terminate the helper process tree. Added regression tests for overflow, timeout and in-flight shutdown; current-head CI is pending.
