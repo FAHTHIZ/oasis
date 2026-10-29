@@ -219,3 +219,9 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Verification boundary:** the regression must pass on the current main SHA. This is a safer default, not a complete shell parser or a guarantee that all destructive shell behavior can be recognized.
 
+## Cross-platform regression: canonical paths on macOS
+
+**Finding:** portable global skills and global-extension skills compared a canonicalized root (`realpath`, often `/private/var/...` on macOS) with an uncanonicalized target path (often `/var/...`). Legitimate files under a temporary or home directory could be rejected on macOS. Two credential-masking tests also compared canonical result paths with noncanonical temporary paths, causing false failures.
+
+**Fix added on main:** containment checks now compare lexical root-to-target paths first, then independently compare canonical real paths after checking that the target itself is not a symlink. This preserves the symlink-escape guard while accepting macOS path aliases. The sandbox tests compare the real canonical credential path. Cross-platform CI will verify the fix.
+

@@ -1308,7 +1308,8 @@ export async function loadSkillText(root, rawName, options = {}) {
     const globalSkillsRoot = path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env));
     const rootReal = await realpath(globalSkillsRoot);
     const target = path.resolve(skill.absolutePath || '');
-    if (!inside(rootReal, target)) throw new Error('Portable global skill path is outside the universal skills directory.');
+    // Compare lexical paths with lexical paths first; macOS /var paths may realpath to /private/var.
+    if (!inside(globalSkillsRoot, target)) throw new Error('Portable global skill path is outside the universal skills directory.');
     const info = await lstat(target);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Portable global skill is not a safe regular Markdown file.');
     const targetReal = await realpath(target);
@@ -1326,7 +1327,8 @@ export async function loadSkillText(root, rawName, options = {}) {
     const globalExtensionsRoot = path.resolve(getConfigDirectory(options.env || process.env), 'extensions');
     const rootReal = await realpath(globalExtensionsRoot);
     const target = path.resolve(skill.absolutePath || '');
-    if (!inside(rootReal, target)) throw new Error('Imported skill path is outside the managed global extension directory.');
+    // Keep lexical and canonical containment checks separate for macOS path aliases.
+    if (!inside(globalExtensionsRoot, target)) throw new Error('Imported skill path is outside the managed global extension directory.');
     const info = await lstat(target);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 96 * 1024) throw new Error('Imported skill is not a safe regular Markdown file.');
     const targetReal = await realpath(target);
