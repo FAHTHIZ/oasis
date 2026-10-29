@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Added canonical permission-mode normalization across settings, `PermissionPolicy`, `/mode`, and `--permission-mode`. `manual` maps to `default`; `accept-edits` and `accept_edits` map to `acceptEdits`. This is an alias-only change; no new permission bypass was added. Current-head CI is pending.
+
 - Updated STATUS.md directly on main to use four evidence/maturity categories and to keep current-head verification unclaimed until fresh checks pass on the exact revision. Added a focused verification matrix; this is a documentation/status change, not a test result.
 
 - Added detailed `/context all` accounting and a two-step `/compact` preview/confirm/cancel flow. Must-preserve records are bounded, included in compaction summaries and persisted across session save/resume; stale previews are rejected without mutating history. Focused tests cover redaction and freshness checks; full current-head CI remains pending.
