@@ -21,7 +21,7 @@ export function crashRecoveryHtml({ reason = 'unknown', exitCode, restartUrl } =
     'Renderer process stopped unexpectedly.',
     'Reason: ' + String(reason || 'unknown').slice(0, 120),
     'Exit code: ' + (Number.isInteger(exitCode) ? exitCode : 'not provided')
-  ].join('\\n');
+  ].join('\n');
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<meta name="color-scheme" content="dark light"><title>OASIS stopped</title>' +
