@@ -41,11 +41,18 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
     status: 'completed',
     createdAt: '2026-10-29T10:00:00.000Z',
     workspaceName: 'oasis',
+    worktreeBranch: 'oasis/provider-setup',
+    worktreePath: '.oasis/worktrees/provider-setup',
+    worktreeBaseCommit: 'a'.repeat(40),
     events: [
       { id: 1, type: 'agent_activity', at: '2026-10-29T10:00:01.000Z', data: { id: 1, at: '2026-10-29T10:00:01.000Z', type: 'team.created', team_id: 'team_1', description: 'Quality team', detail: 'Review current setup' } },
       { id: 2, type: 'agent_activity', at: '2026-10-29T10:00:02.000Z', data: { id: 2, at: '2026-10-29T10:00:02.000Z', type: 'agent.started', run_id: '4ee8f9f0-c654-4c1d-9678-31a75eaa4402', agent_id: 'agent_1', team_id: 'team_1', description: 'Inspect configuration' } },
       { id: 3, type: 'agent_activity', at: '2026-10-29T10:00:03.000Z', data: { id: 3, at: '2026-10-29T10:00:03.000Z', type: 'task.dispatched', agent_id: 'agent_1', team_id: 'team_1', description: 'task_2', detail: 'Add tests' } },
-      { id: 4, type: 'agent_activity', at: '2026-10-29T10:00:04.000Z', data: { id: 4, at: '2026-10-29T10:00:04.000Z', type: 'agent.completed', agent_id: 'agent_1', team_id: 'team_1', description: 'Inspect configuration', detail: 'apiKey=private-value' } }
+      { id: 4, type: 'agent_activity', at: '2026-10-29T10:00:04.000Z', data: { id: 4, at: '2026-10-29T10:00:04.000Z', type: 'agent.completed', agent_id: 'agent_1', team_id: 'team_1', description: 'Inspect configuration', detail: 'apiKey=private-value' } },
+      { id: 5, type: 'approval_required', at: '2026-10-29T10:00:05.000Z', data: { prompt: 'Never expose private-prompt-text' } },
+      { id: 6, type: 'approval_resolved', at: '2026-10-29T10:00:06.000Z', data: { approved: false } },
+      { id: 7, type: 'usage', at: '2026-10-29T10:00:07.000Z', data: { totalTokens: 42 } },
+      { id: 8, type: 'worktree_ready', at: '2026-10-29T10:00:08.000Z', data: { branch: 'oasis/provider-setup', baseCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', changed: true } }
     ]
   };
   const view = summarizeAgentRun(job);
@@ -56,7 +63,14 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
   assert.equal(view.workers[0].taskId, 'task_2');
   assert.equal(view.teamCount, 1);
   assert.equal(view.teams[0].name, 'Quality team');
-  assert.doesNotMatch(JSON.stringify(view), /private-value/);
+  assert.equal(view.branch, 'oasis/provider-setup');
+  assert.equal(view.worktreePath, '.oasis/worktrees/provider-setup');
+  assert.equal(view.baseCommit, 'a'.repeat(40));
+  assert.deepEqual(view.approvals, { requested: 1, resolved: 1, approved: 0, denied: 1, pending: 0 });
+  assert.equal(view.usage.totalTokens, 42);
+  assert.ok(view.events.some((event) => event.type === 'approval_resolved' && event.description === 'Action denied'));
+  assert.ok(view.events.some((event) => event.type === 'worktree_ready' && /oasis\/provider-setup/.test(event.detail)));
+  assert.doesNotMatch(JSON.stringify(view), /private-value|Never expose private-prompt-text/);
   assert.equal(summarizeAgentRun(null), null);
 });
 
