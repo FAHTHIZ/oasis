@@ -12,12 +12,12 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-For comparator revision `268862c`, [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) and [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed. The desktop build matrix for this revision is [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603); its final Windows result should be checked before marking the all-workflow gate complete. The next step remains measured coding outcomes and end-to-end reliability, not another large feature.
+For comparator revision `268862c`, all three required workflows passed: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [Windows/macOS/Linux desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). The next step remains measured coding outcomes and end-to-end reliability, not another large feature.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
 | Current Quality Checks | [Run 40807290624](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) passed: 573 tests, Node 22/24/26, 21 validated fixtures, Linux PTY smoke and Linux Chromium browser smoke | The comparator code revision passed the automated quality matrix. |
-| Current desktop build | The prior complete matrix [run 40804769799](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux. The comparator revision is being rechecked in [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). | Do not treat prior-baseline packaging as proof that the current revision's full matrix passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
+| Current desktop build | [Run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) passed on Windows, macOS and Linux for comparator code revision `268862c`. | Platform packaging passed; installers remain unsigned and first-run/update/uninstall behavior is not fully validated. |
 | Current publishing validation | [Run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed | The repository/public-site checks passed on comparator code revision `268862c`. |
 
 
@@ -102,7 +102,7 @@ Claude Code's documented surface includes subagents, Agent View, agent teams, dy
 
 ## Definition of done for the Alpha-confidence milestone
 
-- [ ] Quality Checks, homepage/repository validation, and desktop build workflows pass on the same final code commit.
+- [x] Quality Checks, homepage/repository validation, and desktop build workflows passed on comparator code revision `268862c`.
 - [ ] The previously failing hook test passes repeatedly without fixed-delay masking or retry-only suppression.
 - [ ] Installation and first-run steps are tested on every OS claimed as supported; unsupported/experimental paths are labelled.
 - [ ] Core CLI and browser journeys have end-to-end tests for success, approval/denial, cancellation, recovery and verification.
