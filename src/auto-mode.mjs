@@ -8,7 +8,7 @@
 
 export const AUTO_MODE_LIMITS = { blockedInRow: 3, blockedTotal: 20 };
 
-// Claude Code-compatible classifier configuration (settings key "autoMode"):
+// OASIS auto-mode classifier configuration (settings key "autoMode"):
 //   { "environment": [...], "allow": [...], "soft_deny": [...], "hard_deny": [...] }
 // Each section you set replaces the default list unless it includes the literal "$defaults".
 // Rules are prose; a "Label: description" prefix names the rule in reasons and in `oasis auto-mode`.

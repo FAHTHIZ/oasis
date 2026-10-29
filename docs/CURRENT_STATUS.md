@@ -1,30 +1,30 @@
 # OASIS current implementation status
 
 **Audit date:** October 29, 2026  
-**Last completed code-verification snapshot before the current security-hardening sequence:** [`e0591d61c992e0810aa689de21c04eef4fa1acd2`](https://github.com/FAHTHIZ/oasis/commit/e0591d61c992e0810aa689de21c04eef4fa1acd2). [Quality Checks run 40828639606](https://github.com/FAHTHIZ/oasis/actions/runs/40828639606) and [homepage/repository validation run 40828639602](https://github.com/FAHTHIZ/oasis/actions/runs/40828639602) passed on that code snapshot; desktop build run [40828639547](https://github.com/FAHTHIZ/oasis/actions/runs/40828639547) was cancelled when subsequent hardening changes were pushed.
-**Evidence boundary:** the shared network policy, NAT64 checks, Keychain stdin transport, profile-scoped cloud-token caches, package-command policy fixes, and sandbox credential masking were added after that verified snapshot. They must be treated as pending until all required workflows pass on one current-main SHA. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).  
+**Last fully verified implementation revision before the follow-up patches in this commit:** [`caf604dde436139e98113feaa4ebfce6afd2c885`](https://github.com/FAHTHIZ/oasis/commit/caf604dde436139e98113feaa4ebfce6afd2c885). [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072) passed 643 tests with zero failures, the Node.js 22/24/26 matrix, 33 evaluation fixtures, Linux PTY, authenticated browser E2E, and Ubuntu/macOS/Windows security regressions. [Publishing validation run 40854882012](https://github.com/FAHTHIZ/oasis/actions/runs/40854882012) and [desktop packaging/release run 40854882048](https://github.com/FAHTHIZ/oasis/actions/runs/40854882048) also passed on that same SHA.
+**Verification boundary:** this commit adds strict validation for saved/runtime model budgets and process-tree cleanup for evaluation, interactive shell/background work, diagnostics and language servers. Treat those follow-up changes as pending until the required workflows pass on their new SHA. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
-This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist.
+This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist and the [whole-codebase gap register](WHOLE_CODEBASE_GAP_REGISTER.md) for code-backed closure criteria.
 
-The mechanic-level source comparison is documented in [Core mechanics audit](CORE_MECHANICS_AUDIT.md). It traces the OASIS execution loop and identifies explicit external-format compatibility separately from generic agent-loop design. It does not claim a Claude Code source-to-source diff or performance parity; a repeated, task-level head-to-head benchmark remains required.
+The core mechanics are documented in [Core mechanics audit](CORE_MECHANICS_AUDIT.md). The external comparison is optional engineering evidence—not a product definition or parity goal. See the [whole-codebase gap register](WHOLE_CODEBASE_GAP_REGISTER.md) for the implementation-backed remaining gaps and their closure criteria.
 
 ## Executive assessment
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-The latest completed code-quality run, [run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) on `5a53756`, passed 594 tests on Node.js 22/24/26, validated 22 evaluation fixtures, and passed native PTY plus browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) also passed on the same code commit. The suite covers the current search/query-planning additions but remains a smoke suite, not a representative repository-level coding benchmark. `oasis eval --compare` compares saved reports across shared task IDs.
+The last fully verified implementation baseline before the follow-up fixes was `caf604d`: 643 tests passed on Node.js 22/24/26, all 33 evaluation fixtures validated, and the PTY, browser E2E, cross-platform security, publishing and desktop packaging jobs passed on that same revision. The fixture suite remains a smoke/regression suite rather than a representative repository-level coding benchmark. `oasis eval --compare` compares saved reports across shared task IDs.
 
 ## Verified repository and CI snapshot
 
-**Latest verified code snapshot:** `5a537564a9817cf879afa636f8517825866c74f3` (October 29, 2026; see [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171)). The run passed 594 tests, 22 fixtures, Node 22/24/26, PTY, and browser E2E.
+**Last fully verified code snapshot before the follow-up patches:** `caf604dde436139e98113feaa4ebfce6afd2c885` (October 29, 2026; see [Quality Checks run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072)). The run passed 643 tests, validated 33 fixtures, and passed Node 22/24/26, security regressions, native PTY and browser E2E.
 
 | Evidence | Latest verified result |
 | --- | --- |
 | Runtime modules | 61 `.mjs` modules under `src/` after adding the process-tree termination helper |
-| Test layout | Node.js test specifications plus shared helpers; latest verified main code run reports 594 passing tests |
-| Latest verified Node test suite | **594 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) |
-| Latest fully verified evaluation-fixture validation | **22/22 valid**; still a smoke suite, not a representative coding benchmark |
+| Test layout | Node.js test specifications plus shared helpers; latest verified main code run reports 643 passing tests |
+| Latest verified Node test suite | **643 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) |
+| Latest fully verified evaluation-fixture validation | **33/33 valid**; still a smoke suite, not a representative coding benchmark |
 | Node runtime matrix | Node.js 22, 24 and 26 passed in run 40818083171 |
 | Native PTY check | Passed on Linux / Node.js 22 in run 40818083171; this is not proof of Windows/macOS/Termux support |
 | Browser E2E | Authenticated Linux Chromium chat smoke test passed in run 40818083171, including workspace write/read |
@@ -33,7 +33,7 @@ The latest completed code-quality run, [run 40818083171](https://github.com/FAHT
 | Homepage/repository validation | [Homepage/repository validation run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed on comparator code revision `268862c` |
 | Release maturity | Package version `0.3.0`; CI can build desktop installers, but the current installers are unsigned and first-run behavior is not yet proven across all supported operating systems |
 
-Quality Checks [run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) and homepage/repository validation [run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) both passed on code revision `5a53756`. The current desktop packaging matrix was not verified on this same revision in this audit; older packaging results remain historical. Browser E2E runs in Linux Chromium and does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
+Quality Checks [run 40854882072](https://github.com/FAHTHIZ/oasis/actions/runs/40854882072), publishing validation [run 40854882012](https://github.com/FAHTHIZ/oasis/actions/runs/40854882012), and desktop packaging/release [run 40854882048](https://github.com/FAHTHIZ/oasis/actions/runs/40854882048) passed on the same implementation revision `caf604d`. The process/configuration follow-up in the current commit requires its own full verification. Browser E2E runs in Linux Chromium and does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
 
 ## What the code currently provides
 
@@ -108,7 +108,7 @@ Repository-level verification also covers `index.html`, `manifest.webmanifest`, 
 Prioritized by the risk they pose to release confidence and everyday usefulness—not by how exciting or visible a new feature would be.
 
 1. **Keep CI deterministic and expand regression depth.** The `FileChanged` test now waits for hook-message delivery; the latest full test matrix passes on Node 22/24/26. Continue repeated focused runs and add supported-OS process lifecycle coverage.
-2. **Measure real coding outcomes.** `oasis eval --compare` now compares repeated-run reports over common task IDs, reporting task-balanced pass rate, median task time and mean cost. The 22-fixture starter suite is still too small and utility-heavy to measure repository-level software work; expand it to 25–30 representative tasks and run a reproducible cross-run benchmark with pinned snapshots/models where possible, acceptance tests, repeated trials, and reviewed diffs.
+2. **Measure real coding outcomes.** `oasis eval --compare` now compares repeated-run reports over common task IDs, reporting task-balanced pass rate, median task time and mean cost. The 33-fixture starter suite is still too small and utility-heavy to measure repository-level software work; expand it to at least 50 representative tasks and run a reproducible cross-run benchmark with pinned snapshots/models where possible, acceptance tests, repeated trials, and reviewed diffs.
 3. **Validate product journeys across platforms.** The Linux/Node 22 PTY smoke and Linux Chromium chat smoke are useful, but they do not prove native PTY cleanup on Windows/macOS or first-run/update/uninstall behavior for every desktop installer. Termux remains experimental for PTY.
 4. **Finish multi-agent lifecycle visibility.** Teams, leases, activity events, bounded worktree dispatch, and tmux panes exist. The remaining gaps are a visual agent/run monitor, durable pause/resume across process restarts, cross-session messaging, and conflict-aware integration. Avoid claiming self-coordinating persistent teams.
 5. **Only then expand remote surfaces.** Remote/mobile/hosted sessions need authenticated identity, trusted-device management, workspace isolation, execution policy, reconnect/recovery, and audit trails—not simply a network-accessible web server.
@@ -134,7 +134,7 @@ This pass prioritizes security and reliability boundaries before feature breadth
 - **Secret storage and cloud identity:** `src/secure-store.mjs`, `src/cloud-providers.mjs`; macOS Keychain writes avoid plaintext argv, and Google/Azure token caches are scoped to profile/project/tenant context. Real macOS behavior and Windows ACL semantics remain unverified.
 - **Verification and docs:** `test/network-safety.test.mjs`, `test/command-risk.test.mjs`, `test/sandbox.test.mjs`, `test/power.test.mjs`, `test/secure-store.test.mjs`, `test/cloud-providers.test.mjs`, and `test/claude-settings-compat.test.mjs` cover the changes above. Related limitations are recorded in `SECURITY.md` and `SECURITY_RELIABILITY_AUDIT.md`.
 
-Still requiring deeper passes: full `src/agent.mjs` and context/compaction lifecycle, workspace-file symlink/TOCTOU behavior, session and memory persistence, MCP server and OAuth execution boundaries, browser origin/authentication behavior, and process/PTY lifecycle on each supported platform. The 22-fixture eval suite remains a starter set; competitive coding quality needs a reproducible 25–30-task repository benchmark.
+Still requiring deeper passes: full `src/agent.mjs` and context/compaction lifecycle, workspace-file symlink/TOCTOU behavior, session and memory persistence, MCP server and OAuth execution boundaries, browser origin/authentication behavior, and process/PTY lifecycle on each supported platform. The 33-fixture eval suite remains a starter set; competitive coding quality needs a reproducible 50-task representative repository benchmark.
 
 ## Source references
 

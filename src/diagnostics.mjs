@@ -1,6 +1,6 @@
 // Code diagnostics: run the project's own type checkers and linters and return
-// structured problems (file, line, column, severity, message), similar to the
-// IDE/LSP diagnostics Claude Code receives after edits.
+// structured problems (file, line, column, severity, message) that help users
+// inspect the project state after changes.
 //
 // Checkers are detected from project files:
 //   typescript  tsconfig.json + tsc           tsc --noEmit --pretty false
@@ -18,6 +18,7 @@
 // rules, the OS sandbox and secret-environment scrubbing all still apply. The two
 // built-in checkers only parse files and need no approval.
 import { spawn, spawnSync } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, access } from 'node:fs/promises';
 import path from 'node:path';
 // tools.mjs imports this module, so its helpers are loaded lazily to avoid a cycle.
@@ -182,8 +183,8 @@ export function parseDiagnostics(checker, output, root = '.') {
 async function changedFiles(root) {
   return await new Promise((resolve) => {
     let out = '';
-    const child = spawn('git', ['status', '--porcelain', '--untracked-files=all', '-z'], { cwd: root, shell: false, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+    const child = spawn('git', ['status', '--porcelain', '--untracked-files=all', '-z'], { cwd: root, shell: false, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, ...processTreeSpawnOptions() });
+    const timer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 10000);
     child.stdout.on('data', (chunk) => { if (out.length < 1024 * 1024) out += chunk; });
     child.on('error', () => { clearTimeout(timer); resolve(null); });
     child.on('close', (code) => {
@@ -223,13 +224,24 @@ async function expandPaths(root, paths) {
 function nodeCheck(absolute, signal) {
   return new Promise((resolve) => {
     let stderr = '';
-    const child = spawn(process.execPath, ['--check', absolute], { shell: false, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '' } });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 15000);
-    const abort = () => child.kill('SIGKILL');
-    if (signal) signal.addEventListener('abort', abort, { once: true });
+    let settled = false;
+    const child = spawn(process.execPath, ['--check', absolute], { shell: false, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '' }, ...processTreeSpawnOptions() });
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', abort);
+      resolve(result);
+    };
+    const timer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 15000);
+    const abort = () => signalProcessTree(child, 'SIGKILL');
+    if (signal) {
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    }
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-8000); });
-    child.on('error', (error) => { clearTimeout(timer); resolve({ code: null, stderr: error.message }); });
-    child.on('close', (code) => { clearTimeout(timer); if (signal) signal.removeEventListener('abort', abort); resolve({ code, stderr }); });
+    child.on('error', (error) => finish({ code: null, stderr: error.message }));
+    child.on('close', (code) => finish({ code, stderr }));
   });
 }
 
