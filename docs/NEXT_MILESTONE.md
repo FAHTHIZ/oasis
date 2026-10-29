@@ -1,4 +1,4 @@
-# Next milestone: Alpha confidence and end-to-end reliability
+# Next milestone: Beta confidence and end-to-end reliability
 
 **Status checked:** October 29, 2026  
 **Latest verified implementation revision before this documentation refresh:** [0002f84a534cd1498b83b5e78fede53922aca7e5](https://github.com/FAHTHIZ/oasis/commit/0002f84a534cd1498b83b5e78fede53922aca7e5)  
@@ -8,7 +8,7 @@
 
 ## Decision
 
-The next biggest milestone is **not another large feature**. It is to make OASIS a dependable, testable Alpha: the supported install paths should work, critical user journeys should be repeatable, all required CI workflows should agree, and the project should measure real coding outcomes instead of inferring quality from its feature list.
+The next biggest milestone is **not another large feature**. It is to make OASIS a dependable, testable Beta: the supported install paths should work, critical user journeys should be repeatable, all required CI workflows should agree, and the project should measure real coding outcomes instead of inferring quality from its feature list.
 
 OASIS already has a substantial coding-agent loop, broad provider choice, MCP, hooks, skills, external ecosystem plugin formats, subagents, a dependency-aware team task board, a CLI, a local browser workspace, a VS Code-family extension, a GitHub Action, and a PTY/xterm path. More feature work will have diminishing value until we can prove those pieces work together reliably for a normal user.
 
@@ -117,7 +117,7 @@ The monitor is a first deliverable, not a claim of full durable teams. The missi
 
 **Release rule:** ship only claims that have a repeatable verification path. Keep unsupported platform behavior explicitly marked, and prefer reliability and trust over adding another option to the feature list.
 
-## Definition of done for the Alpha-confidence milestone
+## Definition of done for the Beta-confidence milestone
 
 - [x] Quality Checks, homepage/repository validation, and desktop build workflows passed on comparator code revision `268862c`.
 - [ ] The previously failing hook test passes repeatedly without fixed-delay masking or retry-only suppression.

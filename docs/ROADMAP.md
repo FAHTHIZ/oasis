@@ -1,6 +1,6 @@
 # Oasis OSS roadmap
 
-This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Implementation baseline reviewed: October 29, 2026**, last fully verified on [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589). The next milestone is [Alpha confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the project-owned readiness plan is [Product readiness](PRODUCT_READINESS.md).
+This roadmap distinguishes implemented code from future work. A listed idea is not shipped merely because it appears here. **Implementation baseline reviewed: October 29, 2026**, last fully verified on [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589). The next milestone is [Beta confidence and end-to-end reliability](NEXT_MILESTONE.md); current security findings are in [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md), implementation/CI evidence is in [CURRENT_STATUS.md](CURRENT_STATUS.md), and the project-owned readiness plan is [Product readiness](PRODUCT_READINESS.md).
 
 ## Milestone 0 — evaluation harness (experimental)
 
@@ -44,15 +44,15 @@ This roadmap distinguishes implemented code from future work. A listed idea is n
 - Bundled [Ponytail](https://github.com/DietrichGebert/ponytail) skills (MIT) for a lean, smallest-complete-change mode.
 - CI tests for install parsing, path boundaries, config permissions, snapshots, approvals, and a simulated agent tool cycle.
 
-## Next milestone — Alpha confidence and end-to-end reliability
+## Next milestone — Beta confidence and end-to-end reliability
 
-The last fully verified implementation revision before the follow-up fixes, `9ed2cc9`, passed 651 tests on Node 22/24/26, validated 33 fixtures, and passed Linux PTY/browser E2E, cross-platform security regressions, publishing validation, and Windows/macOS/Linux desktop packaging on the same SHA. The OAuth token-store concurrency/corruption and atomic user-settings persistence follow-up in the next commit needs its own same-SHA workflow result. The Alpha-confidence milestone remains open for representative coding outcomes, broader supported-OS journeys and release confidence.
+The last fully verified implementation revision before the follow-up fixes, `9ed2cc9`, passed 651 tests on Node 22/24/26, validated 33 fixtures, and passed Linux PTY/browser E2E, cross-platform security regressions, publishing validation, and Windows/macOS/Linux desktop packaging on the same SHA. The OAuth token-store concurrency/corruption and atomic user-settings persistence follow-up in the next commit needs its own same-SHA workflow result. The Beta-confidence work remains open for representative coding outcomes, broader supported-OS journeys and release confidence.
 
 Follow the task list, evidence links and acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md), and see [SECURITY_RELIABILITY_AUDIT.md](SECURITY_RELIABILITY_AUDIT.md) for fixes made and security boundaries that remain. The gate includes deterministic hooks tests, aligned validation workflows, accurate docs, core CLI/browser end-to-end coverage, supported-OS smoke tests, and a representative coding-task benchmark. The CI consistency sub-gate is now satisfied; the broader release-confidence milestone remains open until the remaining user journeys, platform limitations and benchmark criteria are addressed.
 
-## Post-alpha — highest-value compatible ecosystem gaps
+## Post-beta — highest-value compatible ecosystem gaps
 
-Once the Alpha-confidence gate is complete, prioritize:
+Once the Beta-confidence gate is complete, prioritize:
 
 1. **Persistent, observable agent work:** a visual agent/run monitor; durable pause/resume and recovery; cross-session messaging; transparent worker status, cost, approvals and failures; conflict-aware worktree integration with explicit human approval.
 2. **Secure remote continuity:** remote/mobile access to existing sessions only after identity, trusted-device enrollment, workspace isolation, permission enforcement, reconnect/revocation and audit logs are designed and tested.
@@ -61,7 +61,7 @@ Once the Alpha-confidence gate is complete, prioritize:
 
 These priorities follow from the current integration inventory and readiness findings in [Product readiness](PRODUCT_READINESS.md). Do not treat an accessible local web server as a replacement for a secure hosted session service.
 
-## Milestone 1 — Alpha release gate
+## Milestone 1 — Beta release gate
 
 - Make the `FileChanged` hook regression deterministic and root-caused.
 - Require Quality Checks, homepage/repository validation, and desktop build workflows to pass on the same commit.
@@ -69,7 +69,7 @@ These priorities follow from the current integration inventory and readiness fin
 - Verify first launch and a small edit/test task on each OS claimed as supported. Treat Android/Termux as experimental until tested.
 - Document TLS behavior, sandbox defaults, provider setup, unsigned installers and platform limits truthfully.
 - Expand the 33-task smoke suite to at least 50 representative, reviewed repository tasks and publish reproducible outcome reports against explicit OASIS acceptance criteria. External product comparisons may be used as optional evidence, but they do not define the roadmap.
-- Publish a versioned Alpha only when the acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md) are satisfied; successful packaging alone is not sufficient.
+- Publish a versioned Beta only when the acceptance criteria in [NEXT_MILESTONE.md](NEXT_MILESTONE.md) are satisfied; successful packaging alone is not sufficient.
 
 ## Milestone 2 — provider and tool ecosystem
 
@@ -103,7 +103,7 @@ These priorities follow from the current integration inventory and readiness fin
 - Add embedded GitHub OAuth or GitHub App authentication with reviewed fine-grained scopes, branch/push/PR workflows, audit logs, and recovery. Current repository access reuses host-side GitHub CLI auth only.
 - Expand the optional OpenHands bridge into a richer delegated-task lifecycle: direct event streaming, UI-linked confirmation status, and worktree change inspection/integration. Current bridge requires a separately configured Agent Server and profile; remote confirmations remain handled in OpenHands.
 - Establish a well-tested install/bootstrap flow for supported platforms.
-- **Progress:** the CLI has a persistent PTY manager and the browser includes a bundled xterm.js renderer; complete process-tree cleanup and cross-platform integration testing remain Alpha-gate work.
+- **Progress:** the CLI has a persistent PTY manager and the browser includes a bundled xterm.js renderer; complete process-tree cleanup and cross-platform integration testing remain Beta-gate work.
 - **Progress:** the web bridge supports HTTPS with a user-provided certificate/key pair, enforces TLS 1.2+, and refuses non-loopback plaintext listeners unless `--allow-insecure-lan` is explicitly used. Certificate provisioning, phone trust onboarding, and real-device security tests remain unfinished.
 - Share browser dashboard projects/tasks/notes with the selected repository workspace through a tested sync and conflict-resolution design.
 
