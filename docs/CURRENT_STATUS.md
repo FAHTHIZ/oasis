@@ -117,7 +117,7 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 - Third-party plugin imports are safety-reviewed subsets; detection does not mean full runtime compatibility.
 - History compaction is heuristic. Long sessions still need provider-by-provider and long-horizon evaluation for continuity.
 - The browser command panel has a PTY-backed path with a bundled xterm.js renderer. The web runtime supports HTTPS with user-provided certificate/key files for non-loopback access; broader terminal lifecycle and real-device TLS validation remain open.
-- Current CI is green, but coverage does not establish a full security audit, real-device support, cross-platform usability, or equivalence with Claude Code's code quality.
+- CI is mixed on the audited commit: Quality Checks and desktop packaging passed, but homepage/repository validation failed the `FileChanged` hook test. Coverage also does not establish a full security audit, real-device support, cross-platform usability, or equivalence with Claude Code's code quality.
 
 ## Source references
 
