@@ -116,6 +116,8 @@ The README shell installer command now allocates a unique mktemp file and remove
 
 ## Branch cleanup execution safeguard
 
+The cleanup workflow pins checkout and Node setup to immutable commit SHAs and its regression suite asserts those pins, minimum token permissions, the main-only guard, and that policy tests execute before any ref deletion.
+
 The cleanup script now checks exact merged-PR heads and SHA-pinned superseded refs before requesting a branch comparison. This prevents transient compare API failures from blocking branches whose deletion is already justified by direct evidence. The workflow favors the latest main revision so old queued runs do not block the current cleanup policy. Actual ref deletion still depends on the action log.
 
 ## Change discipline

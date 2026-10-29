@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { classifyRetirement, AUDITED_SUPERSEDED_HEADS } from '../scripts/cleanup-merged-branches.mjs';
 
 const mainTree = new Map([
@@ -49,4 +52,17 @@ test('incomplete, oversized, and unique file states fail closed', () => {
   assert.equal(classifyRetirement({ name: 'feat/many-files' }, { status: 'diverged', ahead_by: 1, behind_by: 1, files: Array.from({ length: 300 }, () => ({ filename: 'src/x', sha: 'blob' })) }, 'main', openPRs, mainTree).retire, false);
   assert.equal(classifyRetirement({ name: 'feat/new-doc' }, { status: 'diverged', ahead_by: 1, behind_by: 1, files: [{ filename: 'docs/new.md', status: 'added', sha: 'new-blob' }] }, 'main', openPRs, mainTree).retire, false);
   assert.equal(classifyRetirement({ name: 'feat/rename' }, { status: 'diverged', ahead_by: 1, behind_by: 1, files: [{ filename: 'src/merged.mjs', previous_filename: 'src/old.mjs', status: 'renamed', sha: 'blob-merged' }] }, 'main', openPRs, mainTree).retire, true);
+});
+
+
+test('cleanup workflow pins action SHAs and runs policy tests before deletion', async () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const workflow = await readFile(path.join(root, '.github', 'workflows', 'cleanup-merged-branches.yml'), 'utf8');
+  assert.match(workflow, /actions\/checkout@11d5960a326750d5838078e36cf38b85af677262/);
+  assert.match(workflow, /actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020/);
+  assert.match(workflow, /permissions:\s+contents: write\s+pull-requests: read/);
+  const verification = workflow.indexOf('node --test test/branch-cleanup.test.mjs');
+  const deletion = workflow.indexOf('node scripts/cleanup-merged-branches.mjs --apply');
+  assert.ok(verification >= 0 && deletion > verification, 'branch deletion must be gated by focused cleanup tests');
+  assert.match(workflow, /github\.ref == 'refs\/heads\/main'/);
 });
