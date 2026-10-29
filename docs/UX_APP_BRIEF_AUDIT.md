@@ -61,7 +61,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Empty-state examples, approval cards, run monitor | Implemented in source | Root `index.html` includes the starter tasks, approval card, and monitor event UI. |
 | Theme switch and remembered preference | Implemented in source | Theme/settings hooks exist in the browser app; verify persistence and keyboard navigation manually. |
 | 390px layout and large touch targets | Partial / verify | Responsive CSS and a 390px breakpoint exist; this is not a substitute for real-device testing. |
-| Clear "local only" banner | **Missing** | The UI does not contain a clear banner with that wording. The server defaults to loopback but has explicit non-loopback/TLS options, so the banner must explain the actual connection mode rather than make a false unconditional claim. |
+| Clear connection-scope banner | Implemented in this pass | Agent view now explains that the runtime listens on this computer by default, remote access requires explicit server options, and the runtime token must not be shared. This is a static explanation, not live detection of the actual bind address. |
 | Desktop/phone screenshots for every state | **Missing** | No verified capture set for empty state, chat, approval, error, and settings was found. |
 | Secure QR pairing and paired-device management | **Missing** | No dedicated pairing/token/revocation flow was found. |
 | Phone threat model | Added in this pass | See [Phone connection security note](PHONE_CONNECT_SECURITY.md). This is a design gate, not implementation. The core safety brief must be completed and reviewed before phone pairing work begins. |
@@ -106,6 +106,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 - Added focused regression tests in `test/vscode-chat-process.test.mjs`.
 - Added `docs/PHONE_CONNECT_SECURITY.md` and clarified that explicit LAN/TLS options exist today but do not constitute secure phone pairing.
 - Added an Alpha badge to the README and corrected the Apache license badge's alt text.
+- Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
 
 ## Verification limits
 
