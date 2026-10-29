@@ -97,19 +97,20 @@ export async function startExecJob(options = {}) {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const id = options.id && ID.test(options.id) ? options.id : 'bg-' + randomUUID().replace(/-/g, '').slice(0, 8);
   const logFile = path.join(dir, id + '.log');
-  const entry = { id, kind: 'exec', sessionId: null, root, prompt: command.slice(0, 500), command, status: 'running', startedAt: new Date().toISOString(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}) };
+  const runId = randomUUID();
+  const entry = { id, runId, kind: 'exec', sessionId: null, root, prompt: command.slice(0, 500), command, status: 'running', startedAt: new Date().toISOString(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}) };
   await writeEntry(entry, env);
   const runner = [
     "const { spawn } = require('node:child_process');",
     "const fs = require('node:fs');",
-    "const [command, cwd, entryFile] = process.argv.slice(1);",
+    "const [command, cwd, entryFile, runId] = process.argv.slice(1);",
     "const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));",
     "async function main() {",
     "  // Parent must publish this runner's PID before the command can finish. This",
     "  // prevents a fast command from writing 'completed' and then being overwritten",
     "  // by the parent's stale initial 'running' snapshot.",
     "  let registered = false;",
-    "  for (let i = 0; i < 300; i++) { try { if (JSON.parse(fs.readFileSync(entryFile, 'utf8')).pid === process.pid) { registered = true; break; } } catch {} await wait(10); }",
+    "  for (let i = 0; i < 300; i++) { try { { const current = JSON.parse(fs.readFileSync(entryFile, 'utf8')); if (current.pid === process.pid && current.runId === runId) { registered = true; break; } } } catch {} await wait(10); }",
     "  if (!registered) { process.stderr.write('Background registry startup timed out.\\n'); process.exit(125); }",
     "  const shell = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : (process.env.SHELL || '/bin/sh');",
     "  const args = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];",
@@ -119,7 +120,7 @@ export async function startExecJob(options = {}) {
     "  child.on('exit', (code, signal) => {",
     "    const exitCode = code === null ? 128 : code;",
     "    process.stdout.write('\\n[exit ' + exitCode + (signal ? ' ' + signal : '') + ']\\n');",
-    "    try { const e = JSON.parse(fs.readFileSync(entryFile, 'utf8')); if (e.status === 'running') { e.status = exitCode === 0 ? 'completed' : 'failed'; e.exitCode = exitCode; e.finishedAt = new Date().toISOString(); const temp = entryFile + '.' + process.pid + '.tmp'; fs.writeFileSync(temp, JSON.stringify(e, null, 2) + '\\n', { flag: 'wx', mode: 0o600 }); fs.renameSync(temp, entryFile); } } catch {}",
+    "    try { const e = JSON.parse(fs.readFileSync(entryFile, 'utf8')); if (e.status === 'running' && e.runId === runId) { e.status = exitCode === 0 ? 'completed' : 'failed'; e.exitCode = exitCode; e.finishedAt = new Date().toISOString(); const temp = entryFile + '.' + process.pid + '.tmp'; fs.writeFileSync(temp, JSON.stringify(e, null, 2) + '\\n', { flag: 'wx', mode: 0o600 }); fs.renameSync(temp, entryFile); } } catch {}",
     "    process.exit(exitCode);",
     "  });",
     "}",
@@ -127,7 +128,7 @@ export async function startExecJob(options = {}) {
   ].join('\n');
   const out = openSync(logFile, 'a', 0o600);
   try {
-    const child = spawn(options.execPath || process.execPath, ['-e', runner, command, root, entryPath(id, env)], { cwd: root, env: { ...env, OASIS_BACKGROUND_ID: id }, detached: true, stdio: ['ignore', out, out], windowsHide: true });
+    const child = spawn(options.execPath || process.execPath, ['-e', runner, command, root, entryPath(id, env), runId], { cwd: root, env: { ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }, detached: true, stdio: ['ignore', out, out], windowsHide: true });
     entry.pid = child.pid;
     child.unref();
   } finally { closeSync(out); }
