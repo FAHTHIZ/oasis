@@ -71,13 +71,167 @@ export function commandLine(command, args = []) {
   return [String(command || ''), ...(Array.isArray(args) ? args : [])].join(' ').trim();
 }
 
-function matchCommandSpecifier(specifier, line) {
+const BACKTICK = String.fromCharCode(96);
+
+// Finds a matching closing parenthesis for simple command/process substitutions.
+// Nested substitutions inside quoted substitutions are deliberately rejected as
+// ambiguous; the permission system must ask rather than guess.
+function findMatchingParen(text, openIndex) {
+  let depth = 1;
+  let quote = null;
+  for (let i = openIndex + 1; i < text.length; i++) {
+    const char = text[i];
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      continue;
+    }
+    if (quote === '"') {
+      if (char === '\\') { i++; continue; }
+      if (char === '"') quote = null;
+      else if ((char === '$' && text[i + 1] === '(') || char === BACKTICK) return -1;
+      continue;
+    }
+    if (char === '\\') { i++; continue; }
+    if (char === "'" || char === '"') { quote = char; continue; }
+    if (char === BACKTICK) return -1;
+    if (char === '(') depth++;
+    else if (char === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function findClosingBacktick(text, openIndex) {
+  for (let i = openIndex + 1; i < text.length; i++) {
+    if (text[i] === '\\') { i++; continue; }
+    if (text[i] === BACKTICK) return i;
+  }
+  return -1;
+}
+
+// A small, conservative shell-command splitter for permission decisions. It
+// distinguishes quoted text from operators, inspects nested substitutions, and
+// marks substitutions/redirections/grouping as unsafe for automatic approval.
+// This is intentionally not a full shell parser: uncertain syntax fails closed.
+function splitShellCommands(line, depth = 0) {
+  const text = String(line || '').trim();
+  if (!text) return { safe: false, commands: [] };
+  if (depth > 8) return { safe: false, commands: [text] };
+
+  const commands = [];
+  let start = 0;
+  let quote = null;
+  let safe = true;
+
+  const append = (end) => {
+    const piece = text.slice(start, end).trim();
+    if (!piece) safe = false;
+    else commands.push(piece);
+  };
+  const addNested = (nestedText, nestedDepth) => {
+    const nested = splitShellCommands(nestedText, nestedDepth);
+    commands.push(...nested.commands);
+    safe = false;
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      continue;
+    }
+
+    if (quote === '"') {
+      if (char === '\\') { i++; continue; }
+      if (char === '"') { quote = null; continue; }
+      if (char === '$' && text[i + 1] === '(') {
+        const close = findMatchingParen(text, i + 1);
+        if (close < 0) return { safe: false, commands: [text, ...commands] };
+        addNested(text.slice(i + 2, close), depth + 1);
+        i = close;
+        continue;
+      }
+      if (char === BACKTICK) {
+        const close = findClosingBacktick(text, i);
+        if (close < 0) return { safe: false, commands: [text, ...commands] };
+        addNested(text.slice(i + 1, close), depth + 1);
+        i = close;
+      }
+      continue;
+    }
+
+    if (char === '\\') {
+      if (i === text.length - 1) safe = false;
+      else i++;
+      continue;
+    }
+    if (char === "'" || char === '"') { quote = char; continue; }
+
+    if (char === '$' && text[i + 1] === '(') {
+      const close = findMatchingParen(text, i + 1);
+      if (close < 0) return { safe: false, commands: [text, ...commands] };
+      addNested(text.slice(i + 2, close), depth + 1);
+      i = close;
+      continue;
+    }
+    if (char === BACKTICK) {
+      const close = findClosingBacktick(text, i);
+      if (close < 0) return { safe: false, commands: [text, ...commands] };
+      addNested(text.slice(i + 1, close), depth + 1);
+      i = close;
+      continue;
+    }
+    if (char === '<' && text[i + 1] === '(') {
+      const close = findMatchingParen(text, i + 1);
+      if (close < 0) return { safe: false, commands: [text, ...commands] };
+      addNested(text.slice(i + 2, close), depth + 1);
+      i = close;
+      continue;
+    }
+
+    // Parenthesized shell groups and redirections are outside the deliberately
+    // supported grammar. They need an interactive decision, never auto-approval.
+    if (char === '(' || char === ')' || char === '<' || char === '>') safe = false;
+
+    if (char === ';' || char === '&' || char === '|' || char === '\n' || char === '\r') {
+      append(i);
+      if ((char === '&' || char === '|') && text[i + 1] === char) i++;
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      start = i + 1;
+    }
+  }
+
+  if (quote !== null) safe = false;
+  if (start >= text.length) safe = false;
+  else append(text.length);
+  return { safe, commands };
+}
+
+function matchSingleCommandSpecifier(specifier, line) {
+  if (specifier === null || specifier === '' || specifier === '*') return true;
   if (specifier.endsWith(':*')) {
     const prefix = specifier.slice(0, -2).trim();
     return line === prefix || line.startsWith(prefix + ' ');
   }
   if (specifier.includes('*')) return globToRegExp(specifier.replace(/\//g, '\u0000')).test(line.replace(/\//g, '\u0000'));
   return line === specifier;
+}
+
+function matchCommandSpecifier(specifier, line, options = {}) {
+  const parsed = splitShellCommands(line);
+  if (!parsed.commands.length) return false;
+
+  // Deny/ask rules need to catch any matching piece, even when the whole line
+  // is too complex for approval. Allow rules require a safe parse and a match
+  // for every simple command (including commands found in substitutions).
+  if (options.requireEveryCommand === false) {
+    return parsed.commands.some((piece) => matchSingleCommandSpecifier(specifier, piece));
+  }
+  if (!parsed.safe) return false;
+  return parsed.commands.every((piece) => matchSingleCommandSpecifier(specifier, piece));
 }
 
 function normalizeRelative(p) {
@@ -88,16 +242,16 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
   if (!rule) return false;
   if (rule.isMcpPrefix) return toolName === rule.tools[0] || toolName.startsWith(rule.tools[0] + '_');
   if (!rule.tools.includes(toolName)) return false;
-  if (rule.specifier === null || rule.specifier === '' || rule.specifier === '*') return true;
   if (toolName === 'run_command' || toolName === 'monitor') {
     if (toolName === 'monitor' && !args.command) return false;
-    if (matchCommandSpecifier(rule.specifier, commandLine(args.command, args.args))) return true;
+    if (matchCommandSpecifier(rule.specifier, commandLine(args.command, args.args), { requireEveryCommand: options.requireEveryCommand !== false })) return true;
     // Deny/ask rules also catch the same program called by path (rm:* blocks /bin/rm).
-    return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args));
+    return Boolean(options.matchBasename) && /[\\/]/.test(String(args.command || '')) && matchCommandSpecifier(rule.specifier, commandLine(path.basename(String(args.command)), args.args), { requireEveryCommand: options.requireEveryCommand !== false });
   }
   if (toolName === 'workflow') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
   if (toolName === 'load_skill') { const name = String(args.name || ''); const spec = rule.specifier.replace(/:\*$/, '*'); return spec.endsWith('*') ? name.startsWith(spec.slice(0, -1)) : name === spec; }
-  if (toolName === 'run_shell' || toolName === 'powershell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim());
+  if (toolName === 'run_shell' || toolName === 'powershell') return matchCommandSpecifier(rule.specifier, String(args.command || '').trim(), { requireEveryCommand: options.requireEveryCommand !== false });
+  if (rule.specifier === null || rule.specifier === '' || rule.specifier === '*') return true;
   if (toolName === 'fetch_url') {
     if (rule.specifier.startsWith('domain:')) {
       try {
@@ -140,8 +294,8 @@ export class PermissionPolicy {
 
   // Returns { decision: 'deny'|'ask'|'allow'|'default', rule }.
   evaluate(toolName, args = {}) {
-    for (const rule of this.deny) if (ruleMatches(rule, toolName, args, { matchBasename: true })) return { decision: 'deny', rule: rule.raw };
-    for (const rule of this.ask) if (ruleMatches(rule, toolName, args, { matchBasename: true })) return { decision: 'ask', rule: rule.raw };
+    for (const rule of this.deny) if (ruleMatches(rule, toolName, args, { matchBasename: true, requireEveryCommand: false })) return { decision: 'deny', rule: rule.raw };
+    for (const rule of this.ask) if (ruleMatches(rule, toolName, args, { matchBasename: true, requireEveryCommand: false })) return { decision: 'ask', rule: rule.raw };
     for (const rule of this.allow) if (ruleMatches(rule, toolName, args)) return { decision: 'allow', rule: rule.raw };
     for (const rule of this.sessionAllow) if (ruleMatches(rule, toolName, args)) return { decision: 'allow', rule: rule.raw, session: true };
     return { decision: 'default', rule: null };
