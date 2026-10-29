@@ -21,7 +21,7 @@ export const CONTEXTS = ['Global', 'Chat', 'Autocomplete', 'HistorySearch', 'Con
 
 // Claude Code's defaults for the contexts OASIS implements.
 export const DEFAULT_BINDINGS = {
-  Global: { 'ctrl+c': 'app:interrupt', 'ctrl+d': 'app:exit', 'ctrl+t': 'app:toggleTodos', 'ctrl+o': 'app:toggleTranscript' },
+  Global: { 'ctrl+c': 'app:interrupt', 'ctrl+d': 'app:exit', 'ctrl+t': 'app:toggleTodos', 'ctrl+o': 'app:toggleTranscript', 'ctrl+k': 'app:commandPalette' },
   Chat: {
     escape: 'chat:cancel', 'ctrl+l': 'chat:clearInput', 'shift+tab': 'chat:cycleMode', enter: 'chat:submit',
     'ctrl+j': 'chat:newline', 'shift+enter': 'chat:newline', 'meta+enter': 'chat:newline',
@@ -39,7 +39,7 @@ export const DEFAULT_BINDINGS = {
 
 // What each action does in the OASIS editor: a key name for applyKey, or an editor action.
 export const ACTIONS = {
-  'app:interrupt': { key: 'ctrlC' }, 'app:exit': { key: 'ctrlD' }, 'app:toggleTodos': { key: 'ctrlT' }, 'app:toggleTranscript': { key: 'ctrlO' }, 'app:redraw': { action: 'redraw' },
+  'app:interrupt': { key: 'ctrlC' }, 'app:exit': { key: 'ctrlD' }, 'app:toggleTodos': { key: 'ctrlT' }, 'app:toggleTranscript': { key: 'ctrlO' }, 'app:commandPalette': { action: 'commandPalette' }, 'app:redraw': { action: 'redraw' },
   'history:search': { key: 'search' }, 'history:previous': { key: 'up' }, 'history:next': { key: 'down' },
   'chat:cancel': { key: 'escape' }, 'chat:clearInput': { key: 'clearScreen' }, 'chat:clearScreen': { key: 'clearScreen' }, 'chat:cycleMode': { key: 'shiftTab' },
   'chat:submit': { key: 'enter' }, 'chat:queueSubmit': { key: 'enter' }, 'chat:sendNow': { key: 'enter' }, 'chat:newline': { key: 'newline' }, 'chat:undo': { key: 'undo' },
