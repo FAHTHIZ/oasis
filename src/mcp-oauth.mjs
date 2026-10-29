@@ -11,6 +11,7 @@ import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { isNonPublicIpAddress } from './network-safety.mjs';
 import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 
@@ -64,43 +65,9 @@ export async function deleteStoredToken(serverUrl, env = process.env) {
   return existed;
 }
 
-function privateIPv4(address) {
-  const parts = address.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
-  const [a, b, c] = parts;
-  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
-    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
-    (a === 192 && b === 88 && c === 99) ||
-    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
-    (a === 203 && b === 0 && c === 113) ||
-    (a === 100 && b >= 64 && b <= 127) || a >= 224;
-}
-
-function mappedIPv4(address) {
-  const value = String(address || '').toLowerCase();
-  let tail;
-  if (value.startsWith('::ffff:')) tail = value.slice(7);
-  else if (/^(?:0{1,4}:){5}ffff:/i.test(value)) tail = value.replace(/^(?:0{1,4}:){5}ffff:/i, '');
-  else return null;
-  if (isIP(tail) === 4) return tail;
-  const parts = tail.split(':');
-  if (parts.length !== 2 || parts.some((part) => !/^[a-f0-9]{1,4}$/.test(part))) return null;
-  const high = Number.parseInt(parts[0], 16), low = Number.parseInt(parts[1], 16);
-  return [(high >> 8) & 255, high & 255, (low >> 8) & 255, low & 255].join('.');
-}
-
 function privateAddress(address) {
-  const version = isIP(address);
-  if (version === 4) return privateIPv4(address);
-  if (version !== 6) return true;
-  const value = address.toLowerCase();
-  const mapped = mappedIPv4(value);
-  if (mapped) return privateIPv4(mapped);
-  return value === '::' || value === '::1' || /^f[cd]/.test(value) ||
-    /^fe[89ab]/.test(value) || value.startsWith('fec0:') || value.startsWith('ff') ||
-    /^2001:(?:0|1|2|3|10|20|db8):/.test(value) || value.startsWith('2001:4:112:') ||
-    value.startsWith('2002:') || value.startsWith('64:ff9b:') || value.startsWith('3fff:');
+  const version = isIP(String(address || '').replace(/^\[|\]$/g, ''));
+  return version !== 4 && version !== 6 || isNonPublicIpAddress(address);
 }
 
 function oauthSafetyForServer(serverUrl, lookupImpl = lookup) {
