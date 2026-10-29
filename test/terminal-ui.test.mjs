@@ -8,10 +8,20 @@ import { KeyDecoder, createEditorState, applyKey, layoutFrame, stringWidth, comm
 import { createCompleter, rankFuzzy } from '../src/completion.mjs';
 import { loadHistory, appendHistory } from '../src/input-history.mjs';
 import { renderMarkdown, MarkdownStream, renderDiff, highlightCode } from '../src/markdown.mjs';
-import { logoFrame, footerFor, nextMode, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
+import { logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
 
 const keys = (raw) => new KeyDecoder().feed(raw);
 const typeAll = (state, raw) => { for (const key of keys(raw)) state = applyKey(state, key).state; return state; };
+
+test('startup tips rotate daily and can be disabled', () => {
+  const first = startupTip({}, 1);
+  const nextDay = startupTip({}, 86_400_001);
+  assert.ok(first);
+  assert.ok(nextDay);
+  assert.notEqual(first, nextDay);
+  assert.equal(startupTip({ OASIS_TIP: 'off' }, 1), '');
+  assert.equal(startupTip({ OASIS_NO_TIPS: '1' }, 1), '');
+});
 
 test('key decoder understands arrows, modifiers, shift+enter, and bracketed paste across chunks', () => {
   assert.deepEqual(keys('\x1b[A\x1b[B\x1b[1;5C\x1b[Z').map((k) => k.name), ['up', 'down', 'wordRight', 'shiftTab']);
