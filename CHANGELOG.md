@@ -4,6 +4,8 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Added structured shared-task progress checkpoints with bounded fields, basic credential redaction, active-claim enforcement, and recovery after saved-session restoration. The feature preserves progress for a replacement worker; it does not resurrect the old worker process. Current-main CI is pending.
+
 - Hardened persisted session and backup storage: session loads/listings use bounded descriptor reads, symlinked sessions are rejected/omitted, backup manifests are capped at 64 KiB, and restore rejects POSIX/Windows absolute paths and traversal segments. Added adversarial storage regressions; current-main CI is pending.
 
 - Hardened isolated worktree Git subprocesses: no-shell spawning, 4 MiB per-stream output bounds, explicit timeout results, and process-tree TERM/KILL escalation now apply to worktree creation, diff inspection and merge preflight. Added a child/grandchild timeout regression; current-main CI is pending.
