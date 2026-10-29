@@ -20,7 +20,7 @@ Work directly on `main` in small, reviewable commits. Update this document and t
 - [ ] Required workflows exercise the same intended validation commands without masking failures or relying on retry-only suppression.
 - [ ] Documentation identifies the exact commit for any historical evidence and distinguishes it from current results.
 
-Last fully verified implementation baseline before this follow-up: [Quality Checks run 40859242172](https://github.com/FAHTHIZ/oasis/actions/runs/40859242172) passed on `abe7c2f` (648 tests, 33 fixtures, Node 22/24/26, PTY, browser E2E and Ubuntu/macOS/Windows security regressions); [publishing validation run 40859242145](https://github.com/FAHTHIZ/oasis/actions/runs/40859242145) and [desktop packaging/release run 40859242030](https://github.com/FAHTHIZ/oasis/actions/runs/40859242030) passed on the same revision. The Git/background/MCP process-lifecycle follow-up in the next commit requires the same workflows to pass before Gate 0 closes.
+Last fully verified implementation baseline before this follow-up: [Quality Checks run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973) passed on `9ed2cc9` (651 tests, 33 fixtures, Node 22/24/26, PTY, browser E2E and Ubuntu/macOS/Windows security regressions); [publishing validation run 40860786970](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970) and [desktop packaging/release run 40860787120](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120) passed on the same revision. The OAuth token-store and atomic user-settings mutation follow-up in the next commit requires the same workflows to pass before Gate 0 closes.
 
 **Acceptance:** link each required workflow to the same commit SHA and record any unsupported platform path explicitly.
 

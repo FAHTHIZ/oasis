@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { loadSettings, setWorkspaceTrust } from '../src/settings.mjs';
+import { loadSettings, setWorkspaceTrust, addPermissionRule, updateUserSettings, userSettingsPath } from '../src/settings.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 async function fixture(t) {
@@ -31,6 +31,35 @@ test('~/.claude/settings.json loads as user settings; Oasis user settings win', 
   assert.equal(settings.sources[0].file, path.join(env.CLAUDE_CONFIG_DIR, 'settings.json'));
   const ignored = await loadSettings(root, { env: { ...env, OASIS_IGNORE_CLAUDE_SETTINGS: '1' }, skipPlugins: true });
   assert.ok(!ignored.permissions.allow.includes('Bash(npm test)'));
+});
+
+test('concurrent user-settings mutations preserve changes and keep the file private', async (t) => {
+  const { root, env } = await fixture(t);
+  const file = userSettingsPath(env);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify({ existing: true }), { mode: 0o644 });
+
+  const operations = [
+    ...Array.from({ length: 12 }, (_, index) =>
+      addPermissionRule('user', 'allow', 'run_command(test-' + index + ')', root, env)
+    ),
+    ...Array.from({ length: 12 }, (_, index) =>
+      updateUserSettings((settings) => {
+        settings.concurrentFlags = { ...(settings.concurrentFlags || {}), ['flag' + index]: true };
+        return settings;
+      }, env)
+    )
+  ];
+  await Promise.all(operations);
+
+  const saved = JSON.parse(await readFile(file, 'utf8'));
+  assert.equal(saved.existing, true);
+  assert.equal(saved.permissions.allow.length, 12, 'all concurrent permission-rule additions must survive');
+  assert.equal(Object.keys(saved.concurrentFlags).length, 12, 'all concurrent settings mutations must survive');
+  if (process.platform !== 'win32') {
+    assert.equal((await (await import('node:fs/promises')).stat(file)).mode & 0o777, 0o600,
+      'a user settings file containing environment values must not stay group/world-readable');
+  }
 });
 
 test('sandbox credential masking defaults on and project opt-out requires trust', async (t) => {
