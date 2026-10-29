@@ -174,7 +174,8 @@ async function readJsonBody(response, maxBytes = MAX_OAUTH_METADATA_BYTES) {
   catch { return null; }
 }
 
-async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAUTH_METADATA_BYTES) {
+async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAUTH_METADATA_BYTES, safety = {}) {
+  await requireSafeEndpoint(url, 'OAuth request URL', safety);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
   try {
@@ -191,9 +192,9 @@ async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAU
   } finally { clearTimeout(timer); }
 }
 
-async function getJson(fetchImpl, url) {
+async function getJson(fetchImpl, url, safety = {}) {
   try {
-    const { response, body } = await fetchBoundedJson(fetchImpl, url, { headers: { accept: 'application/json' } });
+    const { response, body } = await fetchBoundedJson(fetchImpl, url, { headers: { accept: 'application/json' } }, MAX_OAUTH_METADATA_BYTES, safety);
     if (!response.ok) return null;
     return body;
   } catch { return null; }
@@ -209,7 +210,9 @@ function wellKnownUrls(base, suffix) {
 }
 
 // Finds the authorization server for an MCP server URL.
-export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null } = {}) {
+export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, lookupImpl = lookup } = {}) {
+  const safety = oauthSafetyForServer(serverUrl, lookupImpl);
+  await requireSafeEndpoint(serverUrl, 'MCP server URL', safety);
   let resourceMetadata = null;
   if (!resourceMetadataUrl) {
     const controller = new AbortController();
@@ -228,16 +231,16 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
     finally { clearTimeout(timer); }
   }
   for (const candidate of resourceMetadataUrl ? [resourceMetadataUrl] : wellKnownUrls(serverUrl, 'oauth-protected-resource')) {
-    resourceMetadata = await getJson(fetchImpl, candidate);
+    resourceMetadata = await getJson(fetchImpl, candidate, safety);
     if (resourceMetadata) break;
   }
   const issuer = resourceMetadata && Array.isArray(resourceMetadata.authorization_servers) && resourceMetadata.authorization_servers[0] || new URL(serverUrl).origin;
   let metadata = null;
-  const issuerUrl = new URL(issuer);
+  const issuerUrl = new URL(await requireSafeEndpoint(issuer, 'OAuth issuer', safety));
   const candidates = [...wellKnownUrls(issuer, 'oauth-authorization-server'), ...wellKnownUrls(issuer, 'openid-configuration')];
   if (issuerUrl.pathname.replace(/\/$/, '')) candidates.push(issuer.replace(/\/$/, '') + '/.well-known/openid-configuration');
   for (const candidate of candidates) {
-    metadata = await getJson(fetchImpl, candidate);
+    metadata = await getJson(fetchImpl, candidate, safety);
     if (metadata && metadata.authorization_endpoint && metadata.token_endpoint) break;
     metadata = null;
   }
@@ -245,9 +248,9 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
   if (!metadata) metadata = { issuer: issuerUrl.origin, authorization_endpoint: issuerUrl.origin + '/authorize', token_endpoint: issuerUrl.origin + '/token', registration_endpoint: issuerUrl.origin + '/register' };
   return {
     issuer,
-    authorizationEndpoint: requireSafeEndpoint(metadata.authorization_endpoint, 'Authorization endpoint'),
-    tokenEndpoint: requireSafeEndpoint(metadata.token_endpoint, 'Token endpoint'),
-    registrationEndpoint: metadata.registration_endpoint ? requireSafeEndpoint(metadata.registration_endpoint, 'Registration endpoint') : null,
+    authorizationEndpoint: await requireSafeEndpoint(metadata.authorization_endpoint, 'Authorization endpoint', safety),
+    tokenEndpoint: await requireSafeEndpoint(metadata.token_endpoint, 'Token endpoint', safety),
+    registrationEndpoint: metadata.registration_endpoint ? await requireSafeEndpoint(metadata.registration_endpoint, 'Registration endpoint', safety) : null,
     scopes: resourceMetadata && Array.isArray(resourceMetadata.scopes_supported) ? resourceMetadata.scopes_supported : null,
     pkce: !Array.isArray(metadata.code_challenge_methods_supported) || metadata.code_challenge_methods_supported.includes('S256')
   };
@@ -255,12 +258,12 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
 
 const b64url = (buffer) => Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-async function postForm(fetchImpl, url, form) {
+async function postForm(fetchImpl, url, form, safety = {}) {
   const { response, body } = await fetchBoundedJson(fetchImpl, url, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
     body: new URLSearchParams(form).toString()
-  });
+  }, MAX_OAUTH_METADATA_BYTES, safety);
   const oauthError = body && body.error
     ? ': ' + String(body.error).slice(0, 100) + (body.error_description ? ' - ' + String(body.error_description).slice(0, 300) : '')
     : '';
@@ -299,7 +302,8 @@ export function openInBrowser(url, { env = process.env, platform = process.platf
 export async function loginMcpServer(server, { env = process.env, fetch: fetchImpl = fetch, print = () => {}, open = (url) => openInBrowser(url, { env }), timeoutMs = LOGIN_TIMEOUT_MS } = {}) {
   if (!server || server.type !== 'http') throw new Error('Only HTTP MCP servers use sign-in; stdio servers get credentials from environment variables.');
   const oauth = server.oauth || {};
-  const discovered = await discoverOAuth(server.url, { fetch: fetchImpl });
+  const safety = oauthSafetyForServer(server.url);
+  const discovered = await discoverOAuth(server.url, { fetch: fetchImpl, lookupImpl: safety.lookupImpl });
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash('sha256').update(verifier).digest());
   const state = b64url(randomBytes(16));
@@ -348,7 +352,7 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
     print('Sign in to ' + server.name + ' in your browser:\n  ' + authorize.toString() + '\nWaiting for the browser to finish (up to ' + Math.round(timeoutMs / 60000) + ' minutes)...');
     open(authorize.toString());
     const code = await result;
-    const body = await postForm(fetchImpl, discovered.tokenEndpoint, { grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: clientId, code_verifier: verifier, resource, ...(clientSecret ? { client_secret: clientSecret } : {}) });
+    const body = await postForm(fetchImpl, discovered.tokenEndpoint, { grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: clientId, code_verifier: verifier, resource, ...(clientSecret ? { client_secret: clientSecret } : {}) }, safety);
     const entry = tokenEntry(body, { server: server.name, resource, clientId, clientSecret, tokenEndpoint: discovered.tokenEndpoint, issuer: discovered.issuer });
     await saveStoredToken(server.url, entry, env);
     return { ok: true, server: server.name, scope: entry.scope, expiresAt: entry.expiresAt };
@@ -361,7 +365,8 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
 export async function refreshStoredToken(serverUrl, { env = process.env, fetch: fetchImpl = fetch } = {}) {
   const entry = await getStoredToken(serverUrl, env);
   if (!entry || !entry.refreshToken) return null;
-  const body = await postForm(fetchImpl, entry.tokenEndpoint, { grant_type: 'refresh_token', refresh_token: entry.refreshToken, client_id: entry.clientId, resource: entry.resource, ...(entry.clientSecret ? { client_secret: entry.clientSecret } : {}) });
+  const safety = oauthSafetyForServer(serverUrl);
+  const body = await postForm(fetchImpl, entry.tokenEndpoint, { grant_type: 'refresh_token', refresh_token: entry.refreshToken, client_id: entry.clientId, resource: entry.resource, ...(entry.clientSecret ? { client_secret: entry.clientSecret } : {}) }, safety);
   const next = tokenEntry(body, entry);
   await saveStoredToken(serverUrl, next, env);
   return next;
