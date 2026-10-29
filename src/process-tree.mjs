@@ -45,5 +45,4 @@ export function signalProcessTree(child, signal = 'SIGTERM') {
   } catch {
     try { return Boolean(child.kill(signal)); } catch { return false; }
   }
-  try { return Boolean(child.kill(signal)); } catch { return false; }
 }
