@@ -9,7 +9,7 @@ OASIS is an independent open-source coding agent and local-first developer works
 
 The project has a multi-step agent/tool loop; scoped workspace file operations; approvals; snapshots and rewind; Git and test tools; saved sessions; multiple hosted and local provider routes; MCP; skills and hooks; plugin adapters; subagents; a session-local task board; bounded worktree dispatch; persisted browser task history; opt-in isolated browser coding runs with a separate Git branch and reviewable diffs; a local authenticated browser workspace; a VS Code-family extension; a GitHub Action; and desktop packaging.
 
-The latest fully verified code snapshot, commit `5a53756`, passed [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171): 594 Node tests, 22/22 evaluation fixtures, Node.js 22/24/26, native PTY and browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code revision. These checks are regression evidence—not proof of production readiness or repository-scale coding quality. Live CI: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
+The latest completed Quality Checks and homepage/repository validation before the current hardening sequence passed on commit `e0591d6` ([Quality run 40828639606](https://github.com/FAHTHIZ/oasis/actions/runs/40828639606), [publishing run 40828639602](https://github.com/FAHTHIZ/oasis/actions/runs/40828639602)). The desktop build for that SHA was cancelled when later fixes were pushed. Follow-on changes include shared IPv4/IPv6/NAT64 checks, Keychain secret transport, cloud credential-context isolation, command-risk hardening, and optional sandbox credential masking. Do not treat the current `main` changes as fully verified until Quality Checks, publishing validation and desktop builds complete on one current SHA. These checks are regression evidence—not proof of production readiness or repository-scale coding quality. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).
 
 ## Biggest remaining gaps
 
@@ -48,9 +48,9 @@ The project now also has durable local browser task history, interrupted-task re
 
 ### P3 — Security and trust
 
-- Replace the macOS Keychain CLI write path that passes secrets in subprocess arguments; verify Windows fallback-file ACLs.
+- Validate the macOS Keychain `security -i` stdin path on a real macOS host and verify Windows fallback-file ACLs; unit tests show the plaintext secret is absent from subprocess argv.
 - Add platform-specific tests for process-tree termination and PTY teardown.
-- Keep OS isolation limitations explicit. Optional Linux/macOS sandboxing is not on by default; a Windows OS sandbox is not implemented.
+- Keep OS isolation limitations explicit. Optional Linux/macOS sandboxing is not on by default; when enabled it masks detected common credential paths but is not full filesystem-read isolation. A Windows OS sandbox is not implemented.
 - Treat enabled MCP servers, hooks and third-party plugin executables as trusted code. Keep network access constrained and credentials scoped.
 - Verify trusted HTTPS and secret handling on real devices. Do not expose the local workspace runtime to untrusted networks.
 - Keep installer signing, provenance, updates and rollback on the release checklist.

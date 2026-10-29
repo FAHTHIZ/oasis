@@ -26,6 +26,16 @@ The isolated-worktree, durable task-history, public-fetch and federated-search/q
 
 Verified main-branch hardening now also includes OAuth DNS pinning, stricter plugin archive SSRF/redirect validation, ZIP traversal/collision/header protections, API-key helper cache isolation and timeout cleanup. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md).
 
+
+### Security-hardening follow-up (verification pending)
+
+- [x] Centralize public-address validation across public fetch, plugin archive downloads, MCP OAuth discovery and browser requests; add IPv6 special-purpose and NAT64-encoded private destination regression cases.
+- [x] Remove plaintext Keychain secrets from macOS subprocess argv and isolate cloud-token caches by configured profile/project/tenant context.
+- [x] Add optional Linux/macOS sandbox masks for detected credential paths, ensure the masks overlay broad writable mounts, and reject unsafe paths in generated Seatbelt profiles.
+- [x] Add tests for option-prefixed npm/pnpm/yarn verbs and command-chain permission parsing.
+- [ ] Verify the new hardening sequence on one current-main SHA across Quality Checks, publishing validation and desktop packaging. The latest completed Quality + publish evidence before this sequence is `e0591d6`; its desktop build was cancelled.
+- [ ] Validate macOS sandbox enforcement and Keychain interactions on an actual macOS host; Windows still has no OS sandbox, and Windows file ACL behavior requires testing.
+
 ## Prioritized worklist
 
 ### P0 — Make the default-branch quality signal trustworthy
@@ -73,7 +83,7 @@ For the controlled coding benchmark:
 - [ ] Add UI/runtime tests for approve, deny, interrupt, cancel, resume, dirty-worktree conflict, and failed-tool recovery.
 - [ ] Exercise a real browser PTY round trip: launch a fixture process, stream output, send input, resize, interrupt/stop, and confirm there are no orphan processes.
 - [ ] Verify trusted local HTTPS on real devices and ensure tokens/secrets never appear in browser logs, URLs, or workflow artifacts.
-- [ ] Replace or mitigate the macOS Keychain CLI write path that currently places the secret in subprocess arguments, and verify Windows fallback-file ACLs. Keep this open until a non-argv secret transport/native API and platform tests are in place.
+- [x] Replace the macOS Keychain plaintext-argv write path with `security -i` and hex-encoded stdin; unit tests verify the secret is absent from process argv. [ ] Validate that path against a real macOS Keychain and verify Windows fallback-file ACLs.
 - [ ] Add supported-OS smoke tests for first launch, model setup, a small edit-and-test task, update, and uninstall. Windows/macOS desktop builds currently exist, but runtime success on those systems must be verified separately.
 - [ ] Keep Android/Termux explicitly experimental for native PTY until its supported path is tested; do not imply that a Linux CI run proves phone compatibility.
 - [ ] Document the signing status honestly. Until signing is configured, label installers as unsigned and explain how to verify that downloads came from the official repository.
