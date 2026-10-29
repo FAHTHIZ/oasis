@@ -14,7 +14,7 @@
 
 OASIS is an open-source AI coding agent. Bring your own model. OASIS is a local-first developer workspace for multi-step software development: it inspects codebases, plans and applies focused edits, runs approved shell commands and tests, and summarizes what changed. Use the CLI in your terminal or launch the browser workspace with `oasis web`; extend it with supported model providers, Model Context Protocol (MCP) tools, reusable skills, hooks, and bounded subagents.
 
-For the current implementation inventory and explicit limitations, see [Current status](docs/CURRENT_STATUS.md) and [Next milestone](docs/NEXT_MILESTONE.md). For the item-by-item UI/UX and app brief audit, see [UI/UX and app implementation audit](docs/UX_APP_BRIEF_AUDIT.md). For the coding-agent evaluation suite and fair-comparison plan, see the [benchmark audit](docs/BENCHMARK_AUDIT.md). For the prioritized, source-backed remaining-gap register, see the [whole-codebase gap register](docs/WHOLE_CODEBASE_GAP_REGISTER.md).
+For the current implementation inventory and explicit limitations, see [root status](STATUS.md), [implementation plan](docs/IMPLEMENTATION_PLAN.md), [Current status](docs/CURRENT_STATUS.md), and [Next milestone](docs/NEXT_MILESTONE.md). For the item-by-item UI/UX and app brief audit, see [UI/UX and app implementation audit](docs/UX_APP_BRIEF_AUDIT.md). For the coding-agent evaluation suite and fair-comparison plan, see the [benchmark audit](docs/BENCHMARK_AUDIT.md). For the prioritized, source-backed remaining-gap register, see the [whole-codebase gap register](docs/WHOLE_CODEBASE_GAP_REGISTER.md).
 
 ## Get started
 
