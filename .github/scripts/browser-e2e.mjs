@@ -60,11 +60,52 @@ try {
           }
         }]
       };
-    } else {
+    } else if (completionCalls === 3) {
       finishReason = 'stop';
       assistantMessage = {
         role: 'assistant',
         content: 'Browser end-to-end fixture completed successfully. The agent wrote and read back a workspace file.'
+      };
+    } else if (completionCalls === 4) {
+      assistantMessage = {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_browser_e2e_delete',
+          type: 'function',
+          function: {
+            name: 'delete_file',
+            arguments: JSON.stringify({ path: 'browser-e2e-output.txt' })
+          }
+        }]
+      };
+    } else if (completionCalls === 5) {
+      finishReason = 'stop';
+      assistantMessage = {
+        role: 'assistant',
+        content: 'The delete request was denied; the file remains unchanged.'
+      };
+    } else if (completionCalls === 6) {
+      assistantMessage = {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_browser_e2e_cancel',
+          type: 'function',
+          function: {
+            name: 'run_command',
+            arguments: JSON.stringify({
+              command: 'node',
+              args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
+            })
+          }
+        }]
+      };
+    } else {
+      finishReason = 'stop';
+      assistantMessage = {
+        role: 'assistant',
+        content: 'The cancellation fixture unexpectedly advanced to another model turn.'
       };
     }
 
@@ -136,6 +177,37 @@ try {
     'Created by the authenticated browser agent tool cycle.\n',
     'The browser request should result in a real workspace file write.'
   );
+
+  // Destructive actions should be explained in plain language and remain denyable.
+  await page.locator('#agentPrompt').fill('Delete browser-e2e-output.txt from this workspace. Ask before deleting it.');
+  await page.locator('#agentSendBtn').click();
+  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  const approvalText = await page.locator('#agentApprovalPrompt').innerText();
+  assert.match(approvalText, /WARNING — RISKY ACTION/);
+  assert.match(approvalText, /browser-e2e-output\.txt/);
+  assert.match(approvalText, /backup will be made first/i);
+  assert.equal(await page.locator('#agentStopBtn').isEnabled(), true, 'Stop should remain available while a task is waiting for approval.');
+  await page.locator('#agentDenyBtn').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
+    .some((element) => element.textContent.includes('The delete request was denied; the file remains unchanged.')),
+  null, { timeout: timeoutMs });
+  assert.equal(completionCalls, 5, 'The denial should be reported to the model without running the delete operation.');
+  assert.equal(
+    await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
+    'Created by the authenticated browser agent tool cycle.\n',
+    'Denying the delete approval must leave the file intact.'
+  );
+  await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
+
+  // A running task can be stopped while it is blocked at a command approval.
+  await page.locator('#agentPrompt').fill('Run the cancellation fixture command after getting my approval.');
+  await page.locator('#agentSendBtn').click();
+  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#agentStopBtn').isEnabled(), true, 'Stop should be enabled while command approval is pending.');
+  await page.locator('#agentStopBtn').click();
+  await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''), null, { timeout: timeoutMs });
+  assert.equal(completionCalls, 6, 'Cancellation must abort the task before another model request.');
+  await assert.rejects(readFile(path.join(root, 'cancel-e2e-side-effect.txt')), { code: 'ENOENT' });
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
   await page.locator('#agentSplitDivider').focus();
   const splitBefore = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
