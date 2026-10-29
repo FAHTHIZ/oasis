@@ -468,16 +468,16 @@ export async function compareEvalReports(paths, options = {}) {
     const leftFingerprint = fingerprintFor(left.results, taskId);
     const rightFingerprint = fingerprintFor(right.results, taskId);
     const verified = Boolean(leftFingerprint && leftFingerprint === rightFingerprint);
-    const left = summarizeComparisonTask(left.results.filter((item) => item.taskId === taskId));
-    const right = summarizeComparisonTask(right.results.filter((item) => item.taskId === taskId));
+    const leftTask = summarizeComparisonTask(left.results.filter((item) => item.taskId === taskId));
+    const rightTask = summarizeComparisonTask(right.results.filter((item) => item.taskId === taskId));
     return {
       taskId,
-      category: left.category && left.category !== 'inconsistent' ? left.category : (right.category === 'inconsistent' ? null : right.category),
-      difficulty: left.difficulty && left.difficulty !== 'inconsistent' ? left.difficulty : (right.difficulty === 'inconsistent' ? null : right.difficulty),
+      category: leftTask.category && leftTask.category !== 'inconsistent' ? leftTask.category : (rightTask.category === 'inconsistent' ? null : rightTask.category),
+      difficulty: leftTask.difficulty && leftTask.difficulty !== 'inconsistent' ? leftTask.difficulty : (rightTask.difficulty === 'inconsistent' ? null : rightTask.difficulty),
       taskFingerprint: verified ? leftFingerprint : null,
       fingerprintStatus: verified ? 'verified' : 'unverified-legacy',
-      left,
-      right
+      left: leftTask,
+      right: rightTask
     };
   });
   const mean = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
