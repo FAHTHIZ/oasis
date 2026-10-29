@@ -21,6 +21,7 @@
 // .claude/commands, .oasis/commands.
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -149,13 +150,45 @@ function runInline(command, root, env, timeoutMs) {
   const shell = process.platform === 'win32' ? { cmd: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { cmd: '/bin/sh', args: ['-c', command] };
   return new Promise((resolve) => {
     let output = '';
-    const child = spawn(shell.cmd, shell.args, { cwd: root, env: inlineEnv(env), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    const timer = setTimeout(() => { child.kill('SIGKILL'); output += '\n(timed out)'; }, timeoutMs);
-    const add = (chunk) => { if (output.length < MAX_INLINE_OUTPUT) output += chunk; };
+    let timedOut = false;
+    let settled = false;
+    let timer;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+    let child;
+    try {
+      child = spawn(shell.cmd, shell.args, {
+        cwd: root,
+        env: inlineEnv(env),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        ...processTreeSpawnOptions()
+      });
+    } catch (error) {
+      finish({ output: error.message, code: null });
+      return;
+    }
+    timer = setTimeout(() => {
+      timedOut = true;
+      signalProcessTree(child, 'SIGKILL');
+    }, timeoutMs);
+    timer.unref?.();
+    const add = (chunk) => {
+      if (output.length < MAX_INLINE_OUTPUT) {
+        output += chunk.toString('utf8').slice(0, MAX_INLINE_OUTPUT - output.length);
+      }
+    };
     child.stdout.on('data', add);
     child.stderr.on('data', add);
-    child.on('error', (error) => { clearTimeout(timer); resolve({ output: error.message, code: null }); });
-    child.on('close', (code) => { clearTimeout(timer); resolve({ output: output.slice(0, MAX_INLINE_OUTPUT), code }); });
+    child.on('error', (error) => finish({ output: error.message, code: null }));
+    child.on('close', (code) => finish({
+      output: output.slice(0, MAX_INLINE_OUTPUT) + (timedOut ? '\n(timed out)' : ''),
+      code: timedOut ? null : code
+    }));
   });
 }
 
