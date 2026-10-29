@@ -13,7 +13,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Clear product description and Alpha expectations | Implemented in source | `site/index.html` describes the product and shows Alpha; README now has an Alpha badge. |
 | Separate desktop and terminal installation choices | Implemented in source | Homepage has two distinct install cards. |
 | Re-check limitations against actual code | Partially done | Homepage acknowledges the VS Code integration and unfinished platform/phone work; continue keeping it synchronized with current code. |
-| Larger/accessible muted text and WCAG AA | Partial / verify | Muted text is brighter than the earlier brief's example, but no contrast-checker result or full accessibility audit was found. |
+| Larger/accessible muted text and WCAG AA | Partial / automated selected-pair checks added on `app/alpha-readiness-gaps` | Homepage and browser-workspace integrity scripts now calculate WCAG contrast for selected small-text/background pairs; the workspace's dim section/footer labels were brightened. A full visual audit, all states/themes, keyboard/screen-reader checks, and real-device validation remain open. |
 | Install → Quick start → User guide link order | Implemented in source | Homepage docs list and README links put the install path first. |
 | Root `index.html` versus `site/index.html` | Resolved: they serve different products | Root `index.html` is the installable browser workspace; `site/index.html` is the public marketing homepage. They should not be merged or deleted as duplicates. `scripts/check-site.mjs` validates the app; `.github/scripts/check-public-site.mjs` validates the homepage. |
 | Social preview and Open Graph metadata | Implemented in source | `site/index.html` points to `site/assets/oasis-social-preview.svg`, a 1200×630 SVG. |
@@ -108,6 +108,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 - Added an Alpha badge to the README and corrected the Apache license badge's alt text.
 - Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
 - On `app/alpha-readiness-gaps`, added a desktop renderer-crash recovery screen and focused tests. The helper tests passed in isolation in the working runtime (3/3); the complete repository suite and Electron crash/restart journey have not been run here.
+- Added WCAG contrast-ratio checks for selected public-homepage and browser-workspace text colors, and brightened two low-contrast workspace labels. The full public-site/app checks have not yet been run from the repository.
 
 ## Verification limits
 
