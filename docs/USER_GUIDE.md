@@ -896,7 +896,7 @@ Compare two completed runs with `oasis eval --compare <run-a.json> <run-b.json>`
 
 Use one row per trial; repeated rows with the same `taskId` represent repeated attempts. The comparator accepts `status: "passed"` or `status: "failed"` (or a boolean `passed` field). `wallTimeMs` and `costUSD` are optional. Only task IDs present in both reports contribute to the headline comparison; the headline pass rate averages each task's pass rate equally, then reports median per-task time and mean per-trial cost. Unmatched tasks are listed separately.
 
-**Important:** `--compare` only reads and compares existing JSON reports. It does not launch compatible ecosystem, execute external verifiers, validate claims in an external report, or generate that report automatically. OASIS has not yet published a matched OASIS-vs-compatible ecosystem benchmark. The 21-task suite remains a smoke benchmark, not representative evidence of repository-level coding quality. For a fair comparison, use the same pinned repository snapshot, task text, acceptance tests, allowed tools/permissions and time/cost budget; record model/provider differences and review the resulting diffs.
+**Important:** `--compare` only reads and compares existing JSON reports. It does not launch compatible ecosystem, execute external verifiers, validate claims in an external report, or generate that report automatically. OASIS has not yet published a matched OASIS-vs-compatible ecosystem benchmark. The 33-task suite remains a smoke benchmark, not representative evidence of repository-level coding quality. For a fair comparison, use the same pinned repository snapshot, task text, acceptance tests, allowed tools/permissions and time/cost budget; record model/provider differences and review the resulting diffs.
 
 ## Run the browser workspace
 
@@ -907,6 +907,12 @@ python -m http.server 8000
 ~~~
 
 Then open `http://localhost:8000`.
+
+### Monitor agent runs and worker activity
+
+When the local browser runtime is connected, choose **Run monitor** in the left navigation. The view lists recent coding-agent runs and provides a selected run's worker/team status and lifecycle timeline. It refreshes while the view is open; use **Refresh** to request an immediate update. If the runtime is not connected, open the **Agent** view and connect using the token printed by `oasis web`.
+
+The monitor reports lifecycle metadata, not full worker prompts or conversation transcripts. It uses the existing local task history; no separate hosted service is involved. The run record can survive a runtime restart, but the actual in-memory agent processes and pending approvals are not restored. A run interrupted by restart needs human review before further work. The current monitor is read-only: it does not pause/resume workers, resolve conflicting worktree diffs, or merge branches automatically. Treat this as an initial feature while its current-main CI and browser end-to-end checks are pending.
 
 ## Development and verification
 
