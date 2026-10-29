@@ -52,7 +52,9 @@ This file distinguishes existing code from behavior proven reliable. A module or
 
 ## Verification evidence
 
-Focused tests exist for LSP, diagnostics, permissions, workflows, sessions, plugins, output styles, hooks and background agents. The existing status docs cite an earlier passing run with 685 tests on Node 22/24/26. That historical run does not verify the current main head. Check [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), and [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml) for the exact revision.
+Focused tests exist for LSP, diagnostics, permissions, workflows, sessions, plugins, output styles, hooks and background agents. The evaluator can export matched-task comparison data as JSON and a self-contained offline HTML report, including paired task outcomes and explicit sample/provenance caveats. The report writer refuses final-path symlinks and atomically replaces regular report files; regression tests protect the symlink target.
+
+Agent turn results also expose structured post-edit verification evidence: changed paths, diff-review state, the most recent recognized check result, LSP outcome summaries and outstanding blockers. Missing optional LSP servers remain visible and do not replace the requirement for a real test/check. The existing status docs cite an earlier passing run with 685 tests on Node 22/24/26. That historical run does not verify the current main head. Check [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), and [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml) for the exact revision.
 
 ## First five files to create or modify
 
