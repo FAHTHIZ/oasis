@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, rename, writeFile, chmod, unlink } from 'node
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
+import { sanitizeMustPreserve } from './context.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_MESSAGES = 120;
@@ -82,6 +83,7 @@ export async function saveSession(session, options = {}) {
     messages,
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
+    mustPreserve: sanitizeMustPreserve(session.mustPreserve),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(
       session.agentTasks && session.agentTasks.autoDispatch && session.agentTasks.autoDispatch.enabled === true
         ? {
@@ -127,6 +129,7 @@ export async function loadSession(root, id, options = {}) {
     messages: validateMessages(payload.messages),
     todos: sanitizeTodos(payload.todos),
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
+    mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint)
   };
 }
