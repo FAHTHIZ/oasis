@@ -10,7 +10,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset } from './config.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
@@ -372,7 +372,12 @@ async function configureProvider(root = process.cwd(), options = {}) {
     foundry: { protocol: 'foundry', baseURL: (() => { try { return defaultCloudBaseURL('foundry', process.env); } catch { return ''; } })() || 'https://RESOURCE.services.ai.azure.com/anthropic', model: process.env.ANTHROPIC_MODEL || process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '' }
   };
   try {
-    const defaultPreset = resolveSetupProviderPreset(options.defaultPreset);
+    const currentConfig = options.defaultPreset === undefined
+      ? await loadConfig().catch(() => null)
+      : null;
+    const defaultPreset = options.defaultPreset === undefined
+      ? inferSetupProviderPreset(currentConfig)
+      : resolveSetupProviderPreset(options.defaultPreset);
     presetName = (await rl.question('Provider preset [omniroute / openai / anthropic / openrouter / gemini / ollama / bedrock / vertex / foundry / custom] (default ' + defaultPreset + '): ')).trim().toLowerCase() || defaultPreset;
     if (presetName === 'custom') {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
