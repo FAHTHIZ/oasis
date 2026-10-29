@@ -163,7 +163,7 @@ The high-impact runner guard and package-publishing block initially examined onl
 7. **Desktop installers are unsigned.** Packaging success does not establish signer identity, first-run/update/uninstall success or accessibility on every platform.
 8. **Secret storage needs platform-specific validation.** The macOS Keychain write path now supplies a hex-encoded secret through `security -i` stdin rather than a plaintext argument, with unit tests for argv isolation. A real macOS Keychain test is still required, and Windows file-fallback ACLs need explicit verification rather than assuming POSIX `0600` semantics.
 9. **Temporary plugin cleanup is best-effort.** Normal process exit removes the temporary extraction root, but a crash or forced termination can leave files in the OS temporary directory; stale-root cleanup and crash-recovery tests remain useful.
-10. **Tests are not a full security audit.** The 21-task evaluation suite is a smoke benchmark. Passing it does not prove all provider, platform or adversarial cases are safe.
+10. **Tests are not a full security audit.** The 22-fixture evaluation suite is a smoke benchmark. Passing it does not prove all provider, platform or adversarial cases are safe.
 
 ## Required verification
 
@@ -177,7 +177,7 @@ The high-impact runner guard and package-publishing block initially examined onl
 - [ ] Run process-tree cancellation tests on Windows as well as POSIX before claiming cross-platform closure.
 - [ ] Continue adversarial URL tests for normalization, IPv4-mapped IPv6, DNS answer sets, redirects and provider/network failure cases.
 
-**Bottom line:** three concrete weaknesses have been patched on main, but the high-impact execution/trust boundaries above remain. This audit does not claim exhaustive coverage or zero remaining bugs.
+**Bottom line:** multiple concrete security and reliability findings have been patched on main, including network-address policy consistency, secret-safe Keychain writes, cloud-token cache isolation, command-risk parsing, and optional sandbox credential masking. The latest follow-up still needs Quality Checks, publishing validation and desktop packaging to pass on one current SHA. This audit does not claim exhaustive coverage or zero remaining bugs.
 
 ## Follow-up hardening: macOS Seatbelt profile path injection
 

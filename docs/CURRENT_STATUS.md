@@ -1,8 +1,8 @@
 # OASIS current implementation status
 
 **Audit date:** October 29, 2026  
-**Latest fully verified code snapshot:** [`5a537564a9817cf879afa636f8517825866c74f3`](https://github.com/FAHTHIZ/oasis/commit/5a537564a9817cf879afa636f8517825866c74f3). [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) passed 594 tests, 22 evaluation fixtures, Node.js 22/24/26, Linux PTY smoke, and browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code snapshot.
-**Evidence boundary:** this records the latest completed code-verification run; later documentation-only commits do not change the tested source. Re-run all required workflows after subsequent code changes.  
+**Last completed code-verification snapshot before the current security-hardening sequence:** [`e0591d61c992e0810aa689de21c04eef4fa1acd2`](https://github.com/FAHTHIZ/oasis/commit/e0591d61c992e0810aa689de21c04eef4fa1acd2). [Quality Checks run 40828639606](https://github.com/FAHTHIZ/oasis/actions/runs/40828639606) and [homepage/repository validation run 40828639602](https://github.com/FAHTHIZ/oasis/actions/runs/40828639602) passed on that code snapshot; desktop build run [40828639547](https://github.com/FAHTHIZ/oasis/actions/runs/40828639547) was cancelled when subsequent hardening changes were pushed.
+**Evidence boundary:** the shared network policy, NAT64 checks, Keychain stdin transport, profile-scoped cloud-token caches, package-command policy fixes, and sandbox credential masking were added after that verified snapshot. They must be treated as pending until all required workflows pass on one current-main SHA. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop builds](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist.
@@ -108,11 +108,11 @@ Repository-level verification also covers `index.html`, `manifest.webmanifest`, 
 Prioritized by the risk they pose to release confidence and everyday usefulness—not by how exciting or visible a new feature would be.
 
 1. **Keep CI deterministic and expand regression depth.** The `FileChanged` test now waits for hook-message delivery; the latest full test matrix passes on Node 22/24/26. Continue repeated focused runs and add supported-OS process lifecycle coverage.
-2. **Measure real coding outcomes.** `oasis eval --compare` now compares repeated-run reports over common task IDs, reporting task-balanced pass rate, median task time and mean cost. The 21-task suite is still too small and utility-heavy to measure repository-level software work; expand it to 25–30 representative tasks and run a reproducible cross-run benchmark with pinned snapshots/models where possible, acceptance tests, repeated trials, and reviewed diffs.
+2. **Measure real coding outcomes.** `oasis eval --compare` now compares repeated-run reports over common task IDs, reporting task-balanced pass rate, median task time and mean cost. The 22-fixture starter suite is still too small and utility-heavy to measure repository-level software work; expand it to 25–30 representative tasks and run a reproducible cross-run benchmark with pinned snapshots/models where possible, acceptance tests, repeated trials, and reviewed diffs.
 3. **Validate product journeys across platforms.** The Linux/Node 22 PTY smoke and Linux Chromium chat smoke are useful, but they do not prove native PTY cleanup on Windows/macOS or first-run/update/uninstall behavior for every desktop installer. Termux remains experimental for PTY.
 4. **Finish multi-agent lifecycle visibility.** Teams, leases, activity events, bounded worktree dispatch, and tmux panes exist. The remaining gaps are a visual agent/run monitor, durable pause/resume across process restarts, cross-session messaging, and conflict-aware integration. Avoid claiming self-coordinating persistent teams.
 5. **Only then expand remote surfaces.** Remote/mobile/hosted sessions need authenticated identity, trusted-device management, workspace isolation, execution policy, reconnect/recovery, and audit trails—not simply a network-accessible web server.
-6. **Continue platform/safety work.** No Windows OS sandbox exists; the optional Linux/macOS sandbox is off by default. The macOS Keychain write path still passes a secret as a subprocess argument, Windows fallback-file ACL semantics need explicit verification, and temporary archive cleanup is not guaranteed after crashes. A native Gemini adapter and JetBrains plugin remain gaps. Desktop builds pass but are unsigned.
+6. **Continue platform/safety work.** No Windows OS sandbox exists; the optional Linux/macOS sandbox is off by default. When enabled, it now masks detected common credential paths, but this is not full filesystem-read isolation and macOS runtime behavior still needs validation. The macOS Keychain writer no longer places the plaintext secret in subprocess argv; a real macOS check and Windows fallback-file ACL verification remain open. Temporary archive cleanup after crashes is not guaranteed. A native Gemini adapter and JetBrains plugin remain gaps. Installers are unsigned, and the latest security-hardening commit is still awaiting the full workflow matrix.
 
 See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and acceptance criteria.
 
@@ -123,7 +123,18 @@ See [Next milestone](NEXT_MILESTONE.md) for the task-level checklist and accepta
 - Third-party plugin imports are safety-reviewed subsets; detection does not mean full runtime compatibility.
 - History compaction is heuristic. Long sessions still need provider-by-provider and long-horizon evaluation for continuity.
 - The browser command panel has a PTY-backed path with a bundled xterm.js renderer. The web runtime supports HTTPS with user-provided certificate/key files for non-loopback access; broader terminal lifecycle and real-device TLS validation remain open.
-- The latest Quality Checks, publishing validation and desktop-build matrix all passed on the same code revision. Passing CI does not establish a full security audit, real-device support, cross-platform usability or equivalence with compatible tooling's code quality.
+- The last completed Quality Checks and publishing validation passed on `e0591d6`, but its desktop build was cancelled. Subsequent security-hardening commits are pending full same-SHA verification. Passing CI does not establish a full security audit, real-device support, cross-platform usability or equivalence with compatible tooling's code quality.
+
+## File-by-file security pass (in progress)
+
+This pass prioritizes security and reliability boundaries before feature breadth. It is a living review log—not a claim that every tracked file has been fully audited.
+
+- **Network egress:** `src/network-safety.mjs`, `src/public-fetch.mjs`, `src/mcp-oauth.mjs`, `src/zip.mjs`, `src/browser-tool.mjs`; shared IPv4/IPv6 policy, private/special IPv6 ranges, IPv4-mapped addresses and NAT64 translation now have regression coverage.
+- **Command execution and OS sandbox:** `src/permissions.mjs`, `src/sandbox.mjs`, `src/settings.mjs`; chained shell permission matching, option-prefixed package-manager verbs, sandbox profile control characters, credential masking and trusted opt-out now have targeted tests.
+- **Secret storage and cloud identity:** `src/secure-store.mjs`, `src/cloud-providers.mjs`; macOS Keychain writes avoid plaintext argv, and Google/Azure token caches are scoped to profile/project/tenant context. Real macOS behavior and Windows ACL semantics remain unverified.
+- **Verification and docs:** `test/network-safety.test.mjs`, `test/command-risk.test.mjs`, `test/sandbox.test.mjs`, `test/power.test.mjs`, `test/secure-store.test.mjs`, `test/cloud-providers.test.mjs`, and `test/claude-settings-compat.test.mjs` cover the changes above. Related limitations are recorded in `SECURITY.md` and `SECURITY_RELIABILITY_AUDIT.md`.
+
+Still requiring deeper passes: full `src/agent.mjs` and context/compaction lifecycle, workspace-file symlink/TOCTOU behavior, session and memory persistence, MCP server and OAuth execution boundaries, browser origin/authentication behavior, and process/PTY lifecycle on each supported platform. The 22-fixture eval suite remains a starter set; competitive coding quality needs a reproducible 25–30-task repository benchmark.
 
 ## Source references
 
