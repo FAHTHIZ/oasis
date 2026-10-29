@@ -193,6 +193,13 @@ body.light .first-run-choice{background:#fff}
   .agent-workspace-tab{padding:8px 10px;min-height:44px}
   .agent-workspace-grid .terminal-xterm{height:270px}
 }
+
+.agent-example-prompts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.agent-example-prompt{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;min-width:0;min-height:76px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#ffffff04;color:var(--text);font:700 11px/1.45 inherit;cursor:pointer}
+.agent-example-prompt:hover,.agent-example-prompt:focus-visible{border-color:var(--accent);background:#b9ed820d;outline-offset:2px}
+.agent-example-prompt span{font-size:10px;font-weight:400;color:var(--muted);line-height:1.6}
+@media(max-width:1050px){.agent-example-prompts{grid-template-columns:minmax(0,1fr)}.agent-example-prompt{min-height:0}}
+@media(max-width:390px){.agent-example-prompt{min-height:44px;padding:11px}.agent-example-prompt span{font-size:10px}}
 </style>
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
@@ -266,7 +273,14 @@ body.light .first-run-choice{background:#fff}
     <div class="agent-chat-column" id="agentChatColumn" role="tabpanel" aria-labelledby="agentChatTab">
 <div class="panel agent-chat-panel">
     <div class="agent-chat-header"><div class="agent-model-summary"><span class="agent-runtime-state" id="agentRuntimeState" data-connected="false">Runtime not connected</span><button class="agent-model-pill" id="agentModelButton" type="button" data-nav="agent" data-scroll-target="provider-setup" title="Open model settings"><span class="agent-model-glyph" aria-hidden="true">◈</span><span class="agent-model-pill-copy"><strong id="agentModelName">Choose a model</strong><small id="agentModelDetail">Connect a runtime</small></span><span class="agent-model-chevron" aria-hidden="true">⌄</span></button></div><div class="agent-session-tools"><label class="sr-only" for="agentModeSelect">Permission mode</label><select id="agentModeSelect" title="Permission mode for this chat"><option value="default">Ask before changes</option><option value="acceptEdits">Auto-accept edits</option><option value="plan">Plan only</option><option value="auto">Auto (classifier decides)</option></select><label class="sr-only" for="agentHistorySelect">Saved chats</label><select id="agentHistorySelect" title="Open a saved chat" hidden><option value="">Saved chats…</option></select><span class="agent-context-meter" id="agentContextMeter" title="Context window use" hidden></span><button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button></div></div>
-    <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">Connect a runtime, then tell Oasis what you want to build.</div></div>
+    <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
+      <p>Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
+      <div class="agent-example-prompts" aria-label="Example tasks">
+        <button class="agent-example-prompt" type="button" data-agent-example="Explain this project">Explain this project<span>Read the important files and explain how they fit together.</span></button>
+        <button class="agent-example-prompt" type="button" data-agent-example="Find a bug">Find a bug<span>Inspect the project, identify one likely bug, and suggest a fix before editing.</span></button>
+        <button class="agent-example-prompt" type="button" data-agent-example="Write tests">Write tests<span>Look at the current tests and propose useful coverage for a missing case.</span></button>
+      </div>
+    </div></div>
     <div class="agent-approval" id="agentApprovalCard" hidden><h3>Approval required</h3><p id="agentApprovalPrompt"></p><div class="agent-buttons"><button class="btn btn-secondary" id="agentDenyBtn" type="button">Deny once</button><button class="btn btn-primary" id="agentApproveBtn" type="button">Approve once</button><button class="btn btn-secondary" id="agentAlwaysBtn" type="button" hidden>Always allow</button></div></div>
     <div class="agent-approval agent-question" id="agentQuestionCard" hidden><h3 id="agentQuestionHeader">Oasis has a question</h3><p id="agentQuestionText"></p><div class="agent-question-options" id="agentQuestionOptions"></div><form class="agent-question-custom" id="agentQuestionForm"><label class="sr-only" for="agentQuestionInput">Your own answer</label><input id="agentQuestionInput" maxlength="2000" placeholder="Or type your own answer" autocomplete="off"><button class="btn btn-primary" type="submit" id="agentQuestionSubmit">Send</button><button class="btn btn-secondary" type="button" id="agentQuestionSkip">Skip</button></form></div>
     <div class="agent-compose"><form id="agentForm"><label class="sr-only" for="agentPrompt">Describe what you want Oasis to do</label><textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Build a settings page, inspect the project first, implement it, and run the relevant tests…" required></textarea><label class="worktree-toggle" for="agentIsolateWorktree"><input id="agentIsolateWorktree" type="checkbox"><span><strong>Isolated Git worktree</strong><small>Keep edits on a separate review branch. Requires a clean Git workspace. Nothing is merged automatically.</small></span></label><div class="agent-buttons agent-compose-actions"><button class="btn btn-primary" id="agentSendBtn" type="submit">Send ↑</button><button class="btn btn-secondary" id="agentStopBtn" type="button" hidden>Stop</button></div></form><small>Commands, package installs, file deletion, and plugin installation wait for your approval. This runs code as your operating-system user; it is not an OS sandbox. Do not expose this HTTP server to the public Internet.</small></div>
@@ -598,6 +612,17 @@ async function firstRunCheckOllama(){document.getElementById('firstRunOllamaLink
 document.querySelectorAll('[data-first-run]').forEach(function(button){button.addEventListener('click',function(){var choice=button.getAttribute('data-first-run');var preset=choice==='api'?'openai':choice;var selector=document.getElementById('providerPreset');selector.value=preset;selector.dispatchEvent(new Event('change'));document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});if(choice==='api'){firstRunStatus('Choose your provider from the list, enter its API key in the masked field, then select Test & save provider.',false);document.getElementById('providerApiKey').focus();}else if(choice==='omniroute'){firstRunStatus('OmniRoute must be running on this computer first. In a terminal, run oasis setup and choose OmniRoute; then return here and test the connection. A shared/free gateway may be slower or limited.',false);document.getElementById('providerModel').focus();}else{firstRunCheckOllama();document.getElementById('providerModel').focus();}});});
 
 // Responsive chat/terminal layout. Divider adjustments are keyboard accessible and remembered.
+(function setupAgentExamples(){
+  var input=document.getElementById('agentPrompt');
+  if(!input)return;
+  document.querySelectorAll('[data-agent-example]').forEach(function(button){
+    button.addEventListener('click',function(){
+      input.value=button.getAttribute('data-agent-example')||'';
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      input.focus();
+    });
+  });
+})();
 (function setupAgentWorkspaceLayout(){
   var grid=document.getElementById('agentWorkspaceGrid');
   var chatTab=document.getElementById('agentChatTab');
