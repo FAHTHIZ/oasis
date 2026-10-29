@@ -1299,7 +1299,9 @@ if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
   menu.setAttribute('role','listbox');
   menu.setAttribute('aria-label','Core OASIS slash commands');
   document.body.appendChild(menu);
+  input.setAttribute('role','combobox');
   input.setAttribute('aria-autocomplete','list');
+  input.setAttribute('aria-haspopup','listbox');
   input.setAttribute('aria-controls',menu.id);
   input.setAttribute('aria-expanded','false');
   var matches=[];
@@ -1348,6 +1350,7 @@ if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
       button.className='skill-command-option';
       button.id='oasisCoreSlashOption'+index;
       button.setAttribute('role','option');
+      button.tabIndex=-1;
       button.setAttribute('aria-selected',String(index===selected));
       var copy=document.createElement('span');
       copy.className='skill-command-copy';
@@ -1383,7 +1386,7 @@ if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
     if(active){
       input.setAttribute('aria-activedescendant',active.id);
       if(active.scrollIntoView)active.scrollIntoView({block:'nearest'});
-    }
+    }else input.removeAttribute('aria-activedescendant');
   }
   input.addEventListener('input',render);
   input.addEventListener('keydown',function(event){
