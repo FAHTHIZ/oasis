@@ -9,9 +9,11 @@ OASIS is an independent open-source coding agent and local-first developer works
 
 The project has a multi-step agent/tool loop; scoped workspace file operations; approvals; snapshots and rewind; Git and test tools; saved sessions; multiple hosted and local provider routes; MCP; skills and hooks; plugin adapters; subagents; a session-local task board; bounded worktree dispatch; a local authenticated browser workspace; a VS Code-family extension; a GitHub Action; and desktop packaging.
 
-The last verified baseline passed 573 Node tests on Node.js 22, 24 and 26, validated 21 evaluation fixtures, and passed native PTY, browser E2E, homepage/repository validation, and desktop build checks. These are useful regression and packaging signals—not proof of production readiness or repository-scale coding quality. Check the quality workflow for the live status: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
+The last fully recorded baseline passed 573 Node tests on Node.js 22, 24 and 26, validated 21 evaluation fixtures, and passed native PTY, browser E2E, homepage/repository validation, and desktop build checks. Those results belong to the recorded historical baseline, not the latest `main` head. The provider-setup preservation fix and its regression tests were subsequently committed directly to `main`; confirm current-main checks before release. These checks are regression and packaging signals—not proof of production readiness or repository-scale coding quality. Live CI: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
 
 ## Biggest remaining gaps
+
+Before release, use [the branch audit](BRANCH_AUDIT.md) to retire already-merged branch tips, selectively port the useful durable-task work instead of forcing its stale conflicted branch, and confirm that the provider setup fix passes on current `main`.
 
 ### P0 — Reliability and release confidence
 
