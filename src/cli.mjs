@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cronState } from './session-tools.mjs';
+import { cronState, formatFindings } from './session-tools.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
@@ -871,7 +871,7 @@ async function ultrareviewCommand(root, rest, autoApprove, persistence) {
   prompt += post
     ? '\n\nWhen the review is complete, post the findings to the pull request as ONE plain comment with `gh pr comment ' + (prNumber || target.replace('#', '')) + ' --body-file -` and say that you did.'
     : '\n\nDo not post anything to GitHub and do not change files: print the findings only.';
-  if (json) prompt += '\n\nEnd your reply with a JSON object on its own: {"findings":[{"severity":"high|medium|low","file":"...","line":N,"title":"...","detail":"..."}],"summary":"..."}';
+  if (json) prompt += '\n\nRecord the confirmed findings with report_findings (pass [] when there are none); the JSON result carries them in its findings field.';
   const timer = setTimeout(() => { stderr.write('Oasis error: ultrareview timed out after ' + minutes + ' minutes.\n'); process.exit(1); }, minutes * 60000);
   timer.unref();
   try {
@@ -1518,6 +1518,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
+        if (name === 'report_findings' && result && !result.error) { endStream(); stdout.write('\n[findings]\n' + formatFindings(session.reportedFindings, { color: colorEnabled(stdout) }) + '\n'); }
         if (verboseEnabled(session)) { const shown = verboseToolOutput(name, result, { color: colorEnabled(stdout) }); if (shown) stdout.write(shown + '\n'); }
       },
       onText: (text) => {

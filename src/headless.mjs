@@ -378,7 +378,8 @@ export async function runHeadless(options) {
     permission_denials: denied,
     ...(structured !== undefined ? { structured_output: structured } : {}),
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
-    ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {})
+    ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {}),
+    ...(session && Array.isArray(session.reportedFindings) ? { findings: session.reportedFindings, ...(session.findingsSummary ? { findings_summary: session.findingsSummary } : {}) } : {})
   };
   if (outputFormat === 'none') {}
   else if (outputFormat === 'text') write(structured !== undefined ? JSON.stringify(structured) + '\n' : summary.result + (summary.result.endsWith('\n') ? '' : '\n'));

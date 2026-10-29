@@ -82,7 +82,7 @@ test('oasis ultrareview runs the deep review headlessly and refuses --post witho
   assert.equal(summary.result, 'No findings.');
   const user = requests[0].messages.filter((m) => m.role === 'user').pop().content;
   assert.match(String(user), /Do not post anything/);
-  assert.match(String(user), /"findings"/);
+  assert.match(String(user), /report_findings/);
   const bad = await run(['-C', root, 'ultrareview', 'src', '--post'], env);
   assert.match(bad.out + bad.err, /--post needs a GitHub pull request/);
 });

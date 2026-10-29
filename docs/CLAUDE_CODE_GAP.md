@@ -95,6 +95,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | `/auto-mode-setup`, `/autofix-pr` | Auto-mode environment drafted from the repo and saved after confirmation; autofix runs locally (Claude uses a cloud session) with gh, up to 5 fix/push/wait rounds | Done |
 | `EnterWorktree` / `ExitWorktree` tools | `enter_worktree` / `exit_worktree` switch the session root mid-task; outside paths need approval; `remove` refuses unsaved work unless `discard_changes` | Done |
 | `ScheduleWakeup` / self-paced `/loop` | `/loop PROMPT` without an interval exposes `schedule_wakeup` (60-3600s or `stop`); the tool is hidden outside such loops | Done |
+| `ReportFindings` tool | `report_findings` stores structured, deduped, severity-sorted findings; rendered in the CLI and returned as `findings` in JSON results; review prompts use it | Done |
 
 ## Ranked next improvements
 
