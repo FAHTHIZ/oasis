@@ -13,4 +13,4 @@ Notable user-facing changes to the OASIS VS Code integration are recorded here.
 ## Unreleased
 
 - Marketplace screenshots and a marketplace-ready PNG extension icon still need to be prepared and checked before publishing.
-- The CLI-missing first-run message and plain-language approval wording need an end-to-end manual review in VS Code.
+- The CLI-missing startup message is implemented; the approval card now explains the decision and adds warning styling for likely destructive requests. Live VS Code wording and allow-rule scope still need manual review.
