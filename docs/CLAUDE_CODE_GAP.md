@@ -92,6 +92,7 @@ These changes close gaps in the everyday agent loop — the part users notice fi
 | `claude auth`, `setup-token`, `agents --json`, `ultrareview` | `oasis auth status\|login\|logout` (JSON with Claude's `authMethod` values and `configDirectory`, exit 1 when signed out, `--api-key-stdin`), `oasis setup-token` (CI key guidance; OASIS uses provider keys, not Anthropic OAuth), `oasis agents --json [--all] [--cwd]`, `oasis ultrareview [target] --json --timeout --post` | Done |
 | `--betas`, `--system-prompt-snapshot`, `--ide`, `--ax-screen-reader`, `--tmux` | Implemented. Snapshot default is `off` (OASIS has always rebuilt on resume); `on` reuses the recorded prompt until compaction. `--teammate-mode tmux\|iterm2` is not implemented: teammates run in-process | Partial |
 | `/setup-bedrock`, `/setup-vertex`, `/bug`/`/feedback`, `/login`/`/logout`, `/new` `/reset` `/quit` `/routines`, `/run` `/verify` `/workflow-authoring` `/plugin-authoring` skills | Wizards detect credentials/region/project/pins and save to user settings `env` after confirmation; `/bug` drafts a prefilled GitHub issue (nothing sent) | Done |
+| `/auto-mode-setup`, `/autofix-pr` | Auto-mode environment drafted from the repo and saved after confirmation; autofix runs locally (Claude uses a cloud session) with gh, up to 5 fix/push/wait rounds | Done |
 
 ## Ranked next improvements
 

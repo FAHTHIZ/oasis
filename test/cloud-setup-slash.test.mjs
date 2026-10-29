@@ -43,3 +43,26 @@ test('/bug drafts an issue URL without sending; aliases and new bundled skills e
   const names = JSON.stringify(skills);
   for (const name of ['workflow-authoring', 'plugin-authoring', 'run', 'verify']) assert.ok(names.includes('"' + name + '"'), name);
 });
+
+test('/auto-mode-setup drafts environment entries from remotes and CI and saves after $defaults', async (t) => {
+  const home = await tmp();
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const { spawnSync } = await import('node:child_process');
+  spawnSync('git', ['init', '-q'], { cwd: home });
+  spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:acme/widgets.git'], { cwd: home });
+  await mkdir(path.join(home, '.github', 'workflows'), { recursive: true });
+  await writeFile(path.join(home, '.github', 'workflows', 'ci.yml'), 'on: push');
+  await writeFile(path.join(home, '.npmrc'), 'registry=https://npm.acme.internal/\n');
+  const env = { HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const preview = await runBuiltinCommand('auto-mode-setup', '', { root: home, env });
+  assert.match(preview.output, /github\.com\/acme\/\*/);
+  assert.match(preview.output, /npm\.acme\.internal/);
+  assert.match(preview.output, /Nothing saved/);
+  await runBuiltinCommand('auto-mode-setup', 'save', { root: home, env });
+  const settings = JSON.parse(await readFile(path.join(home, 'cfg', 'settings.json'), 'utf8'));
+  assert.equal(settings.autoMode.environment[0], '$defaults');
+  assert.ok(settings.autoMode.environment.some((line) => line.includes('GitHub Actions')));
+  const fix = await runBuiltinCommand('autofix-pr', 'ignore lint', { root: home, env });
+  assert.match(fix.prompt, /gh run view RUN_ID --log-failed/);
+  assert.match(fix.prompt, /ignore lint/);
+});

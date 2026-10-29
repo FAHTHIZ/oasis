@@ -795,6 +795,9 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 ## Useful commands
 
+- `/auto-mode-setup` drafts `autoMode.environment` entries from this project (git remote owners, package registries in `.npmrc`/pip config, CI, Docker, Terraform, service hosts in `.env.example`), shows them, and after you confirm appends them after `"$defaults"` in your user settings.
+- `/autofix-pr [instructions]` works the current branch's pull request until it is green: it reads failing check logs and review comments, fixes and tests locally, pushes (never force), waits for the new checks, and repeats up to 5 rounds.
+
 - `/setup-bedrock` and `/setup-vertex` detect your AWS profile or keys (or gcloud project and account), region and model pins (`ANTHROPIC_DEFAULT_SONNET_MODEL` and friends), show what they will write, and after you confirm save it to the `env` block of your user settings; restart to switch. Pass `region=`, `profile=`, `project=`, `model=`, `opus=`, `sonnet=`, `haiku=` to override, and `save` to skip the question. Secrets are never written.
 - `/bug [report]` (alias `/feedback`) drafts a GitHub issue with your report and environment; nothing is sent until you open the link. `--with-transcript` adds the last few messages with API-key-looking strings redacted. `/login` shows the sign-in state and `/logout` removes the stored key. `/new` and `/reset` clear, `/quit` exits, `/routines` is `/schedule`.
 - Bundled skills: `/workflow-authoring` (reference for workflow scripts), `/plugin-authoring` (plugin layout, manifest, testing), `/run` (launch and drive the app to see a change work) and `/verify` (rerun the real checks and exercise the change before reporting done).
