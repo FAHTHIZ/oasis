@@ -10,6 +10,7 @@ import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TASKS_DIR = path.join(APP_ROOT, 'evals', 'tasks');
+const DEFAULT_SNAPSHOTS_DIR = path.join(APP_ROOT, 'evals', 'snapshots');
 const OUTPUT_LIMIT = 12000;
 const DEFAULT_TIMEOUT_MS = 120000;
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target', '.oasis', 'eval-results', '.ssh', '.aws', '.gnupg', '.azure', '.kube', '.docker']);
@@ -157,7 +158,7 @@ async function fingerprintTask(id, taskText, patch, verifierPath, snapshotDir, m
     .digest('hex');
 }
 
-async function assertTaskShape(taskDir) {
+async function assertTaskShape(taskDir, snapshotsDir = DEFAULT_SNAPSHOTS_DIR) {
   const id = path.basename(taskDir);
   if (!safeId(id)) throw new Error('Invalid evaluation task ID: ' + id);
   const repoDir = path.join(taskDir, 'repo');
@@ -173,8 +174,8 @@ async function assertTaskShape(taskDir) {
   if (markerInfo) {
     if (!markerInfo.isFile() || markerInfo.isSymbolicLink()) throw new Error(id + ': repository snapshot pointer must be a regular file');
     const snapshotId = (await readFile(markerPath, 'utf8')).trim();
-    if (!safeId(snapshotId) || snapshotId !== 'oasis-main') throw new Error(id + ': unknown shared repository snapshot');
-    snapshotDir = path.join(APP_ROOT, 'evals', 'snapshots', snapshotId);
+    if (!safeId(snapshotId)) throw new Error(id + ': invalid shared repository snapshot ID');
+    snapshotDir = path.join(path.resolve(snapshotsDir), snapshotId);
     const snapshotInfo = await lstat(snapshotDir).catch(() => null);
     if (!snapshotInfo || !snapshotInfo.isDirectory() || snapshotInfo.isSymbolicLink()) throw new Error(id + ': shared repository snapshot is missing');
   }
@@ -293,7 +294,7 @@ export async function validateEvaluationSuite(options = {}) {
     let task;
     let tempRoot;
     try {
-      task = await assertTaskShape(dir);
+      task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
       tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-eval-validate-'));
       const noOpRoot = path.join(tempRoot, 'no-op');
       await copySnapshot(task.repoDir, noOpRoot);
@@ -813,7 +814,7 @@ async function runClaudeCodeEval(config, options = {}) {
   const startedAt = new Date().toISOString();
   const trials = [];
   for (const dir of selectedDirs) {
-    const task = await assertTaskShape(dir);
+    const task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
     for (let trial = 1; trial <= config.trials; trial++) {
       const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-claude-eval-'));
       const workspace = path.join(tempRoot, 'workspace');
@@ -966,7 +967,7 @@ export async function runEvalCommand(args = [], options = {}) {
   if (config.claudeCode) return await runClaudeCodeEval(config, { ...options, env, tasksDir, output });
 
   if (config.validate) {
-    const report = await validateEvaluationSuite({ tasksDir, env });
+    const report = await validateEvaluationSuite({ tasksDir, env, snapshotsDir: options.snapshotsDir });
     printValidation(report, output);
     return { ok: report.ok, report };
   }
@@ -985,7 +986,7 @@ export async function runEvalCommand(args = [], options = {}) {
 
   try {
     for (const dir of selectedDirs) {
-      const task = await assertTaskShape(dir);
+      const task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
       for (let trial = 1; trial <= config.trials; trial++) {
         const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-eval-run-'));
         const workspace = path.join(tempRoot, 'workspace');
