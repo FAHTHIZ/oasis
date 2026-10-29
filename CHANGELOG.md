@@ -4,6 +4,8 @@ OASIS is an alpha hobby project. This file records notable user-facing changes; 
 
 ## Unreleased
 
+- Hardened HTTP MCP header helpers: stdout uses a strict 64 KiB byte cap, stderr retention is bounded, the production timeout is fixed at 10 seconds, and overflow/timeout/client shutdown terminate the helper process tree. Added regression tests for overflow, timeout and in-flight shutdown; current-head CI is pending.
+
 - Strengthened CI concurrency further: every main commit now gets a unique group, so a later push cannot replace its queued quality, publishing, or desktop verification. PR updates share PR-number groups and remain cancellable. A regression test covers all three workflows; fresh validation is pending.
 
 - Hardened task-history event sanitization for unusual JSON keys and added one focused persistence regression test. Current-head CI is pending.

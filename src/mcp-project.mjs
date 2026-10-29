@@ -23,6 +23,9 @@ import { clientCapabilities, routeServerMessage, MCP_CLIENT_PROTOCOL_VERSION } f
 const PROTOCOL_VERSION = MCP_CLIENT_PROTOCOL_VERSION;
 const MAX_RESPONSE = 4 * 1024 * 1024;
 const MAX_CONTENT = 24000;
+const MAX_HEADERS_HELPER_OUTPUT_BYTES = 64 * 1024;
+const MAX_HEADERS_HELPER_STDERR_BYTES = 4000;
+const DEFAULT_HEADERS_HELPER_TIMEOUT_MS = 10000;
 
 export function expandVariables(value, env = process.env) {
   return String(value).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (match, name, fallback) => {
@@ -231,12 +234,19 @@ export class McpHttpClient {
     this.nextId = 1;
     this.closed = false;
     this.activeRequests = new Set();
+    this.activeHelpers = new Set();
     this.host = options.host || null;
+    // Production is capped at 10 seconds; shorter injected timeouts make cleanup tests fast.
+    const requestedHelperTimeout = options.headersHelperTimeoutMs;
+    this.headersHelperTimeoutMs = Number.isSafeInteger(requestedHelperTimeout)
+      ? Math.min(DEFAULT_HEADERS_HELPER_TIMEOUT_MS, Math.max(25, requestedHelperTimeout))
+      : DEFAULT_HEADERS_HELPER_TIMEOUT_MS;
   }
 
   // headersHelper: a shell command printing a JSON object of headers (short-lived tokens).
   // Runs before the first request and again after a 401; its headers override static ones.
   async _helperHeaders(refresh = false) {
+    if (this.closed) throw new Error('MCP server session closed.');
     if (!this.config.headersHelper) return {};
     if (this.helperHeaders && !refresh) return this.helperHeaders;
     const env = { ...this.env, CLAUDE_CODE_MCP_SERVER_NAME: this.config.name, CLAUDE_CODE_MCP_SERVER_URL: this.config.url, ...(this.config.pluginRoot ? { CLAUDE_PLUGIN_ROOT: this.config.pluginRoot } : {}) };
@@ -245,7 +255,9 @@ export class McpHttpClient {
         shell: true, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
         ...processTreeSpawnOptions()
       });
+      this.activeHelpers.add(child);
       let out = '';
+      let outBytes = 0;
       let err = '';
       let oversized = false;
       let settled = false;
@@ -255,32 +267,48 @@ export class McpHttpClient {
         clearTimeout(timer);
         if (error) reject(error); else resolve(value);
       };
+      const timeoutMs = this.headersHelperTimeoutMs;
+      const timeoutLabel = timeoutMs >= 1000 && timeoutMs % 1000 === 0
+        ? (timeoutMs / 1000) + 's'
+        : timeoutMs + 'ms';
       const timer = setTimeout(() => {
         signalProcessTree(child, 'SIGKILL');
-        finish(new Error('headersHelper timed out after 10s'));
-      }, 10000);
+        finish(new Error('headersHelper timed out after ' + timeoutLabel));
+      }, timeoutMs);
       child.stdout.on('data', (chunk) => {
         if (oversized || settled) return;
-        const currentBytes = Buffer.byteLength(out, 'utf8');
-        if (currentBytes + chunk.length > 65536) {
-          // Do not concatenate an unbounded response chunk before checking the cap.
-          const remainingBytes = Math.max(0, 65536 - currentBytes);
-          out += chunk.subarray(0, remainingBytes).toString('utf8');
+        if (outBytes + chunk.byteLength > MAX_HEADERS_HELPER_OUTPUT_BYTES) {
+          const remainingBytes = Math.max(0, MAX_HEADERS_HELPER_OUTPUT_BYTES - outBytes);
+          if (remainingBytes) out += chunk.subarray(0, remainingBytes).toString('utf8');
+          outBytes += remainingBytes;
           oversized = true;
           signalProcessTree(child, 'SIGKILL');
           finish(new Error('headersHelper output exceeded 64 KiB'));
           return;
         }
         out += chunk.toString('utf8');
+        outBytes += chunk.byteLength;
       });
-      child.stderr.on('data', (chunk) => { err = (err + chunk).slice(-4000); });
-      child.on('error', (error) => finish(error));
+      child.stderr.on('data', (chunk) => {
+        if (settled) return;
+        const tail = chunk.byteLength > MAX_HEADERS_HELPER_STDERR_BYTES
+          ? chunk.subarray(-MAX_HEADERS_HELPER_STDERR_BYTES).toString('utf8')
+          : chunk.toString('utf8');
+        err = (err + tail).slice(-MAX_HEADERS_HELPER_STDERR_BYTES);
+      });
+      child.on('error', (error) => {
+        this.activeHelpers.delete(child);
+        finish(this.closed ? new Error('MCP server session closed.') : error);
+      });
       child.on('close', (code) => {
+        this.activeHelpers.delete(child);
+        if (this.closed) return finish(new Error('MCP server session closed.'));
         if (oversized) return finish(new Error('headersHelper output exceeded 64 KiB'));
         if (code === 0) finish(null, out);
         else finish(new Error('headersHelper exited with ' + code + (err.trim() ? ': ' + err.trim().slice(0, 300) : '')));
       });
     });
+    if (this.closed) throw new Error('MCP server session closed.');
     let parsed;
     try { parsed = JSON.parse(output); } catch { throw new Error('MCP server ' + this.config.name + ': headersHelper must print a JSON object of headers.'); }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('MCP server ' + this.config.name + ': headersHelper must print a JSON object of headers.');
@@ -393,6 +421,7 @@ export class McpHttpClient {
     this.closed = true;
     for (const controller of this.activeRequests) controller.abort();
     this.activeRequests.clear();
+    for (const child of this.activeHelpers) signalProcessTree(child, 'SIGKILL');
     if (this.sessionId) {
       this.fetch(this.config.url, { method: 'DELETE', headers: { ...this.config.headers, 'mcp-session-id': this.sessionId } }).catch(() => {});
     }
