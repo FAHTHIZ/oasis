@@ -18,6 +18,8 @@ Work directly on `main` in small, reviewable commits. Update this document and t
 - [ ] Required workflows exercise the same intended validation commands without masking failures or relying on retry-only suppression.
 - [ ] Documentation identifies the exact commit for any historical evidence and distinguishes it from current results.
 
+Latest code verification: [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171) and [homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on code commit `5a53756` (594 tests, 22 fixtures, Node 22/24/26, PTY and browser E2E). Desktop packaging was not reverified on this same revision; Gate 0 remains open until all required workflows pass on one code commit.
+
 **Acceptance:** link each required workflow to the same commit SHA and record any unsupported platform path explicitly.
 
 ## Gate 1 — Reliable coding loop

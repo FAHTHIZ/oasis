@@ -9,7 +9,7 @@ OASIS is an independent open-source coding agent and local-first developer works
 
 The project has a multi-step agent/tool loop; scoped workspace file operations; approvals; snapshots and rewind; Git and test tools; saved sessions; multiple hosted and local provider routes; MCP; skills and hooks; plugin adapters; subagents; a session-local task board; bounded worktree dispatch; persisted browser task history; opt-in isolated browser coding runs with a separate Git branch and reviewable diffs; a local authenticated browser workspace; a VS Code-family extension; a GitHub Action; and desktop packaging.
 
-The latest fully verified feature baseline, commit `2636739`, passed [Quality Checks run 40817267789](https://github.com/FAHTHIZ/oasis/actions/runs/40817267789): 584 Node tests, 22/22 evaluation fixtures, Node.js 22/24/26, native PTY and browser E2E. Later public-fetch/federated-search commits are newer and still require a completed main-head run. These checks are regression evidence—not proof of production readiness or repository-scale coding quality. Live CI: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
+The latest fully verified code snapshot, commit `5a53756`, passed [Quality Checks run 40818083171](https://github.com/FAHTHIZ/oasis/actions/runs/40818083171): 594 Node tests, 22/22 evaluation fixtures, Node.js 22/24/26, native PTY and browser E2E. [Homepage/repository validation run 40818083169](https://github.com/FAHTHIZ/oasis/actions/runs/40818083169) passed on the same code revision. These checks are regression evidence—not proof of production readiness or repository-scale coding quality. Live CI: https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml
 
 ## Biggest remaining gaps
 
@@ -71,4 +71,4 @@ A release is ready only when all required CI workflows pass on the same commit, 
 **Immediate priority:** stabilize the required quality matrix, expand the eval suite beyond utility smoke tests, and then implement the durable/visible agent lifecycle. Do not declare OASIS finished while those gates remain open.
 
 
-The latest completed quality run on `b52f36a19a8bc8512a76fe9dc9c99299f41dadec` passed 579 Node tests across Node.js 22, 24 and 26, validated 22 fixtures, and passed browser E2E. The desktop packaging matrix for that commit was still in progress. The workspace-lock and restart-persistence regression tests are newer work and require their own verification.
+The latest quality run on `5a53756` passed 594 Node tests across Node.js 22, 24 and 26, validated 22 fixtures, passed the PTY smoke test, and passed browser E2E. Homepage/repository validation also passed on the same code commit. The desktop packaging matrix was not reverified on this revision.
