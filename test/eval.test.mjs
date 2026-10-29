@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { saveConfig } from '../src/config.mjs';
 import { compareEvalReports, runEvalCommand, runEvalProcess, validateEvaluationSuite } from '../src/eval.mjs';
@@ -414,6 +414,9 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
 
   assert.equal(result.ok, true, output.text);
   assert.equal(result.comparison.commonTaskCount, 2);
+  assert.deepEqual(result.comparison.pairedTaskOutcomes, { aWins: 1, bWins: 1, ties: 0 });
+  assert.ok(result.comparison.caveats.some((item) => /targets at least 50 representative tasks/.test(item)));
+  assert.ok(result.comparison.caveats.some((item) => /no verified 40-character source revision/.test(item)));
   assert.deepEqual(result.comparison.onlyInA, ['only-a']);
   assert.deepEqual(result.comparison.onlyInB, ['only-b']);
   assert.equal(result.comparison.sources[1].label, 'Claude Code baseline');
@@ -429,6 +432,50 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
   assert.match(output.text, /Evaluation comparison \(matched tasks only\)/);
   assert.match(output.text, /Task-level outcomes/);
   assert.match(output.text, /unmatched task IDs are excluded/);
+});
+
+test('eval comparison exports private JSON and self-contained escaped HTML reports', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const aPath = path.join(tmp, 'oasis-run.json');
+  const bPath = path.join(tmp, 'external-run.json');
+  const jsonPath = path.join(tmp, 'reports', 'arena.json');
+  const htmlPath = path.join(tmp, 'reports', 'arena.html');
+  const fingerprint = 'a'.repeat(64);
+  const rowsA = [
+    { taskId: 'cross-module-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', status: 'passed', wallTimeMs: 120, costUSD: 0.02 },
+    { taskId: 'cross-module-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', status: 'failed', wallTimeMs: 150, costUSD: 0.02 },
+    { taskId: 'cross-module-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', status: 'passed', wallTimeMs: 110, costUSD: 0.02 }
+  ];
+  const rowsB = [
+    { taskId: 'cross-module-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', status: 'passed', wallTimeMs: 90, costUSD: 0.01 },
+    { taskId: 'cross-module-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', status: 'passed', wallTimeMs: 95, costUSD: 0.01 },
+    { taskId: 'cross-module-task', taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', status: 'passed', wallTimeMs: 100, costUSD: 0.01 }
+  ];
+  await writeFile(aPath, JSON.stringify({ label: 'OASIS', sourceRevision: 'a'.repeat(40), results: rowsA }));
+  await writeFile(bPath, JSON.stringify({ label: '<script>alert(1)</script>', sourceRevision: 'b'.repeat(40), results: rowsB }));
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand([
+    '--compare', aPath, bPath, '--out', jsonPath, '--html', htmlPath
+  ], { env: { ...process.env }, output });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.jsonReportPath, path.resolve(jsonPath));
+  assert.equal(result.htmlReportPath, path.resolve(htmlPath));
+  assert.deepEqual(result.comparison.pairedTaskOutcomes, { aWins: 0, bWins: 1, ties: 0 });
+  assert.equal(result.comparison.caveats.some((item) => /no matched task is labeled large/.test(item)), false);
+  const saved = JSON.parse(await readFile(jsonPath, 'utf8'));
+  assert.equal(saved.schemaVersion, 1);
+  assert.deepEqual(saved.pairedTaskOutcomes, { aWins: 0, bWins: 1, ties: 0 });
+  const html = await readFile(htmlPath, 'utf8');
+  assert.match(html, /OASIS Arena comparison/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.doesNotMatch(html, /<script\b/i, 'the static report must not execute embedded JavaScript');
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(jsonPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(htmlPath)).mode & 0o777, 0o600);
+  }
 });
 
 test('comparison reports category-balanced rates separately from task-balanced rates', async (t) => {
@@ -535,6 +582,14 @@ test('eval comparison refuses unsafe files, invalid result rows and disjoint tas
 });
 
 test('eval comparison requires exactly two report paths and rejects conflicting CLI options', async () => {
+  await assert.rejects(
+    runEvalCommand(['--out', 'report.json'], { env: { ...process.env } }),
+    /--out and --html are only valid with --compare/
+  );
+  await assert.rejects(
+    runEvalCommand(['--compare', 'a.json', 'b.json', '--out', 'same.out', '--html', 'same.out'], { env: { ...process.env } }),
+    /JSON and HTML comparison outputs must use different paths/
+  );
   await assert.rejects(
     runEvalCommand(['--compare', 'only-one.json'], { env: { ...process.env } }),
     /requires two JSON report paths/
