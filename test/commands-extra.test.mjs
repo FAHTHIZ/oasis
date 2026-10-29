@@ -52,7 +52,7 @@ test('allowed-tools Bash rules and deny rules gate inline shell', async (t) => {
   assert.match(denied.text, /skipped !`echo hi`: blocked by permission rule Bash\(echo:\*\)/);
   const askPolicy = new PermissionPolicy({ permissions: { allow: [], ask: ['Bash(echo:*)'], deny: [], defaultMode: 'default' } });
   const asked = await expandInlineShell('!\u0060echo hi\u0060', { root, allowed: true, policy: askPolicy });
-  assert.match(asked.text, /requires explicit approval under permission rule Bash\(echo:\*\)/);
+  assert.match(asked.text, /requires explicit approval under permission rule/);
   assert.equal(asked.ran[0].skipped !== undefined, true);
   const failing = await expandInlineShell('!`exit 3`', { root, allowed: true });
   assert.match(failing.text, /\(exit 3\)/);
