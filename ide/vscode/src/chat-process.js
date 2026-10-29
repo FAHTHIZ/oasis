@@ -6,6 +6,18 @@ const { EventEmitter } = require('node:events');
 
 const BASE_ARGS = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--permission-prompt-tool', 'stdio'];
 
+function friendlyStartError(error, command = 'oasis') {
+  const code = error && error.code;
+  if (code === 'ENOENT') {
+    return 'OASIS could not be found. Install it from https://github.com/FAHTHIZ/oasis/releases or run the CLI install command in the OASIS README. If it is already installed, set the full executable path in VS Code Settings → OASIS → Command (oasis.command), then try again.';
+  }
+  if (code === 'EACCES' || code === 'EPERM') {
+    return 'Your computer refused to run the configured OASIS command. Check that the file exists and is executable, or set VS Code Settings → OASIS → Command (oasis.command) to a command you can run. Then try again.';
+  }
+  const detail = String(error && error.message || 'unknown startup error').replace(/[\\r\\n\\0]/g, ' ').slice(0, 240);
+  return 'OASIS could not start using ' + String(command || 'oasis') + '. ' + detail + '. Check the command setting and run `oasis doctor` in a terminal for help.';
+}
+
 function splitCommand(command) {
   // "node /path/to/cli.mjs" or "oasis": the first word is the program, the rest are arguments.
   const parts = String(command || 'oasis').match(/"[^"]*"|'[^']*'|\S+/g) || ['oasis'];
@@ -43,7 +55,7 @@ class OasisChatProcess extends EventEmitter {
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => this._onData(chunk));
     child.stderr.on('data', (chunk) => this.emit('stderr', chunk));
-    child.on('error', (error) => { this.emit('ui', { kind: 'error', text: 'Could not start OASIS (' + this.command + '): ' + error.message }); this._exit(); });
+    child.on('error', (error) => { this.emit('ui', { kind: 'error', text: friendlyStartError(error, this.command) }); this._exit(); });
     child.on('close', (code) => { if (this.child === child) { this.emit('ui', { kind: 'exit', code }); this._exit(); } });
   }
 
@@ -152,4 +164,4 @@ function translateEvent(event, state = {}) {
   return out;
 }
 
-module.exports = { OasisChatProcess, translateEvent, splitCommand, BASE_ARGS };
+module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, BASE_ARGS };
