@@ -266,7 +266,7 @@ export function analyzeCommand(command, args = [], depth = 0) {
   if (WRAPPERS.has(base)) {
     if (depth > 4) return { blocked: 'Too many nested command wrappers.' };
     const inner = unwrap(base, args.map(String));
-    if (!inner) return { effective: { base, args } };
+    if (!inner) return { blocked: 'Could not safely inspect the nested executable used by the ' + base + ' wrapper. Pass the executable and its arguments directly instead.' };
     const result = analyzeCommand(inner[0], inner[1], depth + 1);
     if (result.blocked) return { blocked: result.blocked + ' (reached through the ' + base + ' wrapper)' };
     return { ...result, highRisk: result.highRisk || ('runs another program through the ' + base + ' wrapper') };
