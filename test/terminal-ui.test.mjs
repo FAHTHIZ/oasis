@@ -8,10 +8,15 @@ import { KeyDecoder, createEditorState, applyKey, layoutFrame, stringWidth, comm
 import { createCompleter, rankFuzzy } from '../src/completion.mjs';
 import { loadHistory, appendHistory } from '../src/input-history.mjs';
 import { renderMarkdown, MarkdownStream, renderDiff, highlightCode } from '../src/markdown.mjs';
-import { logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
+import { animationEnabled, logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock } from '../src/terminal-ui.mjs';
 
 const keys = (raw) => new KeyDecoder().feed(raw);
 const typeAll = (state, raw) => { for (const key of keys(raw)) state = applyKey(state, key).state; return state; };
+
+test('calm mode disables startup animation regardless of terminal colour support', () => {
+  assert.equal(animationEnabled({ isTTY: true }, { OASIS_NO_ANIMATION: '1' }), false);
+  assert.equal(animationEnabled({ isTTY: true }, { TERM: 'dumb' }), false);
+});
 
 test('startup tips rotate daily and can be disabled', () => {
   const first = startupTip({}, 1);
