@@ -1,7 +1,8 @@
 # OASIS current implementation status
 
 **Audit date:** October 29, 2026  
-**Code baseline:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77) (before this documentation refresh)  
+**Code snapshot audited:** [`92798f0b5e0c636fd9702b3251759d14d74a03ca`](https://github.com/FAHTHIZ/oasis/commit/92798f0b5e0c636fd9702b3251759d14d74a03ca) (before the provider-setup fix was ported to main)
+**Last fully recorded quality baseline:** [`268862c783ed27e697c1dd540690d1548ea8cd77`](https://github.com/FAHTHIZ/oasis/commit/268862c783ed27e697c1dd540690d1548ea8cd77). Results for that commit are historical until the current main head completes its own checks.  
 **Package version:** `0.3.0` · **Runtime:** Node.js 22+ · **License:** MIT
 
 This is the repository-grounded status page. It separates shipped implementation, automated evidence and known gaps. A feature name, passing unit test, or successful artifact build is not by itself proof of cross-platform readiness or competitive coding quality. See [Next milestone](NEXT_MILESTONE.md) for the prioritized Alpha-confidence checklist.
@@ -10,18 +11,18 @@ This is the repository-grounded status page. It separates shipped implementation
 
 OASIS has grown into a feature-rich, local-first coding-agent project: CLI and headless runtime, multiple hosted/local model routes, tools for editing and verification, MCP, skills/hooks/plugins, session memory, subagents and task coordination, a browser workspace with a PTY/xterm path, a VS Code-family extension, a GitHub Action, and a desktop packaging pipeline.
 
-On comparator code revision `268862c`, [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, native PTY smoke and browser E2E; [homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) also passed. `oasis eval --compare` compares saved run reports on common task IDs, but the project still has no representative repository-level coding benchmark. The 21 fixtures remain mostly small helper tasks rather than a representative coding score. The current revision's desktop build matrix is tracked separately in [run 40807290603](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603); the latest previously completed full matrix passed on the earlier baseline.
+The last fully recorded quality baseline, comparator revision `268862c`, passed 573 tests on Node 22/24/26, 21 evaluation-fixture validations, a Linux PTY smoke test and browser E2E. [Homepage/repository validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603) also passed for that earlier revision. These results are useful baseline evidence, not proof that later commits pass. The main branch has since received a provider-setup behavior fix and regression tests; current-head CI must pass before those changes are treated as verified. `oasis eval --compare` compares saved reports, but the 21 existing fixtures remain mostly small helper tasks rather than a representative repository-level coding benchmark.
 
 ## Verified repository and CI snapshot
 
-**Current code baseline before this documentation refresh:** `268862c783ed27e697c1dd540690d1548ea8cd77` (October 29, 2026).
+**Code snapshot used for the latest source audit:** `92798f0b5e0c636fd9702b3251759d14d74a03ca` (October 29, 2026). Provider-setup fixes were committed to `main` after that snapshot; check the current workflow results before treating them as release-verified.
 
 | Evidence | Latest verified result |
 | --- | --- |
 | Runtime modules | 61 `.mjs` modules under `src/` after adding the process-tree termination helper |
 | Test layout | Node.js test specifications plus shared helpers; current quality run reports 573 passing tests |
-| Node test suite | **573 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40807290624](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624) |
-| Evaluation-fixture validation | **21/21 valid**; a small regression/smoke suite, not a full coding benchmark |
+| Last recorded Node test suite | **573 passed, 0 failed** on Node.js 22/24/26 in [Quality Checks run 40807290624](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), on the historical comparator baseline |
+| Last recorded evaluation-fixture validation | **21/21 valid**; a small regression/smoke suite, not a full coding benchmark |
 | Node runtime matrix | Node.js 22, 24 and 26 passed in the latest Quality Checks run |
 | Native PTY check | Real interactive-process smoke test passed on Linux / Node.js 22; this is not proof of Windows/macOS/Termux support |
 | Browser E2E | Linux Chromium authenticated chat smoke test passed, including a workspace write/read cycle |
@@ -30,7 +31,7 @@ On comparator code revision `268862c`, [Quality Checks](https://github.com/FAHTH
 | Homepage/repository validation | [Homepage/repository validation run 40807290592](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592) passed on comparator code revision `268862c` |
 | Release maturity | Package version `0.3.0`; CI can build desktop installers, but the current installers are unsigned and first-run behavior is not yet proven across all supported operating systems |
 
-All three required workflows passed on comparator code revision `268862c`: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). The browser smoke test runs in Linux Chromium; it does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
+All three required workflows passed together on the historical comparator code revision `268862c`: [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40807290624), [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40807290592), and the [desktop build matrix](https://github.com/FAHTHIZ/oasis/actions/runs/40807290603). This is not a current-main green signal. The browser smoke test runs in Linux Chromium; it does not establish Android/Termux, real-device TLS, cross-browser, live-cloud-provider, or full Windows/macOS PTY lifecycle readiness.
 
 ## What the code currently provides
 
