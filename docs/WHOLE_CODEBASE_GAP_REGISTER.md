@@ -7,13 +7,13 @@
 
 OASIS is beyond a documentation-only prototype. The repository contains an implemented agent/tool loop, file and command tools, permission evaluation, snapshots and rewind, model/provider adapters, MCP, skills, hooks, plugin loading, memory and context compaction, sessions, subagents, task coordination, worktree support, workflows, diagnostics/LSP, CLI/headless paths, browser workspace, IDE integration, GitHub Action and desktop packaging.
 
-The most recently fully verified implementation baseline before the follow-up patches in this commit is [`9ed2cc9f98d24691a3e902983538110b02284589`](https://github.com/FAHTHIZ/oasis/commit/9ed2cc9f98d24691a3e902983538110b02284589):
+The latest verified implementation snapshot before this documentation refresh is [0002f84a534cd1498b83b5e78fede53922aca7e5](https://github.com/FAHTHIZ/oasis/commit/0002f84a534cd1498b83b5e78fede53922aca7e5):
 
-- [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973): **651 tests passed, 0 failed**, Node.js 22/24/26; all 33 evaluation fixtures validated; Ubuntu/macOS/Windows security regression jobs, Linux native PTY and browser end-to-end smoke passed.
-- [Publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970): passed on that same revision.
-- [Desktop packaging and release workflow](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120): Windows, macOS and Linux package jobs and the versioned-release step passed on that same revision.
+- [Quality Checks run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114): **685 tests passed, 0 failed**, Node.js 22/24/26; clean-environment tests; 33/33 evaluation fixtures; Linux native PTY; browser E2E; Ubuntu/macOS/Windows security regression jobs.
+- [Publishing validation run 40870856141](https://github.com/FAHTHIZ/oasis/actions/runs/40870856141): passed on the same revision.
+- The desktop installer workflow [run 40870856180](https://github.com/FAHTHIZ/oasis/actions/runs/40870856180) was still running when reviewed. The current product remains Alpha, installers are unsigned, and a build is not proof of first-run/update/uninstall readiness on clean machines.
 
-Those results are real regression and packaging evidence. They do **not** prove production readiness, complete security, or representative repository-level coding quality. The current patch serializes OAuth token-store updates and user-settings mutations, uses atomic file replacement and protects malformed token stores from accidental overwrite; it must complete its own CI runs before these additions are treated as verified.
+These results establish regression and packaging evidence, not production readiness, complete security or representative repository-level coding quality. The current code includes guided first-run setup, desktop OS-backed API-key storage with best-effort rollback, fixed-localhost Ollama discovery, shared approval wording and secret redaction, a responsive chat/terminal workspace, starter prompts, CLI status/help improvements and a Ctrl+K command palette. Phone pairing remains intentionally out of scope because the separately required safety brief was not available for review.
 
 This register is an actionable implementation/status map based on the recursive repository tree and direct inspection of the main runtime, tools, permissions, sandbox, context/memory, task coordination, MCP/hooks, LSP/diagnostics, evaluator, tests and CI. It is not a formal proof that every line or dependency is defect-free.
 
@@ -54,11 +54,11 @@ See [the evaluation protocol](BENCHMARKS.md) and [benchmark audit](BENCHMARK_AUD
 
 **Gap:** timeouts and cancellation must terminate descendants and close inherited handles, not merely signal the leader. Linux/POSIX process groups and Windows `taskkill /T /F` have different semantics.
 
-**Verified on `9ed2cc9`:** the evaluator, shell/background tools, diagnostics, language servers and read-only Git use the shared process-tree helper. Regression tests cover inherited output pipes and a descendant that ignores SIGTERM after its leader exits. Saved/runtime/turn model budgets reject malformed integer prefixes.
+**Verified on the earlier 9ed2cc9 baseline and regression-tested on 0002f84:** the evaluator, shell/background tools, diagnostics, language servers and read-only Git use the shared process-tree helper. Regression tests cover inherited output pipes and a descendant that ignores SIGTERM after its leader exits. Saved/runtime/turn model budgets reject malformed integer prefixes.
 
-**Next patch:** extend whole-tree shutdown to Git workflow tools and persistent background-session stops, and impose bounded output plus tree termination on HTTP MCP header helpers. Close this gap only after the new revision passes CI; Windows process-tree semantics still need dedicated adversarial coverage.
+**Remaining work:** extend whole-tree shutdown to Git workflow tools and persistent background-session stops, and impose bounded output plus tree termination on HTTP MCP header helpers. The current quality matrix passes, but Windows process-tree semantics still need dedicated adversarial coverage.
 
-**Close it when:** the new revision passes Quality Checks, and platform-specific tests cover leader-exits-first behavior, cancellation, timeout, inherited-pipe cleanup and LSP/background process shutdown on Windows, macOS and Linux. The new patch is not considered verified until those workflows pass.
+**Close it when:** additional platform-specific tests cover leader-exits-first behavior, cancellation, timeout, inherited-pipe cleanup and LSP/background process shutdown on Windows, macOS and Linux.
 
 ### P1 — Reduce filesystem race exposure
 
@@ -92,7 +92,7 @@ The aim is a coherent OASIS workflow, not simply a longer tool list.
 
 ## Immediate acceptance sequence
 
-1. Pass the full CI, publishing and desktop workflow matrix on the new code revision; fix any failure rather than weakening the assertion.
+1. Keep the full Quality Checks and publishing matrix green on new commits; finish desktop installer verification, fix failures rather than weakening assertions, and retain explicit unsigned-installer notes.
 2. Keep the platform trust boundary explicit and add Windows process-tree regression coverage, then decide the Windows sandbox plan.
 3. Raise the evaluation suite from 33 to at least 50 representative tasks and run repeated trials.
 4. Validate complete user journeys across clean installations, browser sessions, model/provider errors, edit → test → review, cancellation/recovery and multi-agent coordination.
