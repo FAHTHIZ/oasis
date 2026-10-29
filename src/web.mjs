@@ -48,9 +48,16 @@ function monitorText(value, max = 500) {
 export function summarizeAgentRun(job) {
   if (!job || typeof job !== 'object') return null;
   const rawEvents = Array.isArray(job.events) ? job.events : [];
+  // Include only allow-listed run lifecycle events from the parent job. Never
+  // return arbitrary assistant text, prompts, tool results, or command output.
+  const visibleRunTypes = new Set([
+    'started', 'approval_required', 'approval_resolved', 'cancel_requested',
+    'cancelled', 'failed', 'completed', 'worktree_ready', 'usage'
+  ]);
   const agentEvents = rawEvents
-    .filter((event) => event && event.type === 'agent_activity' && event.data && typeof event.data === 'object')
-    .slice(-80);
+    .filter((event) => event && event.data && typeof event.data === 'object' &&
+      (event.type === 'agent_activity' || visibleRunTypes.has(event.type)))
+    .slice(-100);
   const workers = new Map();
   const teams = new Map();
   const stateFor = {
@@ -63,13 +70,55 @@ export function summarizeAgentRun(job) {
     'agent.failed': 'failed',
     'agent.cancelled': 'cancelled'
   };
+  const approvalState = { requested: 0, resolved: 0, approved: 0, denied: 0, pending: 0 };
+  let totalTokens = 0;
+  let hasTokenUsage = false;
   const events = agentEvents.map((event) => {
+    const isAgentEvent = event.type === 'agent_activity';
     const data = event.data;
-    const type = monitorText(data.type, 80) || 'agent.event';
+    let type = isAgentEvent ? monitorText(data.type, 80) || 'agent.event' : 'run.' + monitorText(event.type, 80);
     const agentId = monitorText(data.agent_id, 100);
     const teamId = monitorText(data.team_id, 100);
-    const description = monitorText(data.description, 200);
-    const detail = monitorText(data.detail, 500);
+    let description = monitorText(data.description, 200);
+    let detail = isAgentEvent ? monitorText(data.detail, 500) : '';
+    if (!isAgentEvent) {
+      if (event.type === 'started') {
+        description = 'Run started';
+        detail = monitorText(data.isolation || 'workspace', 80);
+      } else if (event.type === 'approval_required') {
+        approvalState.requested += 1;
+        approvalState.pending += 1;
+        description = 'Waiting for approval';
+      } else if (event.type === 'approval_resolved') {
+        approvalState.resolved += 1;
+        approvalState.pending = Math.max(0, approvalState.pending - 1);
+        if (data.approved) approvalState.approved += 1;
+        else approvalState.denied += 1;
+        description = data.approved ? (data.always ? 'Approval granted for this session' : 'Action approved') : 'Action denied';
+      } else if (event.type === 'cancel_requested') {
+        description = 'Cancellation requested';
+      } else if (event.type === 'cancelled') {
+        description = 'Run cancelled';
+      } else if (event.type === 'failed') {
+        description = 'Run failed';
+        detail = monitorText(data.message || job.error, 500);
+      } else if (event.type === 'completed') {
+        description = data.finished === false ? 'Run stopped for review' : 'Run completed';
+        detail = data.verificationIncomplete ? 'Verification incomplete' : '';
+      } else if (event.type === 'worktree_ready') {
+        description = 'Worktree ready for review';
+        const branch = monitorText(data.branch, 120);
+        detail = branch ? 'Branch ' + branch : '';
+      } else if (event.type === 'usage') {
+        description = 'Model usage';
+        const tokens = Number(data.totalTokens);
+        if (Number.isFinite(tokens) && tokens >= 0) {
+          totalTokens += tokens;
+          hasTokenUsage = true;
+          detail = tokens.toLocaleString() + ' tokens';
+        }
+      }
+    }
     if (teamId && !teams.has(teamId)) {
       teams.set(teamId, { id: teamId, name: teamId, status: 'active', lastActivity: event.at || data.at || '' });
     }
@@ -119,21 +168,30 @@ export function summarizeAgentRun(job) {
     if (team.status === 'shutting_down' && team.running === 0) team.status = 'closed';
   }
   const latestEvent = rawEvents.length ? rawEvents[rawEvents.length - 1] : null;
+  const artifact = job.result && job.result.isolatedWorktree || {};
+  const branch = monitorText(artifact.branch || job.worktreeBranch, 120);
+  const worktreePath = monitorText(artifact.path || job.worktreePath, 180);
+  const baseCommit = /^[a-f0-9]{40}$/i.test(String(artifact.baseCommit || job.worktreeBaseCommit || ''))
+    ? String(artifact.baseCommit || job.worktreeBaseCommit).toLowerCase() : '';
+  if (hasTokenUsage) approvalState.totalTokens = totalTokens;
   return {
     id: monitorText(job.id, 80),
     title: monitorText(job.title || job.type || 'Coding task', 160),
     type: monitorText(job.type || 'agent', 40),
     status: monitorText(job.status || 'unknown', 40),
+    error: monitorText(job.error, 500),
     createdAt: monitorText(job.createdAt, 40),
     updatedAt: monitorText(latestEvent && latestEvent.at || job.updatedAt || job.createdAt, 40),
     workspaceName: monitorText(job.workspaceName, 160),
     isolation: monitorText(job.isolation || (job.worktreeBranch ? 'worktree' : 'workspace'), 40),
+    branch, worktreePath, baseCommit,
+    approvals: approvalState,
     workerCount: workerList.length,
     runningWorkers: workerList.filter((worker) => worker.status === 'running' || worker.status === 'stopping').length,
     teamCount: teams.size,
     teams: [...teams.values()],
     workers: workerList,
-    events: events.slice(-60)
+    events: events.slice(-80)
   };
 }
 
@@ -1380,15 +1438,15 @@ export function createOasisWebServer(options = {}) {
           eventCount: job.events.length, error: job.error || null
         });
       }
-      const recent = [...summaries.values()]
+      const allAgentRuns = [...summaries.values()]
         .filter((item) => item.type === 'agent')
-        .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0))
-        .slice(0, 50);
+        .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
+      const recent = allAgentRuns.slice(0, 50);
       const runs = await Promise.all(recent.map(async (summary) => {
         const task = jobs.get(summary.id) || await taskStore.get(summary.id);
         return summarizeAgentRun(task || summary);
       }));
-      json(res, 200, { runs: runs.filter(Boolean), total: summaries.size, updatedAt: new Date().toISOString() });
+      json(res, 200, { runs: runs.filter(Boolean), total: allAgentRuns.length, updatedAt: new Date().toISOString() });
       return;
     }
 
