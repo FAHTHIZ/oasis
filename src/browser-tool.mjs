@@ -60,16 +60,53 @@ export function browserNavigationPolicy(rawUrl) {
   return {
     url: parsed.href,
     local: localHttp || localBlank,
+    localHttp,
+    localBlank,
     approvalKey: opaqueTarget ? 'opaque-target:' + parsed.href : parsed.origin,
     approvalTarget: opaqueTarget ? parsed.href.slice(0, 1200) : parsed.origin
   };
 }
 
-export function browserNavigationNeedsApproval(rawUrl, approvedNavigations) {
+export function browserNavigationNeedsApproval(rawUrl, approvedNavigations, { strictLocal = false } = {}) {
   const policy = rawUrl && typeof rawUrl === 'object' && typeof rawUrl.approvalKey === 'string'
     ? rawUrl
     : browserNavigationPolicy(rawUrl);
-  return !policy.local && !approvedNavigations.has(policy.approvalKey);
+  const localBypass = policy.localBlank || (policy.localHttp && !strictLocal);
+  return !localBypass && !approvedNavigations.has(policy.approvalKey);
+}
+
+function isPrivateOrSpecialIPv4(host) {
+  const parts = host.split('.');
+  if (parts.length !== 4 || parts.some(part => !/^\d{1,3}$/.test(part) || Number(part) > 255)) return false;
+  const [a,b,c] = parts.map(Number);
+  return a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 88 && c === 99) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113) ||
+    (a === 100 && b >= 64 && b <= 127);
+}
+
+export function isPrivateBrowserRequest(rawUrl) {
+  let parsed;
+  try { parsed = new URL(String(rawUrl)); } catch { return true; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  let host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
+      host.endsWith('.internal') || host.endsWith('.home.arpa') ||
+      host === 'metadata' || host === 'metadata.google.internal' || !host.includes('.')) return true;
+  if (host.startsWith('::ffff:')) {
+    const mapped = host.slice('::ffff:'.length);
+    if (mapped.includes('.')) return isPrivateOrSpecialIPv4(mapped);
+    // Conservatively deny hexadecimal IPv4-mapped IPv6 so it cannot bypass the IPv4 checks.
+    return true;
+  }
+  if (isPrivateOrSpecialIPv4(host)) return true;
+  return host === '::' || host === '::1' || /^f[cd]/i.test(host) ||
+    /^fe[89ab]/i.test(host) || /^fec0/i.test(host) || /^ff/i.test(host) ||
+    /^2001:(?:0|db8):/i.test(host) || /^2002:/i.test(host);
 }
 
 const KEYS = {
@@ -132,18 +169,24 @@ async function setupPage(state, page, context) {
   });
   // Gate top-level document navigations from links, forms, redirects and page
   // scripts too—not only explicit browser.navigate tool calls.
-  await page.send('Fetch.enable', { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] });
+  await page.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
   page.on('Fetch.requestPaused', (request) => {
     const pending = (async () => {
       const resume = () => page.send('Fetch.continueRequest', { requestId: request.requestId }).catch(() => {});
       const fail = () => page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
-      if (request.resourceType !== 'Document') { await resume(); return; }
-      if (!tab.mainFrameId) {
-        tab.blockedNavigations.push({ url: String(request.request.url || '').slice(0, 1200), reason: 'The browser main frame could not be identified safely.' });
+      const requestUrl = String(request.request.url || '');
+      const isDocument = request.resourceType === 'Document';
+      const isMainFrame = isDocument && tab.mainFrameId && request.frameId === tab.mainFrameId;
+      const privateTarget = isPrivateBrowserRequest(requestUrl);
+      if (isDocument && !tab.mainFrameId) {
+        tab.blockedNavigations.push({ url: requestUrl.slice(0, 1200), reason: 'The browser main frame could not be identified safely.' });
         await fail();
         return;
       }
-      if (request.frameId !== tab.mainFrameId) { await resume(); return; }
+      // Public subresources continue normally. Any request from page content to
+      // localhost, private IPs, link-local, metadata, or internal hostnames is
+      // approval-gated, including fetch/XHR, images, iframes and form targets.
+      if (!isMainFrame && !privateTarget) { await resume(); return; }
       let policy;
       try { policy = browserNavigationPolicy(request.request.url); }
       catch (error) {
@@ -151,10 +194,10 @@ async function setupPage(state, page, context) {
         await fail();
         return;
       }
-      if (browserNavigationNeedsApproval(policy, state.approvedNavigations)) {
+      if (browserNavigationNeedsApproval(policy, state.approvedNavigations, { strictLocal: privateTarget || isMainFrame })) {
         const approved = await approve(context,
-          'Follow top-level navigation to ' + policy.approvalTarget + '?\n  ' + policy.url,
-          { tool: 'browser', input: { action: 'navigate', url: policy.url, source: 'page-navigation' } });
+          (isMainFrame ? 'Follow top-level navigation to ' : 'Allow this page to contact a local/private network resource at ') + policy.approvalTarget + '?\n  ' + policy.url,
+          { tool: 'browser', input: { action: 'navigate', url: policy.url, source: isMainFrame ? 'page-navigation' : 'page-private-resource' } });
         if (!approved) {
           tab.blockedNavigations.push({ url: policy.url.slice(0, 1200), reason: 'The user did not approve this navigation.' });
           await fail();
@@ -261,7 +304,7 @@ export async function executeBrowserTool(args, context = {}) {
     case 'navigate': {
       const policy = browserNavigationPolicy(args.url);
       const url = policy.url;
-      if (browserNavigationNeedsApproval(policy, state.approvedNavigations)) {
+      if (browserNavigationNeedsApproval(policy, state.approvedNavigations, { strictLocal: false })) {
         if (!(await approve(context, 'Open ' + policy.approvalTarget + ' in the browser?\n  ' + url, { tool: 'browser', input: args }))) {
           return { error: 'The user did not approve opening ' + policy.approvalTarget + '.' };
         }
