@@ -4,7 +4,7 @@
   "description": "Run the OASIS coding agent in VS Code: a chat panel, selection context, native diff review for edits, and editor diagnostics.",
   "version": "0.2.0",
   "publisher": "fahthiz",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/FAHTHIZ/oasis.git"
