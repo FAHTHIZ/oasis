@@ -841,7 +841,22 @@ export function readInput(options = {}) {
         case 'bell': output.write('\x07'); break;
         default: break;
       }
-      if (!done) draw();
+      if (!done) {
+        // Keep the small slash-command menu visible while a command name is typed.
+        // Tab still performs the existing completion; Enter still submits the prompt.
+        const commandPrefix = state.text.startsWith('/') && !/\\s/.test(state.text) && state.cursor === state.text.length;
+        if (commandPrefix && options.complete && !completion && action !== 'escape' && action !== 'submit') {
+          try {
+            const result = await options.complete(state.text, state.cursor);
+            hints = result && result.candidates && result.candidates.length
+              ? [DIM('Commands · Tab to complete · Enter to run', color), ...renderCandidates(result.candidates, -1, color)]
+              : [];
+          } catch { hints = []; }
+        } else if (!commandPrefix && !completion && hints.length && hints[0] && /Commands · Tab to complete/.test(stripAnsi(hints[0]))) {
+          hints = [];
+        }
+        draw();
+      }
     };
 
     const onData = (chunk) => {
