@@ -99,16 +99,16 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 | Weak/free model reliability | Partial / verify | Retry/provider paths exist; a reproducible local-model benchmark is still required. |
 | "What I'm unsure about" at end of large tasks | Partial / verify | Prompting/evaluation expectations exist; verify this is enforced consistently in final responses. |
 
-## Work completed during this audit
+## Current implementation snapshot
 
-- Added `ide/vscode/CHANGELOG.md`.
-- Improved VS Code startup failures for missing or non-executable OASIS commands, including clear next steps and an `oasis doctor` hint for unexpected errors.
-- Clarified VS Code permission cards with “Allow once” / “Deny”, a review-before-approval reminder, and a conservative red warning for likely destructive requests; added keyboard-focus styling.
-- Added actionable guidance for nonzero VS Code CLI exits, filtered stack frames from the user-facing summary, and added focused regression tests in `test/vscode-chat-process.test.mjs`.
-- Aligned browser approval labels with the same one-time allow/deny wording and explicitly scoped reusable approvals to the current session.
-- Added `docs/PHONE_CONNECT_SECURITY.md` and clarified that explicit LAN/TLS options exist today but do not constitute secure phone pairing.
-- Added an Alpha badge to the README and corrected the Apache license badge's alt text.
-- Added a connection-scope/token-safety note to the browser Agent view and made the integrity check require it.
+- The public homepage and README identify OASIS as an alpha open-source AI coding agent, separate desktop installation from the developer CLI, explain the configured model/search provider boundary, and link to the Install/Quick start/User guide path.
+- `site/assets/oasis-social-preview.svg` is a custom 1200×630 social card, with Open Graph/Twitter metadata and public-site regression checks. It is branded artwork, **not** a real product screenshot.
+- The root workspace contains a local-only-by-default connection notice and warning not to share runtime tokens. This is explanatory copy, not live verification of network binding.
+- The browser approval card uses “Allow once” and “Deny”; the reusable approval label states that it applies for the current session. The shared server-side approval handler remains the enforcement point.
+- VS Code approval cards include an instruction to review the requested action, a conservative visual warning for likely destructive requests, and keyboard-focus styling. Nonzero CLI exits now receive a short next-step message and an `oasis doctor` hint; focused test cases cover the new helper behavior.
+- `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`, `docs/QUICKSTART.md`, `CONTRIBUTING.md`, and `ide/vscode/CHANGELOG.md` already exist. The changelog now records the approval and error-message improvements.
+- `docs/PHONE_CONNECT_SECURITY.md` already exists as a design gate. Phone pairing itself remains unimplemented and must not start until the user has read and reviewed the security note.
+- `index.html` is the app workspace; `site/index.html` is the separate public homepage. They are not duplicate files and must not be merged or deleted as a cleanup shortcut.
 
 ## Verification limits
 
