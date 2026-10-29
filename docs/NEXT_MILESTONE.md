@@ -1,7 +1,7 @@
 # Next milestone: Alpha confidence and end-to-end reliability
 
 **Status checked:** October 29, 2026  
-**Code baseline before this documentation update:** [`02feecc610f5775279b827a51744bc244e725068`](https://github.com/FAHTHIZ/oasis/commit/02feecc610f5775279b827a51744bc244e725068)  
+**Code baseline before this documentation update:** [`a044ed403091a2fb885ff796bd364f010a13e286`](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286)  
 **Purpose:** decide what OASIS should ship next based on the current implementation and the documented Claude Code capability set.
 
 ## Decision
@@ -12,34 +12,34 @@ OASIS already has a substantial coding-agent loop, broad provider choice, MCP, h
 
 ## Why this is the next milestone
 
-The last fully verified baseline had one failed publishing-validation check while its Quality Checks and desktop build passed. Three targeted patches have since been committed directly to main; the latest workflows were still in progress when this audit was written.
+The latest main code revision has a consistent green CI signal: Quality Checks, homepage/repository validation and the desktop build matrix all passed. The next step remains end-to-end reliability and measured coding outcomes, not another large feature.
 
 | Check | Latest available evidence | Interpretation |
 | --- | --- | --- |
-| Prior Quality Checks | [Run 40795987277](https://github.com/FAHTHIZ/oasis/actions/runs/40795987277) passed: 549 tests, Node 22/24/26, 21 validated fixtures, Linux PTY smoke and Linux Chromium browser smoke | This verifies the earlier baseline only, not the newest patches. |
-| Prior desktop build | [Run 40795987139](https://github.com/FAHTHIZ/oasis/actions/runs/40795987139) passed | Packaging pipeline built artifacts; installers are still unsigned and platform first-run behavior is not fully validated. |
-| Prior publishing validation | [Run 40795987174](https://github.com/FAHTHIZ/oasis/actions/runs/40795987174) failed the FileChanged hook test | The test now waits for the expected hook-message delivery rather than checking before the hook response is processed. The targeted rerun is pending below. |
-| Current-main Quality Checks | [Run 40798160831](https://github.com/FAHTHIZ/oasis/actions/runs/40798160831) | Pending at the time of this document update; includes process-tree cancellation and URL-range regressions. |
-| Current-main publishing validation | [Run 40798160822](https://github.com/FAHTHIZ/oasis/actions/runs/40798160822) | Pending at the time of this document update. |
-| Current-main desktop build | [Run 40798160813](https://github.com/FAHTHIZ/oasis/actions/runs/40798160813) | Pending at the time of this document update. |
+| Current Quality Checks | [Run 40804769809](https://github.com/FAHTHIZ/oasis/actions/runs/40804769809) passed: 570 tests, Node 22/24/26, 21 validated fixtures, Linux PTY smoke and Linux Chromium browser smoke | The current code revision passed the automated quality matrix. |
+| Current desktop build | [Run 40804769799](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799) passed on Windows, macOS and Linux | Platform packaging passed; installers are still unsigned and first-run/update/uninstall behavior is not fully validated. |
+| Current publishing validation | [Run 40804769832](https://github.com/FAHTHIZ/oasis/actions/runs/40804769832) passed | The FileChanged hook synchronization fix passed the required publishing-validation workflow. |
 
-Changes already committed to main include process-tree termination for command, package-install, external-skill install and shell-hook cancellation/timeouts; a hook test synchronization fix; and additional special-purpose IPv4/IPv6 deny ranges for the public URL fetch guard. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md). Do not treat “committed” as “verified” until current workflows complete.
+
+
+
+Verified main-branch hardening now also includes OAuth DNS pinning, stricter plugin archive SSRF/redirect validation, ZIP traversal/collision/header protections, API-key helper cache isolation and timeout cleanup. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md).
 
 ## Prioritized worklist
 
 ### P0 — Make the default-branch quality signal trustworthy
 
-- [x] Change the `FileChanged` test to wait for hook-message delivery using the existing bounded `waitFor` helper; this corrects an assertion race caused by the hook log file being written before its message is delivered. Current workflow verification is still pending.
+- [x] Change the `FileChanged` test to wait for hook-message delivery using the existing bounded `waitFor` helper; the full current test matrix passes with the assertion synchronized to the hook response.
 - [x] Added process-tree termination to command, package-install, external-skill install and hook timeout/cancellation paths, plus a regression test for a descendant that inherits output pipes. Cross-platform process behavior still requires verification.
 - [x] Added regression cases for additional reserved/documentation IPv4 and IPv6 addresses to the public URL-fetch guard.
-- [ ] Run the focused hook and process-tree tests repeatedly, then verify Quality Checks, publishing validation and desktop builds on the same commit.
+- [ ] Repeat focused hook and process-tree tests independently, then keep all required workflows passing on the same commit as code changes continue.
 - [ ] Keep the workflows' validation commands aligned where they are intended to cover the same checks. A passing workflow must not mask a failing duplicate gate.
-- [ ] Acceptance: the focused test is deterministic and all required checks pass for one commit, including Quality Checks, homepage/repository validation, and the desktop build matrix.
+- [x] Acceptance: Quality Checks, homepage/repository validation, and the desktop build matrix passed for one code commit. Continue repeated focused runs as additional reliability evidence.
 
 ### P1 — Align documentation with the shipped implementation
 
 - [x] Corrected the stale TLS claim in `SECURITY.md`: the web runtime supports HTTPS when given a certificate and private key; non-loopback plaintext requires an explicit `--allow-insecure-lan` opt-in. Clearly state the remaining certificate-provisioning and real-device validation limitations.
-- [ ] Make the user guide consistent about the PTY path: the browser includes a bundled xterm.js renderer, while native PTY/process lifecycle validation is still limited and cross-platform end-to-end coverage remains incomplete.
+- [x] The user guide describes the browser xterm.js/PTY path and keeps cross-platform lifecycle limitations explicit.
 - [x] Updated the implementation baseline, current CI evidence and priority order in the status, roadmap and Claude Code comparison docs. See [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) for findings and residual risk.
 - [ ] Acceptance: no documented feature is described as both shipped and unsupported in different sections; platform limitations are explicit.
 
@@ -93,13 +93,13 @@ This is the highest-leverage next feature area because OASIS already has subagen
 | Browser and terminal | Local browser workspace with approvals and a bundled xterm.js renderer; CLI PTY manager | Linux/Node 22 PTY integration is verified; broader OS lifecycle and browser PTY E2E are not yet proved. |
 | Remote and managed surfaces | Local-first browser, desktop packaging path, GitHub Action and Chrome browser tool | No equivalent complete Remote Control/cloud/mobile workflow, and desktop installers are currently unsigned. |
 | Safety | Workspace checks, approvals, secrets filtering, optional Linux/macOS sandbox and configurable TLS for non-loopback web access | No Windows sandbox; sandbox is off by default; TLS does not replace trusted-device/session security or real-device verification. |
-| Evaluation | 549 passing tests in the latest quality workflow and 21 validated smoke fixtures | No apples-to-apples OASIS-vs-Claude Code task benchmark has been produced. |
+| Evaluation | 570 passing tests in the latest quality workflow and 21 validated smoke fixtures | No apples-to-apples OASIS-vs-Claude Code task benchmark has been produced. |
 
 Claude Code's documented surface includes subagents, Agent View, agent teams, dynamic workflows, MCP, hooks, skills, plugins/marketplaces, IDEs, Remote Control, web/desktop/mobile entry points, Chrome, and CI/code-review workflows. Agent teams are documented as experimental; OASIS should compare feature behavior, limitations and measured outcomes—not market feature names as parity. Official references: [parallel agents and workflows](https://code.claude.com/docs/en/agents), [extension overview](https://code.claude.com/docs/en/features-overview), [Remote Control](https://code.claude.com/docs/en/remote-control), [best practices](https://code.claude.com/docs/en/best-practices), and [Claude Code power-user tips](https://support.claude.com/en/articles/14554000-claude-code-power-user-tips).
 
 ## Definition of done for the Alpha-confidence milestone
 
-- [ ] Current-main Quality Checks, homepage/repository validation, and desktop build workflows pass on the same commit.
+- [x] Quality Checks, homepage/repository validation, and desktop build workflows passed on the same code commit.
 - [ ] The previously failing hook test passes repeatedly without fixed-delay masking or retry-only suppression.
 - [ ] Installation and first-run steps are tested on every OS claimed as supported; unsupported/experimental paths are labelled.
 - [ ] Core CLI and browser journeys have end-to-end tests for success, approval/denial, cancellation, recovery and verification.
