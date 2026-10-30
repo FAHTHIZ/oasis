@@ -14,6 +14,10 @@ const SETUP_PROVIDER_PRESETS = new Set([
 
 // A fresh setup should work for users who do not already have a paid-provider key.
 // An explicit valid fallback lets callers choose a safe context-specific default.
+export function shouldPromptForProviderBaseURL(presetName) {
+  return String(presetName || '').trim().toLowerCase() === 'custom';
+}
+
 export function resolveSetupProviderPreset(raw, fallback = 'omniroute') {
   const candidate = String(raw || '').trim().toLowerCase();
   if (SETUP_PROVIDER_PRESETS.has(candidate)) return candidate;
@@ -90,12 +94,21 @@ function stripTrailingSlashes(raw) {
 }
 
 export function validateBaseUrl(raw) {
+  const input = String(raw || '').trim();
   let url;
-  try { url = new URL(raw); } catch { throw new Error('The provider URL must be a valid HTTP or HTTPS URL.'); }
+  try {
+    url = new URL(input);
+  } catch {
+    const looksLikeModelId = /^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$/.test(input) && !/^[a-z][a-z0-9+.-]*:/i.test(input);
+    if (looksLikeModelId) {
+      throw new Error('That looks like a model ID, not a provider URL. Keep the provider URL default and enter model IDs such as "gemini-3.8-flash" at the Model name prompt. Custom provider URLs must start with https:// (or http:// for localhost).');
+    }
+    throw new Error('The provider URL must be a valid HTTP or HTTPS URL beginning with https:// (or http:// for localhost).');
+  }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS provider URLs are supported.');
-  if (url.protocol === 'http:' && !isLoopbackUrl(raw)) throw new Error('Non-local model providers must use HTTPS. HTTP is allowed only for localhost providers.');
+  if (url.protocol === 'http:' && !isLoopbackUrl(input)) throw new Error('Non-local model providers must use HTTPS. HTTP is allowed only for localhost providers.');
   if (url.username || url.password || url.search || url.hash) throw new Error('Provider URLs must not include credentials, query parameters, or fragments.');
-  return raw.replace(/\/+$/, '');
+  return input.replace(/\/+$/, '');
 }
 
 function strictInteger(value) {
