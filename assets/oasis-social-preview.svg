@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">OASIS — Inspect. Edit. Verify.</title>
+  <desc id="desc">OASIS is an open-source AI coding agent. Your projects, your choice of model, your control.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#030705"/>
+      <stop offset=".55" stop-color="#0a160d"/>
+      <stop offset="1" stop-color="#020604"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#9bff55" stop-opacity=".34"/>
+      <stop offset=".48" stop-color="#3d9d37" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#06100a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lime" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e1ff9b"/>
+      <stop offset=".5" stop-color="#a9ff58"/>
+      <stop offset="1" stop-color="#4fcf39"/>
+    </linearGradient>
+    <linearGradient id="white" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dce9dc"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="320" cy="320" rx="470" ry="390" fill="url(#glow)"/>
+  <ellipse cx="320" cy="315" rx="245" ry="245" fill="none" stroke="#9bff55" stroke-opacity=".12" stroke-width="2"/>
+  <ellipse cx="320" cy="315" rx="205" ry="205" fill="none" stroke="#9bff55" stroke-opacity=".08" stroke-width="2"/>
+  <path d="M0 480H1200" stroke="#9bff55" stroke-opacity=".18"/>
+  <path d="M0 505H1200M0 545H1200M0 595H1200" stroke="#9bff55" stroke-opacity=".055"/>
+  <g transform="translate(150 174)">
+    <rect width="190" height="190" rx="42" fill="#06110a" stroke="#9bff55" stroke-opacity=".55" stroke-width="2"/>
+    <path d="M31 117V98C31 60 60 31 98 31S165 60 165 98V117H133V98C133 78 118 63 98 63S63 78 63 98V117Z" fill="url(#lime)"/>
+    <path d="M31 129H78V140H31ZM118 129H165V140H118ZM40 151H82V161H40ZM114 151H156V161H114Z" fill="url(#lime)" opacity=".92"/>
+  </g>
+  <text x="395" y="290" font-family="DejaVu Sans,Arial,sans-serif" font-size="126" font-weight="700" letter-spacing="7" fill="url(#white)">OASIS</text>
+  <text x="401" y="380" font-family="DejaVu Sans,Arial,sans-serif" font-size="58" font-weight="700" letter-spacing="3" fill="#aaff61">INSPECT. EDIT. VERIFY.</text>
+  <text x="404" y="447" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" fill="#d5e2d5">An open-source AI coding agent.</text>
+  <text x="404" y="488" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" fill="#a9b9aa">Your projects. Your choice of model. Your control.</text>
+  <rect x="18" y="18" width="1164" height="594" rx="24" fill="none" stroke="#baff7a" stroke-opacity=".13" stroke-width="2"/>
+</svg>
