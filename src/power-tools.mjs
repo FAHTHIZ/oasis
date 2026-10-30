@@ -166,7 +166,6 @@ function runRipgrep(cwd, args, signal) {
     child.on('close', (code, signalName) => finish({ code, signal: signalName }));
   });
 }
-}
 
 export async function grepWorkspace(root, args = {}, options = {}) {
   const pattern = String(args.pattern || '');
