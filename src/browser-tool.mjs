@@ -86,7 +86,9 @@ export async function isPrivateBrowserRequest(rawUrl, lookupImpl = lookup) {
   // HTTP(S)-only host checks below. Data URLs remain non-network content.
   if (parsed.protocol === 'file:' || parsed.protocol === 'about:') return true;
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
+  let host = parsed.hostname.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (host.endsWith('.')) host = host.slice(0, -1);
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') ||
       host === 'metadata' || host === 'metadata.google.internal' || (!host.includes('.') && isIP(host) === 0)) return true;
@@ -100,7 +102,8 @@ export async function isPrivateBrowserRequest(rawUrl, lookupImpl = lookup) {
   catch { throw new Error('Could not resolve browser request hostname safely.'); }
   if (!Array.isArray(records) || !records.length) throw new Error('Browser request hostname returned no addresses.');
   return records.some((record) => {
-    const address = String(record && record.address || '').replace(/^\\[|\\]$/g, '');
+    let address = String(record && record.address || '');
+    if (address.startsWith('[') && address.endsWith(']')) address = address.slice(1, -1);
     return !isIP(address) || isNonPublicIpAddress(address);
   });
 }
