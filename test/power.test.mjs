@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, writeFile, readFile, rm, mkdir, access } from 'node:fs/promises';
 import { analyzeCommand, PermissionPolicy, parseRule, ruleMatches, suggestRule } from '../src/permissions.mjs';
 import { runWorkspaceCommand, executeTool } from '../src/tools.mjs';
-import { grepWorkspace, multiEditFile, shellCommandBlocked, startBackgroundProcess, killBackgroundEntry } from '../src/power-tools.mjs';
+import { executePowerTool, grepWorkspace, multiEditFile, shellCommandBlocked, startBackgroundProcess, killBackgroundEntry } from '../src/power-tools.mjs';
 import { detectSandbox, resolveSandbox, wrapCommand, macProfile } from '../src/sandbox.mjs';
 
 async function tmp(prefix = 'oasis-power-') { return await mkdtemp(path.join(os.tmpdir(), prefix)); }
@@ -208,6 +208,68 @@ test('power-tool background cancellation kills descendants that outlive the lead
   }
   assert.ok(Date.now() - killStarted >= 1300, 'the descendant should ignore SIGTERM and require the SIGKILL escalation');
   assert.equal(await processRunning(descendantPid), false, 'the descendant must be gone after process-tree escalation');
+});
+
+test('run_shell never starts a command when cancellation happens before or during approval', async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const marker = path.join(dir, 'shell-started.txt');
+  const script = path.join(dir, 'write-marker.mjs');
+  await writeFile(script, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'started');`);
+  const command = `node "${script}"`;
+
+  const alreadyCancelled = new AbortController();
+  alreadyCancelled.abort();
+  const beforeApproval = await executePowerTool('run_shell', { command }, {
+    signal: alreadyCancelled.signal,
+    ruleAllowed: true
+  }, dir);
+  assert.equal(beforeApproval.approved, false);
+  assert.equal(beforeApproval.cancelled, true);
+  await assert.rejects(access(marker), { code: 'ENOENT' });
+
+  const cancelledDuringApproval = new AbortController();
+  let prompts = 0;
+  const duringApproval = await executePowerTool('run_shell', { command }, {
+    signal: cancelledDuringApproval.signal,
+    approval: async () => {
+      prompts++;
+      cancelledDuringApproval.abort();
+      return true;
+    }
+  }, dir);
+  assert.equal(prompts, 1);
+  assert.equal(duringApproval.approved, false);
+  assert.equal(duringApproval.cancelled, true);
+  await assert.rejects(access(marker), { code: 'ENOENT' });
+});
+
+test('run_shell removes its abort listener when a shell executable cannot be spawned', async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const controller = new AbortController();
+  let added = 0;
+  let removed = 0;
+  const signal = {
+    get aborted() { return controller.signal.aborted; },
+    addEventListener(type, listener, options) {
+      added++;
+      controller.signal.addEventListener(type, listener, options);
+    },
+    removeEventListener(type, listener) {
+      removed++;
+      controller.signal.removeEventListener(type, listener);
+    }
+  };
+  const missingPowerShell = path.join(dir, 'missing-pwsh.exe');
+  const result = await executePowerTool('powershell', { command: 'Write-Output test' }, {
+    signal,
+    ruleAllowed: true,
+    powershell: missingPowerShell
+  }, dir);
+  assert.match(result.error || '', /ENOENT|not found|cannot find/i);
+  assert.equal(added, 1);
+  assert.equal(removed, 1);
 });
 
 test('shell guard blocks obviously destructive shell lines', () => {
