@@ -1,5 +1,21 @@
 # OASIS current implementation status
 
+## Phase 2 chat-first workspace — October 30, 2026
+
+The browser Agent screen has been reshaped around the conversation while preserving its existing runtime and interaction wiring.
+
+- Replaced the large introductory block with a compact coding-workspace heading and local-workspace context.
+- Compressed the runtime token form into a labeled connection bar while retaining the same one-time token handling and Connect/Disconnect controls.
+- Reworked the conversation header into a single desktop row with runtime status, model selection, permission mode, saved chats, context use and New chat.
+- Made the message stream and composer the primary surface. The composer keeps the full-width prompt above a footer row for isolated-worktree selection and Send/Stop actions.
+- Preserved the resizable desktop chat/terminal split and the existing phone tab behavior; tuned the layout for 780px and 390px widths.
+- Kept provider configuration, GitHub repository controls and task history below the active workspace so the primary coding flow is not displaced.
+- Expanded browser E2E artifacts to include empty Agent, active chat, approval, phone terminal/chat and first-run desktop/phone states. Axe scans and 390px horizontal-overflow checks run in CI.
+
+**Verification boundary:** the structural and responsive assertions are added. Quality run [41061468672](https://github.com/FAHTHIZ/oasis/actions/runs/41061468672) is queued for the latest revision while an earlier Quality run [41060995021](https://github.com/FAHTHIZ/oasis/actions/runs/41060995021) continues on a prior SHA. The new run must complete its Node matrix, clean-environment suite, PTY/security checks, browser E2E/axe scans and screenshot upload before this phase is marked CI-verified. Real-device phone review remains outstanding.
+
+---
+
 ## Phase 1 visual system — October 30, 2026
 
 The visual foundation is implemented directly on `main` and is now aligned to the app redesign brief.
