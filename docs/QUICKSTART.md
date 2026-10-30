@@ -9,7 +9,7 @@ OASIS is an open-source coding helper. You choose the AI model it talks to; OASI
 3. Start OASIS and choose the folder for the project you want it to work on. OASIS can read and change files inside that workspace, so choose a project folder—not your whole home folder.
 4. In the **Model provider** setup, choose one of the three paths:
    - **I have an API key:** choose the provider, open its official key page, paste the key into the masked field, and press **Test & save provider**. A key is never shown back after it is saved.
-   - **Use a free gateway:** start OmniRoute on this computer first. Current setup uses the terminal command `oasis setup`; choose OmniRoute and follow the prompts, then return to the app. Free gateways can be slow or limited.
+   - **Use a free gateway:** the CLI guided setup can install OmniRoute, start its local gateway after approval, and verify the model connection. The desktop app does not yet perform that whole installation flow by itself. Free gateways can be slow or limited.
    - **Use a model on my computer:** install and start [Ollama](https://ollama.com/download). OASIS can list models already installed on the same computer. Small local models may be less capable than larger hosted models.
 5. Wait for the provider test to say it worked. The test checks the model's ability to respond with a tool call; it does not run that tool.
 6. Try **Explain this project**, then ask OASIS to make one small improvement. Review proposed commands and file changes before approving them.
@@ -35,4 +35,4 @@ After you have reviewed the explanation, give it a small, specific task:
 
 ## Important limits
 
-OASIS is an alpha hobby project. It runs commands with the permissions of your computer account; approval prompts are not a substitute for an operating-system sandbox. The desktop installers are currently unsigned. Back up important work and use a separate, trusted project folder when trying unfamiliar code.
+OASIS is beta software. It runs commands with the permissions of your computer account; approval prompts are not a substitute for an operating-system sandbox. The desktop installers are currently unsigned. Back up important work and use a separate, trusted project folder when trying unfamiliar code.
