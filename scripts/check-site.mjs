@@ -26,8 +26,10 @@ const required = [
   'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"', 'aria-pressed="false"',
   'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
-  'id="agentTerminalUtilityTab"', 'id="agentRunsUtilityTab"', 'id="agentTerminalUtilityPanel"',
-  'id="agentRunsUtilityPanel"', 'aria-label="Workspace utilities"', 'Runs &amp; changes',
+  'id="agentTerminalUtilityTab"', 'id="agentChangesUtilityTab"', 'id="agentTasksUtilityTab"',
+  'id="agentTerminalUtilityPanel"', 'id="agentChangesUtilityPanel"', 'id="agentTasksUtilityPanel"',
+  'aria-label="Workspace utilities"', 'data-topbar-panel="terminal"', 'data-topbar-panel="changes"', 'data-topbar-panel="tasks"',
+  'id="sidebarMenuButton"', 'id="sidebarChatList"', 'id="sidebarSettingsButton"', 'id="view-settings"';
 
   'class="intro-row agent-page-heading"', 'class="agent-page-context"', 'class="agent-setup-heading"',
   'class="agent-chat-identity"', 'class="agent-compose-form"', 'aria-label="Runtime connection"',
@@ -98,11 +100,24 @@ assert.ok(html.includes("terminalTab.tabIndex=selected==='terminal'?0:-1"), 'Onl
 assert.ok(html.includes("Hide side panel"), 'The utility visibility control must name the whole side panel.');
 assert.ok(html.includes("window.oasisAgentSetUtilityPanel('terminal')"), 'The terminal command-palette action must explicitly select Terminal.');
 assert.ok(html.includes("workspaceGrid.dataset.terminalVisible==='false'&&utilityToggle"), 'Run-monitor diff review must restore a hidden utility rail before selecting Runs & changes.');
+assert.ok(html.includes("initialVisible=savedVisibility==='true'"), 'The utility rail must start closed on a fresh visit unless the user previously opened it.');
+assert.ok(html.includes("window.oasisAgentSetUtilityPanel('changes')"), 'Run-monitor review must open the Changes tab.');
+assert.ok(html.includes("window.oasisAgentSetUtilityPanel('tasks')"), 'The Changes panel must provide a return path to Tasks.');
+const sidebarMarkup = html.slice(html.indexOf('<aside class="sidebar"'), html.indexOf('</aside>', html.indexOf('<aside class="sidebar"')) + 8);
+assert.ok(sidebarMarkup.includes('id="sidebarNewChatBtn"'), 'The sidebar must expose New chat.');
+assert.ok(sidebarMarkup.includes('id="sidebarProjectPickerBtn"'), 'The sidebar must expose a project picker.');
+assert.ok(sidebarMarkup.includes('id="sidebarChatList"'), 'The sidebar must expose saved chats.');
+assert.equal(/data-nav="(?:home|tasks|notes|monitor|extensions|integrations)"/.test(sidebarMarkup), false, 'Legacy views must move out of the main sidebar.');
+
 
 
 
 assert.ok(interfaceCss.includes('.agent-utility-view[hidden]{display:none!important}'), 'Inactive utility panels must remain hidden.');
-assert.ok(interfaceCss.includes('#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel'), 'The existing run history and diff viewer must render inside the utility panel.');
+assert.ok(interfaceCss.includes('#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel'), 'The existing run history must render inside the Tasks panel.');
+assert.ok(interfaceCss.includes('#agentChangesUtilityPanel .cloud-changes-panel'), 'Run details and isolated diffs must render in the Changes panel.');
+assert.ok(interfaceCss.includes('minmax(360px,440px)'), 'The desktop utility rail must be sized close to the 440px brief.');
+assert.ok(interfaceCss.includes('body.sidebar-open:before'), 'Phone navigation must use a dismissible slide-out menu rather than a bottom tab bar.');
+assert.ok(interfaceCss.includes('.sidebar-new-chat'), 'The left sidebar must expose the New chat action.');
 
 
 assert.match(interfaceCss, /\.agent-message\{font-size:14px\}/);
@@ -110,7 +125,7 @@ assert.match(interfaceCss, /\.agent-message\.activity\{font-size:12\.5px/);
 const limeConsumers = [...interfaceCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .filter((match) => /var\(--accent\)/.test(match[2]));
 assert.equal(limeConsumers.length, 1, 'Lime must be reserved for Send, New chat, and approval actions.');
-assert.match(limeConsumers[0][1], /#agentSendBtn.*#newAgentSessionBtn.*#agentApproveBtn.*#agentAlwaysBtn/);
+assert.match(limeConsumers[0][1], /#agentSendBtn.*#newAgentSessionBtn.*#agentApproveBtn.*#agentAlwaysBtn.*#sidebarNewChatBtn/);
 assert.ok(serviceWorker.includes("'./assets/oasis-interface.css'"), 'The visual-system stylesheet must be available offline.');
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
