@@ -42,6 +42,7 @@ export class PtySessionManager {
     this.idFactory = idFactory || (() => 'term_' + randomBytes(8).toString('hex'));
     this.sessions = new Map();
     this.startingSessions = 0;
+    this.closed = false;
     this.ptyPromise = null;
   }
 
@@ -94,6 +95,7 @@ export class PtySessionManager {
   }
 
   async start(command, args = [], options = {}) {
+    if (this.closed) throw new Error('Terminal session manager is closed.');
     const nul = String.fromCharCode(0);
     if (typeof command !== 'string' || !command.trim() || command.length > 1000 || command.includes(nul)) {
       throw new Error('A terminal session needs one valid executable name or path.');
@@ -108,6 +110,7 @@ export class PtySessionManager {
     try {
       this._prune();
       const pty = await this._pty();
+      if (this.closed) throw new Error('Terminal session manager was closed while the native PTY component was loading.');
       const cols = safeInteger(options.cols, 100, 20, 300);
       const rows = safeInteger(options.rows, 30, 5, 120);
       const display = String(options.display || command.split(/[\\/]/).pop() || command).slice(0, 180);
@@ -284,6 +287,7 @@ export class PtySessionManager {
   }
 
   closeAll() {
+    this.closed = true;
     let stopped = 0;
     for (const record of this.sessions.values()) {
       if (record.state !== 'running' && record.state !== 'stopping') continue;
