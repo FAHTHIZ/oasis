@@ -26,6 +26,8 @@ The recommended CLI installer checks Node.js 22+, asks before installing or chan
 
 Installer checksums are printed in the README. If a hash does not match, stop and do not run the downloaded script. The installer runs `oasis doctor` and opens `oasis setup` after installation. npm publishing is not enabled yet; the source archive route remains the supported CLI bootstrap.
 
+After installation, `oasis update` checks the current GitHub `main` revision, prints the installed and available versions, and asks before replacing the CLI. `oasis uninstall` prints the exact npm package and install folder it will remove, asks first, and keeps projects, settings, saved sessions, memory, and API keys. If the command cannot identify a global npm installation safely, it refuses to delete anything.
+
 ## Interactive terminal sessions (PTY)
 
 Interactive sessions use Microsoft's `node-pty` native component. The desktop build recompiles native dependencies for Electron; the command-line install keeps the component optional so a native build problem cannot prevent the normal CLI from starting.
