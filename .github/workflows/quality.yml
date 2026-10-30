@@ -58,6 +58,7 @@ jobs:
   clean-environment-tests:
     name: Tests with a clean environment
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -73,6 +74,7 @@ jobs:
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -88,6 +90,7 @@ jobs:
   browser-e2e:
     name: Browser end-to-end smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: integrity
     steps:
       - name: Check out source
