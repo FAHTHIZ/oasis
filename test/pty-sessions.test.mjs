@@ -117,7 +117,7 @@ test('rejects invalid inputs and enforces the active-session limit', async () =>
   await assert.rejects(manager.start('', [], { cwd: '/workspace', env: {} }), /valid executable/);
   await assert.rejects(manager.start('node', ['bad' + String.fromCharCode(0) + 'arg'], { cwd: '/workspace', env: {} }), /short strings/);
   await manager.start('node', [], { cwd: '/workspace', env: {} });
-  await assert.rejects(manager.start('node', [], { cwd: '/workspace', env: {} }), /active terminal sessions/);
+  await assert.rejects(manager.start('node', [], { cwd: '/workspace', env: {} }), /active or starting terminal sessions/);
 });
 
 test('waits briefly for output instead of returning before a process produces it', async () => {
