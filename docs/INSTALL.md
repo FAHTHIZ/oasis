@@ -14,17 +14,17 @@ The desktop app is packaged by CI for Windows, macOS, and Linux. Open the [lates
 
 On first launch, choose the folder for your project. The app will guide you to connect a model with one of three paths: an API key, a locally running OmniRoute gateway, or a model installed through Ollama on this computer. The API-key field is masked; the desktop app uses Electron's OS-backed secure storage and refuses to save a new key if encryption is unavailable. Test the provider before you start a coding task. OASIS does not include an AI model or an API subscription. See the [5-minute quickstart](QUICKSTART.md) for the exact clicks.
 
-OmniRoute setup is not yet a fully automatic one-click installer; the current guide asks you to run `oasis setup` and choose OmniRoute first. That limitation will remain documented until the app can show the exact install plan and ask for approval before executing it.
+The CLI guided setup can install OmniRoute through npm, ask before starting its local gateway, and verify tool calling before it saves the provider. The desktop app does not yet offer that complete OmniRoute installation flow inside its graphical setup; use an API key or an already-running local provider there.
 
 ## Command-line installation (optional)
 
 The recommended CLI installer checks Node.js 22+, resolves the latest stable GitHub release tag to its immutable commit SHA, and installs that exact source archive into your user directory. It never installs the moving `main` branch and stops if GitHub does not return a valid stable release and commit. It asks before installing or changing shell startup files and does not use administrator rights.
 
-- **macOS, Linux, and Android/Termux:** copy the checksum-verifying one-line command from the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux).
+- **macOS, Linux, and Android/Termux:** use the one-command guided installer in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux). The README also includes an optional checksum-verified form.
 - **Windows PowerShell:** use the PowerShell one-liner in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux), which checks the script hash before running it.
 - **Android-specific taps and known limits:** see [the Termux guide](TERMUX.md).
 
-Installer checksums are printed in the README. If a hash does not match, stop and do not run the downloaded script. The installer runs `oasis doctor` and opens `oasis setup` after installation. npm publishing is not enabled yet; the source archive route remains the supported CLI bootstrap.
+Installer checksums are printed in the README. If a hash does not match, stop and do not run the downloaded script. The installer runs `oasis doctor` and opens `oasis setup` after installation. On Termux, it offers to install Node.js with `pkg` when needed, so users do not need to prepare npm manually. npm publishing is not enabled yet; the source archive route remains the supported CLI bootstrap.
 
 After installation, `oasis update` checks the latest stable GitHub release, resolves its tag to an immutable commit SHA, prints the installed and available release, and asks before replacing the CLI. Git checkouts fetch that release tag and move to its resolved commit; npm installs use the same exact commit SHA archive. `oasis uninstall` prints the exact npm package and install folder it will remove, asks first, and keeps projects, settings, saved sessions, memory, and API keys. If the command cannot identify a global npm installation safely, it refuses to delete anything.
 
