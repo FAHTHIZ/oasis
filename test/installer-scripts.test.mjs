@@ -14,8 +14,8 @@ test('published installer checksums match the exact checked-in scripts', async (
   const [readme, shell, powershell] = await Promise.all([read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1')]);
   assert.equal(readme.match(/expected=([a-f0-9]{64})/)?.[1], sha256(shell));
   assert.equal(readme.match(/\$expected='([a-f0-9]{64})'/)?.[1], sha256(powershell));
-  assert.equal(readme.match(/\*\*Published installer SHA-256:\s*`([a-f0-9]{64})`/)?.[1], sha256(shell));
-  assert.equal(readme.match(/\*\*Published Windows installer SHA-256:\s*`([a-f0-9]{64})`/)?.[1], sha256(powershell));
+  assert.equal(readme.match(/\*\*Published installer SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(shell));
+  assert.equal(readme.match(/\*\*Published Windows installer SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(powershell));
   assert.match(readme, /mktemp.*oasis-install/);
   assert.match(readme, /NewGuid\(\)\.ToString\('N'\)/);
 });
