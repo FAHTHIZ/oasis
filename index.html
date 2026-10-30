@@ -328,7 +328,17 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
 
 <section class="view" id="view-agent">
 <div class="runtime-scope-note" role="note"><strong>Local only by default:</strong> This workspace connects to an OASIS runtime on this computer. It is not open to the public internet by default. Remote access requires explicit server options; never share your runtime connection token.</div>
-  <div class="intro-row"><div><div class="eyebrow">YOUR CODING PARTNER</div><h1 class="page-title">Build with Oasis.</h1><p class="page-subtitle">Describe the change in plain English. Oasis can inspect your workspace, edit files, run checks, and ask before consequential actions.</p></div></div>
+  <div class="intro-row agent-page-heading">
+    <div class="agent-page-copy">
+      <div class="eyebrow">YOUR CODING PARTNER</div>
+      <h1 class="page-title">Build with Oasis.</h1>
+      <p class="page-subtitle">A focused workspace for inspecting, changing, and verifying your project.</p>
+    </div>
+    <div class="agent-page-context" aria-label="Workspace mode">
+      <span class="agent-workspace-chip"><span class="agent-chip-dot" aria-hidden="true"></span> Local workspace</span>
+      <span class="agent-page-context-note">You stay in control of consequential actions.</span>
+    </div>
+  </div>
   <section class="first-run-wizard" id="firstRunWizard" hidden aria-labelledby="firstRunTitle">
     <div class="first-run-heading"><div class="eyebrow">FIRST-TIME SETUP</div><h2 id="firstRunTitle">Give Oasis a model to work with</h2><p>Oasis is the workspace, not the AI model. Choose one route below. Nothing is saved until you test the connection.</p></div>
     <div class="first-run-options">
@@ -354,15 +364,22 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
       <p class="agent-help" id="providerKeyHelp">Choose a provider to see its official key page. Desktop mode uses OS-backed encrypted storage. CLI/browser mode stores the key in your local OASIS config with restrictive permissions, not OS encryption.</p>
     </form>
   </div>
-  <div class="panel panel-pad agent-setup">
+  <section class="panel panel-pad agent-setup" aria-label="Runtime connection">
+    <div class="agent-setup-heading">
+      <span class="agent-setup-kicker">RUNTIME CONNECTION</span>
+      <span class="agent-setup-local">Local session</span>
+    </div>
     <div class="agent-connect-row">
-      <label for="agentTokenInput">Runtime connection token
+      <label for="agentTokenInput">Connection token
         <input id="agentTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token printed by oasis web">
       </label>
-      <div class="agent-buttons"><button class="btn btn-primary" id="agentConnectBtn" type="button">Connect runtime</button><button class="btn btn-secondary" id="agentDisconnectBtn" type="button">Disconnect</button></div>
+      <div class="agent-buttons">
+        <button class="btn btn-primary" id="agentConnectBtn" type="button">Connect runtime</button>
+        <button class="btn btn-secondary" id="agentDisconnectBtn" type="button">Disconnect</button>
+      </div>
     </div>
-    <p class="agent-help" id="agentConnectionHelp">Start <code>oasis web</code> in the terminal for the project you want to work on, then paste its one-time connection token. The token is held in this browser tab's session storage, not in workspace notes.</p>
-  </div>
+    <p class="agent-help" id="agentConnectionHelp">Start <code>oasis web</code> in the project you want to work on, then paste its one-time token. It stays in this browser tab's session storage, not in workspace notes.</p>
+  </section>
   <div class="agent-workspace-toolbar" aria-label="Agent workspace panels">
     <div class="agent-workspace-tabs" role="tablist" aria-label="Chat or terminal">
       <button class="agent-workspace-tab" id="agentChatTab" type="button" role="tab" aria-selected="true" aria-controls="agentChatColumn">Chat</button>
@@ -373,7 +390,30 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
   <div class="agent-workspace-grid" id="agentWorkspaceGrid" data-active-panel="chat" data-terminal-visible="true">
     <div class="agent-chat-column" id="agentChatColumn" role="tabpanel" aria-labelledby="agentChatTab">
 <div class="panel agent-chat-panel">
-    <div class="agent-chat-header"><div class="agent-model-summary"><span class="agent-runtime-state" id="agentRuntimeState" data-connected="false">Runtime not connected</span><button class="agent-model-pill" id="agentModelButton" type="button" data-nav="agent" data-scroll-target="provider-setup" title="Open model settings"><span class="agent-model-glyph" aria-hidden="true">◈</span><span class="agent-model-pill-copy"><strong id="agentModelName">Choose a model</strong><small id="agentModelDetail">Connect a runtime</small></span><span class="agent-model-chevron" aria-hidden="true">⌄</span></button></div><div class="agent-session-tools"><label class="sr-only" for="agentModeSelect">Permission mode</label><select id="agentModeSelect" title="Permission mode for this chat"><option value="default">Ask before changes</option><option value="acceptEdits">Auto-accept edits</option><option value="plan">Plan only</option><option value="auto">Auto (classifier decides)</option></select><label class="sr-only" for="agentHistorySelect">Saved chats</label><select id="agentHistorySelect" title="Open a saved chat" hidden><option value="">Saved chats…</option></select><span class="agent-context-meter" id="agentContextMeter" title="Context window use" hidden></span><button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button></div></div>
+    <div class="agent-chat-header">
+      <div class="agent-model-summary">
+        <div class="agent-chat-identity">
+          <span class="agent-chat-label">CONVERSATION</span>
+          <span class="agent-runtime-state" id="agentRuntimeState" data-connected="false">Runtime not connected</span>
+        </div>
+        <button class="agent-model-pill" id="agentModelButton" type="button" data-nav="agent" data-scroll-target="provider-setup" title="Open model settings">
+          <span class="agent-model-glyph" aria-hidden="true">◈</span>
+          <span class="agent-model-pill-copy">
+            <strong id="agentModelName">Choose a model</strong>
+            <small id="agentModelDetail">Connect a runtime</small>
+          </span>
+          <span class="agent-model-chevron" aria-hidden="true">⌄</span>
+        </button>
+      </div>
+      <div class="agent-session-tools">
+        <label class="sr-only" for="agentModeSelect">Permission mode</label>
+        <select id="agentModeSelect" title="Permission mode for this chat"><option value="default">Ask before changes</option><option value="acceptEdits">Auto-accept edits</option><option value="plan">Plan only</option><option value="auto">Auto (classifier decides)</option></select>
+        <label class="sr-only" for="agentHistorySelect">Saved chats</label>
+        <select id="agentHistorySelect" title="Open a saved chat" hidden><option value="">Saved chats…</option></select>
+        <span class="agent-context-meter" id="agentContextMeter" title="Context window use" hidden></span>
+        <button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button>
+      </div>
+    </div>
     <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
       <p>Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
       <div class="agent-example-prompts" aria-label="Example tasks">
@@ -384,7 +424,21 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
     </div></div>
     <div class="agent-approval" id="agentApprovalCard" aria-live="assertive" aria-labelledby="agentApprovalTitle" hidden><h3 id="agentApprovalTitle">OASIS needs your permission</h3><p id="agentApprovalPrompt"></p><div class="agent-buttons"><button class="btn btn-secondary" id="agentDenyBtn" type="button">Deny</button><button class="btn btn-primary" id="agentApproveBtn" type="button">Allow once</button><button class="btn btn-secondary" id="agentAlwaysBtn" type="button" hidden>Always allow for this session</button></div></div>
     <div class="agent-approval agent-question" id="agentQuestionCard" hidden><h3 id="agentQuestionHeader">Oasis has a question</h3><p id="agentQuestionText"></p><div class="agent-question-options" id="agentQuestionOptions"></div><form class="agent-question-custom" id="agentQuestionForm"><label class="sr-only" for="agentQuestionInput">Your own answer</label><input id="agentQuestionInput" maxlength="2000" placeholder="Or type your own answer" autocomplete="off"><button class="btn btn-primary" type="submit" id="agentQuestionSubmit">Send</button><button class="btn btn-secondary" type="button" id="agentQuestionSkip">Skip</button></form></div>
-    <div class="agent-compose"><form id="agentForm"><label class="sr-only" for="agentPrompt">Describe what you want Oasis to do</label><textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Build a settings page, inspect the project first, implement it, and run the relevant tests…" required></textarea><label class="worktree-toggle" for="agentIsolateWorktree"><input id="agentIsolateWorktree" type="checkbox"><span><strong>Isolated Git worktree</strong><small>Keep edits on a separate review branch. Requires a clean Git workspace. Nothing is merged automatically.</small></span></label><div class="agent-buttons agent-compose-actions"><button class="btn btn-primary" id="agentSendBtn" type="submit">Send ↑</button><button class="btn btn-secondary" id="agentStopBtn" type="button" hidden>Stop</button></div></form><small>Commands, package installs, file deletion, and plugin installation wait for your approval. This runs code as your operating-system user; it is not an OS sandbox. Do not expose this HTTP server to the public Internet.</small></div>
+    <div class="agent-compose">
+      <form id="agentForm" class="agent-compose-form">
+        <label class="sr-only" for="agentPrompt">Describe what you want Oasis to do</label>
+        <textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Describe a change, ask a question, or paste an error…" required></textarea>
+        <label class="worktree-toggle" for="agentIsolateWorktree">
+          <input id="agentIsolateWorktree" type="checkbox">
+          <span><strong>Isolated Git worktree</strong><small>Keep edits on a separate review branch. Requires a clean Git workspace. Nothing is merged automatically.</small></span>
+        </label>
+        <div class="agent-buttons agent-compose-actions">
+          <button class="btn btn-primary" id="agentSendBtn" type="submit">Send ↑</button>
+          <button class="btn btn-secondary" id="agentStopBtn" type="button" hidden>Stop</button>
+        </div>
+      </form>
+      <small>Commands, package installs and destructive actions remain subject to approval. Processes run as your operating-system user; this is not an OS sandbox. Keep the runtime private.</small>
+    </div>
   </div>
     </div>
     <div class="agent-split-divider" id="agentSplitDivider" role="separator" aria-orientation="vertical" aria-valuemin="35" aria-valuemax="72" aria-valuenow="56" tabindex="0" aria-label="Resize chat and terminal panels"></div>
