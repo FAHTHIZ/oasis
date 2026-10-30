@@ -48,12 +48,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 code,pre,kbd,samp,.terminal-output,.cloud-run-diff-pre{font-family:var(--font-code)}
 #agentPrompt{font-size:14px}
 .agent-help,.agent-compose>small{font-size:12.5px}
-#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn{
+#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn,#sidebarNewChatBtn{
   min-height:44px;background:var(--accent);color:var(--accent-ink);
   border:1px solid transparent;box-shadow:none;font-weight:700;
 }
 #newAgentSessionBtn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;padding:8px 12px;text-decoration:none}
-#agentSendBtn:hover,#newAgentSessionBtn:hover,#agentApproveBtn:hover,#agentAlwaysBtn:hover{filter:brightness(1.04);box-shadow:0 0 0 3px #9BFF551A}
+#agentSendBtn:hover,#newAgentSessionBtn:hover,#agentApproveBtn:hover,#agentAlwaysBtn:hover,#sidebarNewChatBtn:hover{filter:brightness(1.04);box-shadow:0 0 0 3px #9BFF551A}
 #agentDenyBtn{background:var(--surface-muted);color:var(--text);border-color:var(--line-strong)}
 .dot,.eyebrow,.nav-btn.active,.text-link:not(#newAgentSessionBtn),.spark,.stat-icon,.stat-foot b,
 .project-symbol,.project-badge,.workspace-banner-icon,.section-kicker,.extension-card-icon,
@@ -706,7 +706,6 @@ body.light .hero:after{display:none}
   padding:10px 12px;
   border:1px solid transparent;
   border-radius:11px;
-  background:var(--accent);
   color:var(--accent-ink);
   font-size:12px;
   font-weight:800;
@@ -818,6 +817,7 @@ body.light .hero:after{display:none}
 .settings-advanced p{font-size:11px;line-height:1.65;color:var(--muted)}
 #view-settings .settings-group .section-head{margin:0 0 8px}
 #view-settings .settings-group .section-head h2{font-size:13px}
+.sidebar-menu-button{display:none}
 body.light .sidebar{background:var(--sidebar);border-right-color:var(--line)}
 body.light .topbar{background:var(--bg);border-bottom-color:var(--line)}
 @media(max-width:1000px) and (min-width:701px){
@@ -826,6 +826,7 @@ body.light .topbar{background:var(--bg);border-bottom-color:var(--line)}
   .topbar-project-line strong{max-width:180px}
   .topbar-panel-button{padding-inline:7px}
   .topbar-actions{gap:5px}
+  .sidebar-menu-button{display:grid;flex:0 0 36px;width:36px;height:36px;min-width:36px}
 }
 @media(max-width:700px){
   .shell{display:block}
@@ -843,6 +844,7 @@ body.light .topbar{background:var(--bg);border-bottom-color:var(--line)}
   .sidebar .brand,.sidebar .switcher,.sidebar .sidebar-bottom,.sidebar .sidebar-foot{display:flex}
   .sidebar .brand{align-items:center}
   .sidebar-chats{min-height:0}
+  .sidebar-settings-button{display:flex}
   .sidebar-chat-list{max-height:none}
   .sidebar-new-chat{min-height:46px}
   .topbar{min-height:56px;gap:8px;padding:7px 0}
@@ -863,4 +865,43 @@ body.light .topbar{background:var(--bg);border-bottom-color:var(--line)}
 }
 @media(prefers-reduced-motion:reduce){
   .sidebar{transition:none}
+}
+
+
+/* Three-panel side rail and the centered, closed-by-default conversation. */
+#view-agent.active .agent-workspace-grid{
+  grid-template-columns:minmax(0,1fr) 10px minmax(360px,440px);
+}
+#view-agent.active .agent-workspace-grid[data-terminal-visible="false"]{
+  grid-template-columns:minmax(0,1fr);
+}
+#view-agent.active .agent-workspace-grid[data-terminal-visible="false"] .agent-split-divider,
+#view-agent.active .agent-workspace-grid[data-terminal-visible="false"] .agent-terminal-column{display:none}
+#view-agent.active .agent-workspace-grid[data-terminal-visible="false"] .agent-chat-column{
+  width:min(100%,720px);
+  margin-inline:auto;
+}
+#agentChangesUtilityPanel .cloud-changes-panel,
+#agentTasksUtilityPanel .cloud-runs-panel{height:100%;min-height:0}
+#agentChangesUtilityPanel .panel-pad,
+#agentTasksUtilityPanel .panel-pad{min-height:0;overflow:auto}
+.agent-utility-tabs .agent-utility-tab{min-width:0}
+.agent-utility-tabs{width:100%}
+.cloud-changes-panel .agent-chat-header{min-height:54px}
+#cloudRunChangesEmpty{padding:18px 12px}
+@media(max-width:1000px) and (min-width:701px){
+  #view-agent.active .agent-workspace-grid{grid-template-columns:minmax(0,1fr) 8px minmax(300px,380px)}
+}
+@media(max-width:700px){
+  #view-agent.active .agent-workspace-grid{grid-template-columns:minmax(0,1fr)}
+  #view-agent.active .agent-workspace-grid .agent-terminal-column{display:flex}
+  #view-agent.active .agent-workspace-grid[data-terminal-visible="false"] .agent-terminal-column{display:none}
+  #view-agent.active .agent-workspace-grid .agent-utility-tabs{width:100%}
+  #view-agent.active .agent-workspace-grid .agent-utility-tab{min-height:44px}
+  #view-agent.active .agent-workspace-grid .agent-utility-view{height:auto;overflow:visible}
+  #view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel,
+  #view-agent.active .agent-workspace-grid .agent-utility-view .cloud-changes-panel,
+  #view-agent.active .agent-workspace-grid .agent-utility-view .agent-terminal{
+    height:auto;min-height:0;max-height:none;overflow:visible;
+  }
 }
