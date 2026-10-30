@@ -23,9 +23,9 @@ const required = [
   '<!doctype html>', '<html lang="en">', '<meta name="description"',
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
   'id="features"', 'id="providers"', 'id="safety"', 'id="docs"',
-  'https://github.com/FAHTHIZ/oasis/releases/latest', 'no terminal required',
+  'https://github.com/FAHTHIZ/oasis/releases/latest', 'https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md', 'no terminal required',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
-  'Desktop app (no terminal required)', 'Terminal (for developers)', 'Privacy note',
+  'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
   'property="og:image"', 'summary_large_image', '<span class="beta-badge">BETA</span>'
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
@@ -43,6 +43,7 @@ assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-license
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
 assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/QUICKSTART.md'), 'Homepage must link directly to Install and Quick start.');
 assert.ok(html.includes('The desktop app does not require a separate Node.js or Git installation.'), 'Homepage must state that desktop setup needs no runtime installation.');
+assert.ok(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))') && html.includes('@media(max-width:560px){.install-choices{grid-template-columns:1fr}'), 'Platform choices must fit desktop and mobile layouts.');
 assert.ok(!html.includes('Just for fun'), 'Homepage must not contain the old repository description.');
 assert.ok(!html.includes('award-winning') && !html.includes('100% success'), 'Homepage must not make unsupported credibility claims.');
 assert.ok(robots.includes('User-agent: *') && robots.includes('Allow: /'));
