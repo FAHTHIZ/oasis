@@ -89,6 +89,9 @@ assert.ok(interfaceCss.includes('@media(max-width:780px)'), 'Phone workspace tab
 assert.ok(interfaceCss.includes('@media(max-width:390px)'), 'The narrow 390px phone layout must be covered.');
 assert.ok(interfaceCss.includes('/* Utility rail: keep terminal and coding-run diffs next to the conversation. */'), 'Terminal and recent coding runs must share a utility rail.');
 assert.ok(interfaceCss.includes('.agent-utility-tab[aria-selected="true"]'), 'Utility tabs must expose a selected state.');
+assert.ok(html.includes("event.key!=='ArrowLeft'&&event.key!=='ArrowRight'"), 'Utility tabs must support left/right keyboard navigation.');
+assert.ok(html.includes("terminalTab.tabIndex=selected==='terminal'?0:-1"), 'Only the selected utility tab should remain in the tab sequence.');
+
 assert.ok(interfaceCss.includes('.agent-utility-view[hidden]{display:none!important}'), 'Inactive utility panels must remain hidden.');
 assert.ok(interfaceCss.includes('#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel'), 'The existing run history and diff viewer must render inside the utility panel.');
 
