@@ -18,7 +18,7 @@ OmniRoute setup is not yet a fully automatic one-click installer; the current gu
 
 ## Command-line installation (optional)
 
-The recommended CLI installer checks Node.js 22+, asks before installing or changing shell startup files, and installs the immutable source revision `d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a` (package version `0.3.0`) into your user directory. It does not use administrator rights.
+The recommended CLI installer checks Node.js 22+, resolves the latest stable GitHub release tag to its immutable commit SHA, and installs that exact source archive into your user directory. It never installs the moving `main` branch and stops if GitHub does not return a valid stable release and commit. It asks before installing or changing shell startup files and does not use administrator rights.
 
 - **macOS, Linux, and Android/Termux:** copy the checksum-verifying one-line command from the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux).
 - **Windows PowerShell:** use the PowerShell one-liner in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux), which checks the script hash before running it.
@@ -26,7 +26,7 @@ The recommended CLI installer checks Node.js 22+, asks before installing or chan
 
 Installer checksums are printed in the README. If a hash does not match, stop and do not run the downloaded script. The installer runs `oasis doctor` and opens `oasis setup` after installation. npm publishing is not enabled yet; the source archive route remains the supported CLI bootstrap.
 
-After installation, `oasis update` checks the current GitHub `main` revision, prints the installed and available versions, and asks before replacing the CLI. `oasis uninstall` prints the exact npm package and install folder it will remove, asks first, and keeps projects, settings, saved sessions, memory, and API keys. If the command cannot identify a global npm installation safely, it refuses to delete anything.
+After installation, `oasis update` checks the latest stable GitHub release, resolves its tag to an immutable commit SHA, prints the installed and available release, and asks before replacing the CLI. Git checkouts fetch that release tag and move to its resolved commit; npm installs use the same exact commit SHA archive. `oasis uninstall` prints the exact npm package and install folder it will remove, asks first, and keeps projects, settings, saved sessions, memory, and API keys. If the command cannot identify a global npm installation safely, it refuses to delete anything.
 
 ## Interactive terminal sessions (PTY)
 

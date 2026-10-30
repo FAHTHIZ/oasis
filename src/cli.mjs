@@ -60,7 +60,7 @@ const USAGE = createUsageTracker();
 let settingsWarningShown = false;
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const INSTALL_URL = 'git+https://github.com/FAHTHIZ/oasis.git#main';
+const INSTALL_URL = 'https://github.com/FAHTHIZ/oasis/archive/';
 
 function printHelp() {
   stdout.write([
@@ -73,7 +73,7 @@ function printHelp() {
     '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
-    '  oasis update [--check] [--yes] Check GitHub main for a newer Oasis and install it',
+    '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
@@ -186,7 +186,7 @@ function printHelp() {
     '  --help, -h                    Show this help',
     '  --version                     Show the installed version',
     '',
-    'Setup: npm install -g ' + INSTALL_URL,
+    'Setup: use the verified installer in the official README; update with: oasis update',
     'Then:  oasis setup',
     'MCP:   oasis mcp add docs -- npx -y @modelcontextprotocol/server-filesystem /path/to/share',
     'Safety: enable { "sandbox": { "enabled": true } } in settings for OS isolation. Review approvals; --yes increases risk.',
@@ -605,7 +605,7 @@ async function doctor(args = [], root = process.cwd()) {
 // Workspace-level checks: tools Oasis relies on, settings/trust, sandbox, MCP,
 // memory and extension files. Problems are listed with a suggested fix.
 async function updateOasis(args = []) {
-  const { latestMainCommit, installedVersion, updatePlan, describeUpdate } = await import('./update.mjs');
+  const { latestReleaseCommit, installedVersion, updatePlan, describeUpdate } = await import('./update.mjs');
   const checkOnly = args.includes('--check');
   const yes = args.includes('--yes') || args.includes('-y');
   const nodeModules = path.dirname(APP_ROOT);
@@ -616,7 +616,7 @@ async function updateOasis(args = []) {
   }
   const [installed, latest] = await Promise.all([
     installedVersion(APP_ROOT, { npmPrefix }),
-    latestMainCommit()
+    latestReleaseCommit()
   ]);
   const plan = updatePlan(installed, latest);
   stdout.write(describeUpdate(installed, latest, plan) + '\n');
@@ -626,9 +626,15 @@ async function updateOasis(args = []) {
     if (!['y', 'yes'].includes(answer)) { stdout.write('Update skipped.\n'); return; }
   }
   const { spawnSync } = await import('node:child_process');
-  const result = spawnSync(plan.command, plan.args, { stdio: 'inherit', shell: process.platform === 'win32' });
-  if (result.status !== 0) { stderr.write('The update command failed (exit ' + result.status + ').\n'); process.exitCode = 1; return; }
-  stdout.write('Oasis updated to ' + latest.sha.slice(0, 7) + '. Restart any running oasis sessions.\n');
+  for (const step of plan.steps || []) {
+    const result = spawnSync(step.command, step.args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    if (result.status !== 0) {
+      stderr.write('The update command failed (exit ' + result.status + ').\n');
+      process.exitCode = 1;
+      return;
+    }
+  }
+  stdout.write('Oasis updated to ' + latest.tag + ' (' + latest.sha.slice(0, 7) + '). Restart any running oasis sessions.\n');
 }
 
 
@@ -1195,11 +1201,14 @@ async function manageTrust(root, rest) {
 
 async function selfUpdate(autoApprove = false) {
   if (!commandAvailable('npm')) throw new Error('npm was not found. Install Node.js with npm, then rerun oasis update.');
+  const { latestReleaseCommit } = await import('./update.mjs');
+  const latest = await latestReleaseCommit();
+  const installUrl = INSTALL_URL + latest.sha + '.tar.gz';
   const command = 'npm';
-  const args = ['install', '--global', INSTALL_URL];
+  const args = ['install', '--global', installUrl];
   stdout.write('Oasis self-update plan\n  ' + command + ' ' + args.join(' ') + '\n');
-  stdout.write('This downloads the public Oasis source from GitHub and replaces the installed CLI package.\n');
-  if (!(await approve('Install/update Oasis from ' + INSTALL_URL + '?', false, autoApprove))) {
+  stdout.write('This installs the latest stable release ' + latest.tag + ' from its immutable source archive.\n');
+  if (!(await approve('Install/update Oasis from stable release ' + latest.tag + ' (' + latest.sha.slice(0, 7) + ')?', false, autoApprove))) {
     stdout.write('Update cancelled.\n');
     return;
   }
