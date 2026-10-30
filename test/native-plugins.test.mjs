@@ -139,7 +139,7 @@ test('native plugin install requires explicit grants, rejects conflicts and unkn
 
 test('native plugin updates show permission diffs before writes and require explicit confirmation',async t=>{
   const {pkg,env}=await setup(t);await writePackage(pkg,{version:'1.0.0',permissions:['commands','skills']});
-  const first=await installNativePlugin(pkg,{env,grantedPermissions:['commands']});assert.equal(first.installed,true);
+  const first=await installNativePlugin(pkg,{env,grantedPermissions:['commands','skills']});assert.equal(first.installed,true);
   await writePackage(pkg,{version:'1.1.0',permissions:['commands','skills','agents']});
   const preview=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands','agents']});
   assert.equal(preview.needsApproval,true);assert.deepEqual(preview.permissionDiff.added,['agents']);assert.deepEqual(preview.permissionDiff.removed,['skills']);
