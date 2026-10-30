@@ -51,11 +51,11 @@ function lineBatcher(session, monitor) {
   const flushEvent = () => {
     timer = null;
     if (!buffer.length && !dropped) return;
-    let body = buffer.join('\\n');
+    let body = buffer.join('\n');
     if (body.length > MAX_EVENT_CHARS) body = body.slice(0, MAX_EVENT_CHARS) + '…';
-    if (dropped) body += '\\n[' + dropped + ' more line(s) skipped; print fewer lines or use a pattern]';
+    if (dropped) body += '\n[' + dropped + ' more line(s) skipped; print fewer lines or use a pattern]';
     monitor.events += 1;
-    pushBackgroundEvent(session, '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\\n' + body + '\\n</monitor-event>', { kind: 'monitor', id: monitor.id, description: monitor.description, lines: buffer.length });
+    pushBackgroundEvent(session, '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\n' + body + '\n</monitor-event>', { kind: 'monitor', id: monitor.id, description: monitor.description, lines: buffer.length });
     buffer = []; dropped = 0;
   };
   const scheduleFlush = () => {
@@ -81,7 +81,7 @@ function lineBatcher(session, monitor) {
         monitor.pattern = null;
         if (matcher) void matcher.close().catch(() => {});
         pushBackgroundEvent(session,
-          '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\\nPattern matching stopped: ' + escapeAttr(error.message || error) + '\\n</monitor-event>',
+          '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\nPattern matching stopped: ' + escapeAttr(error.message || error) + '\n</monitor-event>',
           { kind: 'monitor', id: monitor.id, description: monitor.description });
       }).finally(() => { queued = Math.max(0, queued - 1); });
     },
@@ -149,19 +149,28 @@ export async function startCommandMonitor(session, args, { run, root, runOptions
   const batcher = lineBatcher(session, monitor);
   let timer = null;
   let endReason = null;
-  const result = await run(root, args.command, Array.isArray(args.args) ? args.args : [], {
-    ...runOptions,
-    background: true,
-    monitor,
-    onLine: (line) => batcher.add(line),
-    onExit: (entry, { stoppedByUser }) => {
-      if (timer) clearTimeout(timer);
-      void batcher.flush().catch(() => {}).then(() => {
-        pushBackgroundEvent(session, endNotice(monitor, entry, endReason || (stoppedByUser ? 'stopped' : 'exited')), { kind: 'monitor-end', id: monitor.id, description });
-      });
-    }
-  });
-  if (!result || !result.id) return result;
+  let result;
+  try {
+    result = await run(root, args.command, Array.isArray(args.args) ? args.args : [], {
+      ...runOptions,
+      background: true,
+      monitor,
+      onLine: (line) => batcher.add(line),
+      onExit: (entry, { stoppedByUser }) => {
+        if (timer) clearTimeout(timer);
+        void batcher.flush().catch(() => {}).then(() => {
+          pushBackgroundEvent(session, endNotice(monitor, entry, endReason || (stoppedByUser ? 'stopped' : 'exited')), { kind: 'monitor-end', id: monitor.id, description });
+        });
+      }
+    });
+  } catch (error) {
+    await batcher.flush().catch(() => {});
+    throw error;
+  }
+  if (!result || !result.id) {
+    await batcher.flush();
+    return result;
+  }
   monitor.id = result.id;
   const entry = session.background && session.background.get(result.id);
   if (entry) entry.monitor = monitor;
@@ -216,7 +225,13 @@ export async function startWsMonitor(session, args, { approval, autoApprove = fa
   const timeoutMs = monitorTimeout(args, { headless });
   const monitor = { id, description, pattern, timeoutMs, events: 0, plugin: null };
   const batcher = lineBatcher(session, monitor);
-  const socket = protocols.length ? new WebSocketImpl(url, protocols) : new WebSocketImpl(url);
+  let socket;
+  try {
+    socket = protocols.length ? new WebSocketImpl(url, protocols) : new WebSocketImpl(url);
+  } catch (error) {
+    await batcher.flush().catch(() => {});
+    throw error;
+  }
   let endReason = null;
   let timer = null;
   const entry = {

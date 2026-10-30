@@ -202,8 +202,8 @@ export async function grepWorkspace(root, args = {}, options = {}) {
         if (s.size > MAX_TEXT_FILE * 4) continue;
         content = await readFile(file.absolute, 'utf8');
       } catch { continue; }
-      if (content.includes('\\0')) continue;
-      const lines = content.split(/\\r?\\n/);
+      if (content.includes('\0')) continue;
+      const lines = content.split(/\r?\n/);
       let hits = 0;
       const emitted = new Set();
       for (let i = 0; i < lines.length; i++) {
@@ -416,7 +416,6 @@ export async function executePowerTool(name, args, context, root) {
       const entry = context.session && context.session.background && context.session.background.get(String(args.id || ''));
       if (!entry) throw new Error('No background process with that id. Use list_background.');
       let text = entry.output.slice(entry.readOffset);
-      entry.readOffset = entry.output.length;
       if (args.filter) {
         let matcher;
         try {
@@ -435,6 +434,7 @@ export async function executePowerTool(name, args, context, root) {
         }
       }
       const truncated = text.length > MAX_OUTPUT;
+      entry.readOffset = entry.output.length;
       return { ...describeBackground(entry), output: truncated ? text.slice(-MAX_OUTPUT) : text, truncated, droppedBytes: entry.dropped };
     }
     case 'kill_command': {
