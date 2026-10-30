@@ -307,6 +307,10 @@ try {
   assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true');
   await page.locator('#agentRunsUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
   assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), false, 'The terminal utility panel should hide while Runs & changes is selected.');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await page.locator('#agentTerminalUtilityTab').getAttribute('aria-selected'), 'true', 'Left arrow should select Terminal.');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true', 'Right arrow should select Runs & changes.');
   await assertAgentContrast(page, 'Runs and changes · desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-runs-desktop.png'), fullPage: true });
   await page.locator('#agentTerminalUtilityTab').click();
