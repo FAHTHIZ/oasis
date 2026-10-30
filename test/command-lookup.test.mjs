@@ -34,14 +34,15 @@ test('package installation checks the supplied PATH environment', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'oasis-npm-'));
   try {
     makeExecutable(directory, process.platform === 'win32' ? 'npm.cmd' : 'npm');
+    const env = { PATH: directory, PATHEXT: process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM' };
     const plan = planPackageInstall({
       packageName: 'omniroute',
       ecosystem: 'npm-global',
-      env: { PATH: directory, PATHEXT: process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM' }
+      env
     });
     assert.equal(plan.command, 'npm');
     assert.deepEqual(plan.args, ['install', '--global', 'omniroute']);
-    assert.equal(commandAvailable(plan.command, { PATH: directory }), true);
+    assert.equal(commandAvailable(plan.command, env), true);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
