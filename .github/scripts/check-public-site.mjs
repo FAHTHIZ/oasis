@@ -33,7 +33,7 @@ assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the
 assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta description must match the approved concise description.');
 assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.svg"'), 'Homepage must point Open Graph at the social preview image.');
 assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.includes('<svg'), 'Social preview must be a 1200x630 SVG image.');
-assert.ok(socialPreview.includes('OASIS beta') && socialPreview.includes('BETA · APACHE 2.0'), 'Social preview must advertise the current Beta stage.');
+assert.ok(socialPreview.includes('OASIS OSS') && socialPreview.includes('CODE. AUTOMATE.') && socialPreview.includes('local-first workspace'), 'Social preview must use the current OASIS portal identity and descriptor.');
 assert.ok(html.includes('Beta · Open source · Apache-2.0'), 'Public homepage must show the Beta stage.');
 for (const [name, sticker] of [['wide beta sticker', betaSticker], ['round beta seal', betaSeal], ['compact beta mark', betaMark]]) {
   assert.ok(sticker.startsWith('<svg') && sticker.includes('</svg>'), name + ' must be an SVG document.');
