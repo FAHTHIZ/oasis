@@ -8,6 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { commandAvailable } from './command-lookup.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { snapshotFile } from './backups.mjs';
@@ -515,27 +516,8 @@ function getMatchingProviderKey(provider, env) {
   return '';
 }
 
-function commandExists(command, env = process.env, timeoutMs = 2500) {
-  return new Promise((resolve) => {
-    const checker = process.platform === 'win32' ? 'where.exe' : 'which';
-    let child;
-    let settled = false;
-    const finish = (exists) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(Boolean(exists));
-    };
-    const timer = setTimeout(() => { try { child?.kill(); } catch {} finish(false); }, timeoutMs);
-    timer.unref?.();
-    try {
-      child = spawn(checker, [command], { env: scrubEnvironment(env), shell: false, windowsHide: true, stdio: 'ignore' });
-      child.once('error', () => finish(false));
-      child.once('close', (code) => finish(code === 0));
-    } catch {
-      finish(false);
-    }
-  });
+function commandExists(command, env = process.env) {
+  return commandAvailable(command, env);
 }
 
 async function checkOmniRouteEndpoint(apiKey = '', timeoutMs = 1200) {
