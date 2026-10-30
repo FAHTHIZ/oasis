@@ -373,7 +373,13 @@ async function componentFiles(plugin, key, defaultDir) {
     if (info.isFile() && target.endsWith('.md')) files.push({ file: target, parts: [path.basename(target, '.md')] });
     else if (info.isDirectory()) files.push(...await markdownFiles(target));
   }
-  return files;
+  const seen = new Set();
+  return files.filter((item) => {
+    const key = path.resolve(item.file);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function readText(file) {
@@ -426,17 +432,26 @@ export async function pluginAgents(plugins, options = {}) {
 /** Skill directories: [{ name, file (SKILL.md), dir, plugin }]. */
 export async function pluginSkills(plugins) {
   const out = [];
+  const seen = new Set();
+  const add = (name, file, dir, plugin) => {
+    const key = path.resolve(file);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ name, file, dir, plugin });
+  };
   for (const plugin of plugins) {
     const roots = [path.join(plugin.root, 'skills'), ...asList(plugin.manifest.skills).map((rel) => resolveInPlugin(plugin, rel)).filter(Boolean)];
-    if (await exists(path.join(plugin.root, 'SKILL.md'))) out.push({ name: plugin.name, file: path.join(plugin.root, 'SKILL.md'), dir: plugin.root, plugin: plugin.id });
+    const rootSkill = path.join(plugin.root, 'SKILL.md');
+    if (await exists(rootSkill)) add(plugin.name, rootSkill, plugin.root, plugin.id);
     for (const dir of [...new Set(roots)]) {
-      if (await exists(path.join(dir, 'SKILL.md'))) { out.push({ name: path.basename(dir), file: path.join(dir, 'SKILL.md'), dir, plugin: plugin.id }); continue; }
+      const directSkill = path.join(dir, 'SKILL.md');
+      if (await exists(directSkill)) { add(path.basename(dir), directSkill, dir, plugin.id); continue; }
       let entries;
       try { entries = await readdir(dir, { withFileTypes: true }); } catch { continue; }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const file = path.join(dir, entry.name, 'SKILL.md');
-        if (await exists(file)) out.push({ name: entry.name, file, dir: path.join(dir, entry.name), plugin: plugin.id });
+        const skillFile = path.join(dir, entry.name, 'SKILL.md');
+        if (await exists(skillFile)) add(entry.name, skillFile, path.join(dir, entry.name), plugin.id);
       }
     }
   }
