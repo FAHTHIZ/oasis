@@ -19,6 +19,25 @@ OASIS is an open-source coding agent and local-first developer workspace. The po
 
 Use the three greens as a restrained portal gradient, not as three competing accent colors. Maintain readable contrast for text and controls. Avoid large neon-green text areas.
 
+## Coding workspace palette
+
+The coding workspace has a separate flat interface palette defined by the October 30, 2026 app redesign brief. These interface colors do not recolor the existing portal mark or app-icon artwork.
+
+| Token | Hex | Use |
+|---|---|---|
+| Workspace background | `#0B100C` | Main canvas |
+| Sidebar | `#0D130E` | Navigation surface |
+| Panel | `#101811` | Cards and workspace panels |
+| Border | `#1C271F` | Quiet panel outlines |
+| Strong border | `#2B3B30` | Emphasized outlines |
+| Primary text | `#E8EFE9` | Main interface text |
+| Muted text | `#9BAA9F` | Secondary copy; maintain at least 4.5:1 contrast |
+| Action lime | `#9BFF55` | Send, New chat, and approval actions only |
+| Risk / removed | `#FF8A8A` | Explicit risk labels and removed diff lines |
+| Added diff | `#9BFF55` | Added diff lines |
+
+Use Inter for interface text and JetBrains Mono for code. Keep surfaces flat, use 1px quiet borders and avoid gradient washes on cards. The original portal mark retains its existing brand artwork colors.
+
 ## Logo and wordmark
 
 - The standalone portal mark is the default sidebar, favicon-adjacent, and small-space mark.
