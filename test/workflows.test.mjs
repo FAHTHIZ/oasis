@@ -81,6 +81,33 @@ test('workflow runtime isolates Node host APIs and blocks host-constructor escap
   assert.equal(result.result.clock, 'blocked');
 });
 
+test('workflow runtime blocks deterministic globals through globalThis and constructor chains', async () => {
+  const result = await runWorkflow({
+    source: `return {
+      globalRandom: (() => { try { globalThis.Math.random(); return 'allowed'; } catch { return 'blocked'; } })(),
+      lexicalRandom: (() => { try { Math.random(); return 'allowed'; } catch { return 'blocked'; } })(),
+      nativeDateAlias: typeof __workflowNativeDate,
+      globalClock: (() => { try { globalThis.Date.now(); return 'allowed'; } catch { return 'blocked'; } })(),
+      lexicalClock: (() => { try { Date.now(); return 'allowed'; } catch { return 'blocked'; } })(),
+      nativeConstructor: Object.getPrototypeOf(Date),
+      nativePrototype: Object.getPrototypeOf(Date.prototype),
+      date: new Date(0).toISOString(),
+      parsed: Date.parse('1970-01-01T00:00:00.000Z')
+    }`,
+    runAgent: async () => ''
+  });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.result.globalRandom, 'blocked');
+  assert.equal(result.result.lexicalRandom, 'blocked');
+  assert.equal(result.result.nativeDateAlias, 'undefined');
+  assert.equal(result.result.globalClock, 'blocked');
+  assert.equal(result.result.lexicalClock, 'blocked');
+  assert.equal(result.result.nativeConstructor, null);
+  assert.equal(result.result.nativePrototype, null);
+  assert.equal(result.result.date, '1970-01-01T00:00:00.000Z');
+  assert.equal(result.result.parsed, 0);
+});
+
 test('workflow runtime interrupts CPU-bound JavaScript', async () => {
   const started = Date.now();
   const result = await runWorkflow({ source: 'while (true) {}', runAgent: async () => '' });
