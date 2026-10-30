@@ -17,6 +17,7 @@ import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { listWorktrees } from './worktrees.mjs';
 import { listAgentTeams } from './agent-tasks.mjs';
+import { killBackgroundEntry } from './power-tools.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
@@ -1293,7 +1294,7 @@ export async function runBuiltinCommand(name, argument, state) {
       let agents = 0;
       if (session.agentTasks && stopAllAgents) { agents = [...session.agentTasks.agents.values()].filter((t) => t.status === 'running').length; stopAllAgents(session); }
       let processes = 0;
-      if (session.background) for (const entry of session.background.values()) if (entry.status === 'running' && entry.child) { try { entry.child.kill('SIGTERM'); entry.status = 'killed'; processes += 1; } catch {} }
+      if (session.background) for (const entry of session.background.values()) if (entry.status === 'running' && entry.child && killBackgroundEntry(entry)) processes += 1;
       return { output: 'Stopped ' + agents + ' background agent(s) and ' + processes + ' process(es).' };
     }
     case 'loop': {
