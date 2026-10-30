@@ -91,6 +91,7 @@ test('workflow runtime blocks deterministic globals through globalThis and const
       lexicalClock: (() => { try { Date.now(); return 'allowed'; } catch { return 'blocked'; } })(),
       nativeConstructor: Object.getPrototypeOf(Date),
       nativePrototype: Object.getPrototypeOf(Date.prototype),
+      dateConstructor: new Date(0).constructor === Date,
       date: new Date(0).toISOString(),
       parsed: Date.parse('1970-01-01T00:00:00.000Z')
     }`,
@@ -104,6 +105,7 @@ test('workflow runtime blocks deterministic globals through globalThis and const
   assert.equal(result.result.lexicalClock, 'blocked');
   assert.equal(result.result.nativeConstructor, null);
   assert.equal(result.result.nativePrototype, null);
+  assert.equal(result.result.dateConstructor, true);
   assert.equal(result.result.date, '1970-01-01T00:00:00.000Z');
   assert.equal(result.result.parsed, 0);
 });
