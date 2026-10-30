@@ -16,9 +16,9 @@
 
 1. Open the [OASIS releases page](https://github.com/FAHTHIZ/oasis/releases/latest).
 2. Download the file for your computer:
-   - **Windows:** `.exe` installer
-   - **macOS:** `.dmg` disk image
-   - **Linux:** `.AppImage` or `.deb`
+   - **Windows (x64):** `.exe` installer
+   - **macOS (Apple Silicon / arm64):** `.dmg` disk image
+   - **Linux (x86_64):** `.AppImage` or `.deb`
 3. Open it, choose a project folder, and follow the model setup.
 
 The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured.
