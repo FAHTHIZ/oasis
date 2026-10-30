@@ -103,9 +103,9 @@ jobs:
           node-version: 22
       - name: Install production dependencies and vendor terminal assets
         run: npm install --omit=dev --no-audit --no-fund
-      - name: Install pinned Playwright and Chromium for CI only
+      - name: Install pinned Playwright, axe, and Chromium for CI only
         run: |
-          npm install --no-save --package-lock=false playwright@1.64.1
+          npm install --no-save --package-lock=false playwright@1.64.1 @axe-core/playwright@4.14.0
           npx playwright install --with-deps chromium
       - name: Run authenticated browser chat smoke test
         run: node .github/scripts/browser-e2e.mjs
