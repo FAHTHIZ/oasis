@@ -1,0 +1,130 @@
+/* OASIS visual system — quiet surfaces, clear hierarchy, and restrained portal green. */
+:root{
+  --bg:#0B0F0C;
+  --panel:#1A1F1B;
+  --surface-raised:#202722;
+  --surface-muted:#141A16;
+  --line:#2D3B32;
+  --line-strong:#405246;
+  --text:#E6F5EA;
+  --muted:#A6B5AA;
+  --accent:#7CFF5E;
+  --accent-2:#32E07A;
+  --accent-3:#0ED168;
+  --ink:#0B0F0C;
+  --shadow:0 12px 32px #0003;
+}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+.sidebar{
+  background:#101713;
+  border-right-color:var(--line);
+}
+.brand-mark img{filter:drop-shadow(0 0 4px #7cff5e20)}
+.switcher{background:var(--panel);border-color:var(--line)}
+.nav-btn.active{
+  background:#7cff5e12;
+  box-shadow:inset 2px 0 0 var(--accent);
+  color:var(--accent);
+}
+.local-card{
+  background:var(--surface-muted);
+  border-color:var(--line);
+}
+.hero,.extension-hero{
+  background:var(--panel);
+  border-color:var(--line);
+  box-shadow:none;
+}
+.hero:after{display:none}
+.panel,.stat,.extension-card,.integration-card{
+  background:var(--panel);
+  border-color:var(--line);
+  box-shadow:none;
+}
+.workspace-banner{
+  background:var(--surface-muted);
+  border-color:var(--line);
+}
+.first-run-wizard{
+  background:var(--panel);
+  border-color:var(--line-strong);
+  box-shadow:none;
+}
+.first-run-choice{
+  background:var(--surface-muted);
+  border-color:var(--line);
+}
+.first-run-choice:hover,.first-run-choice:focus-visible{
+  background:#7cff5e0a;
+  border-color:var(--accent);
+}
+.btn-primary{
+  background:var(--accent);
+  color:var(--ink);
+  box-shadow:none;
+}
+.btn-primary:hover{
+  filter:brightness(1.04);
+  box-shadow:0 0 0 3px #7cff5e18;
+}
+.btn-secondary{
+  background:var(--surface-muted);
+  border-color:var(--line);
+}
+.agent-chat-panel{
+  border-color:var(--line);
+  box-shadow:var(--shadow);
+}
+.agent-chat-header{
+  background:var(--panel);
+  border-bottom-color:var(--line);
+}
+.agent-messages{background:#111713}
+.agent-compose{
+  background:var(--panel);
+  border-top-color:var(--line);
+}
+.agent-compose textarea{
+  background:var(--bg);
+  border-color:var(--line-strong);
+}
+.agent-compose textarea:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px #7cff5e14;
+}
+.agent-workspace-tab[aria-selected="true"]{
+  color:var(--ink);
+  background:var(--accent);
+  border-color:var(--accent);
+}
+.progress-bar{background:var(--accent)}
+.toast{
+  background:var(--panel);
+  border-color:var(--line-strong);
+  box-shadow:var(--shadow);
+}
+.status-dot.connected:before{box-shadow:0 0 0 3px #32e07a12}
+body.light{
+  background:var(--bg);
+}
+body.light .sidebar,
+body.light .panel,
+body.light .stat,
+body.light .hero,
+body.light .local-card,
+body.light .extension-hero,
+body.light .extension-card,
+body.light .integration-card,
+body.light .first-run-wizard{
+  background:var(--panel);
+  border-color:var(--line);
+}
+body.light .hero:after{display:none}
+@media(prefers-reduced-motion:reduce){
+  .brand-mark img{animation:none!important}
+  .btn{transition:none}
+}
