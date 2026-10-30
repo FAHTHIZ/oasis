@@ -52,22 +52,45 @@ node_supported() {
 }
 resolve_latest_release() {
   node --input-type=module -e '
-const base = "https://api.github.com/repos/FAHTHIZ/oasis";
-const headers = { accept: "application/vnd.github+json", "user-agent": "oasis-installer" };
+const apiBase = "https://api.github.com/repos/FAHTHIZ/oasis";
+const apiHeaders = { accept: "application/vnd.github+json", "user-agent": "oasis-installer" };
 async function readJson(url) {
-  const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error("GitHub returned HTTP " + response.status + ".");
+  const response = await fetch(url, { headers: apiHeaders, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error("GitHub API returned HTTP " + response.status + ".");
   return response.json();
 }
+async function resolveFromPublicReleasePage() {
+  const response = await fetch("https://github.com/FAHTHIZ/oasis/releases/latest", {
+    headers: { accept: "text/html", "user-agent": "oasis-installer" },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!response.ok) throw new Error("GitHub release page returned HTTP " + response.status + ".");
+  const finalUrl = new URL(response.url);
+  const tagMatch = finalUrl.pathname.match(/\\/releases\\/tag\\/(v[0-9]+\\.[0-9]+\\.[0-9]+)$/);
+  if (!tagMatch) throw new Error("GitHub did not redirect to a stable versioned release page.");
+  const tag = decodeURIComponent(tagMatch[1]);
+  const html = await response.text();
+  const commitMatch = html.match(/data-hovercard-type="commit"[^>]*href="https:\\/\\/github\\.com\\/FAHTHIZ\\/oasis\\/commit\\/([0-9a-f]{40})"/i);
+  const sha = String(commitMatch && commitMatch[1] || "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page did not include its exact commit SHA.");
+  return { tag, sha };
+}
 try {
-  const release = await readJson(base + "/releases/latest");
-  if (release.draft || release.prerelease) throw new Error("GitHub did not return a stable release.");
-  const tag = String(release.tag_name || "");
-  if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag)) throw new Error("The latest stable release has an unsupported tag.");
-  const commit = await readJson(base + "/commits/" + encodeURIComponent(tag));
-  const sha = String(commit.sha || "").toLowerCase();
-  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("GitHub did not return a valid release commit.");
-  process.stdout.write(tag + "\n" + sha);
+  let resolved;
+  try {
+    const release = await readJson(apiBase + "/releases/latest");
+    if (release.draft || release.prerelease) throw new Error("GitHub did not return a stable release.");
+    const tag = String(release.tag_name || "");
+    if (!/^v[0-9]+\\.[0-9]+\\.[0-9]+$/.test(tag)) throw new Error("The latest stable release has an unsupported tag.");
+    const commit = await readJson(apiBase + "/commits/" + encodeURIComponent(tag));
+    const sha = String(commit.sha || "").toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("GitHub did not return a valid release commit.");
+    resolved = { tag, sha };
+  } catch (apiError) {
+    console.error("GitHub API unavailable (" + apiError.message + "); trying the official public release page.");
+    resolved = await resolveFromPublicReleasePage();
+  }
+  process.stdout.write(resolved.tag + "\n" + resolved.sha);
 } catch (error) {
   console.error("Could not resolve the latest stable OASIS release: " + error.message);
   process.exitCode = 1;
