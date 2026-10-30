@@ -38,10 +38,11 @@ sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { 
 For **Windows PowerShell**, paste this one line. It checks the downloaded script's hash before running it:
 
 ```powershell
-$p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='90f6c8ae5119d3a0cc20afd958565391f4239bf6f26a1807cc2fa8b1e6da03c4'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
+$d=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Force -Path $d | Out-Null; $p=Join-Path $d 'install.ps1'; $h=Join-Path $d 'release-resolution.ps1'; try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/release-resolution.ps1' -OutFile $h; $expected='90f6c8ae5119d3a0cc20afd958565391f4239bf6f26a1807cc2fa8b1e6da03c4'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); $helperExpected='0d5fb319ecd19a479924d808595730f89226f43d874208ee9e30de9947665ff5'; $helperActual=(Get-FileHash $h -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected -or $helperActual -ne $helperExpected){throw 'Installer checksum mismatch. Do not run either file.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
 ```
 
 **Published Windows installer SHA-256:** `90f6c8ae5119d3a0cc20afd958565391f4239bf6f26a1807cc2fa8b1e6da03c4`
+**Published Windows resolver helper SHA-256:** `0d5fb319ecd19a479924d808595730f89226f43d874208ee9e30de9947665ff5`
 
 If the checksum does not match, stop and do not run the downloaded script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
 
