@@ -45,6 +45,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Test PowerShell release fallback parsing
+        shell: pwsh
+        run: ./test/installer-powershell-fallback.test.ps1
       - name: Install pinned release and run doctor
         shell: pwsh
         run: ./scripts/install.ps1 -Yes -SkipSetup
