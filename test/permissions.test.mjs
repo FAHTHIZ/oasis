@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { PermissionPolicy } from '../src/permissions.mjs';
 
 function policyWithAllow(rule) {
@@ -54,4 +55,25 @@ test('deny rules still match a denied command within a chain', () => {
     }
   });
   assert.equal(policy.evaluate('run_shell', { command: 'npm test; ls' }).decision, 'deny');
+});
+
+test('read deny rules normalize workspace-relative and absolute paths case-insensitively', () => {
+  const root = path.resolve('/workspace/oasis');
+  const policy = new PermissionPolicy({
+    permissions: { deny: ['Read(secrets/**)'] }
+  }, { root });
+  const paths = [
+    'src/../secrets/key',
+    './secrets/key',
+    'SECRETS/key',
+    path.join(root, 'secrets', 'key')
+  ];
+
+  for (const filePath of paths) {
+    assert.equal(
+      policy.evaluate('read_file', { path: filePath }).decision,
+      'deny',
+      filePath + ' must match Read(secrets/**)'
+    );
+  }
 });

@@ -235,8 +235,16 @@ function matchCommandSpecifier(specifier, line, options = {}) {
   return parsed.commands.every((piece) => matchSingleCommandSpecifier(specifier, piece));
 }
 
-function normalizeRelative(p) {
-  return String(p || '').replace(/\\/g, '/').replace(/^\.\//, '');
+function normalizeRelative(p, root = process.cwd()) {
+  const value = String(p || '').trim();
+  if (!value) return '';
+  const workspace = path.resolve(root);
+  const absolute = path.resolve(workspace, value.replace(/\\/g, path.sep));
+  const relative = path.relative(workspace, absolute);
+  const insideWorkspace = relative === '' ||
+    (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
+  const normalized = insideWorkspace ? relative : absolute;
+  return normalized.split(path.sep).join('/').replace(/^\.\//, '').toLowerCase();
 }
 
 export function ruleMatches(rule, toolName, args = {}, options = {}) {
@@ -263,9 +271,10 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
     }
     return String(args.url || '') === rule.specifier;
   }
-  const candidate = normalizeRelative(args.path || args.pattern || '');
+  const root = options.root || process.cwd();
+  const candidate = normalizeRelative(args.path || args.pattern || '', root);
   if (!candidate) return false;
-  return globToRegExp(normalizeRelative(rule.specifier)).test(candidate);
+  return globToRegExp(normalizeRelative(rule.specifier, root)).test(candidate);
 }
 
 export class PermissionPolicy {
@@ -275,6 +284,7 @@ export class PermissionPolicy {
     this.ask = (permissions.ask || []).map(parseRule).filter(Boolean);
     this.deny = (permissions.deny || []).map(parseRule).filter(Boolean);
     this.sessionAllow = [];
+    this.root = path.resolve(options.root || process.cwd());
     this.mode = normalizePermissionMode(options.mode) || normalizePermissionMode(permissions.defaultMode) || 'default';
   }
 
@@ -299,10 +309,11 @@ export class PermissionPolicy {
 
   // Returns { decision: 'deny'|'ask'|'allow'|'default', rule }.
   evaluate(toolName, args = {}) {
-    for (const rule of this.deny) if (ruleMatches(rule, toolName, args, { matchBasename: true, requireEveryCommand: false })) return { decision: 'deny', rule: rule.raw };
-    for (const rule of this.ask) if (ruleMatches(rule, toolName, args, { matchBasename: true, requireEveryCommand: false })) return { decision: 'ask', rule: rule.raw };
-    for (const rule of this.allow) if (ruleMatches(rule, toolName, args)) return { decision: 'allow', rule: rule.raw };
-    for (const rule of this.sessionAllow) if (ruleMatches(rule, toolName, args)) return { decision: 'allow', rule: rule.raw, session: true };
+    const matchOptions = { root: this.root, matchBasename: true, requireEveryCommand: false };
+    for (const rule of this.deny) if (ruleMatches(rule, toolName, args, matchOptions)) return { decision: 'deny', rule: rule.raw };
+    for (const rule of this.ask) if (ruleMatches(rule, toolName, args, matchOptions)) return { decision: 'ask', rule: rule.raw };
+    for (const rule of this.allow) if (ruleMatches(rule, toolName, args, { root: this.root })) return { decision: 'allow', rule: rule.raw };
+    for (const rule of this.sessionAllow) if (ruleMatches(rule, toolName, args, { root: this.root })) return { decision: 'allow', rule: rule.raw, session: true };
     return { decision: 'default', rule: null };
   }
 
