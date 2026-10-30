@@ -86,6 +86,18 @@ test('permission rules match commands, paths, domains, MCP prefixes, and Claude 
   assert.equal(policy.evaluate('run_command', { command: 'cargo', args: ['build'] }).decision, 'allow');
 });
 
+test('grep rejects a pre-cancelled search without starting either search engine', async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(path.join(dir, 'matches.txt'), 'cancelled search must not run\\n');
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(
+    grepWorkspace(dir, { pattern: 'cancelled' }, { signal: controller.signal }),
+    { name: 'AbortError' }
+  );
+});
+
 test('grep finds regex matches, honours globs and modes, and never returns secret files', async (t) => {
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));
