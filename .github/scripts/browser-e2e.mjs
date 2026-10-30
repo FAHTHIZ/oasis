@@ -225,6 +225,8 @@ try {
 
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-before.png'), fullPage: true });
   await page.locator('button[data-nav="agent"]').first().click();
+  await assertAgentContrast(page, 'Agent empty state · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-empty-desktop.png'), fullPage: true });
   // The starter cards belong to the empty-state UI, so test them before connecting.
   await page.locator('[data-agent-example="Explain this project"]').click();
   assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
@@ -250,6 +252,7 @@ try {
       '; page errors=' + JSON.stringify(pageErrors));
   }
 
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-desktop.png'), fullPage: true });
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
@@ -265,6 +268,7 @@ try {
   await page.locator('#agentSendBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
   await assertAgentContrast(page, 'Agent approval card');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-approval-desktop.png'), fullPage: true });
   const approvalText = await page.locator('#agentApprovalPrompt').innerText();
   assert.match(approvalText, /WARNING — RISKY ACTION/);
   assert.match(approvalText, /browser-e2e-output\.txt/);
@@ -379,12 +383,16 @@ try {
 
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileDocumentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(mobileDocumentWidth <= 390, 'The Agent workspace must not overflow horizontally at 390px.');
   await page.locator('#agentTerminalTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal', 'The terminal tab should reveal the terminal on narrow screens.');
   await assertAgentContrast(page, 'Agent terminal panel · 390px');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-terminal-390px.png'), fullPage: true });
   await page.locator('#agentChatTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
   await assertAgentContrast(page, 'Agent chat · 390px');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-390px.png'), fullPage: true });
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-390px.png'), fullPage: true });
   console.log('PASS browser E2E: app loaded, token connection succeeded, write/read tools ran, workspace change verified, final reply rendered.');
 
@@ -408,6 +416,8 @@ try {
     await assertAgentContrast(firstRunPage, 'First-run setup · desktop');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-desktop.png'), fullPage: true });
     await firstRunPage.setViewportSize({ width: 390, height: 844 });
+    const firstRunMobileWidth = await firstRunPage.evaluate(() => document.documentElement.scrollWidth);
+    assert.ok(firstRunMobileWidth <= 390, 'The first-run screen must not overflow horizontally at 390px.');
     await assertAgentContrast(firstRunPage, 'First-run setup · 390px');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-390px.png'), fullPage: true });
     assert.equal(await firstRunPage.locator('[data-first-run]').count(), 3, 'First run should present all three model choices.');
