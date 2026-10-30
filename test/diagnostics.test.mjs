@@ -41,6 +41,21 @@ test('node --check output maps to a line and column', () => {
   assert.match(d.message, /SyntaxError/);
 });
 
+test('diagnostics reports cancellation instead of a clean empty result', async () => {
+  const root = await workspace();
+  await writeFile(path.join(root, 'good.js'), 'module.exports = 1;\\n');
+  const controller = new AbortController();
+  controller.abort();
+
+  const result = await runDiagnostics(root, { checker: 'node', paths: ['.'] }, { signal: controller.signal });
+  assert.equal(result.cancelled, true);
+  assert.deepEqual(result.ran, []);
+  assert.deepEqual(result.diagnostics, []);
+  assert.match(result.message, /cancelled/i);
+  assert.doesNotMatch(result.message, /No problems found|No checkers applied/);
+  assert.match(formatDiagnostics(result), /cancelled/i);
+});
+
 test('built-in checks report JavaScript and JSON syntax errors without approval', async () => {
   const root = await workspace();
   await writeFile(path.join(root, 'bad.mjs'), 'export const a = ;\n');
