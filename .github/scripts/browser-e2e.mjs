@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
+import AxeBuilder from '@axe-core/playwright';
 import { startOasisWebServer } from '../../src/web.mjs';
 import { saveConfig } from '../../src/config.mjs';
 
@@ -22,6 +23,25 @@ execFileSync('git', ['commit', '--quiet', '-m', 'Browser E2E workspace baseline'
 const token = 'oasis-browser-e2e-token-0123456789';
 const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(), 'artifacts', 'browser-e2e');
 await mkdir(screenshotDir, { recursive: true });
+
+async function assertAgentContrast(page, label) {
+  const results = await new AxeBuilder({ page })
+    .include('#view-agent')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  const contrast = results.violations.filter((violation) => violation.id === 'color-contrast');
+  const other = results.violations.filter((violation) => violation.id !== 'color-contrast');
+  if (other.length) {
+    console.warn('[axe] ' + label + ': other accessibility findings: ' +
+      other.map((violation) => violation.id + ' (' + violation.impact + ')').join(', '));
+  }
+  const detail = contrast.map((violation) =>
+    violation.nodes.map((node) => violation.id + ' ' + node.target.join(', ') + ': ' +
+      String(node.failureSummary || violation.help).replace(/\\s+/g, ' ').slice(0, 280)).join('\\n')
+  ).join('\\n');
+  assert.equal(contrast.length, 0, '[axe] ' + label + ' has color-contrast violations:\\n' + detail);
+  console.log('[axe] ' + label + ': no color-contrast violations (' + results.passes.length + ' passing rules).');
+}
 
 let providerServer;
 let app;
@@ -214,6 +234,7 @@ try {
     const status = document.querySelector('#agentRuntimeState');
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
+  await assertAgentContrast(page, 'Agent workspace · desktop');
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
   try {
@@ -243,6 +264,7 @@ try {
   await page.locator('#agentPrompt').fill('Delete browser-e2e-output.txt from this workspace. Ask before deleting it.');
   await page.locator('#agentSendBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  await assertAgentContrast(page, 'Agent approval card');
   const approvalText = await page.locator('#agentApprovalPrompt').innerText();
   assert.match(approvalText, /WARNING — RISKY ACTION/);
   assert.match(approvalText, /browser-e2e-output\.txt/);
@@ -359,8 +381,10 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#agentTerminalTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal', 'The terminal tab should reveal the terminal on narrow screens.');
+  await assertAgentContrast(page, 'Agent terminal panel · 390px');
   await page.locator('#agentChatTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
+  await assertAgentContrast(page, 'Agent chat · 390px');
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-390px.png'), fullPage: true });
   console.log('PASS browser E2E: app loaded, token connection succeeded, write/read tools ran, workspace change verified, final reply rendered.');
 
@@ -381,8 +405,10 @@ try {
     await firstRunPage.locator('#agentTokenInput').fill(firstRunApp.token);
     await firstRunPage.locator('#agentConnectBtn').click();
     await firstRunPage.locator('#firstRunWizard').waitFor({ state: 'visible', timeout: timeoutMs });
+    await assertAgentContrast(firstRunPage, 'First-run setup · desktop');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-desktop.png'), fullPage: true });
     await firstRunPage.setViewportSize({ width: 390, height: 844 });
+    await assertAgentContrast(firstRunPage, 'First-run setup · 390px');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-390px.png'), fullPage: true });
     assert.equal(await firstRunPage.locator('[data-first-run]').count(), 3, 'First run should present all three model choices.');
     assert.deepEqual(firstRunErrors, [], 'The first-run screen must not throw JavaScript errors.');
