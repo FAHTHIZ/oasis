@@ -527,13 +527,43 @@ async function checkOmniRouteEndpoint(apiKey = '', timeoutMs = 1200) {
       headers,
       signal: AbortSignal.timeout(timeoutMs)
     });
-    return {
-      reachable: response.status === 200 || response.status === 401 || response.status === 403,
-      status: response.status
-    };
+    return { reachable: true, status: response.status };
   } catch {
     return { reachable: false, status: null };
   }
+}
+
+function omniRouteEndpointIssue(endpoint, apiKey = '') {
+  if (!endpoint || !endpoint.reachable) {
+    return {
+      connected: false,
+      provider: 'omniroute',
+      message: 'The local OmniRoute gateway did not answer on 127.0.0.1:20128. Start OmniRoute and retry; OASIS has not changed your provider settings.'
+    };
+  }
+  if (endpoint.status === 401 || endpoint.status === 403) {
+    if (!apiKey) {
+      return {
+        connected: false,
+        needsLocalApiKey: true,
+        provider: 'omniroute',
+        message: 'The local OmniRoute inference endpoint requires an API key (HTTP ' + endpoint.status + '). Enter the key from OmniRoute Dashboard → API Keys only in OASIS’s hidden terminal prompt or local provider form.'
+      };
+    }
+    return {
+      connected: false,
+      provider: 'omniroute',
+      message: 'OmniRoute rejected the local endpoint key (HTTP ' + endpoint.status + '). Check the key in OmniRoute Dashboard → API Keys and enter it only in OASIS’s hidden terminal prompt. No provider settings were changed.'
+    };
+  }
+  if (endpoint.status !== 200) {
+    return {
+      connected: false,
+      provider: 'omniroute',
+      message: 'OmniRoute is already responding on port 20128, but its /v1/models endpoint returned HTTP ' + endpoint.status + '. OASIS did not start a second server. Check the local OmniRoute dashboard and server logs; no provider settings were changed.'
+    };
+  }
+  return null;
 }
 
 async function waitForOmniRoute(apiKey = '', timeoutMs = 20000, signal) {
@@ -552,15 +582,17 @@ async function waitForOmniRoute(apiKey = '', timeoutMs = 20000, signal) {
 async function startOmniRouteBackground(root, env) {
   return await new Promise((resolve, reject) => {
     let child;
+    const gatewayEnv = scrubEnvironment(env);
+    gatewayEnv.OMNIROUTE_SERVER_HOST = '127.0.0.1';
     try {
       if (process.platform === 'win32') {
         // Fixed command only; no user input is interpolated into this command string.
         child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'start "" /b omniroute'], {
-          cwd: root, env: scrubEnvironment(env), detached: true, windowsHide: true, shell: false, stdio: 'ignore'
+          cwd: root, env: gatewayEnv, detached: true, windowsHide: true, shell: false, stdio: 'ignore'
         });
       } else {
         child = spawn('omniroute', [], {
-          cwd: root, env: scrubEnvironment(env), detached: true, windowsHide: true, shell: false, stdio: 'ignore'
+          cwd: root, env: gatewayEnv, detached: true, windowsHide: true, shell: false, stdio: 'ignore'
         });
       }
     } catch (error) {
@@ -601,11 +633,9 @@ async function saveVerifiedProvider(provider, config, context) {
     if (provider === 'omniroute') {
       return {
         connected: false,
-        needsLocalApiKey: /(?:401|403|unauthorized|authentication|api key|token)/i.test(message),
         provider,
-        message: 'OmniRoute is reachable, but model/tool-call verification did not pass. No provider settings were changed. Open ' +
-          OMNIROUTE_DASHBOARD_URL + ' to confirm a provider route is available; some OmniRoute setups also require a local endpoint key. ' +
-          'Enter that key only in Oasis’s local provider form or the hidden terminal prompt, not in chat. Details: ' + message
+        message: 'OmniRoute accepted the local gateway request, but its upstream model route did not pass tool-call verification. This is not a local endpoint-key failure: HTTP 401/403 from an individual model route means that upstream provider rejected its own credentials; HTTP 502 usually means that upstream provider or browser session is unavailable. Open ' +
+          OMNIROUTE_DASHBOARD_URL + ' and check Providers / Routes: re-authorize the affected provider or choose a working route. Your previous OASIS provider configuration was left unchanged. Details: ' + message
       };
     }
     return { connected: false, provider, message: 'Provider verification failed; the existing configuration was left unchanged. ' + message };
@@ -650,6 +680,11 @@ async function configureProviderFromChat(args, context) {
   const current = await loadConfig({ env }).catch(() => context.config || null);
   const sameTarget = Boolean(current && current.baseURL === baseURL && current.protocol === preset.protocol);
   const apiKey = String((sameTarget && current.apiKey) || getMatchingProviderKey(provider, env) || '');
+  if (provider === 'omniroute') {
+    const endpoint = await checkOmniRouteEndpoint(apiKey);
+    const endpointIssue = omniRouteEndpointIssue(endpoint, apiKey);
+    if (endpointIssue) return endpointIssue;
+  }
   if (!isLoopbackUrl(baseURL) && !apiKey) {
     return {
       connected: false,
@@ -712,6 +747,9 @@ async function setupOmniRoute(args, context, root) {
       };
     }
   }
+
+  const endpointIssue = omniRouteEndpointIssue(endpoint, apiKey);
+  if (endpointIssue) return { ...endpointIssue, installed, started, dashboard: OMNIROUTE_DASHBOARD_URL };
 
   return await saveVerifiedProvider('omniroute', {
     protocol: 'openai-compatible', baseURL, model: 'auto', apiKey

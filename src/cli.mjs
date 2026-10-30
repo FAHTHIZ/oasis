@@ -10,7 +10,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL } from './config.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
@@ -430,7 +430,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
         throw new Error('Choose 1, 2, 3, or 4. No provider settings were changed.');
       }
     }
-    if (presetName === 'custom') {
+    if (shouldPromptForProviderBaseURL(presetName)) {
       protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'bedrock' || protocol === 'vertex' || protocol === 'foundry' ? defaultCloudBaseURL(protocol, process.env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
       baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
@@ -471,7 +471,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
         }
       }
       if (presetName !== 'omniroute') {
-        baseURL = (await rl.question('Base URL [' + selected.baseURL + ']: ')).trim() || selected.baseURL;
+        stdout.write('Using the standard ' + presetName + ' endpoint. To use a different URL, choose Advanced > Custom.\n');
         const modelPrompt = model ? 'Model name [' + model + ']: ' : 'Model name (exact model ID required, after installing a model): ';
         model = (await rl.question(modelPrompt)).trim() || model;
       }
