@@ -108,69 +108,69 @@ export class PtySessionManager {
     try {
       this._prune();
       const pty = await this._pty();
-    const cols = safeInteger(options.cols, 100, 20, 300);
-    const rows = safeInteger(options.rows, 30, 5, 120);
-    const display = String(options.display || command.split(/[\\/]/).pop() || command).slice(0, 180);
-    const child = pty.spawn(command, args, {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd: options.cwd,
-      env: options.env || process.env,
-      encoding: 'utf8',
-      handleFlowControl: true
-    });
-    const record = {
-      id: String(this.idFactory()),
-      display,
-      cwd: options.cwd,
-      process: child,
-      state: 'running',
-      cols,
-      rows,
-      output: '',
-      outputBase: 0,
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      exitCode: null,
-      signal: null,
-      stopTimer: null,
-      sandboxed: options.sandboxed || null,
-      waiters: new Set(),
-      dataDisposable: null,
-      exitDisposable: null
-    };
-    if (!record.id || this.sessions.has(record.id)) {
-      try { child.kill(); } catch {}
-      throw new Error('Could not allocate a unique terminal session id.');
-    }
-    this.sessions.set(record.id, record);
-    const notify = () => {
-      for (const waiter of [...record.waiters]) {
-        try { waiter(); } catch {}
+      const cols = safeInteger(options.cols, 100, 20, 300);
+      const rows = safeInteger(options.rows, 30, 5, 120);
+      const display = String(options.display || command.split(/[\\/]/).pop() || command).slice(0, 180);
+      const child = pty.spawn(command, args, {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: options.cwd,
+        env: options.env || process.env,
+        encoding: 'utf8',
+        handleFlowControl: true
+      });
+      const record = {
+        id: String(this.idFactory()),
+        display,
+        cwd: options.cwd,
+        process: child,
+        state: 'running',
+        cols,
+        rows,
+        output: '',
+        outputBase: 0,
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        exitCode: null,
+        signal: null,
+        stopTimer: null,
+        sandboxed: options.sandboxed || null,
+        waiters: new Set(),
+        dataDisposable: null,
+        exitDisposable: null
+      };
+      if (!record.id || this.sessions.has(record.id)) {
+        try { child.kill(); } catch {}
+        throw new Error('Could not allocate a unique terminal session id.');
       }
-    };
-    record.dataDisposable = child.onData((chunk) => {
-      if (record.state !== 'running' && record.state !== 'stopping') return;
-      const text = String(chunk || '');
-      record.output += text;
-      if (record.output.length > this.bufferLimit) {
-        const excess = record.output.length - this.bufferLimit;
-        record.output = record.output.slice(excess);
-        record.outputBase += excess;
-      }
-      record.updatedAt = new Date().toISOString();
-      notify();
-    });
-    record.exitDisposable = child.onExit((event = {}) => {
-      record.state = 'exited';
-      record.exitCode = Number.isFinite(event.exitCode) ? event.exitCode : 0;
-      record.signal = Number.isFinite(event.signal) && event.signal !== 0 ? event.signal : null;
-      record.updatedAt = new Date().toISOString();
-      notify();
-      try { record.dataDisposable && record.dataDisposable.dispose(); } catch {}
-    });
-      return { ...statusOf(record), message: 'Interactive terminal started. Use terminal_read with this id to receive output; use terminal_input to send keystrokes or program input, terminal_resize to resize, and terminal_stop when finished.' };
+      this.sessions.set(record.id, record);
+      const notify = () => {
+        for (const waiter of [...record.waiters]) {
+          try { waiter(); } catch {}
+        }
+      };
+      record.dataDisposable = child.onData((chunk) => {
+        if (record.state !== 'running' && record.state !== 'stopping') return;
+        const text = String(chunk || '');
+        record.output += text;
+        if (record.output.length > this.bufferLimit) {
+          const excess = record.output.length - this.bufferLimit;
+          record.output = record.output.slice(excess);
+          record.outputBase += excess;
+        }
+        record.updatedAt = new Date().toISOString();
+        notify();
+      });
+      record.exitDisposable = child.onExit((event = {}) => {
+        record.state = 'exited';
+        record.exitCode = Number.isFinite(event.exitCode) ? event.exitCode : 0;
+        record.signal = Number.isFinite(event.signal) && event.signal !== 0 ? event.signal : null;
+        record.updatedAt = new Date().toISOString();
+        notify();
+        try { record.dataDisposable && record.dataDisposable.dispose(); } catch {}
+      });
+        return { ...statusOf(record), message: 'Interactive terminal started. Use terminal_read with this id to receive output; use terminal_input to send keystrokes or program input, terminal_resize to resize, and terminal_stop when finished.' };
     } finally {
       this.startingSessions = Math.max(0, this.startingSessions - 1);
     }
