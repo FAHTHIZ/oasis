@@ -1,37 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-<title id="title">OASIS — Open-source AI coding agent</title>
-<desc id="desc">OASIS beta, an open-source AI coding agent. Bring your own model. Inspect, edit, and verify software in a local-first workspace.</desc>
+<title id="title">OASIS OSS — Code. Automate. Flourish.</title><desc id="desc">The OASIS green portal mark and wordmark over a dark reflective grid, representing a focused local-first coding workspace.</desc>
 <defs>
-  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0f0c"/><stop offset=".55" stop-color="#14271b"/><stop offset="1" stop-color="#233b29"/></linearGradient>
-  <linearGradient id="lime" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d4ff7a"/><stop offset="1" stop-color="#76e64b"/></linearGradient>
-  <radialGradient id="glow"><stop stop-color="#9bff55" stop-opacity=".28"/><stop offset="1" stop-color="#9bff55" stop-opacity="0"/></radialGradient>
-  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#baf59a" stroke-opacity=".07"/></pattern>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#050907"/><stop offset=".55" stop-color="#0B0F0C"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
+<radialGradient id="glow"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".27"/><stop offset=".46" stop-color="#32E07A" stop-opacity=".12"/><stop offset="1" stop-color="#0B0F0C" stop-opacity="0"/></radialGradient>
+<linearGradient id="portal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E"/><stop offset=".52" stop-color="#32E07A"/><stop offset="1" stop-color="#0ED168"/></linearGradient>
+<linearGradient id="strata" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7CFF5E"/><stop offset="1" stop-color="#0ED168"/></linearGradient>
+<linearGradient id="white" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E6F5EA"/><stop offset="1" stop-color="#B8C9BE"/></linearGradient>
+<pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse"><path d="M54 0H0V54" fill="none" stroke="#7CFF5E" stroke-opacity=".09" stroke-width="1"/></pattern>
 </defs>
-<rect width="1200" height="630" fill="url(#bg)"/><rect width="1200" height="630" fill="url(#grid)"/>
-<circle cx="1000" cy="90" r="360" fill="url(#glow)"/>
-<path d="M72 78h54l34 34-34 34H72l34-34z" fill="none" stroke="url(#lime)" stroke-width="5" stroke-linejoin="round"/>
-<text x="184" y="126" fill="#f2f5ee" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="42" font-weight="800" letter-spacing="6">OASIS</text>
-<rect x="880" y="82" width="230" height="43" rx="21.5" fill="#9bff5517" stroke="#9bff5577"/>
-<circle cx="906" cy="103.5" r="5" fill="#9bff55"/><text x="923" y="110" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="2">BETA · APACHE 2.0</text>
-<text x="74" y="263" fill="#f2f5ee" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="800" letter-spacing="-1.8">Open-source AI coding agent.</text>
-<text x="76" y="333" fill="#9bff55" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="50" font-weight="750" letter-spacing="-1">Bring your own model.</text>
-<text x="78" y="384" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="23">Local-first tools to inspect code, make changes, and prove the fix.</text>
-<g transform="translate(76 452)">
-  <rect width="322" height="112" rx="15" fill="#0b130d" stroke="#526a51"/>
-  <circle cx="24" cy="23" r="5" fill="#ff8b80"/><circle cx="42" cy="23" r="5" fill="#ffd66b"/><circle cx="60" cy="23" r="5" fill="#9bff55"/>
-  <text x="22" y="59" fill="#9bff55" font-family="ui-monospace,Consolas,monospace" font-size="17">$ oasis "find a bug"</text>
-  <text x="22" y="86" fill="#b7c8b8" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="14">Inspect · plan · edit · verify</text>
-</g>
-<g transform="translate(422 452)">
-  <rect width="322" height="112" rx="15" fill="#122018" stroke="#344a3b"/>
-  <text x="22" y="37" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="750">YOUR MODEL</text>
-  <text x="22" y="64" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15">API key · free gateway · local</text>
-  <text x="22" y="88" fill="#91a795" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13">You choose the provider</text>
-</g>
-<g transform="translate(768 452)">
-  <rect width="354" height="112" rx="15" fill="#122018" stroke="#344a3b"/>
-  <text x="22" y="37" fill="#d4ff7a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" font-weight="750">REVIEWABLE WORK</text>
-  <text x="22" y="64" fill="#c2d0c3" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15">Approvals · checkpoints · tests</text>
-  <text x="22" y="88" fill="#91a795" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13">Open source · built in the open</text>
-</g>
+<rect width="1200" height="630" fill="url(#bg)"/><rect y="350" width="1200" height="280" fill="url(#grid)"/><ellipse cx="320" cy="300" rx="390" ry="350" fill="url(#glow)"/><ellipse cx="865" cy="250" rx="420" ry="300" fill="url(#glow)"/>
+<path d="M0 475H1200M0 515H1200M0 565H1200M0 615H1200" stroke="#32E07A" stroke-opacity=".12"/>
+<g transform="translate(128 170) scale(.94)"><path d="M18 151 C18 76 76 13 150 13 C224 13 282 76 282 151 L224 151 C224 101 194 63 150 63 C106 63 76 101 76 151 Z" fill="url(#portal)"/><path d="M76 150 C76 99 107 61 150 61 C193 61 224 99 224 150" fill="none" stroke="#32E07A" stroke-width="4.5" stroke-linecap="round"/><g fill="url(#strata)"><path d="M18 151 H98 V160 H18 Z M202 151 H282 V160 H202 Z"/><path d="M21 168 H92 V176 H21 Z M208 168 H279 V176 H208 Z"/><path d="M27 185 H99 V193 H27 Z M201 185 H273 V193 H201 Z"/><path d="M36 202 H113 V210 H36 Z M187 202 H264 V210 H187 Z"/><path d="M46 219 H124 V227 H46 Z M176 219 H254 V227 H176 Z"/><path d="M58 236 H132 V244 H58 Z M168 236 H242 V244 H168 Z"/><path d="M73 253 H133 V260 H73 Z M167 253 H227 V260 H167 Z"/><path d="M91 269 H132 V275 H91 Z M168 269 H209 V275 H168 Z"/></g></g>
+<text x="476" y="260" font-family="Space Grotesk,Inter,DejaVu Sans,Arial,sans-serif" font-size="108" font-weight="500" letter-spacing="16" fill="url(#white)">OASIS</text>
+<path d="M480 307H645 M812 307H1085" stroke="#32E07A" stroke-width="2" opacity=".8"/><text x="728" y="317" text-anchor="middle" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="11" fill="#7CFF5E">OSS</text>
+<text x="482" y="382" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="4.4" fill="#E6F5EA">CODE. AUTOMATE. <tspan fill="#7CFF5E">FLOURISH.</tspan></text>
+<text x="484" y="431" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="20" fill="#AEBEB2">An open-source coding agent and local-first workspace.</text>
+<rect x="18" y="18" width="1164" height="594" rx="24" fill="none" stroke="#7CFF5E" stroke-opacity=".13" stroke-width="2"/>
 </svg>
