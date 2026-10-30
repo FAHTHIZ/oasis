@@ -1,14 +1,14 @@
 # What this script does:
 # 1. Checks for Node.js 22 or newer.
 # 2. Offers to install Node.js with winget only after asking first.
-# 3. Installs the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0) under your user profile.
+# 3. Installs the fixed source revision d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a (package version 0.3.0) under your user profile.
 # 4. Runs oasis doctor and opens first-run provider setup.
 # It does not request administrator rights, upload files, or send telemetry.
 [CmdletBinding()]
 param([switch]$Yes, [switch]$SkipSetup)
 $ErrorActionPreference = 'Stop'
 $ReleaseTag = 'v0.3.0'
-$Archive = "https://github.com/FAHTHIZ/oasis/archive/27efc103994c26cab2331bb7037167372ceaa787.tar.gz"
+$Archive = "https://github.com/FAHTHIZ/oasis/archive/d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a.tar.gz"
 $InstallPrefix = Join-Path $env:LOCALAPPDATA 'OASIS'
 $OasisCommand = Join-Path $InstallPrefix 'oasis.cmd'
 
@@ -66,7 +66,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 Write-Host ("npm is ready: " + (& npm --version))
 Write-Host 'Git is optional for this archive-based install.'
 Write-Host "OASIS will be installed for your user in: $InstallPrefix"
-Write-Host "The installer uses the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0); it does not download the moving main branch."
+Write-Host "The installer uses the fixed source revision d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a (package version 0.3.0); it does not download the moving main branch."
 if (-not (Confirm-Change "May I install OASIS $ReleaseTag in that folder using npm?")) { exit 1 }
 
 New-Item -ItemType Directory -Force -Path $InstallPrefix | Out-Null

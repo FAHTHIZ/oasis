@@ -18,7 +18,7 @@ OmniRoute setup is not yet a fully automatic one-click installer; the current gu
 
 ## Command-line installation (optional)
 
-The recommended CLI installer checks Node.js 22+, asks before installing or changing shell startup files, and installs the immutable source revision `27efc103994c26cab2331bb7037167372ceaa787` (package version `0.3.0`) into your user directory. It does not use administrator rights.
+The recommended CLI installer checks Node.js 22+, asks before installing or changing shell startup files, and installs the immutable source revision `d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a` (package version `0.3.0`) into your user directory. It does not use administrator rights.
 
 - **macOS, Linux, and Android/Termux:** copy the checksum-verifying one-line command from the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux).
 - **Windows PowerShell:** use the PowerShell one-liner in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux), which checks the script hash before running it.

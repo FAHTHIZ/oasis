@@ -19,20 +19,20 @@
 Paste this **single line** into your terminal. It downloads the installer, checks its SHA-256 against the published value below, and runs it only if the checksum matches.
 
 ```sh
-sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { rm -f "$f"; }; trap cleanup EXIT; trap "exit 1" HUP INT TERM; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f"; expected=0969eb1ed71b21158bfe0ba3fe7a13b1198299d84fcbb5f4873574de47c287e5; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
+sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { rm -f "$f"; }; trap cleanup EXIT; trap "exit 1" HUP INT TERM; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f"; expected=c680486e81a657155d2fb07ffa0680915c3bf143a013523dfdaac8c28572609f; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
 ```
 
-The installer checks Node.js 22+, asks before installing OASIS or changing your shell startup file, uses immutable source revision `27efc103994c26cab2331bb7037167372ceaa787` (package version `0.3.0`) rather than moving `main`, then runs `oasis doctor` and opens first-run setup. It never requests administrator rights. If Node.js is missing, it offers Termux's `pkg install nodejs` or Homebrew on a Mac when available; otherwise it shows the official Node.js download page.
+The installer checks Node.js 22+, asks before installing OASIS or changing your shell startup file, uses immutable source revision `d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a` (package version `0.3.0`) rather than moving `main`, then runs `oasis doctor` and opens first-run setup. It never requests administrator rights. If Node.js is missing, it offers Termux's `pkg install nodejs` or Homebrew on a Mac when available; otherwise it shows the official Node.js download page.
 
-**Published installer SHA-256:** `0969eb1ed71b21158bfe0ba3fe7a13b1198299d84fcbb5f4873574de47c287e5`
+**Published installer SHA-256:** `c680486e81a657155d2fb07ffa0680915c3bf143a013523dfdaac8c28572609f`
 
 For **Windows PowerShell**, paste this one line. It checks the downloaded script's hash before running it:
 
 ```powershell
-$p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='920e1c647c905977afc308ee9c72f8a9cac2f173c279460fa0ca35505f97efd3'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
+$p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='89f548e3e79224387c11b732e60a6060c28f78ba2b2285edf18b74be3e90b630'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
 ```
 
-**Published Windows installer SHA-256:** `920e1c647c905977afc308ee9c72f8a9cac2f173c279460fa0ca35505f97efd3`
+**Published Windows installer SHA-256:** `89f548e3e79224387c11b732e60a6060c28f78ba2b2285edf18b74be3e90b630`
 
 If the check fails, stop and do not run the script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
 
