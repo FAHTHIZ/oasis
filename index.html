@@ -665,7 +665,7 @@ function commandPaletteItems(){
     {id:'provider-setup',label:'Model provider setup',description:'Choose an API provider, local Ollama or a gateway',category:'Settings',keywords:'model api key ollama omniroute',run:function(){navigate('agent');window.setTimeout(function(){var el=document.querySelector('.provider-setup');if(el)el.scrollIntoView({block:'start'});var first=document.getElementById('providerPreset');if(first)first.focus()},100)}},
     {id:'first-run',label:'First-run model choices',description:'Review API key, free gateway and local-model setup paths',category:'Settings',keywords:'first run setup model install',run:function(){navigate('agent');window.setTimeout(function(){var wizard=document.getElementById('firstRunWizard');if(wizard&&!wizard.hidden)wizard.scrollIntoView({block:'start'});else{var provider=document.querySelector('.provider-setup');if(provider)provider.scrollIntoView({block:'start'})}},100)}},
     {id:'github-settings',label:'GitHub repository settings',description:'Connect GitHub CLI and select a workspace repository',category:'Settings',keywords:'clone repository github git',run:function(){navigate('agent');window.setTimeout(function(){var el=document.querySelector('.github-panel');if(el)el.scrollIntoView({block:'start'});var btn=document.getElementById('githubCheckBtn');if(btn)btn.focus()},100)}},
-    {id:'terminal-open',label:'Open terminal panel',description:'Switch to the terminal inside the coding workspace',category:'Workspace',keywords:'run command shell process console',run:function(){navigate('agent');window.setTimeout(function(){var tab=document.getElementById('agentTerminalTab');if(tab)tab.click();var el=document.getElementById('agentWorkspaceGrid');if(el)el.scrollIntoView({block:'start'})},100)}},
+    {id:'terminal-open',label:'Open terminal panel',description:'Switch to the terminal inside the coding workspace',category:'Workspace',keywords:'run command shell process console',run:function(){navigate('agent');window.setTimeout(function(){if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('terminal');var tab=document.getElementById('agentTerminalTab');if(tab)tab.click();var el=document.getElementById('agentWorkspaceGrid');if(el)el.scrollIntoView({block:'start'})},100)}},
     {id:'new-agent-chat',label:'Start a new agent chat',description:'Keep saved sessions, but begin a clean conversation',category:'Workspace',keywords:'new session clear conversation',run:function(){navigate('agent');window.setTimeout(function(){var btn=document.getElementById('newAgentSessionBtn');if(btn)btn.click()},100)}},
     {id:'starter-explain',label:'Explain this project',description:'Fill the agent prompt with a read-first request',category:'Agent starters',keywords:'understand repository code walkthrough',run:function(){prepareAgentPrompt('Explain this project')}},
     {id:'starter-find-bug',label:'Find a bug',description:'Ask for an inspection and a suggested fix before editing',category:'Agent starters',keywords:'debug error defect bugfix',run:function(){prepareAgentPrompt('Find a bug')}},
@@ -1130,7 +1130,7 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){button.ad
   }
   function setVisible(visible){
     grid.dataset.terminalVisible=String(!!visible);
-    toggle.textContent=visible?'Hide terminal':'Show terminal';
+    toggle.textContent=visible?'Hide side panel':'Show side panel';
     toggle.setAttribute('aria-expanded',String(!!visible));
     persist('oasis.agent.terminalVisible',String(!!visible));
     if(!visible)setPanel('chat');
