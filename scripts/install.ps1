@@ -72,89 +72,11 @@ try {
     $release = Invoke-RestMethod -Uri "$ApiBase/releases/latest" -Headers $ApiHeaders -TimeoutSec 15
     if ($release.draft -or $release.prerelease) { throw 'GitHub did not return a stable release.' }
     $ReleaseTag = [string]$release.tag_name
-    if ($ReleaseTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+
-
-New-Item -ItemType Directory -Force -Path $InstallPrefix | Out-Null
-& npm install --global --prefix $InstallPrefix $Archive
-if ($LASTEXITCODE -ne 0) {
-    Write-Host 'npm could not complete the OASIS install. No administrator command was run.'
-    exit $LASTEXITCODE
-}
-if (-not (Test-Path $OasisCommand)) {
-    Write-Host "The install finished, but OASIS was not found at $OasisCommand."
-    exit 1
-}
-Write-Host 'Checking the installed OASIS version...'
-& $OasisCommand --version
-if (-not $SkipSetup) {
-    try { & $OasisCommand doctor } catch { Write-Host 'The environment check reported a problem. Read the notes above before continuing.' }
-    Write-Host 'Opening first-run model setup...'
-    & $OasisCommand setup
-} else {
-    Write-Host 'First-run setup was skipped because -SkipSetup was supplied.'
-    & $OasisCommand doctor
-}
-
-$pathEntries = @($env:Path -split ';' | ForEach-Object { $_.TrimEnd('\') })
-if ($pathEntries -notcontains $InstallPrefix.TrimEnd('\')) {
-    Write-Host 'The OASIS command folder is not on your permanent user PATH yet.'
-    if (Confirm-Change "May I add $InstallPrefix to your user PATH? This affects only your Windows account.") {
-        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        $parts = @($userPath -split ';' | Where-Object { $_ })
-        if ($parts -notcontains $InstallPrefix) { $parts += $InstallPrefix }
-        [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
-        $env:Path = "$env:Path;$InstallPrefix"
-        Write-Host 'The user PATH entry is saved. Open a new PowerShell window to use oasis by name.'
-    } else {
-        Write-Host ('For this session, add ' + $InstallPrefix + ' to the front of PATH or call the command by full path.')
-        Write-Host 'OASIS was installed; no PATH setting was changed.'
-    }
-}
-Write-Host 'OASIS installation steps are complete.'
-) { throw 'The latest stable release has an unsupported tag.' }
+    if (-not [regex]::IsMatch($ReleaseTag, '\Av[0-9]+\.[0-9]+\.[0-9]+\z')) { throw 'The latest stable release has an unsupported tag.' }
     $encodedTag = [uri]::EscapeDataString($ReleaseTag)
     $releaseCommit = Invoke-RestMethod -Uri "$ApiBase/commits/$encodedTag" -Headers $ApiHeaders -TimeoutSec 15
     $ReleaseCommit = ([string]$releaseCommit.sha).ToLowerInvariant()
-    if ($ReleaseCommit -notmatch '^[0-9a-f]{40}
-
-New-Item -ItemType Directory -Force -Path $InstallPrefix | Out-Null
-& npm install --global --prefix $InstallPrefix $Archive
-if ($LASTEXITCODE -ne 0) {
-    Write-Host 'npm could not complete the OASIS install. No administrator command was run.'
-    exit $LASTEXITCODE
-}
-if (-not (Test-Path $OasisCommand)) {
-    Write-Host "The install finished, but OASIS was not found at $OasisCommand."
-    exit 1
-}
-Write-Host 'Checking the installed OASIS version...'
-& $OasisCommand --version
-if (-not $SkipSetup) {
-    try { & $OasisCommand doctor } catch { Write-Host 'The environment check reported a problem. Read the notes above before continuing.' }
-    Write-Host 'Opening first-run model setup...'
-    & $OasisCommand setup
-} else {
-    Write-Host 'First-run setup was skipped because -SkipSetup was supplied.'
-    & $OasisCommand doctor
-}
-
-$pathEntries = @($env:Path -split ';' | ForEach-Object { $_.TrimEnd('\') })
-if ($pathEntries -notcontains $InstallPrefix.TrimEnd('\')) {
-    Write-Host 'The OASIS command folder is not on your permanent user PATH yet.'
-    if (Confirm-Change "May I add $InstallPrefix to your user PATH? This affects only your Windows account.") {
-        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        $parts = @($userPath -split ';' | Where-Object { $_ })
-        if ($parts -notcontains $InstallPrefix) { $parts += $InstallPrefix }
-        [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
-        $env:Path = "$env:Path;$InstallPrefix"
-        Write-Host 'The user PATH entry is saved. Open a new PowerShell window to use oasis by name.'
-    } else {
-        Write-Host ('For this session, add ' + $InstallPrefix + ' to the front of PATH or call the command by full path.')
-        Write-Host 'OASIS was installed; no PATH setting was changed.'
-    }
-}
-Write-Host 'OASIS installation steps are complete.'
-) { throw 'GitHub did not return a valid release commit.' }
+    if ($ReleaseCommit -notmatch '^[0-9a-f]{40}\z') { throw 'GitHub did not return a valid release commit.' }
 } catch {
     Write-Host ("Could not resolve the latest stable OASIS release: " + $_.Exception.Message)
     exit 1
