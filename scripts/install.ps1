@@ -7,6 +7,7 @@
 [CmdletBinding()]
 param([switch]$Yes, [switch]$SkipSetup)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'release-resolution.ps1')
 $ApiBase = 'https://api.github.com/repos/FAHTHIZ/oasis'
 $ApiHeaders = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'oasis-installer' }
 $ReleaseTag = ''
@@ -88,23 +89,7 @@ if (-not $ReleaseCommit) {
         $releasePage = Invoke-WebRequest -Uri 'https://github.com/FAHTHIZ/oasis/releases/latest' -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'text/html' } -TimeoutSec 20 -UseBasicParsing
         $pageHtml = [string]$releasePage.Content
 
-        # PowerShell 7 exposes the final redirected URL through RequestMessage;
-        # Windows PowerShell 5 exposes it through ResponseUri. Prefer the
-        # redirect target, then accept either absolute or relative GitHub links.
-        $finalUrl = ''
-        try {
-            $baseResponse = $releasePage.BaseResponse
-            if ($baseResponse.RequestMessage -and $baseResponse.RequestMessage.RequestUri) {
-                $finalUrl = [string]$baseResponse.RequestMessage.RequestUri.AbsoluteUri
-            } elseif ($baseResponse.ResponseUri) {
-                $finalUrl = [string]$baseResponse.ResponseUri.AbsoluteUri
-            }
-        } catch { }
-        $tagPattern = 'github\.com/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)(?:[/?#]|$)'
-        $tagMatch = [regex]::Match($finalUrl, $tagPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        if (-not $tagMatch.Success) {
-            $tagMatch = [regex]::Match($pageHtml, 'href=["''](?:https://github\.com)?/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        }
+        $ReleaseTag = Resolve-OasisReleaseTagFromResponse -Response $releasePage
         $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
         if (-not $tagMatch.Success) {
             throw 'The public release redirect and page did not contain a stable version tag.'
@@ -117,12 +102,7 @@ if (-not $ReleaseCommit) {
             # tag target from GitHub's public Atom feed, which does not use REST API quota.
             $encodedTag = [uri]::EscapeDataString($ReleaseTag)
             $atomPage = Invoke-WebRequest -Uri "https://github.com/FAHTHIZ/oasis/commits/$encodedTag.atom" -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'application/atom+xml' } -TimeoutSec 20 -UseBasicParsing
-            $atomEntry = [regex]::Match([string]$atomPage.Content, '<entry\b[^>]*>([\s\S]*?)</entry>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-            $atomCommit = if ($atomEntry.Success) { [regex]::Match($atomEntry.Groups[1].Value, '<id>tag:github\.com,2008:Grit::Commit/([0-9a-f]{40})</id>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) } else { [regex]::Match('', 'a^') }
-            if (-not $atomCommit.Success) {
-                throw 'The public release page and tag Atom feed did not include an exact commit SHA.'
-            }
-            $ReleaseCommit = $atomCommit.Groups[1].Value.ToLowerInvariant()
+            $ReleaseCommit = Resolve-OasisCommitFromAtom -Content ([string]$atomPage.Content)
         }
     } catch {
         Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; public release page: " + $_.Exception.Message)
