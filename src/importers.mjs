@@ -330,7 +330,33 @@ export async function planImport(root, options = {}) {
         await addFile('command', 'gemini', file, path.join(targetDir, ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), content, parts.join(':') + ' (' + scope + ')');
       }
     }
-  }export async function applyImport(plan) {
+  }
+  if (sources.includes('cursor')) {
+    addServers(((await readJson(path.join(home, '.cursor', 'mcp.json'))) || {}).mcpServers, 'cursor', 'user', 'cursor');
+    addServers(((await readJson(path.join(workspace, '.cursor', 'mcp.json'))) || {}).mcpServers, 'cursor', 'project', 'cursor');
+    const legacy = await readText(path.join(workspace, '.cursorrules'));
+    if (legacy) await addFile('rule', 'cursor', path.join(workspace, '.cursorrules'), path.join(workspace, '.claude', 'rules', 'cursorrules.md'), '<!-- imported from .cursorrules -->\n' + legacy.trim() + '\n', '.cursorrules');
+    for (const { file, parts } of await listFiles(path.join(workspace, '.cursor', 'rules'), '.mdc')) {
+      const text = await readText(file);
+      if (text) await addFile('rule', 'cursor', file, path.join(workspace, '.claude', 'rules', 'cursor-' + slug(parts.join('-')) + '.md'), cursorRuleToMarkdown(text, parts.join('/')), parts.join('/'));
+    }
+    for (const { file, parts } of await listFiles(path.join(workspace, '.cursor', 'commands'), '.md')) {
+      await addFile('command', 'cursor', file, path.join(workspace, '.oasis', 'commands', ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), await readText(file), parts.join(':'));
+    }
+  }
+  return { root: workspace, sources, items, userMcpFile, projectMcpFile };
+}
+
+export function describePlan(plan) {
+  const adds = plan.items.filter((item) => item.action !== 'skip');
+  const skips = plan.items.filter((item) => item.action === 'skip');
+  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md) and Cursor (~/.cursor, .cursor/, .cursorrules) configuration.';
+  const label = { mcp: 'MCP server', instructions: 'Instructions', command: 'Command', rule: 'Rule' };
+  const line = (item) => '  ' + (item.action === 'skip' ? '- ' : '+ ') + '[' + item.source + '] ' + label[item.kind] + ' ' + item.name + (item.kind === 'mcp' && item.scope ? ' (' + item.scope + ')' : '') + (item.target && item.action !== 'skip' ? ' -> ' + item.target : '') + (item.reason ? ' (skipped: ' + item.reason + ')' : '');
+  return [adds.length ? 'Will import ' + adds.length + ' item' + (adds.length === 1 ? '' : 's') + ':' : 'Nothing new to import.', ...adds.map(line), ...(skips.length ? ['Skipped:', ...skips.map(line)] : [])].join('\n');
+}
+
+export async function applyImport(plan) {
   const done = [];
   const mcp = { user: null, project: null };
   // Validate every destination before the first write so one unsafe item cannot
@@ -364,49 +390,6 @@ export async function planImport(root, options = {}) {
     await mkdir(path.dirname(file), { recursive: true });
     await assertSafeImportTarget(plan, file);
     await writeImportFileAtomically(file, JSON.stringify(data, null, 2) + '\n', scope === 'user' ? 0o600 : 0o644);
-  }
-  return done;
-}
-
- root: workspace, sources, items, userMcpFile, projectMcpFile };
-}
-
-export function describePlan(plan) {
-  const adds = plan.items.filter((item) => item.action !== 'skip');
-  const skips = plan.items.filter((item) => item.action === 'skip');
-  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md) and Cursor (~/.cursor, .cursor/, .cursorrules) configuration.';
-  const label = { mcp: 'MCP server', instructions: 'Instructions', command: 'Command', rule: 'Rule' };
-  const line = (item) => '  ' + (item.action === 'skip' ? '- ' : '+ ') + '[' + item.source + '] ' + label[item.kind] + ' ' + item.name + (item.kind === 'mcp' && item.scope ? ' (' + item.scope + ')' : '') + (item.target && item.action !== 'skip' ? ' -> ' + item.target : '') + (item.reason ? ' (skipped: ' + item.reason + ')' : '');
-  return [adds.length ? 'Will import ' + adds.length + ' item' + (adds.length === 1 ? '' : 's') + ':' : 'Nothing new to import.', ...adds.map(line), ...(skips.length ? ['Skipped:', ...skips.map(line)] : [])].join('\n');
-}
-
-export async function applyImport(plan) {
-  const done = [];
-  const mcp = { user: null, project: null };
-  for (const item of plan.items) {
-    if (item.action === 'skip') continue;
-    if (item.kind === 'mcp') {
-      const file = item.scope === 'user' ? plan.userMcpFile : plan.projectMcpFile;
-      if (!mcp[item.scope]) mcp[item.scope] = (await readJson(file)) || {};
-      mcp[item.scope].mcpServers ||= {};
-      mcp[item.scope].mcpServers[item.name] = item.server;
-      done.push(item);
-      continue;
-    }
-    await mkdir(path.dirname(item.target), { recursive: true });
-    if (item.action === 'append') {
-      const before = (await readText(item.target)) || '';
-      await writeFile(item.target, before + item.content, { mode: 0o600 });
-    } else {
-      await writeFile(item.target, item.content, { flag: 'wx' }).catch((error) => { if (error.code !== 'EEXIST') throw error; });
-    }
-    done.push(item);
-  }
-  for (const [scope, data] of Object.entries(mcp)) {
-    if (!data) continue;
-    const file = scope === 'user' ? plan.userMcpFile : plan.projectMcpFile;
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, JSON.stringify(data, null, 2) + '\n', scope === 'user' ? { mode: 0o600 } : {});
   }
   return done;
 }
