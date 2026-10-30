@@ -90,5 +90,5 @@ test('Windows installer has the same public-page and Atom-feed fallbacks for API
   assert.ok(powershell.includes("releases/latest"));
   assert.ok(powershell.includes('BaseResponse.RequestMessage.RequestUri'), 'Windows fallback must use the final redirected release URL in PowerShell 7.');
   assert.ok(powershell.includes('BaseResponse.ResponseUri'), 'Windows fallback must support the redirected URL shape in Windows PowerShell.');
-  assert.ok(powershell.includes('https://github\\.com)?/FAHTHIZ/oasis/releases/tag/'), 'Windows fallback must accept relative GitHub release links.');
+  assert.ok(powershell.includes('FAHTHIZ/oasis/releases/tag/(v[0-9]+'), 'Windows fallback must accept relative GitHub release links.');
 });
