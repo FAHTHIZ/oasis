@@ -478,7 +478,8 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
     <div class="agent-terminal-column" id="agentTerminalColumn" role="tabpanel" aria-labelledby="agentTerminalTab">
   <div class="agent-utility-tabs" role="tablist" aria-label="Workspace utilities">
     <button class="agent-utility-tab" id="agentTerminalUtilityTab" type="button" role="tab" aria-selected="true" aria-controls="agentTerminalUtilityPanel">Terminal</button>
-    <button class="agent-utility-tab" id="agentRunsUtilityTab" type="button" role="tab" aria-selected="false" aria-controls="agentRunsUtilityPanel">Runs &amp; changes</button>
+    <button class="agent-utility-tab" id="agentChangesUtilityTab" type="button" role="tab" aria-selected="false" aria-controls="agentChangesUtilityPanel">Changes</button>
+    <button class="agent-utility-tab" id="agentTasksUtilityTab" type="button" role="tab" aria-selected="false" aria-controls="agentTasksUtilityPanel">Tasks</button>
   </div>
   <div class="agent-utility-view" id="agentTerminalUtilityPanel" role="tabpanel" aria-labelledby="agentTerminalUtilityTab">
 <div class="panel agent-terminal">
@@ -499,20 +500,28 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
     </div>
   </div>
   </div>
-  <div class="agent-utility-view" id="agentRunsUtilityPanel" role="tabpanel" aria-labelledby="agentRunsUtilityTab" hidden>
-<div class="panel github-panel cloud-runs-panel">
-  <div class="agent-chat-header"><span><strong>Task history</strong> · recent coding runs</span><span id="cloudRunsStatus" class="github-state" data-connected="false">Connect runtime</span></div>
-  <div class="panel-pad">
-    <div class="cloud-runs-toolbar"><p class="github-help">Review recent agent and terminal runs, including tasks interrupted by a runtime restart. History is saved locally on the connected Oasis host; it is not hosted cloud compute or cross-device sync.</p><button class="btn btn-secondary" id="cloudRunsRefreshBtn" type="button">Refresh runs</button></div>
-    <div class="cloud-runs-list" id="cloudRunsList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div>
-    <div class="cloud-run-detail" id="cloudRunDetail" hidden>
-      <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="github-actions"><button class="btn btn-secondary" id="cloudRunDiffBtn" type="button" hidden>Review diff</button><button class="btn btn-primary" id="cloudRunMergeBtn" type="button" hidden>Merge reviewed changes</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
-      <div class="cloud-run-events" id="cloudRunEvents"></div>
-      <div class="cloud-run-detail" id="cloudRunDiffDetail" hidden><div class="cloud-run-detail-head"><strong id="cloudRunDiffTitle">Isolated changes</strong><button class="btn btn-secondary" id="cloudRunDiffClose" type="button">Close diff</button></div><pre class="cloud-run-diff-pre" id="cloudRunDiffText"></pre></div>
+  <div class="agent-utility-view" id="agentTasksUtilityPanel" role="tabpanel" aria-labelledby="agentTasksUtilityTab" hidden>
+  <div class="panel github-panel cloud-runs-panel">
+    <div class="agent-chat-header"><span><strong>Tasks</strong> · recent coding runs</span><span id="cloudRunsStatus" class="github-state" data-connected="false">Connect runtime</span></div>
+    <div class="panel-pad">
+      <div class="cloud-runs-toolbar"><p class="github-help">Recent work on this computer, including tasks interrupted by a runtime restart.</p><button class="btn btn-secondary" id="cloudRunsRefreshBtn" type="button">Refresh</button></div>
+      <div class="cloud-runs-list" id="cloudRunsList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div>
+    </div>
+  </div>
+  </div>
+<div class="agent-utility-view" id="agentChangesUtilityPanel" role="tabpanel" aria-labelledby="agentChangesUtilityTab" hidden>
+  <div class="panel github-panel cloud-changes-panel">
+    <div class="agent-chat-header"><span><strong>Changes</strong> · review before keeping</span><button class="btn btn-secondary" id="cloudRunTasksBackBtn" type="button">← All tasks</button></div>
+    <div class="panel-pad">
+      <div class="cloud-run-empty" id="cloudRunChangesEmpty">Choose a run in Tasks to inspect its activity and review isolated changes.</div>
+      <div class="cloud-run-detail" id="cloudRunDetail" hidden>
+        <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="github-actions"><button class="btn btn-secondary" id="cloudRunDiffBtn" type="button" hidden>Review diff</button><button class="btn btn-primary" id="cloudRunMergeBtn" type="button" hidden>Merge reviewed changes</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
+        <div class="cloud-run-events" id="cloudRunEvents"></div>
+        <div class="cloud-run-detail" id="cloudRunDiffDetail" hidden><div class="cloud-run-detail-head"><strong id="cloudRunDiffTitle">Isolated changes</strong><button class="btn btn-secondary" id="cloudRunDiffClose" type="button">Close diff</button></div><pre class="cloud-run-diff-pre" id="cloudRunDiffText"></pre></div>
+      </div>
     </div>
   </div>
 </div>
-  </div>
     </div>
   </div>
 
@@ -706,6 +715,28 @@ function addProject(){var dialog=document.getElementById('projectDialog');dialog
 function addTaskDialog(){var select=document.getElementById('taskProject');select.innerHTML='<option value="">Unassigned</option>'+state.projects.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'}).join('');if(state.projects[0])select.value=state.projects[0].id;document.getElementById('taskPriority').value='normal';var dialog=document.getElementById('taskDialog');dialog.showModal();document.getElementById('taskTitle').focus()}
 function exportBackup(){var data={app:'OASIS',schemaVersion:1,exportedAt:new Date().toISOString(),projects:state.projects,tasks:state.tasks,notes:state.notes},blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='oasis-workspace-backup-'+today()+'.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);notify('Workspace backup exported.')}
 function importBackup(file){if(!file)return;var reader=new FileReader();reader.onload=function(){try{var d=JSON.parse(String(reader.result||''));if(!d||!Array.isArray(d.projects)||!Array.isArray(d.tasks)||typeof d.notes!=='string')throw new Error('Invalid format');if(!window.confirm('Replace this browser workspace with the imported backup? Export current data first if you want to keep it.'))return;state={projects:d.projects.filter(function(p){return p&&typeof p.id==='string'&&typeof p.name==='string'}).map(function(p){return {id:p.id,name:p.name,description:String(p.description||''),symbol:String(p.symbol||'◇'),status:p.status==='completed'?'completed':'active',createdAt:String(p.createdAt||'')}}),tasks:d.tasks.filter(function(t){return t&&typeof t.id==='string'&&typeof t.title==='string'}).map(function(t){return {id:t.id,title:t.title,projectId:String(t.projectId||''),priority:['low','normal','high'].includes(t.priority)?t.priority:'normal',done:!!t.done,createdAt:String(t.createdAt||'')}}),notes:d.notes,lastSaved:null};save();render();notify('Workspace backup imported.')}catch(e){notify('That file is not a valid Oasis backup.')}document.getElementById('importFile').value=''};reader.onerror=function(){notify('The selected file could not be read.');document.getElementById('importFile').value=''};reader.readAsText(file)}
+
+(function setupTopbarPanelButtons(){
+  document.querySelectorAll('[data-topbar-panel]').forEach(function(button){
+    button.addEventListener('click',function(){
+      var requested=button.getAttribute('data-topbar-panel');
+      if(currentView!=='agent')navigate('agent');
+      var grid=document.getElementById('agentWorkspaceGrid');
+      var isOpen=grid&&grid.dataset.terminalVisible!=='false';
+      var active=window.oasisAgentGetUtilityPanel&&window.oasisAgentGetUtilityPanel();
+      if(isOpen&&active===requested){
+        if(window.oasisAgentSetUtilityVisible)window.oasisAgentSetUtilityVisible(false);
+        return;
+      }
+      if(!isOpen&&window.oasisAgentSetUtilityVisible)window.oasisAgentSetUtilityVisible(true);
+      if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel(requested);
+      if(window.matchMedia('(max-width: 780px)').matches){
+        var terminalTab=document.getElementById('agentTerminalTab');
+        if(terminalTab)terminalTab.click();
+      }
+    });
+  });
+})();
 
 // Searchable, keyboard-accessible workspace palette. Selecting a row only
 // navigates or prepares a prompt; agent work is never sent automatically.
@@ -1029,9 +1060,9 @@ async function agentOpenCloudRun(id,titleFromList){
 document.getElementById('cloudRunsRefreshBtn').addEventListener('click',function(){void agentLoadCloudTasks(false)});
 document.getElementById('agentMonitorRefreshBtn').addEventListener('click',function(){void agentLoadMonitor(false)});
 document.getElementById('agentMonitorOpenSessionBtn').addEventListener('click',function(){var id=this.dataset.sessionId;if(!id||!agentToken||agentBusy)return;navigate('agent');void agentOpenSession(id)});
-document.getElementById('agentMonitorReviewRunBtn').addEventListener('click',async function(){var id=this.dataset.runId,title=this.dataset.runTitle;if(!id||!agentToken)return;navigate('agent');var workspaceGrid=document.getElementById('agentWorkspaceGrid'),utilityToggle=document.getElementById('agentTerminalToggle');if(workspaceGrid&&workspaceGrid.dataset.terminalVisible==='false'&&utilityToggle)utilityToggle.click();if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('runs');await agentOpenCloudRun(id,title);var diffButton=document.getElementById('cloudRunDiffBtn');if(diffButton.dataset.cloudRunId===id&&!diffButton.hidden)diffButton.click();var detail=document.getElementById('cloudRunDetail');if(detail&&!detail.hidden)detail.scrollIntoView({behavior:'smooth',block:'start'})});
+document.getElementById('agentMonitorReviewRunBtn').addEventListener('click',async function(){var id=this.dataset.runId,title=this.dataset.runTitle;if(!id||!agentToken)return;navigate('agent');var workspaceGrid=document.getElementById('agentWorkspaceGrid'),utilityToggle=document.getElementById('agentTerminalToggle');if(workspaceGrid&&workspaceGrid.dataset.terminalVisible==='false'&&utilityToggle)utilityToggle.click();if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('changes');await agentOpenCloudRun(id,title);var diffButton=document.getElementById('cloudRunDiffBtn');if(diffButton.dataset.cloudRunId===id&&!diffButton.hidden)diffButton.click();var detail=document.getElementById('cloudRunDetail');if(detail&&!detail.hidden)detail.scrollIntoView({behavior:'smooth',block:'start'})});
 window.setInterval(function(){if(currentView==='monitor'&&agentToken)void agentLoadMonitor(true)},5000);
-document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button)void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)});
+document.getElementById('cloudRunsList').addEventListener('click',function(event){var button=event.target.closest('[data-cloud-run-id]');if(button){if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('changes');void agentOpenCloudRun(button.dataset.cloudRunId,button.dataset.cloudRunTitle)}});
 document.getElementById('cloudRunDiffBtn').addEventListener('click',async function(){
   var id=this.dataset.cloudRunId;if(!id)return;
   var heading=document.getElementById('cloudRunDiffTitle'),body=document.getElementById('cloudRunDiffText'),wrap=document.getElementById('cloudRunDiffDetail'),mergeButton=document.getElementById('cloudRunMergeBtn');
@@ -1071,6 +1102,7 @@ document.getElementById('cloudRunMergeBtn').addEventListener('click',async funct
 });
 document.getElementById('cloudRunDiffClose').addEventListener('click',function(){document.getElementById('cloudRunDiffDetail').hidden=true});
 document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true});
+document.getElementById('cloudRunTasksBackBtn').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true;if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('tasks')});
 
 function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
 function agentAppendMessage(role,text,jobId){var empty=document.getElementById('agentEmptyState');if(empty)empty.remove();var el=document.createElement('div');el.className='agent-message '+role;el.textContent=text||'';if(jobId)el.dataset.jobId=jobId;document.getElementById('agentMessages').appendChild(el);agentScroll();return el}
@@ -1169,34 +1201,42 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){
   });
 })();
 (function setupAgentUtilityTabs(){
-  var terminalTab=document.getElementById('agentTerminalUtilityTab');
-  var runsTab=document.getElementById('agentRunsUtilityTab');
-  var terminalPanel=document.getElementById('agentTerminalUtilityPanel');
-  var runsPanel=document.getElementById('agentRunsUtilityPanel');
-  if(!terminalTab||!runsTab||!terminalPanel||!runsPanel)return;
+  var tabs=[
+    {name:'terminal',button:document.getElementById('agentTerminalUtilityTab'),panel:document.getElementById('agentTerminalUtilityPanel')},
+    {name:'changes',button:document.getElementById('agentChangesUtilityTab'),panel:document.getElementById('agentChangesUtilityPanel')},
+    {name:'tasks',button:document.getElementById('agentTasksUtilityTab'),panel:document.getElementById('agentTasksUtilityPanel')}
+  ].filter(function(item){return item.button&&item.panel});
+  if(tabs.length!==3)return;
+  var selected='terminal';
+  function updateTopbar(){
+    document.querySelectorAll('[data-topbar-panel]').forEach(function(button){
+      button.setAttribute('aria-pressed',String(button.getAttribute('data-topbar-panel')===selected));
+    });
+  }
   function setUtility(name){
-    var selected=name==='runs'?'runs':'terminal';
-    terminalTab.setAttribute('aria-selected',String(selected==='terminal'));
-    runsTab.setAttribute('aria-selected',String(selected==='runs'));
-    terminalTab.tabIndex=selected==='terminal'?0:-1;
-    runsTab.tabIndex=selected==='runs'?0:-1;
-    terminalPanel.hidden=selected!=='terminal';
-    runsPanel.hidden=selected!=='runs';
+    selected=['terminal','changes','tasks'].includes(name)?name:'terminal';
+    tabs.forEach(function(item){
+      var active=item.name===selected;
+      item.button.setAttribute('aria-selected',String(active));
+      item.button.tabIndex=active?0:-1;
+      item.panel.hidden=!active;
+    });
+    updateTopbar();
     try{localStorage.setItem('oasis.agent.utilityPanel',selected)}catch{}
   }
-  terminalTab.addEventListener('click',function(){setUtility('terminal')});
-  runsTab.addEventListener('click',function(){setUtility('runs')});
-  [terminalTab,runsTab].forEach(function(tab){
-    tab.addEventListener('keydown',function(event){
+  tabs.forEach(function(item,index){
+    item.button.addEventListener('click',function(){setUtility(item.name)});
+    item.button.addEventListener('keydown',function(event){
       if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight'&&event.key!=='Home'&&event.key!=='End')return;
       event.preventDefault();
-      var target=event.key==='Home'?terminalTab:event.key==='End'?runsTab:
-        event.key==='ArrowRight'?(tab===terminalTab?runsTab:terminalTab):(tab===runsTab?terminalTab:runsTab);
-      setUtility(target===runsTab?'runs':'terminal');
-      target.focus();
+      var next=event.key==='Home'?0:event.key==='End'?tabs.length-1:
+        (index+(event.key==='ArrowRight'?1:tabs.length-1))%tabs.length;
+      setUtility(tabs[next].name);
+      tabs[next].button.focus();
     });
   });
   window.oasisAgentSetUtilityPanel=setUtility;
+  window.oasisAgentGetUtilityPanel=function(){return selected};
   var saved='terminal';
   try{saved=localStorage.getItem('oasis.agent.utilityPanel')||'terminal'}catch{}
   setUtility(saved);
@@ -1225,6 +1265,7 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){
     if(!visible)setPanel('chat');
     if(visible&&window.matchMedia('(max-width: 780px)').matches)setPanel('terminal');
   }
+  window.oasisAgentSetUtilityVisible=setVisible;
   function setSplit(value){
     var split=Math.max(35,Math.min(72,Number(value)||56));
     grid.style.setProperty('--agent-chat-split',split+'%');
