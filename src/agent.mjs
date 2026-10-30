@@ -660,7 +660,7 @@ export async function rebuildSession(session, createOptions = {}, what = 'plugin
   const snapshot = { id: session.sessionId || null, name: session.sessionName || null, messages: session.messages, todos: session.todos, sharedTasks: session.sharedTasks };
   const running = session.background ? [...session.background.values()].filter((entry) => entry.status === 'running').length : 0;
   const config = session.config;
-  closeSession(session);
+  await closeSession(session);
   const next = await createSession({ ...createOptions, root, config, restore: snapshot });
   if (snapshot.name) next.sessionName = snapshot.name;
   const after = { skills: await countSkills(), plugins: (next.settings && next.settings.plugins || []).length };
@@ -674,24 +674,31 @@ export async function rebuildSession(session, createOptions = {}, what = 'plugin
 }
 
 export function closeSession(session) {
-  if (session) session.closing = true;
-  if (session && session.activeSessionId) {
-    import('./session-messaging.mjs').then(({ unregisterActiveSession }) => unregisterActiveSession(session).catch(() => {})).catch(() => {});
-  }
-  try { stopCron(session); } catch {}
-  if (session && session.fileWatchers) { try { session.fileWatchers.stop(); } catch {} session.fileWatchers = null; }
-  if (session && session.background) killAllBackground(session.background);
-  if (session && session.ptyManager) { try { session.ptyManager.closeAll(); } catch {} }
-  if (session && session.browserState) closeBrowser(session).catch(() => {});
-  if (session && session.lspClients) stopLspClients(session).catch(() => {});
-  if (session && session.agentTasks) stopAllAgents(session);
-  if (session && session.teammatePanes) closeTeammatePanes(session);
-  if (session && session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
-    runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, hookOptions(session)).catch(() => {});
-  }
-  if (session) session.closed = true;
-  if (session && session.mcpClients) closeMcpClients(session.mcpClients);
-  if (session && session.mcpClients) session.mcpClients.clear();
+  if (!session) return Promise.resolve();
+  if (session.closePromise) return session.closePromise;
+  session.closing = true;
+  session.closePromise = (async () => {
+    if (session.activeSessionId) {
+      import('./session-messaging.mjs').then(({ unregisterActiveSession }) => unregisterActiveSession(session).catch(() => {})).catch(() => {});
+    }
+    try { stopCron(session); } catch {}
+    if (session.fileWatchers) { try { session.fileWatchers.stop(); } catch {} session.fileWatchers = null; }
+    if (session.background) killAllBackground(session.background);
+    if (session.ptyManager) { try { session.ptyManager.closeAll(); } catch {} }
+    const cleanup = [];
+    if (session.browserState) cleanup.push(Promise.resolve().then(() => closeBrowser(session)));
+    if (session.lspClients) cleanup.push(Promise.resolve().then(() => stopLspClients(session)));
+    if (session.agentTasks) cleanup.push(Promise.resolve().then(() => stopAllAgents(session)));
+    if (session.teammatePanes) closeTeammatePanes(session);
+    if (session.hooks && hasHooks(session.hooks, 'SessionEnd')) {
+      cleanup.push(runHooks('SessionEnd', { session_id: session.sessionId || 'unsaved', reason: 'exit' }, hookOptions(session)));
+    }
+    session.closed = true;
+    if (session.mcpClients) closeMcpClients(session.mcpClients);
+    if (session.mcpClients) session.mcpClients.clear();
+    await Promise.allSettled(cleanup);
+  })();
+  return session.closePromise;
 }
 
 function openAIEndpoint(baseURL) {
