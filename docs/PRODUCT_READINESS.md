@@ -1,6 +1,6 @@
 # OASIS product readiness and engineering priorities
 
-**Audit date:** October 29, 2026  
+**Audit date:** October 30, 2026  
 **Purpose:** Maintain a truthful, product-owned plan for reliability, capability depth, safety and release quality.
 
 OASIS is an independent open-source coding agent and local-first developer workspace. Its identity, roadmap, implementation and UX should stand on their own. Interoperability with documented protocols and configuration formats is an integration feature—not the product's identity. Keep adapters isolated, do not vendor proprietary implementation code, and do not infer complete behavior parity from a recognized file format or protocol.
@@ -10,6 +10,12 @@ OASIS is an independent open-source coding agent and local-first developer works
 The project has a multi-step agent/tool loop; scoped workspace file operations; approvals; snapshots and rewind; Git and test tools; saved sessions; multiple hosted and local provider routes; MCP; skills and hooks; plugin adapters; subagents; a session-local task board; bounded worktree dispatch; persisted browser task history; opt-in isolated browser coding runs with a separate Git branch and reviewable diffs; a local authenticated browser workspace; a VS Code-family extension; a GitHub Action; and desktop packaging.
 
 The latest completed Quality Checks and homepage/repository validation before the current hardening sequence passed on commit `e0591d6` ([Quality run 40828639606](https://github.com/FAHTHIZ/oasis/actions/runs/40828639606), [publishing run 40828639602](https://github.com/FAHTHIZ/oasis/actions/runs/40828639602)). The desktop build for that SHA was cancelled when later fixes were pushed. Follow-on changes include shared IPv4/IPv6/NAT64 checks, Keychain secret transport, cloud credential-context isolation, command-risk hardening, and optional sandbox credential masking. Do not treat the current `main` changes as fully verified until Quality Checks, publishing validation and desktop builds complete on one current SHA. These checks are regression evidence—not proof of production readiness or repository-scale coding quality. Live status: [Quality](https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml), [publishing](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), [desktop](https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml).
+
+## Current hardening status — October 30, 2026
+
+Session teardown now has an awaited lifecycle for language-server processes and background agents, and the new LSP shutdown regression is part of the quality suite. This is an implementation change, not yet a verified release gate; require a full same-SHA Quality run before relying on it.
+
+The desktop workflow now separates packaging from publication. A normal `main` push validates and builds installers but does not publish a release. Publication is restricted to an explicit `v*` tag that must match the version in `package.json`. Signing, provenance, and rollback verification remain outstanding.
 
 ## Biggest remaining gaps
 
@@ -21,7 +27,7 @@ Before release, use [the branch audit](BRANCH_AUDIT.md) to retire already-merged
 - Cover approve, deny, interrupt, cancel, resume, failed-tool recovery, dirty-worktree conflicts and browser terminal teardown in end-to-end tests.
 - Test native PTY process lifecycle on each claimed platform. Linux-only success does not establish Windows, macOS, Android or Termux readiness.
 - Verify the first-run, provider setup, editing, update and uninstall journeys on every OS advertised as supported.
-- Publish installers only with clear provenance. Current desktop build artifacts are unsigned; do not imply publisher signing or verified auto-update behavior.
+- Keep release publication tag-gated and validate the tag against the package version. Current desktop build artifacts are still unsigned and lack verified provenance; do not imply publisher signing or verified auto-update behavior.
 
 ### P1 — Benchmark real coding work
 

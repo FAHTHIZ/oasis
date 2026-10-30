@@ -1,6 +1,6 @@
 # OASIS status
 
-**Audit date:** 2026-10-29  
+**Audit date:** 2026-10-30  
 **Repository:** https://github.com/FAHTHIZ/oasis  
 **Branch audited:** main  
 **Verification rule:** use the exact `head_sha` reported by the linked Quality workflow; this status file does not pin itself to a potentially stale commit SHA.
@@ -12,6 +12,14 @@ This inventory separates code presence from verified behavior. A feature is **ve
 **None claimed in this audit.** The previously documented passing run is from an earlier revision. Current-head verification must be recorded only after fresh checks report success for the exact commit under review.
 
 This is a conservative evidence status, not a claim that the repository has no working features.
+
+## Current-main hardening — 2026-10-30
+
+The current hardening increment makes `closeSession()` return a shared cleanup promise, awaits LSP client shutdown and background-agent cancellation, and disables auto-dispatch before stopping agents. The LSP client now waits for the child process to close, and regression coverage exercises the graceful shutdown handshake. The post-edit verification test now closes its LSP-enabled session, and the background-agent fixture awaits teardown. These changes are implemented but are **not verified on the current HEAD** until the final Quality workflow completes.
+
+Desktop installers continue to build on ordinary `main` pushes, but publishing a GitHub release now requires an explicit `v*` tag equal to the package version. This prevents a routine source push from implicitly releasing a beta build. It does not add signing or provenance: desktop artifacts remain unsigned.
+
+The previous diagnostic Quality run on SHA `d6bdbc9` was cancelled at the job timeout after the TAP cases completed while Node processes remained alive. The resource watcher found a live LSP child and an agent-test HTTP server. The lifecycle changes above directly address those observed cleanup gaps. Do not count the cancelled run as a pass.
 
 ## Implemented but not yet verified on current HEAD
 

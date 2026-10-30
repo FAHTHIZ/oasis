@@ -4,6 +4,9 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Made session shutdown await language-server process exit and background-agent cancellation, paused auto-dispatch during teardown, and added LSP shutdown and cleanup regressions. Current-head verification is required before marking this behavior verified.
+- Changed desktop release publication to require an explicit `v*` tag matching `package.json`; ordinary pushes to `main` still build and validate but cannot publish a release. Desktop installers remain unsigned.
+
 ## 0.4.0 — 2026-10-30
 
 - Pinned the branch-deletion workflow's checkout and Node setup actions to exact commit SHAs, and added a regression test ensuring cleanup-policy tests must pass before the deletion step can run.
