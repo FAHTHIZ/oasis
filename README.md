@@ -31,7 +31,7 @@ This quick command runs the installer fetched from the official OASIS repository
 sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { rm -f "$f"; }; trap cleanup EXIT; trap "exit 1" HUP INT TERM; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f"; expected=8544a1f9f0f11206eba2b30adae007c9e54cc35f3b3cf9dec18459a767a9cbb7; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
 ```
 
-**Published installer SHA-256:** `1392c34fba20c771a1b20de6c927505885f91304be0d3dc90ec87b7833f77301`
+**Published installer SHA-256:** `8544a1f9f0f11206eba2b30adae007c9e54cc35f3b3cf9dec18459a767a9cbb7`
 
 </details>
 
@@ -41,7 +41,7 @@ For **Windows PowerShell**, paste this one line. It checks the downloaded script
 $p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='a38f390575b8e7a00b12a6d319985211b9bd7c341deb84235cafb1e2b0c0ab59'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
 ```
 
-**Published Windows installer SHA-256:** `4ad1589b737cde3b03da4204cfa346b26650102c5a7d4111f5179fc2cbb65843`
+**Published Windows installer SHA-256:** `a38f390575b8e7a00b12a6d319985211b9bd7c341deb84235cafb1e2b0c0ab59`
 
 If the checksum does not match, stop and do not run the downloaded script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
 
