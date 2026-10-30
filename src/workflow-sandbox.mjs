@@ -178,7 +178,7 @@ export async function runWorkflowScript({ body, args, agent, phase, log, signal,
       '  if (!values.length) throw new Error("new Date() without arguments is unavailable in workflows; pass a timestamp through args.");',
       '  return Reflect.construct(NativeDate, values, new.target);',
       ' };',
-      ' SafeDate.prototype = Object.create(null);'
+      ' SafeDate.prototype = Object.create(null);',
       ' for (const key of Reflect.ownKeys(NativeDate.prototype)) {',
       '  if (key === "constructor") continue;',
       '  const descriptor = Object.getOwnPropertyDescriptor(NativeDate.prototype, key);',
