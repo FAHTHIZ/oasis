@@ -1,5 +1,20 @@
 # OASIS current implementation status
 
+## Phase 1 visual system — October 30, 2026
+
+A first visual-system slice is implemented on branch `ux/visual-system-step-1`.
+
+- Added `assets/oasis-interface.css` as a local, separately maintained stylesheet; the existing application markup and JavaScript remain in place.
+- Kept the documented Night, Graphite, Mist, and Portal Lime identity. Primary actions now use one solid lime treatment rather than a multi-green gradient.
+- Flattened the main panels, hero, first-run wizard, extension/integration cards, and workspace surfaces; removed the decorative hero rings and large background gradients from the main workspace.
+- Kept the portal mark and existing interaction states; no runtime, approval, terminal, provider, or permission behavior was changed.
+- Added the stylesheet to the offline app-shell cache and bumped the cache version so existing installs can receive it.
+- Added integrity assertions for the stylesheet link, brand tokens, primary-action treatment, hero decoration, and offline cache inclusion.
+
+**Verification:** code-level integrity assertions are added. Full test matrix, browser E2E, screenshots, and manual phone/desktop review are pending fresh CI on this branch. This is a visual foundation pass, not a claim that the full chat-first redesign is complete.
+
+---
+
 ## Phase 0 finish-plan follow-up — October 30, 2026
 
 ## Current-main Gate A verification — October 30, 2026
