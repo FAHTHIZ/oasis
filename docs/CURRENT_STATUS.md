@@ -2,16 +2,17 @@
 
 ## Phase 1 visual system — October 30, 2026
 
-A first visual-system slice is implemented on branch `ux/visual-system-step-1`.
+The visual foundation is implemented directly on `main` and is now aligned to the app redesign brief.
 
-- Added `assets/oasis-interface.css` as a local, separately maintained stylesheet; the existing application markup and JavaScript remain in place.
-- Kept the documented Night, Graphite, Mist, and Portal Lime identity. Primary actions now use one solid lime treatment rather than a multi-green gradient.
-- Flattened the main panels, hero, first-run wizard, extension/integration cards, and workspace surfaces; removed the decorative hero rings and large background gradients from the main workspace.
-- Kept the portal mark and existing interaction states; no runtime, approval, terminal, provider, or permission behavior was changed.
-- Added the stylesheet to the offline app-shell cache and bumped the cache version so existing installs can receive it.
-- Added integrity assertions for the stylesheet link, brand tokens, primary-action treatment, hero decoration, and offline cache inclusion.
+- Kept `assets/oasis-interface.css` as a local, separately maintained stylesheet and kept it in the offline app-shell cache.
+- Set the workspace canvas, sidebar, panels, borders, text and muted text to the exact values in the redesign brief: `#0B100C`, `#0D130E`, `#101811`, `#1C271F`, `#2B3B30`, `#E8EFE9`, and `#9BAA9F`.
+- Reserved action lime `#9BFF55` for Send, New chat and approval actions. Generic primary buttons and selected navigation states remain neutral.
+- Added Inter and JetBrains Mono font stacks, 14px conversation text, quieter 12.5px activity text, and 44px phone touch targets for send and approval controls.
+- Added token-level WCAG contrast calculations to `scripts/check-site.mjs` for primary, muted, risk and lime-action text. The required combinations are checked against the 4.5:1 threshold.
+- Preserved the OASIS portal mark artwork and made no runtime, provider, approval-policy, terminal or permission changes.
 
-**Verification:** code-level integrity assertions are added. Full test matrix, browser E2E, screenshots, and manual phone/desktop review are pending fresh CI on this branch. This is a visual foundation pass, not a claim that the full chat-first redesign is complete.
+**Verification boundary:** the source-level contrast checks are implemented. The full quality matrix, browser E2E, Playwright screenshots at 1280px and 390px, and manual phone/desktop review still need fresh results on this revision. A full axe scan has not been run; no axe dependency was added.
+
 
 ---
 
