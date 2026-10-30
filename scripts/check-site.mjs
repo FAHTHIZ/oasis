@@ -23,7 +23,7 @@ const required = [
   'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
   'id="githubRepoSelect"', 'id="githubCloneBtn"', 'id="githubCheckBtn"', '/api/github/clone',
   'id="exportBtn"', 'id="importFile"', 'localStorage', 'id="providerSetupForm"', 'id="providerProtocol"', 'id="providerBaseUrl"', 'id="providerModel"', 'id="providerApiKey"',
-  'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"',
+  'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"', 'aria-pressed="false"',
   'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
   'id="agentTerminalUtilityTab"', 'id="agentRunsUtilityTab"', 'id="agentTerminalUtilityPanel"',
@@ -87,6 +87,10 @@ assert.match(interfaceCss, /grid-template-areas:\s*"prompt"\s*"context"\s*"actio
 assert.ok(interfaceCss.includes('grid-template-columns:minmax(0,var(--agent-chat-split)) 10px minmax(300px,1fr)'), 'Desktop workspace must preserve a resizable chat/terminal split.');
 assert.ok(interfaceCss.includes('@media(max-width:780px)'), 'Phone workspace tabs must have a dedicated responsive layout.');
 assert.ok(interfaceCss.includes('@media(max-width:390px)'), 'The narrow 390px phone layout must be covered.');
+assert.ok(html.includes("option.setAttribute('aria-pressed',String(option===button))"), 'First-run route selection must update its accessible pressed state.');
+assert.ok(interfaceCss.includes('.first-run-choice[aria-pressed="true"]'), 'Selected first-run route must be visually apparent.');
+assert.ok(interfaceCss.includes('.first-run-status[data-error="true"]'), 'Local-model discovery errors must have an explicit status treatment.');
+
 assert.ok(interfaceCss.includes('/* Utility rail: keep terminal and coding-run diffs next to the conversation. */'), 'Terminal and recent coding runs must share a utility rail.');
 assert.ok(interfaceCss.includes('.agent-utility-tab[aria-selected="true"]'), 'Utility tabs must expose a selected state.');
 assert.ok(html.includes("event.key!=='ArrowLeft'&&event.key!=='ArrowRight'"), 'Utility tabs must support left/right keyboard navigation.');
