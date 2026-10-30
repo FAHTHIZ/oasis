@@ -161,10 +161,24 @@ test('background process history evicts only the oldest completed entries', asyn
   const runningEntry = { id: 'keep-running', status: 'running', command: 'ongoing task', startedAt: new Date().toISOString() };
   registry.set(runningEntry.id, runningEntry);
 
+  let resolveExit;
+  let exitTimer;
+  const exited = new Promise((resolve, reject) => {
+    resolveExit = resolve;
+    exitTimer = setTimeout(() => reject(new Error('Background process did not emit its completion callback.')), 5000);
+  });
   const started = startBackgroundProcess(registry, {
     command: process.execPath,
     args: ['-e', "process.stdout.write('new output')"]
-  }, { cwd: dir, env: process.env, display: 'new task' });
+  }, {
+    cwd: dir,
+    env: process.env,
+    display: 'new task',
+    onExit: (finished) => {
+      clearTimeout(exitTimer);
+      resolveExit(finished);
+    }
+  });
   const entry = registry.get(started.id);
   assert.ok(entry);
   t.after(() => { if (entry.status === 'running') killBackgroundEntry(entry); });
@@ -174,10 +188,7 @@ test('background process history evicts only the oldest completed entries', asyn
   assert.equal(registry.has('keep-running'), true, 'running jobs must never be evicted');
   assert.equal(registry.size, historyLimit + 1, 'the bounded history plus running entries should remain');
 
-  await new Promise((resolve, reject) => {
-    entry.child.once('close', resolve);
-    entry.child.once('error', reject);
-  });
+  await exited;
   assert.equal(entry.status, 'exited');
   assert.equal(entry.output, 'new output');
 });
