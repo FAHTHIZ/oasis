@@ -8,35 +8,25 @@ This is the phone-first path for people using Android. The Electron desktop app 
 2. Choose the F-Droid or GitHub release route listed there. Use one source consistently; do not mix Termux and add-ons from different signing sources.
 3. Open **Termux**. Tap the terminal area to type or paste commands.
 
-## 2. Prepare Android
+## 2. Install OASIS with one command
 
-Run the commands below one at a time. Tap the terminal, paste a command, then press **Enter**.
-
-```sh
-pkg update
-```
-
-Read the package list before accepting. Then install Node.js:
+Paste this single command into Termux and press **Enter**:
 
 ```sh
-pkg install nodejs
-node --version
-npm --version
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh | sh
 ```
 
-OASIS requires Node.js 22 or newer. If the version is below 22, update Termux's Node.js package and check again before continuing. Git is optional for this archive-based installation.
+The installer checks for Node.js 22 or newer. If it is missing, it offers to install Node.js with Termux's package manager. It then downloads the latest stable OASIS release, installs it in your user folder, checks the environment, and starts guided provider setup. You do not need to clone the repository, install Git, or type separate npm commands.
 
-## 3. Install OASIS
+The easy command runs the installer from the official repository over HTTPS. For an additional SHA-256 check, use the verified command in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux).
 
-The one-line command in the README downloads `scripts/install.sh` from the official repository, checks the SHA-256 against the published README value, and only then runs it. If the checksum does not match, **stop**; do not run the script.
+During provider setup, choose the free OmniRoute gateway to let OASIS offer to install the gateway through npm, start it locally, and verify the model connection. Read each approval prompt; npm packages may run third-party install scripts. A free gateway may be limited or unavailable, and OASIS does not include an AI model or subscription. You can instead choose a provider for which you already have an API key.
 
-The installer resolves the latest stable GitHub release and its exact commit SHA, then downloads that immutable source archive rather than moving `main`. It asks before installing OASIS into your home directory (`~/.local`) or changing your shell's startup file, runs `oasis doctor`, and opens `oasis setup`. If GitHub cannot provide a valid stable release and commit, it stops without installing anything.
+Keep Termux open until installation and provider verification finish. If the installer says it added the OASIS command folder to your shell startup file, open a new Termux session before using `oasis`.
 
-A hosted provider may receive the prompts and code you choose to send to it. OASIS does not include a model or an API subscription. Never share API keys in public issues, screenshots, or chat.
+## 3. Start OASIS
 
-## 4. Start and check
-
-Open a new Termux session after setup, then run:
+In a new Termux session, check the installation and start OASIS:
 
 ```sh
 oasis --version
