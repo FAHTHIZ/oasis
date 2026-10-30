@@ -91,10 +91,6 @@ if (-not $ReleaseCommit) {
 
         $ReleaseTag = Resolve-OasisReleaseTagFromResponse -Response $releasePage
         $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
-        if (-not $tagMatch.Success) {
-            throw 'The public release redirect and page did not contain a stable version tag.'
-        }
-        $ReleaseTag = $tagMatch.Groups[1].Value
         if ($commitMatch.Success) {
             $ReleaseCommit = $commitMatch.Groups[1].Value.ToLowerInvariant()
         } else {
