@@ -4,6 +4,8 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-30
+
 - Pinned the branch-deletion workflow's checkout and Node setup actions to exact commit SHAs, and added a regression test ensuring cleanup-policy tests must pass before the deletion step can run.
 
 
