@@ -11,11 +11,13 @@ const read = (file) => readFile(path.join(ROOT, file), 'utf8');
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 test('published installer checksums match the exact checked-in scripts', async () => {
-  const [readme, shell, powershell] = await Promise.all([read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1')]);
+  const [readme, shell, powershell, powershellHelper] = await Promise.all([read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1'), read('scripts/release-resolution.ps1')]);
   assert.equal(readme.match(/expected=([a-f0-9]{64})/)?.[1], sha256(shell));
   assert.equal(readme.match(/\$expected='([a-f0-9]{64})'/)?.[1], sha256(powershell));
+  assert.equal(readme.match(/\$helperExpected='([a-f0-9]{64})'/)?.[1], sha256(powershellHelper));
   assert.equal(readme.match(/\*\*Published installer SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(shell));
   assert.equal(readme.match(/\*\*Published Windows installer SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(powershell));
+  assert.equal(readme.match(/\*\*Published Windows resolver helper SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(powershellHelper));
   assert.match(readme, /mktemp.*oasis-install/);
   assert.match(readme, /NewGuid\(\)\.ToString\('N'\)/);
 });
@@ -89,7 +91,7 @@ test('Windows installer has the same public-page and Atom-feed fallbacks for API
   assert.match(powershell, /commits\/\$encodedTag\.atom/i);
   assert.ok(powershell.includes("releases/latest"));
   const helper = await read('scripts/release-resolution.ps1');
-  assert.match(powershell, /release-resolution\\.ps1/);
+  assert.match(powershell, /release-resolution[.]ps1/);
   assert.ok(helper.includes('RequestMessage.RequestUri'), 'Windows fallback must use the final redirected release URL in PowerShell 7.');
   assert.ok(helper.includes('ResponseUri'), 'Windows fallback must support the redirected URL shape in Windows PowerShell.');
   assert.ok(helper.includes('FAHTHIZ/oasis/releases/tag/(v[0-9]+'), 'Windows fallback must accept relative GitHub release links.');
