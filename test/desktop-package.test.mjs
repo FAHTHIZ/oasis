@@ -7,7 +7,7 @@ const desktopMain = await readFile(new URL('../desktop/main.mjs', import.meta.ur
 const installGuide = await readFile(new URL('../docs/INSTALL.md', import.meta.url), 'utf8');
 
 test('desktop packaging defines one-click Windows installer and macOS/Linux packages', () => {
-  assert.equal(packageJson.version, '0.3.0');
+  assert.match(packageJson.version, /^\d+\.\d+\.\d+$/, 'desktop version must be a stable semantic version');
   assert.equal(packageJson.build.extraMetadata.main, 'desktop/main.mjs');
   assert.equal(packageJson.build.nsis.oneClick, true);
   assert.equal(packageJson.build.nsis.perMachine, false);
