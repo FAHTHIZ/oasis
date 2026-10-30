@@ -51,7 +51,7 @@ OASIS is an open-source, local-first AI coding agent. It helps inspect a codebas
 
 ## License
 
-OASIS is released under the **Apache-2.0 license**. Read the full terms in [`LICENSE`](LICENSE).
+OASIS is released under the **Apache-2.0 license**. Apache License 2.0 — see [LICENSE](LICENSE).
 
 ## Why OASIS
 
