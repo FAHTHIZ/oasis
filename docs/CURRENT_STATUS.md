@@ -1,5 +1,19 @@
 # OASIS current implementation status
 
+## Phase 0 finish-plan follow-up — October 30, 2026
+
+The first Phase 0 implementation slice has been applied directly to `main`.
+
+- The repository README now labels the project Alpha until the Beta confidence gate is satisfied.
+- The Agent view no longer contains the stray literal escaped newline.
+- The site-integrity test checks the Agent markup and verifies that the sidebar references a populated `assets/oasis-mark.svg`. The SVG already existed and was not replaced.
+- Credential-redaction output has a regression test for stable placeholders. No production redaction change was needed because the inspected implementation already produced the expected output.
+- Unattended GitHub Action runs set `OASIS_DISABLE_LSP=1`, receive an explicit instruction not to launch LSP processes, and use project test/lint/build/type-check commands as the verification path. Regression tests cover the LSP policy and Action option wiring.
+
+**Verification boundary:** direct-main commits trigger GitHub Actions validation. The full Node 22/24/26 integrity matrix, clean-environment suite, Linux PTY integration, cross-platform security checks, and repository publishing validation must pass on the latest main commit before Gate A is closed. Earlier partial results from superseded branches are not treated as proof for current main. Gate A remains open.
+---
+
+
 ## Latest verified main snapshot
 
 **Audit date:** October 29, 2026  
