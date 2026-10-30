@@ -213,6 +213,8 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.equal(home.status, 200);
   const homeHtml = await home.text();
   assert.match(homeHtml, /id="view-agent"/);
+  assert.equal(homeHtml.includes('id="view-agent">\\n'), false, 'the Agent view must not render a visible newline escape');
+  assert.ok(homeHtml.includes('<img src="/assets/oasis-mark.svg"'), 'the sidebar mark must use a root-relative asset path');
   assert.match(homeHtml, /id="view-monitor"/, 'the authenticated workspace includes the run monitor view');
   assert.match(homeHtml, /id="agentMonitorRefreshBtn"/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');

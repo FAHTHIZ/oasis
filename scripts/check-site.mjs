@@ -14,7 +14,7 @@ const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
   'id="view-tasks"', 'id="view-notes"', 'id="projectDialog"', 'id="taskDialog"', 'id="manageProjectDialog"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
-  'id="view-agent"', 'runtime-scope-note', 'src="./assets/oasis-mark.svg"', 'Local only by default:', 'It is not open to the public internet by default.', 'Remote access requires explicit server options', 'never share your runtime connection token.', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'aria-live="assertive"', 'aria-labelledby="agentApprovalTitle"', 'OASIS needs your permission', '>Deny</button>', '>Allow once</button>', 'Always allow for this session', 'for this session', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
+  'id="view-agent"', 'runtime-scope-note', 'src="/assets/oasis-mark.svg"', 'Local only by default:', 'It is not open to the public internet by default.', 'Remote access requires explicit server options', 'never share your runtime connection token.', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'aria-live="assertive"', 'aria-labelledby="agentApprovalTitle"', 'OASIS needs your permission', '>Deny</button>', '>Allow once</button>', 'Always allow for this session', 'for this session', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
   'id="view-monitor"', 'id="agentMonitorRefreshBtn"', 'id="agentMonitorOpenSessionBtn"', 'id="agentMonitorReviewRunBtn"', 'id="agentMonitorStats"', 'id="agentMonitorRunList"', 'id="agentMonitorWorkers"', 'id="agentMonitorEvents"', 'function agentLoadMonitor(', "agentApi('/api/agent-monitor')", 'agentOpenCloudRun(id,title)', 'canReviewIsolatedDiff',
   'id="view-extensions"', 'id="extensionInspectForm"', 'id="extensionScope"', 'id="extensionCandidateList"', 'id="extensionCompatibility"', 'Detected format:', 'id="installedExtensions"',
   'id="view-integrations"', 'data-integration-tab="connectors"', 'Specialist reviews', 'id="mcpAddForm"', '/api/extensions/inspect', '/api/extensions/install', '/api/mcp',
@@ -76,7 +76,7 @@ assert.equal(manifest.display, 'standalone');
 assert.ok(Array.isArray(manifest.icons) && manifest.icons.some((item) => item.src === './assets/oasis-icon.svg'));
 assert.ok(icon.includes('<svg') && icon.includes('</svg>'), 'PWA icon must be a valid SVG document.');
 assert.ok(sidebarMark.startsWith('<svg') && sidebarMark.includes('<path d='), 'Sidebar brand mark must be a populated SVG document.');
-assert.ok(html.includes('src="./assets/oasis-mark.svg"'), 'Sidebar must reference the OASIS portal mark.');
+assert.ok(html.includes('src="/assets/oasis-mark.svg"'), 'Sidebar must reference the OASIS portal mark.');
 assert.ok(!html.includes('id="view-agent">\\n<div'), 'Agent view must not contain a literal escaped newline before its runtime note.');
 assert.ok(serviceWorker.includes("self.addEventListener('install'"));
 assert.ok(serviceWorker.includes("self.addEventListener('fetch'"));
