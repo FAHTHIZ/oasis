@@ -1,5 +1,17 @@
 # OASIS current implementation status
 
+## Phase 3 first-run model onboarding — October 30, 2026
+
+- Added clear selected-route feedback and accessible pressed states to the API key, OmniRoute gateway and local Ollama choices.
+- The API route directs the user to provider selection and the masked API-key field; the gateway route explains that OmniRoute must already be running and points to `oasis setup`; the local route calls the existing Ollama discovery endpoint and reports found models or an unavailable/no-model state.
+- Updated the first-run choice cards and status treatment to match the flat workspace palette, including a distinct selected state and visible discovery-error styling.
+- Browser E2E now selects all three routes, verifies their provider presets and status messages, and captures desktop route states plus the selected local route at 390px.
+- The flow still tests a provider before saving configuration; no API key is saved merely by selecting a route.
+
+**Verification boundary:** route interaction and screenshot coverage are source-complete. Same-revision Quality Checks and browser/axe artifacts remain pending; no live Ollama device was available for manual hardware validation.
+
+---
+
 ## Phase 2 chat-first Agent workspace — October 30, 2026
 
 The browser Agent view has been reshaped around the conversation while preserving its existing runtime and permission flows.
