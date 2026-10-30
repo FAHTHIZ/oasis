@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+<title id="title">OASIS OSS — Code. Automate. Flourish.</title>
+<desc id="desc">The OASIS portal mark and wordmark in luminous green and soft white on a dark graphite background, with a subtle reflective grid.</desc>
+<defs>
+  <linearGradient id="night" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#050907"/><stop offset=".52" stop-color="#0B0F0C"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
+  <radialGradient id="halo"><stop offset="0" stop-color="#32E07A" stop-opacity=".22"/><stop offset=".55" stop-color="#32E07A" stop-opacity=".07"/><stop offset="1" stop-color="#0B0F0C" stop-opacity="0"/></radialGradient>
+  <linearGradient id="portal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CFF5E"/><stop offset=".52" stop-color="#32E07A"/><stop offset="1" stop-color="#0ED168"/></linearGradient>
+  <linearGradient id="strata" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7CFF5E"/><stop offset="1" stop-color="#0ED168"/></linearGradient>
+  <linearGradient id="word" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#F4FBF5"/><stop offset="1" stop-color="#C8D8CD"/></linearGradient>
+  <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#7CFF5E" stroke-opacity=".075" stroke-width="1"/></pattern>
+</defs>
+<rect width="1200" height="520" rx="24" fill="url(#night)"/>
+<ellipse cx="270" cy="240" rx="350" ry="320" fill="url(#halo)"/>
+<ellipse cx="850" cy="255" rx="440" ry="290" fill="url(#halo)"/>
+<circle cx="270" cy="235" r="202" fill="none" stroke="#32E07A" stroke-opacity=".07" stroke-width="2"/>
+<circle cx="270" cy="235" r="174" fill="none" stroke="#32E07A" stroke-opacity=".045" stroke-width="2"/>
+<rect y="355" width="1200" height="165" fill="url(#grid)"/>
+<path d="M0 394H1200M0 438H1200M0 486H1200" stroke="#32E07A" stroke-opacity=".1"/>
+<g transform="translate(112 82) scale(1.06)">
+  <path d="M18 151C18 76 76 13 150 13C224 13 282 76 282 151H224C224 101 194 63 150 63C106 63 76 101 76 151Z" fill="url(#portal)"/>
+  <path d="M76 150C76 99 107 61 150 61C193 61 224 99 224 150" fill="none" stroke="#32E07A" stroke-width="4.5" stroke-linecap="round"/>
+  <g fill="url(#strata)">
+    <path d="M18 151H98V160H18ZM202 151H282V160H202Z"/>
+    <path d="M21 168H92V176H21ZM208 168H279V176H208Z"/>
+    <path d="M27 185H99V193H27ZM201 185H273V193H201Z"/>
+    <path d="M36 202H113V210H36ZM187 202H264V210H187Z"/>
+    <path d="M46 219H124V227H46ZM176 219H254V227H176Z"/>
+    <path d="M58 236H132V244H58ZM168 236H242V244H168Z"/>
+    <path d="M73 253H133V260H73ZM167 253H227V260H167Z"/>
+    <path d="M91 269H132V275H91ZM168 269H209V275H168Z"/>
+  </g>
+</g>
+<text x="466" y="226" font-family="Space Grotesk,Inter,DejaVu Sans,Arial,sans-serif" font-size="110" font-weight="450" letter-spacing="18" fill="url(#word)">OASIS</text>
+<path d="M470 273H631M806 273H1088" stroke="#32E07A" stroke-width="2" opacity=".78"/>
+<text x="718" y="284" text-anchor="middle" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="28" font-weight="650" letter-spacing="12" fill="#7CFF5E">OSS</text>
+<text x="470" y="353" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="650" letter-spacing="4.3" fill="#E6F5EA">CODE. AUTOMATE. <tspan fill="#7CFF5E">FLOURISH.</tspan></text>
+<text x="473" y="397" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="18" fill="#AEBEB2">An open-source coding agent and local-first developer workspace.</text>
+<rect x="17" y="17" width="1166" height="486" rx="20" fill="none" stroke="#7CFF5E" stroke-opacity=".15" stroke-width="2"/>
+</svg>
