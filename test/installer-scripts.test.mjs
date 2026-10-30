@@ -20,6 +20,8 @@ test('published installer checksums match the exact checked-in scripts', async (
   assert.equal(readme.match(/\*\*Published Windows resolver helper SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(powershellHelper));
   assert.match(readme, /mktemp.*oasis-install/);
   assert.match(readme, /NewGuid\(\)\.ToString\('N'\)/);
+  assert.ok(readme.includes('scripts/release-resolution.ps1'), 'Windows quick install must download the companion resolver helper.');
+  assert.ok(readme.includes('$helperExpected='), 'Windows quick install must verify the companion helper checksum before running.');
 });
 
 test('installers resolve the latest stable release to an immutable commit SHA', async () => {
