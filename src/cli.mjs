@@ -608,7 +608,16 @@ async function updateOasis(args = []) {
   const { latestMainCommit, installedVersion, updatePlan, describeUpdate } = await import('./update.mjs');
   const checkOnly = args.includes('--check');
   const yes = args.includes('--yes') || args.includes('-y');
-  const [installed, latest] = await Promise.all([installedVersion(APP_ROOT), latestMainCommit()]);
+  const nodeModules = path.dirname(APP_ROOT);
+  let npmPrefix = null;
+  if (path.basename(nodeModules) === 'node_modules') {
+    const parent = path.dirname(nodeModules);
+    npmPrefix = path.basename(parent) === 'lib' ? path.dirname(parent) : parent;
+  }
+  const [installed, latest] = await Promise.all([
+    installedVersion(APP_ROOT, { npmPrefix }),
+    latestMainCommit()
+  ]);
   const plan = updatePlan(installed, latest);
   stdout.write(describeUpdate(installed, latest, plan) + '\n');
   if (plan.upToDate || plan.blocked || checkOnly) { if (plan.blocked) process.exitCode = 1; return; }
