@@ -1978,9 +1978,10 @@ export function verificationIssues(state) {
     if (!changed.includes(file)) continue;
     if (result.status === 'unavailable') {
       // LSP is optional editor integration, not a substitute for a real code check.
-      // When a recognized check passed after review, absence remains visible but is
-      // not independently blocking.
-      if (state.lastVerificationExitCode !== 0) {
+      // A result explicitly marked non-blocking (for example, disabled by the
+      // unattended Action policy) remains visible but does not block completion.
+      // Source edits still require a recognized project check to pass above.
+      if (result.blocking !== false && state.lastVerificationExitCode !== 0) {
         issues.push('LSP verification unavailable for ' + file + ': ' + String(result.reason || 'no diagnostic result'));
       }
     } else if (Array.isArray(result.newErrors) && result.newErrors.length) {
