@@ -353,6 +353,9 @@ async function runShell(root, args, context, flavor = 'sh') {
   if (command.length > 8000 || command.includes('\0')) throw new Error('Shell command is too long or invalid.');
   const blocked = shellCommandBlocked(command);
   if (blocked) throw new Error(blocked);
+  if (context.signal && context.signal.aborted) {
+    return { approved: false, command, cancelled: true, message: 'Task was cancelled before shell approval or execution.' };
+  }
   const requestedSandbox = context.sandbox && context.sandbox.enabled ? context.sandbox : null;
   assertSandboxAvailable(requestedSandbox);
   const sandbox = requestedSandbox;
@@ -360,6 +363,9 @@ async function runShell(root, args, context, flavor = 'sh') {
   if (!autoAllowed) {
     const ok = context.approval && await context.approval('Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox);
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };
+  }
+  if (context.signal && context.signal.aborted) {
+    return { approved: false, command, cancelled: true, message: 'Task was cancelled before the shell command started.' };
   }
   let shell;
   if (flavor === 'powershell') {
@@ -379,19 +385,41 @@ async function runShell(root, args, context, flavor = 'sh') {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let cancelled = false;
+    let settled = false;
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
-    const kill = () => { signalProcessTree(child, 'SIGKILL'); };
-    const timer = setTimeout(() => { timedOut = true; kill(); }, timeoutSeconds * 1000);
-    const onAbort = () => kill();
-    if (context.signal) context.signal.addEventListener('abort', onAbort, { once: true });
-    child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(-MAX_OUTPUT); });
-    child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-MAX_OUTPUT); });
-    child.on('error', (error) => { clearTimeout(timer); resolve({ approved: true, command, exitCode: null, stdout, stderr, error: error.message }); });
-    child.on('close', (code, signal) => {
+    const cleanup = () => {
       clearTimeout(timer);
       if (context.signal) context.signal.removeEventListener('abort', onAbort);
-      const note = benignExitNote(command, code);
-      resolve({ approved: true, command, exitCode: code, ...(note ? { note } : {}), signal, stdout, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}) });
+    };
+    const kill = () => { signalProcessTree(child, 'SIGKILL'); };
+    const onAbort = () => {
+      if (settled) return;
+      cancelled = true;
+      kill();
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      kill();
+    }, timeoutSeconds * 1000);
+    if (context.signal) {
+      if (context.signal.aborted) onAbort();
+      else context.signal.addEventListener('abort', onAbort, { once: true });
+    }
+    child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(-MAX_OUTPUT); });
+    child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-MAX_OUTPUT); });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ approved: true, command, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled });
+    });
+    child.on('close', (code, signal) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ approved: true, command, exitCode: code, stdout, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal });
     });
   });
 }
