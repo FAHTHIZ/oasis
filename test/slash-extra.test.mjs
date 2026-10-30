@@ -8,6 +8,7 @@ import { applyEffort, thinkingBudgetFor, reasoningEffortFor } from '../src/agent
 import { clipboardCandidates, copyToClipboard } from '../src/clipboard.mjs';
 import { loadSession } from '../src/sessions.mjs';
 import { PermissionPolicy } from '../src/permissions.mjs';
+import { killBackgroundEntry } from '../src/power-tools.mjs';
 
 async function setup() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-slash-'));
@@ -194,4 +195,25 @@ test('/cd validates the target and /sandbox toggles the session sandbox', async 
   await runBuiltinCommand('sandbox', 'off', state);
   assert.equal(session.sandbox.enabled, false);
   assert.match((await runBuiltinCommand('sandbox', 'maybe', state)).output, /Usage/);
+});
+
+
+test('/stop terminates background processes through process-tree cleanup', async () => {
+  const { state, session } = await setup();
+  const signals = [];
+  const entry = {
+    id: 'bg_stop_test',
+    status: 'running',
+    child: {
+      pid: 0,
+      kill(signal) { signals.push(signal); return true; }
+    }
+  };
+  session.background = new Map([[entry.id, entry]]);
+  const result = await runBuiltinCommand('stop', '', state);
+  assert.equal(result.output, 'Stopped 0 background agent(s) and 1 process(es).');
+  assert.deepEqual(signals, ['SIGTERM']);
+  assert.equal(entry.status, 'killed');
+  assert.ok(entry.killTimer, 'the normal process-tree SIGKILL escalation should be scheduled');
+  clearTimeout(entry.killTimer);
 });
