@@ -301,6 +301,17 @@ try {
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
 
+  // The right utility rail should switch between the live terminal and saved
+  // coding runs/diffs without leaving the conversation workspace.
+  await page.locator('#agentRunsUtilityTab').click();
+  assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true');
+  await page.locator('#agentRunsUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), false, 'The terminal utility panel should hide while Runs & changes is selected.');
+  await assertAgentContrast(page, 'Runs and changes · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-runs-desktop.png'), fullPage: true });
+  await page.locator('#agentTerminalUtilityTab').click();
+  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), true, 'The terminal utility panel should be restored by its tab.');
+
   // Commit the output from the preceding non-isolated file test so the real
   // worktree run begins from a clean user workspace, as required in production.
   execFileSync('git', ['add', 'browser-e2e-output.txt'], { cwd: root });
@@ -404,6 +415,15 @@ try {
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal', 'The terminal tab should reveal the terminal on narrow screens.');
   await assertAgentContrast(page, 'Agent terminal panel · 390px');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-terminal-390px.png'), fullPage: true });
+  await page.locator('#agentRunsUtilityTab').click();
+  await page.locator('#agentRunsUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), false);
+  await assertAgentContrast(page, 'Runs and changes · 390px');
+  const utilityMobileWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(utilityMobileWidth <= 390, 'Runs and changes must not overflow horizontally at 390px.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-runs-390px.png'), fullPage: true });
+  await page.locator('#agentTerminalUtilityTab').click();
+  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), true);
   await page.locator('#agentChatTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
   await assertAgentContrast(page, 'Agent chat · 390px');
