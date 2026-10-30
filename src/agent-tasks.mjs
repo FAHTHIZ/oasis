@@ -323,9 +323,19 @@ export function stopAgent(session, args = {}) {
   return { id: record.id, status: 'stopping', message: 'Stop requested; the agent will end at its next step.' };
 }
 
-export function stopAllAgents(session) {
+export async function stopAllAgents(session) {
   if (!session || !session.agentTasks) return;
-  for (const record of session.agentTasks.agents.values()) {
-    if (record.status === 'running' && record.controller) { record.cancelRequested = true; record.controller.abort(); }
+  const workflow = session.agentTasks.autoDispatch;
+  if (workflow) {
+    workflow.enabled = false;
+    workflow.pending = false;
   }
+  const pending = [];
+  for (const record of session.agentTasks.agents.values()) {
+    if (record.status !== 'running') continue;
+    record.cancelRequested = true;
+    if (record.controller) record.controller.abort();
+    if (record.promise) pending.push(Promise.resolve(record.promise).catch(() => {}));
+  }
+  await Promise.allSettled(pending);
 }
