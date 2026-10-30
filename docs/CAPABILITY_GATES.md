@@ -1,6 +1,6 @@
 # OASIS capability and release gates
 
-**Updated:** 2026-10-29  
+**Updated:** 2026-10-30  
 **Purpose:** Turn the goal of a highly capable coding agent into measurable, OASIS-owned engineering work. This document describes OASIS requirements and acceptance criteria, not feature-count parity claims.
 
 ## Operating rule
@@ -17,12 +17,13 @@ Work directly on `main` in small, reviewable commits. Update this document and t
 - [ ] Homepage/repository validation passes on the same commit.
 - [ ] Windows/macOS/Linux packaging passes on the same commit.
 - [ ] Focused tests for the latest fixes pass independently.
+- [ ] Session shutdown awaits LSP process exit and background-agent cancellation without leaving orphan processes.
 - [ ] Required workflows exercise the same intended validation commands without masking failures or relying on retry-only suppression.
 - [ ] Documentation identifies the exact commit for any historical evidence and distinguishes it from current results.
 
 Last fully verified implementation baseline before this follow-up: [Quality Checks run 40860786973](https://github.com/FAHTHIZ/oasis/actions/runs/40860786973) passed on `9ed2cc9` (651 tests, 33 fixtures, Node 22/24/26, PTY, browser E2E and Ubuntu/macOS/Windows security regressions); [publishing validation run 40860786970](https://github.com/FAHTHIZ/oasis/actions/runs/40860786970) and [desktop packaging/release run 40860787120](https://github.com/FAHTHIZ/oasis/actions/runs/40860787120) passed on the same revision. The OAuth token-store and atomic user-settings mutation follow-up in the next commit requires the same workflows to pass before Gate 0 closes.
 
-**Acceptance:** link each required workflow to the same commit SHA and record any unsupported platform path explicitly.
+**Acceptance:** link each required workflow to the same commit SHA and record any unsupported platform path explicitly. The desktop release workflow now requires an explicit `v*` tag matching `package.json`; the required signing/provenance gate remains open.
 
 ## Gate 1 — Reliable coding loop
 
