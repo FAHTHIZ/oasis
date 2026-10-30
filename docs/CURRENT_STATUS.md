@@ -12,6 +12,8 @@ The first Phase 0 implementation slice has been applied directly to `main`.
 - Gate A triage: Quality run [41052480430](https://github.com/FAHTHIZ/oasis/actions/runs/41052480430) on an intermediate main revision exposed two clean-environment regressions. The Action fixture used an unsupported `canUseTool` option instead of mirroring the production LSP-disable policy; it now sets `OASIS_DISABLE_LSP=1`. The QuickJS Date sandbox nulled the constructor prototype of a class that still relied on `super()`, breaking `new Date(...)`; `SafeDate` is now a guarded function constructor using `Reflect.construct`, so its constructor chain can be hidden without breaking Date instances. Both fixes require fresh current-main CI evidence before Gate A can close.
 
 **Verification boundary:** direct-main commits trigger GitHub Actions validation. The full Node 22/24/26 integrity matrix, clean-environment suite, Linux PTY integration, cross-platform security checks, and repository publishing validation must pass on the latest main commit before Gate A is closed. Earlier partial results from superseded branches are not treated as proof for current main. Gate A remains open.
+
+The pre-fix Quality run on `90145fd2e5da07149b40bb1419592a6e870d2e6a` remained in progress after its clean-environment job failed, holding the per-ref Quality concurrency group and preventing the latest-main run from starting. The workflow concurrency group has been rotated to `oasis-quality-v6` so the current `main` snapshot can receive an independent verification run. This does not change any test requirement or mark a gate passed.
 ---
 
 
