@@ -7,8 +7,8 @@ The desktop app is packaged by CI for Windows, macOS, and Linux. Open the [lates
 | Operating system | Download | First launch |
 | --- | --- | --- |
 | Windows 10/11, x64 | OASIS installer (.exe) | Double-click the installer. It installs for your user and adds Start Menu/Desktop shortcuts. |
-| macOS | OASIS disk image (.dmg) | Open the disk image and drag OASIS into Applications. |
-| Linux, x64 | OASIS .deb or AppImage | Open the .deb with your software installer, or run the AppImage from your desktop environment. |
+| macOS, Apple Silicon (arm64) | OASIS disk image (.dmg) | Open the disk image and drag OASIS into Applications. |
+| Linux, x86_64 | OASIS .deb or AppImage | Open the .deb with your software installer, or run the AppImage from your desktop environment. |
 
 **Release signing note:** builds are currently unsigned because signing certificates are not configured. Windows may show SmartScreen; macOS may require you to explicitly open an unverified application. Verify that the download came from the official OASIS GitHub release before proceeding.
 
