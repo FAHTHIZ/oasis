@@ -17,8 +17,8 @@ const LOGO = [
   '  ██████  ██   ██ ███████ ██ ███████'
 ];
 
-// Desert-oasis palette: deep water teal → lagoon → sky → sand → sunset.
-const STOPS = [[20, 184, 166], [45, 212, 191], [56, 189, 248], [251, 191, 36], [249, 115, 22]];
+// OASIS portal palette: lime → growth green → signal green.
+const STOPS = [[124, 255, 94], [50, 224, 122], [14, 209, 104]];
 
 // The brand gradient; other themes blend their "claude" and "claudeShimmer" tokens.
 function stops() {
@@ -116,8 +116,8 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   }
   const dim = (text) => (color ? ANSI.dim + text + ANSI.noBold : text);
   const accent = (text) => (color ? rgb(gradientAt(0.15)) + text + ANSI.fg : text);
-  const tagline = 'the open coding agent · any model · your machine';
-  output.write('  ' + accent('✦') + ' ' + (color ? ANSI.bold : '') + 'Oasis' + (version ? ' v' + version : '') + (color ? ANSI.noBold : '') + '  ' + dim(tagline) + '\n');
+  const tagline = 'CODE. AUTOMATE. FLOURISH.';
+  output.write('  ' + accent('✦') + ' ' + (color ? ANSI.bold : '') + 'OASIS' + (version ? ' v' + version : '') + (color ? ANSI.noBold : '') + '  ' + dim(tagline) + '\n');
   const rows = [
     ['workspace', root || process.cwd()],
     ...(model ? [['model', model + (provider ? dim('  via ' + provider) : '')]] : []),
@@ -132,7 +132,7 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
 // Prompt and footer -------------------------------------------------------
 
 // /color: a per-session prompt color, so several Oasis terminals are easy to tell apart.
-export const PROMPT_COLORS = { red: [239, 68, 68], blue: [59, 130, 246], green: [34, 197, 94], yellow: [234, 179, 8], purple: [168, 85, 247], orange: [249, 115, 22], pink: [236, 72, 153], cyan: [6, 182, 212] };
+export const PROMPT_COLORS = { red: [239, 68, 68], blue: [59, 130, 246], green: [50, 224, 122], yellow: [234, 179, 8], purple: [168, 85, 247], orange: [249, 115, 22], pink: [236, 72, 153], cyan: [6, 182, 212] };
 let promptColor = null;
 export function setPromptColor(name) {
   let key = String(name || '').trim().toLowerCase();
