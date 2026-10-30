@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
+import AxeBuilder from '@axe-core/playwright';
 import { startOasisWebServer } from '../../src/web.mjs';
 import { saveConfig } from '../../src/config.mjs';
 
@@ -205,6 +206,28 @@ try {
 
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-before.png'), fullPage: true });
   await page.locator('button[data-nav="agent"]').first().click();
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const assertAgentContrast = async (viewport) => {
+    const results = await new AxeBuilder({ page })
+      .include('.sidebar')
+      .include('#view-agent')
+      .withRules(['color-contrast'])
+      .analyze();
+    const violations = results.violations.map((violation) => ({
+      id: violation.id,
+      help: violation.help,
+      nodes: violation.nodes.map((node) => ({ target: node.target, summary: node.failureSummary }))
+    }));
+    assert.deepEqual(violations, [], 'Axe found color-contrast violations at ' + viewport + ': ' + JSON.stringify(violations));
+    console.log('PASS Axe color contrast: ' + viewport + ', 0 violations.');
+  };
+  await assertAgentContrast('1280x800');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-desktop-1280x800.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertAgentContrast('390x844');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-phone-390x844.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
   // The starter cards belong to the empty-state UI, so test them before connecting.
   await page.locator('[data-agent-example="Explain this project"]').click();
   assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
