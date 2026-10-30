@@ -11,7 +11,7 @@ test('Pages launch summary prints Markdown backticks literally', async () => {
 
 test('CI keeps latest pending concurrency per ref and lets active quality runs finish', async () => {
   const cases = [
-    { path: '../.github/workflows/quality.yml', group: 'group: oasis-quality-v3-${{ github.ref }}', cancel: false },
+    { path: '../.github/workflows/quality.yml', group: 'group: oasis-quality-v4-${{ github.ref }}', cancel: false },
     { path: '../.github/workflows/pages.yml', group: 'group: oasis-public-launch-${{ github.ref }}', cancel: true },
     { path: '../.github/workflows/desktop-build.yml', group: 'group: oasis-desktop-${{ github.ref }}', cancel: true }
   ];
