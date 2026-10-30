@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,4 +34,33 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
   assert.match(termux, /official.*Termux/i);
   assert.match(termux, /Android is not yet a fully verified support target/i);
   assert.match(install, /TERMUX\.md/);
+});
+
+
+test('shell release resolver is valid JavaScript and falls back from API rate limits', async () => {
+  const shell = await read('scripts/install.sh');
+  const embedded = shell.match(/node --input-type=module -e '\n([\s\S]*?)\n'\n}/);
+  assert.ok(embedded, 'installer must contain its embedded Node release resolver');
+  const sha = '0123456789abcdef0123456789abcdef01234567';
+  const html = '<a data-hovercard-type="commit" data-hovercard-url="/FAHTHIZ/oasis/commit/' + sha +
+    '/hovercard" href="https://github.com/FAHTHIZ/oasis/commit/' + sha + '"><code>0123456</code></a>';
+  const harness = [
+    'globalThis.fetch = async (url) => {',
+    '  if (String(url).startsWith("https://api.github.com/")) return { ok: false, status: 403, json: async () => ({}) };',
+    '  if (String(url) === "https://github.com/FAHTHIZ/oasis/releases/latest") return { ok: true, status: 200, url: "https://github.com/FAHTHIZ/oasis/releases/tag/v9.8.7", text: async () => ' + JSON.stringify(html) + ' };',
+    '  throw new Error("Unexpected URL: " + url);',
+    '};',
+    embedded[1]
+  ].join('\n');
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout.trim(), 'v9.8.7\n' + sha);
+  assert.match(result.stderr, /GitHub API unavailable/);
+});
+
+test('Windows installer has the same public-page fallback for API rate limits', async () => {
+  const powershell = await read('scripts/install.ps1');
+  assert.match(powershell, /trying the official public release page/i);
+  assert.match(powershell, /data-hovercard-type="commit"/);
+  assert.match(powershell, /releases\\/latest/);
 });
