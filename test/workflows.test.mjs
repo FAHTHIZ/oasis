@@ -96,7 +96,7 @@ test('workflow runtime blocks deterministic globals through globalThis and const
     }`,
     runAgent: async () => ''
   });
-  assert.equal(result.status, 'completed');
+  assert.equal(result.status, 'completed', result.error || 'workflow returned no error detail');
   assert.equal(result.result.globalRandom, 'blocked');
   assert.equal(result.result.lexicalRandom, 'blocked');
   assert.equal(result.result.nativeDateAlias, 'undefined');

@@ -148,7 +148,7 @@ function gitEnv(env = process.env) {
 async function git(cwd, args, env, timeout = 20000) {
   const result = await runWorktreeCommand('git', args, { cwd, timeout, env: gitEnv(env) });
   if (result.exitCode !== 0) {
-    const detail = result.stderr || result.error || ('Git exited with code ' + result.exitCode + '.');
+    const detail = result.stderr || result.error || ('Git ' + String(args[0] || 'command') + ' exited with code ' + result.exitCode + '.');
     const error = new Error(detail);
     error.code = result.timedOut ? 'ETIMEDOUT' : result.errorCode || result.exitCode;
     error.stdout = result.stdout;
