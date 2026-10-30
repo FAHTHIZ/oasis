@@ -159,6 +159,43 @@ test('on a same-repo pull request, Oasis commits to the PR branch and opens no n
   assert.ok(!calls.some((call) => call.route.endsWith('/pulls') && call.method === 'POST'));
 });
 
+test('GitHub Action passes the unattended LSP restriction into the agent runtime', async (t) => {
+  const { work } = await repoWithRemote(t);
+  const home = await tmp(t);
+  const { request } = fakeGitHub();
+  let capturedOptions = null;
+  const sdk = {
+    run: async (_prompt, options) => {
+      capturedOptions = options;
+      return { is_error: false, subtype: 'success', result: 'login() is defined in login.js.' };
+    }
+  };
+  const env = {
+    ...gitEnv,
+    HOME: home,
+    OASIS_CONFIG_DIR: path.join(home, 'cfg'),
+    OASIS_DISABLE_LSP: '1',
+    GITHUB_EVENT_NAME: 'issue_comment',
+    GITHUB_REPOSITORY: 'acme/app'
+  };
+  const outcome = await runAction({
+    env,
+    root: work,
+    event: comment('@oasis where is login?'),
+    request,
+    sdk,
+    log: () => {}
+  });
+
+  assert.equal(outcome.responded, true);
+  assert.equal(outcome.result.is_error, false);
+  assert.equal(capturedOptions.env.OASIS_DISABLE_LSP, '1');
+  assert.match(capturedOptions.appendSystemPrompt, /do not use LSP or start language-server processes/i);
+  assert.match(capturedOptions.appendSystemPrompt, /repository's own test, lint, build, or type-check commands/i);
+  assert.match(capturedOptions.appendSystemPrompt, /report verification as incomplete/i);
+  assert.equal(outcome.published.changed, false);
+});
+
 test('questions get an answer and no push', async (t) => {
   const { work } = await repoWithRemote(t);
   const { calls, request } = fakeGitHub();
