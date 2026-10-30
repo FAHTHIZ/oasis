@@ -38,6 +38,10 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
   assert.match(termux, /latest stable GitHub release/i);
   assert.match(install, /latest stable GitHub release/i);
   assert.match(termux, /official.*Termux/i);
+  assert.match(readme, /command -v curl/);
+  assert.match(readme, /command -v wget/);
+  assert.match(termux, /command -v curl/);
+  assert.match(termux, /command -v wget/);
   assert.match(termux, /Android is not yet a fully verified support target/i);
   assert.match(install, /TERMUX\.md/);
 });
