@@ -1,130 +1,95 @@
 /* OASIS visual system — quiet surfaces, clear hierarchy, and restrained portal green. */
 :root{
-  --bg:#0B0F0C;
-  --panel:#1A1F1B;
-  --surface-raised:#202722;
-  --surface-muted:#141A16;
-  --line:#2D3B32;
-  --line-strong:#405246;
-  --text:#E6F5EA;
-  --muted:#A6B5AA;
-  --accent:#7CFF5E;
-  --accent-2:#32E07A;
-  --accent-3:#0ED168;
-  --ink:#0B0F0C;
+  --bg:#0B100C;--sidebar:#0D130E;--panel:#101811;
+  --surface-raised:#152019;--surface-muted:#0D130E;
+  --line:#1C271F;--line-strong:#2B3B30;
+  --text:#E8EFE9;--muted:#9BAA9F;
+  --accent:#9BFF55;--accent-ink:#0B100C;
+  --accent-2:#8FA195;--accent-3:#73877A;
+  --danger:#FF8A8A;--diff-add:#9BFF55;--diff-remove:#FF8A8A;
+  --focus:#B7C9BC;--status-ok:#8FA195;--ink:#0B100C;
   --shadow:0 12px 32px #0003;
+  --font-body:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-code:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
-body{
-  background:var(--bg);
-  color:var(--text);
-  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-}
-.sidebar{
-  background:#101713;
-  border-right-color:var(--line);
-}
-.brand-mark img{filter:drop-shadow(0 0 4px #7cff5e20)}
+body{background:var(--bg);background-image:none;color:var(--text);font-family:var(--font-body)}
+.sidebar{background:var(--sidebar);border-right-color:var(--line)}
+.brand-mark img{filter:none}
 .switcher{background:var(--panel);border-color:var(--line)}
-.nav-btn.active{
-  background:#7cff5e12;
-  box-shadow:inset 2px 0 0 var(--accent);
-  color:var(--accent);
-}
-.local-card{
-  background:var(--surface-muted);
-  border-color:var(--line);
-}
-.hero,.extension-hero{
-  background:var(--panel);
-  border-color:var(--line);
-  box-shadow:none;
-}
+.nav-btn.active{background:var(--surface-raised);box-shadow:inset 2px 0 0 var(--line-strong);color:var(--text)}
+.local-card{background:var(--surface-muted);border-color:var(--line)}
+.hero,.extension-hero{background:var(--panel);border-color:var(--line);box-shadow:none}
 .hero:after{display:none}
-.panel,.stat,.extension-card,.integration-card{
-  background:var(--panel);
-  border-color:var(--line);
-  box-shadow:none;
+.panel,.stat,.extension-card,.integration-card{background:var(--panel);border-color:var(--line);box-shadow:none}
+.workspace-banner{background:var(--surface-muted);border-color:var(--line)}
+.first-run-wizard{background:var(--panel);border-color:var(--line-strong);box-shadow:none}
+.first-run-choice{background:var(--surface-muted);border-color:var(--line)}
+.first-run-choice:hover,.first-run-choice:focus-visible{background:var(--surface-raised);border-color:var(--line-strong)}
+.btn-primary{background:var(--surface-muted);color:var(--text);border-color:var(--line-strong);box-shadow:none}
+.btn-primary:hover{background:var(--surface-raised);box-shadow:none}
+.btn-secondary{background:var(--surface-muted);border-color:var(--line)}
+.text-link{color:var(--muted)}
+.agent-chat-panel{border-color:var(--line);box-shadow:none}
+.agent-chat-header{background:var(--panel);border-bottom-color:var(--line)}
+.agent-messages{background:var(--sidebar);font-size:14px}
+.agent-message{font-size:14px}
+.agent-message.activity{font-size:12.5px;color:var(--muted)}
+.agent-compose{background:var(--panel);border-top-color:var(--line)}
+.agent-compose textarea{background:var(--bg);border-color:var(--line-strong);font:14px/1.5 var(--font-body)}
+.agent-compose textarea:focus{border-color:var(--focus);box-shadow:0 0 0 3px #B7C9BC1A}
+.agent-workspace-tab[aria-selected="true"]{color:var(--text);background:var(--surface-raised);border-color:var(--line-strong)}
+.agent-approval{background:var(--panel);border-color:var(--line-strong)}
+.agent-approval .btn{min-height:44px}
+.runtime-scope-note{background:var(--panel);border-color:var(--line)}
+.progress-bar{background:var(--status-ok)}
+.toast{background:var(--panel);border-color:var(--line-strong);box-shadow:none}
+.status-dot.connected:before{box-shadow:0 0 0 3px #8FA19518}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline-color:var(--focus)}
+code,pre,kbd,samp,.terminal-output,.cloud-run-diff-pre{font-family:var(--font-code)}
+#agentPrompt{font-size:14px}
+.agent-help,.agent-compose>small{font-size:12.5px}
+#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn{
+  min-height:44px;background:var(--accent);color:var(--accent-ink);
+  border:1px solid transparent;box-shadow:none;font-weight:700;
 }
-.workspace-banner{
-  background:var(--surface-muted);
-  border-color:var(--line);
+#newAgentSessionBtn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;padding:8px 12px;text-decoration:none}
+#agentSendBtn:hover,#newAgentSessionBtn:hover,#agentApproveBtn:hover,#agentAlwaysBtn:hover{filter:brightness(1.04);box-shadow:0 0 0 3px #9BFF551A}
+#agentDenyBtn{background:var(--surface-muted);color:var(--text);border-color:var(--line-strong)}
+.dot,.eyebrow,.nav-btn.active,.text-link:not(#newAgentSessionBtn),.spark,.stat-icon,.stat-foot b,
+.project-symbol,.project-badge,.workspace-banner-icon,.section-kicker,.extension-card-icon,
+.extension-chip.good,.integration-tab.active,.github-state[data-connected="true"],
+.agent-runtime-state[data-connected="true"]:before,.status-dot.connected:before,.agent-model-glyph,
+.cloud-run-status[data-status="completed"],.first-run-icon,.first-run-arrow,.first-run-install,
+#providerKeyHelp a,.command-palette-result-category,.agent-monitor-event-dot,
+.agent-monitor-pill[data-status="running"],.agent-monitor-pill[data-status="active"],.skill-command-name{
+  color:var(--status-ok);
 }
-.first-run-wizard{
-  background:var(--panel);
-  border-color:var(--line-strong);
-  box-shadow:none;
-}
-.first-run-choice{
-  background:var(--surface-muted);
-  border-color:var(--line);
-}
-.first-run-choice:hover,.first-run-choice:focus-visible{
-  background:#7cff5e0a;
-  border-color:var(--accent);
-}
-.btn-primary{
-  background:var(--accent);
-  color:var(--ink);
-  box-shadow:none;
-}
-.btn-primary:hover{
-  filter:brightness(1.04);
-  box-shadow:0 0 0 3px #7cff5e18;
-}
-.btn-secondary{
-  background:var(--surface-muted);
-  border-color:var(--line);
-}
-.agent-chat-panel{
-  border-color:var(--line);
-  box-shadow:var(--shadow);
-}
-.agent-chat-header{
-  background:var(--panel);
-  border-bottom-color:var(--line);
-}
-.agent-messages{background:#111713}
-.agent-compose{
-  background:var(--panel);
-  border-top-color:var(--line);
-}
-.agent-compose textarea{
-  background:var(--bg);
-  border-color:var(--line-strong);
-}
-.agent-compose textarea:focus{
-  border-color:var(--accent);
-  box-shadow:0 0 0 3px #7cff5e14;
-}
-.agent-workspace-tab[aria-selected="true"]{
-  color:var(--ink);
-  background:var(--accent);
-  border-color:var(--accent);
-}
-.progress-bar{background:var(--accent)}
-.toast{
-  background:var(--panel);
-  border-color:var(--line-strong);
-  box-shadow:var(--shadow);
-}
-.status-dot.connected:before{box-shadow:0 0 0 3px #32e07a12}
+.dot{background:var(--status-ok);box-shadow:0 0 0 4px #8FA19518}
+.nav-btn.active{background:var(--surface-raised);box-shadow:inset 2px 0 0 var(--line-strong)}
+.agent-runtime-state[data-connected="true"]:before{background:var(--status-ok)}
+.github-state[data-connected="true"]{color:var(--status-ok)}
+.status-dot.connected:before{background:var(--status-ok)}
+.agent-monitor-event-dot{background:var(--status-ok)}
+.integration-tab.active{border-bottom-color:var(--line-strong);color:var(--text)}
+.task-check:checked{accent-color:var(--status-ok)}
+.agent-split-divider:hover:before,.agent-split-divider:focus-visible:before{background:var(--line-strong)}
+.agent-example-prompt:hover,.agent-example-prompt:focus-visible{border-color:var(--line-strong);background:var(--surface-raised)}
+.skill-command-option:hover,.skill-command-option[aria-selected="true"]{border-color:var(--line-strong);background:var(--surface-raised)}
+.diff-added,.diff-line.added{color:var(--diff-add)}
+.diff-removed,.diff-line.removed{color:var(--diff-remove)}
 body.light{
-  background:var(--bg);
+  background:var(--bg);--sidebar:#FBFCF8;--surface-muted:#F4F7F2;--surface-raised:#EFF3ED;
+  --line-strong:#C7D2C8;--accent:#4A742F;--accent-ink:#FFFFFF;--focus:#34563D;
+  --status-ok:#487A53;--diff-add:#3F7B4B;--diff-remove:#B94D4D;--ink:#0B100C;
 }
-body.light .sidebar,
-body.light .panel,
-body.light .stat,
-body.light .hero,
-body.light .local-card,
-body.light .extension-hero,
-body.light .extension-card,
-body.light .integration-card,
-body.light .first-run-wizard{
-  background:var(--panel);
-  border-color:var(--line);
-}
+body.light .sidebar{background:var(--sidebar);border-color:var(--line)}
+body.light .panel,body.light .stat,body.light .hero,body.light .local-card,
+body.light .extension-hero,body.light .extension-card,body.light .integration-card,
+body.light .first-run-wizard,body.light .agent-chat-panel,body.light .agent-chat-header,
+body.light .agent-compose{background:var(--panel);border-color:var(--line)}
 body.light .hero:after{display:none}
-@media(prefers-reduced-motion:reduce){
-  .brand-mark img{animation:none!important}
-  .btn{transition:none}
+@media(max-width:780px){
+  #agentSendBtn,#agentStopBtn,#agentApproveBtn,#agentAlwaysBtn,#agentDenyBtn,#agentConnectBtn{min-height:44px}
+  .agent-approval .agent-buttons{display:grid;grid-template-columns:1fr}
 }
+@media(prefers-reduced-motion:reduce){.brand-mark img{animation:none!important}.btn{transition:none}}
