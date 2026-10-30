@@ -170,7 +170,7 @@ export class PtySessionManager {
         notify();
         try { record.dataDisposable && record.dataDisposable.dispose(); } catch {}
       });
-        return { ...statusOf(record), message: 'Interactive terminal started. Use terminal_read with this id to receive output; use terminal_input to send keystrokes or program input, terminal_resize to resize, and terminal_stop when finished.' };
+      return { ...statusOf(record), message: 'Interactive terminal started. Use terminal_read with this id to receive output; use terminal_input to send keystrokes or program input, terminal_resize to resize, and terminal_stop when finished.' };
     } finally {
       this.startingSessions = Math.max(0, this.startingSessions - 1);
     }
