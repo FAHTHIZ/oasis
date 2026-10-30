@@ -40,12 +40,15 @@ export async function installedVersion(appRoot, options = {}) {
     return { kind: 'git', commit, dirty: Boolean(dirty), root: appRoot };
   } catch {}
   try {
-    const tree = JSON.parse(await exec('npm', ['ls', '-g', 'oasis-oss', '--json', '--long'], {}));
+    const npmArgs = ['ls', '-g'];
+    if (options.npmPrefix) npmArgs.push('--prefix', options.npmPrefix);
+    npmArgs.push('oasis-oss', '--json', '--long');
+    const tree = JSON.parse(await exec('npm', npmArgs, {}));
     const entry = tree && tree.dependencies && tree.dependencies['oasis-oss'];
     const resolved = String(entry && (entry.resolved || entry.version) || '');
     const match = resolved.match(/#([0-9a-f]{40})\b/);
-    if (match) return { kind: 'npm', commit: match[1], root: appRoot };
-    if (entry) return { kind: 'npm', commit: '', root: appRoot };
+    if (match) return { kind: 'npm', commit: match[1], root: appRoot, ...(options.npmPrefix ? { npmPrefix: options.npmPrefix } : {}) };
+    if (entry) return { kind: 'npm', commit: '', root: appRoot, ...(options.npmPrefix ? { npmPrefix: options.npmPrefix } : {}) };
   } catch {}
   return { kind: 'unknown', commit: '', root: appRoot };
 }
@@ -56,7 +59,7 @@ export function updatePlan(installed, latest) {
     if (installed.dirty) return { upToDate: false, blocked: 'Your Oasis checkout has uncommitted changes; commit or stash them, then run git pull.' };
     return { upToDate: false, command: 'git', args: ['-C', installed.root, 'pull', '--ff-only', 'origin', 'main'] };
   }
-  return { upToDate: false, command: 'npm', args: ['install', '-g', INSTALL_SPEC] };
+  return { upToDate: false, command: 'npm', args: ['install', '-g', ...(installed.npmPrefix ? ['--prefix', installed.npmPrefix] : []), INSTALL_SPEC] };
 }
 
 export function describeUpdate(installed, latest, plan) {
