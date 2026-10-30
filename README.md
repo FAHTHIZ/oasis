@@ -17,7 +17,7 @@
 **Easy install:** open your terminal and paste this one command:
 
 ```sh
-f="$HOME/.oasis-install.sh"; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f" && sh "$f"; status=$?; rm -f "$f"; exit "$status"
+sh -c 'f=$(mktemp) || exit; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f" && sh "$f"; r=$?; rm -f "$f"; exit "$r"'
 ```
 
 The guided installer checks for Node.js 22 or newer. On Termux, it can offer to install Node.js through `pkg`; on a Mac with Homebrew, it can offer Homebrew installation. It downloads the latest stable OASIS release, resolves it to an exact commit, installs into your user folder, checks the environment, and opens provider setup. It does not need Git or administrator access. Review the prompts before approving changes.
