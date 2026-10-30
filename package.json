@@ -1,6 +1,6 @@
 {
   "name": "oasis-oss",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Open-source AI coding agent and local-first developer workspace with a CLI, browser UI, multi-provider LLMs, MCP integrations, skills, hooks, memory, and subagents.",
   "type": "module",
   "main": "./src/sdk.mjs",
