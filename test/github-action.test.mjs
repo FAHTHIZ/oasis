@@ -48,11 +48,16 @@ function fakeGitHub() {
   return { calls, request };
 }
 
-test('GitHub Action status never says finished when verification is incomplete', () => {
-  assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Verification incomplete: LSP is unavailable.'), 'pushed changes, but verification is incomplete.');
+test('GitHub Action distinguishes an unapproved language-server check from incomplete verification', () => {
+  const notApproved = 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\\n' +
+    '- LSP verification unavailable for src/app.ts: Starting the TypeScript language server was not approved. Use grep or read_file instead.\\n' +
+    'Fix or explicitly resolve these diagnostics, then run verification again.';
+  assert.equal(actionStatus({ is_error: false }, { changed: true }, notApproved), 'pushed changes; language-server check was not run.');
+  assert.equal(actionStatus({ is_error: false }, { changed: false }, notApproved), 'language-server check was not run.');
+  assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Verification incomplete: LSP reports 1 new or unclassified error(s) in src/app.ts.'), 'pushed changes, but verification is incomplete.');
   assert.equal(actionStatus({ is_error: false }, { changed: false }, 'Verification incomplete: a diagnostic remains.'), 'verification is incomplete.');
   assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Fixed the bug and tests passed.'), 'finished and pushed changes.');
-  assert.equal(actionStatus({ is_error: true, subtype: 'error_during_execution' }, { changed: true }, 'Verification incomplete: blocked.'), 'ran into a problem (error_during_execution).');
+  assert.equal(actionStatus({ is_error: true, subtype: 'error_during_execution' }, { changed: true }, notApproved), 'ran into a problem (error_during_execution).');
 });
 
 test('readTrigger responds only to trusted human mentions', () => {
