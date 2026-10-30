@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { parseToml, planImport, applyImport, describePlan } from '../src/importers.mjs';
@@ -27,6 +27,46 @@ test('parseToml rejects incomplete values and arrays without hanging', () => {
   ]) {
     assert.throws(() => parseToml(malformed), /TOML:/, malformed);
   }
+});
+
+test('applyImport refuses a symlinked project MCP destination without modifying its target', { skip: process.platform === 'win32' }, async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-import-mcp-link-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'project');
+  const home = path.join(base, 'home');
+  await mkdir(path.join(root, '.gemini'), { recursive: true });
+  await mkdir(home, { recursive: true });
+  const external = path.join(base, 'outside-mcp.json');
+  const original = JSON.stringify({ protected: true });
+  await writeFile(external, original);
+  await symlink(external, path.join(root, '.mcp.json'));
+  await writeFile(path.join(root, '.gemini', 'settings.json'), JSON.stringify({
+    mcpServers: { docs: { command: 'node', args: ['server.js'] } }
+  }));
+  const plan = await planImport(root, { env: { HOME: home }, sources: ['gemini'] });
+  await assert.rejects(applyImport(plan), /symbolic-link destination/);
+  assert.equal(await readFile(external, 'utf8'), original);
+});
+
+test('applyImport refuses project destination directories that are symlinks before writing anything', { skip: process.platform === 'win32' }, async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-import-dir-link-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'project');
+  const home = path.join(base, 'home');
+  const outside = path.join(base, 'outside');
+  await mkdir(path.join(root, '.gemini'), { recursive: true });
+  await mkdir(outside, { recursive: true });
+  await mkdir(home, { recursive: true });
+  await writeFile(path.join(root, '.gemini', 'settings.json'), JSON.stringify({
+    mcpServers: { docs: { command: 'node', args: ['server.js'] } }
+  }));
+  await writeFile(path.join(root, 'GEMINI.md'), 'Project instructions.');
+  await symlink(outside, path.join(root, '.claude'));
+  const plan = await planImport(root, { env: { HOME: home }, sources: ['gemini'] });
+  await assert.rejects(applyImport(plan), /symbolic-link directory/);
+  await assert.rejects(readFile(path.join(outside, 'rules', 'gemini.md')), { code: 'ENOENT' });
+  await assert.rejects(readFile(path.join(root, '.mcp.json')), { code: 'ENOENT' },
+    'unsafe destination preflight must prevent earlier MCP writes');
 });
 
 test('imports Codex, Gemini CLI and Cursor configuration without overwriting', async () => {
