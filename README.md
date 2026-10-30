@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/oasis-readme-banner.svg" alt="OASIS — Code. Automate. Flourish." width="100%" />
+  <img src="assets/oasis-readme-portal.svg" alt="OASIS OSS — Code. Automate. Flourish." width="100%" />
 </p>
 
-<p align="center"><strong>Inspect. Edit. Verify.</strong> An open-source coding agent for your own projects and your own choice of model.</p>
+<p align="center"><strong>Code. Automate. Flourish.</strong> An open-source coding agent and local-first developer workspace. Your projects. Your choice of model.</p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
-  <img src="https://img.shields.io/badge/status-beta-9BFF55.svg?style=flat" alt="Beta software" />
+  <img src="https://img.shields.io/badge/status-beta-7CFF5E.svg?style=flat" alt="Beta software" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache License 2.0" /></a>
 </p>
 
