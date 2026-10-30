@@ -26,7 +26,7 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 
 | Requirement | Status | Evidence / remaining work |
 |---|---|---|
-| Three-path first-run model setup | Implemented in source | Root app has API-key, OmniRoute, and Ollama paths; current status documents the flow. |
+| Three-path first-run model setup | Implemented in source; automated route coverage added | API, OmniRoute and Ollama choices expose a selected state and route-specific next steps. Browser E2E selects each route, checks the provider preset/status, and captures desktop plus 390px states. Ollama discovery still requires a real local Ollama installation for hardware validation. |
 | API keys masked and stored via Electron secure storage | Implemented in source | `desktop/main.mjs` uses Electron `safeStorage`, fails closed if encryption is unavailable, and rolls back the previous secret if config persistence fails. Real host/keychain behavior still needs platform validation. |
 | Ollama discovery | Implemented in source | `src/web.mjs` exposes a loopback-only local-model discovery endpoint targeting the fixed Ollama localhost API. |
 | Safe installation confirmation | Partial / verify | Setup and install flows have approval gates; the full set of missing-dependency prompts still needs journey testing. |
