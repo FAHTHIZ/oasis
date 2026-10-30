@@ -130,20 +130,52 @@ function runRipgrep(cwd, args, signal) {
   return new Promise((resolve) => {
     let out = '';
     let err = '';
+    let cancelled = false;
+    let settled = false;
+    if (signal && signal.aborted) {
+      resolve({ code: null, out, err: 'Search was cancelled before ripgrep started.', cancelled: true });
+      return;
+    }
     const child = spawn('rg', args, { cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 30000);
-    const abort = () => child.kill('SIGKILL');
-    if (signal) signal.addEventListener('abort', abort, { once: true });
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', abort);
+    };
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ ...result, out, err, cancelled: cancelled || Boolean(signal && signal.aborted) });
+    };
+    const abort = () => {
+      if (settled) return;
+      cancelled = true;
+      child.kill('SIGKILL');
+    };
+    const timer = setTimeout(() => {
+      if (settled) return;
+      child.kill('SIGKILL');
+    }, 30000);
+    if (signal) {
+      if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort, { once: true });
+    }
     child.stdout.on('data', (chunk) => { if (out.length < 4 * 1024 * 1024) out += chunk; });
     child.stderr.on('data', (chunk) => { err = (err + chunk).slice(-4000); });
-    child.on('error', (error) => { clearTimeout(timer); resolve({ code: null, out, err: error.message }); });
-    child.on('close', (code) => { clearTimeout(timer); if (signal) signal.removeEventListener('abort', abort); resolve({ code, out, err }); });
+    child.on('error', (error) => finish({ code: null, error: error.message }));
+    child.on('close', (code, signalName) => finish({ code, signal: signalName }));
   });
+}
 }
 
 export async function grepWorkspace(root, args = {}, options = {}) {
   const pattern = String(args.pattern || '');
   if (!pattern) throw new Error('grep needs a pattern.');
+  if (options.signal && options.signal.aborted) {
+    const error = new Error('Search was cancelled before it started.');
+    error.name = 'AbortError';
+    throw error;
+  }
   if (pattern.length > 1000) throw new Error('Pattern is too long.');
   const mode = ['content', 'files_with_matches', 'count'].includes(args.output_mode) ? args.output_mode : 'content';
   const limit = Math.max(1, Math.min(500, Number.parseInt(args.limit, 10) || 200));
@@ -168,6 +200,11 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     else { rgArgs.push('-n'); if (contextLines) rgArgs.push('-C', String(contextLines)); }
     rgArgs.push('-e', pattern, '--', relTarget);
     const out = await runRipgrep(rootReal, rgArgs, options.signal);
+    if (out.cancelled || (options.signal && options.signal.aborted)) {
+      const error = new Error('Search was cancelled.');
+      error.name = 'AbortError';
+      throw error;
+    }
     if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim());
     for (const line of out.out.split('\n')) {
       if (!line) continue;
