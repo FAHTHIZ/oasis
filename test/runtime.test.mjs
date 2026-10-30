@@ -12,7 +12,7 @@ import { TOOL_DEFINITIONS, executeTool, updateTodos, readWorkspaceFile, resolveW
 import { analyzeCommand } from '../src/permissions.mjs';
 import { microcompact, estimateTokens, contextWindowSize } from '../src/context.mjs';
 import { listBackups, restoreBackup } from '../src/backups.mjs';
-import { createSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
+import { createSession, closeSession, runAgentTurn, runAgentPlan, testProviderConnection } from '../src/agent.mjs';
 import { loadMcpServers, saveMcpServers, connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, validateMcpServerConfig } from '../src/mcp.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from '../src/sessions.mjs';
 import { scriptedModel } from './helpers/scripted-model.mjs';
