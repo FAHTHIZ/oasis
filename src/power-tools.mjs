@@ -22,6 +22,7 @@ const MAX_TEXT_FILE = 256 * 1024;
 const MAX_OUTPUT = 24 * 1024;
 const MAX_BACKGROUND_BUFFER = 512 * 1024;
 const MAX_BACKGROUND_PROCESSES = 8;
+const MAX_BACKGROUND_HISTORY = 24;
 
 // Defined here (not in notebook.mjs) so module cycles cannot hit it before initialization.
 export const NOTEBOOK_EDIT_DEFINITION = { type: 'function', function: { name: 'notebook_edit', description: 'Edit a Jupyter notebook (.ipynb) cell by cell. edit_mode replace (default) swaps a cell\'s source and clears its outputs, insert adds a new cell after cell_id (or at the top when cell_id is omitted), delete removes a cell. Use read_file on the notebook first to see cell ids. The original file is snapshotted first.', parameters: { type: 'object', properties: {
@@ -307,8 +308,20 @@ export async function multiEditFile(root, args = {}, context = {}) {
 
 // ---------------------------------------------------------------- background processes
 export function startBackgroundProcess(registry, launch, options) {
-  const running = [...registry.values()].filter((item) => item.status === 'running');
+  const entries = [...registry.values()];
+  const running = entries.filter((item) => item.status === 'running');
   if (running.length >= MAX_BACKGROUND_PROCESSES) throw new Error('Too many background processes are running (' + MAX_BACKGROUND_PROCESSES + '). Stop one with kill_command first.');
+
+  // Retain a bounded, recent history for command_output/list_background.
+  // Running entries are never evicted; only the oldest completed records go.
+  const history = entries
+    .filter((item) => item.status !== 'running')
+    .sort((a, b) => (Number(a.endedAt) || Date.parse(a.startedAt) || 0) - (Number(b.endedAt) || Date.parse(b.startedAt) || 0));
+  while (history.length >= MAX_BACKGROUND_HISTORY) {
+    const oldest = history.shift();
+    registry.delete(oldest.id);
+  }
+
   const id = 'bg_' + randomUUID().slice(0, 8);
   const child = spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
   const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: '', readOffset: 0, dropped: 0, startedAt: new Date().toISOString(), child, sandboxed: options.sandboxed };
