@@ -223,26 +223,51 @@ async function expandPaths(root, paths) {
 
 function nodeCheck(absolute, signal) {
   return new Promise((resolve) => {
+    if (signal && signal.aborted) {
+      resolve({ code: null, stderr: '', cancelled: true });
+      return;
+    }
     let stderr = '';
     let settled = false;
-    const child = spawn(process.execPath, ['--check', absolute], { shell: false, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '' }, ...processTreeSpawnOptions() });
+    let cancelled = false;
+    let timedOut = false;
+    let timer = null;
+    let child = null;
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', abort);
+    };
     const finish = (result) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      if (signal) signal.removeEventListener('abort', abort);
-      resolve(result);
+      cleanup();
+      resolve({ ...result, cancelled: cancelled || Boolean(signal && signal.aborted), timedOut });
     };
-    const timer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 15000);
-    const abort = () => signalProcessTree(child, 'SIGKILL');
+    const abort = () => {
+      if (settled) return;
+      cancelled = true;
+      if (child) signalProcessTree(child, 'SIGKILL');
+    };
+    try {
+      child = spawn(process.execPath, ['--check', absolute], { shell: false, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '' }, ...processTreeSpawnOptions() });
+    } catch (error) {
+      finish({ code: null, stderr: error.message });
+      return;
+    }
+    timer = setTimeout(() => {
+      if (settled) return;
+      timedOut = true;
+      signalProcessTree(child, 'SIGKILL');
+    }, 15000);
     if (signal) {
-      signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();
+      else signal.addEventListener('abort', abort, { once: true });
     }
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-8000); });
     child.on('error', (error) => finish({ code: null, stderr: error.message }));
     child.on('close', (code) => finish({ code, stderr }));
   });
+}
 }
 
 // node --check prints "file:LINE\n<source>\n   ^^^\n\nSyntaxError: message".
@@ -276,6 +301,7 @@ const JSONC_FILES = /(^|\/)(tsconfig[^/]*\.json|jsconfig\.json|\.eslintrc\.json|
 async function runBuiltin(name, root, files, signal) {
   const { sensitivePath } = await workspaceTools();
   const diagnostics = [];
+  const timedOutFiles = [];
   let checked = 0;
   const wanted = files.filter((file) => {
     if (sensitivePath(file) || /(^|\/)(node_modules|\.git|dist|build|coverage)\//.test(file)) return false;
@@ -283,22 +309,28 @@ async function runBuiltin(name, root, files, signal) {
     return name === 'node' ? JS_EXT.has(ext) : ext === '.json' && !JSONC_FILES.test(file);
   });
   for (const relative of wanted.slice(0, MAX_BUILTIN_FILES)) {
-    if (signal && signal.aborted) break;
+    if (signal && signal.aborted) return { diagnostics, checked, timedOutFiles, cancelled: true, skippedFiles: Math.max(0, wanted.length - MAX_BUILTIN_FILES) };
     const absolute = path.join(root, relative);
     const info = await stat(absolute).catch(() => null);
     if (!info || !info.isFile() || info.size > 2 * 1024 * 1024) continue;
-    checked++;
     if (name === 'node') {
       const out = await nodeCheck(absolute, signal);
-      if (out.code !== 0 && out.code !== null) diagnostics.push(parseNodeCheck(relative, out.stderr));
+      if (out.cancelled || (signal && signal.aborted)) {
+        return { diagnostics, checked, timedOutFiles, cancelled: true, skippedFiles: Math.max(0, wanted.length - MAX_BUILTIN_FILES) };
+      }
+      checked++;
+      if (out.timedOut) timedOutFiles.push(relative);
+      else if (out.code !== 0 && out.code !== null) diagnostics.push(parseNodeCheck(relative, out.stderr));
+      else if (out.code === null && out.stderr) diagnostics.push({ file: relative, line: 1, column: 1, severity: 'error', message: ('Node syntax checker could not start: ' + out.stderr).slice(0, 600), source: 'node' });
     } else {
       const content = await readFile(absolute, 'utf8').catch(() => null);
       if (content === null) continue;
+      checked++;
       const problem = jsonDiagnostic(relative, content.replace(/^\uFEFF/, ''));
       if (problem) diagnostics.push(problem);
     }
   }
-  return { diagnostics, checked, skippedFiles: Math.max(0, wanted.length - MAX_BUILTIN_FILES) };
+  return { diagnostics, checked, timedOutFiles, cancelled: Boolean(signal && signal.aborted), skippedFiles: Math.max(0, wanted.length - MAX_BUILTIN_FILES) };
 }
 
 function underPaths(file, paths) {
