@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runLsp, stopLspClients, locateSymbol, serverForFile, verifyEditedFileWithLsp } from '../src/lsp.mjs';
+import { fileURLToPath } from 'node:url';
+import { LspClient, runLsp, stopLspClients, locateSymbol, serverForFile, verifyEditedFileWithLsp } from '../src/lsp.mjs';
 import { TOOL_DEFINITIONS } from '../src/tools.mjs';
 import { loadSettings } from '../src/settings.mjs';
 
@@ -181,4 +182,16 @@ test('lspServers are only honoured from trusted settings', async () => {
   const settings = await loadSettings(root, { env: { HOME: home, OASIS_HOME: path.join(home, '.oasis') } });
   assert.deepEqual(settings.lspServers, {});
   assert.ok(settings.ignoredUntrusted.length >= 1);
+});
+
+
+test('LSP client shutdown waits for the language-server process to exit', async (t) => {
+  const helper = fileURLToPath(new URL('./helpers/clean-lsp-server.cjs', import.meta.url));
+  const client = new LspClient({ command: process.execPath, args: [helper], cwd: tmpdir(), env: process.env, name: 'clean-shutdown-fixture' });
+  client.start();
+  t.after(async () => { await client.stop(); });
+  await client.initialize();
+  await client.stop();
+  assert.equal(client.child.exitCode, 0, 'the clean language server must complete its shutdown handshake');
+  assert.equal(client.child.signalCode, null);
 });
