@@ -20,7 +20,12 @@ test('latestReleaseCommit rejects API failures, prereleases, malformed tags and 
   await assert.rejects(latestReleaseCommit({ fetch: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
   await assert.rejects(latestReleaseCommit({ fetch: async () => ({ ok: true, json: async () => ({ tag_name: 'v0.5.0-rc.1' }) }) }), /valid latest stable/);
   let call = 0;
-  await assert.rejects(latestReleaseCommit({ fetch: async () => { call++; return call === 1 ? { ok: true, json: async () => ({ tag_name: 'v0.5.0' }) } : { ok: true, json: async () => ({ sha: 'bad' }) }; }), /valid commit id/);
+  await assert.rejects(latestReleaseCommit({ fetch: async () => {
+    call++;
+    return call === 1
+      ? { ok: true, json: async () => ({ tag_name: 'v0.5.0' }) }
+      : { ok: true, json: async () => ({ sha: 'bad' }) };
+  } }), /valid commit id/);
 });
 
 test('archive installs read the immutable commit SHA from npm metadata', async () => {
