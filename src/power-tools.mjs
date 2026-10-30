@@ -131,6 +131,7 @@ function runRipgrep(cwd, args, signal) {
     let out = '';
     let err = '';
     let cancelled = false;
+    let timedOut = false;
     let settled = false;
     if (signal && signal.aborted) {
       resolve({ code: null, out, err: 'Search was cancelled before ripgrep started.', cancelled: true });
@@ -145,7 +146,7 @@ function runRipgrep(cwd, args, signal) {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({ ...result, out, err, cancelled: cancelled || Boolean(signal && signal.aborted) });
+      resolve({ ...result, out, err, cancelled: cancelled || Boolean(signal && signal.aborted), timedOut });
     };
     const abort = () => {
       if (settled) return;
@@ -154,6 +155,7 @@ function runRipgrep(cwd, args, signal) {
     };
     const timer = setTimeout(() => {
       if (settled) return;
+      timedOut = true;
       child.kill('SIGKILL');
     }, 30000);
     if (signal) {
@@ -204,6 +206,8 @@ export async function grepWorkspace(root, args = {}, options = {}) {
       error.name = 'AbortError';
       throw error;
     }
+    if (out.timedOut) throw new Error('grep exceeded its 30-second time limit. Narrow the search path or pattern and retry.');
+    if (out.error) throw new Error('grep could not start ripgrep: ' + out.error);
     if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim());
     for (const line of out.out.split('\n')) {
       if (!line) continue;
