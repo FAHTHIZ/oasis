@@ -227,7 +227,7 @@ test('worktree Git command timeout terminates a child and its descendant', async
     "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
     "fs.writeFileSync(process.argv[1], JSON.stringify([process.pid, child.pid]));",
     "setInterval(() => {}, 1000);"
-  ].join('\\n');
+  ].join('\n');
   const result = await runWorktreeCommand(process.execPath, ['-e', script, marker], {
     cwd: dir,
     env: process.env,
