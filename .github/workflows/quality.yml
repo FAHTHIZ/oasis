@@ -7,10 +7,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Keep only the latest run per ref to avoid queuing obsolete test matrices.
-  # Main and pull requests use distinct refs; superseded runs are intentionally cancelled.
+  # Let an active quality run finish so the branch badge always gets a real result.
+  # GitHub keeps only the newest pending run for this group when more pushes arrive.
   group: oasis-quality-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   integrity:
     name: Node ${{ matrix.node-version }} runtime and package integrity
