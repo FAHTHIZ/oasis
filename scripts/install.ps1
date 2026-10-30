@@ -87,10 +87,27 @@ if (-not $ReleaseCommit) {
     try {
         $releasePage = Invoke-WebRequest -Uri 'https://github.com/FAHTHIZ/oasis/releases/latest' -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'text/html' } -TimeoutSec 20 -UseBasicParsing
         $pageHtml = [string]$releasePage.Content
-        $tagMatch = [regex]::Match($pageHtml, 'href="https://github\.com/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)"')
+
+        # PowerShell 7 exposes the final redirected URL through RequestMessage;
+        # Windows PowerShell 5 exposes it through ResponseUri. Prefer the
+        # redirect target, then accept either absolute or relative GitHub links.
+        $finalUrl = ''
+        try {
+            $baseResponse = $releasePage.BaseResponse
+            if ($baseResponse.RequestMessage -and $baseResponse.RequestMessage.RequestUri) {
+                $finalUrl = [string]$baseResponse.RequestMessage.RequestUri.AbsoluteUri
+            } elseif ($baseResponse.ResponseUri) {
+                $finalUrl = [string]$baseResponse.ResponseUri.AbsoluteUri
+            }
+        } catch { }
+        $tagPattern = 'github\.com/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)(?:[/?#]|$)'
+        $tagMatch = [regex]::Match($finalUrl, $tagPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if (-not $tagMatch.Success) {
+            $tagMatch = [regex]::Match($pageHtml, 'href=["''](?:https://github\.com)?/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)["'']', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        }
         $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
         if (-not $tagMatch.Success) {
-            throw 'The public release page did not contain a stable version tag.'
+            throw 'The public release redirect and page did not contain a stable version tag.'
         }
         $ReleaseTag = $tagMatch.Groups[1].Value
         if ($commitMatch.Success) {
