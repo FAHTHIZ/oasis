@@ -628,3 +628,55 @@ body.light .hero:after{display:none}
 @media(max-width:390px){
   .agent-utility-tab{font-size:9px;padding-inline:5px}
 }
+
+
+/* First-run setup: make the selected provider route and its next step obvious. */
+.first-run-choice{
+  min-height:124px;
+  display:flex;
+  align-items:flex-start;
+  gap:11px;
+  padding:15px 14px;
+  background:var(--surface-muted);
+  border-color:var(--line);
+}
+.first-run-choice>span:nth-child(2){display:grid;gap:6px;flex:1;min-width:0}
+.first-run-choice strong{font-size:12px;line-height:1.4}
+.first-run-choice small{font-size:10.5px;line-height:1.55;color:var(--muted)}
+.first-run-choice[aria-pressed="true"]{
+  background:var(--surface-raised);
+  border-color:var(--line-strong);
+  box-shadow:inset 0 0 0 1px var(--line-strong);
+}
+.first-run-choice[aria-pressed="true"] .first-run-icon{
+  background:var(--surface-muted);
+  color:var(--text);
+}
+.first-run-choice[aria-pressed="true"] .first-run-arrow{color:var(--text)}
+.first-run-status{
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--surface-muted);
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.55;
+}
+.first-run-status[data-error="true"]{
+  border-color:var(--line-strong);
+  color:var(--danger);
+}
+.first-run-install{font-size:11px;color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.first-run-install:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+@media(max-width:950px){
+  .first-run-choice{min-height:0;padding:13px}
+  .first-run-choice small{font-size:10.5px}
+}
+@media(max-width:390px){
+  .first-run-wizard{gap:12px;padding:13px}
+  .first-run-heading p{font-size:11px}
+  .first-run-choice{gap:8px;padding:12px}
+  .first-run-choice strong{font-size:11.5px}
+  .first-run-choice small{font-size:10px}
+  .first-run-status{padding:9px 10px;font-size:10px}
+}
