@@ -357,10 +357,14 @@ async function resolveServer(root, server, env) {
 
 export async function stopLspClients(session) {
   if (!session || !session.lspClients) return;
-  for (const entry of session.lspClients.values()) {
-    try { const client = await entry; client.stop(); } catch {}
-  }
+  const clients = [...session.lspClients.values()];
   session.lspClients.clear();
+  await Promise.allSettled(clients.map(async (entry) => {
+    try {
+      const client = await entry;
+      await client.stop();
+    } catch {}
+  }));
 }
 
 async function clientFor(root, server, options) {
