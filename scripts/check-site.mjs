@@ -2,12 +2,13 @@ import { readFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
-const [html, manifestText, serviceWorker, icon, sidebarMark, packageText] = await Promise.all([
+const [html, manifestText, serviceWorker, icon, sidebarMark, interfaceCss, packageText] = await Promise.all([
   read('../index.html'),
   read('../manifest.webmanifest'),
   read('../sw.js'),
   read('../assets/oasis-icon.svg'),
   read('../assets/oasis-mark.svg'),
+  read('../assets/oasis-interface.css'),
   read('../package.json')
 ]);
 const required = [
@@ -32,6 +33,13 @@ const required = [
   'function exportBackup()', 'function importBackup(file)',
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
 ];
+assert.ok(html.includes('href="./assets/oasis-interface.css"'), 'The app must load its local visual-system stylesheet.');
+assert.match(interfaceCss, /--bg:#0B0F0C/);
+assert.match(interfaceCss, /--panel:#1A1F1B/);
+assert.match(interfaceCss, /--accent:#7CFF5E/);
+assert.match(interfaceCss, /\.hero:after\{display:none\}/, 'Decorative hero rings must stay out of the primary workspace.');
+assert.match(interfaceCss, /\.btn-primary\{\s*background:var\(--accent\)/, 'Primary actions must use the single portal-lime token.');
+assert.ok(serviceWorker.includes("'./assets/oasis-interface.css'"), 'The visual-system stylesheet must be available offline.');
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
 }
