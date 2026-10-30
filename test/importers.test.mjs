@@ -15,6 +15,20 @@ test('parseToml handles Codex-style config', () => {
   assert.equal(data.mcp_servers.remote.prompt, 'line1\nline2');
 });
 
+test('parseToml rejects incomplete values and arrays without hanging', () => {
+  for (const malformed of [
+    'items = [',
+    'items = [1',
+    'items = [1,',
+    'items = [1,,2]',
+    'items = [{ key = 1 }',
+    'items = [1, { key = }]',
+    'name = "unterminated'
+  ]) {
+    assert.throws(() => parseToml(malformed), /TOML:/, malformed);
+  }
+});
+
 test('imports Codex, Gemini CLI and Cursor configuration without overwriting', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-import-home-'));
   const root = path.join(home, 'proj');

@@ -59,6 +59,7 @@ export function parseToml(text) {
       if (quote === '"' && src[i] === '\\') { out += src[i] + src[i + 1]; i += 2; continue; }
       out += src[i++];
     }
+    if (i >= src.length) throw new Error('TOML: unterminated string at offset ' + i);
     i++;
     return quote === '"' ? unescape(out) : out;
   };
@@ -73,7 +74,18 @@ export function parseToml(text) {
     if (ch === '[') {
       i++;
       const arr = [];
-      for (;;) { wsnl(); if (src[i] === ']') { i++; return arr; } arr.push(value()); wsnl(); if (src[i] === ',') i++; }
+      for (;;) {
+        wsnl();
+        if (i >= src.length) throw new Error('TOML: unterminated array at offset ' + i);
+        if (src[i] === ']') { i++; return arr; }
+        const before = i;
+        arr.push(value());
+        if (i <= before) throw new Error('TOML: expected an array value at offset ' + i);
+        wsnl();
+        if (src[i] === ',') { i++; continue; }
+        if (src[i] === ']') { i++; return arr; }
+        throw new Error('TOML: expected , or ] at offset ' + i);
+      }
     }
     if (ch === '{') {
       i++;
@@ -83,6 +95,7 @@ export function parseToml(text) {
     const start = i;
     while (i < src.length && !/[,\]}\n#]/.test(src[i])) i++;
     const raw = src.slice(start, i).trim();
+    if (!raw) throw new Error('TOML: expected a value at offset ' + start);
     if (raw === 'true') return true;
     if (raw === 'false') return false;
     const num = Number(raw.replace(/_/g, ''));
