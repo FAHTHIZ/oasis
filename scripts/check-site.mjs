@@ -26,6 +26,9 @@ const required = [
   'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"',
   'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
+  'class="intro-row agent-page-heading"', 'class="agent-page-context"', 'class="agent-setup-heading"',
+  'class="agent-chat-identity"', 'class="agent-compose-form"', 'aria-label="Runtime connection"',
+
   'aria-label="Resize chat and terminal panels"', 'oasis.agent.chatSplit', 'ArrowLeft', 'ArrowRight',
   'id="agentEmptyState"', 'data-agent-example="Explain this project"', 'data-agent-example="Find a bug"', 'data-agent-example="Write tests"',
   'id="commandPaletteDialog"', 'id="commandPaletteSearch"', 'id="commandPaletteButton"', 'commandPaletteOpen()', 'starter-find-bug', 'Ctrl+K or ?',
@@ -75,6 +78,13 @@ assert.match(interfaceCss, /--font-code:"JetBrains Mono"/);
 assert.match(interfaceCss, /\.hero:after\{display:none\}/, 'Decorative hero rings must stay out of the primary workspace.');
 assert.match(interfaceCss, /\.btn-primary\{background:var\(--surface-muted\)/, 'Generic primary buttons must remain neutral.');
 assert.match(interfaceCss, /#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn\s*\{/);
+assert.ok(interfaceCss.includes('Chat-first coding workspace:'), 'The chat-first layout must remain a separately maintained local stylesheet.');
+assert.ok(interfaceCss.includes('grid-template-areas:\\n    "prompt prompt"\\n    "context actions"'), 'Desktop composer must keep its prompt above the action footer.');
+assert.ok(interfaceCss.includes('grid-template-areas:"prompt" "context" "actions"'), 'Phone composer must stack the prompt, context and actions.');
+assert.ok(interfaceCss.includes('grid-template-columns:minmax(0,var(--agent-chat-split)) 10px minmax(300px,1fr)'), 'Desktop workspace must preserve a resizable chat/terminal split.');
+assert.ok(interfaceCss.includes('@media(max-width:780px)'), 'Phone workspace tabs must have a dedicated responsive layout.');
+assert.ok(interfaceCss.includes('@media(max-width:390px)'), 'The narrow 390px phone layout must be covered.');
+
 assert.match(interfaceCss, /\.agent-message\{font-size:14px\}/);
 assert.match(interfaceCss, /\.agent-message\.activity\{font-size:12\.5px/);
 const limeConsumers = [...interfaceCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
