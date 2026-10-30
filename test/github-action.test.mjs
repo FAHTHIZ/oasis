@@ -115,6 +115,7 @@ test('an @oasis issue comment runs the agent, pushes a branch, opens a PR, and r
   const env = { ...gitEnv, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app', GITHUB_SERVER_URL: 'https://github.com', GITHUB_RUN_ID: '42', INPUT_PERMISSION_MODE: 'default' };
   const outcome = await runAction({ env, root: work, event: comment('@oasis fix the login'), request, log: () => {}, runOptions: {
       provider: config,
+      canUseTool: async (toolName) => toolName === 'lsp',
       settings: {
         ...settings,
         lspServers: {
