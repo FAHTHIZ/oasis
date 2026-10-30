@@ -364,7 +364,8 @@ try {
     'The primary checkout must be clean before creating an isolated worktree.');
 
   // Saved-chat recovery must reopen the parent chat without restarting workers.
-  await page.locator('button[data-nav="monitor"]').click();
+  await page.locator('#sidebarSettingsButton').click();
+  await page.locator('#view-settings [data-nav="monitor"]').click();
   const originalRun = page.locator('#agentMonitorRunList .agent-monitor-run')
     .filter({ hasText: 'Run the browser end-to-end fixture and report its result.' });
   await originalRun.waitFor({ state: 'visible', timeout: timeoutMs });
@@ -419,7 +420,8 @@ try {
   // Hiding the entire utility rail must not strand the monitor's review shortcut.
   await page.locator('#agentTerminalToggle').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false');
-  await page.locator('button[data-nav="monitor"]').click();
+  await page.locator('#sidebarSettingsButton').click();
+  await page.locator('#view-settings [data-nav="monitor"]').click();
   const isolatedRun = page.locator('#agentMonitorRunList .agent-monitor-run')
     .filter({ hasText: 'Run the isolated worktree fixture and prepare changes for review.' });
   await isolatedRun.waitFor({ state: 'visible', timeout: timeoutMs });
@@ -516,7 +518,7 @@ try {
     firstRunPage.on('pageerror', (error) => firstRunErrors.push(error.message));
     await firstRunPage.setViewportSize({ width: 1280, height: 900 });
     await firstRunPage.goto('http://127.0.0.1:' + firstRunApp.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-    await firstRunPage.locator('button[data-nav="agent"]').first().click();
+    await firstRunPage.locator('#sidebarNewChatBtn').click();
     await firstRunPage.locator('#agentTokenInput').fill(firstRunApp.token);
     await firstRunPage.locator('#agentConnectBtn').click();
     await firstRunPage.locator('#firstRunWizard').waitFor({ state: 'visible', timeout: timeoutMs });
