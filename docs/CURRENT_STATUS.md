@@ -2,7 +2,7 @@
 
 ## Phase 0 finish-plan follow-up — October 30, 2026
 
-Implementation for the first Phase 0 slice is tracked in [PR #45](https://github.com/FAHTHIZ/oasis/pull/45) on branch `fix/phase-0-finish-plan-20261030`.
+Implementation for the first Phase 0 slice is tracked in [PR #46](https://github.com/FAHTHIZ/oasis/pull/46) on branch `fix/phase-0-finish-plan-20261030-sync`.
 
 - The repository README now labels the project Alpha until the Beta confidence gate is satisfied.
 - The Agent view no longer contains the stray literal escaped newline.
