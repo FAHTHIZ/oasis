@@ -8,16 +8,19 @@ import { planPackageInstall } from '../src/installer.mjs';
 
 function makeExecutable(directory, name) {
   const file = path.join(directory, name);
-  writeFileSync(file, '#!/bin/sh\nexit 0\n', 'utf8');
-  chmodSync(file, 0o755);
+  if (process.platform === 'win32') writeFileSync(file, '@echo off\r\nexit /b 0\r\n', 'utf8');
+  else {
+    writeFileSync(file, '#!/bin/sh\nexit 0\n', 'utf8');
+    chmodSync(file, 0o755);
+  }
   return file;
 }
 
 test('command lookup finds executables on PATH without which or where', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'oasis-path-'));
   try {
-    const executable = makeExecutable(directory, 'npm');
-    const env = { PATH: directory };
+    const executable = makeExecutable(directory, process.platform === 'win32' ? 'npm.cmd' : 'npm');
+    const env = { PATH: directory, PATHEXT: process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM' };
     assert.equal(findCommandPath('npm', env), executable);
     assert.equal(commandAvailable('npm', env), true);
     assert.equal(commandAvailable('which', env), false);
@@ -30,16 +33,15 @@ test('command lookup finds executables on PATH without which or where', () => {
 test('package installation checks the supplied PATH environment', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'oasis-npm-'));
   try {
-    const executable = makeExecutable(directory, 'npm');
+    makeExecutable(directory, process.platform === 'win32' ? 'npm.cmd' : 'npm');
     const plan = planPackageInstall({
       packageName: 'omniroute',
       ecosystem: 'npm-global',
-      env: { PATH: directory }
+      env: { PATH: directory, PATHEXT: process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM' }
     });
     assert.equal(plan.command, 'npm');
     assert.deepEqual(plan.args, ['install', '--global', 'omniroute']);
     assert.equal(commandAvailable(plan.command, { PATH: directory }), true);
-    assert.ok(executable.endsWith(path.join(directory, 'npm')));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -48,7 +50,7 @@ test('package installation checks the supplied PATH environment', () => {
 test('command lookup accepts a direct executable path', () => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'oasis-direct-'));
   try {
-    const executable = makeExecutable(directory, 'oasis-probe');
+    const executable = makeExecutable(directory, process.platform === 'win32' ? 'oasis-probe.cmd' : 'oasis-probe');
     assert.equal(findCommandPath(executable, { PATH: '' }), executable);
   } finally {
     rmSync(directory, { recursive: true, force: true });
