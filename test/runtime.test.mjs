@@ -1183,6 +1183,7 @@ test('post-edit verification gate asks for diff review and a passing check befor
   const baseSettings = await loadSettings(tmp);
   baseSettings.lspServers = { clean: { command: process.execPath, args: [cleanLsp], extensions: ['.mjs'] } };
   const session = await createSession({ root: tmp, config, settings: baseSettings });
+  t.after(() => closeSession(session));
   const transcript = [];
   const result = await runAgentTurn(session, 'Change the example module value from one to two.', {
     autoApprove: true,
