@@ -101,6 +101,7 @@ const desktopMain = await read('../desktop/main.mjs');
 const webRuntime = await read('../src/web.mjs');
 const secureSecrets = await read('../desktop/secure-secrets.mjs');
 const e2e = await read('../.github/scripts/browser-e2e.mjs');
+const qualityWorkflow = await read('../.github/workflows/quality.yml');
 assert.ok(desktopMain.includes('onProviderConfig: persistDesktopProviderConfig'), 'Desktop provider setup must use encrypted key storage.');
 assert.ok(desktopMain.includes('const previousSecret = await loadDesktopApiKey'), 'Desktop provider saves must capture the prior secret for rollback.');
 assert.ok(desktopMain.includes("await saveDesktopApiKey(previousSecret || ''"), 'Desktop provider saves must restore the prior secret if config persistence fails.');
@@ -116,6 +117,13 @@ assert.ok(e2e.includes('Selecting a starter must not send a message.'), 'Browser
 assert.ok(e2e.includes('Saved-chat recovery must reopen the parent chat without restarting workers.'), 'Browser E2E must verify saved-chat recovery does not imply worker resurrection.');
 assert.ok(e2e.includes('#agentMonitorOpenSessionBtn'), 'Browser E2E must exercise the run monitor saved-chat control.');
 assert.ok(e2e.includes('PASS isolated-diff review:'), 'Browser E2E must verify the run monitor can open the isolated worktree diff.');
+assert.ok(e2e.includes("import AxeBuilder from '@axe-core/playwright'"), 'Browser E2E must use axe-core for accessibility scans.');
+assert.ok(e2e.includes("new AxeBuilder({ page })"), 'Browser E2E must run axe against the real browser page.');
+assert.ok(e2e.includes(".include('#view-agent')"), 'Axe scans must target the Agent workspace.');
+assert.ok(e2e.includes("violation.id === 'color-contrast'"), 'Agent view contrast violations must fail browser E2E.');
+assert.ok(e2e.includes("First-run setup · 390px"), 'Axe must scan the first-run screen at phone width.');
+assert.ok(qualityWorkflow.includes('@axe-core/playwright@4.14.0'), 'The CI-only axe package must use the documented exact version.');
+
 assert.ok(e2e.includes('#agentMonitorReviewRunBtn'), 'Browser E2E must exercise the worktree review action from Run Monitor.');
 
 const manifest = JSON.parse(manifestText);
