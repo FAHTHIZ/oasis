@@ -38,10 +38,10 @@ sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { 
 For **Windows PowerShell**, paste this one line. It checks the downloaded script's hash before running it:
 
 ```powershell
-$p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='ebbb919c5a0c4610630827242bcc8041196c874568237b087bcfa9184002bddc'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
+$p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; $expected='90f6c8ae5119d3a0cc20afd958565391f4239bf6f26a1807cc2fa8b1e6da03c4'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected){Remove-Item $p -Force; throw 'Installer checksum mismatch. Do not run it.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
 ```
 
-**Published Windows installer SHA-256:** `ebbb919c5a0c4610630827242bcc8041196c874568237b087bcfa9184002bddc`
+**Published Windows installer SHA-256:** `90f6c8ae5119d3a0cc20afd958565391f4239bf6f26a1807cc2fa8b1e6da03c4`
 
 If the checksum does not match, stop and do not run the downloaded script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
 
