@@ -1,18 +1,23 @@
-# OASIS current implementation status
+## Phase 2 workspace shell and navigation — October 30, 2026
 
-## Phase 3 first-run model onboarding — October 30, 2026
+The main browser shell now follows the redesign brief's chat-first navigation model.
 
-- Added clear selected-route feedback and accessible pressed states to the API key, OmniRoute gateway and local Ollama choices.
-- The API route directs the user to provider selection and the masked API-key field; the gateway route explains that OmniRoute must already be running and points to `oasis setup`; the local route calls the existing Ollama discovery endpoint and reports found models or an unavailable/no-model state.
-- Updated the first-run choice cards and status treatment to match the flat workspace palette, including a distinct selected state and visible discovery-error styling.
-- Browser E2E now selects all three routes, verifies their provider presets and status messages, and captures desktop route states plus the selected local route at 390px.
-- The flow still tests a provider before saving configuration; no API key is saved merely by selecting a route.
+- Replaced the old primary sidebar navigation with OASIS branding, New chat, a project-picker entry, a saved-chat list grouped by Today / Yesterday / Earlier, and Settings at the bottom.
+- Connected saved chats to the existing authenticated /api/sessions endpoint. The sidebar and preserved chat-session selector use the same runtime session list; opening a sidebar item resumes its saved conversation.
+- Added a 52px project-context header with the active workspace name, a local-workspace pill, local-only status, context placeholder, cost placeholder, and Terminal / Changes / Tasks controls.
+- Created a Settings hub for the pre-existing Overview, Projects, Tasks, Notes, Run monitor, Model provider, GitHub, Integrations, Extensions, appearance, search and backup screens. The original pages and their IDs remain in the app.
+- Split the right utility rail into three accessible tabs: Terminal, Changes (selected run activity and isolated diff review), and Tasks (recent coding-run history). The same saved-run and diff code is reused; no second history store was introduced.
+- Added top-bar open/close behavior, keyboard navigation for utility tabs, monitor-to-Changes routing, and a dismissible phone sidebar drawer that opens from the menu button and closes on outside tap or Escape. The previous seven-item mobile bottom navigation is removed.
+- Expanded browser E2E to cover Settings navigation, the project-picker route, New chat, saved-chat loading, top-bar utility controls, all three panels, phone drawer behavior, and desktop / 390px screenshots plus axe checks.
 
-**Verification boundary:** route interaction and screenshot coverage are source-complete. Same-revision Quality Checks and browser/axe artifacts remain pending; no live Ollama device was available for manual hardware validation.
+Known data limits: the existing /api/status response supplies the active workspace name and provider configuration, but does not supply a Git branch or cost figure. The header therefore labels the context as a local workspace and leaves cost as an em dash instead of fabricating branch or billing information. The project-picker chip currently opens the existing Projects screen; selecting a Git repository continues through the established GitHub panel flow. The current local workspace selector is not yet a repository switcher.
+
+Verification boundary: browser E2E and axe checks for this exact revision are pending. Screenshot artifacts are not treated as verified until the same-revision workflow publishes them. The automated 390px checks do not substitute for a physical Android/Termux run.
+
 
 ---
 
-## Phase 2 chat-first Agent workspace — October 30, 2026
+## Phase 3 conversation-first Agent workspace — October 30, 2026
 
 The browser Agent view has been reshaped around the conversation while preserving its existing runtime and permission flows.
 
@@ -21,8 +26,8 @@ The browser Agent view has been reshaped around the conversation while preservin
 - Reworked the conversation header to keep model/runtime identity, permission mode, saved chats, context meter and New chat controls in a single responsive header.
 - Reworked the composer into a full-width prompt plus a separate context/actions row on desktop; phone layout stacks prompt, isolated-worktree option and Send/Stop controls.
 - Preserved the terminal split, divider resizing, terminal visibility, narrow-screen Chat/Terminal tabs, approval/question cards, saved-session behavior, provider setup and GitHub workspace controls. No server routes or permission semantics were changed for this layout pass.
-- Moved the existing Task history list and isolated-worktree diff review into a second right-side utility tab, **Runs & changes**, beside Terminal. The two views share the same column and are keyboard/tab accessible; Agent monitor review now opens the Runs & changes view directly. The run-history panel is reused, not duplicated.
-- Added browser E2E screenshot coverage for empty state, connected chat, connection failure, approval, terminal, Runs & changes, provider settings and first-run at desktop and/or 390px widths. Axe color-contrast scans cover the connection error, provider settings and Runs & changes states too.
+- Moved the existing saved-run list and isolated-worktree diff review into separate **Tasks** and **Changes** views beside Terminal. The three views share one utility column and are keyboard/tab accessible; selecting a run or opening a review from the Agent monitor opens Changes. The original history and diff handlers are reused.
+- Added browser E2E screenshot coverage for empty state, connected chat, connection failure, approval, terminal, Changes, Tasks, provider settings and first-run at desktop and/or 390px widths. Axe color-contrast scans cover the connection error, provider settings, Changes and Tasks states too.
 - Added a static layout integrity check for the desktop split, desktop/mobile composer structure, utility rail, and 390px breakpoint.
 
 **Verification boundary:** the updated browser/quality run for this exact revision is pending. Screenshot files are generated by CI when browser E2E passes; no local screenshot was generated in this session. The 390px width check is automated and does not replace a real Android device test. Android/Termux remains experimental for native PTY and is not being claimed as supported by this browser layout work.
