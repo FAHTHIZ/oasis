@@ -15,7 +15,7 @@ const required = [
   '<!doctype html>', 'id="view-home"', 'id="view-projects"',
   'id="view-tasks"', 'id="view-notes"', 'id="projectDialog"', 'id="taskDialog"', 'id="manageProjectDialog"', 'id="dashboardProjects"',
   'id="allProjects"', 'id="allTasks"', 'id="notesEditor"',
-  'id="view-agent"', 'runtime-scope-note', 'src="./assets/oasis-mark.svg"', 'Local only by default:', 'It is not open to the public internet by default.', 'Remote access requires explicit server options', 'never share your runtime connection token.', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'aria-live="assertive"', 'aria-labelledby="agentApprovalTitle"', 'OASIS needs your permission', '>Deny</button>', '>Allow once</button>', 'Always allow for this session', 'for this session', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
+  'id="view-agent"', 'runtime-scope-note', 'src="/assets/oasis-mark.svg"', 'Local only by default:', 'It is not open to the public internet by default.', 'Remote access requires explicit server options', 'never share your runtime connection token.', 'id="agentForm"', 'id="agentTokenInput"', 'id="agentApprovalCard"', 'aria-live="assertive"', 'aria-labelledby="agentApprovalTitle"', 'OASIS needs your permission', '>Deny</button>', '>Allow once</button>', 'Always allow for this session', 'for this session', 'assistant_delta', 'id="agentStopBtn"', '/cancel',
   'id="view-monitor"', 'id="agentMonitorRefreshBtn"', 'id="agentMonitorOpenSessionBtn"', 'id="agentMonitorReviewRunBtn"', 'id="agentMonitorStats"', 'id="agentMonitorRunList"', 'id="agentMonitorWorkers"', 'id="agentMonitorEvents"', 'function agentLoadMonitor(', "agentApi('/api/agent-monitor')", 'agentOpenCloudRun(id,title)', 'canReviewIsolatedDiff',
   'id="view-extensions"', 'id="extensionInspectForm"', 'id="extensionScope"', 'id="extensionCandidateList"', 'id="extensionCompatibility"', 'Detected format:', 'id="installedExtensions"',
   'id="view-integrations"', 'data-integration-tab="connectors"', 'Specialist reviews', 'id="mcpAddForm"', '/api/extensions/inspect', '/api/extensions/install', '/api/mcp',
@@ -29,7 +29,7 @@ const required = [
   'id="agentTerminalUtilityTab"', 'id="agentChangesUtilityTab"', 'id="agentTasksUtilityTab"',
   'id="agentTerminalUtilityPanel"', 'id="agentChangesUtilityPanel"', 'id="agentTasksUtilityPanel"',
   'aria-label="Workspace utilities"', 'data-topbar-panel="terminal"', 'data-topbar-panel="changes"', 'data-topbar-panel="tasks"',
-  'id="sidebarMenuButton"', 'id="sidebarChatList"', 'id="sidebarSettingsButton"', 'id="view-settings"';
+  'id="sidebarMenuButton"', 'id="sidebarChatList"', 'id="sidebarNewChatBtn"', 'id="sidebarProjectPickerBtn"', 'id="sidebarSettingsButton"', 'id="view-settings"',
 
   'class="intro-row agent-page-heading"', 'class="agent-page-context"', 'class="agent-setup-heading"',
   'class="agent-chat-identity"', 'class="agent-compose-form"', 'aria-label="Runtime connection"',
