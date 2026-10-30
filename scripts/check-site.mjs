@@ -97,6 +97,8 @@ assert.ok(html.includes("event.key!=='ArrowLeft'&&event.key!=='ArrowRight'"), 'U
 assert.ok(html.includes("terminalTab.tabIndex=selected==='terminal'?0:-1"), 'Only the selected utility tab should remain in the tab sequence.');
 assert.ok(html.includes("Hide side panel"), 'The utility visibility control must name the whole side panel.');
 assert.ok(html.includes("window.oasisAgentSetUtilityPanel('terminal')"), 'The terminal command-palette action must explicitly select Terminal.');
+assert.ok(html.includes("workspaceGrid.dataset.terminalVisible==='false'&&utilityToggle"), 'Run-monitor diff review must restore a hidden utility rail before selecting Runs & changes.');
+
 
 
 assert.ok(interfaceCss.includes('.agent-utility-view[hidden]{display:none!important}'), 'Inactive utility panels must remain hidden.');
