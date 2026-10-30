@@ -304,7 +304,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
 <div class="shell">
-<aside class="sidebar" aria-label="OASIS workspace">
+<aside class="sidebar" id="mainSidebar" aria-label="OASIS workspace">
   <a class="brand" href="#" data-nav="agent" aria-label="Oasis chat home">
     <span class="brand-mark"><img src="/assets/oasis-mark.svg" alt="" aria-hidden="true"></span>
     <span><span class="brand-name">OASIS</span><span class="brand-sub" style="display:block">CODE. AUTOMATE. FLOURISH.</span></span>
@@ -332,6 +332,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
   </div>
 </aside>
 <main class="main"><header class="topbar">
+  <button class="icon-btn sidebar-menu-button" id="sidebarMenuButton" type="button" aria-label="Open chats and navigation" aria-controls="mainSidebar" aria-expanded="false">☰</button>
   <div class="topbar-project-context">
     <div class="topbar-project-line"><strong id="topbarProjectName">Personal studio</strong><span class="topbar-branch-pill" id="topbarBranchPill">local workspace</span></div>
     <div class="topbar-meta-line"><span class="local-only-pill" title="OASIS listens on this computer by default. Remote access requires explicit server options. Never share the runtime token.">Local only</span><span id="topbarContext">Context —</span><span id="topbarCost">Cost —</span></div>
@@ -420,7 +421,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
     </div>
     <button class="btn btn-secondary agent-terminal-toggle" id="agentTerminalToggle" type="button" aria-controls="agentTerminalColumn" aria-expanded="true">Hide terminal</button>
   </div>
-  <div class="agent-workspace-grid" id="agentWorkspaceGrid" data-active-panel="chat" data-terminal-visible="true">
+  <div class="agent-workspace-grid" id="agentWorkspaceGrid" data-active-panel="chat" data-terminal-visible="false">
     <div class="agent-chat-column" id="agentChatColumn" role="tabpanel" aria-labelledby="agentChatTab">
 <div class="panel agent-chat-panel">
     <div class="agent-chat-header">
@@ -704,7 +705,7 @@ function doneCount(id){return state.tasks.filter(function(t){return t.projectId=
 function progress(p){var n=taskCount(p.id);return n?Math.round(doneCount(p.id)/n*100):(p.status==='completed'?100:0)}
 function taskHTML(t){var p=project(t.projectId),priority=t.priority||'normal',label=priority==='high'?'High':priority==='low'?'Low':'Normal',title=esc(t.title);return '<div class="task-row '+(t.done?'is-done':'')+'"><input class="task-check" type="checkbox" data-toggle-task="'+esc(t.id)+'" '+(t.done?'checked':'')+' aria-label="Mark '+title+' '+(t.done?'open':'complete')+'"><div class="task-main"><div class="task-title">'+title+'</div><div class="task-meta"><span>'+esc(p?p.name:'Unassigned')+'</span><span class="priority '+(priority==='normal'?'':priority)+'">'+label+'</span></div></div><button class="delete-task" data-delete-task="'+esc(t.id)+'" aria-label="Delete task '+title+'" title="Delete task">×</button></div>'}
 function projectHTML(p){var pct=progress(p),n=taskCount(p.id),done=doneCount(p.id);return '<article class="project-card"><div class="project-card-head"><div class="project-symbol">'+esc(p.symbol||'◇')+'</div><div class="project-info"><div class="project-name">'+esc(p.name)+'</div><div class="project-desc">'+esc(p.description||'A project in your workspace.')+'</div></div><span class="project-badge">'+(p.status==='completed'?'Complete':'In progress')+'</span></div><div class="progress-labels"><span>Progress</span><strong>'+pct+'%</strong></div><div class="progress-track" role="progressbar" aria-valuenow="'+pct+'" aria-valuemin="0" aria-valuemax="100" aria-label="Project progress"><div class="progress-bar" style="width:'+pct+'%"></div></div><div class="project-footer"><span>'+done+' of '+n+' tasks complete</span><button class="text-link" data-project-action="'+esc(p.id)+'">Manage →</button></div></article>'}
-function renderStats(){var open=state.tasks.filter(function(t){return !t.done}).length,done=state.tasks.filter(function(t){return t.done}).length,pct=state.tasks.length?Math.round(done/state.tasks.length*100):0,words=state.notes.trim()?state.notes.trim().split(/\s+/).length:0;document.getElementById('statProjects').textContent=state.projects.filter(function(p){return p.status!=='completed'}).length;document.getElementById('statOpen').textContent=open;document.getElementById('statDone').textContent=done;document.getElementById('completionPct').textContent=pct+'%';document.getElementById('statNotes').textContent=words;document.getElementById('noteWords').textContent=words+' words';document.getElementById('projectCount').textContent=state.projects.length;document.getElementById('openTaskCount').textContent=open}
+function renderStats(){var open=state.tasks.filter(function(t){return !t.done}).length,done=state.tasks.filter(function(t){return t.done}).length,pct=state.tasks.length?Math.round(done/state.tasks.length*100):0,words=state.notes.trim()?state.notes.trim().split(/\s+/).length:0;document.getElementById('statProjects').textContent=state.projects.filter(function(p){return p.status!=='completed'}).length;document.getElementById('statOpen').textContent=open;document.getElementById('statDone').textContent=done;document.getElementById('completionPct').textContent=pct+'%';document.getElementById('statNotes').textContent=words;document.getElementById('noteWords').textContent=words+' words';document.getElementById('projectCount').textContent=state.projects.length;document.getElementById('openTaskCount').textContent=open;var topbarTaskCount=document.getElementById('topbarTaskCount');if(topbarTaskCount)topbarTaskCount.textContent=open}
 function renderDashboard(){var ps=state.projects.filter(function(p){return p.status!=='completed'}).slice(0,3),ts=state.tasks.filter(function(t){return !t.done}).slice(0,4);document.getElementById('dashboardProjects').innerHTML=ps.length?ps.map(projectHTML).join(''):'<div class="panel empty-state">✦<br>No projects yet. Create one to give your work a home.</div>';document.getElementById('dashboardTasks').innerHTML=ts.length?ts.map(taskHTML).join(''):'<div class="empty-state">☼<br>Nothing urgent here. Take a breath, or add a next step.</div>'}
 function renderProjects(){var q=document.getElementById('projectSearch').value.toLowerCase(),f=document.getElementById('projectFilter').value;var list=state.projects.filter(function(p){return (p.name+' '+p.description).toLowerCase().includes(q)&&(f==='all'||(f==='completed'?p.status==='completed':p.status!=='completed'))});document.getElementById('allProjects').innerHTML=list.length?list.map(projectHTML).join(''):'<div class="panel empty-state">◇<br>No projects match. Create one or adjust your search.</div>'}
 function renderTasks(){var q=(document.getElementById('taskSearch').value||document.getElementById('globalSearch').value||'').toLowerCase(),f=document.getElementById('taskFilter').value;var list=state.tasks.filter(function(t){var p=project(t.projectId),match=(t.title+' '+(p?p.name:'')).toLowerCase().includes(q),status=f==='all'||(f==='done'?t.done:f==='high'?(!t.done&&t.priority==='high'):!t.done);return match&&status});var rank={high:0,normal:1,low:2};list.sort(function(a,b){if(a.done!==b.done)return a.done?1:-1;return (rank[a.priority]===undefined?1:rank[a.priority])-(rank[b.priority]===undefined?1:rank[b.priority])});document.getElementById('allTasks').innerHTML=list.length?list.map(taskHTML).join(''):'<div class="empty-state">✓<br>No tasks here. A little space can be a good thing.</div>'}
@@ -736,6 +737,27 @@ function importBackup(file){if(!file)return;var reader=new FileReader();reader.o
       }
     });
   });
+})();
+
+(function setupMobileSidebarMenu(){
+  var sidebar=document.getElementById('mainSidebar');
+  var button=document.getElementById('sidebarMenuButton');
+  if(!sidebar||!button)return;
+  function setOpen(open){
+    var visible=!!open;
+    sidebar.classList.toggle('mobile-open',visible);
+    document.body.classList.toggle('sidebar-open',visible);
+    button.setAttribute('aria-expanded',String(visible));
+    button.setAttribute('aria-label',visible?'Close chats and navigation':'Open chats and navigation');
+  }
+  button.addEventListener('click',function(){setOpen(!sidebar.classList.contains('mobile-open'))});
+  document.addEventListener('click',function(event){
+    if(document.body.classList.contains('sidebar-open')&&!sidebar.contains(event.target)&&event.target!==button)setOpen(false);
+  });
+  document.addEventListener('keydown',function(event){
+    if(event.key==='Escape'&&document.body.classList.contains('sidebar-open')){setOpen(false);button.focus()}
+  });
+  window.oasisCloseSidebarMenu=function(){setOpen(false)};
 })();
 
 // Searchable, keyboard-accessible workspace palette. Selecting a row only
@@ -848,7 +870,21 @@ document.addEventListener('keydown',function(event){
     event.preventDefault();commandPaletteOpen();
   }
 });
-document.addEventListener('click',function(e){var nav=e.target.closest('[data-nav]');if(nav){e.preventDefault();var nextView=nav.getAttribute('data-nav'),scrollTarget=nav.getAttribute('data-scroll-target');navigate(nextView);if(scrollTarget){window.setTimeout(function(){var targetNode=document.querySelector('.'+scrollTarget)||document.getElementById(scrollTarget);if(targetNode)targetNode.scrollIntoView({behavior:'smooth',block:'start'})},120)}return}var toggle=e.target.closest('[data-toggle-task]');if(toggle){var t=state.tasks.find(function(x){return x.id===toggle.getAttribute('data-toggle-task')});if(t){t.done=!!toggle.checked;save();render()}return}var remove=e.target.closest('[data-delete-task]');if(remove){var id=remove.getAttribute('data-delete-task');if(window.confirm('Delete this task?')){state.tasks=state.tasks.filter(function(t){return t.id!==id});save();render();notify('Task deleted.')}return}var manage=e.target.closest('[data-project-action]');if(manage){var p=project(manage.getAttribute('data-project-action'));if(!p)return;currentProjectActionId=p.id;document.getElementById('manageProjectTitle').textContent=p.name;document.getElementById('manageProjectDescription').textContent='Choose an action for this project.';document.getElementById('reopenProjectAction').hidden=p.status!=='completed';document.getElementById('completeProjectAction').hidden=p.status==='completed';document.getElementById('manageProjectDialog').showModal();return}});
+document.getElementById('sidebarNewChatBtn').addEventListener('click',function(){
+  navigate('agent');
+  var newChat=document.getElementById('newAgentSessionBtn');
+  if(newChat)newChat.click();
+  if(window.oasisCloseSidebarMenu)window.oasisCloseSidebarMenu();
+});
+document.getElementById('sidebarRefreshChats').addEventListener('click',function(){void agentLoadHistoryList()});
+document.getElementById('sidebarChatList').addEventListener('click',function(event){
+  var button=event.target.closest('[data-sidebar-session-id]');
+  if(!button)return;
+  navigate('agent');
+  void agentOpenSession(button.dataset.sidebarSessionId);
+  if(window.oasisCloseSidebarMenu)window.oasisCloseSidebarMenu();
+});
+document.addEventListener('click',function(e){var nav=e.target.closest('[data-nav]');if(nav){e.preventDefault();var nextView=nav.getAttribute('data-nav'),scrollTarget=nav.getAttribute('data-scroll-target');navigate(nextView);if(window.oasisCloseSidebarMenu)window.oasisCloseSidebarMenu();if(scrollTarget){window.setTimeout(function(){var targetNode=document.querySelector('.'+scrollTarget)||document.getElementById(scrollTarget);if(targetNode)targetNode.scrollIntoView({behavior:'smooth',block:'start'})},120)}return}var toggle=e.target.closest('[data-toggle-task]');if(toggle){var t=state.tasks.find(function(x){return x.id===toggle.getAttribute('data-toggle-task')});if(t){t.done=!!toggle.checked;save();render()}return}var remove=e.target.closest('[data-delete-task]');if(remove){var id=remove.getAttribute('data-delete-task');if(window.confirm('Delete this task?')){state.tasks=state.tasks.filter(function(t){return t.id!==id});save();render();notify('Task deleted.')}return}var manage=e.target.closest('[data-project-action]');if(manage){var p=project(manage.getAttribute('data-project-action'));if(!p)return;currentProjectActionId=p.id;document.getElementById('manageProjectTitle').textContent=p.name;document.getElementById('manageProjectDescription').textContent='Choose an action for this project.';document.getElementById('reopenProjectAction').hidden=p.status!=='completed';document.getElementById('completeProjectAction').hidden=p.status==='completed';document.getElementById('manageProjectDialog').showModal();return}});
 document.getElementById('completeProjectAction').addEventListener('click',function(){var p=project(currentProjectActionId);if(p){p.status='completed';save();render();notify('Project marked complete.')}document.getElementById('manageProjectDialog').close()});
 document.getElementById('reopenProjectAction').addEventListener('click',function(){var p=project(currentProjectActionId);if(p){p.status='active';save();render();notify('Project reopened.')}document.getElementById('manageProjectDialog').close()});
 document.getElementById('deleteProjectAction').addEventListener('click',function(){var p=project(currentProjectActionId);if(p&&window.confirm('Remove '+p.name+'? Its tasks will become unassigned.')){state.tasks.forEach(function(t){if(t.projectId===p.id)t.projectId=''});state.projects=state.projects.filter(function(x){return x.id!==p.id});save();render();notify('Project removed.')}document.getElementById('manageProjectDialog').close()});
@@ -868,9 +904,75 @@ document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat(undefi
 if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){console.warn('Offline cache was not enabled in this browser.')})})}
 
 var agentToken=sessionStorage.getItem('oasis.web.token')||'',agentSessionId=sessionStorage.getItem('oasis.web.sessionId')||'',agentActiveJob=null,agentApprovalId=null,agentBusy=false,agentAssistantNodes=Object.create(null),activePtyId=null,activePtyOffset=0,oasisTerminal=null,oasisFitAddon=null,terminalInputQueue=Promise.resolve(),terminalFitTimer=null;
-async function agentLoadHistoryList(){var sel=document.getElementById('agentHistorySelect');if(!agentToken)return;try{var d=await agentApi('/api/sessions');var list=(d.sessions||[]).slice(0,30);sel.innerHTML='';var o=document.createElement('option');o.value='';o.textContent=list.length?'Saved chats ('+list.length+')':'No saved chats';sel.appendChild(o);list.forEach(function(s){var opt=document.createElement('option');opt.value=s.id;var when=s.updatedAt?new Date(s.updatedAt).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';opt.textContent=(s.title||'Untitled chat').slice(0,48)+(when?' · '+when:'');sel.appendChild(opt)});sel.value=list.some(function(s){return s.id===agentSessionId})?agentSessionId:'';sel.hidden=false}catch(e){sel.hidden=true}}
-async function agentOpenSession(id){if(!id||agentBusy)return;agentSessionId=id;sessionStorage.setItem('oasis.web.sessionId',id);try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(id));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});agentActivity('Saved chat reopened. Send a message to continue it.')}catch(e){agentActivity('Could not open that chat: '+e.message)}}
-function agentShowSessionState(d){var sel=document.getElementById('agentModeSelect');if(d.mode&&sel.querySelector('option[value="'+d.mode+'"]'))sel.value=d.mode;var m=document.getElementById('agentContextMeter');m.hidden=false;m.textContent='Context '+(d.contextPercent||0)+'% · '+Number(d.totalTokens||0).toLocaleString()+' tokens';m.title='~'+Number(d.contextTokens||0).toLocaleString()+' of '+Number(d.contextWindow||0).toLocaleString()+' context tokens'+(d.model?' · '+d.model:'');m.dataset.level=d.contextPercent>=80?'high':d.contextPercent>=50?'mid':'low'}
+var agentSavedSessions=[];
+function agentRenderSidebarChats(list,emptyMessage){
+  var root=document.getElementById('sidebarChatList');
+  if(!root)return;
+  root.replaceChildren();
+  if(!agentToken||!list.length){
+    var empty=document.createElement('div');
+    empty.className='sidebar-chat-empty';
+    empty.textContent=emptyMessage||(!agentToken?'Connect Oasis to see saved chats.':'No saved chats yet. Start a new chat.');
+    root.appendChild(empty);
+    return;
+  }
+  var groups=[{name:'Today',items:[]},{name:'Yesterday',items:[]},{name:'Earlier',items:[]}];
+  var todayDate=new Date();todayDate.setHours(0,0,0,0);
+  var yesterdayDate=new Date(todayDate);yesterdayDate.setDate(yesterdayDate.getDate()-1);
+  list.forEach(function(session){
+    var date=session.updatedAt?new Date(session.updatedAt):null;
+    var group='Earlier';
+    if(date&&!Number.isNaN(date.getTime())){
+      var day=new Date(date);day.setHours(0,0,0,0);
+      if(day.getTime()===todayDate.getTime())group='Today';
+      else if(day.getTime()===yesterdayDate.getTime())group='Yesterday';
+    }
+    groups.find(function(item){return item.name===group}).items.push(session);
+  });
+  groups.forEach(function(group){
+    if(!group.items.length)return;
+    var heading=document.createElement('div');
+    heading.className='sidebar-chat-group-label';heading.textContent=group.name;
+    root.appendChild(heading);
+    group.items.forEach(function(session){
+      var button=document.createElement('button');
+      button.type='button';button.className='sidebar-chat-item';
+      button.dataset.sidebarSessionId=session.id;
+      button.textContent=(session.title||'Untitled chat').slice(0,64);
+      button.title=session.title||'Untitled chat';
+      button.setAttribute('aria-current',session.id===agentSessionId?'page':'false');
+      root.appendChild(button);
+    });
+  });
+}
+async function agentLoadHistoryList(){
+  var sel=document.getElementById('agentHistorySelect');
+  if(!agentToken){agentSavedSessions=[];agentRenderSidebarChats([]);return}
+  try{
+    var d=await agentApi('/api/sessions');
+    var list=(d.sessions||[]).slice(0,30);
+    agentSavedSessions=list;
+    sel.innerHTML='';
+    var option=document.createElement('option');
+    option.value='';option.textContent=list.length?'Saved chats ('+list.length+')':'No saved chats';
+    sel.appendChild(option);
+    list.forEach(function(session){
+      var item=document.createElement('option');
+      item.value=session.id;
+      var when=session.updatedAt?new Date(session.updatedAt).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      item.textContent=(session.title||'Untitled chat').slice(0,48)+(when?' · '+when:'');
+      sel.appendChild(item);
+    });
+    sel.value=list.some(function(session){return session.id===agentSessionId})?agentSessionId:'';
+    sel.hidden=false;
+    agentRenderSidebarChats(list);
+  }catch(error){
+    sel.hidden=true;
+    agentRenderSidebarChats([], 'Saved chats could not be loaded. Reconnect and try again.');
+  }
+}
+async function agentOpenSession(id){if(!id||agentBusy)return;agentSessionId=id;sessionStorage.setItem('oasis.web.sessionId',id);agentRenderSidebarChats(agentSavedSessions);try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(id));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});agentActivity('Saved chat reopened. Send a message to continue it.')}catch(e){agentActivity('Could not open that chat: '+e.message)}}
+function agentShowSessionState(d){var topbarContext=document.getElementById('topbarContext');if(topbarContext)topbarContext.textContent='Context '+(d.contextPercent||0)+'%';var sel=document.getElementById('agentModeSelect');if(d.mode&&sel.querySelector('option[value="'+d.mode+'"]'))sel.value=d.mode;var m=document.getElementById('agentContextMeter');m.hidden=false;m.textContent='Context '+(d.contextPercent||0)+'% · '+Number(d.totalTokens||0).toLocaleString()+' tokens';m.title='~'+Number(d.contextTokens||0).toLocaleString()+' of '+Number(d.contextWindow||0).toLocaleString()+' context tokens'+(d.model?' · '+d.model:'');m.dataset.level=d.contextPercent>=80?'high':d.contextPercent>=50?'mid':'low'}
 function agentSetStatus(text,connected){var el=document.getElementById('agentRuntimeState');el.textContent=text;el.dataset.connected=connected?'true':'false'}
 function agentApi(url,options){options=options||{};var headers=Object.assign({},options.headers||{});if(agentToken)headers.Authorization='Bearer '+agentToken;if(options.body)headers['Content-Type']='application/json';return fetch(url,Object.assign({},options,{headers:headers,cache:'no-store'})).then(function(r){return r.json().catch(function(){return {error:'Invalid response from Oasis runtime'}}).then(function(data){if(!r.ok)throw new Error(data.error||('HTTP '+r.status));return data})})}
 
@@ -1110,7 +1212,7 @@ function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if
 function agentActivity(text){agentAppendMessage('activity',text)}
 function agentClearMessages(){document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null}
 function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=!agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentIsolateWorktree').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy;if(!agentBusy&&agentToken)void agentLoadCloudTasks(true)}
-async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);void agentLoadMonitor(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
+async function agentConnect(silent){var field=document.getElementById('agentTokenInput'),token=(field.value||agentToken).trim();if(!token){agentSetStatus('Paste a connection token to connect',false);return}agentToken=token;try{var data=await agentApi('/api/status');var topbarProjectName=document.getElementById('topbarProjectName');if(topbarProjectName)topbarProjectName.textContent=data.workspaceName||'Personal studio';sessionStorage.setItem('oasis.web.token',agentToken);agentSetStatus(data.providerConfigured?'Connected · '+(data.provider.model||data.provider.protocol):'Connected · model setup needed',true);document.getElementById('agentModelName').textContent=data.providerConfigured?(data.provider.model||'Configured model'):'Choose a model';document.getElementById('agentModelDetail').textContent=data.providerConfigured?(data.provider.protocol||'Provider')+' · '+(data.workspaceName||'Workspace'):'No provider configured';document.getElementById('firstRunWizard').hidden=!!data.providerConfigured;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?'Configured · '+(data.provider.model||data.provider.protocol):'Setup required';var providerSaveBtn=document.getElementById('providerSaveBtn');providerSaveBtn.disabled=!data.providerSetupAvailable;document.getElementById('providerSetupStatus').textContent=data.providerConfigured?(data.provider.model||data.provider.protocol)+(data.providerSetupAvailable?' · configured':' · host terminal only'):(data.providerSetupAvailable?'Setup required':'Configure in host terminal');if(data.provider){document.getElementById('providerProtocol').value=data.provider.protocol||'openai-responses';document.getElementById('providerModel').value=data.provider.model||'';document.getElementById('providerBaseUrl').value=data.provider.baseURL||(data.provider.protocol==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')}document.getElementById('agentConnectionHelp').textContent=data.providerConfigured?'Connected to workspace “'+data.workspaceName+'”. Consequential actions require approval.':'Runtime connected, but no model provider is configured. Use the Model provider form below when this runtime is on the same device, or run oasis setup in the terminal. '+(data.setupHint||'');if(agentSessionId){try{var hist=await agentApi('/api/sessions/'+encodeURIComponent(agentSessionId));agentClearMessages();hist.messages.forEach(function(m){agentAppendMessage(m.role==='user'?'user':'assistant',m.content)});if(!hist.messages.length)agentActivity('Saved session resumed. Send a task to continue.')}catch(e){agentActivity('Could not restore saved history: '+e.message)}}else if(!silent){agentClearMessages();agentActivity('Runtime connected. Ask Oasis to inspect the project or describe your change.')}void agentLoadHistoryList();void agentLoadCloudTasks(true);void agentLoadMonitor(true);}catch(e){if(!silent)notify('Runtime connection failed: '+e.message);agentSetStatus('Connection failed',false);if(/token/i.test(e.message)){agentToken='';sessionStorage.removeItem('oasis.web.token')}}}
 function agentDisconnect(){agentToken='';sessionStorage.removeItem('oasis.web.token');document.getElementById('agentTokenInput').value='';agentSetStatus('Runtime not connected',false);document.getElementById('agentModelName').textContent='Choose a model';document.getElementById('agentModelDetail').textContent='Connect a runtime';document.getElementById('agentConnectionHelp').textContent='Disconnected. Start or return to oasis web, then paste its token to reconnect.';void agentLoadMonitor(true);notify('Runtime disconnected from this browser tab.')}
 var agentQuestionId=null,agentQuestionMulti=false;
 function agentShowQuestion(d){agentQuestionId=d.questionId;agentQuestionMulti=!!d.multiSelect;document.getElementById('agentQuestionHeader').textContent=d.header?d.header:'Oasis has a question';document.getElementById('agentQuestionText').textContent=d.question;var box=document.getElementById('agentQuestionOptions');box.innerHTML='';(d.options||[]).forEach(function(o){var b=document.createElement('button');b.type='button';b.className='agent-question-option';b.setAttribute('aria-pressed','false');var l=document.createElement('strong');l.textContent=o.label;b.appendChild(l);if(o.description){var s=document.createElement('span');s.textContent=o.description;b.appendChild(s)}b.addEventListener('click',function(){if(agentQuestionMulti){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true')}else{void agentAnswerQuestion(o.label)}});box.appendChild(b)});document.getElementById('agentQuestionInput').value='';document.getElementById('agentQuestionSubmit').textContent=agentQuestionMulti?'Send selected':'Send';document.getElementById('agentQuestionCard').hidden=false;agentSetStatus('Waiting for your answer',true);agentScroll()}
@@ -1122,7 +1224,7 @@ function agentProcessEvent(jobId,event){var d=event.data||{};if(event.type==='st
 async function agentPoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var s=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(s.events||[]).forEach(function(e){cursor=Math.max(cursor,e.id);agentProcessEvent(jobId,e)});if(s.status==='completed'||s.status==='error'||s.status==='cancelled'){if(s.status==='error'&&s.error){agentAssistantUpdate(jobId,'Oasis stopped: '+s.error);agentSetBusy(false);agentActiveJob=null;agentSetStatus('Agent error',true)}if(s.result&&s.result.isolatedWorktree){var wt=s.result.isolatedWorktree;agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';document.getElementById('agentIsolateWorktree').checked=false;if(wt&&wt.changed===false)agentActivity('The isolated run made no changes; its temporary worktree was removed.');else if(wt&&wt.branch&&!wt.committed)agentActivity('Review branch '+wt.branch+' is retained. Check Task history for its diff; nothing is merged automatically.');void agentLoadCloudTasks(true)}else if(s.result&&s.result.sessionId){agentSessionId=s.result.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}return}await new Promise(function(resolve){setTimeout(resolve,650)})}}catch(e){if(agentActiveJob===jobId){agentActivity('Connection interrupted: '+e.message+' Reconnect to check whether the task finished.');agentSetStatus('Connection interrupted',false);agentSetBusy(false);agentActiveJob=null}}}
 document.getElementById('agentConnectBtn').addEventListener('click',function(){void agentConnect(false)});
 document.getElementById('agentDisconnectBtn').addEventListener('click',agentDisconnect);
-document.getElementById('newAgentSessionBtn').addEventListener('click',function(){if(agentBusy){notify('Wait until the current task finishes.');return}agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();document.getElementById('agentHistorySelect').value='';agentActivity('New chat ready. The previous session remains saved on the runtime.');agentSetStatus(agentToken?'Connected':'Runtime not connected',!!agentToken)});
+document.getElementById('newAgentSessionBtn').addEventListener('click',function(){if(agentBusy){notify('Wait until the current task finishes.');return}agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();document.getElementById('agentHistorySelect').value='';agentRenderSidebarChats(agentSavedSessions);agentActivity('New chat ready. The previous session remains saved on the runtime.');agentSetStatus(agentToken?'Connected':'Runtime not connected',!!agentToken)});
 document.getElementById('agentApproveBtn').addEventListener('click',function(){void agentResolveApproval(true)});document.getElementById('agentAlwaysBtn').addEventListener('click',function(){void agentResolveApproval(true,true)});
 document.getElementById('agentDenyBtn').addEventListener('click',function(){void agentResolveApproval(false)});
 document.getElementById('agentQuestionForm').addEventListener('submit',function(e){e.preventDefault();var typed=document.getElementById('agentQuestionInput').value.trim();var picked=[].slice.call(document.querySelectorAll('#agentQuestionOptions [aria-pressed="true"] strong')).map(function(n){return n.textContent});var answer=typed||picked.join(', ');if(answer)void agentAnswerQuestion(answer)});
@@ -1239,6 +1341,7 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){
   window.oasisAgentGetUtilityPanel=function(){return selected};
   var saved='terminal';
   try{saved=localStorage.getItem('oasis.agent.utilityPanel')||'terminal'}catch{}
+  if(saved==='runs')saved='tasks';
   setUtility(saved);
 })();
 (function setupAgentWorkspaceLayout(){
@@ -1276,7 +1379,8 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){
     var bounds=grid.getBoundingClientRect();
     if(bounds.width>0)setSplit((clientX-bounds.left)/bounds.width*100);
   }
-  var initialVisible=saved('oasis.agent.terminalVisible')!=='false';
+  var savedVisibility=saved('oasis.agent.terminalVisible');
+  var initialVisible=savedVisibility==='true';
   setVisible(initialVisible);
   var initialPanel=saved('oasis.agent.activePanel');
   if(initialVisible&&(initialPanel==='chat'||initialPanel==='terminal'))setPanel(initialPanel);
