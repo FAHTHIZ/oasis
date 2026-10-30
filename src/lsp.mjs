@@ -481,6 +481,10 @@ function describeDiagnostics(list, relative) {
 
 // ---------------------------------------------------------------- tool entry point
 export async function runLsp(root, args = {}, options = {}) {
+  const runEnv = options.env || process.env;
+  if (runEnv.OASIS_DISABLE_LSP === '1') {
+    throw new Error('Language-server startup is disabled for unattended GitHub Action runs; use repository checks instead.');
+  }
   const { resolveWorkspacePath, sensitivePath } = await workspaceTools();
   const operation = String(args.operation || '');
   if (!LSP_OPERATIONS.includes(operation)) throw new Error('operation must be one of: ' + LSP_OPERATIONS.join(', ') + '.');
@@ -652,8 +656,9 @@ export async function verifyEditedFileWithLsp(root, file, options = {}) {
     // A missing optional built-in executable is not a new diagnostic. Keep the
     // unavailable status visible, while the independent project-check gate remains
     // responsible for deciding whether this edit can be considered verified.
-    const missingOptionalServer = !customServer &&
-      /No [^\\s]+ language server found\\./i.test(reason);
+    const disabledByPolicy = /Language-server startup is disabled for unattended GitHub Action runs/i.test(reason);
+    const missingOptionalServer = disabledByPolicy || (!customServer &&
+      /No [^\\s]+ language server found\\./i.test(reason));
     return {
       status: 'unavailable',
       blocking: !missingOptionalServer,
