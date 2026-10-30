@@ -33,7 +33,7 @@ import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
-import { accessSync, constants as fsConstants, fstatSync, readFileSync, rmSync } from 'node:fs';
+import { fstatSync, readFileSync, rmSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -44,6 +44,7 @@ import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough,
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
+import { commandAvailable } from './command-lookup.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -550,33 +551,6 @@ async function ensureModelProviderSetup(root, options = {}) {
 
 function isOmniRouteSetupIntent(text) {
   return /\b(?:add|install|setup|set\s*up|configure|connect|use|switch|route)\b[\s\S]{0,120}\bomniroute\b/i.test(String(text || ''));
-}
-
-function commandAvailable(name) {
-  // Do not depend on external "which"/"where" utilities: minimal Linux and
-  // Android/Termux installations may not include them. Resolve executables
-  // directly from PATH so doctor, setup, update, and uninstall work on a
-  // clean system without an extra package.
-  if (typeof name !== 'string' || !name.trim()) return false;
-  const command = name.trim();
-  const hasPath = command.includes('/') || (process.platform === 'win32' && command.includes('\\'));
-  const extensions = process.platform === 'win32'
-    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')
-    : [''];
-  const directories = hasPath ? [''] : String(process.env.PATH || '').split(path.delimiter);
-  for (const directory of directories) {
-    const base = hasPath ? command : path.join(directory || '.', command);
-    for (const extension of extensions) {
-      const candidate = process.platform === 'win32' && !path.extname(base)
-        ? base + extension
-        : base;
-      try {
-        accessSync(candidate, process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK);
-        return true;
-      } catch {}
-    }
-  }
-  return false;
 }
 
 async function doctor(args = [], root = process.cwd()) {
