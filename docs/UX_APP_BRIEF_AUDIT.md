@@ -1,6 +1,6 @@
 # UI/UX and real-app brief: implementation audit
 
-**Audit date:** 2026-10-29  
+**Audit date:** 2026-10-30  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
 **Scope:** Compare `EVA_UI_UX_BRIEF.md` and `EVA_APP_BRIEF.md` against the current default-branch files. This is a source review, not a fresh end-to-end test run.
 
@@ -60,9 +60,9 @@ Legend: **Implemented in source** means a matching code or documentation path ex
 |---|---|---|
 | Empty-state examples, approval cards, run monitor | Implemented in source | Root `index.html` includes the starter tasks, approval card, and monitor event UI. |
 | Theme switch and remembered preference | Implemented in source | Theme/settings hooks exist in the browser app; verify persistence and keyboard navigation manually. |
-| 390px layout and large touch targets | Partial / verify | Responsive CSS and a 390px breakpoint exist; this is not a substitute for real-device testing. |
+| 390px layout and large touch targets | Implemented in source; CI verification pending | Chat-first workspace has dedicated 780px and 390px rules, 44px phone controls, a no-horizontal-overflow assertion, and axe contrast scans for chat, terminal, provider settings and first-run. This is not a substitute for real Android device/Termux PTY testing. |
 | Clear connection-scope banner | Implemented in this pass | Agent view now explains that the runtime listens on this computer by default, remote access requires explicit server options, and the runtime token must not be shared. This is a static explanation, not live detection of the actual bind address. |
-| Desktop/phone screenshots for every state | **Missing** | No verified capture set for empty state, chat, approval, error, and settings was found. |
+| Desktop/phone screenshots for every state | CI capture coverage added; artifact verification pending | Browser E2E now captures empty state, connected chat, connection error, approval, terminal, provider settings and first-run across desktop/390px. The actual screenshot artifacts are not considered verified until the same-revision browser workflow passes and publishes them. |
 | Secure QR pairing and paired-device management | **Missing** | No dedicated pairing/token/revocation flow was found. |
 | Phone threat model | Added in this pass | See [Phone connection security note](PHONE_CONNECT_SECURITY.md). This is a design gate, not implementation. The core safety brief must be completed and reviewed before phone pairing work begins. |
 
