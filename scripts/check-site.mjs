@@ -91,6 +91,9 @@ assert.ok(interfaceCss.includes('/* Utility rail: keep terminal and coding-run d
 assert.ok(interfaceCss.includes('.agent-utility-tab[aria-selected="true"]'), 'Utility tabs must expose a selected state.');
 assert.ok(html.includes("event.key!=='ArrowLeft'&&event.key!=='ArrowRight'"), 'Utility tabs must support left/right keyboard navigation.');
 assert.ok(html.includes("terminalTab.tabIndex=selected==='terminal'?0:-1"), 'Only the selected utility tab should remain in the tab sequence.');
+assert.ok(html.includes("Hide side panel"), 'The utility visibility control must name the whole side panel.');
+assert.ok(html.includes("window.oasisAgentSetUtilityPanel('terminal')"), 'The terminal command-palette action must explicitly select Terminal.');
+
 
 assert.ok(interfaceCss.includes('.agent-utility-view[hidden]{display:none!important}'), 'Inactive utility panels must remain hidden.');
 assert.ok(interfaceCss.includes('#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel'), 'The existing run history and diff viewer must render inside the utility panel.');
