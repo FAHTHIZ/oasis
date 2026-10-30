@@ -79,8 +79,8 @@ assert.match(interfaceCss, /\.hero:after\{display:none\}/, 'Decorative hero ring
 assert.match(interfaceCss, /\.btn-primary\{background:var\(--surface-muted\)/, 'Generic primary buttons must remain neutral.');
 assert.match(interfaceCss, /#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn\s*\{/);
 assert.ok(interfaceCss.includes('Chat-first coding workspace:'), 'The chat-first layout must remain a separately maintained local stylesheet.');
-assert.ok(interfaceCss.includes('grid-template-areas:\\n    "prompt prompt"\\n    "context actions"'), 'Desktop composer must keep its prompt above the action footer.');
-assert.ok(interfaceCss.includes('grid-template-areas:"prompt" "context" "actions"'), 'Phone composer must stack the prompt, context and actions.');
+assert.match(interfaceCss, /grid-template-areas:\\s*"prompt prompt"\\s*"context actions"/, 'Desktop composer must keep its prompt above the action footer.');
+assert.match(interfaceCss, /grid-template-areas:\\s*"prompt"\\s*"context"\\s*"actions"/, 'Phone composer must stack the prompt, context and actions.');
 assert.ok(interfaceCss.includes('grid-template-columns:minmax(0,var(--agent-chat-split)) 10px minmax(300px,1fr)'), 'Desktop workspace must preserve a resizable chat/terminal split.');
 assert.ok(interfaceCss.includes('@media(max-width:780px)'), 'Phone workspace tabs must have a dedicated responsive layout.');
 assert.ok(interfaceCss.includes('@media(max-width:390px)'), 'The narrow 390px phone layout must be covered.');
