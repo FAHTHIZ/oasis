@@ -68,6 +68,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 }
 Write-Host ("npm is ready: " + (& npm --version))
 Write-Host 'Resolving the latest stable OASIS release from GitHub...'
+$apiFailure = ''
 try {
     $release = Invoke-RestMethod -Uri "$ApiBase/releases/latest" -Headers $ApiHeaders -TimeoutSec 15
     if ($release.draft -or $release.prerelease) { throw 'GitHub did not return a stable release.' }
@@ -78,8 +79,25 @@ try {
     $ReleaseCommit = ([string]$releaseCommit.sha).ToLowerInvariant()
     if ($ReleaseCommit -notmatch '^[0-9a-f]{40}\z') { throw 'GitHub did not return a valid release commit.' }
 } catch {
-    Write-Host ("Could not resolve the latest stable OASIS release: " + $_.Exception.Message)
-    exit 1
+    $apiFailure = $_.Exception.Message
+}
+
+if (-not $ReleaseCommit) {
+    Write-Host "GitHub API unavailable ($apiFailure); trying the official public release page..."
+    try {
+        $releasePage = Invoke-WebRequest -Uri 'https://github.com/FAHTHIZ/oasis/releases/latest' -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'text/html' } -TimeoutSec 20 -UseBasicParsing
+        $pageHtml = [string]$releasePage.Content
+        $tagMatch = [regex]::Match($pageHtml, 'href="https://github\.com/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)"')
+        $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
+        if (-not $tagMatch.Success -or -not $commitMatch.Success) {
+            throw 'The public release page did not contain a stable version tag and exact commit SHA.'
+        }
+        $ReleaseTag = $tagMatch.Groups[1].Value
+        $ReleaseCommit = $commitMatch.Groups[1].Value.ToLowerInvariant()
+    } catch {
+        Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; public release page: " + $_.Exception.Message)
+        exit 1
+    }
 }
 $Archive = "https://github.com/FAHTHIZ/oasis/archive/$ReleaseCommit.tar.gz"
 Write-Host "Latest stable release: $ReleaseTag ($ReleaseCommit)"
