@@ -90,10 +90,14 @@ export class LspClient {
     this.capabilities = {};
     this.stderr = '';
     this.closed = false;
+    this.stopPromise = null;
   }
 
   start() {
     this.child = spawn(this.command, this.args, { cwd: this.cwd, env: this.env, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, ...processTreeSpawnOptions() });
+    this.exitPromise = new Promise((resolve) => {
+      this.child.once('close', (code, signal) => resolve({ code, signal }));
+    });
     this.child.stdout.on('data', (chunk) => this.onData(chunk));
     this.child.stderr.on('data', (chunk) => { this.stderr = (this.stderr + chunk).slice(-4000); });
     this.child.stdin.on('error', () => {});
@@ -256,19 +260,38 @@ export class LspClient {
   }
 
   stop() {
-    if (this.closed) {
-      signalProcessTree(this.child, 'SIGKILL');
-      return;
+    if (this.stopPromise) return this.stopPromise;
+    const child = this.child;
+    if (!child) {
+      this.closed = true;
+      return Promise.resolve();
     }
-    try {
-      const shutdown = this.request('shutdown', null, 2000).catch(() => {});
-      shutdown.finally(() => {
-        this.notify('exit', null);
-        const timer = setTimeout(() => signalProcessTree(this.child, 'SIGKILL'), 500);
-        timer.unref?.();
-      });
-    } catch { signalProcessTree(this.child, 'SIGKILL'); }
-    this.closed = true;
+    this.stopPromise = (async () => {
+      const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+      if (!hasExited() && !this.closed) {
+        try { await this.request('shutdown', null, 2000); } catch {}
+        try { this.notify('exit', null); } catch {}
+        try { child.stdin.end(); } catch {}
+      }
+      this.closed = true;
+
+      // Wait for the server's graceful shutdown before escalating to the whole
+      // process group. The leader may exit while helper processes keep running.
+      if (!hasExited()) {
+        const graceful = await Promise.race([
+          this.exitPromise.then(() => true),
+          new Promise((resolve) => setTimeout(() => resolve(false), 500))
+        ]);
+        if (!graceful && !hasExited()) signalProcessTree(child, 'SIGTERM');
+      }
+      const terminated = await Promise.race([
+        this.exitPromise.then(() => true),
+        new Promise((resolve) => setTimeout(() => resolve(false), 750))
+      ]);
+      if (!terminated) signalProcessTree(child, 'SIGKILL');
+      await this.exitPromise;
+    })();
+    return this.stopPromise;
   }
 }
 
