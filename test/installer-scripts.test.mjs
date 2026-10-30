@@ -62,5 +62,5 @@ test('Windows installer has the same public-page fallback for API rate limits', 
   const powershell = await read('scripts/install.ps1');
   assert.match(powershell, /trying the official public release page/i);
   assert.match(powershell, /data-hovercard-type="commit"/);
-  assert.match(powershell, /releases\\/latest/);
+  assert.ok(powershell.includes("releases/latest"));
 });
