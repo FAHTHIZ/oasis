@@ -27,7 +27,7 @@ test('all network-facing features consistently block non-public IPv6 destination
   for (const address of nonPublicIpv6) {
     const url = 'https://[' + address + ']/resource';
 
-    assert.equal(isPrivateBrowserRequest(url), true, 'browser policy: ' + address);
+    assert.equal(await isPrivateBrowserRequest(url), true, 'browser policy: ' + address);
 
     await assert.rejects(
       fetchPublicUrl(url, {
