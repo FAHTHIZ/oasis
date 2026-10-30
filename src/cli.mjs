@@ -33,7 +33,7 @@ import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
-import { fstatSync, readFileSync, rmSync } from 'node:fs';
+import { accessSync, constants as fsConstants, fstatSync, readFileSync, rmSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -553,8 +553,30 @@ function isOmniRouteSetupIntent(text) {
 }
 
 function commandAvailable(name) {
-  const probe = process.platform === 'win32' ? 'where' : 'which';
-  return spawnSync(probe, [name], { stdio: 'ignore', timeout: 1500, windowsHide: true }).status === 0;
+  // Do not depend on external "which"/"where" utilities: minimal Linux and
+  // Android/Termux installations may not include them. Resolve executables
+  // directly from PATH so doctor, setup, update, and uninstall work on a
+  // clean system without an extra package.
+  if (typeof name !== 'string' || !name.trim()) return false;
+  const command = name.trim();
+  const hasPath = command.includes('/') || (process.platform === 'win32' && command.includes('\\'));
+  const extensions = process.platform === 'win32'
+    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')
+    : [''];
+  const directories = hasPath ? [''] : String(process.env.PATH || '').split(path.delimiter);
+  for (const directory of directories) {
+    const base = hasPath ? command : path.join(directory || '.', command);
+    for (const extension of extensions) {
+      const candidate = process.platform === 'win32' && !path.extname(base)
+        ? base + extension
+        : base;
+      try {
+        accessSync(candidate, process.platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK);
+        return true;
+      } catch {}
+    }
+  }
+  return false;
 }
 
 async function doctor(args = [], root = process.cwd()) {
