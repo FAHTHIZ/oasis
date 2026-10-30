@@ -260,7 +260,6 @@ test('session rules for path commands keep the path; deny rules also catch path 
   );
   assert.ok(Date.now() - started < 4000, 'a pathological pattern must not block the main process');
 });
-
 test('multi_edit applies all edits atomically or none', async (t) => {
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));
