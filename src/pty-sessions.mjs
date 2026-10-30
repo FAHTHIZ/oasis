@@ -41,6 +41,7 @@ export class PtySessionManager {
     this.killGraceMs = safeInteger(killGraceMs, 1500, 10, 10000);
     this.idFactory = idFactory || (() => 'term_' + randomBytes(8).toString('hex'));
     this.sessions = new Map();
+    this.startingSessions = 0;
     this.ptyPromise = null;
   }
 
@@ -102,9 +103,11 @@ export class PtySessionManager {
     }
     if (!options.cwd || typeof options.cwd !== 'string') throw new Error('A workspace path is required to start a terminal session.');
     const active = [...this.sessions.values()].filter((record) => record.state === 'running' || record.state === 'stopping').length;
-    if (active >= this.maxSessions) throw new Error('OASIS already has ' + active + ' active terminal sessions. Stop an unused session before opening another.');
-    this._prune();
-    const pty = await this._pty();
+    if (active + this.startingSessions >= this.maxSessions) throw new Error('OASIS already has ' + (active + this.startingSessions) + ' active or starting terminal sessions. Stop an unused session before opening another.');
+    this.startingSessions += 1;
+    try {
+      this._prune();
+      const pty = await this._pty();
     const cols = safeInteger(options.cols, 100, 20, 300);
     const rows = safeInteger(options.rows, 30, 5, 120);
     const display = String(options.display || command.split(/[\\/]/).pop() || command).slice(0, 180);
@@ -167,7 +170,10 @@ export class PtySessionManager {
       notify();
       try { record.dataDisposable && record.dataDisposable.dispose(); } catch {}
     });
-    return { ...statusOf(record), message: 'Interactive terminal started. Use terminal_read with this id to receive output; use terminal_input to send keystrokes or program input, terminal_resize to resize, and terminal_stop when finished.' };
+      return { ...statusOf(record), message: 'Interactive terminal started. Use terminal_read with this id to receive output; use terminal_input to send keystrokes or program input, terminal_resize to resize, and terminal_stop when finished.' };
+    } finally {
+      this.startingSessions = Math.max(0, this.startingSessions - 1);
+    }
   }
 
   list() {
