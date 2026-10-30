@@ -15,6 +15,7 @@
 // "on-skill-invoke:<skill>" (start the first time that skill runs).
 import './tools.mjs'; // load order: tools.mjs before power-tools.mjs (they import each other)
 import { startBackgroundProcess, killBackgroundEntry } from './power-tools.mjs';
+import { createBoundedRegexMatcher } from './safe-regex.mjs';
 
 export const MONITOR_DEFAULT_TIMEOUT_MS = 300000;
 export const MONITOR_MAX_TIMEOUT_MS = 3600000;
@@ -44,30 +45,68 @@ function lineBatcher(session, monitor) {
   let buffer = [];
   let dropped = 0;
   let timer = null;
-  const flush = () => {
+  let pending = Promise.resolve();
+  let queued = 0;
+  let disabled = false;
+  const flushEvent = () => {
     timer = null;
     if (!buffer.length && !dropped) return;
-    let body = buffer.join('\n');
+    let body = buffer.join('\\n');
     if (body.length > MAX_EVENT_CHARS) body = body.slice(0, MAX_EVENT_CHARS) + '…';
-    if (dropped) body += '\n[' + dropped + ' more line(s) skipped; print fewer lines or use a pattern]';
+    if (dropped) body += '\\n[' + dropped + ' more line(s) skipped; print fewer lines or use a pattern]';
     monitor.events += 1;
-    pushBackgroundEvent(session, '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\n' + body + '\n</monitor-event>', { kind: 'monitor', id: monitor.id, description: monitor.description, lines: buffer.length });
+    pushBackgroundEvent(session, '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\\n' + body + '\\n</monitor-event>', { kind: 'monitor', id: monitor.id, description: monitor.description, lines: buffer.length });
     buffer = []; dropped = 0;
+  };
+  const scheduleFlush = () => {
+    if (!timer) { timer = setTimeout(flushEvent, FLUSH_MS); timer.unref?.(); }
+  };
+  const append = (line) => {
+    if (buffer.length >= MAX_LINES_PER_EVENT) dropped += 1;
+    else buffer.push(clip(line));
+    scheduleFlush();
   };
   return {
     add(line) {
-      if (!String(line).trim()) return;
-      if (monitor.pattern && !monitor.pattern.test(line)) return;
-      if (buffer.length >= MAX_LINES_PER_EVENT) dropped += 1; else buffer.push(clip(line));
-      if (!timer) { timer = setTimeout(flush, FLUSH_MS); timer.unref?.(); }
+      const value = String(line);
+      if (!value.trim() || disabled) return;
+      if (!monitor.pattern) { append(value); return; }
+      if (queued >= 128) { dropped += 1; scheduleFlush(); return; }
+      queued++;
+      pending = pending.then(async () => {
+        if (!disabled && monitor.pattern && await monitor.pattern.test(value.slice(0, 8000))) append(value);
+      }).catch((error) => {
+        disabled = true;
+        const matcher = monitor.pattern;
+        monitor.pattern = null;
+        if (matcher) void matcher.close().catch(() => {});
+        pushBackgroundEvent(session,
+          '<monitor-event id="' + monitor.id + '" description="' + escapeAttr(monitor.description) + '">\\nPattern matching stopped: ' + escapeAttr(error.message || error) + '\\n</monitor-event>',
+          { kind: 'monitor', id: monitor.id, description: monitor.description });
+      }).finally(() => { queued = Math.max(0, queued - 1); });
     },
-    flush() { if (timer) clearTimeout(timer); flush(); }
+    async flush() {
+      await pending;
+      if (timer) clearTimeout(timer);
+      flushEvent();
+      const matcher = monitor.pattern;
+      monitor.pattern = null;
+      if (matcher) await matcher.close();
+    }
   };
 }
 
-function compilePattern(pattern) {
+async function compilePattern(pattern) {
   if (!pattern) return null;
-  try { return new RegExp(String(pattern).slice(0, 500)); } catch (error) { throw new Error('Invalid pattern: ' + error.message); }
+  let matcher;
+  try {
+    matcher = createBoundedRegexMatcher(String(pattern).slice(0, 500), '', { timeoutMs: 250 });
+    await matcher.ready;
+    return matcher;
+  } catch (error) {
+    if (matcher) await matcher.close().catch(() => {});
+    throw new Error('Invalid pattern: ' + error.message);
+  }
 }
 
 export function monitorTimeout(args = {}, { headless = false } = {}) {
@@ -104,7 +143,7 @@ export async function startCommandMonitor(session, args, { run, root, runOptions
   if (!description) throw new Error('monitor needs a description.');
   if (args.ws && args.command) throw new Error('Give either command or ws, not both.');
   if (!args.command) throw new Error('monitor needs a command (or ws).');
-  const pattern = compilePattern(args.pattern);
+  const pattern = await compilePattern(args.pattern);
   const timeoutMs = monitorTimeout(args, { headless });
   const monitor = { id: null, description, pattern, timeoutMs, events: 0, plugin: null };
   const batcher = lineBatcher(session, monitor);
@@ -117,8 +156,9 @@ export async function startCommandMonitor(session, args, { run, root, runOptions
     onLine: (line) => batcher.add(line),
     onExit: (entry, { stoppedByUser }) => {
       if (timer) clearTimeout(timer);
-      batcher.flush();
-      pushBackgroundEvent(session, endNotice(monitor, entry, endReason || (stoppedByUser ? 'stopped' : 'exited')), { kind: 'monitor-end', id: monitor.id, description });
+      void batcher.flush().catch(() => {}).then(() => {
+        pushBackgroundEvent(session, endNotice(monitor, entry, endReason || (stoppedByUser ? 'stopped' : 'exited')), { kind: 'monitor-end', id: monitor.id, description });
+      });
     }
   });
   if (!result || !result.id) return result;
@@ -172,7 +212,7 @@ export async function startWsMonitor(session, args, { approval, autoApprove = fa
   }
   const registry = session.background || (session.background = new Map());
   const id = 'ws_' + Math.random().toString(16).slice(2, 10);
-  const pattern = compilePattern(args.pattern);
+  const pattern = await compilePattern(args.pattern);
   const timeoutMs = monitorTimeout(args, { headless });
   const monitor = { id, description, pattern, timeoutMs, events: 0, plugin: null };
   const batcher = lineBatcher(session, monitor);
@@ -184,10 +224,10 @@ export async function startWsMonitor(session, args, { approval, autoApprove = fa
     child: { kill() { endReason = endReason || 'stopped'; try { socket.close(); } catch {} } }
   };
   registry.set(id, entry);
-  const finish = () => {
+  const finish = async () => {
     if (entry.status === 'running' || entry.status === 'killed') entry.status = entry.status === 'killed' ? 'killed' : 'exited';
     if (timer) clearTimeout(timer);
-    batcher.flush();
+    await batcher.flush();
     pushBackgroundEvent(session, endNotice(monitor, entry, endReason || (entry.status === 'killed' ? 'stopped' : 'exited')), { kind: 'monitor-end', id, description });
   };
   let closed = false;
@@ -201,7 +241,7 @@ export async function startWsMonitor(session, args, { approval, autoApprove = fa
   };
   socket.addEventListener('message', (event) => { onMessage(event).catch(() => {}); });
   socket.addEventListener('error', () => { entry.output += '[oasis] WebSocket error\n'; });
-  socket.addEventListener('close', () => { if (closed) return; closed = true; finish(); });
+  socket.addEventListener('close', () => { if (closed) return; closed = true; void finish().catch(() => {}); });
   if (timeoutMs) { timer = setTimeout(() => { endReason = 'timeout'; try { socket.close(); } catch {} }, timeoutMs); timer.unref?.(); }
   return { id, monitoring: true, description, url, deadline: timeoutMs ? Math.round(timeoutMs / 1000) + 's' : 'none (persistent)', message: 'Connected. Each message arrives as a <monitor-event id="' + id + '"> notice. Stop it with kill_command id ' + id + '.' };
 }
@@ -255,8 +295,9 @@ export function startPluginMonitor(session, spec, { root, env = process.env } = 
     cwd: root || session.root, env: { ...env, ...(spec.env || {}) }, display: spec.plugin + ':' + spec.name, monitor,
     onLine: (line) => batcher.add(line),
     onExit: (entry, { stoppedByUser }) => {
-      batcher.flush();
-      if (!stoppedByUser && !session.closing) pushBackgroundEvent(session, endNotice(monitor, entry, 'exited'), { kind: 'monitor-end', id: monitor.id, description: monitor.description });
+      void batcher.flush().catch(() => {}).then(() => {
+        if (!stoppedByUser && !session.closing) pushBackgroundEvent(session, endNotice(monitor, entry, 'exited'), { kind: 'monitor-end', id: monitor.id, description: monitor.description });
+      });
     }
   });
   monitor.id = result.id;

@@ -16,6 +16,7 @@ import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
+import { createBoundedRegexMatcher } from './safe-regex.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_OUTPUT = 24 * 1024;
@@ -178,41 +179,53 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     return { pattern, mode, engine: 'ripgrep', results, count: results.length, truncated };
   }
 
-  let regex;
-  try { regex = new RegExp(pattern, (args.ignore_case ? 'i' : '') + (args.multiline ? 'ms' : '')); } catch (error) { throw new Error('Invalid regular expression: ' + error.message); }
-  const matchGlob = globMatcher(args.glob);
-  const info = await stat(target.absolute);
-  const files = info.isFile() ? [{ absolute: target.absolute, relative: path.basename(target.absolute) }] : await walkFiles(target.absolute, { includeHidden: true, maxFiles: 8000, maxDepth: 14 });
-  for (const file of files) {
-    const relative = path.relative(rootReal, file.absolute).split(path.sep).join('/');
-    if (matchGlob && !matchGlob(relative)) continue;
-    let content;
-    try {
-      const s = await stat(file.absolute);
-      if (s.size > MAX_TEXT_FILE * 4) continue;
-      content = await readFile(file.absolute, 'utf8');
-    } catch { continue; }
-    if (content.includes('\0')) continue;
-    const lines = content.split(/\r?\n/);
-    let hits = 0;
-    const emitted = new Set();
-    for (let i = 0; i < lines.length; i++) {
-      if (!regex.test(lines[i])) continue;
-      hits++;
-      if (mode !== 'content') continue;
-      for (let j = Math.max(0, i - contextLines); j <= Math.min(lines.length - 1, i + contextLines); j++) {
-        if (emitted.has(j)) continue;
-        emitted.add(j);
-        if (results.length >= limit) { truncated = true; break; }
-        results.push(relative + (j === i ? ':' : '-') + (j + 1) + (j === i ? ':' : '-') + lines[j].slice(0, 400));
-      }
-      if (truncated) break;
-    }
-    if (hits && mode === 'files_with_matches') results.push(relative);
-    if (hits && mode === 'count') results.push(relative + ':' + hits);
-    if (truncated || results.length >= limit) { truncated = truncated || results.length >= limit; break; }
+  let matcher;
+  try {
+    matcher = createBoundedRegexMatcher(pattern, (args.ignore_case ? 'i' : '') + (args.multiline ? 'ms' : ''), {
+      timeoutMs: options.regexTimeoutMs === undefined ? 250 : options.regexTimeoutMs
+    });
+    await matcher.ready;
+  } catch (error) {
+    if (matcher) await matcher.close().catch(() => {});
+    throw new Error('Invalid regular expression: ' + error.message);
   }
-  return { pattern, mode, engine: 'builtin', results: results.slice(0, limit), count: Math.min(results.length, limit), truncated };
+  const matchGlob = globMatcher(args.glob);
+  try {
+    const info = await stat(target.absolute);
+    const files = info.isFile() ? [{ absolute: target.absolute, relative: path.basename(target.absolute) }] : await walkFiles(target.absolute, { includeHidden: true, maxFiles: 8000, maxDepth: 14 });
+    for (const file of files) {
+      const relative = path.relative(rootReal, file.absolute).split(path.sep).join('/');
+      if (matchGlob && !matchGlob(relative)) continue;
+      let content;
+      try {
+        const s = await stat(file.absolute);
+        if (s.size > MAX_TEXT_FILE * 4) continue;
+        content = await readFile(file.absolute, 'utf8');
+      } catch { continue; }
+      if (content.includes('\\0')) continue;
+      const lines = content.split(/\\r?\\n/);
+      let hits = 0;
+      const emitted = new Set();
+      for (let i = 0; i < lines.length; i++) {
+        if (!await matcher.test(lines[i], { signal: options.signal })) continue;
+        hits++;
+        if (mode !== 'content') continue;
+        for (let j = Math.max(0, i - contextLines); j <= Math.min(lines.length - 1, i + contextLines); j++) {
+          if (emitted.has(j)) continue;
+          emitted.add(j);
+          if (results.length >= limit) { truncated = true; break; }
+          results.push(relative + (j === i ? ':' : '-') + (j + 1) + (j === i ? ':' : '-') + lines[j].slice(0, 400));
+        }
+        if (truncated) break;
+      }
+      if (hits && mode === 'files_with_matches') results.push(relative);
+      if (hits && mode === 'count') results.push(relative + ':' + hits);
+      if (truncated || results.length >= limit) { truncated = truncated || results.length >= limit; break; }
+    }
+    return { pattern, mode, engine: 'builtin', results: results.slice(0, limit), count: Math.min(results.length, limit), truncated };
+  } finally {
+    await matcher.close().catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------- multi_edit
@@ -405,9 +418,21 @@ export async function executePowerTool(name, args, context, root) {
       let text = entry.output.slice(entry.readOffset);
       entry.readOffset = entry.output.length;
       if (args.filter) {
-        let regex;
-        try { regex = new RegExp(String(args.filter)); } catch (error) { throw new Error('Invalid filter: ' + error.message); }
-        text = text.split('\n').filter((line) => regex.test(line)).join('\n');
+        let matcher;
+        try {
+          matcher = createBoundedRegexMatcher(String(args.filter), '', { timeoutMs: 250 });
+          await matcher.ready;
+        } catch (error) {
+          if (matcher) await matcher.close().catch(() => {});
+          throw new Error('Invalid filter: ' + error.message);
+        }
+        try {
+          const filtered = [];
+          for (const line of text.split('\n')) if (await matcher.test(line, { signal: context.signal })) filtered.push(line);
+          text = filtered.join('\n');
+        } finally {
+          await matcher.close().catch(() => {});
+        }
       }
       const truncated = text.length > MAX_OUTPUT;
       return { ...describeBackground(entry), output: truncated ? text.slice(-MAX_OUTPUT) : text, truncated, droppedBytes: entry.dropped };
