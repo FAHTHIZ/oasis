@@ -1,124 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="640" viewBox="0 0 1920 640" role="img" aria-labelledby="title desc">
-  <title id="title">OASIS — Code. Automate. Flourish.</title>
-  <desc id="desc">A cinematic lime-green portal over a reflective digital floor beside the OASIS wordmark and a summary of the open-source, local-first coding workspace.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">OASIS — Inspect. Edit. Verify.</title>
+  <desc id="desc">OASIS is an open-source AI coding agent. Your projects, your choice of model, your control.</desc>
   <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#040705"/>
-      <stop offset=".48" stop-color="#09120b"/>
-      <stop offset="1" stop-color="#030605"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#030705"/>
+      <stop offset=".55" stop-color="#0a160d"/>
+      <stop offset="1" stop-color="#020604"/>
     </linearGradient>
-    <radialGradient id="portalGlow" cx=".5" cy=".48" r=".58">
-      <stop offset="0" stop-color="#c4ff76" stop-opacity=".48"/>
-      <stop offset=".38" stop-color="#4acb3e" stop-opacity=".22"/>
-      <stop offset="1" stop-color="#08100a" stop-opacity="0"/>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#9bff55" stop-opacity=".34"/>
+      <stop offset=".48" stop-color="#3d9d37" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#06100a" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="lime" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#e2ff9b"/>
-      <stop offset=".35" stop-color="#b6ff61"/>
-      <stop offset=".72" stop-color="#8df34a"/>
-      <stop offset="1" stop-color="#4fce38"/>
+      <stop offset="0" stop-color="#e1ff9b"/>
+      <stop offset=".5" stop-color="#a9ff58"/>
+      <stop offset="1" stop-color="#4fcf39"/>
     </linearGradient>
-    <linearGradient id="bars" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#c8ff70"/>
-      <stop offset="1" stop-color="#50d23b"/>
-    </linearGradient>
-    <linearGradient id="horizon" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#8cff50" stop-opacity="0"/>
-      <stop offset=".18" stop-color="#9bff55" stop-opacity=".84"/>
-      <stop offset=".48" stop-color="#77e94b" stop-opacity=".2"/>
-      <stop offset="1" stop-color="#9bff55" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="mountains" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#17291b"/>
-      <stop offset="1" stop-color="#07100a"/>
-    </linearGradient>
-    <linearGradient id="wordmark" x1="0" y1="0" x2="1" y2="0">
+    <linearGradient id="white" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dfe9df"/>
+      <stop offset="1" stop-color="#dce9dc"/>
     </linearGradient>
-    <linearGradient id="textShade" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#030605" stop-opacity="0"/>
-      <stop offset=".22" stop-color="#030605" stop-opacity=".52"/>
-      <stop offset="1" stop-color="#030605" stop-opacity=".18"/>
-    </linearGradient>
-    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="16" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="lightBlur" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="12"/>
-    </filter>
-    <pattern id="stars" width="193" height="127" patternUnits="userSpaceOnUse">
-      <circle cx="16" cy="22" r="1.1" fill="#aaff62" opacity=".48"/>
-      <circle cx="87" cy="71" r=".8" fill="#d7ff9e" opacity=".35"/>
-      <circle cx="151" cy="17" r=".9" fill="#8dff55" opacity=".25"/>
-      <circle cx="132" cy="106" r="1.15" fill="#aaff62" opacity=".23"/>
-      <circle cx="47" cy="112" r=".7" fill="#d7ff9e" opacity=".22"/>
-    </pattern>
-    <clipPath id="frame"><rect width="1920" height="640" rx="22"/></clipPath>
   </defs>
-  <g clip-path="url(#frame)">
-    <rect width="1920" height="640" fill="url(#background)"/>
-    <rect width="1920" height="640" fill="url(#stars)"/>
-    <ellipse cx="340" cy="330" rx="560" ry="430" fill="url(#portalGlow)"/>
-    <ellipse cx="1330" cy="350" rx="700" ry="310" fill="url(#portalGlow)" opacity=".48"/>
-    <path d="M0 352 70 327 130 338 210 300 270 325 346 275 418 322 482 302 546 338 621 310 690 347 770 324 850 350 930 315 1010 343 1080 303 1150 345 1224 326 1290 351 1375 307 1437 344 1512 292 1578 335 1640 310 1707 344 1780 300 1855 330 1920 309V430H0Z" fill="url(#mountains)" opacity=".88"/>
-    <path d="M0 367 93 347 172 359 250 328 321 353 389 323 457 355 534 339 604 362 676 345 744 370 821 343 891 365 966 343 1034 364 1112 339 1180 362 1262 343 1332 368 1410 334 1480 364 1560 338 1630 358 1705 329 1776 356 1853 335 1920 352" fill="none" stroke="#315237" stroke-opacity=".3" stroke-width="2"/>
-    <rect x="590" y="0" width="1330" height="390" fill="url(#textShade)"/>
-    <rect x="0" y="378" width="1920" height="262" fill="#07100a" opacity=".72"/>
-    <path d="M0 383H1920 M0 394H1920 M0 410H1920 M0 431H1920 M0 459H1920 M0 497H1920 M0 548H1920 M0 612H1920" fill="none" stroke="#8cff55" stroke-opacity=".10" stroke-width="1"/>
-    <g fill="none" stroke="#8cff55" stroke-opacity=".11" stroke-width="1.2">
-      <path d="M330 378 0 640"/><path d="M330 378 150 640"/><path d="M330 378 355 640"/><path d="M330 378 620 640"/><path d="M330 378 920 640"/><path d="M330 378 1240 640"/><path d="M330 378 1560 640"/><path d="M330 378 1920 570"/>
-      <path d="M0 455 330 378 1920 455" opacity=".18"/>
-    </g>
-    <ellipse cx="344" cy="383" rx="420" ry="22" fill="#9bff55" opacity=".22" filter="url(#lightBlur)"/>
-    <ellipse cx="340" cy="442" rx="210" ry="130" fill="#8cff50" opacity=".09" filter="url(#lightBlur)"/>
-    <path d="M0 382H1920" stroke="url(#horizon)" stroke-width="2.2"/>
-    <path d="M0 384H1920" stroke="#b8ff73" stroke-opacity=".22" stroke-width="1"/>
-    <g transform="translate(114 28) scale(1.48)" filter="url(#softGlow)">
-      <path d="M18 151 C18 76 76 13 150 13 C224 13 282 76 282 151 L224 151 C224 101 194 63 150 63 C106 63 76 101 76 151 Z" fill="url(#lime)"/>
-      <path d="M76 150 C76 99 107 61 150 61 C193 61 224 99 224 150" fill="none" stroke="#4ccc3a" stroke-width="4.5" stroke-linecap="round" opacity=".88"/>
-      <g fill="url(#bars)">
-        <path d="M18 151 H98 V160 H18 Z M202 151 H282 V160 H202 Z"/>
-        <path d="M21 168 H92 V176 H21 Z M208 168 H279 V176 H208 Z"/>
-        <path d="M27 185 H99 V193 H27 Z M201 185 H273 V193 H201 Z"/>
-        <path d="M36 202 H113 V210 H36 Z M187 202 H264 V210 H187 Z"/>
-        <path d="M46 219 H124 V227 H46 Z M176 219 H254 V227 H176 Z"/>
-        <path d="M58 236 H132 V244 H58 Z M168 236 H242 V244 H168 Z"/>
-        <path d="M73 253 H133 V260 H73 Z M167 253 H227 V260 H167 Z"/>
-        <path d="M91 269 H132 V275 H91 Z M168 269 H209 V275 H168 Z"/>
-      </g>
-    </g>
-    <path d="M305 399 305 492 M365 399 365 492" stroke="#9bff55" stroke-opacity=".04" stroke-width="18" filter="url(#lightBlur)"/>
-    <text x="690" y="192" font-family="Space Grotesk, Montserrat, 'DejaVu Sans', Arial, sans-serif" font-size="132" font-weight="450" letter-spacing="22" fill="url(#wordmark)">OASIS</text>
-    <text x="700" y="260" font-family="Space Grotesk, Montserrat, 'DejaVu Sans', Arial, sans-serif" font-size="31" font-weight="600" letter-spacing="6.8" fill="#eaf1e6">CODE. AUTOMATE.</text>
-    <text x="1193" y="260" font-family="Space Grotesk, Montserrat, 'DejaVu Sans', Arial, sans-serif" font-size="31" font-weight="700" letter-spacing="6.8" fill="#a6ff55">FLOURISH.</text>
-    <text x="702" y="326" font-family="'DejaVu Sans', Arial, sans-serif" font-size="23" fill="#d9e3d8">An open-source AI coding agent and local-first developer workspace.</text>
-    <text x="702" y="364" font-family="'DejaVu Sans', Arial, sans-serif" font-size="23" fill="#aab9ab">Built for multi-step software development, with you in control.</text>
-    <path d="M702 399H1775" stroke="#9bff55" stroke-opacity=".28" stroke-width="1.4"/>
-    <path d="M702 399H915" stroke="#9bff55" stroke-opacity=".8" stroke-width="2.2"/>
-    <g font-family="'DejaVu Sans', Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="1.5" fill="#b6d3af">
-      <text x="720" y="462">CLI</text><circle cx="769" cy="457" r="2.3" fill="#9bff55"/>
-      <text x="790" y="462">BROWSER WORKSPACE</text><circle cx="1009" cy="457" r="2.3" fill="#9bff55"/>
-      <text x="1030" y="462">MULTI-PROVIDER</text><circle cx="1225" cy="457" r="2.3" fill="#9bff55"/>
-      <text x="1246" y="462">MCP</text><circle cx="1303" cy="457" r="2.3" fill="#9bff55"/>
-      <text x="1324" y="462">SKILLS</text><circle cx="1404" cy="457" r="2.3" fill="#9bff55"/>
-      <text x="1425" y="462">SUBAGENTS</text>
-    </g>
-    <g transform="translate(700 500)">
-      <rect width="1080" height="68" rx="13" fill="#040805" fill-opacity=".62" stroke="#9bff55" stroke-opacity=".26"/>
-      <circle cx="22" cy="20" r="3.3" fill="#9bff55" opacity=".85"/>
-      <circle cx="34" cy="20" r="3.3" fill="#9bff55" opacity=".4"/>
-      <circle cx="46" cy="20" r="3.3" fill="#9bff55" opacity=".2"/>
-      <text x="24" y="47" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" fill="#a7ff58">oasis <tspan fill="#dce8d9">›</tspan></text>
-      <text x="177" y="47" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="17" fill="#b9c9ba">Plan</text>
-      <circle cx="220" cy="41" r="3" fill="#9bff55"/>
-      <text x="246" y="47" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="17" fill="#b9c9ba">Build</text>
-      <circle cx="301" cy="41" r="3" fill="#9bff55"/>
-      <text x="327" y="47" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="17" fill="#b9c9ba">Test</text>
-      <circle cx="370" cy="41" r="3" fill="#9bff55"/>
-      <text x="1037" y="47" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="17" text-anchor="end" fill="#9bff55">READY</text>
-    </g>
-    <rect width="1920" height="640" fill="none" stroke="#caff9a" stroke-opacity=".07" stroke-width="2"/>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="320" cy="320" rx="470" ry="390" fill="url(#glow)"/>
+  <ellipse cx="320" cy="315" rx="245" ry="245" fill="none" stroke="#9bff55" stroke-opacity=".12" stroke-width="2"/>
+  <ellipse cx="320" cy="315" rx="205" ry="205" fill="none" stroke="#9bff55" stroke-opacity=".08" stroke-width="2"/>
+  <path d="M0 480H1200" stroke="#9bff55" stroke-opacity=".18"/>
+  <path d="M0 505H1200M0 545H1200M0 595H1200" stroke="#9bff55" stroke-opacity=".055"/>
+  <g transform="translate(150 174)">
+    <rect width="190" height="190" rx="42" fill="#06110a" stroke="#9bff55" stroke-opacity=".55" stroke-width="2"/>
+    <path d="M31 117V98C31 60 60 31 98 31S165 60 165 98V117H133V98C133 78 118 63 98 63S63 78 63 98V117Z" fill="url(#lime)"/>
+    <path d="M31 129H78V140H31ZM118 129H165V140H118ZM40 151H82V161H40ZM114 151H156V161H114Z" fill="url(#lime)" opacity=".92"/>
   </g>
+  <text x="395" y="290" font-family="DejaVu Sans,Arial,sans-serif" font-size="126" font-weight="700" letter-spacing="7" fill="url(#white)">OASIS</text>
+  <text x="401" y="380" font-family="DejaVu Sans,Arial,sans-serif" font-size="58" font-weight="700" letter-spacing="3" fill="#aaff61">INSPECT. EDIT. VERIFY.</text>
+  <text x="404" y="447" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" fill="#d5e2d5">An open-source AI coding agent.</text>
+  <text x="404" y="488" font-family="DejaVu Sans,Arial,sans-serif" font-size="27" fill="#a9b9aa">Your projects. Your choice of model. Your control.</text>
+  <rect x="18" y="18" width="1164" height="594" rx="24" fill="none" stroke="#baff7a" stroke-opacity=".13" stroke-width="2"/>
 </svg>
