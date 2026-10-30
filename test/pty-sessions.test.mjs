@@ -54,6 +54,31 @@ test('starts an argv-based PTY session and reads output by cursor', async () => 
   assert.equal(manager.list().sessions[0].exitCode, 0);
 });
 
+test('reserves terminal capacity while the native PTY module is still loading', async () => {
+  const fake = makeFakePty();
+  let resolveModule;
+  const manager = new PtySessionManager({
+    loadPty: () => new Promise((resolve) => { resolveModule = resolve; }),
+    maxSessions: 1,
+    idFactory: () => 'term_reserved'
+  });
+
+  const firstStart = manager.start('node', [], { cwd: '/workspace', env: {} });
+  await Promise.resolve();
+  assert.equal(typeof resolveModule, 'function', 'the first launch should be waiting for the native module');
+  await assert.rejects(
+    manager.start('node', [], { cwd: '/workspace', env: {} }),
+    /active or starting terminal sessions/
+  );
+
+  resolveModule(fake.module);
+  const started = await firstStart;
+  assert.equal(started.state, 'running');
+  assert.equal(fake.processes.length, 1);
+  assert.equal(manager.startingSessions, 0);
+  fake.processes[0].emitExit({ exitCode: 0, signal: 0 });
+});
+
 test('bounds captured output and reports lost cursor content', async () => {
   const fake = makeFakePty();
   const manager = new PtySessionManager({ loadPty: async () => fake.module, bufferLimit: 1024, idFactory: () => 'term_buffer' });
