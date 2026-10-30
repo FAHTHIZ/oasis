@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink } from 'node:fs/promises';
 import { loadSettings, setWorkspaceTrust, addPermissionRule, updateUserSettings, userSettingsPath } from '../src/settings.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
@@ -31,6 +31,20 @@ test('~/.claude/settings.json loads as user settings; Oasis user settings win', 
   assert.equal(settings.sources[0].file, path.join(env.CLAUDE_CONFIG_DIR, 'settings.json'));
   const ignored = await loadSettings(root, { env: { ...env, OASIS_IGNORE_CLAUDE_SETTINGS: '1' }, skipPlugins: true });
   assert.ok(!ignored.permissions.allow.includes('Bash(npm test)'));
+});
+
+test('settings loader bounds reads and rejects symlink settings files', async (t) => {
+  const { root, base, env } = await fixture(t);
+  const file = path.join(root, '.claude', 'settings.json');
+  await writeFile(file, ' '.repeat(256 * 1024 + 1));
+  await assert.rejects(loadSettings(root, { env, skipPlugins: true }), /Settings file is too large/);
+
+  if (process.platform === 'win32') return;
+  const outside = path.join(base, 'outside-settings.json');
+  await writeFile(outside, JSON.stringify({ permissions: { allow: ['Bash(echo:*)'] } }));
+  await rm(file);
+  await symlink(outside, file);
+  await assert.rejects(loadSettings(root, { env, skipPlugins: true }), /regular, non-symlink file/);
 });
 
 test('concurrent user-settings mutations preserve changes and keep the file private', async (t) => {
