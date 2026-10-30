@@ -4,6 +4,10 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+- Corrected the public README lifecycle label to Alpha while the Beta confidence gate remains open, removed the stray literal newline from the Agent view, and added checks for the sidebar brand asset and markup.
+- Added a credential-redaction regression for the malformed placeholder report.
+- Restricted unattended GitHub Action runs from starting language-server processes; repository test, lint, build, or type-check commands remain the verification path.
+
 - Made session shutdown await language-server process exit and background-agent cancellation, paused auto-dispatch during teardown, and added LSP shutdown and cleanup regressions. Current-head verification is required before marking this behavior verified.
 - Changed desktop release publication to require an explicit `v*` tag matching `package.json`; ordinary pushes to `main` still build and validate but cannot publish a release. Desktop installers remain unsigned.
 
