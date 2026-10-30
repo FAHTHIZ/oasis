@@ -34,11 +34,53 @@ const required = [
   'prefers-reduced-motion', 'aria-live="polite"', 'rel="manifest"', "navigator.serviceWorker.register('./sw.js')"
 ];
 assert.ok(html.includes('href="./assets/oasis-interface.css"'), 'The app must load its local visual-system stylesheet.');
-assert.match(interfaceCss, /--bg:#0B0F0C/);
-assert.match(interfaceCss, /--panel:#1A1F1B/);
-assert.match(interfaceCss, /--accent:#7CFF5E/);
+function cssColorToken(name) {
+  const match = interfaceCss.match(new RegExp('--' + name + ':\\s*(#[0-9A-F]{6})', 'i'));
+  assert.ok(match, 'Missing six-digit color token: --' + name);
+  return match[1].toUpperCase();
+}
+function relativeLuminance(hex) {
+  const values = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const linear = values.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+function contrastRatio(foreground, background) {
+  const values = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (values[0] + 0.05) / (values[1] + 0.05);
+}
+const palette = Object.fromEntries([
+  'bg', 'sidebar', 'panel', 'line', 'line-strong', 'text', 'muted',
+  'accent', 'accent-ink', 'danger', 'diff-add', 'diff-remove'
+].map((name) => [name, cssColorToken(name)]));
+assert.equal(palette.bg, '#0B100C');
+assert.equal(palette.sidebar, '#0D130E');
+assert.equal(palette.panel, '#101811');
+assert.equal(palette.line, '#1C271F');
+assert.equal(palette['line-strong'], '#2B3B30');
+assert.equal(palette.text, '#E8EFE9');
+assert.equal(palette.muted, '#9BAA9F', 'Muted text must be at least as bright as the brief requires.');
+assert.equal(palette.accent, '#9BFF55');
+assert.equal(palette['accent-ink'], '#0B100C');
+assert.equal(palette.danger, '#FF8A8A');
+assert.equal(palette['diff-add'], '#9BFF55');
+assert.equal(palette['diff-remove'], '#FF8A8A');
+for (const surface of ['bg', 'sidebar', 'panel', 'line-strong']) {
+  assert.ok(contrastRatio(palette.text, palette[surface]) >= 4.5, 'Primary text contrast must be at least 4.5:1 on --' + surface);
+  assert.ok(contrastRatio(palette.muted, palette[surface]) >= 4.5, 'Muted text contrast must be at least 4.5:1 on --' + surface);
+}
+assert.ok(contrastRatio(palette['accent-ink'], palette.accent) >= 4.5, 'Text on the lime action color must meet 4.5:1.');
+assert.ok(contrastRatio(palette.danger, palette.panel) >= 4.5, 'Risk text must meet 4.5:1 on a panel.');
+assert.match(interfaceCss, /--font-body:Inter/);
+assert.match(interfaceCss, /--font-code:"JetBrains Mono"/);
 assert.match(interfaceCss, /\.hero:after\{display:none\}/, 'Decorative hero rings must stay out of the primary workspace.');
-assert.match(interfaceCss, /\.btn-primary\{\s*background:var\(--accent\)/, 'Primary actions must use the single portal-lime token.');
+assert.match(interfaceCss, /\.btn-primary\{background:var\(--surface-muted\)/, 'Generic primary buttons must remain neutral.');
+assert.match(interfaceCss, /#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn\s*\{/);
+assert.match(interfaceCss, /\.agent-message\{font-size:14px\}/);
+assert.match(interfaceCss, /\.agent-message\.activity\{font-size:12\.5px/);
+const limeConsumers = [...interfaceCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter((match) => /var\(--accent\)/.test(match[2]));
+assert.equal(limeConsumers.length, 1, 'Lime must be reserved for Send, New chat, and approval actions.');
+assert.match(limeConsumers[0][1], /#agentSendBtn.*#newAgentSessionBtn.*#agentApproveBtn.*#agentAlwaysBtn/);
 assert.ok(serviceWorker.includes("'./assets/oasis-interface.css'"), 'The visual-system stylesheet must be available offline.');
 for (const marker of required) {
   assert.ok(html.includes(marker), 'Missing required app feature/anchor: ' + marker);
