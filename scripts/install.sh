@@ -71,8 +71,21 @@ async function resolveFromPublicReleasePage() {
   const tag = decodeURIComponent(tagMatch[1]);
   const html = await response.text();
   const commitMatch = html.match(/data-hovercard-type="commit"[^>]*href="https:\/\/github\.com\/FAHTHIZ\/oasis\/commit\/([0-9a-f]{40})"/i);
-  const sha = String(commitMatch && commitMatch[1] || "").toLowerCase();
-  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page did not include its exact commit SHA.");
+  let sha = String(commitMatch && commitMatch[1] || "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sha)) {
+    // GitHub no longer reliably renders commit hovercards on release pages.
+    // The public Atom feed for a tag exposes its first (tag-target) commit SHA.
+    const atomResponse = await fetch("https://github.com/FAHTHIZ/oasis/commits/" + encodeURIComponent(tag) + ".atom", {
+      headers: { accept: "application/atom+xml", "user-agent": "oasis-installer" },
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!atomResponse.ok) throw new Error("The public tag Atom feed returned HTTP " + atomResponse.status + ".");
+    const atom = await atomResponse.text();
+    const firstEntry = atom.match(/<entry\\b[^>]*>([\\s\\S]*?)<\\/entry>/i);
+    const atomCommit = firstEntry && firstEntry[1].match(/<id>tag:github\\.com,2008:Grit::Commit\\/([0-9a-f]{40})<\\/id>/i);
+    sha = String(atomCommit && atomCommit[1] || "").toLowerCase();
+  }
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page and tag Atom feed did not include its exact commit SHA.");
   return { tag, sha };
 }
 try {
