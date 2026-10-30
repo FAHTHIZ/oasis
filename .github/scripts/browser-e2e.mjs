@@ -376,6 +376,9 @@ try {
     'The isolated change must remain on a separate review branch.');
   await assert.rejects(readFile(path.join(root, 'review-e2e-output.txt')), { code: 'ENOENT' });
 
+  // Hiding the entire utility rail must not strand the monitor's review shortcut.
+  await page.locator('#agentTerminalToggle').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false');
   await page.locator('button[data-nav="monitor"]').click();
   const isolatedRun = page.locator('#agentMonitorRunList .agent-monitor-run')
     .filter({ hasText: 'Run the isolated worktree fixture and prepare changes for review.' });
@@ -393,6 +396,12 @@ try {
     return wrap && !wrap.hidden && heading.includes('Committed preview') &&
       diff.includes('review-e2e-output.txt') && diff.includes('Created in the isolated worktree for diff review.');
   }, null, { timeout: timeoutMs });
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true',
+    'Reviewing a run must reveal the utility rail even when it was hidden.');
+  assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true',
+    'Reviewing a run must select Runs & changes.');
+  await assertAgentContrast(page, 'Runs and changes diff · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-isolated-diff-desktop.png'), fullPage: true });
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Opening the isolated diff must not merge the worktree or change the main branch.');
   await page.locator('#cloudRunDiffClose').click();
