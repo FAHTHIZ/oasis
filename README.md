@@ -14,17 +14,26 @@
 
 ### Install from the terminal — macOS, Linux, or Android/Termux
 
-**What this script does:** checks Node.js 22+, resolves the latest stable GitHub release to its exact commit, asks before installing or changing your PATH, then runs `oasis doctor` and `oasis setup`. It does not request administrator rights or send data anywhere.
+**Easy install:** open your terminal and paste this one command:
 
-Paste this **single line** into your terminal. It downloads the installer, checks its SHA-256 against the published value below, and runs it only if the checksum matches.
+```sh
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh | sh
+```
+
+The guided installer checks for Node.js 22 or newer. On Termux, it can offer to install Node.js through `pkg`; on a Mac with Homebrew, it can offer Homebrew installation. It downloads the latest stable OASIS release, resolves it to an exact commit, installs into your user folder, checks the environment, and opens provider setup. It does not need Git or administrator access. Review the prompts before approving changes.
+
+This quick command runs the installer fetched from the official OASIS repository over HTTPS. For an additional SHA-256 check before running the installer, use the verified version below.
+
+<details>
+<summary>Use the checksum-verified shell installer</summary>
 
 ```sh
 sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { rm -f "$f"; }; trap cleanup EXIT; trap "exit 1" HUP INT TERM; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f"; expected=1392c34fba20c771a1b20de6c927505885f91304be0d3dc90ec87b7833f77301; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
 ```
 
-The installer checks Node.js 22+, asks GitHub for the latest stable release, resolves that release tag to an immutable 40-character commit SHA, and downloads the archive for that exact commit (never the moving `main` branch). It asks before installing OASIS or changing your shell startup file, then runs `oasis doctor` and opens first-run setup. It never requests administrator rights. If Node.js is missing, it offers Termux's `pkg install nodejs` or Homebrew on a Mac when available; otherwise it shows the official Node.js download page. If GitHub cannot provide a valid stable release and commit, the installer stops without installing anything.
-
 **Published installer SHA-256:** `1392c34fba20c771a1b20de6c927505885f91304be0d3dc90ec87b7833f77301`
+
+</details>
 
 For **Windows PowerShell**, paste this one line. It checks the downloaded script's hash before running it:
 
@@ -34,7 +43,7 @@ $p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.p
 
 **Published Windows installer SHA-256:** `4ad1589b737cde3b03da4204cfa346b26650102c5a7d4111f5179fc2cbb65843`
 
-If the check fails, stop and do not run the script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
+If the checksum does not match, stop and do not run the downloaded script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
 
 ### Download the app — no terminal needed
 
@@ -45,7 +54,7 @@ If the check fails, stop and do not run the script. Read the [installation guide
    - **Linux (x86_64):** `.AppImage` or `.deb`
 3. Open it, choose a project folder, and follow the model setup.
 
-The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured.
+The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured. Android does not have a native APK release yet; use the Termux install command above.
 
 ## What is OASIS?
 
