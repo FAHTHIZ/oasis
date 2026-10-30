@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { commandAvailable } from './command-lookup.mjs';
 import path from 'node:path';
 
 const NPM_GLOBAL_PACKAGES = new Set(['pnpm', 'wrangler', 'vercel', 'netlify-cli', 'npm-check-updates']);
@@ -51,10 +51,8 @@ export function parseInstallIntent(text) {
   } catch { return null; }
 }
 
-function commandExists(command) {
-  const probe = process.platform === 'win32' ? 'where' : 'which';
-  const result = spawnSync(probe, [command], { encoding: 'utf8', stdio: 'ignore', timeout: 1500, windowsHide: true });
-  return result.status === 0;
+function commandExists(command, env = process.env) {
+  return commandAvailable(command, env);
 }
 
 export function resolveEcosystem(packageName, requested = 'auto', workspaceRoot = process.cwd()) {
@@ -93,14 +91,14 @@ export function planPackageInstall({ packageName, ecosystem = 'auto', workspaceR
 
   if (chosen === 'npm' || chosen === 'npm-global') {
     validateNpmSpec(name);
-    if (!commandExists('npm')) throw new Error('npm is not on PATH. Install Node.js with npm first, then run oasis doctor.');
+    if (!commandExists('npm', env)) throw new Error('npm is not on PATH. Install Node.js with npm first, then run oasis doctor.');
     const args = chosen === 'npm-global' ? ['install', '--global', name] : ['install', name];
     return { command: 'npm', args, packageName: name, ecosystem: chosen, note: 'npm packages may run third-party lifecycle scripts during installation.' };
   }
   if (chosen === 'pip' || chosen === 'pipx') {
     validatePythonSpec(name);
-    const python = commandExists('python3') ? 'python3' : (commandExists('python') ? 'python' : null);
-    if (chosen === 'pipx' && commandExists('pipx')) {
+    const python = commandExists('python3', env) ? 'python3' : (commandExists('python', env) ? 'python' : null);
+    if (chosen === 'pipx' && commandExists('pipx', env)) {
       return { command: 'pipx', args: ['install', name], packageName: name, ecosystem: chosen, note: 'pipx creates an isolated Python environment for this command-line tool.' };
     }
     if (!python) throw new Error('Python is not on PATH. Run oasis doctor or select another package ecosystem.');
@@ -115,41 +113,41 @@ export function planPackageInstall({ packageName, ecosystem = 'auto', workspaceR
   }
   if (chosen === 'cargo') {
     validateSystemPackage(name);
-    if (!commandExists('cargo')) throw new Error('Cargo is not on PATH.');
+    if (!commandExists('cargo', env)) throw new Error('Cargo is not on PATH.');
     return { command: 'cargo', args: ['install', name], packageName: name, ecosystem: chosen, note: 'Cargo may compile third-party source code locally.' };
   }
   if (chosen === 'go') {
     if (!name.includes('/') || !/^[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+-]+)+$/.test(name)) throw new Error('Go installs require a module path such as example.com/org/tool.');
-    if (!commandExists('go')) throw new Error('Go is not on PATH.');
+    if (!commandExists('go', env)) throw new Error('Go is not on PATH.');
     return { command: 'go', args: ['install', name], packageName: name, ecosystem: chosen, note: 'Go will download and compile the selected module.' };
   }
   if (chosen !== 'system') throw new Error('Unsupported package ecosystem: ' + chosen);
   validateSystemPackage(name);
 
   if (process.platform === 'win32') {
-    if (!commandExists('winget')) throw new Error('winget is unavailable. Configure a supported package manager, then run oasis doctor.');
+    if (!commandExists('winget', env)) throw new Error('winget is unavailable. Configure a supported package manager, then run oasis doctor.');
     return { command: 'winget', args: ['install', '--id', name, '--exact', '--accept-source-agreements', '--accept-package-agreements'], packageName: name, ecosystem: 'winget', note: 'The package name is treated as an exact Windows Package Manager ID.' };
   }
   if (process.platform === 'darwin') {
-    if (!commandExists('brew')) throw new Error('Homebrew is not on PATH. Configure a package manager, then run oasis doctor.');
+    if (!commandExists('brew', env)) throw new Error('Homebrew is not on PATH. Configure a package manager, then run oasis doctor.');
     return { command: 'brew', args: ['install', name], packageName: name, ecosystem: 'brew', note: 'Homebrew may run install hooks and may request system permission.' };
   }
-  if (process.platform === 'linux' && (env.TERMUX_VERSION || String(env.PREFIX || '').includes('com.termux')) && commandExists('pkg')) {
+  if (process.platform === 'linux' && (env.TERMUX_VERSION || String(env.PREFIX || '').includes('com.termux')) && commandExists('pkg', env)) {
     return { command: 'pkg', args: ['install', '-y', name], packageName: name, ecosystem: 'termux-pkg', note: 'Termux package names must match its repositories.' };
   }
   if (process.platform === 'linux') {
     const nonRoot = typeof process.getuid === 'function' && process.getuid() !== 0;
-    if (commandExists('apt-get')) {
-      return { command: nonRoot && commandExists('sudo') ? 'sudo' : 'apt-get', args: nonRoot && commandExists('sudo') ? ['apt-get', 'install', '-y', name] : ['install', '-y', name], packageName: name, ecosystem: 'apt', note: 'System package installation may require administrator permission.' };
+    if (commandExists('apt-get', env)) {
+      return { command: nonRoot && commandExists('sudo', env) ? 'sudo' : 'apt-get', args: nonRoot && commandExists('sudo', env) ? ['apt-get', 'install', '-y', name] : ['install', '-y', name], packageName: name, ecosystem: 'apt', note: 'System package installation may require administrator permission.' };
     }
-    if (commandExists('dnf')) {
-      return { command: nonRoot && commandExists('sudo') ? 'sudo' : 'dnf', args: nonRoot && commandExists('sudo') ? ['dnf', 'install', '-y', name] : ['install', '-y', name], packageName: name, ecosystem: 'dnf', note: 'System package installation may require administrator permission.' };
+    if (commandExists('dnf', env)) {
+      return { command: nonRoot && commandExists('sudo', env) ? 'sudo' : 'dnf', args: nonRoot && commandExists('sudo', env) ? ['dnf', 'install', '-y', name] : ['install', '-y', name], packageName: name, ecosystem: 'dnf', note: 'System package installation may require administrator permission.' };
     }
-    if (commandExists('pacman')) {
-      return { command: nonRoot && commandExists('sudo') ? 'sudo' : 'pacman', args: nonRoot && commandExists('sudo') ? ['pacman', '-S', '--noconfirm', name] : ['-S', '--noconfirm', name], packageName: name, ecosystem: 'pacman', note: 'System package installation may require administrator permission.' };
+    if (commandExists('pacman', env)) {
+      return { command: nonRoot && commandExists('sudo', env) ? 'sudo' : 'pacman', args: nonRoot && commandExists('sudo', env) ? ['pacman', '-S', '--noconfirm', name] : ['-S', '--noconfirm', name], packageName: name, ecosystem: 'pacman', note: 'System package installation may require administrator permission.' };
     }
-    if (commandExists('zypper')) {
-      return { command: nonRoot && commandExists('sudo') ? 'sudo' : 'zypper', args: nonRoot && commandExists('sudo') ? ['zypper', '--non-interactive', 'install', name] : ['--non-interactive', 'install', name], packageName: name, ecosystem: 'zypper', note: 'System package installation may require administrator permission.' };
+    if (commandExists('zypper', env)) {
+      return { command: nonRoot && commandExists('sudo', env) ? 'sudo' : 'zypper', args: nonRoot && commandExists('sudo', env) ? ['zypper', '--non-interactive', 'install', name] : ['--non-interactive', 'install', name], packageName: name, ecosystem: 'zypper', note: 'System package installation may require administrator permission.' };
     }
   }
   throw new Error('Could not detect a supported package manager for this system. Run oasis doctor, or choose npm, pip, pipx, cargo, or go explicitly.');
