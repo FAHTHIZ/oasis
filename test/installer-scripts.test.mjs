@@ -60,7 +60,7 @@ test('shell release resolver is valid JavaScript and falls back from API rate li
 
 test('shell release resolver falls back to the public Atom feed when release HTML omits the commit SHA', async () => {
   const shell = await read('scripts/install.sh');
-  const embedded = shell.match(/node --input-type=module -e '\n([\\s\\S]*?)\n'\n}/);
+  const embedded = shell.match(/node --input-type=module -e '\n([\s\S]*?)\n'\n}/);
   assert.ok(embedded, 'installer must contain its embedded Node release resolver');
   const sha = '0123456789abcdef0123456789abcdef01234567';
   const atom = '<?xml version="1.0"?><feed><entry><id>tag:github.com,2008:Grit::Commit/' + sha + '</id></entry></feed>';
@@ -73,10 +73,10 @@ test('shell release resolver falls back to the public Atom feed when release HTM
     '  throw new Error("Unexpected URL: " + target);',
     '};',
     embedded[1]
-  ].join('\\n');
+  ].join('\n');
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.equal(result.stdout.trim(), 'v9.8.7\\n' + sha);
+  assert.equal(result.stdout.trim(), 'v9.8.7\n' + sha);
   assert.match(result.stderr, /GitHub API unavailable/);
 });
 
@@ -84,6 +84,6 @@ test('Windows installer has the same public-page and Atom-feed fallbacks for API
   const powershell = await read('scripts/install.ps1');
   assert.match(powershell, /trying the official public release page/i);
   assert.match(powershell, /data-hovercard-type="commit"/);
-  assert.match(powershell, /commits\\/\$encodedTag\.atom/i);
+  assert.match(powershell, /commits\/\$encodedTag\.atom/i);
   assert.ok(powershell.includes("releases/latest"));
 });
