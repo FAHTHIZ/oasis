@@ -462,10 +462,32 @@ try {
     await firstRunPage.locator('#firstRunWizard').waitFor({ state: 'visible', timeout: timeoutMs });
     await assertAgentContrast(firstRunPage, 'First-run setup · desktop');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-desktop.png'), fullPage: true });
+
+    await firstRunPage.locator('[data-first-run="api"]').click();
+    assert.equal(await firstRunPage.locator('#providerPreset').inputValue(), 'openai');
+    assert.equal(await firstRunPage.locator('[data-first-run="api"]').getAttribute('aria-pressed'), 'true');
+    assert.match(await firstRunPage.locator('#firstRunStatus').innerText(), /API route selected/i);
+    await assertAgentContrast(firstRunPage, 'First-run API route · desktop');
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-api-route-desktop.png'), fullPage: true });
+
+    await firstRunPage.locator('[data-first-run="omniroute"]').click();
+    assert.equal(await firstRunPage.locator('#providerPreset').inputValue(), 'omniroute');
+    assert.equal(await firstRunPage.locator('[data-first-run="omniroute"]').getAttribute('aria-pressed'), 'true');
+    assert.match(await firstRunPage.locator('#firstRunStatus').innerText(), /OmniRoute must be running/i);
+    await assertAgentContrast(firstRunPage, 'First-run gateway route · desktop');
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-gateway-route-desktop.png'), fullPage: true });
+
+    await firstRunPage.locator('[data-first-run="ollama"]').click();
+    assert.equal(await firstRunPage.locator('#providerPreset').inputValue(), 'ollama');
+    assert.equal(await firstRunPage.locator('[data-first-run="ollama"]').getAttribute('aria-pressed'), 'true');
+    await assertAgentContrast(firstRunPage, 'First-run local route · desktop');
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-local-route-desktop.png'), fullPage: true });
+
     await firstRunPage.setViewportSize({ width: 390, height: 844 });
     const firstRunMobileWidth = await firstRunPage.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(firstRunMobileWidth <= 390, 'The first-run screen must not overflow horizontally at 390px.');
     await assertAgentContrast(firstRunPage, 'First-run setup · 390px');
+    assert.equal(await firstRunPage.locator('[data-first-run="ollama"]').getAttribute('aria-pressed'), 'true', 'The selected route should remain visible on phone.');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-390px.png'), fullPage: true });
     assert.equal(await firstRunPage.locator('[data-first-run]').count(), 3, 'First run should present all three model choices.');
     assert.deepEqual(firstRunErrors, [], 'The first-run screen must not throw JavaScript errors.');
