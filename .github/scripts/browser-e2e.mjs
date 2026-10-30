@@ -406,10 +406,13 @@ try {
   const splitAfter = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
   assert.notEqual(splitAfter, splitBefore, 'Keyboard arrows should resize the chat/terminal divider.');
 
+  assert.equal(await page.locator('#agentTerminalToggle').innerText(), 'Hide side panel', 'The desktop visibility control should identify the complete utility rail.');
   await page.locator('#agentTerminalToggle').click();
-  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false', 'The desktop terminal toggle should hide the terminal.');
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false', 'The desktop utility toggle should hide the side panel.');
+  assert.equal(await page.locator('#agentTerminalToggle').innerText(), 'Show side panel');
   await page.locator('#agentTerminalToggle').click();
-  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true', 'The desktop terminal toggle should restore the terminal.');
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true', 'The desktop utility toggle should restore the side panel.');
+  assert.equal(await page.locator('#agentTerminalToggle').innerText(), 'Hide side panel');
 
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
