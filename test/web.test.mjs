@@ -215,6 +215,36 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.match(homeHtml, /id="view-agent"/);
   assert.equal(homeHtml.includes('id="view-agent">\\n'), false, 'the Agent view must not render a visible newline escape');
   assert.ok(homeHtml.includes('<img src="/assets/oasis-mark.svg"'), 'the sidebar mark must use a root-relative asset path');
+
+  const agentStyle = homeHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1] || '';
+  const tokenBlock = [...agentStyle.matchAll(/:root\s*\{([^}]+)\}/g)].at(-1)?.[1] || '';
+  assert.match(tokenBlock, /--bg:#0B100C/);
+  assert.match(tokenBlock, /--sidebar:#0D130E/);
+  assert.match(tokenBlock, /--panel:#101811/);
+  assert.match(tokenBlock, /--line:#1C271F/);
+  assert.match(tokenBlock, /--line-strong:#2B3B30/);
+  assert.match(tokenBlock, /--text:#E8EFE9/);
+  assert.match(tokenBlock, /--muted:#9BAA9F/);
+  assert.match(tokenBlock, /--accent:#9BFF55/);
+  assert.match(tokenBlock, /--font-ui:Inter/);
+  assert.match(tokenBlock, /--font-mono:"JetBrains Mono"/);
+  const relativeLuminance = (hex) => {
+    const values = hex.slice(1).match(/.{2}/g).map((part) => parseInt(part, 16) / 255);
+    const linear = values.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  };
+  const contrastRatio = (foreground, background) => {
+    const values = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+    return (values[0] + 0.05) / (values[1] + 0.05);
+  };
+  for (const surface of ['#0B100C', '#0D130E', '#101811', '#1C271F', '#2B3B30']) {
+    assert.ok(contrastRatio('#9BAA9F', surface) >= 4.5, 'muted text must meet WCAG AA against ' + surface);
+  }
+  assert.ok(contrastRatio('#E8EFE9', '#101811') >= 7, 'primary text must remain high contrast on panels');
+  assert.ok(contrastRatio('#0B100C', '#9BFF55') >= 7, 'text on the lime action colour must remain readable');
+  assert.match(agentStyle, /\.panel,[\s\S]*?background:\s*var\(--panel\)/);
+  assert.match(agentStyle, /#newAgentSessionBtn,[\s\S]*?\.agent-compose-actions \.btn-primary,[\s\S]*?#agentApproveBtn/);
+
   assert.match(homeHtml, /id="view-monitor"/, 'the authenticated workspace includes the run monitor view');
   assert.match(homeHtml, /id="agentMonitorRefreshBtn"/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
