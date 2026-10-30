@@ -20,6 +20,7 @@ Any provider Oasis supports works: OpenAI, Anthropic, OpenRouter, or any OpenAI-
 - **Who can trigger it:** only authors with an `OWNER`, `MEMBER`, or `COLLABORATOR` association (change this with `allowed_associations`). Bots are ignored, so Oasis never replies to itself.
 - **Permissions:** the default mode is `auto`. A classifier model approves routine steps such as tests and builds, and blocks risky ones such as uploads, force pushes, reading secrets, or `curl | sh`. The classifier only sees the request and the pending action, never the issue text or tool output, so instructions planted there can't approve anything.
 - **Treating text as data:** issue and PR descriptions are passed to the agent as information, not as instructions.
+- **Verification in unattended runs:** the Action does not launch language-server processes, including project-configured ones. It uses the repository's own test, lint, build, or type-check commands instead. If no relevant check passes after a source edit, OASIS reports verification as incomplete; it does not claim a language-server result.
 - **Extra limits:** use `allowed_tools` to pre-approve exact commands and `disallowed_tools` to forbid others.
 - **Pushing:** Oasis never runs `git push` itself. The action commits and pushes only the working-tree changes, and it never force-pushes.
 
