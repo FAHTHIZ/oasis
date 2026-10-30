@@ -15,7 +15,8 @@
 //           .cursor/mcp.json                        -> project .mcp.json
 //           .cursorrules, .cursor/rules/**/*.mdc    -> .claude/rules/ (globs -> paths)
 //           .cursor/commands/*.md                   -> project commands
-import { mkdir, readFile, readdir, writeFile, lstat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile, lstat, rename, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -204,6 +205,62 @@ function cursorRuleToMarkdown(text, name) {
   return (lines.length > 3 ? lines.join('\n') : lines.slice(2).join('\n'));
 }
 
+function isWithinPath(root, target) {
+  const relative = path.relative(root, target);
+  return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
+}
+
+// Import plans can be stale by the time the user confirms them. Re-check the
+// destination at apply time, including every existing parent directory.
+async function assertSafeImportTarget(plan, rawTarget) {
+  if (typeof rawTarget !== 'string' || !rawTarget) throw new Error('Import destination is missing.');
+  const target = path.resolve(rawTarget);
+  const workspace = path.resolve(plan.root);
+  const userConfig = path.resolve(path.dirname(plan.userMcpFile));
+  const base = isWithinPath(workspace, target) ? workspace :
+    (isWithinPath(userConfig, target) ? userConfig : null);
+  if (!base) throw new Error('Import destination must remain inside the workspace or user OASIS configuration directory.');
+
+  const relative = path.relative(base, target);
+  const parent = path.dirname(relative);
+  let current = base;
+  for (const part of parent === '.' ? [] : parent.split(path.sep)) {
+    current = path.join(current, part);
+    try {
+      const info = await lstat(current);
+      if (info.isSymbolicLink()) throw new Error('Refusing to import through a symbolic-link directory: ' + current);
+      if (!info.isDirectory()) throw new Error('Import destination parent is not a directory: ' + current);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  try {
+    const info = await lstat(target);
+    if (info.isSymbolicLink() || !info.isFile()) throw new Error('Refusing to import to a non-regular or symbolic-link destination: ' + target);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
+
+async function writeImportFileAtomically(file, content, mode) {
+  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+  try {
+    await writeFile(temp, content, { encoding: 'utf8', mode, flag: 'wx' });
+    await rename(temp, file);
+  } finally {
+    await unlink(temp).catch(() => {});
+  }
+}
+
+function importItemTarget(plan, item) {
+  if (item.kind === 'mcp') {
+    if (item.scope === 'user') return plan.userMcpFile;
+    if (item.scope === 'project') return plan.projectMcpFile;
+    throw new Error('Invalid MCP import scope.');
+  }
+  return item.target;
+}
+
 // ---- planning ----
 export async function planImport(root, options = {}) {
   const env = options.env || process.env;
@@ -273,21 +330,45 @@ export async function planImport(root, options = {}) {
         await addFile('command', 'gemini', file, path.join(targetDir, ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), content, parts.join(':') + ' (' + scope + ')');
       }
     }
+  }export async function applyImport(plan) {
+  const done = [];
+  const mcp = { user: null, project: null };
+  // Validate every destination before the first write so one unsafe item cannot
+  // leave a partially-applied import behind.
+  for (const item of plan.items) {
+    if (item.action !== 'skip') await assertSafeImportTarget(plan, importItemTarget(plan, item));
   }
-  if (sources.includes('cursor')) {
-    addServers(((await readJson(path.join(home, '.cursor', 'mcp.json'))) || {}).mcpServers, 'cursor', 'user', 'cursor');
-    addServers(((await readJson(path.join(workspace, '.cursor', 'mcp.json'))) || {}).mcpServers, 'cursor', 'project', 'cursor');
-    const legacy = await readText(path.join(workspace, '.cursorrules'));
-    if (legacy) await addFile('rule', 'cursor', path.join(workspace, '.cursorrules'), path.join(workspace, '.claude', 'rules', 'cursorrules.md'), '<!-- imported from .cursorrules -->\n' + legacy.trim() + '\n', '.cursorrules');
-    for (const { file, parts } of await listFiles(path.join(workspace, '.cursor', 'rules'), '.mdc')) {
-      const text = await readText(file);
-      if (text) await addFile('rule', 'cursor', file, path.join(workspace, '.claude', 'rules', 'cursor-' + slug(parts.join('-')) + '.md'), cursorRuleToMarkdown(text, parts.join('/')), parts.join('/'));
+  for (const item of plan.items) {
+    if (item.action === 'skip') continue;
+    if (item.kind === 'mcp') {
+      const file = importItemTarget(plan, item);
+      if (!mcp[item.scope]) mcp[item.scope] = (await readJson(file)) || {};
+      mcp[item.scope].mcpServers ||= {};
+      mcp[item.scope].mcpServers[item.name] = item.server;
+      done.push(item);
+      continue;
     }
-    for (const { file, parts } of await listFiles(path.join(workspace, '.cursor', 'commands'), '.md')) {
-      await addFile('command', 'cursor', file, path.join(workspace, '.oasis', 'commands', ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), await readText(file), parts.join(':'));
+    await mkdir(path.dirname(item.target), { recursive: true });
+    await assertSafeImportTarget(plan, item.target);
+    if (item.action === 'append') {
+      const before = (await readText(item.target)) || '';
+      await writeImportFileAtomically(item.target, before + item.content, 0o600);
+    } else {
+      await writeFile(item.target, item.content, { flag: 'wx' }).catch((error) => { if (error.code !== 'EEXIST') throw error; });
     }
+    done.push(item);
   }
-  return { root: workspace, sources, items, userMcpFile, projectMcpFile };
+  for (const [scope, data] of Object.entries(mcp)) {
+    if (!data) continue;
+    const file = scope === 'user' ? plan.userMcpFile : plan.projectMcpFile;
+    await mkdir(path.dirname(file), { recursive: true });
+    await assertSafeImportTarget(plan, file);
+    await writeImportFileAtomically(file, JSON.stringify(data, null, 2) + '\n', scope === 'user' ? 0o600 : 0o644);
+  }
+  return done;
+}
+
+ root: workspace, sources, items, userMcpFile, projectMcpFile };
 }
 
 export function describePlan(plan) {
