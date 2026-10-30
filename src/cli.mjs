@@ -74,6 +74,7 @@ function printHelp() {
     '  oasis setup                   Configure a model provider',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis update [--check] [--yes] Check GitHub main for a newer Oasis and install it',
+    '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
@@ -619,6 +620,50 @@ async function updateOasis(args = []) {
   const result = spawnSync(plan.command, plan.args, { stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.status !== 0) { stderr.write('The update command failed (exit ' + result.status + ').\n'); process.exitCode = 1; return; }
   stdout.write('Oasis updated to ' + latest.sha.slice(0, 7) + '. Restart any running oasis sessions.\n');
+}
+
+
+async function uninstallOasis(args = []) {
+  const yes = args.includes('--yes') || args.includes('-y');
+  if (args.some((arg) => !['--yes', '-y'].includes(arg))) {
+    throw new Error('Usage: oasis uninstall [--yes]');
+  }
+  const nodeModules = path.dirname(APP_ROOT);
+  if (path.basename(nodeModules) !== 'node_modules') {
+    throw new Error('This OASIS copy does not look like a global npm installation. I will not delete project files. Remove it with the package manager used to install it.');
+  }
+  const libOrPrefix = path.dirname(nodeModules);
+  const prefix = path.basename(libOrPrefix) === 'lib' ? path.dirname(libOrPrefix) : libOrPrefix;
+  const packageFile = path.join(APP_ROOT, 'package.json');
+  const { readFile } = await import('node:fs/promises');
+  const installedPackage = JSON.parse(await readFile(packageFile, 'utf8'));
+  const packageName = installedPackage.name;
+  if (packageName !== 'oasis-oss') {
+    throw new Error('The installed package name was not oasis-oss. Nothing was removed.');
+  }
+  stdout.write('OASIS uninstall plan\n');
+  stdout.write('  Package: ' + packageName + '\n');
+  stdout.write('  Install prefix: ' + prefix + '\n');
+  stdout.write('  Will remove: ' + APP_ROOT + ' and the npm command links for OASIS.\n');
+  stdout.write('  Will keep: your projects, OASIS settings, saved sessions, memory, and API keys.\n');
+  if (!yes) {
+    const answer = (await askLine('Remove the OASIS CLI now? [y/N] ')).trim().toLowerCase();
+    if (!['y', 'yes'].includes(answer)) {
+      stdout.write('Uninstall cancelled. Nothing was removed.\n');
+      return;
+    }
+  } else {
+    stdout.write('Uninstall approved by --yes.\n');
+  }
+  if (!commandAvailable('npm')) throw new Error('npm was not found. Nothing was removed.');
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync('npm', ['uninstall', '--global', '--prefix', prefix, packageName], { stdio: 'inherit', shell: process.platform === 'win32' });
+  if (result.status !== 0) {
+    stderr.write('npm could not complete the uninstall. Your project and OASIS user data were not targeted.\n');
+    process.exitCode = result.status || 1;
+    return;
+  }
+  stdout.write('OASIS CLI has been uninstalled. Your projects and user data were kept.\n');
 }
 
 async function doctorWorkspaceReport(root) {
@@ -2908,6 +2953,7 @@ async function main() {
   if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
   if (command === 'update') return await updateOasis(rest);
+  if (command === 'uninstall') return await uninstallOasis(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
