@@ -81,8 +81,8 @@ async function resolveFromPublicReleasePage() {
     });
     if (!atomResponse.ok) throw new Error("The public tag Atom feed returned HTTP " + atomResponse.status + ".");
     const atom = await atomResponse.text();
-    const firstEntry = atom.match(/<entry\\b[^>]*>([\\s\\S]*?)<\\/entry>/i);
-    const atomCommit = firstEntry && firstEntry[1].match(/<id>tag:github\\.com,2008:Grit::Commit\\/([0-9a-f]{40})<\\/id>/i);
+    const firstEntry = atom.match(/<entry\b[^>]*>([\s\S]*?)<\/entry>/i);
+    const atomCommit = firstEntry && firstEntry[1].match(/<id>tag:github\.com,2008:Grit::Commit\/([0-9a-f]{40})<\/id>/i);
     sha = String(atomCommit && atomCommit[1] || "").toLowerCase();
   }
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page and tag Atom feed did not include its exact commit SHA.");
