@@ -142,6 +142,46 @@ test('multi_edit applies all edits atomically or none', async (t) => {
   delete process.env.OASIS_CONFIG_DIR;
 });
 
+test('background process history evicts only the oldest completed entries', async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const registry = new Map();
+  const historyLimit = 24;
+  for (let index = 0; index < historyLimit; index++) {
+    const id = 'completed-' + index;
+    registry.set(id, {
+      id,
+      status: 'exited',
+      command: 'old task ' + index,
+      output: 'old output',
+      startedAt: new Date(1000 + index).toISOString(),
+      endedAt: 1000 + index
+    });
+  }
+  const runningEntry = { id: 'keep-running', status: 'running', command: 'ongoing task', startedAt: new Date().toISOString() };
+  registry.set(runningEntry.id, runningEntry);
+
+  const started = startBackgroundProcess(registry, {
+    command: process.execPath,
+    args: ['-e', "process.stdout.write('new output')"]
+  }, { cwd: dir, env: process.env, display: 'new task' });
+  const entry = registry.get(started.id);
+  assert.ok(entry);
+  t.after(() => { if (entry.status === 'running') killBackgroundEntry(entry); });
+
+  assert.equal(registry.has('completed-0'), false, 'the oldest completed record should be evicted');
+  assert.equal(registry.has('completed-1'), true, 'newer completed records should be retained');
+  assert.equal(registry.has('keep-running'), true, 'running jobs must never be evicted');
+  assert.equal(registry.size, historyLimit + 1, 'the bounded history plus running entries should remain');
+
+  await new Promise((resolve, reject) => {
+    entry.child.once('close', resolve);
+    entry.child.once('error', reject);
+  });
+  assert.equal(entry.status, 'exited');
+  assert.equal(entry.output, 'new output');
+});
+
 test('background commands start, stream output, and can be killed', async (t) => {
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));
