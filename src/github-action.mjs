@@ -220,7 +220,10 @@ export async function runAction(options = {}) {
       allowedTools: input(env, 'allowed_tools').split(',').map((item) => item.trim()).filter(Boolean),
       disallowedTools: input(env, 'disallowed_tools').split(',').map((item) => item.trim()).filter(Boolean),
       maxTurns: Number(input(env, 'max_turns', '40')) || 40,
-      appendSystemPrompt: input(env, 'append_system_prompt'),
+      appendSystemPrompt: [
+        input(env, 'append_system_prompt'),
+        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. If no relevant check passes, report verification as incomplete.'
+      ].filter(Boolean).join('\n\n'),
       ...(options.runOptions || {})
     });
   } catch (error) {
