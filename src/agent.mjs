@@ -38,7 +38,7 @@ import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
-import { webSearchEnabled } from './web-search.mjs';
+import { webSearchEnabled, searchBackends, searchBackend } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 
@@ -440,6 +440,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     pricing: pricing || loadedSettings.pricing || null,
     messages: [],
     mcpClients: mcp.clients,
+    webAccessApprovals: new Set(),
     mcpHost,
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
@@ -2787,6 +2788,43 @@ function permissionMode(session, options) {
   return (session.permissions && session.permissions.mode) || 'default';
 }
 
+const SEARCH_PROVIDER_HOSTS = {
+  duckduckgo: 'html.duckduckgo.com',
+  tavily: 'api.tavily.com',
+  brave: 'api.search.brave.com',
+  exa: 'api.exa.ai',
+  firecrawl: 'api.firecrawl.dev'
+};
+
+function webSearchHosts(args, env) {
+  const configured = searchBackends(env);
+  const strategy = String(args.strategy || env.OASIS_SEARCH_STRATEGY || 'auto').toLowerCase();
+  let providers;
+  if (strategy === 'single') {
+    const preferred = searchBackend(env);
+    providers = [configured.length ? (configured.includes(preferred) ? preferred : configured[0]) : 'duckduckgo'];
+  } else {
+    providers = configured.length ? [...configured, 'duckduckgo'] : ['duckduckgo'];
+  }
+  return [...new Set(providers.map((provider) => {
+    if (provider === 'searxng') {
+      try { return new URL(String(env.OASIS_SEARXNG_URL)).hostname.toLowerCase(); }
+      catch { return 'configured SearXNG endpoint'; }
+    }
+    return SEARCH_PROVIDER_HOSTS[provider] || provider;
+  }))];
+}
+
+function webAccessSites(name, args, env) {
+  if (name === 'fetch_url') {
+    try {
+      const host = new URL(String(args.url || '')).hostname.toLowerCase();
+      return host ? [host] : [];
+    } catch { return []; }
+  }
+  return name === 'web_search' ? webSearchHosts(args, env) : [];
+}
+
 // Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
 async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
@@ -2882,9 +2920,27 @@ async function authorizeCall(session, name, args, context, options) {
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);
   };
+  const sites = webAccessSites(name, args, context.env || process.env);
+  let siteApprovalHandled = false;
+  if (sites.length) {
+    session.webAccessApprovals ||= new Set();
+    for (const host of sites) {
+      const key = 'site:' + host;
+      if (session.webAccessApprovals.has(key)) continue;
+      const message = name === 'web_search'
+        ? 'Allow web_search to send this query to ' + host + ' for the rest of this session? Search results may refer to other websites; fetching any result page will ask separately.'
+        : 'Allow fetch_url to retrieve a public page from ' + host + ' for the rest of this session?';
+      const ok = await overlay.approval(message, true);
+      if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve web access to ' + host + '.' };
+      session.webAccessApprovals.add(key);
+      siteApprovalHandled = true;
+    }
+  }
   if (decision === 'ask') {
-    const ok = await overlay.approval('Permission rule ' + (verdict.rule || 'from a PreToolUse hook') + ' requires approval for ' + name + ':\n  ' + JSON.stringify(args).slice(0, 1500), true);
-    if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve this ' + name + ' call.' };
+    if (!siteApprovalHandled) {
+      const ok = await overlay.approval('Permission rule ' + (verdict.rule || 'from a PreToolUse hook') + ' requires approval for ' + name + ':\n  ' + JSON.stringify(args).slice(0, 1500), true);
+      if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve this ' + name + ' call.' };
+    }
     overlay.ruleAllowed = true;
     overlay.autoApprove = true;
   } else if (decision === 'allow') {

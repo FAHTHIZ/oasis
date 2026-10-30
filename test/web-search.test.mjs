@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { webSearch, parseDuckDuckGoHtml, searchBackend, webSearchEnabled } from '../src/web-search.mjs';
-import { createSession, closeSession } from '../src/agent.mjs';
+import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
+import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 import os from 'node:os';
 
 const DDG = `<div class="result results_links web-result "><div class="links_main result__body">
@@ -199,4 +200,36 @@ test('auto strategy falls back to DuckDuckGo when its sole configured provider f
   assert.equal(result.strategy, 'single-fallback');
   assert.equal(result.results.length, 2);
   assert.ok(result.providerErrors.some((item) => item.provider === 'tavily'));
+});
+
+test('web tools ask once per website and remember consent for the session', async (t) => {
+  const { config } = await scriptedModel(t, [
+    toolCall('fetch-1', 'fetch_url', { url: 'http://127.0.0.1:9/first' }),
+    toolCall('fetch-2', 'fetch_url', { url: 'http://127.0.0.1:10/second' }),
+    toolCall('fetch-3', 'fetch_url', { url: 'http://localhost:9/third' }),
+    toolCall('search-1', 'web_search', { query: ' ' }),
+    toolCall('search-2', 'web_search', { query: ' ' }),
+    { content: 'Done.' }
+  ]);
+  const env = {
+    ...process.env,
+    OASIS_WEB_SEARCH: 'on',
+    TAVILY_API_KEY: '',
+    BRAVE_SEARCH_API_KEY: '',
+    OASIS_SEARXNG_URL: '',
+    EXA_API_KEY: '',
+    FIRECRAWL_API_KEY: ''
+  };
+  const session = await createSession({ root: os.tmpdir(), config, env });
+  t.after(() => closeSession(session));
+  const prompts = [];
+  await runAgentTurn(session, 'Use the web tools', {
+    env,
+    approval: async (message) => { prompts.push(message); return true; }
+  });
+
+  assert.equal(prompts.length, 3, 'one prompt for each new host; repeat hosts stay approved for this session');
+  assert.match(prompts[0], /127\.0\.0\.1/);
+  assert.match(prompts[1], /localhost/);
+  assert.match(prompts[2], /html\.duckduckgo\.com/);
 });
