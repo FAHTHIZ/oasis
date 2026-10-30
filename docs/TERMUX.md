@@ -13,7 +13,7 @@ This is the phone-first path for people using Android. The Electron desktop app 
 Paste this single command into Termux and press **Enter**:
 
 ```sh
-sh -c 'f=$(mktemp) || exit; curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh -o "$f" && sh "$f"; r=$?; rm -f "$f"; exit "$r"'
+sh -c 'f=$(mktemp) || exit; url=https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh; if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$f"; elif command -v wget >/dev/null 2>&1; then wget -qO "$f" "$url"; else echo "Install curl or wget first, then retry." >&2; rm -f "$f"; exit 1; fi && sh "$f"; r=$?; rm -f "$f"; exit "$r"'
 ```
 
 The installer checks for Node.js 22 or newer. If it is missing, it offers to install Node.js with Termux's package manager. It then downloads the latest stable GitHub release of OASIS, installs it in your user folder, checks the environment, and starts guided provider setup. You do not need to clone the repository, install Git, or type separate npm commands.
