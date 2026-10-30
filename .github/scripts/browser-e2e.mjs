@@ -206,6 +206,22 @@ try {
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+  await page.waitForFunction(() => document.querySelector('#agentWorkspaceGrid')?.dataset.terminalVisible === 'false',
+    null, { timeout: timeoutMs });
+  assert.equal(await page.locator('#view-home').evaluate((node) => node.classList.contains('active')), true,
+    'The existing Overview page should remain available.');
+  await page.locator('#sidebarSettingsButton').click();
+  assert.equal(await page.locator('#view-settings').evaluate((node) => node.classList.contains('active')), true,
+    'Legacy destinations and preferences should be grouped under Settings.');
+  await page.locator('#view-settings [data-nav="projects"]').click();
+  assert.equal(await page.locator('#view-projects').evaluate((node) => node.classList.contains('active')), true,
+    'The Settings page should preserve the existing Projects view.');
+  await page.locator('#sidebarProjectPickerBtn').click();
+  assert.equal(await page.locator('#view-projects').evaluate((node) => node.classList.contains('active')), true,
+    'The project picker should open the existing project list.');
+  await page.locator('#sidebarNewChatBtn').click();
+  assert.equal(await page.locator('#view-agent').evaluate((node) => node.classList.contains('active')), true,
+    'New chat should open the coding conversation.');
 
   // Ctrl+K opens the browser palette. A selection fills the composer but must
   // not start an agent task; the user explicitly presses Send afterwards.
@@ -224,7 +240,8 @@ try {
   assert.equal(await page.locator('#commandPaletteDialog').isVisible(), false, 'Escape should close the palette without running the selection.');
 
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-before.png'), fullPage: true });
-  await page.locator('button[data-nav="agent"]').first().click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false',
+    'The utility rail should be closed by default.');
   await assertAgentContrast(page, 'Agent empty state · desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-empty-desktop.png'), fullPage: true });
   // The starter cards belong to the empty-state UI, so test them before connecting.
@@ -247,6 +264,7 @@ try {
     const status = document.querySelector('#agentRuntimeState');
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
+  await page.locator('#topbarProjectName').waitFor({ state: 'visible', timeout: timeoutMs });
   await assertAgentContrast(page, 'Agent workspace · desktop');
   await page.locator('#agentModelButton').click();
   await page.waitForFunction(() => window.scrollY > 0, null, { timeout: timeoutMs });
@@ -272,6 +290,10 @@ try {
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
   assert.equal(completionCalls, 3, 'The agent should write the file, read it back, and then produce a final answer.');
+  await page.waitForFunction(() => document.querySelectorAll('#sidebarChatList [data-sidebar-session-id]').length > 0,
+    null, { timeout: timeoutMs });
+  assert.ok(await page.locator('#sidebarChatList [data-sidebar-session-id]').count() > 0,
+    'The sidebar should show saved conversations from the authenticated runtime.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
     'Created by the authenticated browser agent tool cycle.\n',
@@ -301,20 +323,38 @@ try {
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
 
-  // The right utility rail should switch between the live terminal and saved
-  // coding runs/diffs without leaving the conversation workspace.
-  await page.locator('#agentRunsUtilityTab').click();
-  assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true');
-  await page.locator('#agentRunsUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
-  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), false, 'The terminal utility panel should hide while Runs & changes is selected.');
+  // Top-bar buttons open/close the three dedicated utility views.
+  await page.locator('#topbarTasksBtn').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true',
+    'The top-bar Tasks button should open the side panel.');
+  assert.equal(await page.locator('#topbarTasksBtn').getAttribute('aria-pressed'), 'true');
+  await page.locator('#agentTasksUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), false,
+    'The Terminal panel should hide while Tasks is selected.');
   await page.keyboard.press('ArrowLeft');
-  assert.equal(await page.locator('#agentTerminalUtilityTab').getAttribute('aria-selected'), 'true', 'Left arrow should select Terminal.');
+  assert.equal(await page.locator('#agentChangesUtilityTab').getAttribute('aria-selected'), 'true',
+    'Left arrow from Tasks should select Changes.');
   await page.keyboard.press('ArrowRight');
-  assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true', 'Right arrow should select Runs & changes.');
-  await assertAgentContrast(page, 'Runs and changes · desktop');
-  await page.screenshot({ path: path.join(screenshotDir, 'agent-runs-desktop.png'), fullPage: true });
-  await page.locator('#agentTerminalUtilityTab').click();
-  assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), true, 'The terminal utility panel should be restored by its tab.');
+  assert.equal(await page.locator('#agentTasksUtilityTab').getAttribute('aria-selected'), 'true',
+    'Right arrow should return to Tasks.');
+  await page.keyboard.press('Home');
+  assert.equal(await page.locator('#agentTerminalUtilityTab').getAttribute('aria-selected'), 'true',
+    'Home should select Terminal.');
+  await page.keyboard.press('End');
+  assert.equal(await page.locator('#agentTasksUtilityTab').getAttribute('aria-selected'), 'true',
+    'End should select Tasks.');
+  await assertAgentContrast(page, 'Tasks · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-tasks-desktop.png'), fullPage: true });
+  await page.locator('#topbarChangesBtn').click();
+  await page.locator('#agentChangesUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  await assertAgentContrast(page, 'Changes · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-changes-desktop.png'), fullPage: true });
+  await page.locator('#topbarChangesBtn').click();
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'false',
+    'Clicking the selected top-bar tab should close the side panel.');
+  await page.locator('#topbarTerminalBtn').click();
+  await page.locator('#agentTerminalUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#topbarTerminalBtn').getAttribute('aria-pressed'), 'true');
 
   // Commit the output from the preceding non-isolated file test so the real
   // worktree run begins from a clean user workspace, as required in production.
@@ -398,9 +438,9 @@ try {
   }, null, { timeout: timeoutMs });
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true',
     'Reviewing a run must reveal the utility rail even when it was hidden.');
-  assert.equal(await page.locator('#agentRunsUtilityTab').getAttribute('aria-selected'), 'true',
-    'Reviewing a run must select Runs & changes.');
-  await assertAgentContrast(page, 'Runs and changes diff · desktop');
+  assert.equal(await page.locator('#agentChangesUtilityTab').getAttribute('aria-selected'), 'true',
+    'Reviewing a run must select Changes.');
+  await assertAgentContrast(page, 'Changes diff · desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-isolated-diff-desktop.png'), fullPage: true });
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Opening the isolated diff must not merge the worktree or change the main branch.');
@@ -428,18 +468,29 @@ try {
   const mobileDocumentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(mobileDocumentWidth <= 390, 'The Agent workspace must not overflow horizontally at 390px.');
   await page.locator('#agentTerminalTab').click();
-  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal', 'The terminal tab should reveal the terminal on narrow screens.');
+  assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal',
+    'The phone Terminal tab should select the terminal workspace.');
   await assertAgentContrast(page, 'Agent terminal panel · 390px');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-terminal-390px.png'), fullPage: true });
-  await page.locator('#agentRunsUtilityTab').click();
-  await page.locator('#agentRunsUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  await page.locator('#agentTasksUtilityTab').click();
+  await page.locator('#agentTasksUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
   assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), false);
-  await assertAgentContrast(page, 'Runs and changes · 390px');
+  await assertAgentContrast(page, 'Tasks · 390px');
   const utilityMobileWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-  assert.ok(utilityMobileWidth <= 390, 'Runs and changes must not overflow horizontally at 390px.');
-  await page.screenshot({ path: path.join(screenshotDir, 'agent-runs-390px.png'), fullPage: true });
+  assert.ok(utilityMobileWidth <= 390, 'Tasks must not overflow horizontally at 390px.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-tasks-390px.png'), fullPage: true });
+  await page.locator('#agentChangesUtilityTab').click();
+  await page.locator('#agentChangesUtilityPanel').waitFor({ state: 'visible', timeout: timeoutMs });
+  await assertAgentContrast(page, 'Changes · 390px');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-changes-390px.png'), fullPage: true });
   await page.locator('#agentTerminalUtilityTab').click();
   assert.equal(await page.locator('#agentTerminalUtilityPanel').isVisible(), true);
+  await page.locator('#sidebarMenuButton').click();
+  assert.equal(await page.locator('#sidebarMenuButton').getAttribute('aria-expanded'), 'true',
+    'The phone menu should open the saved-chats drawer.');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#sidebarMenuButton').getAttribute('aria-expanded'), 'false',
+    'Escape should close the saved-chats drawer.');
   await page.locator('#agentChatTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
   await assertAgentContrast(page, 'Agent chat · 390px');
