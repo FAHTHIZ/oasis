@@ -535,3 +535,96 @@ body.light .hero:after{display:none}
   .agent-runtime-state{font-size:9px}
   #newAgentSessionBtn{font-size:9px;padding:6px 8px}
 }
+
+
+/* Utility rail: keep terminal and coding-run diffs next to the conversation. */
+.agent-terminal-column{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  height:100%;
+  min-height:0;
+}
+.agent-utility-tabs{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  flex:0 0 auto;
+  min-width:0;
+  padding:3px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--surface-muted);
+}
+.agent-utility-tab{
+  min-width:0;
+  min-height:37px;
+  flex:1 1 0;
+  padding:7px 9px;
+  border:1px solid transparent;
+  border-radius:7px;
+  color:var(--muted);
+  background:transparent;
+  font-size:10px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.agent-utility-tab:hover{color:var(--text);background:var(--surface-raised)}
+.agent-utility-tab[aria-selected="true"]{
+  color:var(--text);
+  background:var(--surface-raised);
+  border-color:var(--line-strong);
+}
+.agent-utility-view{
+  flex:1 1 0;
+  min-height:0;
+  min-width:0;
+  overflow:hidden;
+}
+.agent-utility-view[hidden]{display:none!important}
+#view-agent.active .agent-workspace-grid .agent-utility-view .agent-terminal,
+#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel{
+  display:flex;
+  flex-direction:column;
+  width:100%;
+  height:100%;
+  min-height:0;
+  max-height:none;
+  margin:0;
+  overflow:hidden;
+}
+.agent-utility-view .agent-terminal .panel-pad,
+.agent-utility-view .cloud-runs-panel .panel-pad{
+  flex:1 1 0;
+  min-height:0;
+  overflow:auto;
+}
+.agent-utility-view .cloud-runs-panel .panel-pad{align-content:start}
+.agent-utility-view .cloud-runs-toolbar{align-items:flex-start}
+.agent-utility-view .cloud-runs-list{min-width:0}
+.agent-utility-view .cloud-run-detail{min-width:0;max-width:100%}
+.agent-utility-view .cloud-run-detail-head{flex-wrap:wrap}
+.agent-utility-view .cloud-run-diff-pre{max-width:100%;overflow:auto}
+#agentRunsUtilityPanel .cloud-runs-panel .agent-chat-header{min-height:54px}
+@media(max-width:1000px) and (min-width:781px){
+  .agent-utility-tab{font-size:9.5px;padding-inline:6px}
+}
+@media(max-width:780px){
+  .agent-terminal-column{height:auto;min-height:0;gap:8px}
+  .agent-utility-tabs{width:100%}
+  .agent-utility-tab{min-height:44px;font-size:10px}
+  .agent-utility-view{height:auto;flex:none;overflow:visible}
+  #view-agent.active .agent-workspace-grid .agent-utility-view .agent-terminal,
+  #view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel{
+    height:auto;
+    min-height:0;
+    max-height:none;
+    overflow:visible;
+  }
+  .agent-utility-view .agent-terminal .panel-pad,
+  .agent-utility-view .cloud-runs-panel .panel-pad{overflow:visible}
+  .agent-utility-view .agent-terminal .terminal-xterm{height:260px}
+}
+@media(max-width:390px){
+  .agent-utility-tab{font-size:9px;padding-inline:5px}
+}
