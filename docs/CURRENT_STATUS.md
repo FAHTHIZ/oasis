@@ -2,6 +2,14 @@
 
 ## Phase 0 finish-plan follow-up — October 30, 2026
 
+## Current-main Gate A verification — October 30, 2026
+
+- Current `main`: [`b85b850`](https://github.com/FAHTHIZ/oasis/commit/b85b850c68b1f722bbee5904fe1b44b59e998683).
+- Quality Checks: [run 41055081277](https://github.com/FAHTHIZ/oasis/actions/runs/41055081277), triggered for this exact SHA; publishing validation: [run 41055081196](https://github.com/FAHTHIZ/oasis/actions/runs/41055081196). Both were queued/in progress when checked; neither is recorded as passed.
+- Previous Quality run [41052480430](https://github.com/FAHTHIZ/oasis/actions/runs/41052480430) passed Linux PTY and Ubuntu/macOS/Windows security jobs but the clean-environment suite failed 2 of 796 tests. The failures were (1) an Action integration fixture that did not mirror the production unattended LSP-disable environment and (2) a QuickJS Date sandbox constructor/prototype compatibility regression.
+- Follow-up main commits [`6f358c3`](https://github.com/FAHTHIZ/oasis/commit/6f358c39cec96f41ba09b4499f79ce85bdf292b3), [`21276b8`](https://github.com/FAHTHIZ/oasis/commit/21276b8c4523e7e2590f40ebfd312c8b5b733848), and [`90ed7ca`](https://github.com/FAHTHIZ/oasis/commit/90ed7cab39ea8485a08b4bb0ab6a37588ba90376) address the two failures. The latest-main CI run must confirm the fixes before Gate A closes.
+
+
 The first Phase 0 implementation slice has been applied directly to `main`.
 
 - The repository README now labels the project Alpha until the Beta confidence gate is satisfied.
