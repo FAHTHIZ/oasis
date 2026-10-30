@@ -304,15 +304,48 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 </head><body>
 <div class="shell">
-<aside class="sidebar" aria-label="Main navigation">
-<a class="brand" href="#" data-nav="home" aria-label="Oasis home"><span class="brand-mark"><img src="./assets/oasis-mark.svg" alt="" aria-hidden="true"></span><span><span class="brand-name">OASIS</span><span class="brand-sub" style="display:block">CODE. AUTOMATE. FLOURISH.</span></span></a>
-<div class="switcher"><span class="dot"></span><span class="workspace-meta"><span class="workspace-label">YOUR WORKSPACE</span><br><span class="workspace-name">Personal studio</span></span><span aria-hidden="true">⌄</span></div>
-<div><div class="nav-label">Workspace</div><nav class="nav">
-<button class="nav-btn active" data-nav="home"><span class="nav-icon">⌂</span><span>Overview</span></button><button class="nav-btn" data-nav="projects"><span class="nav-icon">▦</span><span>Projects</span><span class="nav-count" id="projectCount">0</span></button><button class="nav-btn" data-nav="tasks"><span class="nav-icon">✓</span><span>Tasks</span><span class="nav-count" id="openTaskCount">0</span></button><button class="nav-btn" data-nav="notes"><span class="nav-icon">≡</span><span>Notes</span></button><button class="nav-btn" data-nav="agent"><span class="nav-icon">✦</span><span>Agent</span><span class="nav-count">LIVE</span></button><button class="nav-btn" data-nav="monitor"><span class="nav-icon">◉</span><span>Run monitor</span></button><button class="nav-btn" data-nav="extensions"><span class="nav-icon">⬡</span><span>Extensions</span></button><button class="nav-btn" data-nav="integrations"><span class="nav-icon">⛓</span><span>Integrations</span></button>
-</nav></div>
-<div class="sidebar-bottom"><div class="local-card"><div class="local-title"><span class="dot"></span>Saved on this device</div><p>Your workspace stays in this browser. Export a backup before clearing browser data or switching devices.</p></div><div class="sidebar-foot">OASIS OSS · A little more room to think.</div></div>
+<aside class="sidebar" aria-label="OASIS workspace">
+  <a class="brand" href="#" data-nav="agent" aria-label="Oasis chat home">
+    <span class="brand-mark"><img src="/assets/oasis-mark.svg" alt="" aria-hidden="true"></span>
+    <span><span class="brand-name">OASIS</span><span class="brand-sub" style="display:block">CODE. AUTOMATE. FLOURISH.</span></span>
+  </a>
+  <button class="sidebar-new-chat" id="sidebarNewChatBtn" type="button">＋ New chat</button>
+  <button class="switcher" id="sidebarProjectPickerBtn" type="button" data-nav="projects" aria-label="Open project picker">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="workspace-meta"><span class="workspace-label">PROJECT</span><br><span class="workspace-name">Choose a project</span></span>
+    <span class="switcher-chevron" aria-hidden="true">⌄</span>
+  </button>
+  <div class="sidebar-chats">
+    <div class="sidebar-section-heading">
+      <span>Chats</span>
+      <button class="sidebar-refresh-chats" id="sidebarRefreshChats" type="button" aria-label="Refresh saved chats" title="Refresh saved chats">↻</button>
+    </div>
+    <div class="sidebar-chat-list" id="sidebarChatList" aria-live="polite">
+      <div class="sidebar-chat-empty">Connect Oasis to see saved chats.</div>
+    </div>
+  </div>
+  <div class="sidebar-bottom">
+    <button class="sidebar-settings-button" id="sidebarSettingsButton" type="button" data-nav="settings">
+      <span class="nav-icon" aria-hidden="true">⚙</span><span>Settings</span>
+    </button>
+    <div class="sidebar-foot">OASIS OSS · A little more room to think.</div>
+  </div>
 </aside>
-<main class="main"><header class="topbar"><div class="crumb"><span>Workspace</span><span>›</span><strong id="crumbPage">Overview</strong></div><div class="top-actions"><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label><button class="icon-btn" id="commandPaletteButton" type="button" aria-label="Open command palette" title="Search actions (Ctrl+K or ?)">⌘</button><button class="icon-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">☼</button><button class="icon-btn" id="exportBtn" aria-label="Export workspace backup" title="Export backup">↥</button><button class="icon-btn" id="importBtn" aria-label="Import workspace backup" title="Import backup">↧</button><span class="avatar" aria-label="Personal workspace">OS</span></div></header>
+<main class="main"><header class="topbar">
+  <div class="topbar-project-context">
+    <div class="topbar-project-line"><strong id="topbarProjectName">Personal studio</strong><span class="topbar-branch-pill" id="topbarBranchPill">local workspace</span></div>
+    <div class="topbar-meta-line"><span class="local-only-pill" title="OASIS listens on this computer by default. Remote access requires explicit server options. Never share the runtime token.">Local only</span><span id="topbarContext">Context —</span><span id="topbarCost">Cost —</span></div>
+  </div>
+  <div class="topbar-actions">
+    <div class="topbar-panel-tabs" role="toolbar" aria-label="Workspace side panel">
+      <button class="topbar-panel-button" id="topbarTerminalBtn" type="button" data-topbar-panel="terminal" aria-pressed="false">Terminal</button>
+      <button class="topbar-panel-button" id="topbarChangesBtn" type="button" data-topbar-panel="changes" aria-pressed="false">Changes</button>
+      <button class="topbar-panel-button" id="topbarTasksBtn" type="button" data-topbar-panel="tasks" aria-pressed="false">Tasks <span class="topbar-task-count" id="topbarTaskCount">0</span></button>
+    </div>
+    <button class="icon-btn" id="commandPaletteButton" type="button" aria-label="Open command palette" title="Search everything (Ctrl+K or ?)">⌘</button>
+    <span class="avatar" aria-label="Personal workspace">OS</span>
+  </div>
+</header>
 <div class="content">
 <section class="view active" id="view-home">
 <div class="intro-row"><div><div class="eyebrow" id="todayLabel">YOUR STUDIO</div><h1 class="page-title">Make room for your best work.</h1><p class="page-subtitle">A quieter home for the things you’re building. Keep the next step visible, and let the rest wait.</p></div><button class="btn btn-primary" id="newTaskTop">＋ New task</button></div>
@@ -500,6 +533,38 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
 
 </section>
  
+<section class="view" id="view-settings">
+  <div class="intro-row"><div><div class="eyebrow">MAKE OASIS YOURS</div><h1 class="page-title">Settings</h1><p class="page-subtitle">Everything outside the conversation stays one click away.</p></div></div>
+  <div class="settings-grid">
+    <section class="panel panel-pad settings-group">
+      <div class="section-head"><div><h2>Workspace</h2><div class="section-sub">Your existing workspace pages are still here.</div></div></div>
+      <button class="settings-row" type="button" data-nav="home"><span><strong>Overview</strong><small>Projects in motion and next steps</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="projects"><span><strong>Projects</strong><small>Manage your local project list</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="tasks"><span><strong>Tasks</strong><small>Local tasks and priorities</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="notes"><span><strong>Notes</strong><small>Your saved workspace notes</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="monitor"><span><strong>Run monitor</strong><small>Worker activity and run history</small></span><span>›</span></button>
+    </section>
+    <section class="panel panel-pad settings-group">
+      <div class="section-head"><div><h2>Models and connections</h2><div class="section-sub">Provider setup and repository access.</div></div></div>
+      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="provider-setup"><span><strong>Model provider</strong><small>Choose a model and test the connection</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="github-panel"><span><strong>GitHub</strong><small>Connect repositories through GitHub CLI</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="integrations"><span><strong>Integrations</strong><small>Manage connected tools</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="extensions"><span><strong>Extensions</strong><small>Inspect and manage extensions</small></span><span>›</span></button>
+    </section>
+    <section class="panel panel-pad settings-group">
+      <div class="section-head"><div><h2>Appearance and backup</h2><div class="section-sub">Preferences and a copy of your local workspace.</div></div></div>
+      <div class="settings-control-row"><span><strong>Theme</strong><small>Choose a comfortable appearance.</small></span><button class="btn btn-secondary" id="themeToggle" type="button">Toggle theme</button></div>
+      <div class="settings-control-row"><span><strong>Search</strong><small>Find local projects and tasks.</small></span><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label></div>
+      <div class="settings-control-row"><span><strong>Backup</strong><small>Export before clearing browser data or switching devices.</small></span><div class="agent-buttons"><button class="btn btn-secondary" id="exportBtn" type="button">Export backup</button><button class="btn btn-secondary" id="importBtn" type="button">Import backup</button></div></div>
+    </section>
+    <details class="panel panel-pad settings-group settings-advanced">
+      <summary>Advanced · local connection and privacy</summary>
+      <p>OASIS connects to a runtime on this computer by default. It is not open to the public internet by default. Remote access requires explicit server options. Never share your runtime connection token. Browser connections use a one-time token kept in this tab's session storage.</p>
+      <p>Workspace notes and saved local project data stay in this browser. Export a backup before clearing browser data or switching devices.</p>
+      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="agent-setup"><span><strong>Runtime connection</strong><small>Connect or disconnect this browser from the local Oasis runtime.</small></span><span>›</span></button>
+    </details>
+  </div>
+</section>
 <section class="view" id="view-monitor">
   <div class="intro-row"><div><div class="eyebrow">PARALLEL WORK, VISIBLE</div><h1 class="page-title">Agent run monitor</h1><p class="page-subtitle">Inspect worker activity, team coordination, run outcomes, and saved events. This view observes work; it never auto-merges branches.</p></div><button class="btn btn-secondary" id="agentMonitorRefreshBtn" type="button">↻ Refresh</button></div>
   <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Runs loaded</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams observed</span><strong>—</strong></div></div>
@@ -634,8 +699,8 @@ function renderStats(){var open=state.tasks.filter(function(t){return !t.done}).
 function renderDashboard(){var ps=state.projects.filter(function(p){return p.status!=='completed'}).slice(0,3),ts=state.tasks.filter(function(t){return !t.done}).slice(0,4);document.getElementById('dashboardProjects').innerHTML=ps.length?ps.map(projectHTML).join(''):'<div class="panel empty-state">✦<br>No projects yet. Create one to give your work a home.</div>';document.getElementById('dashboardTasks').innerHTML=ts.length?ts.map(taskHTML).join(''):'<div class="empty-state">☼<br>Nothing urgent here. Take a breath, or add a next step.</div>'}
 function renderProjects(){var q=document.getElementById('projectSearch').value.toLowerCase(),f=document.getElementById('projectFilter').value;var list=state.projects.filter(function(p){return (p.name+' '+p.description).toLowerCase().includes(q)&&(f==='all'||(f==='completed'?p.status==='completed':p.status!=='completed'))});document.getElementById('allProjects').innerHTML=list.length?list.map(projectHTML).join(''):'<div class="panel empty-state">◇<br>No projects match. Create one or adjust your search.</div>'}
 function renderTasks(){var q=(document.getElementById('taskSearch').value||document.getElementById('globalSearch').value||'').toLowerCase(),f=document.getElementById('taskFilter').value;var list=state.tasks.filter(function(t){var p=project(t.projectId),match=(t.title+' '+(p?p.name:'')).toLowerCase().includes(q),status=f==='all'||(f==='done'?t.done:f==='high'?(!t.done&&t.priority==='high'):!t.done);return match&&status});var rank={high:0,normal:1,low:2};list.sort(function(a,b){if(a.done!==b.done)return a.done?1:-1;return (rank[a.priority]===undefined?1:rank[a.priority])-(rank[b.priority]===undefined?1:rank[b.priority])});document.getElementById('allTasks').innerHTML=list.length?list.map(taskHTML).join(''):'<div class="empty-state">✓<br>No tasks here. A little space can be a good thing.</div>'}
-function render(){renderStats();renderDashboard();renderProjects();renderTasks();var editor=document.getElementById('notesEditor');if(editor&&editor.value!==state.notes)editor.value=state.notes;document.querySelectorAll('[data-nav]').forEach(function(b){if(b.classList.contains('nav-btn'))b.classList.toggle('active',b.getAttribute('data-nav')===currentView)});document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('active',v.id==='view-'+currentView)});document.getElementById('crumbPage').textContent=({home:'Overview',projects:'Projects',tasks:'Tasks',notes:'Notes',agent:'Coding workspace',extensions:'Extensions',integrations:'Integrations',monitor:'Agent run monitor'})[currentView]||'Overview'}
-function navigate(v){if(!['home','projects','tasks','notes','agent','monitor','extensions','integrations'].includes(v))return;currentView=v;render();var activeNav=document.querySelector('.nav-btn.active');if(activeNav&&activeNav.scrollIntoView)activeNav.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});window.scrollTo({top:0,behavior:'smooth'});if(v==='extensions')void extensionRefreshInstalled();if(v==='integrations')void integrationRefresh();if(v==='monitor')void agentLoadMonitor(true)}
+function render(){renderStats();renderDashboard();renderProjects();renderTasks();var editor=document.getElementById('notesEditor');if(editor&&editor.value!==state.notes)editor.value=state.notes;document.querySelectorAll('[data-nav]').forEach(function(b){if(b.classList.contains('nav-btn'))b.classList.toggle('active',b.getAttribute('data-nav')===currentView)});document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('active',v.id==='view-'+currentView)});document.getElementById('crumbPage').textContent=({home:'Overview',projects:'Projects',tasks:'Tasks',notes:'Notes',agent:'Coding workspace',monitor:'Agent run monitor',extensions:'Extensions',integrations:'Integrations',settings:'Settings'})[currentView]||'Overview'}
+function navigate(v){if(!['home','projects','tasks','notes','agent','monitor','extensions','integrations','settings'].includes(v))return;currentView=v;render();var activeNav=document.querySelector('.nav-btn.active');if(activeNav&&activeNav.scrollIntoView)activeNav.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});window.scrollTo({top:0,behavior:'smooth'});if(v==='extensions')void extensionRefreshInstalled();if(v==='integrations')void integrationRefresh();if(v==='monitor')void agentLoadMonitor(true)}
 function addTask(title,pid,priority){title=(title||'').trim();if(!title){notify('Give the task a short name first.');return false}state.tasks.unshift({id:uid('task'),title:title.slice(0,160),projectId:pid===undefined?((state.projects[0]&&state.projects[0].id)||''):pid,priority:priority||'normal',done:false,createdAt:today()});save();render();notify('Task added. One step at a time.');return true}
 function addProject(){var dialog=document.getElementById('projectDialog');dialog.showModal();document.getElementById('projectName').focus()}
 function addTaskDialog(){var select=document.getElementById('taskProject');select.innerHTML='<option value="">Unassigned</option>'+state.projects.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'}).join('');if(state.projects[0])select.value=state.projects[0].id;document.getElementById('taskPriority').value='normal';var dialog=document.getElementById('taskDialog');dialog.showModal();document.getElementById('taskTitle').focus()}
