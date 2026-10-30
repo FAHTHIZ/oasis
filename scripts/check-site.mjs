@@ -96,7 +96,13 @@ assert.ok(interfaceCss.includes('.first-run-status[data-error="true"]'), 'Local-
 assert.ok(interfaceCss.includes('/* Utility rail: keep terminal and coding-run diffs next to the conversation. */'), 'Terminal and recent coding runs must share a utility rail.');
 assert.ok(interfaceCss.includes('.agent-utility-tab[aria-selected="true"]'), 'Utility tabs must expose a selected state.');
 assert.ok(html.includes("event.key!=='ArrowLeft'&&event.key!=='ArrowRight'"), 'Utility tabs must support left/right keyboard navigation.');
-assert.ok(html.includes("terminalTab.tabIndex=selected==='terminal'?0:-1"), 'Only the selected utility tab should remain in the tab sequence.');
+assert.ok(html.includes('item.button.tabIndex=active?0:-1'), 'Only the selected utility tab should remain in the tab sequence.');
+assert.ok(html.includes("name==='changes'?'changes'"), 'The utility rail must expose a dedicated Changes view.');
+assert.ok(html.includes("name==='tasks'?'tasks'"), 'The utility rail must expose a dedicated Tasks view.');
+assert.ok(html.includes("button.getAttribute('data-topbar-panel')===selected"), 'The top-bar buttons must reflect the selected utility view.');
+assert.ok(html.includes("document.body.classList.toggle('sidebar-open',visible)"), 'The phone navigation drawer must expose its open state.');
+assert.ok(html.includes("event.key==='Escape'&&document.body.classList.contains('sidebar-open')"), 'Escape must close the phone navigation drawer.');
+
 assert.ok(html.includes("Hide side panel"), 'The utility visibility control must name the whole side panel.');
 assert.ok(html.includes("window.oasisAgentSetUtilityPanel('terminal')"), 'The terminal command-palette action must explicitly select Terminal.');
 assert.ok(html.includes("workspaceGrid.dataset.terminalVisible==='false'&&utilityToggle"), 'Run-monitor diff review must restore a hidden utility rail before selecting Runs & changes.');
