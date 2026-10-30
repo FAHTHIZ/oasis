@@ -2,13 +2,13 @@
 # What this script does:
 # 1. Checks for Node.js 22 or newer.
 # 2. Offers supported Node.js installation steps and asks before changing anything.
-# 3. Installs the fixed source revision d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a (package version 0.3.0).
+# 3. Resolves the latest stable GitHub release and installs its immutable commit.
 # 4. Runs oasis doctor and opens first-run provider setup.
 # It does not request administrator rights, upload files, or send telemetry.
 set -eu
 
-OASIS_VERSION="v0.3.0"
-OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a.tar.gz"
+OASIS_VERSION=""
+OASIS_ARCHIVE=""
 OASIS_PREFIX="${OASIS_INSTALL_PREFIX:-$HOME/.local}"
 OASIS_BIN="$OASIS_PREFIX/bin/oasis"
 ASSUME_YES=0
@@ -50,6 +50,30 @@ node_supported() {
   major=$(node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null) || return 1
   [ "$major" -ge 22 ] 2>/dev/null
 }
+resolve_latest_release() {
+  node --input-type=module -e '
+const base = "https://api.github.com/repos/FAHTHIZ/oasis";
+const headers = { accept: "application/vnd.github+json", "user-agent": "oasis-installer" };
+async function readJson(url) {
+  const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error("GitHub returned HTTP " + response.status + ".");
+  return response.json();
+}
+try {
+  const release = await readJson(base + "/releases/latest");
+  if (release.draft || release.prerelease) throw new Error("GitHub did not return a stable release.");
+  const tag = String(release.tag_name || "");
+  if (!/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(tag)) throw new Error("The latest stable release has an unsupported tag.");
+  const commit = await readJson(base + "/commits/" + encodeURIComponent(tag));
+  const sha = String(commit.sha || "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("GitHub did not return a valid release commit.");
+  process.stdout.write(tag + "\n" + sha);
+} catch (error) {
+  console.error("Could not resolve the latest stable OASIS release: " + error.message);
+  process.exitCode = 1;
+}
+'
+}
 install_node_if_approved() {
   if command -v pkg >/dev/null 2>&1 && [ -n "${PREFIX:-}" ]; then
     say "Node.js 22 or newer was not found. This looks like Termux on Android."
@@ -75,9 +99,22 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 say "npm is ready: $(npm --version)."
+ say "Resolving the latest stable OASIS release from GitHub..."
+RELEASE_INFO=$(resolve_latest_release) || exit 1
+OASIS_VERSION=$(printf '%s\n' "$RELEASE_INFO" | sed -n '1p')
+OASIS_COMMIT=$(printf '%s\n' "$RELEASE_INFO" | sed -n '2p')
+case "$OASIS_VERSION" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *) say "GitHub returned an invalid release tag. Nothing was installed."; exit 1 ;;
+esac
+case "$OASIS_COMMIT" in
+  *[!0-9a-f]*|'') say "GitHub returned an invalid release commit. Nothing was installed."; exit 1 ;;
+esac
+[ "${#OASIS_COMMIT}" -eq 40 ] || { say "GitHub returned an invalid release commit. Nothing was installed."; exit 1; }
+OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/$OASIS_COMMIT.tar.gz"
+say "Latest stable release: $OASIS_VERSION ($OASIS_COMMIT)"
 say "Git is optional for this archive-based install."
 say "OASIS will be installed for your user in: $OASIS_PREFIX"
-say "The installer uses the fixed source revision d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a (package version 0.3.0); it does not download the moving main branch."
 if ask_yes_no "May I install OASIS $OASIS_VERSION in that folder using npm?"; then
   npm install --global --prefix "$OASIS_PREFIX" "$OASIS_ARCHIVE"
 else
