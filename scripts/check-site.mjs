@@ -26,6 +26,9 @@ const required = [
   'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"',
   'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
+  'id="agentTerminalUtilityTab"', 'id="agentRunsUtilityTab"', 'id="agentTerminalUtilityPanel"',
+  'id="agentRunsUtilityPanel"', 'aria-label="Workspace utilities"', 'Runs &amp; changes',
+
   'class="intro-row agent-page-heading"', 'class="agent-page-context"', 'class="agent-setup-heading"',
   'class="agent-chat-identity"', 'class="agent-compose-form"', 'aria-label="Runtime connection"',
 
@@ -84,6 +87,11 @@ assert.match(interfaceCss, /grid-template-areas:\s*"prompt"\s*"context"\s*"actio
 assert.ok(interfaceCss.includes('grid-template-columns:minmax(0,var(--agent-chat-split)) 10px minmax(300px,1fr)'), 'Desktop workspace must preserve a resizable chat/terminal split.');
 assert.ok(interfaceCss.includes('@media(max-width:780px)'), 'Phone workspace tabs must have a dedicated responsive layout.');
 assert.ok(interfaceCss.includes('@media(max-width:390px)'), 'The narrow 390px phone layout must be covered.');
+assert.ok(interfaceCss.includes('/* Utility rail: keep terminal and coding-run diffs next to the conversation. */'), 'Terminal and recent coding runs must share a utility rail.');
+assert.ok(interfaceCss.includes('.agent-utility-tab[aria-selected="true"]'), 'Utility tabs must expose a selected state.');
+assert.ok(interfaceCss.includes('.agent-utility-view[hidden]{display:none!important}'), 'Inactive utility panels must remain hidden.');
+assert.ok(interfaceCss.includes('#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel'), 'The existing run history and diff viewer must render inside the utility panel.');
+
 
 assert.match(interfaceCss, /\.agent-message\{font-size:14px\}/);
 assert.match(interfaceCss, /\.agent-message\.activity\{font-size:12\.5px/);
