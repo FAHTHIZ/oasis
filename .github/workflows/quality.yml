@@ -30,6 +30,8 @@ jobs:
       - name: Install production dependencies and vendor terminal assets
         run: npm install --omit=dev --no-audit --no-fund
       - name: Run full quality gate and validate eval fixtures
+        env:
+          NODE_OPTIONS: --import=${{ github.workspace }}/.github/scripts/test-resource-watch.mjs
         run: npm run check
       - name: Verify installable CLI package contents
         run: npm pack --dry-run
@@ -69,7 +71,7 @@ jobs:
       - name: Install production dependencies
         run: npm install --omit=dev --no-audit --no-fund
       - name: Run tests without inherited environment variables
-        run: mkdir -p /tmp/h1 && env -i PATH="$PATH" HOME=/tmp/h1 node --test test/*.test.mjs
+        run: mkdir -p /tmp/h1 && env -i PATH="$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test test/*.test.mjs
 
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
