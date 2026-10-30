@@ -140,7 +140,16 @@ export async function publishChanges({ root, trigger, context, request, summary 
 
 export function actionStatus(result, published, summary) {
   if (result && result.is_error) return 'ran into a problem (' + result.subtype + ').';
-  if (/^Verification incomplete:/im.test(String(summary || ''))) {
+  const text = String(summary || '');
+  const languageServerNotApproved =
+    /^Verification incomplete:/im.test(text) &&
+    /LSP verification unavailable[^\n]*Starting the .+ language server was not approved\./i.test(text);
+  if (languageServerNotApproved) {
+    return published && published.changed
+      ? 'pushed changes; language-server check was not run.'
+      : 'language-server check was not run.';
+  }
+  if (/^Verification incomplete:/im.test(text)) {
     return published && published.changed
       ? 'pushed changes, but verification is incomplete.'
       : 'verification is incomplete.';

@@ -570,6 +570,9 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   if (subagentSystemAppend) session.subagentSystemAppend = String(subagentSystemAppend);
   if (deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env })) systemText += '\n\n' + deferredToolsPrompt(session);
+  // Non-blocking MCP connections finish after this prompt is composed. Retain
+  // the completed base so their instructions can be added to the system prompt.
+  session.mcpSystemPromptBase = systemPromptOverride ? null : systemText;
   const systemMessage = { role: 'system', content: systemText };
   session.messages = [systemMessage];
   if (restore && Array.isArray(restore.messages)) {
@@ -597,7 +600,21 @@ export async function createSession({ root, config, restore = null, permissionMo
       refreshSessionMcpTools(session);
       const ready = [...result.clients.keys()];
       const notes = [];
-      if (ready.length) notes.push('MCP servers finished connecting: ' + ready.join(', ') + '. Their tools (mcp_<server>_<tool>) are now available.' + mcpInstructionsSection(result.clients, { channels: session.channels, settings: loadedSettings }));
+      if (ready.length) {
+        if (session.mcpSystemPromptBase !== null) {
+          const updatedSystemText = session.mcpSystemPromptBase +
+            mcpInstructionsSection(session.mcpClients, { channels: session.channels, settings: loadedSettings });
+          if (session.freshSystemText) {
+            // Preserve a recorded snapshot for this conversation; use the fresh
+            // prompt (including the newly connected server instructions) later.
+            session.freshSystemText = updatedSystemText;
+          } else {
+            session.baseSystemPrompt = updatedSystemText;
+            refreshTodoPrompt(session);
+          }
+        }
+        notes.push('MCP servers finished connecting: ' + ready.join(', ') + '. Their tools (mcp_<server>_<tool>) are now available.');
+      }
       if (result.failures.length) notes.push('MCP servers that failed to connect: ' + result.failures.map((f) => f.name + ' (' + String(f.error).slice(0, 200) + ')').join(', '));
       if (notes.length) (session.asyncHookFeedback ||= []).push(notes.join('\n'));
     });
