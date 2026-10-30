@@ -347,6 +347,7 @@ export async function runDiagnostics(root, args = {}, options = {}) {
   const env = options.env || process.env;
   const requested = args.checker && args.checker !== 'auto' ? String(args.checker) : 'auto';
   if (requested !== 'auto' && !CHECKERS.includes(requested)) throw new Error('Unknown checker ' + requested + '. Use one of: auto, ' + CHECKERS.join(', ') + '.');
+  if (options.signal && options.signal.aborted) return { checker: requested, ran: [], diagnostics: [], summary: { errors: 0, warnings: 0, total: 0 }, cancelled: true, message: 'Diagnostics were cancelled before they started.' };
   const rawPaths = Array.isArray(args.paths) ? args.paths.map(String).filter(Boolean).slice(0, 50) : [];
   const paths = [];
   for (const item of rawPaths) {
@@ -368,15 +369,25 @@ export async function runDiagnostics(root, args = {}, options = {}) {
   let builtinFiles = null;
   const ran = [];
   let diagnostics = [];
+  let cancelled = false;
   for (const checker of checkers) {
-    if (options.signal && options.signal.aborted) break;
+    if (options.signal && options.signal.aborted) { cancelled = true; break; }
     if (checker.missing) { ran.push({ name: checker.name, skipped: checker.missing }); continue; }
     if (checker.builtin) {
       if (builtinFiles === null) builtinFiles = paths.length ? await expandPaths(workspace, paths) : (await changedFiles(workspace) || []);
       const out = await runBuiltin(checker.name, workspace, builtinFiles, options.signal);
-      if (!out.checked) continue;
-      ran.push({ name: checker.name, builtin: true, filesChecked: out.checked, ...(out.skippedFiles ? { filesSkipped: out.skippedFiles } : {}), problems: out.diagnostics.length });
+      const entry = {
+        name: checker.name,
+        builtin: true,
+        filesChecked: out.checked,
+        ...(out.skippedFiles ? { filesSkipped: out.skippedFiles } : {}),
+        ...(out.timedOutFiles && out.timedOutFiles.length ? { timedOut: true, timedOutFiles: out.timedOutFiles } : {}),
+        problems: out.diagnostics.length,
+        ...(out.cancelled ? { cancelled: true } : {})
+      };
+      if (out.checked || (out.timedOutFiles && out.timedOutFiles.length) || out.cancelled) ran.push(entry);
       diagnostics.push(...out.diagnostics);
+      if (out.cancelled || (options.signal && options.signal.aborted)) { cancelled = true; break; }
       continue;
     }
     const result = await runWorkspaceCommand(workspace, checker.command, checker.args, {
@@ -389,6 +400,11 @@ export async function runDiagnostics(root, args = {}, options = {}) {
       sandbox: options.sandbox
     });
     const commandText = [checker.command, ...checker.args].join(' ');
+    if (result.cancelled || (options.signal && options.signal.aborted)) {
+      ran.push({ name: checker.name, command: commandText, cancelled: true });
+      cancelled = true;
+      break;
+    }
     if (result.approved === false) { ran.push({ name: checker.name, command: commandText, skipped: result.message || 'Not approved.' }); continue; }
     const found = parseDiagnostics(checker.name, (result.stdout || '') + '\n' + (result.stderr || ''), workspace);
     const entry = { name: checker.name, command: commandText, exitCode: result.exitCode, problems: found.length };
@@ -399,6 +415,7 @@ export async function runDiagnostics(root, args = {}, options = {}) {
     ran.push(entry);
     diagnostics.push(...found);
   }
+  cancelled = cancelled || Boolean(options.signal && options.signal.aborted);
 
   diagnostics = diagnostics.filter((item) => underPaths(item.file, paths));
   const seen = new Set();
@@ -423,8 +440,10 @@ export async function runDiagnostics(root, args = {}, options = {}) {
     summary,
     diagnostics: diagnostics.slice(0, MAX_DIAGNOSTICS),
     ...(truncated ? { truncated: true } : {}),
-    message: !ran.length ? 'No checkers applied: no type checker or linter config was found and there were no changed .js/.json files. Pass paths to check specific files.'
-      : summary.total ? summary.errors + ' error(s) and ' + summary.warnings + ' warning(s) found.' : 'No problems found.'
+    ...(cancelled ? { cancelled: true } : {}),
+    message: cancelled ? 'Diagnostics were cancelled; the results shown may be partial.'
+      : !ran.length ? 'No checkers applied: no type checker or linter config was found and there were no changed .js/.json files. Pass paths to check specific files.'
+        : summary.total ? summary.errors + ' error(s) and ' + summary.warnings + ' warning(s) found.' : 'No problems found.'
   };
 }
 
@@ -433,13 +452,14 @@ export function formatDiagnostics(result) {
   const lines = [];
   for (const entry of result.ran || []) {
     const label = entry.builtin ? entry.name + ' (built-in, ' + entry.filesChecked + ' file' + (entry.filesChecked === 1 ? '' : 's') + ')' : entry.name + (entry.command ? ' — ' + entry.command : '');
-    lines.push((entry.skipped ? '  skipped ' : '  ran     ') + label + (entry.skipped ? ': ' + entry.skipped : entry.timedOut ? ' (timed out)' : ''));
+    lines.push((entry.skipped ? '  skipped ' : '  ran     ') + label + (entry.skipped ? ': ' + entry.skipped : entry.cancelled ? ' (cancelled)' : entry.timedOut ? ' (timed out' + (entry.timedOutFiles && entry.timedOutFiles.length ? ': ' + entry.timedOutFiles.join(', ') : '') + ')' : ''));
     if (entry.output) lines.push(entry.output.split('\n').map((line) => '      ' + line).join('\n'));
   }
   for (const item of result.diagnostics || []) {
     lines.push(item.file + ':' + item.line + ':' + item.column + ' ' + item.severity + (item.code ? ' ' + item.code : '') + ' ' + item.message + ' [' + item.source + ']');
   }
   if (result.truncated) lines.push('… more problems were omitted.');
+  if (result.cancelled) lines.push('Diagnostics were cancelled; listed results are partial.');
   lines.push(result.message);
   return lines.join('\n');
 }
