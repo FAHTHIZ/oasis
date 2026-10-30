@@ -9,9 +9,11 @@ The visual foundation is implemented directly on `main` and is now aligned to th
 - Reserved action lime `#9BFF55` for Send, New chat and approval actions. Generic primary buttons and selected navigation states remain neutral.
 - Added Inter and JetBrains Mono font stacks, 14px conversation text, quieter 12.5px activity text, and 44px phone touch targets for send and approval controls.
 - Added token-level WCAG contrast calculations to `scripts/check-site.mjs` for primary, muted, risk and lime-action text. The required combinations are checked against the 4.5:1 threshold.
-- Preserved the OASIS portal mark artwork and made no runtime, provider, approval-policy, terminal or permission changes.
+- Added pinned, CI-only `@axe-core/playwright@4.14.0` scans to the authenticated browser E2E for desktop Agent, approval, terminal/chat at 390px, and first-run at desktop/390px. Color-contrast violations fail the browser test; the package is not an OASIS runtime dependency.
+- Corrected the CI test's stale quality concurrency-group expectation and made the Agent verification gate honor an explicitly non-blocking LSP result. Source edits still require a recognized project check to pass.
+- Preserved the OASIS portal mark artwork and did not change provider, approval-policy, terminal-command or runtime permission behavior.
 
-**Verification boundary:** the source-level contrast checks are implemented. The full quality matrix, browser E2E, Playwright screenshots at 1280px and 390px, and manual phone/desktop review still need fresh results on this revision. A full axe scan has not been run; no axe dependency was added.
+**Verification boundary:** static token checks and contrast calculations are in place. Fresh CI for this revision must pass the full quality matrix, clean-environment suite, browser E2E/axe scans, and package checks. Playwright screenshots are produced by CI for workspace and first-run desktop/390px states; the full requested six-state screenshot set and manual phone/desktop review remain for the later layout steps.
 
 
 ---
