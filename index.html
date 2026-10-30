@@ -1089,12 +1089,24 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){button.ad
     var selected=name==='runs'?'runs':'terminal';
     terminalTab.setAttribute('aria-selected',String(selected==='terminal'));
     runsTab.setAttribute('aria-selected',String(selected==='runs'));
+    terminalTab.tabIndex=selected==='terminal'?0:-1;
+    runsTab.tabIndex=selected==='runs'?0:-1;
     terminalPanel.hidden=selected!=='terminal';
     runsPanel.hidden=selected!=='runs';
     try{localStorage.setItem('oasis.agent.utilityPanel',selected)}catch{}
   }
   terminalTab.addEventListener('click',function(){setUtility('terminal')});
   runsTab.addEventListener('click',function(){setUtility('runs')});
+  [terminalTab,runsTab].forEach(function(tab){
+    tab.addEventListener('keydown',function(event){
+      if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight'&&event.key!=='Home'&&event.key!=='End')return;
+      event.preventDefault();
+      var target=event.key==='Home'?terminalTab:event.key==='End'?runsTab:
+        event.key==='ArrowRight'?(tab===terminalTab?runsTab:terminalTab):(tab===runsTab?terminalTab:runsTab);
+      setUtility(target===runsTab?'runs':'terminal');
+      target.focus();
+    });
+  });
   window.oasisAgentSetUtilityPanel=setUtility;
   var saved='terminal';
   try{saved=localStorage.getItem('oasis.agent.utilityPanel')||'terminal'}catch{}
