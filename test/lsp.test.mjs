@@ -70,6 +70,17 @@ test('locateSymbol finds whole-word occurrences, optionally on a line', () => {
   assert.throws(() => locateSymbol(text, 'missing'), /not found/);
 });
 
+test('unattended runs do not start project-configured language servers', async () => {
+  const { root, settings } = await project();
+  const result = await verifyEditedFileWithLsp(root, 'main.fake', {
+    settings,
+    env: { OASIS_DISABLE_LSP: '1' }
+  });
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.blocking, false);
+  assert.match(result.reason, /disabled for unattended GitHub Action runs/i);
+});
+
 test('builtin server mapping by extension', () => {
   assert.equal(serverForFile('src/a.tsx').name, 'typescript');
   assert.equal(serverForFile('a.py').name, 'python');
