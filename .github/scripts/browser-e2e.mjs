@@ -230,6 +230,17 @@ try {
   // The starter cards belong to the empty-state UI, so test them before connecting.
   await page.locator('[data-agent-example="Explain this project"]').click();
   assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
+
+  // A rejected runtime token must leave the chat usable and explain the failure.
+  await page.locator('#agentTokenInput').fill('oasis-invalid-browser-e2e-token');
+  await page.locator('#agentConnectBtn').click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector('#agentRuntimeState');
+    return status && status.textContent.includes('Connection failed');
+  }, null, { timeout: timeoutMs });
+  await assertAgentContrast(page, 'Agent connection error · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-connection-error-desktop.png'), fullPage: true });
+
   await page.locator('#agentTokenInput').fill(token);
   await page.locator('#agentConnectBtn').click();
   await page.waitForFunction(() => {
@@ -237,6 +248,10 @@ try {
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
   await assertAgentContrast(page, 'Agent workspace · desktop');
+  await page.locator('#agentModelButton').click();
+  await page.waitForFunction(() => window.scrollY > 0, null, { timeout: timeoutMs });
+  await assertAgentContrast(page, 'Agent provider settings · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-provider-settings-desktop.png'), fullPage: true });
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await page.locator('#agentSendBtn').click();
   try {
@@ -393,6 +408,11 @@ try {
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'chat', 'The chat tab should return to chat on narrow screens.');
   await assertAgentContrast(page, 'Agent chat · 390px');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-390px.png'), fullPage: true });
+  await page.locator('#agentModelButton').click();
+  await assertAgentContrast(page, 'Agent provider settings · 390px');
+  const providerMobileWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(providerMobileWidth <= 390, 'Provider settings must not overflow horizontally at 390px.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-provider-settings-390px.png'), fullPage: true });
   await page.screenshot({ path: path.join(screenshotDir, 'workspace-after-390px.png'), fullPage: true });
   console.log('PASS browser E2E: app loaded, token connection succeeded, write/read tools ran, workspace change verified, final reply rendered.');
 
