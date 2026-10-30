@@ -18,7 +18,7 @@ The CLI guided setup can install OmniRoute through npm, ask before starting its 
 
 ## Command-line installation (optional)
 
-The recommended CLI installer checks Node.js 22+, resolves the latest stable GitHub release tag to its immutable commit SHA, and installs that exact source archive into your user directory. It never installs the moving `main` branch and stops if GitHub does not return a valid stable release and commit. It asks before installing or changing shell startup files and does not use administrator rights.
+The recommended CLI installer checks Node.js 22+, resolves the latest stable GitHub release tag to its immutable commit SHA, and installs that exact source archive into your user directory. The one-command shell bootstrap downloads the installer with either `curl` or `wget`. It never installs the moving `main` branch and stops if GitHub does not return a valid stable release and commit. It asks before installing or changing shell startup files and does not use administrator rights.
 
 - **macOS, Linux, and Android/Termux:** use the one-command guided installer in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux). The README also includes an optional checksum-verified form.
 - **Windows PowerShell:** use the PowerShell one-liner in the [README](../README.md#install-from-the-terminal--macos-linux-or-androidtermux). It downloads the installer and its resolver helper into one temporary folder, verifies both SHA-256 hashes, and only then runs the installer.
