@@ -89,11 +89,24 @@ if (-not $ReleaseCommit) {
         $pageHtml = [string]$releasePage.Content
         $tagMatch = [regex]::Match($pageHtml, 'href="https://github\.com/FAHTHIZ/oasis/releases/tag/(v[0-9]+\.[0-9]+\.[0-9]+)"')
         $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
-        if (-not $tagMatch.Success -or -not $commitMatch.Success) {
-            throw 'The public release page did not contain a stable version tag and exact commit SHA.'
+        if (-not $tagMatch.Success) {
+            throw 'The public release page did not contain a stable version tag.'
         }
         $ReleaseTag = $tagMatch.Groups[1].Value
-        $ReleaseCommit = $commitMatch.Groups[1].Value.ToLowerInvariant()
+        if ($commitMatch.Success) {
+            $ReleaseCommit = $commitMatch.Groups[1].Value.ToLowerInvariant()
+        } else {
+            # The release page may omit commit hovercards. Resolve the immutable
+            # tag target from GitHub's public Atom feed, which does not use REST API quota.
+            $encodedTag = [uri]::EscapeDataString($ReleaseTag)
+            $atomPage = Invoke-WebRequest -Uri "https://github.com/FAHTHIZ/oasis/commits/$encodedTag.atom" -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'application/atom+xml' } -TimeoutSec 20 -UseBasicParsing
+            $atomEntry = [regex]::Match([string]$atomPage.Content, '<entry\\b[^>]*>([\\s\\S]*?)</entry>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            $atomCommit = if ($atomEntry.Success) { [regex]::Match($atomEntry.Groups[1].Value, '<id>tag:github\\.com,2008:Grit::Commit/([0-9a-f]{40})</id>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) } else { [regex]::Match('', 'a^') }
+            if (-not $atomCommit.Success) {
+                throw 'The public release page and tag Atom feed did not include an exact commit SHA.'
+            }
+            $ReleaseCommit = $atomCommit.Groups[1].Value.ToLowerInvariant()
+        }
     } catch {
         Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; public release page: " + $_.Exception.Message)
         exit 1
