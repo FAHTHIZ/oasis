@@ -366,7 +366,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null };
   if (restricted && loadedSettings.permissions && loadedSettings.permissions.defaultMode === 'bypassPermissions') loadedSettings = { ...loadedSettings, permissions: { ...loadedSettings.permissions, defaultMode: 'default' } };
-  const permissions = new PermissionPolicy(loadedSettings, { mode: permissionMode || undefined });
+  const permissions = new PermissionPolicy(loadedSettings, { mode: permissionMode || undefined, root });
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
   const sandbox = resolveSandbox(loadedSettings, root);
@@ -617,7 +617,7 @@ export async function reloadSessionSettings(session) {
   const opts = session.settingsLoadOptions || {};
   const loaded = await loadSettings(session.root, { env: opts.env || process.env, extraSettings: opts.extraSettings, settingSources: opts.settingSources });
   const previous = session.permissions;
-  const permissions = new PermissionPolicy(loaded, { mode: previous ? previous.mode : undefined });
+  const permissions = new PermissionPolicy(loaded, { mode: previous ? previous.mode : undefined, root: session.root });
   for (const rule of opts.cliAllow || []) permissions.addRule('allow', rule);
   for (const rule of opts.cliDeny || []) permissions.addRule('deny', rule);
   if (previous && Array.isArray(previous.sessionAllow)) permissions.sessionAllow = previous.sessionAllow;
