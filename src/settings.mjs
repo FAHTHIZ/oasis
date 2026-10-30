@@ -11,7 +11,8 @@
 // always apply. Rules that loosen policy (allow, hooks that run commands,
 // defaultMode, sandbox opt-outs) apply only after the user trusts the workspace
 // with `oasis trust` or `/trust`. User-level settings always apply.
-import { readFile, writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
+import { writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
+import { readBoundedRegularFile } from './safe-storage.mjs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -50,11 +51,15 @@ export function projectSettingsPaths(root) {
 
 async function readJsonFile(file) {
   let raw;
-  try { raw = await readFile(file, 'utf8'); } catch (error) {
+  try {
+    raw = await readBoundedRegularFile(file, MAX_SETTINGS_BYTES, {
+      label: 'Settings file',
+      tooLargeMessage: 'Settings file is too large: ' + file
+    });
+  } catch (error) {
     if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
     throw error;
   }
-  if (Buffer.byteLength(raw, 'utf8') > MAX_SETTINGS_BYTES) throw new Error('Settings file is too large: ' + file);
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
