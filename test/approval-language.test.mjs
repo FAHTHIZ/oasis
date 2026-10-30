@@ -48,3 +48,10 @@ test('approval text redacts common provider keys, bearer credentials, and key as
   assert.match(redactApprovalSecrets('{"apiKey":"json-secret"}'), /apiKey":"\[redacted\]/i);
   assert.match(redactApprovalSecrets('run --token super-secret-value'), /--token \[redacted\]/i);
 });
+
+
+test('credential redaction keeps a stable placeholder without malformed secret fragments', () => {
+  const result = redactApprovalSecrets('Provider key sk-ant-abcdefghijklmnop123456; token=super-secret-value');
+  assert.equal(result, 'Provider key [redacted secret]; token=[redacted]');
+  assert.doesNotMatch(result, /\\[redacted\\]\\s*secret\\]/i);
+});
