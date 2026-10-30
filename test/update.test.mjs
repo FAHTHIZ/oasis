@@ -25,6 +25,15 @@ test('npm installs read the commit npm recorded; plans pick npm or git', async (
   assert.deepEqual(plan, { upToDate: false, command: 'npm', args: ['install', '-g', INSTALL_SPEC] });
   assert.match(describeUpdate(installed, { sha: SHA_B, message: 'm' }, plan), /aaaaaaa[\s\S]*bbbbbbb - m[\s\S]*npm install -g/);
   assert.equal(updatePlan(installed, { sha: SHA_A }).upToDate, true);
+  const prefixed = await installedVersion('/custom/prefix/lib/node_modules/oasis-oss', {
+    npmPrefix: '/custom/prefix',
+    exec: async (cmd, args) => {
+      assert.deepEqual(args, ['ls', '-g', '--prefix', '/custom/prefix', 'oasis-oss', '--json', '--long']);
+      return JSON.stringify({ dependencies: { 'oasis-oss': { resolved: 'git+https://github.com/FAHTHIZ/oasis.git#' + SHA_A } } });
+    }
+  });
+  assert.equal(prefixed.npmPrefix, '/custom/prefix');
+  assert.deepEqual(updatePlan(prefixed, { sha: SHA_B }).args, ['install', '-g', '--prefix', '/custom/prefix', INSTALL_SPEC]);
   assert.deepEqual(updatePlan({ kind: 'git', commit: SHA_A, root: '/r' }, { sha: SHA_B }).args, ['-C', '/r', 'pull', '--ff-only', 'origin', 'main']);
   assert.match(updatePlan({ kind: 'git', commit: SHA_A, dirty: true, root: '/r' }, { sha: SHA_B }).blocked, /uncommitted/);
 });
