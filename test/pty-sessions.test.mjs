@@ -79,6 +79,27 @@ test('reserves terminal capacity while the native PTY module is still loading', 
   fake.processes[0].emitExit({ exitCode: 0, signal: 0 });
 });
 
+test('does not start a PTY after shutdown while the native module is loading', async () => {
+  const fake = makeFakePty();
+  let resolveModule;
+  const manager = new PtySessionManager({
+    loadPty: () => new Promise((resolve) => { resolveModule = resolve; }),
+    maxSessions: 1,
+    idFactory: () => 'term_shutdown_race'
+  });
+
+  const pendingStart = manager.start('node', [], { cwd: '/workspace', env: {} });
+  await Promise.resolve();
+  assert.equal(typeof resolveModule, 'function');
+  assert.equal(manager.closeAll().stopped, 0);
+  resolveModule(fake.module);
+
+  await assert.rejects(pendingStart, /manager was closed while the native PTY component was loading/i);
+  assert.equal(fake.processes.length, 0, 'shutdown must prevent the late PTY spawn');
+  assert.equal(manager.startingSessions, 0, 'the startup reservation must be released after shutdown');
+  await assert.rejects(manager.start('node', [], { cwd: '/workspace', env: {} }), /manager is closed/i);
+});
+
 test('bounds captured output and reports lost cursor content', async () => {
   const fake = makeFakePty();
   const manager = new PtySessionManager({ loadPty: async () => fake.module, bufferLimit: 1024, idFactory: () => 'term_buffer' });
