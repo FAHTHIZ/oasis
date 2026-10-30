@@ -9,16 +9,16 @@ test('Pages launch summary prints Markdown backticks literally', async () => {
   assert.ok(!workflow.includes('echo "Add the `OASIS_REPO_ADMIN_TOKEN`'));
 });
 
-test('CI keeps latest-run-only concurrency per ref and isolates publishing refs', async () => {
+test('CI keeps latest pending concurrency per ref and lets active quality runs finish', async () => {
   const cases = [
-    { path: '../.github/workflows/quality.yml', group: 'group: oasis-quality-${{ github.ref }}' },
-    { path: '../.github/workflows/pages.yml', group: 'group: oasis-public-launch-${{ github.ref }}' },
-    { path: '../.github/workflows/desktop-build.yml', group: 'group: oasis-desktop-${{ github.ref }}' }
+    { path: '../.github/workflows/quality.yml', group: 'group: oasis-quality-v3-${{ github.ref }}', cancel: false },
+    { path: '../.github/workflows/pages.yml', group: 'group: oasis-public-launch-${{ github.ref }}', cancel: true },
+    { path: '../.github/workflows/desktop-build.yml', group: 'group: oasis-desktop-${{ github.ref }}', cancel: true }
   ];
   for (const item of cases) {
     const workflow = await readFile(new URL(item.path, import.meta.url), 'utf8');
     assert.ok(workflow.includes(item.group), item.path + ' must use a per-ref concurrency group');
-    assert.ok(workflow.includes('cancel-in-progress: true'), item.path + ' should cancel superseded runs');
+    assert.ok(workflow.includes('cancel-in-progress: ' + String(item.cancel)), item.path + ' has the wrong cancellation policy');
     assert.ok(!workflow.includes('${{ github.sha }}'), item.path + ' must not create a separate expensive run for every commit');
   }
   const publishing = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
