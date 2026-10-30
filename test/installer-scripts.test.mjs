@@ -23,7 +23,7 @@ test('installers pin the immutable source revision and Termux guide', async () =
   const [readme, shell, powershell, termux, install] = await Promise.all([
     read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1'), read('docs/TERMUX.md'), read('docs/INSTALL.md')
   ]);
-  const revision = '27efc103994c26cab2331bb7037167372ceaa787';
+  const revision = 'd3a2156924e7fe6bfd8f7bad5b49b8531f740a0a';
   assert.ok(shell.includes(revision + '.tar.gz'));
   assert.ok(powershell.includes(revision + '.tar.gz'));
   assert.ok(readme.includes(revision));

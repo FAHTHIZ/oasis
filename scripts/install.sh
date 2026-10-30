@@ -2,13 +2,13 @@
 # What this script does:
 # 1. Checks for Node.js 22 or newer.
 # 2. Offers supported Node.js installation steps and asks before changing anything.
-# 3. Installs the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0).
+# 3. Installs the fixed source revision d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a (package version 0.3.0).
 # 4. Runs oasis doctor and opens first-run provider setup.
 # It does not request administrator rights, upload files, or send telemetry.
 set -eu
 
 OASIS_VERSION="v0.3.0"
-OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/27efc103994c26cab2331bb7037167372ceaa787.tar.gz"
+OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a.tar.gz"
 OASIS_PREFIX="${OASIS_INSTALL_PREFIX:-$HOME/.local}"
 OASIS_BIN="$OASIS_PREFIX/bin/oasis"
 ASSUME_YES=0
@@ -77,7 +77,7 @@ fi
 say "npm is ready: $(npm --version)."
 say "Git is optional for this archive-based install."
 say "OASIS will be installed for your user in: $OASIS_PREFIX"
-say "The installer uses the fixed source revision 27efc103994c26cab2331bb7037167372ceaa787 (package version 0.3.0); it does not download the moving main branch."
+say "The installer uses the fixed source revision d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a (package version 0.3.0); it does not download the moving main branch."
 if ask_yes_no "May I install OASIS $OASIS_VERSION in that folder using npm?"; then
   npm install --global --prefix "$OASIS_PREFIX" "$OASIS_ARCHIVE"
 else

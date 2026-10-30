@@ -30,7 +30,7 @@ OASIS requires Node.js 22 or newer. If the version is below 22, update Termux's 
 
 The one-line command in the README downloads `scripts/install.sh` from the official repository, checks the SHA-256 against the published README value, and only then runs it. If the checksum does not match, **stop**; do not run the script.
 
-The installer uses immutable source revision `27efc103994c26cab2331bb7037167372ceaa787` (package version `0.3.0`), asks before installing OASIS into your home directory (`~/.local`) or changing your shell's startup file, runs `oasis doctor`, and opens `oasis setup`.
+The installer uses immutable source revision `d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a` (package version `0.3.0`), asks before installing OASIS into your home directory (`~/.local`) or changing your shell's startup file, runs `oasis doctor`, and opens `oasis setup`.
 
 A hosted provider may receive the prompts and code you choose to send to it. OASIS does not include a model or an API subscription. Never share API keys in public issues, screenshots, or chat.
 
