@@ -115,9 +115,8 @@ test('an @oasis issue comment runs the agent, pushes a branch, opens a PR, and r
   const env = { ...gitEnv, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app', GITHUB_SERVER_URL: 'https://github.com', GITHUB_RUN_ID: '42', INPUT_PERMISSION_MODE: 'default' };
   const outcome = await runAction({ env, root: work, event: comment('@oasis fix the login'), request, log: () => {}, runOptions: {
       provider: config,
-      // The explicit server-launch prompt has no tool metadata; the LSP tool
-      // request itself is reported as "lsp" to this approval callback.
-      canUseTool: async (toolName) => toolName === 'lsp' || toolName === null,
+      // Match action.yml: unattended runs disable LSP and verify with project checks.
+      env: { ...env, OASIS_DISABLE_LSP: '1' },
       settings: {
         ...settings,
         lspServers: {
