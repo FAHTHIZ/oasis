@@ -12,18 +12,9 @@
 
 ## Two ways to start
 
-### Download the app — no terminal needed
-
-1. Open the [OASIS releases page](https://github.com/FAHTHIZ/oasis/releases/latest).
-2. Download the file for your computer:
-   - **Windows (x64):** `.exe` installer
-   - **macOS (Apple Silicon / arm64):** `.dmg` disk image
-   - **Linux (x86_64):** `.AppImage` or `.deb`
-3. Open it, choose a project folder, and follow the model setup.
-
-The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured.
-
 ### Install from the terminal — macOS, Linux, or Android/Termux
+
+**What this script does:** checks Node.js 22+, asks before installing or changing your PATH, installs a fixed tested source revision in your user folder, then runs `oasis doctor` and `oasis setup`. It does not request administrator rights or send data anywhere.
 
 Paste this **single line** into your terminal. It downloads the installer, checks its SHA-256 against the published value below, and runs it only if the checksum matches.
 
@@ -44,6 +35,17 @@ $p=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N') + '.p
 **Published Windows installer SHA-256:** `920e1c647c905977afc308ee9c72f8a9cac2f173c279460fa0ca35505f97efd3`
 
 If the check fails, stop and do not run the script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
+
+### Download the app — no terminal needed
+
+1. Open the [OASIS releases page](https://github.com/FAHTHIZ/oasis/releases/latest).
+2. Download the file for your computer:
+   - **Windows (x64):** `.exe` installer
+   - **macOS (Apple Silicon / arm64):** `.dmg` disk image
+   - **Linux (x86_64):** `.AppImage` or `.deb`
+3. Open it, choose a project folder, and follow the model setup.
+
+The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured.
 
 ## What is OASIS?
 
