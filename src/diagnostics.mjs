@@ -268,7 +268,6 @@ function nodeCheck(absolute, signal) {
     child.on('close', (code) => finish({ code, stderr }));
   });
 }
-}
 
 // node --check prints "file:LINE\n<source>\n   ^^^\n\nSyntaxError: message".
 export function parseNodeCheck(relative, stderr) {
