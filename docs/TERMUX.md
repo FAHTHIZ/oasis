@@ -42,7 +42,7 @@ oasis web
 
 Open the **local address printed in the terminal** in the browser on the same phone. Keep it on localhost; do not expose it to the Internet or an untrusted network.
 
-## 5. Optional phone keyboard shortcuts
+## 4. Optional phone keyboard shortcuts
 
 Termux's extra-keys row makes **ESC**, **TAB**, **CTRL**, and arrow keys easier to use on a phone.
 
