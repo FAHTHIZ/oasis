@@ -7,6 +7,7 @@
 import { Browser, findChrome } from './cdp.mjs';
 import { isNonPublicIpAddress } from './network-safety.mjs';
 import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 
 export const BROWSER_TOOL_DEFINITION = {
   type: 'function',
@@ -77,7 +78,7 @@ export function browserNavigationNeedsApproval(rawUrl, approvedNavigations, { st
   return !localBypass && !approvedNavigations.has(policy.approvalKey);
 }
 
-export function isPrivateBrowserRequest(rawUrl) {
+export async function isPrivateBrowserRequest(rawUrl, lookupImpl = lookup) {
   let parsed;
   try { parsed = new URL(String(rawUrl)); } catch { return true; }
   // Page-initiated file/about requests are local-resource access too. Gate them
@@ -85,11 +86,23 @@ export function isPrivateBrowserRequest(rawUrl) {
   // HTTP(S)-only host checks below. Data URLs remain non-network content.
   if (parsed.protocol === 'file:' || parsed.protocol === 'about:') return true;
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '').replace(/\\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') ||
       host === 'metadata' || host === 'metadata.google.internal' || (!host.includes('.') && isIP(host) === 0)) return true;
-  return isNonPublicIpAddress(host);
+  if (isIP(host)) return isNonPublicIpAddress(host);
+
+  // Resolve every address family before allowing page-initiated network access.
+  // A mixed public/private answer is treated as private. This is DNS-aware
+  // approval gating; it does not pin Chrome's later socket resolution.
+  let records;
+  try { records = await lookupImpl(host, { all: true, verbatim: true }); }
+  catch { throw new Error('Could not resolve browser request hostname safely.'); }
+  if (!Array.isArray(records) || !records.length) throw new Error('Browser request hostname returned no addresses.');
+  return records.some((record) => {
+    const address = String(record && record.address || '').replace(/^\\[|\\]$/g, '');
+    return !isIP(address) || isNonPublicIpAddress(address);
+  });
 }
 
 const KEYS = {
@@ -160,7 +173,7 @@ async function setupPage(state, page, context) {
       const requestUrl = String(request.request.url || '');
       const isDocument = request.resourceType === 'Document';
       const isMainFrame = isDocument && tab.mainFrameId && request.frameId === tab.mainFrameId;
-      const privateTarget = isPrivateBrowserRequest(requestUrl);
+      const privateTarget = await isPrivateBrowserRequest(requestUrl);
       if (isDocument && !tab.mainFrameId) {
         tab.blockedNavigations.push({ url: requestUrl.slice(0, 1200), reason: 'The browser main frame could not be identified safely.' });
         await fail();

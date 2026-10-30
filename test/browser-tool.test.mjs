@@ -13,7 +13,7 @@ import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const chrome = findChrome(process.env);
 
-test('browser navigation approvals scope web URLs by origin and opaque URLs by exact target', () => {
+test('browser navigation approvals scope web URLs by origin and opaque URLs by exact target', async () => {
   const approved = new Set();
   const firstWeb = browserNavigationPolicy('https://example.test/one');
   assert.equal(browserNavigationNeedsApproval(firstWeb, approved), true);
@@ -39,22 +39,35 @@ test('browser navigation approvals scope web URLs by origin and opaque URLs by e
   assert.equal(loopback.local, true);
   assert.equal(browserNavigationNeedsApproval(loopback, new Set()), false, 'explicit local navigation remains convenient for development');
   assert.equal(browserNavigationNeedsApproval(loopback, new Set(), { strictLocal: true }), true, 'page-triggered localhost access must ask first');
-  assert.equal(isPrivateBrowserRequest('http://127.0.0.1:8123/api'), true);
-  assert.equal(isPrivateBrowserRequest('http://192.168.1.1/admin'), true);
-  assert.equal(isPrivateBrowserRequest('http://169.254.169.254/latest/meta-data/'), true);
-  assert.equal(isPrivateBrowserRequest('http://metadata.google.internal/'), true);
-  assert.equal(isPrivateBrowserRequest('http://printer.local/'), true);
-  assert.equal(isPrivateBrowserRequest('http://[::1]:9222/json'), true);
-  assert.equal(isPrivateBrowserRequest('https://[2606:4700:4700::1111]/'), false, 'public IPv6 literals are not single-label hostnames');
-  assert.equal(isPrivateBrowserRequest('http://[fd00::1]/private'), true);
-  assert.equal(isPrivateBrowserRequest('http://[64:ff9b::1]/'), true);
-  assert.equal(isPrivateBrowserRequest('http://[64:ff9b:1::1]/'), true);
-  assert.equal(isPrivateBrowserRequest('http://[3fff::1]/'), true);
-  assert.equal(isPrivateBrowserRequest('http://[2001:20::1]/'), true);
-  assert.equal(isPrivateBrowserRequest('file:///etc/passwd'), true, 'page-initiated file requests require approval');
-  assert.equal(isPrivateBrowserRequest('about:srcdoc'), true, 'page-initiated about subframes require approval');
-  assert.equal(isPrivateBrowserRequest('https://cdn.example.com/script.js'), false);
-  assert.equal(isPrivateBrowserRequest('data:image/png;base64,AAAA'), false);
+  assert.equal(await isPrivateBrowserRequest('http://127.0.0.1:8123/api'), true);
+  assert.equal(await isPrivateBrowserRequest('http://192.168.1.1/admin'), true);
+  assert.equal(await isPrivateBrowserRequest('http://169.254.169.254/latest/meta-data/'), true);
+  assert.equal(await isPrivateBrowserRequest('http://metadata.google.internal/'), true);
+  assert.equal(await isPrivateBrowserRequest('http://printer.local/'), true);
+  assert.equal(await isPrivateBrowserRequest('http://[::1]:9222/json'), true);
+  assert.equal(await isPrivateBrowserRequest('https://[2606:4700:4700::1111]/'), false, 'public IPv6 literals are not single-label hostnames');
+  assert.equal(await isPrivateBrowserRequest('http://[fd00::1]/private'), true);
+  assert.equal(await isPrivateBrowserRequest('http://[64:ff9b::1]/'), true);
+  assert.equal(await isPrivateBrowserRequest('http://[64:ff9b:1::1]/'), true);
+  assert.equal(await isPrivateBrowserRequest('http://[3fff::1]/'), true);
+  assert.equal(await isPrivateBrowserRequest('http://[2001:20::1]/'), true);
+  assert.equal(await isPrivateBrowserRequest('file:///etc/passwd'), true, 'page-initiated file requests require approval');
+  assert.equal(await isPrivateBrowserRequest('about:srcdoc'), true, 'page-initiated about subframes require approval');
+  assert.equal(await isPrivateBrowserRequest('https://cdn.example.com/script.js', async () => [{ address: '93.184.216.34', family: 4 }]), false);
+  assert.equal(await isPrivateBrowserRequest('https://cdn.example.com/script.js', async () => [{ address: '10.0.0.8', family: 4 }]), true,
+    'public-looking hostnames resolving to private IPv4 require approval');
+  assert.equal(await isPrivateBrowserRequest('https://cdn.example.com/script.js', async () => [
+    { address: '93.184.216.34', family: 4 }, { address: 'fd00::8', family: 6 }
+  ]), true, 'a mixed public/private DNS answer is treated as private');
+  await assert.rejects(
+    isPrivateBrowserRequest('https://unresolved.example/script.js', async () => { throw new Error('NXDOMAIN'); }),
+    /Could not resolve browser request hostname safely/
+  );
+  await assert.rejects(
+    isPrivateBrowserRequest('https://empty.example/script.js', async () => []),
+    /returned no addresses/
+  );
+  assert.equal(await isPrivateBrowserRequest('data:image/png;base64,AAAA'), false);
   assert.throws(() => browserNavigationPolicy('https://example.test/' + 'x'.repeat(33000)), /too long/);
   assert.throws(() => browserNavigationPolicy('https://user:pass@example.test/'), /must not embed/);
 });
