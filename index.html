@@ -342,9 +342,9 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-ser
   <section class="first-run-wizard" id="firstRunWizard" hidden aria-labelledby="firstRunTitle">
     <div class="first-run-heading"><div class="eyebrow">FIRST-TIME SETUP</div><h2 id="firstRunTitle">Give Oasis a model to work with</h2><p>Oasis is the workspace, not the AI model. Choose one route below. Nothing is saved until you test the connection.</p></div>
     <div class="first-run-options">
-      <button class="first-run-choice" type="button" data-first-run="api"><span class="first-run-icon" aria-hidden="true">⌁</span><span><strong>I have an API key</strong><small>Choose a provider, paste the key into the masked field, and test it before saving.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
-      <button class="first-run-choice" type="button" data-first-run="omniroute"><span class="first-run-icon" aria-hidden="true">◇</span><span><strong>Use a free gateway</strong><small>Connect through OmniRoute running on this computer. Free gateways can be slow, limited, or require their own key.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
-      <button class="first-run-choice" type="button" data-first-run="ollama"><span class="first-run-icon" aria-hidden="true">◌</span><span><strong>Use a model on my computer</strong><small>Check Ollama for models already installed on this device. Local models can be more private, but smaller ones may be less capable.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
+      <button class="first-run-choice" type="button" data-first-run="api" aria-pressed="false"><span class="first-run-icon" aria-hidden="true">⌁</span><span><strong>I have an API key</strong><small>Choose a provider, paste the key into the masked field, and test it before saving.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
+      <button class="first-run-choice" type="button" data-first-run="omniroute" aria-pressed="false"><span class="first-run-icon" aria-hidden="true">◇</span><span><strong>Use a free gateway</strong><small>Connect through OmniRoute running on this computer. Free gateways can be slow, limited, or require their own key.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
+      <button class="first-run-choice" type="button" data-first-run="ollama" aria-pressed="false"><span class="first-run-icon" aria-hidden="true">◌</span><span><strong>Use a model on my computer</strong><small>Check Ollama for models already installed on this device. Local models can be more private, but smaller ones may be less capable.</small></span><span class="first-run-arrow" aria-hidden="true">›</span></button>
     </div>
     <p class="first-run-status" id="firstRunStatus" role="status" aria-live="polite">Choose one option to get started.</p>
     <a class="first-run-install" id="firstRunOllamaLink" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" hidden>Get Ollama from its official download page ↗</a>
@@ -1065,7 +1065,31 @@ document.getElementById('githubResetWorkspaceBtn').addEventListener('click',asyn
 function firstRunStatus(message,isError){var node=document.getElementById('firstRunStatus');node.textContent=message||'';node.dataset.error=isError?'true':'false';}
 function setProviderKeyHelp(){var preset=document.getElementById('providerPreset').value;var items={openai:['OpenAI','https://platform.openai.com/api-keys'],anthropic:['Anthropic','https://console.anthropic.com/settings/keys'],openrouter:['OpenRouter','https://openrouter.ai/keys'],gemini:['Google AI Studio','https://aistudio.google.com/app/apikey']};var node=document.getElementById('providerKeyHelp');node.replaceChildren();var info=items[preset];if(!info){node.textContent='For a custom endpoint, use that provider’s own key instructions. Desktop mode uses OS-backed encryption; CLI/browser mode stores keys in the local config file with restrictive permissions.';return;}node.appendChild(document.createTextNode('Need a key? Get one from '));var link=document.createElement('a');link.href=info[1];link.target='_blank';link.rel='noopener noreferrer';link.textContent=info[0]+' official settings';node.appendChild(link);node.appendChild(document.createTextNode('. Desktop mode uses OS-backed encryption; CLI/browser mode stores keys in the local config file with restrictive permissions.'));}
 async function firstRunCheckOllama(){document.getElementById('firstRunOllamaLink').hidden=true;firstRunStatus('Checking this computer for Ollama and installed models…',false);try{var result=await agentApi('/api/provider/local-models');if(result.available&&result.models&&result.models.length){var modelField=document.getElementById('providerModel');if(!modelField.value||modelField.value==='auto'||!result.models.includes(modelField.value))modelField.value=result.models[0];firstRunStatus('Ollama is running. Found '+result.models.length+' model'+(result.models.length===1?'':'s')+': '+result.models.join(', ')+'. The first model is selected; edit the model field before testing if needed.',false);}else{firstRunStatus(result.message||'Ollama is running but no models were found.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}catch(error){firstRunStatus('Could not check Ollama: '+error.message+' Connect the local runtime and try again.',true);document.getElementById('firstRunOllamaLink').hidden=false;}}
-document.querySelectorAll('[data-first-run]').forEach(function(button){button.addEventListener('click',function(){var choice=button.getAttribute('data-first-run');var preset=choice==='api'?'openai':choice;var selector=document.getElementById('providerPreset');selector.value=preset;selector.dispatchEvent(new Event('change'));document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});if(choice==='api'){firstRunStatus('Choose your provider from the list, enter its API key in the masked field, then select Test & save provider.',false);document.getElementById('providerApiKey').focus();}else if(choice==='omniroute'){firstRunStatus('OmniRoute must be running on this computer first. In a terminal, run oasis setup and choose OmniRoute; then return here and test the connection. A shared/free gateway may be slower or limited.',false);document.getElementById('providerModel').focus();}else{firstRunCheckOllama();document.getElementById('providerModel').focus();}});});
+document.querySelectorAll('[data-first-run]').forEach(function(button){
+  button.addEventListener('click',function(){
+    var choice=button.getAttribute('data-first-run');
+    document.querySelectorAll('[data-first-run]').forEach(function(option){
+      option.setAttribute('aria-pressed',String(option===button));
+    });
+    document.getElementById('firstRunStatus').dataset.choice=choice;
+    var preset=choice==='api'?'openai':choice;
+    var selector=document.getElementById('providerPreset');
+    selector.value=preset;
+    selector.dispatchEvent(new Event('change'));
+    document.getElementById('providerSetupForm').scrollIntoView({block:'start',behavior:'auto'});
+    if(choice==='api'){
+      firstRunStatus('API route selected. Choose your provider, enter its key in the masked field, then test it before saving.',false);
+      document.getElementById('providerApiKey').focus();
+    }else if(choice==='omniroute'){
+      firstRunStatus('Gateway route selected. OmniRoute must be running on this computer first. Run oasis setup in the host terminal, then return here and test the connection. A shared/free gateway may be slower or limited.',false);
+      document.getElementById('providerModel').focus();
+    }else{
+      firstRunStatus('Local route selected. Checking this computer for Ollama and installed models…',false);
+      firstRunCheckOllama();
+      document.getElementById('providerModel').focus();
+    }
+  });
+});
 
 // Responsive chat/terminal layout. Divider adjustments are keyboard accessible and remembered.
 (function setupAgentExamples(){
