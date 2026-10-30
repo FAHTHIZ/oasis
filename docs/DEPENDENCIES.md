@@ -13,6 +13,17 @@ OASIS intentionally keeps its dependency list small. Versions below are the exac
 
 The licence labels above are the expected upstream package licences; verify the actual published package metadata and bundled notices when changing versions. This short table is not a complete third-party notice inventory for every transitive dependency.
 
+## CI-only browser test tools
+
+These tools are installed dynamically by the browser end-to-end workflow. They are not application runtime dependencies and are not included in the published OASIS package.
+
+| Package | Pinned version | Purpose | Licence |
+| --- | --- | --- | --- |
+| `playwright` | `1.64.1` | Browser automation and responsive screenshots in CI | Apache-2.0 |
+| `@axe-core/playwright` | `4.14.0` | WCAG accessibility scans of Agent and first-run views in CI | MPL-2.0 |
+
+The browser workflow installs these exact versions with `--no-save --package-lock=false`. They are intentionally kept out of `package.json` and the production dependency set.
+
 ## Rules for changes
 
 - Prefer built-in Node.js and browser APIs when they are enough.
