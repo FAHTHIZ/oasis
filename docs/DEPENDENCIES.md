@@ -22,3 +22,12 @@ The licence labels above are the expected upstream package licences; verify the 
 - Do not add GPL-licensed code to the application.
 - For every new direct dependency, record the reason, exact version and licence here.
 - Before merging a dependency change, run `npm audit`, `npm run check`, and the desktop/browser packaging checks that cover it. Record audit findings accurately; an audit can report issues in transitive packages too.
+
+## CI-only browser audit tooling
+
+These exact versions are installed ephemerally by the browser E2E workflow. They are test tools only and are not included in the OASIS application package or runtime dependency tree.
+
+| Package | Pinned version | Purpose | Licence |
+| --- | --- | --- | --- |
+| \`playwright\` | \`1.64.1\` | Headless Chromium browser tests and screenshots | Apache-2.0 |
+| \`@axe-core/playwright\` | \`4.14.0\` | WCAG color-contrast audit of the Agent view at desktop and phone widths | MPL-2.0 |
