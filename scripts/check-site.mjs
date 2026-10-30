@@ -43,7 +43,7 @@ const required = [
 ];
 assert.ok(html.includes('href="./assets/oasis-interface.css"'), 'The app must load its local visual-system stylesheet.');
 function cssColorToken(name) {
-  const match = interfaceCss.match(new RegExp('--' + name + ':\s*(#[0-9A-F]{6})', 'i'));
+  const match = interfaceCss.match(new RegExp('--' + name + ':\\s*(#[0-9A-F]{6})', 'i'));
   assert.ok(match, 'Missing six-digit color token: --' + name);
   return match[1].toUpperCase();
 }
@@ -82,7 +82,7 @@ assert.match(interfaceCss, /--font-body:Inter/);
 assert.match(interfaceCss, /--font-code:"JetBrains Mono"/);
 assert.match(interfaceCss, /\.hero:after\{display:none\}/, 'Decorative hero rings must stay out of the primary workspace.');
 assert.match(interfaceCss, /\.btn-primary\{background:var\(--surface-muted\)/, 'Generic primary buttons must remain neutral.');
-assert.match(interfaceCss, /#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn\s*\{/);
+assert.match(interfaceCss, /#agentSendBtn,#newAgentSessionBtn,#agentApproveBtn,#agentAlwaysBtn,#sidebarNewChatBtn\s*\{/);
 assert.ok(interfaceCss.includes('Chat-first coding workspace:'), 'The chat-first layout must remain a separately maintained local stylesheet.');
 assert.match(interfaceCss, /grid-template-areas:\s*"prompt prompt"\s*"context actions"/, 'Desktop composer must keep its prompt above the action footer.');
 assert.match(interfaceCss, /grid-template-areas:\s*"prompt"\s*"context"\s*"actions"/, 'Phone composer must stack the prompt, context and actions.');
