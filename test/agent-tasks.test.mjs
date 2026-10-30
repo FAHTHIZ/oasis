@@ -128,7 +128,7 @@ test('send_message steers a running agent, agent_status waits, and agent_stop ca
     }
   });
   const session = await createSession({ root, config, settings });
-  t.after(() => { hang.open(); closeSession(session); });
+  t.after(async () => { hang.open(); await closeSession(session); });
   await runAgentTurn(session, 'go');
   assert.equal(session.agentTasks.agents.size, 2);
   // While agent_1 is still on its first step, queue a message; it arrives at the next step.
