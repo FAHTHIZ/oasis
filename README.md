@@ -49,6 +49,10 @@ If the check fails, stop and do not run the script. Read the [installation guide
 
 OASIS is an open-source, local-first AI coding agent. It helps inspect a codebase, plan focused edits, make approved changes, run checks, and explain what changed. Bring a supported model/provider of your choice; OASIS does not include a model or paid subscription.
 
+## License
+
+OASIS is released under the **Apache-2.0 license**. Read the full terms in [`LICENSE`](LICENSE).
+
 ## Why OASIS
 
 - **Model choice:** supported cloud providers, compatible endpoints, OmniRoute, and local Ollama setups.
