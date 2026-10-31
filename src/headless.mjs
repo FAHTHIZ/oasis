@@ -9,7 +9,7 @@
 // denied unless a permission rule, permission mode, or --yes allows it.
 import { activeAgentMonitors, startPluginMonitorsFor } from './monitors.mjs';
 
-const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'agent-notice', 'channel']);
+const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'background-stuck', 'agent-notice', 'channel']);
 const WAKE_PREFIX = '[background event] ';
 import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';

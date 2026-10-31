@@ -266,9 +266,18 @@ export async function startWsMonitor(session, args, { approval, autoApprove = fa
 export function backgroundExitNotifier(session) {
   return (entry, { stoppedByUser } = {}) => {
     if (stoppedByUser || entry.monitor) return;
-    const code = entry.status === 'failed' ? 'failed to start' : 'exited' + (entry.exitCode !== null && entry.exitCode !== undefined ? ' with code ' + entry.exitCode : '') + (entry.signal ? ' (' + entry.signal + ')' : '');
+    const code = entry.status === 'failed' ? 'failed to start' : entry.status === 'timed_out' ? 'was stopped after reaching max_seconds=' + entry.maxSeconds : 'exited' + (entry.exitCode !== null && entry.exitCode !== undefined ? ' with code ' + entry.exitCode : '') + (entry.signal ? ' (' + entry.signal + ')' : '');
     const unread = entry.output.slice(Math.min(entry.readOffset, entry.output.length)).trim();
     pushBackgroundEvent(session, '<background-command id="' + entry.id + '" command="' + escapeAttr(entry.command).slice(0, 200) + '">\nBackground command ' + code + '.' + (unread ? '\nUnread output (tail):\n' + unread.slice(-1500) : '') + '\nUse command_output with id ' + entry.id + ' for the full output.\n</background-command>', { kind: 'background-exit', id: entry.id });
+  };
+}
+
+export function backgroundStuckNotifier(session) {
+  return (entry, quietSeconds) => {
+    const minutes = Math.max(1, Math.round(quietSeconds / 60));
+    pushBackgroundEvent(session, '<background-command id="' + entry.id + '" command="' + escapeAttr(entry.command).slice(0, 200) + '">\nBackground command has produced no output for about ' + minutes + ' minute(s). ' +
+      'It may be stuck, deadlocked, or waiting for input it cannot receive (background commands have no stdin). Check command_output with id ' + entry.id +
+      ', and stop it with kill_command if it is not making progress. Long-running servers that are simply idle can be left alone.\n</background-command>', { kind: 'background-stuck', id: entry.id });
   };
 }
 
