@@ -369,7 +369,8 @@ export async function connectMcpServers(options = {}) {
       debugLog('mcp', 'connected ' + config.name + ' (' + (config.type || 'stdio') + ', ' + source + ')');
     } catch (error) {
       debugLog('mcp', 'failed ' + config.name + ': ' + error.message);
-      failures.push({ name: config.name, error: error.message });
+      // Keep the config (non-enumerable, so it never ends up in JSON output) for /mcp reconnect.
+      failures.push(Object.defineProperty({ name: config.name, error: error.message }, 'config', { value: { ...config, source }, enumerable: false }));
       if (client) client.close();
     }
   }));
@@ -440,13 +441,37 @@ export async function reconnectMcpServer(session, config, options = {}) {
   const client = config.type === 'http' ? new McpHttpClient(config, { host: session.mcpHost, ...options }) : new McpServerClient(config, { host: session.mcpHost, ...options });
   client.source = config.source || 'project';
   await client.start();
+  session.mcpClients ||= new Map();
   const previous = session.mcpClients.get(config.name);
-  if (previous) previous.close();
+  if (previous && previous !== client) previous.close();
   session.mcpClients.set(config.name, client);
   session.mcpFailures = (session.mcpFailures || []).filter((failure) => failure.name !== config.name);
   const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
   const dynamic = mcpToolDefinitions(session.mcpClients);
   session.mcpToolMap = dynamic.map;
   session.toolDefinitions = session.toolDefinitions.filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
+  if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
   return client;
+}
+
+// /mcp reconnect: restart failed (or all) servers using the config they were started with.
+export async function reconnectMcpServers(session, names = [], options = {}) {
+  const wanted = new Set(names.filter((name) => name && name !== 'all'));
+  const all = names.includes('all');
+  const targets = new Map();
+  for (const failure of session.mcpFailures || []) if (failure.config && (all || !wanted.size || wanted.has(failure.name))) targets.set(failure.name, failure.config);
+  for (const [name, client] of session.mcpClients || []) if (client.config && (all || wanted.has(name))) targets.set(name, { ...client.config, source: client.source || client.config.source });
+  const results = [];
+  for (const name of wanted) if (!targets.has(name)) results.push({ name, ok: false, error: 'no MCP server with this name was configured in this session' });
+  for (const [name, config] of targets) {
+    try {
+      const client = await reconnectMcpServer(session, config, { host: session.mcpHost, ...options });
+      results.push({ name, ok: true, tools: (client.tools || []).length });
+    } catch (error) {
+      session.mcpFailures = (session.mcpFailures || []).filter((failure) => failure.name !== name);
+      session.mcpFailures.push(Object.defineProperty({ name, error: error.message }, 'config', { value: config, enumerable: false }));
+      results.push({ name, ok: false, error: error.message });
+    }
+  }
+  return results;
 }

@@ -1696,8 +1696,12 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (!session.onAgentNotice) session.onAgentNotice = (text) => stdout.write('\n[agents] ' + String(text).split('\n')[0] + ' The report will be shared with Oasis on your next message (/tasks to read it now).\n');
   reportSessionNotices(session);
   if (session.mcpFailures && session.mcpFailures.length) {
-    for (const failure of session.mcpFailures) stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + '\n');
-    session.mcpFailures = [];
+    // Print each failure once, but keep it so /mcp can show it and /mcp reconnect can retry it.
+    for (const failure of session.mcpFailures) {
+      if (failure.reported) continue;
+      Object.defineProperty(failure, 'reported', { value: true, enumerable: false, configurable: true });
+      stdout.write('[MCP] ' + failure.name + ' did not start: ' + failure.error + (failure.config ? ' (retry with /mcp reconnect ' + failure.name + ')' : '') + '\n');
+    }
   }
   // Ctrl+C stops the current task and returns to the prompt; a second Ctrl+C exits.
   const controller = new AbortController();
