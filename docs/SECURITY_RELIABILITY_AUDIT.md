@@ -197,15 +197,15 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 ## Required verification
 
-- [ ] Verify browser-navigation guards for same-origin navigation, cross-origin click/form/redirect behavior, opaque data/file URLs, and denied navigation with live Chrome E2E tests.
+- [x] Verified browser-navigation guards with live Chrome E2E (`test/browser-navigation-e2e.test.mjs`): same-origin link passes without a prompt; cross-origin link, form POST and 302 redirect each ask; denial keeps the page on the original origin; `file:`/`data:` links never load; an approved cross-origin navigation proceeds. This test found and fixed a bug where the first page load cleared the main-frame id and blocked every later navigation.
 - [x] Re-ran the full runtime test suite on Node.js 22/24/26 in [Quality Checks run 40870856114](https://github.com/FAHTHIZ/oasis/actions/runs/40870856114); 685 tests passed, 0 failed, the clean-environment run passed, all 33 fixtures validated, and browser E2E plus cross-platform security jobs passed on 0002f84.
 
 - [x] Full Quality Checks passed with 685 tests on 0002f84: https://github.com/FAHTHIZ/oasis/actions/runs/40870856114.
 - [x] Publishing validation passed on the same code revision: https://github.com/FAHTHIZ/oasis/actions/runs/40870856141.
 - [ ] Desktop packaging workflow for 0002f84 was still in progress when this audit was refreshed; installers remain unsigned and need clean-machine installation/update/uninstall checks.
-- [ ] Repeat cancellation/timeout tests and confirm descendants are stopped and inherited pipes close.
-- [ ] Run process-tree cancellation tests on Windows as well as POSIX before claiming cross-platform closure.
-- [ ] Continue adversarial URL tests for normalization, IPv4-mapped IPv6, DNS answer sets, redirects and provider/network failure cases.
+- [x] Cancellation, timeout and SIGTERM-ignoring-descendant tests (`test/process-tree-cancel.test.mjs`) confirm the grandchild holding inherited pipes is gone after the command settles; repeated 5/5 locally.
+- [ ] Run process-tree cancellation tests on Windows as well as POSIX before claiming cross-platform closure. (`test/process-tree-cancel.test.mjs` now runs on windows-latest/macos-latest/ubuntu-latest in Quality Checks; tick once a run on the release SHA is green.)
+- [x] Adversarial URL tests (`test/url-adversarial.test.mjs`): decimal/octal/hex IPv4, IPv4-mapped and NAT64 IPv6, trailing-dot hostnames, mixed public/private DNS answer sets, schemes/credentials, unfollowed redirects with pinned DNS, and provider failures. Found and fixed trailing-dot normalization gaps.
 
 **Bottom line:** multiple concrete security and reliability findings have been patched on main, including network-address policy consistency, secret-safe Keychain writes, cloud-token cache isolation, command-risk parsing, optional sandbox credential masking, desktop OS-encrypted provider-key storage, shared approval wording and secret redaction across browser/relay paths. The 0002f84 implementation snapshot passed Quality Checks and publishing validation on one SHA. Desktop packaging was still in progress at the time of this refresh. This audit does not claim exhaustive coverage or zero remaining bugs.
 

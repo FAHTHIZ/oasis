@@ -163,8 +163,11 @@ async function setupPage(state, page, context) {
   await Promise.all([page.send('Page.enable'), page.send('Runtime.enable'), page.send('Network.enable'), page.send('Log.enable').catch(() => {})]);
   const frameTree = await page.send('Page.getFrameTree');
   tab.mainFrameId = frameTree && frameTree.frameTree && frameTree.frameTree.frame && frameTree.frameTree.frame.id;
-  page.on('Page.frameNavigated', (frame) => {
-    if (frame && !frame.parentId) tab.mainFrameId = frame.id;
+  // CDP sends { frame, type }; keep the previous id if an event is malformed so a
+  // bad event can never clear the main-frame identity and block every navigation.
+  page.on('Page.frameNavigated', (params) => {
+    const frame = params && params.frame ? params.frame : params;
+    if (frame && !frame.parentId && frame.id) tab.mainFrameId = frame.id;
   });
   // Gate top-level document navigations from links, forms, redirects and page
   // scripts too—not only explicit browser.navigate tool calls.
@@ -172,10 +175,16 @@ async function setupPage(state, page, context) {
   page.on('Fetch.requestPaused', (request) => {
     const pending = (async () => {
       const resume = () => page.send('Fetch.continueRequest', { requestId: request.requestId }).catch(() => {});
-      const fail = () => page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' }).catch(() => {});
       const requestUrl = String(request.request.url || '');
       const isDocument = request.resourceType === 'Document';
       const isMainFrame = isDocument && tab.mainFrameId && request.frameId === tab.mainFrameId;
+      // A denied top-level navigation answers 204 No Content, which browsers treat
+      // as "stay on the current page"; failing it would replace the page with an
+      // error document and lose the agent's place. Everything else is failed.
+      const fail = () => (isMainFrame
+        ? page.send('Fetch.fulfillRequest', { requestId: request.requestId, responseCode: 204, responseHeaders: [{ name: 'Cache-Control', value: 'no-store' }], body: '' })
+        : Promise.reject(new Error('fail'))
+      ).catch(() => page.send('Fetch.failRequest', { requestId: request.requestId, errorReason: 'BlockedByClient' })).catch(() => {});
       const privateTarget = await isPrivateBrowserRequest(requestUrl);
       if (isDocument && !tab.mainFrameId) {
         tab.blockedNavigations.push({ url: requestUrl.slice(0, 1200), reason: 'The browser main frame could not be identified safely.' });
