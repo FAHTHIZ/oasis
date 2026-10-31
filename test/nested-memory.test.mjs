@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
@@ -78,4 +78,23 @@ test('path-scoped rules support safe glob matching and deterministic conflict or
   const rules = await nestedMemoryFor(root, 'pkg/api/a.js', new Set(), { env, home });
   const text = rules.map((item) => item.text).join('\n');
   assert.ok(text.indexOf('USER BROAD RULE') < text.indexOf('PROJECT SPECIFIC RULE'));
+});
+
+test('oversize or clipped nested instructions are reported, not skipped silently', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-nested-big-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_DISABLE_NESTED_MEMORY: '' };
+  await mkdir(path.join(root, 'big'), { recursive: true });
+  await mkdir(path.join(root, 'long'), { recursive: true });
+  await writeFile(path.join(root, 'big', 'AGENTS.md'), 'x'.repeat(50 * 1024));
+  await writeFile(path.join(root, 'long', 'AGENTS.md'), 'rule\n'.repeat(3000));
+  const big = await nestedMemoryFor(root, 'big/a.js', new Set(), { env, home: root });
+  assert.equal(big.length, 1);
+  assert.match(big[0].text, /over the 40960-byte limit, so it was not loaded/);
+  const long = await nestedMemoryFor(root, 'long/a.js', new Set(), { env, home: root });
+  assert.match(long[0].text, /truncated: \d+ more characters not loaded/);
+  await writeFile(path.join(root, 'CLAUDE.md'), '@huge.md\n');
+  await writeFile(path.join(root, 'huge.md'), 'y'.repeat(50 * 1024));
+  const memory = await loadMemory(root, { env, home: root });
+  assert.match(memory, /not imported: huge\.md is 51200 bytes/);
 });
