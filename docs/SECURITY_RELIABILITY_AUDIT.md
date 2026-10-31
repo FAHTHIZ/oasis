@@ -1,4 +1,6 @@
-# Security and reliability audit
+> **Evidence note:** This is a dated source-review record. Individual findings and CI references belong to the snapshots named in each section; they are not proof of the current release candidate. For the latest lifecycle, release status, and open gates, use [the project plan](PROJECT_PLAN.md).
+
+# OASIS security and reliability audit
 
 **Audit date:** October 29, 2026  
 **Original source-review baseline:** [a044ed403091a2fb885ff796bd364f010a13e286](https://github.com/FAHTHIZ/oasis/commit/a044ed403091a2fb885ff796bd364f010a13e286).  
@@ -253,3 +255,34 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Fix added on main:** containment checks now accept either matching lexical paths or matching canonical-root aliases for the initial check, then independently compare canonical real paths after checking that the target itself is not a symlink. This preserves the symlink-escape guard while accepting macOS path aliases. The sandbox tests compare the real canonical credential path. Cross-platform CI will verify the fix.
 
+
+ 
+## Additional component research and authorization decisions
+
+**Research reviewed:** October 29, 2026. These are design references and OASIS-specific decisions, not endorsements of third-party security guarantees.
+
+### Operating-system sandbox reference
+
+The Anthropic Sandbox Runtime was reviewed at version `@anthropic-ai/sandbox-runtime@0.0.81` (Apache-2.0; Node.js `>=22.12.0` in the reviewed manifest). Its published documentation describes macOS Seatbelt, Linux bubblewrap/network mediation, and a Windows implementation identified as alpha. It describes itself as a beta research preview.
+
+**OASIS decision:** use it as a design and implementation reference, not as an unreviewed drop-in replacement. Its manager includes process-level configuration/proxy state, while OASIS supports concurrent sessions and workspaces. Any adapter must demonstrate per-command/session policy isolation, validated configuration mapping, process cleanup, PTY/background behavior, and fail-closed behavior when requested isolation is unavailable. Keep approval policy distinct from OS containment. See the [upstream project](https://github.com/anthropics/sandbox-runtime).
+
+### Shell parsing reference
+
+`shell-quote` 1.12.0 (MIT) was reviewed as a possible tokenizer. Its documentation limits its interpretation of command substitution/arithmetic and describes POSIX-oriented behavior; that is not a complete Windows command parser.
+
+**OASIS decision:** do not use a shell tokenizer alone as an authorization engine. Preserve conservative, fail-closed handling of command substitutions, process substitutions, redirects, and ambiguous syntax. Any parser integration needs explicit policy logic and adversarial tests. See [shell-quote](https://github.com/ljharb/shell-quote).
+
+### Authorization and shell-approval decisions
+
+A review identified that a `PreToolUse` hook could rewrite `updatedInput` after permission evaluation. The required behavior is to re-evaluate the final merged arguments, honor matching deny rules, and preserve an explicit ask. The regression tests for rewritten actions belong with the permission and hook suites.
+
+Free-form shell strings are a different risk class from argv-based commands. The documented policy separates `sandbox.autoAllowCommands` from `sandbox.autoAllowShellCommands`; shell auto-approval defaults to false. Approval to run a command is not proof that the command is harmless or contained within the writable project.
+
+### Reusable security gates
+
+1. Keep permission decisions and OS isolation as distinct controls.
+2. Do not share mutable sandbox policy state between concurrent sessions without demonstrated isolation.
+3. Validate the sandbox configuration and workspace trust boundary before launch.
+4. Test denied network access, secrets, PTY/background commands, cancellation, startup failure, cleanup, and process descendants.
+5. Make unsupported or failed isolation visible; never describe an unsandboxed command as contained.
