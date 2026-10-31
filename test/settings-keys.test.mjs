@@ -10,7 +10,7 @@ test('session behavior keys survive loadSettings', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-keys-'));
   const config = await mkdtemp(path.join(os.tmpdir(), 'oasis-keys-cfg-'));
   t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(config, { recursive: true, force: true })]));
-  const values = { fastMode: true, ultracode: true, mcpNonBlocking: true, workflowsEnabled: false, leanTools: false, subagentEffort: 'low', systemPromptSnapshot: 'on', teammateMode: 'tmux', toolSearchThreshold: 7 };
+  const values = { fastMode: true, ultracode: true, mcpNonBlocking: true, workflowsEnabled: false, leanTools: false, subagentEffort: 'low', systemPromptSnapshot: 'on', teammateMode: 'tmux', toolSearchThreshold: 7, cleanupPeriodDays: 45 };
   await writeFile(path.join(config, 'settings.json'), JSON.stringify(values));
   const env = { ...process.env, OASIS_CONFIG_DIR: config, OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
   const settings = await loadSettings(root, { env, skipPlugins: true });

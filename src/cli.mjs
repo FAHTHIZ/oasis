@@ -14,7 +14,7 @@ import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_A
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
-import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
+import { loadSession, saveSession, listSessions, deleteSession, staleSessions, pruneSessions } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -1469,7 +1469,22 @@ async function manageSessions(root, rest) {
     stdout.write('Deleted saved session ' + id + '.\n');
     return;
   }
-  throw new Error('Unknown sessions action. Use oasis sessions list or oasis sessions clear SESSION_ID.');
+  if (action === 'prune') {
+    const flag = rest.indexOf('--older-than');
+    const raw = flag >= 0 ? rest[flag + 1] : rest[1];
+    const days = raw === undefined ? 30 : Number.parseInt(String(raw).replace(/d$/i, ''), 10);
+    if (!Number.isInteger(days) || days < 1) throw new Error('Usage: oasis sessions prune [--older-than DAYS]   (default 30)');
+    const stale = await staleSessions(root, days);
+    if (!stale.length) { stdout.write('No saved sessions older than ' + days + ' days.\n'); return; }
+    stdout.write(stale.length + ' saved session(s) last used more than ' + days + ' days ago:\n');
+    for (const item of stale.slice(0, 20)) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + (item.title || '') + '\n');
+    if (stale.length > 20) stdout.write('  ... and ' + (stale.length - 20) + ' more\n');
+    if (!(await approve('Delete these ' + stale.length + ' saved conversation(s)? This removes their history files.', true, false))) { stdout.write('Nothing deleted.\n'); return; }
+    const removed = await pruneSessions(root, days);
+    stdout.write('Deleted ' + removed.length + ' saved session(s).\n');
+    return;
+  }
+  throw new Error('Unknown sessions action. Use oasis sessions list, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
 }
 
 async function manageMcp(rest, root = process.cwd()) {
@@ -2220,9 +2235,12 @@ async function readMainInput(root, session, state) {
 
 // Settings "env" (Claude Code key) is applied to process.env before the provider loads;
 // "disableBypassPermissionsMode": "disable" (often from managed settings) blocks bypass mode.
-async function applySettingsPolicy(root, autoApprove) {
+async function applySettingsPolicy(root, autoApprove, keepSessionIds = []) {
   const settings = await loadSettings(root).catch(() => null);
   if (!settings) return;
+  // "cleanupPeriodDays" (Claude Code key, opt-in): quietly delete saved chats unused for that long.
+  const cleanupDays = Number.parseInt(process.env.OASIS_CLEANUP_PERIOD_DAYS || '', 10) || settings.cleanupPeriodDays;
+  if (Number.isInteger(cleanupDays) && cleanupDays >= 1) pruneSessions(root, cleanupDays, { keep: keepSessionIds.filter(Boolean) }).catch(() => {});
   for (const [key, value] of Object.entries(settings.env || {})) process.env[key] = value;
   if (settings.apiKeyHelper && !process.env.OASIS_API_KEY_HELPER) process.env.OASIS_API_KEY_HELPER = settings.apiKeyHelper;
   if (settings.customHeadersHelper && !process.env.OASIS_CUSTOM_HEADERS_HELPER) process.env.OASIS_CUSTOM_HEADERS_HELPER = settings.customHeadersHelper;
@@ -3016,7 +3034,7 @@ async function main() {
     if (!headless.jsonSchema || typeof headless.jsonSchema !== 'object') throw new Error('--json-schema must be a JSON object.');
     if (!headless.enabled) throw new Error('--json-schema works with -p (headless mode).');
   }
-  await applySettingsPolicy(workspace, autoApprove);
+  await applySettingsPolicy(workspace, autoApprove, [persistence && persistence.resumeId, SESSION_OPTIONS.sessionId]);
   if (SESSION_OPTIONS.exec !== undefined) {
     if (SESSION_OPTIONS.restricted) throw new Error('--exec is not available in --restricted mode.');
     const { startExecJob } = await import('./background-sessions.mjs');

@@ -493,6 +493,7 @@ More Claude Code commands:
 
 - `/diff [PATH] [--stat]` shows uncommitted changes (against `HEAD`) and untracked files.
 - `/autocompact PERCENT|off|reset` moves the auto-compaction trigger for this session; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (or `OASIS_AUTOCOMPACT_PCT`) sets it for every session. Subagents can compact at their own point: `"subagentAutoCompactPercent": 40` in settings or `OASIS_SUBAGENT_AUTOCOMPACT_PCT=40` (0 turns it off for subagents), and `"subagentEffort": "low"` (or `OASIS_SUBAGENT_EFFORT`) runs them at a different effort than the main session.
+- Saved chats pile up over time. `oasis sessions prune --older-than 30` lists chats unused for that many days and deletes them after you confirm. For automatic cleanup set `"cleanupPeriodDays": 30` in settings (or `OASIS_CLEANUP_PERIOD_DAYS=30`); it is off by default, and the chat you are resuming is never removed.
 - `/reload-plugins` and `/reload-skills` rebuild the session from current settings, plugins, skills, agents, hooks and MCP servers without losing the conversation (running background commands are stopped).
 - `/list-agents` (alias `/peers`) lists running subagents, teams and background processes.
 - `/statusline [what to show]` has the agent write and register a status line script; `/update-config DESCRIPTION` has it edit the right `settings.json`.
