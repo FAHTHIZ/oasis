@@ -43,6 +43,7 @@ export const BUILTIN_COMMANDS = {
   'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id])',
+  routing: 'Route clearly easy read-only tasks to a cheaper model (/routing easy MODEL, strong MODEL, on|off|status|reset)',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
@@ -150,15 +151,33 @@ function formatNumber(value) {
 }
 
 export function createUsageTracker() {
-  return { inputTokens: 0, outputTokens: 0, totalTokens: 0, requests: 0, turns: 0 };
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    requests: 0,
+    turns: 0,
+    costUSD: 0,
+    costKnown: true,
+    costRequests: 0,
+    routingTasks: 0,
+    routingSavingsUSD: 0
+  };
 }
 
 export function recordUsage(tracker, usage = {}) {
   tracker.inputTokens += Number(usage.inputTokens || 0);
   tracker.outputTokens += Number(usage.outputTokens || 0);
   tracker.totalTokens += Number(usage.totalTokens || 0);
-  if (usage.phase === undefined) tracker.requests += 1;
+  if (usage.phase === undefined) {
+    tracker.requests += 1;
+    tracker.costRequests = (tracker.costRequests || 0) + 1;
+    if (usage.costKnown === false) tracker.costKnown = false;
+    else tracker.costUSD = Number(tracker.costUSD || 0) + Number(usage.costUsd || 0);
+  }
 }
+
+
 
 export async function runBuiltinCommand(name, argument, state) {
   if (Object.hasOwn(COMMAND_ALIASES, name) && !Object.hasOwn(BUILTIN_COMMANDS, name)) name = COMMAND_ALIASES[name];
@@ -479,293 +498,70 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'cost': {
       const u = usage || createUsageTracker();
-      const spent = session && typeof session.costUsd === 'number' ? session.costUsd : (u.costUsd || 0);
       const { formatUsd, priceFor } = await import('./pricing.mjs');
       const model = session && session.config && session.config.model || '';
       const priced = priceFor(model, { config: session && session.config || {}, overrides: session && session.pricing || {} });
-      const money = priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.' : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
-      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money };
+      const hasTrackedRequests = Number(u.costRequests || 0) > 0;
+      const trackingUnknown = hasTrackedRequests && u.costKnown === false;
+      const trackedCost = hasTrackedRequests && !trackingUnknown;
+      const spent = trackedCost ? u.costUSD : (session && typeof session.costUsd === 'number' ? session.costUsd : 0);
+      const money = trackingUnknown
+        ? ' Estimated cost: unknown (one or more requests used a model without configured pricing).'
+        : trackedCost
+          ? ' Estimated cost: ' + formatUsd(spent) + (priced && priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
+          : priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
+            : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
+      const routingNote = Number(u.routingTasks || 0) > 0
+        ? (u.routingSavingsKnown === false
+          ? ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); net savings are unknown because at least one model price is unavailable.'
+          : ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); estimated net savings versus the strong model: ' + formatUsd(u.routingSavingsUSD || 0) + '.')
+        : '';
+      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money + routingNote };
     }
-    case 'model': {
-      if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID or an alias (opus, sonnet, haiku, fable, best, opusplan) to switch for this session, /model default to reset.' };
-      // PreModelSwitch hooks can allow, deny, or ask; PostModelSwitch adds context for the next request.
-      if (session && session.availableModels) {
-        const { modelAllowed, modelRestrictionMessage } = await import('./model-aliases.mjs');
-        if (!modelAllowed(argument, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) return { output: modelRestrictionMessage(argument, session.availableModels) };
+
+    case 'routing': {
+      if (!session) return { output: 'Start a provider session before configuring model routing.' };
+      const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      const action = String(words[0] || 'status').toLowerCase();
+      const current = { enabled: false, easyModel: '', strongModel: '', ...(session.settings && session.settings.modelRouting || {}) };
+      const describe = (value) => value.enabled && value.easyModel
+        ? 'Automatic routing is on. Clearly read-only requests use ' + value.easyModel + '; hard, ambiguous, and change requests use ' + (value.strongModel || session.config.model) + '.'
+        : value.easyModel
+          ? 'Automatic model routing is off. Easy model: ' + value.easyModel + '; strong model: ' + (value.strongModel || session.config.model) + '. Run /routing on to enable it.'
+          : 'Automatic model routing is off. Current model: ' + session.config.model + '.';
+      if (action === 'status') return { output: describe(current) + ' Configure with /routing easy MODEL and /routing on.' };
+      if (action === 'off' || action === 'disable') {
+        current.enabled = false;
+      } else if (action === 'on' || action === 'enable') {
+        if (!current.easyModel) return { output: 'Set a cheaper model first with /routing easy MODEL. The current session model remains the strong-model default.' };
+        current.enabled = true;
+      } else if (action === 'easy' || action === 'strong') {
+        const model = String(words.slice(1).join(' ') || '').trim();
+        if (!model || model.length > 200 || /[\r\n\0]/.test(model)) return { output: 'Usage: /routing ' + action + ' MODEL_ID' };
+        if (session.availableModels) {
+          const { modelAllowed, modelRestrictionMessage } = await import('./model-aliases.mjs');
+          if (!modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) {
+            return { output: modelRestrictionMessage(model, session.availableModels) };
+          }
+        }
+        if (action === 'easy') current.easyModel = model;
+        else current.strongModel = model;
+      } else if (action === 'reset') {
+        current.enabled = false;
+        current.easyModel = '';
+        current.strongModel = '';
+      } else {
+        return { output: 'Usage: /routing [status|easy MODEL|strong MODEL|on|off|reset]' };
       }
-      const previous = session ? session.config.model : null;
-      if (session && hasHooks(session.hooks, 'PreModelSwitch')) {
-        const pre = await runHooks('PreModelSwitch', { session_id: session.sessionId || 'unsaved', model: argument, previous_model: previous, source: 'slash_command' }, hookOptions(session, env));
-        if (pre.blocked || pre.permissionDecision === 'deny') return { output: 'A PreModelSwitch hook blocked switching to ' + argument + ': ' + (pre.reason || 'no reason given') };
-        if (pre.permissionDecision === 'ask' && typeof state.confirm === 'function' && !(await state.confirm('A hook asks you to confirm switching to ' + argument + '. Switch?'))) return { output: 'Model switch cancelled.' };
-      }
-      if (argument.toLowerCase() === 'default' && session && session.initialModel && session.initialModel !== 'default') {
-        sessionOptions.model = null;
-        session.config = { ...session.config, model: session.initialModel };
-        return { output: 'Model reset to the configured default, ' + session.initialModel + '.' };
-      }
-      sessionOptions.model = argument;
-      if (session) session.config = { ...session.config, model: argument };
-      if (session && hasHooks(session.hooks, 'PostModelSwitch')) {
-        const post = await runHooks('PostModelSwitch', { session_id: session.sessionId || 'unsaved', model: argument, previous_model: previous, source: 'slash_command' }, hookOptions(session, env)).catch(() => null);
-        if (post && post.additionalContext.length) (session.asyncHookFeedback ||= []).push('PostModelSwitch hook: ' + post.additionalContext.join('\n'));
-      }
-      return { output: 'Model for this session set to ' + argument + '.' };
-    }
-    case 'mode': {
-      const current = session ? session.permissions.mode : (sessionOptions.permissionMode || 'default');
-      if (!argument || argument === 'log') {
-        const state = session && session.autoMode;
-        const log = state && state.log.length ? '\nRecent auto mode decisions:\n' + state.log.slice(-10).map((item) => '  ' + item.decision + ' ' + item.tool + (item.reason ? ': ' + item.reason : '')).join('\n') : '';
-        return { output: 'Permission mode: ' + current + '. Options: ' + PERMISSION_MODES.join(', ') + '.' + log };
-      }
-      const normalizedMode = normalizePermissionMode(argument);
-      if (!normalizedMode) return { output: 'Unknown mode. Options: ' + PERMISSION_MODES.join(', ') + '. Aliases: manual, accept-edits.' };
-      if (normalizedMode === 'bypassPermissions' && (sessionOptions.disableBypass || (session && session.settings && session.settings.permissions && session.settings.permissions.disableBypassPermissionsMode))) return { output: 'bypassPermissions mode is disabled by settings (permissions.disableBypassPermissionsMode).' };
-      sessionOptions.permissionMode = normalizedMode;
-      if (session) {
-        if (normalizedMode === 'plan' && session.permissions.mode !== 'plan') session.prePlanMode = session.permissions.mode;
-        session.permissions.setMode(normalizedMode);
-      }
-      if (normalizedMode === 'auto' && session && session.autoMode) { session.autoMode.blockedInRow = 0; session.autoMode.blockedTotal = 0; }
-      const aliasNote = normalizedMode !== String(argument || '').trim() ? ' (alias for ' + normalizedMode + ')' : '';
-      return { output: 'Permission mode set to ' + normalizedMode + aliasNote + '.' + (normalizedMode === 'auto' ? ' A classifier model now approves routine actions and blocks risky ones; anything unclear still comes to you. /mode log shows its decisions.' : '') };
-    }
-    case 'permissions': {
-      const described = session ? session.permissions.describe() : null;
-      const settings = await loadSettings(root, { env });
-      const view = described || { mode: sessionOptions.permissionMode || settings.permissions.defaultMode, allow: settings.permissions.allow, ask: settings.permissions.ask, deny: settings.permissions.deny, session: [] };
-      const lines = ['Mode: ' + view.mode + '   Workspace trusted: ' + (settings.trusted ? 'yes' : 'no (run oasis trust)')];
-      for (const kind of ['allow', 'ask', 'deny', 'session']) lines.push('  ' + kind.padEnd(8) + (view[kind].length ? view[kind].join(', ') : '(none)'));
-      if (session && session.sandbox) lines.push('Sandbox: ' + (session.sandbox.enabled ? (session.sandbox.available ? session.sandbox.kind + (session.sandbox.network ? ', network on' : ', network off') : 'unavailable - ' + session.sandbox.reason) : 'off'));
-      lines.push('Add rules with: oasis permissions add allow "Bash(npm test:*)"');
-      return { output: lines.join('\n') };
-    }
-    case 'agents': {
-      const agents = session && session.agents || await loadAgentDefinitions(root, { env }).catch(() => ({ ...BUILTIN_AGENTS }));
-      return { output: Object.values(agents).map((agent) => agent.name + ' [' + agent.source + ']' + (agent.tools ? ' tools: ' + agent.tools.join(', ') : '') + '\n    ' + agent.description).join('\n') + '\nAdd your own in .oasis/agents/NAME.md or .claude/agents/NAME.md.' };
-    }
-    case 'hooks': {
-      const hooks = session ? session.hooks : (await loadSettings(root, { env })).hooks;
-      const entries = Object.entries(hooks || {});
-      if (!entries.length) return { output: 'No hooks configured. Add them under "hooks" in .oasis/settings.json or .claude/settings.json.' };
-      const lines = [];
-      for (const [event, groups] of entries) for (const group of groups) for (const hook of group.hooks) lines.push(event + (group.matcher ? ' [' + group.matcher + ']' : '') + ': ' + describeHook(hook));
-      return { output: lines.join('\n') };
-    }
-    case 'notify': {
-      if (!session) return { output: 'Start a session and complete one turn before sending cross-session messages.' };
-      const match = String(argument || '').trim().match(/^(\S+)\s+([\s\S]+)$/);
-      if (!match) return { output: 'Usage: /notify SESSION-ID-OR-NAME Message text. Messages are data only and never execute commands in the recipient session.' };
-      const { sendSessionMessage } = await import('./session-messaging.mjs');
-      const queued = await sendSessionMessage(session, match[1], match[2], { env });
-      return { output: 'Message ' + queued.id + ' queued for session ' + queued.targetSessionId + (queued.queued ? ' (recipient is busy; delivery waits for its next idle boundary).' : '.') + ' It will not run commands.' };
-    }
-    case 'inbox': {
-      if (!session) return { output: 'Start a session before opening its inbox.' };
-      const { readSessionInbox, listSessionInbox, updateInboxMessage, formatSessionMessage } = await import('./session-messaging.mjs');
-      const input = String(argument || '').trim().split(/\s+/).filter(Boolean);
-      const action = (input[0] || 'list').toLowerCase();
-      if (action === 'read' && input[1]) {
-        const message = await updateInboxMessage(session, input[1], 'read', { env });
-        return { output: 'Marked message ' + message.id + ' as read.\\n\\n' + formatSessionMessage(message) };
-      }
-      if (action === 'dismiss' && input[1]) {
-        await updateInboxMessage(session, input[1], 'dismiss', { env });
-        return { output: 'Dismissed inbox message ' + input[1] + '.' };
-      }
-      if (!['list', ''].includes(action) || input.length > 1) return { output: 'Usage: /inbox [list|read MESSAGE-ID|dismiss MESSAGE-ID]' };
-      await readSessionInbox(session, { env });
-      const messages = await listSessionInbox(session, { env });
-      if (!messages.length) return { output: 'Inbox is empty.' };
-      return { output: messages.map((message) => '[' + message.id + '] ' + (message.read ? 'READ' : message.delivered ? 'DELIVERED / UNREAD' : 'QUEUED') + ' | ' + message.priority + ' | ' + (message.sourceName || message.sourceSessionId) + '\\n' + formatSessionMessage(message)).join('\\n\\n---\\n\\n') };
-    }
-    case 'artifact': {
-      const input = String(argument || '').trim();
-      const parts = input.split(/\s+/).filter(Boolean);
-      if (!input || /^list$/i.test(input)) {
-        const { listArtifacts } = await import('./artifacts.mjs');
-        const items = await listArtifacts(root, { env });
-        return { output: items.length ? 'Local investigation artifacts:\n' + items.map((item) => '  ' + item.slug + ' — ' + (item.goal || '(goal not set)') + ' — updated ' + item.updatedAt).join('\n') : 'No investigation artifacts for this workspace. Create one with /artifact NAME.' };
-      }
-      const action=(parts[0]||'').toLowerCase();
-      if(action==='add'&&parts.length>=4){
-        const {recordArtifactEvent}=await import('./artifacts.mjs');
-        const typeMap={goal:'goal',timeline:'timeline',command:'command',file:'file',test:'test',error:'error',hypothesis:'hypothesis',rollback:'rollback'};
-        const type=typeMap[(parts[2]||'').toLowerCase()];
-        if(!type)return {output:'Unsupported artifact type. Use goal, timeline, command, file, test, error, hypothesis, or rollback.'};
-        const details=input.split(/\s+/).slice(3).join(' ');
-        const {artifact,htmlPath}=await recordArtifactEvent(root,parts[1],type,details,{env});
-        return {output:'Recorded '+type+' in '+artifact.slug+'. Local page: '+htmlPath};
-      }
-      if(action==='goal'&&parts.length>=3){
-        const {recordArtifactEvent}=await import('./artifacts.mjs');
-        const goal=input.split(/\s+/).slice(2).join(' ');
-        const {artifact,htmlPath}=await recordArtifactEvent(root,parts[1],'goal',goal,{env});
-        return {output:'Updated goal for '+artifact.slug+'. Local page: '+htmlPath};
-      }
-      if(action==='open'&&parts[1]){
-        const {readArtifact}=await import('./artifacts.mjs');
-        const found=await readArtifact(root,parts[1],{env});
-        return found?{output:'Local investigation page: '+found.fileUrl+'\nRaw state: '+found.dataPath}:{output:'Artifact not found. Use /artifact list or /artifact NAME.'};
-      }
-      if(action==='delete'&&parts[1]){
-        const {deleteArtifact}=await import('./artifacts.mjs');
-        await deleteArtifact(root,parts[1],{env});
-        if(session&&session.activeArtifact===parts[1])session.activeArtifact=null;
-        return {output:'Artifact '+parts[1]+' deleted from local storage.'};
-      }
-      if(action==='stop'&&parts[1]){
-        if(session&&session.activeArtifact===parts[1])session.activeArtifact=null;
-        return {output:'Automatic capture stopped for '+parts[1]+'. The stored artifact remains on this device.'};
-      }
-      const name=parts[0];
-      const goal=parts.slice(1).join(' ');
-      const {createArtifact}=await import('./artifacts.mjs');
-      const created=await createArtifact(root,name,{env,goal:goal||undefined});
-      if(session)session.activeArtifact=created.artifact.slug;
-      return {output:'Local investigation artifact '+created.artifact.slug+' is active. Page: '+created.fileUrl+'\nGoal: '+(created.artifact.goal||'Use /artifact goal '+created.artifact.slug+' YOUR GOAL.')+'\nAutomatic task timeline, commands, changed files, tests, and errors will be recorded for this session. Use /artifact add '+created.artifact.slug+' TYPE DETAILS, /artifact open '+created.artifact.slug+', or /artifact stop '+created.artifact.slug+'. Data stays in the local Oasis config directory.'};
-    }
-    case 'style':
-    case 'output-style': {
-      const styles = await loadOutputStyles(root, { env });
-      const current = session && session.outputStyle || sessionOptions.outputStyle || 'default';
-      if (!argument) return { output: ['Output styles (current: ' + current + '):', ...Object.values(styles).map((style) => (style.name === current ? '* ' : '  ') + style.name.padEnd(14) + ' ' + style.description + ' [' + style.source + ']'), 'Switch with /output-style NAME. Make it the default with "outputStyle" in .oasis/settings.json. Add your own in .oasis/output-styles/NAME.md.'].join('\n') };
-      const style = styles[argument.toLowerCase()];
-      if (!style) return { output: 'Unknown output style ' + argument + '. Run /output-style to list them.' };
-      sessionOptions.outputStyle = style.name;
-      if (session) applyOutputStyle(session, style);
-      return { output: 'Output style set to ' + style.name + '.' };
-    }
-    case 'add-dir': {
-      if (!argument) {
-        const dirs = session && session.additionalDirectories || [];
-        return { output: dirs.length ? 'Additional directories:\n' + dirs.map((dir) => '  ' + dir).join('\n') : 'No additional directories. Add one with /add-dir PATH.' };
-      }
-      const wanted = [...(session && session.additionalDirectories || []), path.resolve(root, argument)];
-      const result = await setAdditionalDirectories(root, wanted);
-      if (result.rejected.length) return { output: 'Could not add ' + argument + ': ' + result.rejected[0].error + '.' };
-      sessionOptions.addDirs = [...new Set([...(sessionOptions.addDirs || []), ...result.accepted])];
-      if (session) {
-        session.additionalDirectories = result.accepted;
-        if (session.sandbox && Array.isArray(session.sandbox.writable)) session.sandbox.writable = [root, ...result.accepted];
-        const note = '\n\nAdditional working directory added: ' + result.accepted.at(-1) + ' (you may read and edit files there).';
-        session.baseSystemPrompt = (session.baseSystemPrompt || session.messages[0].content) + note;
-        if (session.messages[0] && session.messages[0].role === 'system') session.messages[0].content += note;
-      }
-      if (session && hasHooks(session.hooks, 'DirectoryAdded')) {
-        // The directory is already added; the hook's systemMessage becomes context next turn.
-        runHooks('DirectoryAdded', { session_id: session.sessionId || 'unsaved', directory: result.accepted.at(-1), source: 'slash_command' }, hookOptions(session, env))
-          .then((added) => { const notes = [...added.messages, ...added.additionalContext]; if (notes.length) (session.asyncHookFeedback ||= []).push('DirectoryAdded hook: ' + notes.join('\n')); }).catch(() => {});
-      }
-      return { output: 'Added ' + result.accepted.at(-1) + ' for this session.' };
-    }
-    case 'ide': {
-      const { discoverIde, attachIde, listIdeLocks } = await import('./ide.mjs');
-      if (session && session.ide && argument.trim() !== 'reconnect') return { output: 'Connected to ' + session.ide.ideName + ' (port ' + session.ide.port + '). Selections are shared with each prompt; edit approvals open as diffs there.' };
-      const client = await discoverIde(root, env);
-      if (client && session) { attachIde(session, client); return { output: 'Connected to ' + client.ideName + '. Selections are now shared and edit approvals open as diffs in the IDE.' }; }
-      if (client) return { output: client.ideName + ' is available; it connects when the session starts.' };
-      const locks = await listIdeLocks(env);
-      return { output: 'No IDE bridge found for this folder.' + (locks.length ? ' Running bridges: ' + locks.map((lock) => (lock.ideName || 'IDE') + ' [' + (lock.workspaceFolders || []).join(', ') + ']').join('; ') + '.' : '') + ' Install the extension with: oasis ide install, then open this folder in VS Code.' };
-    }
-    case 'plugin-package': {
-      const { parseNativePluginPackageArguments, validateNativePluginPackage, installNativePlugin, uninstallNativePlugin, listNativePlugins } = await import('./native-plugins.mjs');
-      let parsed;
-      try { parsed = parseNativePluginPackageArguments(argument, root); } catch (error) { return { output: error.message }; }
-      const [target] = parsed.positionals;
-      if (parsed.action === 'list') {
-        const items = await listNativePlugins({ env });
-        return { output: items.length ? items.map(item => item.name + '@' + item.version + '\n  granted: ' + (item.grantedPermissions.join(', ') || 'none') + '\n  requested: ' + (item.requestedPermissions.join(', ') || 'none')).join('\n') : 'No native Oasis plugins installed.' };
-      }
-      if (parsed.action === 'validate') {
-        const item = await validateNativePluginPackage(target);
-        return { output: 'Valid native plugin package: ' + item.name + '@' + item.version + '\n  requested permissions: ' + item.requestedPermissions.join(', ') + '\n  commands: ' + item.components.commands.join(', ') + '\n  skills: ' + item.components.skills.join(', ') + '\n  agents: ' + item.components.agents.join(', ') + '\n  hooks: ' + item.components.hooks + '\n  hook files: ' + item.components.hookFiles.join(', ') + '\n  MCP servers: ' + item.components.mcpServers.join(', ') + '\n  MCP files: ' + item.components.mcpFiles.join(', ') };
-      }
-      if (parsed.action === 'install' || parsed.action === 'update') {
-        const result = await installNativePlugin(target, { env, grantedPermissions: parsed.grantedPermissions, update: parsed.action === 'update', acceptPermissionDiff: parsed.acceptPermissionDiff });
-        if (result.needsApproval) return { output: ['Permission changes require explicit confirmation before updating ' + result.id + '.', 'Version: ' + result.fromVersion + ' -> ' + result.toVersion, 'Granted permissions added: ' + (result.permissionDiff.added.join(', ') || 'none'), 'Granted permissions removed: ' + (result.permissionDiff.removed.join(', ') || 'none'), 'Newly requested: ' + (result.permissionDiff.requestedAdded.join(', ') || 'none'), 'No longer requested: ' + (result.permissionDiff.requestedRemoved.join(', ') || 'none'), 'Review the package, then repeat the update with --grant ' + result.grants.join(',') + ' --accept-permission-diff. No files were changed.'].join('\n') };
-        return { output: (parsed.action === 'install' ? 'Installed' : 'Updated') + ' and enabled ' + result.id + '@' + result.version + '.\n  granted: ' + result.grantedPermissions.join(', ') + '\n  commands: ' + result.components.commands.join(', ') + '\n  skills: ' + result.components.skills.join(', ') + '\n  agents: ' + result.components.agents.join(', ') + '\n  hooks: ' + (result.components.hooks || 'not granted') + '\n  hook files: ' + result.components.hookFiles.join(', ') + '\n  MCP: ' + (result.components.mcpServers || 'not granted') + '\n  MCP files: ' + result.components.mcpFiles.join(', ') + '\nStart a new session to load the plugin.' };
-      }
-      if (parsed.action === 'uninstall' || parsed.action === 'remove') {
-        if (!target) return { output: 'Usage: /plugin-package uninstall NAME' };
-        const result = await uninstallNativePlugin(target, { env });
-        if (session && session.toolDefinitions) session.pluginReloadRequired = true;
-        return { output: 'Uninstalled native plugin ' + result.name + '. Open sessions already running its hooks/MCP clients should be closed before continuing.' };
-      }
-      return { output: 'Usage: /plugin-package [list|validate SOURCE|install SOURCE --grant CAPABILITIES|update SOURCE --grant CAPABILITIES --accept-permission-diff|uninstall NAME]. SOURCE can be a local folder or HTTPS/SSH/file Git URL, optionally followed by #branch-or-tag.' };
-    }
-    case 'plugin':
-    case 'plugins': {
-      const { pluginCli } = await import('./claude-plugins.mjs');
-      let text = '';
-      const args = argument.trim() ? argument.trim().split(/\s+/) : ['list'];
-      await pluginCli(root, args, { env, write: (chunk) => { text += chunk; } });
-      return { output: text.trim() + (/^(install|i|uninstall|remove|enable|disable|update)$/.test(args[0]) ? '\nRun /clear or start a new session to load the change.' : '') };
-    }
-    case 'mcp': {
-      const login = argument.match(/^(login|logout)\s+([A-Za-z0-9_-]+)$/i);
-      if (login && login[1].toLowerCase() === 'login') return { output: 'Starting sign-in for ' + login[2] + '.', mcpLogin: login[2] };
-      if (login) {
-        const { mcpLogout } = await import('./mcp-auth-commands.mjs');
-        return { output: await mcpLogout(root, login[2], { env }) };
-      }
-      const clients = session && session.mcpClients ? [...session.mcpClients.entries()] : [];
-      const failures = session && session.mcpFailures || [];
-      const lines = [];
-      for (const [name, client] of clients) {
-        lines.push(name + ' [' + (client.source || 'user') + ', ' + (client.config && client.config.type === 'http' ? 'http' : 'stdio') + '] ' + (client.tools || []).length + ' tool(s): ' + (client.tools || []).map((tool) => tool.name).join(', '));
-        const resources = (client.resources || []).length + (client.resourceTemplates || []).length;
-        if (resources) lines.push('    resources: ' + resources + ' (mention one as @' + name + ':URI, e.g. @' + name + ':' + ((client.resources || [])[0] || { uri: 'URI' }).uri + ')');
-        for (const prompt of client.prompts || []) lines.push('    /mcp__' + name + '__' + prompt.name + (prompt.arguments && prompt.arguments.length ? ' ' + prompt.arguments.map((arg) => arg.required ? '<' + arg.name + '>' : '[' + arg.name + ']').join(' ') : '') + (prompt.description ? '  ' + String(prompt.description).slice(0, 120) : ''));
-      }
-      for (const failure of failures) lines.push(failure.name + ' - not connected: ' + failure.error);
-      if (session && session.mcpConnecting) lines.push('(more servers still connecting in the background; MCP_CONNECTION_NONBLOCKING is on)');
-      if (!lines.length) return { output: 'No MCP servers connected. Add user servers with oasis mcp add, or project servers in .mcp.json.' };
-      return { output: lines.join('\n') };
-    }
-    case 'audit': {
-      const scope = String(argument || '.').trim() || '.';
-      return {
-        output: 'Starting the bounded read-only audit workflow. Reviewers run in isolated contexts; the final report separates verified and unverified findings. Scope: ' + scope,
-        prompt: [
-          'Run the built-in workflow named "audit" through the workflow tool, with action "run", name "audit", and args set to ' + JSON.stringify(scope) + '.',
-          'Do not replace the workflow with a single-agent review. The workflow runs security, performance, test-coverage, and dependency reviewers in isolated read-only contexts, deduplicates findings, verifies up to four high/critical findings, and bounds the final report.',
-          'Render only the merged report returned by the workflow. Keep verified and unverified findings separate, sort by severity then confidence, include path/line evidence and a concrete fix, and report any failed reviewer as partial coverage. Never present an unverified finding as confirmed.'
-        ].join('\n')
-      };
-    }
-    case 'ultrareview':
-      if (session) session.reportedFindings = undefined;
-      return { output: 'Starting a deep code review of ' + describeReviewTarget('ultra ' + argument) + '.', prompt: reviewPrompt('review', 'ultra ' + argument) };
-    case 'review':
-    case 'security-review': {
-      const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
-      if (custom.has(name)) return null; // A project or user command with this name wins.
-      if (session) session.reportedFindings = undefined; // Each review reports its own findings.
-      return { output: 'Preview: ' + (name === 'review' ? 'review the diff for correctness, security, performance, accessibility, and regression-test gaps' : 'review pending changes for security risks') + '. ' + (name === 'review' && !parseReviewArgs(argument).fix ? 'Read-only; no files will be changed.' : name === 'review' ? 'The explicit --fix option allows focused corrections after findings are reported.' : 'Read-only; no files will be changed.') + ' Target: ' + describeReviewTarget(argument) + '.', prompt: reviewPrompt(name, argument) };
-    }
-    case 'export': {
-      if (!session || session.messages.length <= 1) return { output: 'Nothing to export yet.' };
-      const target = path.resolve(root, argument || 'oasis-conversation-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.md');
-      const relative = path.relative(root, target);
-      if (relative.startsWith('..') || path.isAbsolute(relative)) return { output: 'Export path must be inside the workspace.' };
-      await writeFile(target, conversationMarkdown(session), { flag: 'wx' }).catch((error) => {
-        if (error.code === 'EEXIST') throw new Error(relative + ' already exists; choose another file name.');
-        throw error;
-      });
-      return { output: 'Exported ' + (session.messages.length - 1) + ' messages to ' + relative + '.' };
-    }
-    case 'resume': {
-      const saved = await listSessions(root, { env });
-      if (!argument) {
-        if (!saved.length) return { output: 'No saved sessions for this workspace. Start Oasis with --save (or --continue) to keep conversations.' };
-        return { output: ['Saved sessions (newest first):', ...saved.slice(0, 15).map((item, index) => '  ' + (index + 1) + '. ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages' + (item.model ? '  ' + item.model : '')), 'Resume with /resume ID or /resume NUMBER.'].join('\n') };
-      }
-      // Ids may start with digits, so prefer an id match before treating the argument as a list number.
-      const pick = saved.find((item) => item.id === argument) || (/^\d{1,3}$/.test(argument) ? saved[Number(argument) - 1] : null) || saved.find((item) => item.id.startsWith(argument));
-      if (!pick) return { output: 'No saved session matches ' + argument + '. Run /resume to list them.' };
-      return { output: 'Resuming session ' + pick.id + ' on your next message.', resume: pick.id };
+      const { updateUserSettings } = await import('./settings.mjs');
+      await updateUserSettings((settings) => {
+        if (action === 'reset') delete settings.modelRouting;
+        else settings.modelRouting = current;
+        return settings;
+      }, env);
+      session.settings ||= {};
+      session.settings.modelRouting = action === 'reset' ? { enabled: false, easyModel: '', strongModel: '' } : current;
+      return { output: action === 'reset' ? 'Automatic model routing reset.' : describe(current) + ' Saved to user settings.' };
     }
     case 'usage':
       return await runBuiltinCommand('cost', argument, state);
