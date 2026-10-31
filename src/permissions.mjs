@@ -554,6 +554,9 @@ export function analyzeCommand(command, args = [], depth = 0) {
   if ((base === 'sed' || base === 'gsed') && args.some((a) => /(^|;)\s*e\b|\/e$|\/[gip]*e[gip]*$/.test(a))) {
     return { highRisk: 'sed program can execute commands', effective: { base, args } };
   }
+  if (['taskkill', 'tskill', 'xkill', 'stop-process', 'osascript'].includes(base) || (base === 'fuser' && args.some((a) => /^-\w*k/.test(a)))) {
+    return { highRisk: base + ' can close or kill applications the user has open', effective: { base, args } };
+  }
   if (['kill', 'killall', 'pkill', 'systemctl', 'launchctl', 'service', 'crontab', 'at', 'iptables', 'ufw', 'netsh', 'reg', 'scp', 'rsync', 'ssh'].includes(base)) {
     return { highRisk: base + ' affects processes, services, or remote systems', effective: { base, args } };
   }
