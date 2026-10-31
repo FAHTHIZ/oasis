@@ -24,6 +24,13 @@ export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mj
 
 const MAX_SETTINGS_BYTES = 256 * 1024;
 
+/** A plain language name ("Bengali", "Português (Brasil)") or null. Blocks prompt-like text. */
+export function normalizeLanguage(value) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!text || text.length > 40) return null;
+  return /^[\p{L}\p{M}][\p{L}\p{M} ()'-]*$/u.test(text) ? text : null;
+}
+
 export function userSettingsPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'settings.json');
 }
@@ -233,6 +240,8 @@ export async function loadSettings(root, options = {}) {
     result.permissions.ask.push(...stringList(permissions.ask));
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
+    // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
+    if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
     if (typeof settings.theme === 'string' && settings.theme.trim()) result.theme = settings.theme.trim().slice(0, 120);
     if (typeof settings.agent === 'string' && settings.agent.trim()) { result.agent = settings.agent.trim().toLowerCase(); result.agentSource = scope; }
     // Disabling channels only tightens, so any scope may do it (Claude Code's channelsEnabled policy).

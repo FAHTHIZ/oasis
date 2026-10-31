@@ -5,7 +5,8 @@ import { describeHook, runHooks, hasHooks } from './hooks.mjs';
 import { compactHistoryIfNeeded, hookOptions, undoCompaction } from './agent.mjs';
 import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
-import { loadSettings, PERMISSION_MODES, normalizePermissionMode } from './settings.mjs';
+import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLanguage } from './settings.mjs';
+import { applyReplyLanguage } from './reply-language.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
@@ -58,6 +59,7 @@ export const BUILTIN_COMMANDS = {
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
   style: 'List or switch the active response style (/style [default|concise|explanatory|architect|reviewer])',
+  language: 'Pin the reply language (/language Bengali, /language off)',
   'output-style': 'Legacy alias: list or switch response styles (/output-style NAME)',
   todos: 'Show the current todo list',
   scope: 'Lock file edits to paths for this session: /scope src/** test/** | /scope off',
@@ -205,7 +207,7 @@ export async function runBuiltinCommand(name, argument, state) {
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
         { title: 'Working', commands: ['clear', 'compact', 'diagnostics', 'audit', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
-        { title: 'Settings', commands: ['model', 'effort', 'config', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
+        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
       const used = new Set();
       const lines = [];
@@ -1348,6 +1350,16 @@ export async function runBuiltinCommand(name, argument, state) {
       session.sandbox = resolveSandbox({ sandbox: { enabled, network, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
       if (session.sandbox.enabled) session.sandbox.writable = writable;
       return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
+    }
+    case 'language': {
+      const requested = String(argument || '').trim();
+      const current = session && (session.language || (session.settings && session.settings.language)) || null;
+      if (!requested) return { output: 'Reply language: ' + (current || 'not pinned (the model picks; usually the language you write in)') + '.\nUsage: /language NAME (for example /language Bengali) | /language off. Set "language" in settings or OASIS_LANGUAGE to keep it for every session.' };
+      const language = /^(?:off|none|auto|default)$/i.test(requested) ? null : normalizeLanguage(requested);
+      if (requested && language === null && !/^(?:off|none|auto|default)$/i.test(requested)) return { output: 'Use a plain language name such as English, Bengali or Português (Brasil).' };
+      if (!session) return { output: 'Reply language for the next session: ' + (language || 'not pinned') + '.' };
+      applyReplyLanguage(session, language);
+      return { output: language ? 'Replies will be written in ' + language + ' for this session.' : 'Reply language is no longer pinned for this session.' };
     }
     case 'style':
     case 'output-style': {
