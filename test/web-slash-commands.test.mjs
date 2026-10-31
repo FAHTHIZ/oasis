@@ -24,6 +24,8 @@ test('the browser slash menu lists built-ins, custom commands and skills', async
   assert.equal(byName.help.kind, 'builtin');
   assert.equal(byName.language.kind, 'builtin');
   assert.equal(byName.resume, undefined, 'terminal-only commands are hidden');
+  assert.equal(byName.copy, undefined);
+  assert.equal(byName.exit, undefined);
   assert.equal(byName.ship.kind, 'command');
   assert.match(byName.ship.description, /Bump the version/);
   assert.equal(byName['notes-writer'].kind, 'skill');
