@@ -1069,12 +1069,12 @@ export async function runEvalCommand(args = [], options = {}) {
   if (config.negativeControl) {
     const control = await runEvalNegativeControl({ tasksDir, env, snapshotsDir: options.snapshotsDir });
     const pct = (control.passRate * 100).toFixed(2);
-    output.write('Evaluation negative control: ' + (control.ok ? 'PASS' : 'FAIL') + '\\n');
-    output.write('Unchanged snapshots accepted: ' + control.noOpPasses + '/' + control.total + ' (' + pct + '%); required: below ' + (control.threshold * 100).toFixed(0) + '%.\\n');
+    output.write('Evaluation negative control: ' + (control.ok ? 'PASS' : 'FAIL') + '\n');
+    output.write('Unchanged snapshots accepted: ' + control.noOpPasses + '/' + control.total + ' (' + pct + '%); required: below ' + (control.threshold * 100).toFixed(0) + '%.\n');
     if (!control.fixturesValid) {
-      output.write('Fixture validation failed. The reference-patch checks or fixture structure must be repaired before this control can pass.\\n');
+      output.write('Fixture validation failed. The reference-patch checks or fixture structure must be repaired before this control can pass.\n');
       for (const result of control.results.filter((item) => !item.ok)) {
-        output.write('  FAIL ' + result.id + ': ' + (result.error || 'invalid fixture') + '\\n');
+        output.write('  FAIL ' + result.id + ': ' + (result.error || 'invalid fixture') + '\n');
       }
     }
     return { ok: control.ok, negativeControl: control };
