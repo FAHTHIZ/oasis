@@ -1,9 +1,9 @@
 # OASIS Implementation Audit and External Capability Benchmark
 
-**Audit date:** October 29, 2026  
-**OASIS code/test revision inspected:** [349f5add40b363c9ac384d058e11e55b43b8097a](https://github.com/FAHTHIZ/oasis/commit/349f5add40b363c9ac384d058e11e55b43b8097a); verified by [Quality Checks run 40879705797](https://github.com/FAHTHIZ/oasis/actions/runs/40879705797) and [publishing validation run 40879705789](https://github.com/FAHTHIZ/oasis/actions/runs/40879705789)  
-**Claude Code release artifact inspected:** [@anthropic-ai/claude-code 2.1.312](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/)  
-**Method:** inspect OASIS source, registered tools, tests, task fixtures and CI configuration; compare these with files shipped in Claude Code's official public release and official public repository. This is a code-evidence audit, not a claim of measured product parity.
+**Updated:** October 31, 2026  
+**OASIS source snapshot reviewed:** [508a0a68d4760f07c22a4037eeb26a6d83c7216f](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f)  
+**Claude Code evidence:** current official documentation pages retrieved on October 31, 2026 (linked in the comparison below).  
+**Method:** inspect current OASIS source, registered tools, tests, fixtures, product-readiness records and CI configuration; compare them with current official Claude Code documentation. Claude Code's private runtime remains unavailable for a line-by-line source audit. This is a source-and-documentation comparison, not a measured head-to-head benchmark or a claim of parity.
 
 ## Executive verdict: OASIS on its own merits
 
@@ -113,6 +113,45 @@ Claude Code's official repository exposes public plugin and example material, an
 | Product-specific tools and hosted features | Some same-named tools not present in the built-in OASIS registry reviewed | SDK schema includes Projects, ClaudeDesign, Artifacts, RemoteTrigger and notification-related contracts | Potential feature-level gaps; verify user need and implement deliberately rather than adding empty stubs |
 | Proven coding performance | 33 deterministic regression/eval tasks in manifest | No comparable result inferred from tool schemas | Not established for either side by this audit |
 
+## Current Claude Code capability comparison — October 31, 2026
+
+The official docs now describe more than a single terminal coding loop. They document custom and built-in subagents, background sessions and an Agent view, agent teams, a broad hook lifecycle, granular permission modes, MCP resources/prompts and multiple transports, skill/plugin marketplaces, and local/cloud/SSH/WSL desktop workflows. The table below compares those documented behaviors with what is present in OASIS; it does not infer private implementation details or assume that two similarly named features behave identically.
+
+| Capability | OASIS on the inspected main snapshot | Claude Code's current public documentation | Assessment |
+| --- | --- | --- | --- |
+| Coding loop, file tools and command execution | Source-backed multi-step agent loop, file/Git/command tools, approvals, snapshots, cancellation, context compaction and explicit post-edit diff/check gate. | Interactive CLI, Bash and file tools, task backgrounding, session controls and diff review are documented. | **Broad architectural overlap.** Relative patch quality, instruction-following and success rates remain unmeasured. |
+| Subagents and task decomposition | OASIS has custom subagents, bounded worker pools, specialist review, team/task tools, task dependencies and inter-session messaging modules. | Built-in/custom subagents can use independent context, tools, permissions, skills and hooks; agent teams add shared dependency tasks and direct teammate messaging. | **Strong overlap in concepts.** OASIS needs more restart-safe coordination and deeper behavioral testing; exact delegation quality is unknown. |
+| Long-running background agents | OASIS persists run events and displays worker/team states in an authenticated monitor. It can mark workers and approvals interrupted after a runtime restart and reopen an eligible saved parent chat. It does not restore the original live worker processes or pending approvals, and does not yet provide a restart-safe pause/resume state machine. | Agent view documents concurrent background sessions, activity summaries, peeking/steering, stop/respawn/delete, resume, and session persistence across machine sleep, updates and supervisor restarts. | **Largest product-level gap.** OASIS has observability and recovery records, but not Claude's documented durable background-session lifecycle. |
+| Team messaging and shared task state | OASIS has session/team task state, worker messaging and task checkpoints. Worker registry/leases are still session-scoped; stale lease reconciliation and live-process recovery are incomplete. | Agent teams document directly addressed messages, shared file-backed task lists, dependency blocking, self-claiming and team monitoring. Teams also have documented limits (one team/session, no nested teams and no in-process teammate session resume). | **Partial-to-strong overlap.** Improve persistence and recovery instead of creating another team API. |
+| Hooks and lifecycle automation | OASIS has a hook runtime and session, turn, tool and task-related events, including blocking/continuation behavior and bounded execution. | Official hooks docs enumerate session, prompt, tool, subagent, teammate, task, compaction, model-switch, file and configuration events; command, prompt and agent handlers; matchers; async execution; and managed trust controls. | **Broad overlap, not event-for-event parity.** Compare exact event coverage, failure defaults, timeout behavior, plugin/skill scopes and enterprise policy. |
+| Permissions and sandbox | OASIS has deny/ask/allow rules, command-chain analysis, approval handling and multiple modes. OS sandboxing is optional, disabled by default, currently targeted at Linux/macOS and is not full filesystem-read isolation; Windows OS isolation is not implemented. | Claude documents default, accept-edits, plan, auto, dontAsk and bypass modes, ordered rules, managed policies and OS sandboxing for supported environments. Native Windows sandboxing is also limited; its docs call out WSL2/Linux/macOS paths. | **Meaningful gap in default enforcement and managed policy.** OASIS should not claim equivalent isolation. |
+| MCP integrations | OASIS has MCP client/server integration, OAuth discovery and token storage, transport lifecycle handling, tool schema support and client-side protocol features. | Claude documents stdio, HTTP/Streamable HTTP, deprecated SSE and remote WebSocket transports; scoped server configuration, OAuth/static/dynamic headers, tool approval, resources and prompt invocation. | **MCP support is present, but full transport, scope, auth-helper, resource/prompt and policy parity needs feature-by-feature verification.** |
+| Skills and plugins | OASIS supports skill loading and plugin/marketplace adapters, including some Claude-format interoperability. Compatibility is deliberately feature-specific. | Claude documents Markdown skills, automatic/invoked loading, tool allow/deny frontmatter, plugins bundling skills, agents, hooks, MCP and mods, plus user/project/local marketplaces and managed allowlists. | **Strong ecosystem overlap, incomplete compatibility claim.** Keep adapters separable and test real manifests/components rather than claiming drop-in parity. |
+| Desktop and remote environments | OASIS offers CLI, local authenticated browser workspace, VS Code-family integration and Electron packaging. Browser/CLI data coordination is incomplete; cloud sessions, SSH/WSL remote execution and native Android APK are not shipped. | Claude Desktop docs describe parallel/split sessions, git worktrees, integrated terminal, diff feedback, connectors, local/SSH/cloud/WSL environments and remote background work; computer use is separately gated. | **Distribution/workspace gap.** OASIS is local-first today, not a cloud/remote multi-environment replacement. |
+| Coding performance | The 33-task fixture suite is a regression/smoke harness and is utility-heavy; no authenticated same-model, task-paired Claude Code result is published. | Official feature docs do not provide a directly comparable OASIS-vs-Claude Code benchmark. | **Unknown.** No evidence supports a numeric parity, speed, accuracy or superiority claim. |
+| Release maturity | Package version 0.4.0 and release notes are prepared; installers remain unsigned, automatic desktop updates and provenance are not configured, and clean-machine update/uninstall evidence remains open. | Claude's official distribution has its own product and trust infrastructure; this repo audit does not compare publisher operations or paid account infrastructure. | **OASIS Beta release work remains, not Stable/production certification.** |
+
+### What this means for the roadmap
+
+1. **Close the durable-agent lifecycle gap first.** OASIS already has worker/task/run abstractions and a monitor. The next engineering slice should be explicit run states, durable worker/task identity, idempotent lease recovery, safe cancellation, and a truthful resume flow. A recovered transcript must never be shown as a resumed live worker.
+2. **Prove execution safety on every advertised platform.** Add native Windows process/isolation strategy or keep the limitation prominent; exercise PTY teardown, process-tree kill, path/symlink escape, network denial and secret handling on clean Windows/macOS/Linux environments.
+3. **Raise the benchmark quality.** Expand beyond utility regressions to at least 50 representative pinned-repository tasks, run multiple trials, preserve raw results and publish failures. Use the same model when possible; otherwise distinguish model/provider differences from harness differences.
+4. **Tighten ecosystem compatibility without copying proprietary code.** Prioritize MCP resources/prompts/transports, hook event coverage and plugin manifests only where they support a real OASIS workflow. Avoid empty command stubs or superficial name matching.
+5. **Finish distribution proof.** Keep unsigned status explicit, add signing/provenance and clean-machine update/uninstall tests, and keep Android/Termux native PTY and APK status honest.
+
+### Official Claude Code documentation inspected
+
+- [Custom subagents](https://code.claude.com/docs/en/sub-agents)
+- [Agent teams](https://code.claude.com/docs/en/agent-teams)
+- [Background sessions and Agent view](https://code.claude.com/docs/en/agent-view)
+- [Hooks reference](https://code.claude.com/docs/en/hooks)
+- [Permissions and sandboxing](https://code.claude.com/docs/en/permissions)
+- [MCP integration](https://code.claude.com/docs/en/mcp)
+- [Agent Skills](https://code.claude.com/docs/en/skills)
+- [Plugin architecture and marketplaces](https://code.claude.com/docs/en/plugins/overview)
+- [Claude Desktop Code workflow](https://code.claude.com/docs/en/desktop)
+- [Interactive CLI mode](https://code.claude.com/docs/en/interactive-mode)
+
 ## Ranked gaps and product implications
 
 | Priority | Gap | What the evidence says | Recommended treatment |
@@ -154,9 +193,9 @@ Official comparison references: [Claude Code overview](https://code.claude.com/d
 
 ## Verification boundary for the inspected source revision
 
-The inspected source/test revision is [45eeaeabc0cc1d6c4154960df58ebee5dcce352d](https://github.com/FAHTHIZ/oasis/commit/45eeaeabc0cc1d6c4154960df58ebee5dcce352d). Earlier CI passes on older revisions remain useful regression evidence, but they do not verify the new named-snapshot evaluator change or its regression tests. Check the Quality Checks and publishing workflows on the updated `main` before treating this exact change as verified.
+The current-main source snapshot reviewed for this update is [508a0a68d4760f07c22a4037eeb26a6d83c7216f](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f). For that exact SHA, the installer-check workflow passed on Windows, macOS and Linux ([run 41173654892](https://github.com/FAHTHIZ/oasis/actions/runs/41173654892)). The Quality matrix was still running, with macOS and Windows security regressions and Linux PTY integration already successful; Node 22/24/26 full quality gates and clean-environment tests were not yet complete when this section was updated. Publishing validation and the three-platform desktop packaging workflow were also still running. The 0.4.0 package version and curated release notes exist, but the `v0.4.0` tag and GitHub Release did not yet exist at this audit check. Do not interpret a pending workflow as a pass.
 
-No comparison in this document proves exhaustive security, broad real-world coding ability, or Claude Code parity. The intended acceptance evidence is the combination of a green current-main quality gate and representative, reproducible head-to-head task outcomes.
+No comparison in this document proves exhaustive security, broad real-world coding ability, or Claude Code parity. The evidence needed for that is a green same-commit release matrix plus representative, reproducible head-to-head task outcomes with task-level failures and human-reviewed diffs.
 
 ## Source register
 
