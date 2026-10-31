@@ -106,3 +106,16 @@ The intended public identity is:
 Keep release, download, quality and benchmark badges tied to real published artifacts or current evidence. Search metadata and social previews do not guarantee indexing, traffic or ranking. Repository administration credentials belong only in GitHub Actions secrets; never commit or paste them into documentation.
 
 For the logo, color tokens and interface rules, see [Brand](BRAND.md). For user-visible product claims, the README and [Project plan](PROJECT_PLAN.md) are authoritative.
+
+ 
+## Publishing and public metadata operations
+
+The static public landing page is in `site/`. The root `index.html` is the local browser workspace. The Pages workflow validates the application/site, deploys only `site/`, and can update the repository homepage, About description, and topic list. Pull-request runs validate only; repository administration changes require the configured secret.
+
+To authorize publishing, create a fine-grained personal access token scoped only to `FAHTHIZ/oasis` with **Administration: Read and write** (repository About metadata) and **Pages: Read and write** (Pages settings/deployment). Store it in the repository Actions secrets as `OASIS_REPO_ADMIN_TOKEN`; never commit it or paste it into chat, an issue, or a log. The workflow skips privileged updates when the secret is absent and records the skip in its summary.
+
+Run [Publish OASIS homepage and repository metadata](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml) on `main` after the site and metadata are ready. Verify the actual deployment URL and repository About fields after the run. A passing validation without a successful deployment is not proof that the public site is live.
+
+Search metadata, Open Graph tags, `robots.txt`, and a sitemap help crawlers understand the site; they do not guarantee indexing, ranking, or traffic. Use Google Search Console to inspect indexing and request a crawl when appropriate; a request is not a guarantee of inclusion.
+
+The canonical public identity is maintained in [Brand](BRAND.md). The README, project plan, release notes, and public site must describe the same shipped product. Add release/download/benchmark badges only when the relevant release or result actually exists.
