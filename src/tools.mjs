@@ -1852,6 +1852,9 @@ export async function executeTool(name, args = {}, context = {}) {
       if (install.blocked) return { command: args.command, ...install.blocked };
       const approval = install.approvalNote && context.approval ? (text, ...rest) => context.approval(install.approvalNote + '\n' + text, ...rest) : context.approval;
       const snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard).catch(() => null) : null;
+      const { snapshotScriptedEdit, noOpEditWarning } = await import('./inplace-edit-check.mjs');
+      const editSnapshot = args.run_in_background === true || args.interactive === true ? null
+        : await snapshotScriptedEdit(root, [args.command].concat(Array.isArray(args.args) ? args.args.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg) : []).join(' '), env).catch(() => null);
       const commandResult = await runWorkspaceCommand(root, args.command, args.args || [], {
         approval,
         autoApprove: Boolean(context.autoApprove) && !install.forceAsk,
@@ -1869,6 +1872,10 @@ export async function executeTool(name, args = {}, context = {}) {
         maxSeconds: args.max_seconds
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
+      if (editSnapshot && commandResult && typeof commandResult === 'object') {
+        const noOp = await noOpEditWarning(editSnapshot, commandResult.exitCode);
+        if (noOp) commandResult.noOpEditWarning = noOp;
+      }
       if (snapshot) {
         if (commandResult && commandResult.approved === false) await gitSafety.dropSnapshot(snapshot);
         else if (commandResult && typeof commandResult === 'object') commandResult.safetySnapshot = gitSafety.snapshotNote(snapshot);

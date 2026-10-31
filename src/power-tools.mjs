@@ -16,6 +16,7 @@ import { snapshotFile } from './backups.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
+import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
@@ -544,9 +545,12 @@ export async function executePowerTool(name, args, context, root) {
       return await editNotebook(root, args);
     case 'run_shell':
       {
+        const editSnapshot = args.run_in_background === true ? null : await snapshotScriptedEdit(root, args.command, context.env || process.env).catch(() => null);
         const shellResult = await runShell(root, args, context);
         const pipeWarning = shellResult && typeof shellResult.exitCode === 'number' ? maskedPipelineWarning(args.command, shellResult.exitCode, process.platform === 'win32' ? 'cmd' : 'sh') : '';
-        return pipeWarning ? { ...shellResult, exitCodeWarning: pipeWarning } : shellResult;
+        const noOp = editSnapshot && shellResult && typeof shellResult === 'object' ? await noOpEditWarning(editSnapshot, shellResult.exitCode) : '';
+        if (!pipeWarning && !noOp) return shellResult;
+        return { ...shellResult, ...(pipeWarning ? { exitCodeWarning: pipeWarning } : {}), ...(noOp ? { noOpEditWarning: noOp } : {}) };
       }
     case 'powershell':
       return await runShell(root, args, context, 'powershell');
