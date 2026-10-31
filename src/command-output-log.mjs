@@ -7,7 +7,7 @@ import { redactApprovalSecrets } from './approval-language.mjs';
 
 const MAX_LOG_BYTES = 32 * 1024 * 1024;
 const MAX_LINE_CHARS = 1024 * 1024;
-const LINE_CARRY_CHARS = 2048;
+const MAX_PENDING_LINE_CHARS = 1024 * 1024;
 
 async function ensureRealDirectory(directory) {
   try {
@@ -114,12 +114,12 @@ export async function createCommandOutputLog(root) {
       writeRedacted(state, '[OASIS omitted one output line longer than 1 MiB for safe log redaction.]\n');
       state.pending = '';
       state.discardUntilNewline = true;
-    } else if (state.pending.length > LINE_CARRY_CHARS * 32) {
-      // A pathological line is bounded in memory. Keep a carry window so a
-      // credential split across adjacent chunks is still redacted.
-      const flushLength = state.pending.length - LINE_CARRY_CHARS;
-      writeRedacted(state, state.pending.slice(0, flushLength));
-      state.pending = state.pending.slice(flushLength);
+    } else if (state.pending.length > MAX_PENDING_LINE_CHARS) {
+      // Do not split an unusually long line: doing so could separate a key name
+      // from its value and leak the remainder after redaction.
+      writeRedacted(state, '[OASIS omitted one output line longer than 1 MiB for safe log redaction.]\n');
+      state.pending = '';
+      state.discardUntilNewline = true;
     }
   }
 
