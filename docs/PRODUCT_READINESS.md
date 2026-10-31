@@ -15,7 +15,7 @@ The latest completed Quality Checks and homepage/repository validation before th
 
 Session teardown now has an awaited lifecycle for language-server processes and background agents, and the new LSP shutdown regression is part of the quality suite. This is an implementation change, not yet a verified release gate; require a full same-SHA Quality run before relying on it.
 
-The desktop workflow now separates packaging from publication. A normal `main` push validates and builds installers but does not publish a release. Publication is restricted to an explicit `v*` tag that must match the version in `package.json`. Signing, provenance, and rollback verification remain outstanding.
+The desktop workflow validates and builds installers on `main` pushes. When the same commit also passes Quality Checks, public-site validation, and installer checks, the workflow can publish the Beta release using the immutable `vX.Y.Z` tag derived from `package.json`; a version bump and matching `docs/releases/vX.Y.Z.md` notes are required for a new release. Manual dispatch is opt-in through `publish_release`. Existing version tags are never moved or overwritten. Signing, provenance, and rollback verification remain outstanding.
 
 ## Biggest remaining gaps
 
