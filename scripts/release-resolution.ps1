@@ -32,6 +32,34 @@ function Resolve-OasisReleaseTagFromResponse {
     return $tagMatch.Groups[1].Value
 }
 
+function Resolve-OasisStableTagFromList {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][object[]]$Tags)
+
+    $candidates = @(
+        foreach ($item in $Tags) {
+            $name = [string]$item.name
+            $sha = ([string]$item.commit.sha).ToLowerInvariant()
+            if (
+                $name -match '\Av(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z' -and
+                $sha -match '\A[0-9a-f]{40}\z'
+            ) {
+                [pscustomobject]@{
+                    Tag = $name
+                    CommitSha = $sha
+                    Version = [version]::Parse($name.Substring(1))
+                }
+            }
+        }
+    )
+
+    $selected = $candidates | Sort-Object -Property Version -Descending | Select-Object -First 1
+    if (-not $selected) {
+        throw 'The GitHub tags API did not return a stable version tag with a valid commit SHA.'
+    }
+    return $selected
+}
+
 function Resolve-OasisCommitFromAtom {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Content)

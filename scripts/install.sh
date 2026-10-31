@@ -88,6 +88,28 @@ async function resolveFromPublicReleasePage() {
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page and tag Atom feed did not include its exact commit SHA.");
   return { tag, sha };
 }
+async function resolveFromStableTags() {
+  const tags = await readJson(apiBase + "/tags?per_page=100");
+  if (!Array.isArray(tags)) throw new Error("GitHub tags API returned an invalid response.");
+  const candidates = tags.map((entry) => ({
+    tag: String(entry && entry.name || ""),
+    sha: String(entry && entry.commit && entry.commit.sha || "").toLowerCase()
+  })).filter((entry) =>
+    /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(entry.tag) &&
+    /^[0-9a-f]{40}$/.test(entry.sha)
+  );
+  candidates.sort((left, right) => {
+    const a = left.tag.slice(1).split(".").map(Number);
+    const b = right.tag.slice(1).split(".").map(Number);
+    for (let i = 0; i < 3; i += 1) {
+      if (a[i] !== b[i]) return b[i] - a[i];
+    }
+    return 0;
+  });
+  if (!candidates.length) throw new Error("No stable version tag with a valid commit SHA was found.");
+  return { tag: candidates[0].tag, sha: candidates[0].sha };
+}
+
 try {
   let resolved;
   try {
@@ -100,8 +122,14 @@ try {
     if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("GitHub did not return a valid release commit.");
     resolved = { tag, sha };
   } catch (apiError) {
-    console.error("GitHub API unavailable (" + apiError.message + "); trying the official public release page.");
-    resolved = await resolveFromPublicReleasePage();
+    console.error("GitHub API unavailable (" + apiError.message + "); checking stable version tags.");
+    try {
+      resolved = await resolveFromStableTags();
+      console.error("No published stable release object was available; using stable Git tag " + resolved.tag + ".");
+    } catch (tagError) {
+      console.error("GitHub tags API unavailable (" + tagError.message + "); trying the official public release page.");
+      resolved = await resolveFromPublicReleasePage();
+    }
   }
   process.stdout.write(resolved.tag + "\n" + resolved.sha);
 } catch (error) {

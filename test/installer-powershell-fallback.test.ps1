@@ -44,6 +44,23 @@ $relativeLink = [pscustomobject]@{
 }
 Assert-Equal 'v6.5.4' (Resolve-OasisReleaseTagFromResponse -Response $relativeLink) 'relative release link'
 
+$stableTags = @(
+    [pscustomobject]@{ name = 'v9.9.9'; commit = [pscustomobject]@{ sha = '1111111111111111111111111111111111111111' } },
+    [pscustomobject]@{ name = 'v9.10.0'; commit = [pscustomobject]@{ sha = '2222222222222222222222222222222222222222' } },
+    [pscustomobject]@{ name = 'v10.0.0-beta.1'; commit = [pscustomobject]@{ sha = '3333333333333333333333333333333333333333' } }
+)
+$stableTag = Resolve-OasisStableTagFromList -Tags $stableTags
+Assert-Equal 'v9.10.0' $stableTag.Tag 'newest stable semantic version tag'
+Assert-Equal '2222222222222222222222222222222222222222' $stableTag.CommitSha 'stable tag commit SHA'
+
+$rejected = $false
+try {
+    Resolve-OasisStableTagFromList -Tags @([pscustomobject]@{ name = 'v10.0.0-beta.1'; commit = [pscustomobject]@{ sha = '3333333333333333333333333333333333333333' } })
+} catch {
+    $rejected = $_.Exception.Message -match 'stable version tag'
+}
+if (-not $rejected) { throw 'The tag resolver accepted a prerelease-only tag list.' }
+
 $atom = "<?xml version='1.0'?><feed><entry><id>tag:github.com,2008:Grit::Commit/$sha</id></entry></feed>"
 Assert-Equal $sha (Resolve-OasisCommitFromAtom -Content $atom) 'Atom commit SHA'
 
