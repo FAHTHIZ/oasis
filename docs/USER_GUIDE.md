@@ -802,6 +802,7 @@ export OTEL_METRICS_EXPORTER=otlp     # otlp | console | none (same for LOGS and
 
 - **Metrics:** `oasis.session.count`, `oasis.token.usage` (by `type`: input, output, cacheRead, cacheCreation), `oasis.api.duration`, `oasis.api.error.count`, `oasis.tool.count` (by `tool_name` and `success`), `oasis.tool.duration`, `oasis.turn.duration`, `oasis.active_time.total`, `oasis.lines_of_code.count` (added/removed), `oasis.commit.count`, and `oasis.pull_request.count`.
 - **Events (logs):** `oasis.session_start`, `oasis.user_prompt` (length only, unless `OTEL_LOG_USER_PROMPTS=1`), `oasis.api_request`, `oasis.api_error`, and `oasis.tool_result` (arguments only with `OTEL_LOG_TOOL_DETAILS=1`).
+- Every event includes the workspace's current git branch as `vcs.ref.head.name`. Set `OASIS_OTEL_NO_BRANCH=1` to leave it out.
 - **Traces:** each turn is a trace. Every model request and tool call is a child span, and subagent turns nest under the tool call that started them. Events carry the span they happened in. This is something compatible-format metrics and logs export does not give you.
 - Standard variables are honored: `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRIC_EXPORT_INTERVAL` (default 60 s), `OTEL_LOGS_EXPORT_INTERVAL` (default 5 s), and per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` / `_HEADERS`. Only the HTTP/JSON wire format is supported, not gRPC or protobuf. Data is flushed on exit.
 

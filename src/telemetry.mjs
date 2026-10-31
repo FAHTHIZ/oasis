@@ -13,6 +13,29 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import os from 'node:os';
+import { readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
+
+// Current git branch for a workspace, read straight from .git/HEAD (cached for a few seconds).
+const branchCache = new Map();
+export function gitBranchName(root, now = Date.now()) {
+  if (!root) return '';
+  const hit = branchCache.get(root);
+  if (hit && now - hit.at < 5000) return hit.name;
+  let name = '';
+  try {
+    let gitDir = path.join(root, '.git');
+    if (statSync(gitDir).isFile()) {
+      const pointer = /^gitdir:\s*(.+)$/m.exec(readFileSync(gitDir, 'utf8'));
+      if (pointer) gitDir = path.resolve(root, pointer[1].trim());
+    }
+    const head = readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    const ref = /^ref:\s*refs\/heads\/(.+)$/.exec(head);
+    name = ref ? ref[1] : '';
+  } catch {}
+  branchCache.set(root, { at: now, name });
+  return name;
+}
 
 const VERSION = '1';
 const spanContext = new AsyncLocalStorage();
@@ -93,6 +116,12 @@ export class Telemetry {
 
   baseAttributes() { return { 'session.id': this.sessionId }; }
 
+  // Events carry the workspace's git branch (vcs.ref.head.name); metrics stay low-cardinality.
+  eventAttributes() {
+    const branch = truthy(this.env.OASIS_OTEL_NO_BRANCH) ? '' : gitBranchName(this.root);
+    return { ...this.baseAttributes(), ...(branch ? { 'vcs.ref.head.name': branch } : {}) };
+  }
+
   // Monotonic cumulative counter.
   add(name, value = 1, attrs = {}, unit = '1', description = '') {
     if (!Number.isFinite(Number(value)) || Number(value) === 0) return;
@@ -120,7 +149,7 @@ export class Telemetry {
       severityNumber: 9,
       severityText: 'INFO',
       body: { stringValue: name },
-      attributes: toAttributes({ 'event.name': name, 'event.timestamp': new Date().toISOString(), ...this.baseAttributes(), ...attrs }),
+      attributes: toAttributes({ 'event.name': name, 'event.timestamp': new Date().toISOString(), ...this.eventAttributes(), ...attrs }),
       ...(span ? { traceId: span.traceId, spanId: span.spanId } : {})
     });
     if (this.logRecords.length >= 512) this.flushLogs().catch(() => {});

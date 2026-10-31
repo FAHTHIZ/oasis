@@ -741,6 +741,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   session.baseSystemPrompt = systemMessage.content;
   const tel = getTelemetry(env);
   if (tel) {
+    if (!tel.root) tel.root = root;
     tel.add('oasis.session.count', 1, { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), resumed: Boolean(restore) }, '1', 'Sessions started');
     tel.event('oasis.session_start', { model: config && config.model || '', provider: config && config.protocol || '', resumed: Boolean(restore) });
   }
