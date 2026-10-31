@@ -52,6 +52,7 @@ node_supported() {
 }
 resolve_latest_release() {
   node --input-type=module -e '
+import { spawnSync } from "node:child_process";
 const apiBase = "https://api.github.com/repos/FAHTHIZ/oasis";
 const apiHeaders = { accept: "application/vnd.github+json", "user-agent": "oasis-installer" };
 async function readJson(url) {
@@ -88,6 +89,43 @@ async function resolveFromPublicReleasePage() {
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("The public release page and tag Atom feed did not include its exact commit SHA.");
   return { tag, sha };
 }
+async function resolveFromGitTags() {
+  const result = spawnSync("git", [
+    "ls-remote", "--tags",
+    "https://github.com/FAHTHIZ/oasis.git",
+    "refs/tags/v*"
+  ], {
+    encoding: "utf8",
+    timeout: 20000,
+    maxBuffer: 1024 * 1024,
+    windowsHide: true
+  });
+  if (result.error) throw new Error("Git tag lookup failed: " + result.error.message);
+  if (result.status !== 0) throw new Error("Git tag lookup failed: " + String(result.stderr || "git ls-remote exited unsuccessfully").trim());
+  const plain = new Map();
+  const peeled = new Map();
+  for (const line of String(result.stdout || "").split(/\r?\n/)) {
+    const match = line.match(/^([0-9a-f]{40})\s+refs\/tags\/(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(\^\{\})?$/);
+    if (!match) continue;
+    const target = line.endsWith("^{}") ? peeled : plain;
+    target.set(match[2], match[1]);
+  }
+  const candidates = [...plain.entries()].map(([tag, sha]) => ({
+    tag,
+    sha: peeled.get(tag) || sha
+  })).filter((entry) => /^[0-9a-f]{40}$/.test(entry.sha));
+  candidates.sort((left, right) => {
+    const a = left.tag.slice(1).split(".").map(Number);
+    const b = right.tag.slice(1).split(".").map(Number);
+    for (let i = 0; i < 3; i += 1) {
+      if (a[i] !== b[i]) return b[i] - a[i];
+    }
+    return 0;
+  });
+  if (!candidates.length) throw new Error("Git did not return a stable version tag with a valid commit SHA.");
+  return { tag: candidates[0].tag, sha: candidates[0].sha };
+}
+
 async function resolveFromStableTags() {
   const tags = await readJson(apiBase + "/tags?per_page=100");
   if (!Array.isArray(tags)) throw new Error("GitHub tags API returned an invalid response.");
@@ -127,8 +165,14 @@ try {
       resolved = await resolveFromStableTags();
       console.error("No published stable release object was available; using stable Git tag " + resolved.tag + ".");
     } catch (tagError) {
-      console.error("GitHub tags API unavailable (" + tagError.message + "); trying the official public release page.");
-      resolved = await resolveFromPublicReleasePage();
+      console.error("GitHub tags API unavailable (" + tagError.message + "); trying public Git tag transport.");
+      try {
+        resolved = await resolveFromGitTags();
+        console.error("Using stable Git tag " + resolved.tag + " resolved to its exact commit SHA.");
+      } catch (gitError) {
+        console.error("Public Git tag lookup unavailable (" + gitError.message + "); trying the official public release page.");
+        resolved = await resolveFromPublicReleasePage();
+      }
     }
   }
   process.stdout.write(resolved.tag + "\n" + resolved.sha);

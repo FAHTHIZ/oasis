@@ -96,6 +96,22 @@ if (-not $ReleaseCommit) {
     }
 }
 
+$gitTagFailure = ''
+if (-not $ReleaseCommit) {
+    try {
+        $gitCommand = Get-Command git -ErrorAction SilentlyContinue
+        if (-not $gitCommand) { throw 'Git is not installed; skipping Git transport fallback.' }
+        $gitOutput = & $gitCommand.Source ls-remote --tags 'https://github.com/FAHTHIZ/oasis.git' 'refs/tags/v*' 2>&1
+        if ($LASTEXITCODE -ne 0) { throw ([string]::Join([Environment]::NewLine, @($gitOutput))) }
+        $stableTag = Resolve-OasisStableTagFromGitOutput -Output ([string]::Join([Environment]::NewLine, @($gitOutput)))
+        $ReleaseTag = [string]$stableTag.Tag
+        $ReleaseCommit = [string]$stableTag.CommitSha
+        Write-Host "Using stable Git tag $ReleaseTag resolved to its exact commit SHA."
+    } catch {
+        $gitTagFailure = $_.Exception.Message
+    }
+}
+
 if (-not $ReleaseCommit) {
     Write-Host "GitHub API unavailable ($apiFailure); trying the official public release page..."
     try {
@@ -114,7 +130,7 @@ if (-not $ReleaseCommit) {
             $ReleaseCommit = Resolve-OasisCommitFromAtom -Content ([string]$atomPage.Content)
         }
     } catch {
-        Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; tags API: " + $tagApiFailure + "; public release page: " + $_.Exception.Message)
+        Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; tags API: " + $tagApiFailure + "; Git tags: " + $gitTagFailure + "; public release page: " + $_.Exception.Message)
         exit 1
     }
 }
