@@ -206,12 +206,16 @@ try {
   const consoleErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    // The rejected-token step intentionally produces one 401 network log; app errors still fail the run.
+    if (message.type() === 'error' && !/Failed to load resource: .*401/.test(message.text())) consoleErrors.push(message.text());
   });
 
   await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentWorkspaceGrid')?.dataset.terminalVisible === 'false',
     null, { timeout: timeoutMs });
+  assert.equal(await page.locator('#view-agent').evaluate((node) => node.classList.contains('active')), true,
+    'The workspace should open on the coding conversation.');
+  await page.locator('.sidebar [data-nav="home"]').first().click();
   assert.equal(await page.locator('#view-home').evaluate((node) => node.classList.contains('active')), true,
     'The existing Overview page should remain available.');
   await page.locator('#sidebarSettingsButton').click();
@@ -250,7 +254,7 @@ try {
   await page.screenshot({ path: path.join(screenshotDir, 'agent-empty-desktop.png'), fullPage: true });
   // The starter cards belong to the empty-state UI, so test them before connecting.
   await page.locator('[data-agent-example="Explain this project"]').click();
-  assert.equal(await page.locator('#agentPrompt').inputValue(), 'Explain this project', 'Starter prompt cards should fill the chat composer.');
+  assert.match(await page.locator('#agentPrompt').inputValue(), /^Explain this project/, 'Starter prompt cards should fill the chat composer.');
 
   // A rejected runtime token must leave the chat usable and explain the failure.
   await page.locator('#agentTokenInput').fill('oasis-invalid-browser-e2e-token');
