@@ -41,13 +41,13 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Latest release-check snapshot:** `8ebb5cec5a273133950fd5f40f5b36f9da654e8e` (October 31, 2026). Every workflow passed on this exact SHA:
+**Latest release-check snapshot:** `30a1a9bae0d666e57912ae9e14854cc3eb781ab2` (October 31, 2026). Every workflow passed on this exact SHA:
 
-- **Quality Checks — all nine jobs green** (Node 22/24/26 full gate, Linux/macOS/Windows security matrix including process-tree cancellation and adversarial URL tests, native PTY, clean environment, browser E2E with axe): [run 41203146905](https://github.com/FAHTHIZ/oasis/actions/runs/41203146905). Before this, the gate had been hanging because bare `node --test` executed a helper LSP server; that is fixed.
-- **Installer checks passed on Windows, macOS and Ubuntu:** [run 41203146915](https://github.com/FAHTHIZ/oasis/actions/runs/41203146915).
-- **Desktop packaging completed** (unsigned): [run 41203146960](https://github.com/FAHTHIZ/oasis/actions/runs/41203146960).
-- **Public-site validation and deployment passed:** [run 41203147018](https://github.com/FAHTHIZ/oasis/actions/runs/41203147018).
-- **Guarded branch cleanup passed:** [run 41203146878](https://github.com/FAHTHIZ/oasis/actions/runs/41203146878).
+- **Quality Checks — all nine jobs green** (Node 22/24/26 full gate, Linux/macOS/Windows security matrix including process-tree cancellation and adversarial URL tests, native PTY, clean environment, browser E2E with axe): [run 41204345336](https://github.com/FAHTHIZ/oasis/actions/runs/41204345336). The first all-green SHA was `8ebb5ce` (after fixing a gate hang caused by bare `node --test` running a helper LSP server).
+- **Installer checks passed on Windows, macOS and Ubuntu:** [run 41204345509](https://github.com/FAHTHIZ/oasis/actions/runs/41204345509).
+- **Desktop packaging completed** (unsigned): [run 41204345152](https://github.com/FAHTHIZ/oasis/actions/runs/41204345152).
+- **Public-site validation and deployment passed:** [run 41204345138](https://github.com/FAHTHIZ/oasis/actions/runs/41204345138).
+- **Guarded branch cleanup passed:** [run 41204345312](https://github.com/FAHTHIZ/oasis/actions/runs/41204345312).
 
 Release state, checked against live Git refs:
 
@@ -105,10 +105,10 @@ Prioritize high-value user journeys: provider setup, project onboarding, CLI/bro
 
 ## Release acceptance checklist
 
-- [x] Latest Quality Checks pass on the exact candidate SHA. `8ebb5ce` passed all nine jobs (Node 22/24/26 gate, Linux/macOS/Windows security matrix, PTY, clean environment, browser E2E): [run 41203146905](https://github.com/FAHTHIZ/oasis/actions/runs/41203146905). Re-run on the final release SHA before tagging.
-- [x] Public-site validation passes on that same SHA: [run 41203147018](https://github.com/FAHTHIZ/oasis/actions/runs/41203147018).
-- [x] Windows/macOS/Linux installer checks pass on that same SHA: [run 41203146915](https://github.com/FAHTHIZ/oasis/actions/runs/41203146915).
-- [x] Desktop packaging completes on that same SHA: [run 41203146960](https://github.com/FAHTHIZ/oasis/actions/runs/41203146960) (unsigned builds).
+- [x] Latest Quality Checks pass on the exact candidate SHA. `30a1a9b` passed all nine jobs (Node 22/24/26 gate, Linux/macOS/Windows security matrix, PTY, clean environment, browser E2E): [run 41204345336](https://github.com/FAHTHIZ/oasis/actions/runs/41204345336). Re-run on the final release SHA before tagging.
+- [x] Public-site validation passes on that same SHA: [run 41204345138](https://github.com/FAHTHIZ/oasis/actions/runs/41204345138).
+- [x] Windows/macOS/Linux installer checks pass on that same SHA: [run 41204345509](https://github.com/FAHTHIZ/oasis/actions/runs/41204345509).
+- [x] Desktop packaging completes on that same SHA: [run 41204345152](https://github.com/FAHTHIZ/oasis/actions/runs/41204345152) (unsigned builds).
 - [x] Browser end-to-end tests cover first-run, approval/denial, cancellation, edit/verify and recovery paths (`.github/scripts/browser-e2e.mjs`: first-run at desktop and 390px, denied delete leaves the file intact, Stop during a pending approval prevents the side effect, write/read/verify with rendered reply, saved-chat recovery, isolated-diff review, axe contrast).
 - [ ] Clean-machine install and first-run behavior is exercised for each advertised desktop OS. (Needs real Windows/macOS/Linux machines; CI builds only.)
 - [ ] Release version, immutable tag, release notes, checksums and uploaded artifacts agree. (Blocked until `v0.4.0` is tagged and published.)
