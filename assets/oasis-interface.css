@@ -720,3 +720,10 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 .extension-form{grid-template-columns:minmax(0,1fr) minmax(180px,auto) auto}
 .extension-form>.btn{justify-self:start;white-space:nowrap}
 @media (max-width:760px){.extension-form{grid-template-columns:1fr}}
+/* Extensions: icon beside the hero copy; import button level with the inputs. */
+.extension-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.extension-hero>.workspace-banner-icon{flex:0 0 32px}
+.extension-form>.form-field{margin-bottom:0}
+.extension-form>.btn{align-self:end;min-height:40px}
+.extension-form{margin-bottom:12px}
+.panel+.section-head{margin-top:24px}
