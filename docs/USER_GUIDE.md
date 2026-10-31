@@ -531,9 +531,19 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 
 Sessions are saved by default. `oasis -c` continues the latest one, `oasis -r ID` resumes one, and `--no-session-persistence` (or `OASIS_PERSIST_SESSIONS=0`) skips saving. `/cost` shows tokens and an estimated USD cost. `--max-budget-usd 2` stops a run at that spend. Local models count as free. Set `OASIS_PRICE_INPUT` and `OASIS_PRICE_OUTPUT` (USD per million tokens) to override pricing.
 
+### Cost-aware model routing
+
+Automatic routing is optional and off by default. Use `/routing status` to inspect it, `/routing easy MODEL_ID` to choose the lower-cost model, `/routing strong MODEL_ID` to optionally choose a separate strong model, and `/routing on` to enable it. Use `/routing off` to pause routing or `/routing reset` to clear the saved user setting.
+
+Routing changes the model ID for a turn; it does not switch the provider, endpoint, API key, or credentials. Choose model IDs supported by the connected provider. When an available-model allow-list is present and rejects the selected model, OASIS keeps the session's configured model.
+
+For ordinary interactive prompts, only short, clearly read-only, low-risk requests qualify for the easy model. Long, ambiguous, security-sensitive, and change-oriented requests stay on the strong model. The evaluation harness has a separate explicit difficulty hint for controlled small-task routing experiments; that hint is not used for normal interactive prompts.
+
+`/usage` and the per-turn routing summary show pricing-based estimates when both models have configured rates. The strong-model comparison reuses the routed task's observed token counts, so it is a rate-based estimate—not a measured counterfactual, guaranteed saving, or billing quote. A strong-model response could use a different number of tokens.
+
 ## Slash commands, @mentions, and memory
 
-Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/model [id]`, `/mode [default|acceptEdits|plan|auto|bypassPermissions|log]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
+Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/routing`, `/model [id]`, `/mode [default|acceptEdits|plan|auto|bypassPermissions|log]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
 
 Context controls:
 
