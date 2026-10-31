@@ -37,8 +37,9 @@ export function runAutoTest(root, command, { timeoutMs = 600000, signal, env = p
   return new Promise((resolve) => {
     const started = Date.now();
     const windows = process.platform === 'win32';
-    const child = spawn(windows ? (env.ComSpec || 'cmd.exe') : '/bin/sh', windows ? ['/d', '/s', '/c', command] : ['-c', command], {
-      cwd: root, env: { ...env, CI: env.CI || '1', FORCE_COLOR: '0' }, detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
+    // shell: true gives cmd.exe the verbatim quoting it expects on Windows and /bin/sh -c elsewhere.
+    const child = spawn(command, [], {
+      cwd: root, env: { ...env, CI: env.CI || '1', FORCE_COLOR: '0' }, shell: true, detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
     });
     let output = '';
     let timedOut = false;
