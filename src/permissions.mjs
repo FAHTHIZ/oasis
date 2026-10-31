@@ -558,6 +558,25 @@ export function analyzeCommand(command, args = [], depth = 0) {
   if (['taskkill', 'tskill', 'xkill', 'stop-process', 'osascript'].includes(base) || (base === 'fuser' && args.some((a) => /^-\w*k/.test(a)))) {
     return { highRisk: base + ' can close or kill applications the user has open', effective: { base, args } };
   }
+  // Desktop automation drives the user's real windows and keyboard: it can close
+  // apps, type into open documents, or quit them without saving.
+  if (['wmctrl', 'xdotool', 'ydotool', 'cliclick', 'nircmd', 'nircmdc', 'autohotkey', 'autohotkey64', 'autohotkeyu64', 'xte'].includes(base)) {
+    return { highRisk: base + ' controls windows or sends input to applications the user has open', effective: { base, args } };
+  }
+  if (['tmux', 'screen'].includes(base) && args.some((a) => /^(kill-server|kill-session|kill-window|kill-pane|quit)$/i.test(a))) {
+    return { highRisk: base + ' can close terminal sessions the user has open', effective: { base, args } };
+  }
+  if (['docker', 'podman', 'nerdctl'].includes(base)) {
+    const words = args.filter((a) => !String(a).startsWith('-'));
+    const destructive = /^(stop|kill|rm|rmi|restart|down|prune|pause)$/i;
+    const verb = ['compose', 'container', 'image', 'network', 'stack', 'service'].includes(words[0]) ? words[1] : words[0];
+    if (destructive.test(verb || '') || (words[0] === 'volume' && /^(rm|prune)$/.test(words[1] || '')) || (words[0] === 'system' && words[1] === 'prune')) {
+      return { highRisk: base + ' can stop or delete containers, images or volumes (and their data)', effective: { base, args } };
+    }
+  }
+  if (base === 'kubectl' && args.some((a) => /^(delete|drain|cordon|scale|rollout|replace|apply|patch|edit)$/.test(a))) {
+    return { highRisk: 'kubectl changes resources in a cluster', effective: { base, args } };
+  }
   if (['kill', 'killall', 'pkill', 'systemctl', 'launchctl', 'service', 'crontab', 'at', 'iptables', 'ufw', 'netsh', 'reg', 'scp', 'rsync', 'ssh'].includes(base)) {
     return { highRisk: base + ' affects processes, services, or remote systems', effective: { base, args } };
   }
