@@ -4,7 +4,7 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
-- Corrected the public README lifecycle label to Alpha while the Beta confidence gate remains open, removed the stray literal newline from the Agent view, and added checks for the sidebar brand asset and markup.
+- Confirmed Beta as the public lifecycle label while the Beta confidence and release-quality gates remain open. Removed the stray literal newline from the Agent view and added checks for the sidebar brand asset and markup.
 - Added a credential-redaction regression for the malformed placeholder report.
 - Restricted unattended GitHub Action runs from starting language-server processes; repository test, lint, build, or type-check commands remain the verification path.
 

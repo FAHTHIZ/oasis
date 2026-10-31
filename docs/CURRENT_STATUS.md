@@ -65,7 +65,7 @@ The visual foundation is implemented directly on `main` and is now aligned to th
 
 The first Phase 0 implementation slice has been applied directly to `main`.
 
-- The repository README now labels the project Alpha until the Beta confidence gate is satisfied.
+- The public product lifecycle is Beta. The Beta confidence and release-quality gates track verification maturity; they do not relabel the product as Alpha.
 - The Agent view no longer contains the stray literal escaped newline.
 - The site-integrity test checks the Agent markup and verifies that the sidebar references a populated `assets/oasis-mark.svg`. The SVG already existed and was not replaced.
 - Credential-redaction output has a regression test for stable placeholders. No production redaction change was needed because the inspected implementation already produced the expected output.
@@ -230,7 +230,7 @@ Still requiring deeper passes: full `src/agent.mjs` and context/compaction lifec
 - [Latest desktop build matrix — passed](https://github.com/FAHTHIZ/oasis/actions/runs/40804769799)
 
 - [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md)
-- [Alpha-confidence milestone](NEXT_MILESTONE.md)
+- [Beta-confidence milestone](NEXT_MILESTONE.md)
 
 ## PTY milestone update (October 29, 2026)
 
