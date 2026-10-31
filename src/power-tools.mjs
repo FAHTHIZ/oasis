@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
+import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, combineWarnings } from './change-guard.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
@@ -501,7 +502,11 @@ export async function executePowerTool(name, args, context, root) {
     case 'notebook_edit':
       return await editNotebook(root, args);
     case 'run_shell':
-      return await runShell(root, args, context);
+      {
+        const shellResult = await runShell(root, args, context);
+        const pipeWarning = shellResult && typeof shellResult.exitCode === 'number' ? maskedPipelineWarning(args.command, shellResult.exitCode, process.platform === 'win32' ? 'cmd' : 'sh') : '';
+        return pipeWarning ? { ...shellResult, exitCodeWarning: pipeWarning } : shellResult;
+      }
     case 'powershell':
       return await runShell(root, args, context, 'powershell');
     case 'list_background': {
