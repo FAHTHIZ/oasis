@@ -203,6 +203,26 @@ test('OAuth discovery refuses redirects and bounds metadata bodies', async () =>
   assert.equal(large.scopes, null, 'oversized resource metadata is ignored');
 });
 
+test('OAuth discovery bounds time spent waiting for stalled metadata endpoints', async () => {
+  const requests = [];
+  const fetchImpl = (url, init = {}) => new Promise((_resolve, reject) => {
+    requests.push({ url: String(url), init });
+    const fail = () => reject(init.signal.reason || new Error('request aborted'));
+    if (!init.signal || init.signal.aborted) { fail(); return; }
+    init.signal.addEventListener('abort', fail, { once: true });
+  });
+  const started = Date.now();
+  const found = await discoverOAuth('https://mcp.example/mcp', {
+    fetch: fetchImpl,
+    lookupImpl: async () => [{ address: '93.184.216.34', family: 4 }],
+    fetchTimeoutMs: 20
+  });
+  assert.ok(Date.now() - started < 1000, 'discovery should return promptly when metadata endpoints stall');
+  assert.equal(found.issuer, 'https://mcp.example');
+  assert.ok(requests.length >= 3, 'the probe and metadata candidates should each be attempted');
+  assert.ok(requests.every((request) => request.init.signal instanceof AbortSignal), 'every request must have an abort signal');
+});
+
 test('OAuth discovery never fetches private-network resource metadata URLs', async () => {
   const origin = 'https://mcp.example';
   const requests = [];
