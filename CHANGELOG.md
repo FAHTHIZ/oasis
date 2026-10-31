@@ -8,6 +8,7 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
 - **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
+- **Git safety snapshots** — before `git checkout .`, `git restore`, `git switch --discard-changes`, `git checkout -f`, `git stash drop/clear` (and other discarding commands) run, the full working tree including untracked files is saved under `refs/oasis/safety/` without touching your index or stash; the tool result includes the one-line restore command. Disable with `OASIS_GIT_SAFETY=0`.
 - **Stop on fatal account errors** — a 429 that really means out of quota/billing/account on hold is no longer retried, and loops, cron prompts and background wake-ups pause after an authentication or billing error until you send the next message.
 - **Honest workflow status** — workflows whose agents failed inside `pipeline`/`parallel` now report the failed count, names and errors (`failedAgents`, `warning`, `partial` in `/workflows`) instead of a plain "completed".
 - Fixed a FileChanged race: an unlink that happened while a hook ran could be dropped when the hook returned `watchPaths`.

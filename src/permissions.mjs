@@ -8,6 +8,7 @@
 //   mcp_github                every tool from one MCP server (prefix), or an exact MCP tool name
 //   Bash(...), Edit(...), Write(...), Read(...), WebFetch(...), Grep, Glob are accepted aliases.
 // Precedence: deny > ask > allow > mode default.
+import { discardReason } from './git-safety.mjs';
 import path from 'node:path';
 import { normalizePermissionMode } from './permission-modes.mjs';
 
@@ -515,8 +516,8 @@ export function analyzeCommand(command, args = [], depth = 0) {
     if (args.some((a) => a === '-c' || a.startsWith('--config-env') || a.startsWith('--exec-path') || a.startsWith('--upload-pack') || a.startsWith('--receive-pack'))) {
       return { highRisk: 'git configuration overrides can execute arbitrary programs', effective: { base, args } };
     }
-    if ((sub === 'checkout' || sub === 'restore') && args.some((a) => a === '.' || a === '--' )) {
-      return { highRisk: 'discards uncommitted changes', effective: { base, args } };
+    if (((sub === 'checkout' || sub === 'restore') && args.some((a) => a === '.' || a === '--' )) || discardReason(args.map(String))) {
+      return { highRisk: 'discards uncommitted changes (OASIS saves a safety snapshot under refs/oasis/safety first)', effective: { base, args } };
     }
     if (sub === 'branch' && args.some((a) => a === '-D')) return { highRisk: 'force-deletes a branch', effective: { base, args } };
   }
