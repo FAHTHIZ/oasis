@@ -17,7 +17,8 @@ const IGNORED_DIRECTORY_NAMES = new Set([
 
 // Any directory with one of these names is protected from benchmark-question leakage.
 const PROTECTED_DIRECTORY_NAMES = new Set([
-  'train', 'training', 'training-data', 'model-training',
+  'train', 'train-data', 'train-dataset', 'train-datasets',
+  'training', 'training-data', 'training-dataset', 'training-datasets', 'model-training',
   'snapshots', 'snapshot',
   'teacher-dialogue', 'teacher-dialogues', 'teacher-data'
 ]);
