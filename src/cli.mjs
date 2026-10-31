@@ -1724,6 +1724,21 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       }
     }).finally(() => { if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
+    if (result.modelRouting && result.modelRouting.enabled) {
+      const taskUsage = result.taskUsage || {};
+      if (result.modelRouting.tier === 'easy') {
+        USAGE.routingTasks = Number(USAGE.routingTasks || 0) + 1;
+        if (typeof taskUsage.savingsUSD === 'number') USAGE.routingSavingsUSD = Number(USAGE.routingSavingsUSD || 0) + taskUsage.savingsUSD;
+      }
+      const costText = typeof taskUsage.costUSD === 'number' ? formatUsd(taskUsage.costUSD) : 'unknown';
+      const baselineText = typeof taskUsage.strongModelCostUSD === 'number' ? formatUsd(taskUsage.strongModelCostUSD) : 'unknown';
+      const savingsText = typeof taskUsage.savingsUSD === 'number'
+        ? (taskUsage.savingsUSD >= 0 ? 'saved ' : 'cost ' + formatUsd(Math.abs(taskUsage.savingsUSD)) + ' more than ') + (taskUsage.savingsUSD >= 0 ? formatUsd(taskUsage.savingsUSD) : 'the strong-model estimate')
+        : 'savings unavailable (pricing not configured for both models)';
+      stdout.write('[routing] ' + result.modelRouting.tier + ' · ' + result.modelRouting.selectedModel +
+        ' · ' + taskUsage.totalTokens + ' tokens · ' + costText + ' vs strong-model estimate ' + baselineText +
+        ' · ' + savingsText + '\n');
+    }
     if (result.verification && result.verification.required) {
       const evidence = result.verification;
       const check = evidence.checkRequired
