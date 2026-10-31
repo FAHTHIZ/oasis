@@ -5,7 +5,9 @@ import { mkdtemp, rm, readFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
-import { protectedConfigPath, ruleNamesProtectedPath, protectedEditsAllowed } from '../src/protected-paths.mjs';
+import { protectedConfigPath, ruleNamesProtectedPath, protectedEditsAllowed, protectedShellWrite } from '../src/protected-paths.mjs';
+import { executePowerTool } from '../src/power-tools.mjs';
+import { executeTool } from '../src/tools.mjs';
 
 test('settings, hooks, MCP and git paths are protected; ordinary files are not', () => {
   const root = path.resolve('/work/repo');
@@ -85,4 +87,33 @@ test('an approved protected edit applies; bypassPermissions and explicit path ru
   const explicit = await run(t, [hookWrite], { allow: ['write_file(.oasis/settings.json)'] });
   assert.equal(explicit.prompts.length, 0);
   assert.match(await readFile(path.join(explicit.root, '.oasis', 'settings.json'), 'utf8'), /SessionStart/);
+});
+
+test('shell writes to protected paths and command-running git config keys are recognized', () => {
+  for (const command of ['echo x > .git/hooks/pre-commit', 'cp evil.json .oasis/settings.json', 'printf "{}" | tee .mcp.json', 'git config core.hooksPath .h',
+    'git -c a=b config alias.st "!sh"', 'sed -i s/a/b/ .claude/settings.local.json', 'Set-Content .git/config x', 'git config --local core.fsmonitor ./x.sh']) assert.ok(protectedShellWrite(command), command);
+  for (const command of ['cat .oasis/settings.json', 'git config --get core.hooksPath', 'git config user.name x', 'npm test > out.txt', 'grep hooks .git/config', 'ls .git/hooks', 'git status']) assert.equal(protectedShellWrite(command), null, command);
+});
+
+test('allowed shell and argv commands that write protected files still prompt with force', { skip: process.platform === 'win32' }, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-protected-sh-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, '.git', 'hooks'), { recursive: true });
+  const env = { ...process.env, OASIS_ALLOW_CONFIG_EDITS: '' };
+  const prompts = [];
+  const approval = async (message, force) => { prompts.push({ message, force }); return false; };
+  const shell = await executePowerTool('run_shell', { command: 'echo evil > .git/hooks/pre-commit' }, { root, ruleAllowed: true, autoApprove: true, approval, env }, root);
+  assert.equal(shell.approved, false);
+  assert.equal(prompts.length, 1);
+  assert.equal(prompts[0].force, true);
+  assert.match(prompts[0].message, /^Warning: it appears to write a protected configuration file/);
+  await assert.rejects(readFile(path.join(root, '.git', 'hooks', 'pre-commit')), /ENOENT/);
+  const argv = await executeTool('run_command', { command: 'git', args: ['config', 'core.hooksPath', '.h'] }, { root, ruleAllowed: true, autoApprove: true, approval, env });
+  assert.equal(argv.approved, false);
+  assert.equal(prompts.length, 2);
+  assert.equal(prompts[1].force, true);
+  assert.match(prompts[1].message, /HIGH RISK: it sets a git config key/);
+  const bypass = await executePowerTool('run_shell', { command: 'echo ok > .git/hooks/post-commit' }, { root, autoApprove: true, permissionMode: 'bypassPermissions', approval, env }, root);
+  assert.equal(bypass.exitCode, 0);
+  assert.equal(prompts.length, 2);
 });
