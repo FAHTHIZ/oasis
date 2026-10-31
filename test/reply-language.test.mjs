@@ -58,3 +58,18 @@ test('/language switches and clears the live system prompt', async () => {
   assert.equal(session.messages[0].content, 'You are OASIS.');
   assert.equal(session.language, null);
 });
+
+test('a reply-language reminder follows each tool batch so answers do not drift into English', async (t) => {
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-lang-drift-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'a.txt'), 'English tool output\n');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'read_file', { path: 'a.txt' }), { content: 'listo' }]);
+  const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
+  const session = await createSession({ root, config, settings, env: { ...process.env, OASIS_LANGUAGE: 'Spanish' } });
+  await runAgentTurn(session, 'lee a.txt');
+  const tool = requests[1].messages.filter((m) => m.role === 'tool').pop();
+  assert.match(tool.content, /Keep replying to the user in Spanish/);
+  closeSession(session);
+});
