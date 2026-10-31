@@ -48,6 +48,7 @@ import { getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { loadSettings, normalizeLanguage } from './settings.mjs';
 import { withReplyLanguage } from './reply-language.mjs';
+import { effectivePhrases, normalizeCommentMode, withWritingRules } from './style-rules.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
@@ -672,6 +673,10 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.language = replyLanguage;
     systemText = withReplyLanguage(systemText, replyLanguage);
   }
+  // Writing rules (avoidPhrases, codeComments) live in the system prompt so they survive compaction.
+  session.avoidPhrases = effectivePhrases(loadedSettings, env);
+  session.commentMode = normalizeCommentMode(env.OASIS_CODE_COMMENTS) || loadedSettings.codeComments || null;
+  systemText = withWritingRules(systemText, session.avoidPhrases, session.commentMode);
   // Main-thread agent (--agent, "agent" setting, or a plugin's settings.json default):
   // the session runs with that agent's instructions and tool list, like Claude Code.
   const mainAgentName = bare ? null : (agent || loadedSettings.agent || null);

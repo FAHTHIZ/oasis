@@ -52,6 +52,8 @@ This is the current shortcut reference for the terminal experience. Exact key be
 | **/color** | Change the prompt color. |
 | **/output-style** | View or change output style. |
 | **/language** | Pin the reply language (`/language Bengali`, `/language off`). |
+| **/avoid** | Ban a phrase from replies, comments and commits (`/avoid delve`, `/avoid remove delve`); saved to settings. |
+| **/comments** | `none`, `minimal` or `default` code comments; `none` warns on edits that add comments. |
 | **/keybindings** | Inspect keybinding files and supported actions. |
 
 ## Command palette notes

@@ -11,6 +11,7 @@
 // always apply. Rules that loosen policy (allow, hooks that run commands,
 // defaultMode, sandbox opt-outs) apply only after the user trusts the workspace
 // with `oasis trust` or `/trust`. User-level settings always apply.
+import { normalizePhrases, normalizeCommentMode } from './style-rules.mjs';
 import { writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { sanitizeModelRouting } from './model-routing.mjs';
@@ -242,6 +243,9 @@ export async function loadSettings(root, options = {}) {
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
+    // Writing rules: phrases accumulate across scopes; the most specific codeComments wins.
+    if (settings.avoidPhrases !== undefined) result.avoidPhrases = normalizePhrases([...(result.avoidPhrases || []), ...normalizePhrases(settings.avoidPhrases)]);
+    if (normalizeCommentMode(settings.codeComments)) result.codeComments = normalizeCommentMode(settings.codeComments);
     if (typeof settings.theme === 'string' && settings.theme.trim()) result.theme = settings.theme.trim().slice(0, 120);
     if (typeof settings.agent === 'string' && settings.agent.trim()) { result.agent = settings.agent.trim().toLowerCase(); result.agentSource = scope; }
     // Disabling channels only tightens, so any scope may do it (Claude Code's channelsEnabled policy).

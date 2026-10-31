@@ -89,6 +89,7 @@ OASIS follows the familiar agent-harness design (tools, subagents, hooks, MCP, s
 | "A prompt injection could edit my settings or git hooks" | **Protected config files**: edits to settings, hooks, plugins, `.mcp.json` and `.git/` always ask with a warning, even with `--yes` or broad allow rules. |
 | "It litters my repo with test scripts and temp files" | **Scratch space**: each session gets a git-ignored `.oasis/scratch/` folder for throwaway files, pruned after a week. |
 | "It suddenly started replying in another language" | **Pinned reply language**: `/language Bengali`, the `language` setting or `OASIS_LANGUAGE`. |
+| "It keeps adding comments and saying 'load-bearing' after I told it to stop" | **Persistent writing rules**: `/comments none` (edits that add comments get flagged) and `/avoid PHRASE`, saved to settings so they survive compaction. |
 | "It retries the same failing command forever" | **Retry guard** stops repeated identical failures and asks for a different approach. |
 
 The complete list is in the [changelog](CHANGELOG.md). These guards reduce common failure modes; they do not make any model infallible.
