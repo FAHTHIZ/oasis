@@ -24,6 +24,8 @@ import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readW
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
+// Built-ins that only make sense in the terminal; the browser explains instead of running them.
+const WEB_TERMINAL_ONLY_COMMANDS = new Set(['copy', 'sandbox', 'loop', 'cd', 'exit', 'vim', 'terminal-setup', 'keybindings']);
 
 // Compact session status for the browser: permission mode, context use, token totals.
 export function webSessionState(session, env = process.env) {
@@ -1832,7 +1834,7 @@ export async function webSlashCommands(root, env = process.env) {
     seen.add(key);
     list.push({ name: String(name), description: String(description || '').replace(/\s+/g, ' ').slice(0, 160), kind });
   };
-  for (const [name, description] of Object.entries(BUILTIN_COMMANDS)) if (!WEB_UNSUPPORTED_COMMANDS.has(name)) add(name, description, 'builtin');
+  for (const [name, description] of Object.entries(BUILTIN_COMMANDS)) if (!WEB_UNSUPPORTED_COMMANDS.has(name) && !WEB_TERMINAL_ONLY_COMMANDS.has(name)) add(name, description, 'builtin');
   try { for (const [name, command] of (await loadCustomCommands(root, { env })).entries()) add(name, command && command.description || 'Custom command', 'command'); } catch { /* ignore broken command folders */ }
   try {
     const { listAvailableSkills } = await import('./tools.mjs');
