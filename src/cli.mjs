@@ -1777,9 +1777,10 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
           : 'not recorded')
         : 'not required';
       const lsp = Array.isArray(evidence.lsp) ? evidence.lsp : [];
-      const lspIssues = lsp.filter((item) => item.status === 'unavailable' || item.status === 'errors').length;
+      const lspIssues = lsp.filter((item) => item.status === 'issues' || item.status === 'errors' || (item.status === 'unavailable' && item.blocking !== false)).length;
+      const lspSkipped = lsp.filter((item) => item.status === 'unavailable' && item.blocking === false).length;
       const lspStatus = lsp.length
-        ? 'LSP ' + lspIssues + ' issue(s) across ' + lsp.length + ' changed file(s)'
+        ? 'LSP ' + lspIssues + ' issue(s) across ' + lsp.length + ' changed file(s)' + (lspSkipped ? ' (' + lspSkipped + ' skipped: no language server installed)' : '')
         : 'LSP not reported';
       stdout.write('[verification] ' + (evidence.complete ? 'Complete' : 'Incomplete') +
         ' · diff ' + (evidence.diffReviewed ? 'reviewed' : 'not reviewed') +

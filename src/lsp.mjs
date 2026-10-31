@@ -658,7 +658,7 @@ export async function verifyEditedFileWithLsp(root, file, options = {}) {
     // responsible for deciding whether this edit can be considered verified.
     const disabledByPolicy = /Language-server startup is disabled for unattended GitHub Action runs/i.test(reason);
     const missingOptionalServer = disabledByPolicy || (!customServer &&
-      /No [^\\s]+ language server found\\./i.test(reason));
+      /No \S+ language server found\./i.test(reason));
     return {
       status: 'unavailable',
       blocking: !missingOptionalServer,
