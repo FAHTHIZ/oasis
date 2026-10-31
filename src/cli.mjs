@@ -947,6 +947,7 @@ function reportSessionNotices(session) {
     if (session.styleWarning) stdout.write('[settings] ' + session.styleWarning + '\n');
     if (session.agentWarning) stdout.write('[settings] ' + session.agentWarning + '\n');
     else if (session.mainAgent) stdout.write('[agent] Running as ' + session.mainAgent + (session.settings && session.settings.agentSource && !SESSION_OPTIONS.agent ? ' (from ' + session.settings.agentSource + ' settings)' : '') + '.\n');
+    for (const note of session.instructionNotices || []) stdout.write('[instructions] ' + note + ' Split it or move detail into @imports / .claude/rules/.\n');
     for (const item of session.rejectedDirectories || []) stdout.write('[settings] Additional directory ' + item.dir + ' was not added: ' + item.error + '.\n');
     if (session.additionalDirectories && session.additionalDirectories.length) stdout.write('[settings] Additional directories: ' + session.additionalDirectories.join(', ') + '\n');
     const ignored = session.settings && session.settings.ignoredUntrusted || [];

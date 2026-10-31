@@ -68,12 +68,23 @@ async function readImports(root, text, depth = 0) {
   return lines.join('\n');
 }
 
+function clipInstruction(name, content, notices) {
+  if (content.length <= PER_FILE_LIMIT) return content;
+  notices.push(name + ' is ' + content.length + ' characters; only the first ' + PER_FILE_LIMIT + ' were loaded into the prompt.');
+  return content.slice(0, PER_FILE_LIMIT) + '\n[... ' + name + ' truncated: ' + (content.length - PER_FILE_LIMIT) + ' more characters not loaded. read_file it if the rest matters ...]';
+}
+
 export async function loadMemory(root, options = {}) {
   const files = await memoryFiles(root, options);
+  const notices = Array.isArray(options.notices) ? options.notices : [];
   const parts = [];
+  let readmePart = '';
   const seen = new Set();
   for (const file of files) {
-    if (!file.exists) continue;
+    if (!file.exists) {
+      if (file.size > MAX_MEMORY_FILE * 4 && file.label !== 'readme') notices.push(path.basename(file.path) + ' (' + file.size + ' bytes) is too large and was not loaded at all.');
+      continue;
+    }
     let real;
     try { real = await realpath(file.path); } catch { continue; }
     if (file.label !== 'user' && file.label !== 'parent') {
@@ -89,7 +100,9 @@ export async function loadMemory(root, options = {}) {
     if (file.label !== 'readme') content = await readImports(root, content);
     const name = file.label === 'user' || file.label === 'parent' ? file.path.replace(os.homedir(), '~') : path.relative(path.resolve(root), file.path);
     const heading = file.label === 'user' ? 'User memory (applies to all projects)' : file.label === 'local' ? 'Personal project memory' : file.label === 'parent' ? 'Parent directory memory' : 'Project context';
-    parts.push('--- ' + heading + ': ' + name + ' ---\n' + content.slice(0, PER_FILE_LIMIT));
+    const block = '--- ' + heading + ': ' + name + ' ---\n' + (file.label === 'readme' ? content.slice(0, PER_FILE_LIMIT) : clipInstruction(name, content, notices));
+    if (file.label === 'readme') readmePart = block;
+    else parts.push(block);
   }
   const env = options.env || process.env;
   const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
@@ -98,9 +111,16 @@ export async function loadMemory(root, options = {}) {
   for (const rule of rules) {
     if (rule.paths.length || seen.has(rule.real)) continue;
     seen.add(rule.real);
-    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + rule.body.slice(0, PER_FILE_LIMIT));
+    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + clipInstruction('rule ' + rule.name, rule.body, notices));
   }
-  return parts.join('\n\n').slice(0, MAX_TOTAL);
+  // README is background, not instructions: it only gets whatever budget the real instruction files leave.
+  if (readmePart) parts.push(readmePart);
+  const joined = parts.join('\n\n');
+  if (joined.length <= MAX_TOTAL) return joined;
+  const marker = '\n[... instruction budget of ' + MAX_TOTAL + ' characters reached: ' + (joined.length - MAX_TOTAL) + ' characters of the files above were not loaded ...]';
+  const instructionsOnly = parts.slice(0, readmePart ? -1 : undefined).join('\n\n');
+  if (instructionsOnly.length > MAX_TOTAL - marker.length) notices.push('Instruction files total ' + instructionsOnly.length + ' characters; only the first ' + MAX_TOTAL + ' were loaded.');
+  return joined.slice(0, MAX_TOTAL - marker.length) + marker;
 }
 
 // Claude Code rules: every .md file under a rules/ directory (recursive, sorted).
