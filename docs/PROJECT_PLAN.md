@@ -4,7 +4,7 @@
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
-**Current documentation / release-status snapshot:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`
+**Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. It replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
@@ -38,7 +38,7 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Current `main` snapshot rechecked:** `5d6225e982755dd333dc0d476e685b4f8f0282ac` (October 31, 2026). The source package is version `0.4.0`; its release notes are prepared, but `v0.4.0` has not been tagged or published.
+**Last fully enumerated validation snapshot:** `5d6225e982755dd333dc0d476e685b4f8f0282ac` (October 31, 2026). The source package was version `0.4.0`; its release notes were prepared, but `v0.4.0` had not been tagged or published.
 
 The public release state was checked against the repository's Git refs and Releases API:
 
@@ -53,7 +53,7 @@ The public release state was checked against the repository's Git refs and Relea
 - Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
 - The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
-The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; this is intentionally distinct from the current documentation/release-status snapshot. All CI statements above are tied to `5d6225e982755dd333dc0d476e685b4f8f0282ac`. Any later commit needs its own same-SHA checks; a pass from an earlier commit is historical evidence only.
+The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the CI evidence baseline `5d6225e982755dd333dc0d476e685b4f8f0282ac`. All CI statements above refer only to that exact SHA. Subsequent documentation follow-ups—README, installer availability wording, the public homepage and its validator—were committed directly to `main` after this validation snapshot. Those later commits need their own same-SHA checks; a pass from an earlier commit is historical evidence only.
 
 ## Production-readiness outlook
 
