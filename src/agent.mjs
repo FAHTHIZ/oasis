@@ -175,7 +175,11 @@ export async function compactHistoryIfNeeded(session, options = {}) {
         { role: 'user', content: 'Summarize this bounded transcript:\n\n--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + transcript + '\n--- END UNTRUSTED TRANSCRIPT ---' }
       ]
     };
-    const completion = await requestCompletion(summarySession, { noTools: true, signal: options.signal });
+    const completion = await requestCompletion(summarySession, {
+      noTools: true,
+      signal: options.signal,
+      ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
+    });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
   } catch (error) {
@@ -265,7 +269,11 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
         { role: 'user', content: 'Summarize these completed tool rounds only.\n\n--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + transcript + '\n--- END UNTRUSTED TRANSCRIPT ---' }
       ]
     };
-    const completion = await requestCompletion(summarySession, { noTools: true, signal: options.signal });
+    const completion = await requestCompletion(summarySession, {
+      noTools: true,
+      signal: options.signal,
+      ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
+    });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
   } catch (error) {
@@ -3924,7 +3932,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   session.messages.push({ role: 'user', content: 'The tool-step budget has been reached. Give a concise and honest report of what is completed, which checks ran, and anything unfinished. Do not request more tools.' + (pendingVerification.length ? '\nVerification still incomplete: ' + pendingVerification.join('; ') : '') });
   let final = { content: '' };
   try {
-    final = await requestCompletion(session, { noTools: true });
+    final = await requestCompletion(session, {
+      noTools: true,
+      ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
+    });
     tokensUsed += Number(final.usage && final.usage.totalTokens || 0);
     if (options.onUsage && final.usage) options.onUsage({ ...final.usage, step: maxSteps + 1 });
   } catch (error) {
