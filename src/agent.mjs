@@ -90,6 +90,27 @@ function deterministicHistorySummary(messages) {
   return (text.length > 16000 ? '[Earlier history clipped; most recent details retained]\n' + text.slice(-16000) : text) || 'No usable earlier conversation details were available.';
 }
 
+// Compaction must never look like a freeze: the summary request gets its own
+// hard deadline (OASIS_COMPACT_TIMEOUT_SECONDS, default 90) and falls back to the
+// deterministic local summary when the model is slow or unavailable.
+function compactionDeadline(options = {}) {
+  const env = options.env || process.env;
+  const seconds = Number(env.OASIS_COMPACT_TIMEOUT_SECONDS);
+  const ms = Math.round((Number.isFinite(seconds) && seconds > 0 ? seconds : 90) * 1000);
+  const deadline = AbortSignal.timeout(ms);
+  const signal = options.signal && typeof AbortSignal.any === 'function' ? AbortSignal.any([options.signal, deadline]) : (options.signal || deadline);
+  return { signal, ms, timedOut: () => deadline.aborted && !(options.signal && options.signal.aborted) };
+}
+
+function compactionError(deadline, error) {
+  return deadline.timedOut() ? new Error('Compaction summary took longer than ' + Math.round(deadline.ms / 1000) + 's; used a local summary instead (OASIS_COMPACT_TIMEOUT_SECONDS).') : error;
+}
+
+function announceCompaction(options, info) {
+  if (typeof options.onCompactionStart !== 'function') return;
+  try { options.onCompactionStart(info); } catch {}
+}
+
 async function reportCompaction(session, summary, beforeTokens, options = {}, details = {}) {
   const afterTokens = estimateTokens(session.messages || []);
   const savedTokens = Math.max(0, beforeTokens - afterTokens);
@@ -172,6 +193,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   ].join('\n');
   let summary = '';
   let tokensUsed = 0;
+  const deadline = compactionDeadline(options);
   try {
     const summarySession = {
       config: session.config,
@@ -181,15 +203,16 @@ export async function compactHistoryIfNeeded(session, options = {}) {
         { role: 'user', content: 'Summarize this bounded transcript:\n\n--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + transcript + '\n--- END UNTRUSTED TRANSCRIPT ---' }
       ]
     };
+    announceCompaction(options, { beforeTokens, messages: oldMessages.length, timeoutSeconds: Math.round(deadline.ms / 1000) });
     const completion = await requestCompletion(summarySession, {
       noTools: true,
-      signal: options.signal,
+      signal: deadline.signal,
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
   } catch (error) {
-    if (options.onCompactionError) options.onCompactionError(error);
+    if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
   }
   if (!summary) summary = deterministicHistorySummary(oldMessages);
   if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
@@ -266,6 +289,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
 
   let summary = '';
   let tokensUsed = 0;
+  const deadline = compactionDeadline(options);
   try {
     const summarySession = {
       config: session.config,
@@ -275,16 +299,17 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
         { role: 'user', content: 'Summarize these completed tool rounds only.\n\n--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + transcript + '\n--- END UNTRUSTED TRANSCRIPT ---' }
       ]
     };
+    announceCompaction(options, { beforeTokens, messages: oldMessages.length, timeoutSeconds: Math.round(deadline.ms / 1000) });
     const completion = await requestCompletion(summarySession, {
       noTools: true,
-      signal: options.signal,
+      signal: deadline.signal,
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
   } catch (error) {
     if (options.signal && options.signal.aborted) throw error;
-    if (options.onCompactionError) options.onCompactionError(error);
+    if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
   }
   if (!summary) summary = deterministicHistorySummary(oldMessages);
   summary = summary.slice(0, 12_000);
