@@ -182,6 +182,31 @@ async function gitLog(root, args, options) {
   return { ok: true, branch: await currentBranch(root, env), commits, count: commits.length };
 }
 
+// Builds what the commit would contain in a throwaway index and scans the
+// added lines for credentials. The user's real index is never touched.
+async function stagedSecretHits(root, prefixes, env) {
+  if (/^(0|off|false)$/i.test(String((env && env.OASIS_COMMIT_SECRET_SCAN) ?? process.env.OASIS_COMMIT_SECRET_SCAN ?? ''))) return [];
+  const { findSecretsInDiff } = await import('./secret-shield.mjs');
+  const { mkdtemp, copyFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const indexPath = (await git(root, ['rev-parse', '--git-path', 'index'], { env })).stdout.trim();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-commit-scan-'));
+  try {
+    const tempIndex = path.join(dir, 'index');
+    try { await copyFile(path.resolve(root, indexPath), tempIndex); } catch { /* no index yet */ }
+    const scanEnv = { ...env, GIT_INDEX_FILE: tempIndex };
+    const add = await git(root, ['add', '-A', '--', ...(prefixes.length ? prefixes : ['.'])], { env: scanEnv });
+    if (add.exitCode !== 0) return [];
+    const hasHead = (await git(root, ['rev-parse', '--verify', '-q', 'HEAD'], { env })).exitCode === 0;
+    // Without a HEAD yet, compare against the empty tree.
+    const base = hasHead ? 'HEAD' : '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    const diff = await git(root, ['diff', '--cached', '--no-color', '--no-ext-diff', '--no-renames', '-U0', '--diff-filter=AM', base], { env: scanEnv });
+    return findSecretsInDiff(String(diff.stdout || '').slice(0, 20 * 1024 * 1024));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function gitCommit(root, args, options) {
   const { resolveWorkspacePath, sensitivePath } = await workspaceTools();
   const env = await commandEnv(options.env || process.env, false);
@@ -203,6 +228,11 @@ async function gitCommit(root, args, options) {
   if (!selected.length) return fail('There is nothing to commit' + (prefixes.length ? ' under ' + prefixes.join(', ') : '') + '.');
   const secrets = selected.filter((entry) => !entry.status.includes('D') && sensitivePath(entry.file)).map((entry) => entry.file);
   if (secrets.length) return fail('Refusing to commit files that look like secrets: ' + secrets.join(', ') + '. Add them to .gitignore, or commit them yourself if this is intentional.', { blocked: secrets });
+  const leaked = await stagedSecretHits(root, prefixes, env);
+  if (leaked.length) {
+    return fail('Refusing to commit: the changes contain what looks like real credentials:\n' + leaked.slice(0, 15).map((hit) => '  ' + hit.file + ':' + hit.line + '  ' + hit.kind + '  ' + hit.preview).join('\n') +
+      '\nMove the value into an environment variable or an ignored .env file and reference it from code. If it is a deliberate test fixture, the user can commit it themselves (or set OASIS_COMMIT_SECRET_SCAN=0).', { secretHits: leaked.slice(0, 15) });
+  }
   const branch = await currentBranch(root, env);
   const lines = selected.slice(0, 40).map((entry) => '  ' + describeStatus(entry.status).padEnd(9) + ' ' + entry.file);
   if (selected.length > 40) lines.push('  … and ' + (selected.length - 40) + ' more');

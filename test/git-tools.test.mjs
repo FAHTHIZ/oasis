@@ -240,3 +240,29 @@ test('worktree_merge requires approval and preserves HEAD when denied', async (t
   assert.equal(prompts.length, 1);
   assert.match(prompts[0], /creates a merge commit/);
 });
+
+test('git_commit refuses credentials hardcoded in source, with file:line and a masked preview', async () => {
+  const { findSecretsInDiff } = await import('../src/secret-shield.mjs');
+  const root = await mkdtemp(path.join(tmpdir(), 'oasis-commit-secret-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: root });
+    await writeFile(path.join(root, 'config.js'), "export const url = 'https://api.example.com';\nconst key = 'sk-proj-" + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4' + "';\n");
+    await writeFile(path.join(root, 'sample.js'), "// docs: AKIAIOSFODNN7EXAMPLE\nconst token = process.env.API_TOKEN;\n");
+    const approvals = [];
+    const blocked = await runGitTool('git_commit', root, { message: 'Add config' }, { approval: async (m) => { approvals.push(m); return true; } });
+    assert.equal(blocked.ok, false);
+    assert.match(blocked.error || blocked.message || JSON.stringify(blocked), /config\.js:2\s+token\s+sk-p…/);
+    assert.doesNotMatch(JSON.stringify(blocked), /A1b2C3d4E5f6G7h8I9j0K1l2M3n4/, 'the secret itself is never echoed');
+    assert.doesNotMatch(JSON.stringify(blocked), /sample\.js/, 'obvious samples and env references are fine');
+    assert.equal(approvals.length, 0, 'refused before asking');
+    assert.equal(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: root, encoding: 'utf8' }), '', 'real index untouched');
+    await writeFile(path.join(root, 'config.js'), "const key = process.env.OPENAI_API_KEY;\n");
+    const ok = await runGitTool('git_commit', root, { message: 'Add config' }, { approval: async () => true });
+    assert.equal(ok.ok, true);
+    assert.equal(findSecretsInDiff('+++ b/a.env\n@@ -0,0 +1 @@\n+DATABASE_URL=postgres://admin:hunter22@db:5432/app\n').length >= 1, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

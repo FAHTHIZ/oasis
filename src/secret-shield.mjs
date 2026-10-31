@@ -81,3 +81,59 @@ export function unmaskSecrets(session, value) {
 
 export const SECRET_SHIELD_NOTE = 'Values shown as «secret:ID» are credentials hidden from you by OASIS. Use the placeholder verbatim in tool arguments ' +
   '(edits, commands) and OASIS substitutes the real value; never ask the user to paste secrets and never try to reveal them.';
+
+// Finds high-confidence credentials in text (e.g. added diff lines). Returns
+// [{ kind, preview }] with values masked; obvious samples ("EXAMPLE", xxxx) are skipped.
+const SAMPLE_VALUE = /example|sample|dummy|placeholder|fake|x{5,}|\*{4,}|0{8,}|1234567890|abcdef(?:ghij)?$|your[_-]?(?:api|key|token)|«secret:/i;
+const maskPreview = (value) => { const text = String(value); return text.length <= 8 ? '****' : text.slice(0, 4) + '…' + text.slice(-2) + ' (' + text.length + ' chars)'; };
+export function findSecretsInText(text) {
+  const found = [];
+  const value = String(text || '');
+  for (const pattern of TOKEN_PATTERNS) {
+    for (const match of value.matchAll(new RegExp(pattern.source, pattern.flags))) {
+      if (SAMPLE_VALUE.test(match[0])) continue;
+      found.push({ kind: /PRIVATE KEY/.test(match[0]) ? 'private key' : 'token', preview: maskPreview(match[0].split('\n')[0]) });
+    }
+  }
+  for (const match of value.matchAll(new RegExp(ASSIGNMENT.source, ASSIGNMENT.flags))) {
+    const secret = match[2];
+    if (NON_SECRET_VALUE.test(secret) || SAMPLE_VALUE.test(secret) || /^[a-z]+$/i.test(secret) || /^\$|^\{\{|^%\(|^@/.test(secret)) continue;
+    found.push({ kind: 'assignment ' + match[1].trim().replace(/\s*[:=]\s*["']?$/, ''), preview: maskPreview(secret) });
+  }
+  for (const match of value.matchAll(new RegExp(URL_CREDENTIAL.source, URL_CREDENTIAL.flags))) {
+    if (SAMPLE_VALUE.test(match[2]) || /^\$|^\{/.test(match[2])) continue;
+    found.push({ kind: 'URL credential', preview: match[1] + '****@' });
+  }
+  return found;
+}
+
+// Scans a unified diff and reports secrets on added lines as file:line.
+export function findSecretsInDiff(diff) {
+  const hits = [];
+  let file = '';
+  let line = 0;
+  const lines = String(diff || '').split('\n');
+  // Private keys span lines; check whole added blocks per file as well.
+  let block = [];
+  const flush = () => {
+    if (!block.length) return;
+    const joined = block.map((item) => item.text).join('\n');
+    if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(joined)) {
+      for (const hit of findSecretsInText(joined)) if (hit.kind === 'private key') hits.push({ file, line: block[0].line, ...hit });
+    }
+    block = [];
+  };
+  for (const raw of lines) {
+    if (raw.startsWith('+++ ')) { flush(); file = raw.replace(/^\+\+\+ (?:b\/)?/, ''); continue; }
+    const header = raw.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (header) { flush(); line = Number(header[1]); continue; }
+    if (raw.startsWith('+') && !raw.startsWith('+++')) {
+      const text = raw.slice(1);
+      block.push({ text, line });
+      for (const hit of findSecretsInText(text)) if (hit.kind !== 'private key') hits.push({ file, line, ...hit });
+      line++;
+    } else if (!raw.startsWith('-')) { flush(); if (!raw.startsWith('\\')) line++; }
+  }
+  flush();
+  return hits.slice(0, 50);
+}
