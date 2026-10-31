@@ -47,6 +47,26 @@ test('approval text redacts common provider keys, bearer credentials, and key as
   assert.match(redactApprovalSecrets('api_key=do-not-show-me'), /api_key=\[redacted\]/i);
   assert.match(redactApprovalSecrets('{"apiKey":"json-secret"}'), /apiKey":"\[redacted\]/i);
   assert.match(redactApprovalSecrets('run --token super-secret-value'), /--token \[redacted\]/i);
+  assert.equal(
+    redactApprovalSecrets('--api-key sk-ant-abcdefghijklmnop123456'),
+    '--api-key [redacted secret]',
+    'a provider key redacted before option processing must keep one placeholder'
+  );
+  assert.equal(
+    redactApprovalSecrets('--api-key "sk-ant-abcdefghijklmnop123456"'),
+    '--api-key "[redacted secret]"',
+    'quoted provider placeholders must remain intact'
+  );
+  assert.equal(
+    redactApprovalSecrets('api_key=sk-ant-abcdefghijklmnop123456'),
+    'api_key=[redacted secret]',
+    'assignment placeholders must not be split into fragments'
+  );
+  assert.equal(
+    redactApprovalSecrets('--api-key [redacted secret]'),
+    '--api-key [redacted secret]',
+    'already redacted text must not be redacted a second time'
+  );
 });
 
 
