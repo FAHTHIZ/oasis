@@ -8,6 +8,7 @@ import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBloc
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
+import { selectTaskModel } from './model-routing.mjs';
 
 function withResolvedModel(config, env, planMode) {
   if (!config || !isModelAlias(config.model)) return config;
@@ -3316,19 +3317,115 @@ function refreshTodoPrompt(session) {
 
 export async function runAgentTurn(session, prompt, options = {}) {
   const env = options.env || process.env;
-  if (!options.isSubagent && session && session.root) {
-    const messaging = await import('./session-messaging.mjs').catch(() => null);
-    if (messaging) {
-      await messaging.registerActiveSession(session, { env }).catch(() => {});
-      await messaging.updateActiveSession(session, { state: 'busy' }, { env }).catch(() => {});
+  const originalConfig = session && session.config;
+  const originalModel = originalConfig && originalConfig.model || '';
+  const routing = session && session.settings && session.settings.modelRouting || {};
+  const route = options.isSubagent || !session
+    ? { enabled: false, tier: 'strong', model: originalModel, strongModel: originalModel, reason: 'subagents use their configured model' }
+    : selectTaskModel(prompt, originalModel, routing, { hint: options.routingHint });
+  let selectedModel = route.model || originalModel;
+  if (route.enabled && session.availableModels && !modelAllowed(selectedModel, session.availableModels, {
+    env: session.modelEnv || env,
+    protocol: originalConfig && originalConfig.protocol
+  })) {
+    selectedModel = originalModel;
+    route.enabled = false;
+    route.tier = 'strong';
+    route.strongModel = originalModel;
+    route.reason = 'the configured routed model is not in availableModels; kept the session model';
+  }
+  const temporarilyRouted = Boolean(route.enabled && originalConfig && selectedModel !== originalModel);
+  if (temporarilyRouted) session.config = { ...originalConfig, model: selectedModel };
+  const taskUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    requests: 0,
+    costUSD: 0,
+    strongModelCostUSD: 0,
+    costKnown: true,
+    strongModelCostKnown: true
+  };
+  const onUsage = (entry = {}) => {
+    taskUsage.inputTokens += Number(entry.inputTokens || 0);
+    taskUsage.outputTokens += Number(entry.outputTokens || 0);
+    taskUsage.totalTokens += Number(entry.totalTokens || 0);
+    if (entry.phase === undefined) {
+      taskUsage.requests += 1;
+      const actualModel = String(entry.model || (session && session.config && session.config.model) || selectedModel);
+      const pricingOptions = {
+        config: originalConfig || {},
+        overrides: session && session.pricing || {},
+        env
+      };
+      const actualPriceModel = resolveModelAlias(actualModel, {
+        protocol: originalConfig && originalConfig.protocol,
+        env
+      });
+      const strongPriceModel = resolveModelAlias(route.strongModel || originalModel, {
+        protocol: originalConfig && originalConfig.protocol,
+        env
+      });
+      if (priceFor(actualPriceModel, pricingOptions) === null) taskUsage.costKnown = false;
+      else taskUsage.costUSD += Number(entry.costUsd || 0);
+      if (priceFor(strongPriceModel, pricingOptions) === null) taskUsage.strongModelCostKnown = false;
+      else taskUsage.strongModelCostUSD += estimateCostUsd(strongPriceModel, entry, pricingOptions);
     }
-    try {
-      return await runAgentTurnWithTelemetry(session, prompt, options);
-    } finally {
-      if (messaging) await messaging.updateActiveSession(session, { state: 'active' }, { env }).catch(() => {});
+    if (typeof options.onUsage === 'function') options.onUsage(entry);
+  };
+  const turnOptions = { ...options, onUsage };
+  let result;
+  try {
+    if (!options.isSubagent && session && session.root) {
+      const messaging = await import('./session-messaging.mjs').catch(() => null);
+      if (messaging) {
+        await messaging.registerActiveSession(session, { env }).catch(() => {});
+        await messaging.updateActiveSession(session, { state: 'busy' }, { env }).catch(() => {});
+      }
+      try {
+        result = await runAgentTurnWithTelemetry(session, prompt, turnOptions);
+      } finally {
+        if (messaging) await messaging.updateActiveSession(session, { state: 'active' }, { env }).catch(() => {});
+      }
+    } else {
+      result = await runAgentTurnWithTelemetry(session, prompt, turnOptions);
+    }
+    const actualCostKnown = taskUsage.requests > 0 && taskUsage.costKnown;
+    const strongCostKnown = taskUsage.requests > 0 && taskUsage.strongModelCostKnown;
+    const savingsUSD = actualCostKnown && strongCostKnown
+      ? taskUsage.strongModelCostUSD - taskUsage.costUSD
+      : null;
+    if (session && session.webUsage && route.enabled && route.tier === 'easy' && taskUsage.requests > 0) {
+      session.webUsage.routingTasks = Number(session.webUsage.routingTasks || 0) + 1;
+      if (savingsUSD !== null) session.webUsage.routingSavingsUSD = Number(session.webUsage.routingSavingsUSD || 0) + savingsUSD;
+      else session.webUsage.routingSavingsKnown = false;
+    }
+    return {
+      ...result,
+      modelRouting: {
+        enabled: Boolean(route.enabled),
+        tier: route.tier,
+        selectedModel,
+        strongModel: route.strongModel || originalModel,
+        reason: route.reason
+      },
+      taskUsage: {
+        ...taskUsage,
+        costUSD: actualCostKnown ? taskUsage.costUSD : null,
+        strongModelCostUSD: strongCostKnown ? taskUsage.strongModelCostUSD : null,
+        costKnown: actualCostKnown,
+        strongModelCostKnown: strongCostKnown,
+        savingsUSD,
+        selectedModel
+      }
+    };
+  } finally {
+    // Preserve a genuine emergency fallback switch, but otherwise return the
+    // session to its chosen default model after this routed task.
+    if (temporarilyRouted && session.config && session.config.model === selectedModel) {
+      session.config = originalConfig;
     }
   }
-  return runAgentTurnWithTelemetry(session, prompt, options);
 }
 
 async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
