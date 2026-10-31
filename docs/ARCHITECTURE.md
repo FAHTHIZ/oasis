@@ -324,6 +324,10 @@ The repository uses several levels of verification; each answers a different que
 - Desktop packaging builds platform artifacts in CI. A successful build does not prove clean-machine install, first-run, updates, publisher identity, or security certification.
 - The evaluation harness validates pinned reference tasks and can compare saved reports. The current 33-task suite is a smoke/regression harness, not a representative repository-scale coding benchmark.
 
+### Runtime verification gate
+
+Inside a task, `src/agent.mjs` keeps a per-turn verification state and does not accept a final answer until it is satisfied or the agent has been asked once to finish it. It records which files the agent changed, whether their diff was reviewed, whether a recognized check passed after the latest edit, and LSP diagnostics per file (`src/lsp.mjs`). Two deterministic steps run outside the model before the gate is evaluated. If `autoTest` is configured, `src/auto-test.mjs` runs the user's test command and sends failures back as a new user turn, up to a fixed number of attempts. `src/test-tamper.mjs` compares the edited test files with `HEAD` and turns skips, `.only`, removed test cases or assertions, and deleted test files into blockers. Results are returned as `verification` in the CLI summary, JSON/stream-json output, the SDK and the web workspace.
+
 CI passing is evidence for the exact commit and jobs that ran. A green older run is not verification of a newer commit. For current statuses and release gates, use the [project plan](PROJECT_PLAN.md).
 
 ## Current architectural limits
@@ -359,6 +363,10 @@ These are current engineering boundaries, not statements that the corresponding 
 | Electron desktop host | `desktop/main.mjs`, `desktop/secure-secrets.mjs` |
 | VS Code-family extension | `ide/vscode/`, `src/ide.mjs` |
 | Language-server integration | `src/lsp.mjs` |
+| Verification helpers | `src/auto-test.mjs`, `src/test-tamper.mjs`, `src/lsp.mjs` |
+| Repository map and watch mode | `src/repo-map.mjs`, `src/ai-comments.mjs` |
+| Public URL fetching and SSRF guards | `src/public-fetch.mjs`, `src/browser-tool.mjs` |
+| Slash commands and terminal rendering | `src/slash.mjs`, `src/terminal-ui.mjs`, `src/markdown.mjs` |
 | Memory, backups, secure storage and telemetry | `src/memory.mjs`, `src/backups.mjs`, `src/secure-store.mjs`, `src/telemetry.mjs`, `desktop/secure-secrets.mjs` |
 
 ## Related references
