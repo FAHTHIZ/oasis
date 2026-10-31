@@ -73,3 +73,21 @@ test('install_package refuses hallucinated names and asks a human for risky ones
   assert.match(prompts[0], /Package check: .*first published/);
   assert.match(JSON.stringify(declined.vetting), /only 1 download/);
 });
+
+test('shell and run_command installs are vetted too', async (t) => {
+  const { extractInstallTargets } = await import('../src/package-vetting.mjs');
+  assert.deepEqual(extractInstallTargets('cd web && npm install lodash@4 -D @types/node').map((item) => item.spec), ['lodash@4', '@types/node']);
+  assert.deepEqual(extractInstallTargets('python3 -m pip install -r req.txt requests>=2').map((item) => item.spec), ['requests>=2']);
+  assert.deepEqual(extractInstallTargets('npm ci && npm install && npm install ./pkg git+https://x/y.git'), []);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-vet-cmd-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { fetchImpl } = fakeRegistry({});
+  const viaCommand = await executeTool('run_command', { command: 'npm', args: ['install', 'totally-invented-pkg'] }, { root, autoApprove: true, approval: async () => true, fetchImpl, env: process.env });
+  assert.equal(viaCommand.blocked, true);
+  assert.match(viaCommand.message, /does not exist on the npm registry\. The command was not run/);
+  const { executePowerTool } = await import('../src/power-tools.mjs');
+  const viaShell = await executePowerTool('run_shell', { command: 'pip install reqeusts && echo ran' }, { root, autoApprove: true, approval: async () => true, fetchImpl, env: process.env }, root);
+  assert.equal(viaShell.blocked, true);
+  assert.match(viaShell.message, /does not exist on PyPI/);
+  assert.equal(viaShell.stdout, undefined, 'nothing ran');
+});

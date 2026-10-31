@@ -109,3 +109,72 @@ export async function vetPackage(plan, { fetchImpl = globalThis.fetch, env = pro
   if (downloads !== null && downloads < 50) warnings.push('"' + name + '" has only ' + downloads + ' download(s) in the last week.');
   return { checked: true, missing: false, risky: warnings.length > 0, name, registry, created, downloads, warnings };
 }
+
+// ---- Shell / run_command installs --------------------------------------------
+const INSTALLERS = [
+  { re: /^(?:npm)$/, subs: ['install', 'i', 'add', 'isntall'], ecosystem: 'npm' },
+  { re: /^(?:pnpm|yarn|bun)$/, subs: ['add', 'install', 'i'], ecosystem: 'npm', needsArgs: true },
+  { re: /^(?:pip|pip3)$/, subs: ['install'], ecosystem: 'pip' },
+  { re: /^(?:uv|poetry|pdm|rye)$/, subs: ['add'], ecosystem: 'pip' },
+  { re: /^cargo$/, subs: ['add', 'install'], ecosystem: 'cargo' }
+];
+const VALUE_FLAGS = new Set(['-r', '--requirement', '-c', '--constraint', '-e', '--editable', '-i', '--index-url', '--extra-index-url', '-f', '--find-links', '--target', '-t', '--prefix', '--root', '--registry', '--features', '--git', '--path', '--branch', '--tag', '--rev', '--version', '--vers', '--group', '-G', '--filter', '-w', '--workspace', '--python']);
+
+function installSpecs(parts) {
+  let at = 0;
+  while (at < parts.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(parts[at]) || ['sudo', 'command', 'time', 'nice', 'env', 'npx'].includes(parts[at]))) at++;
+  let program = String(parts[at] || '').split('/').pop();
+  let rest = parts.slice(at + 1);
+  // python -m pip install x
+  if (/^python(?:\d+(?:\.\d+)?)?$/.test(program) && rest[0] === '-m' && /^pip\d?$/.test(rest[1] || '')) { program = 'pip'; rest = rest.slice(2); }
+  if (program === 'uv' && rest[0] === 'pip') rest = rest.slice(1).map((item, index) => (index === 0 && item === 'install' ? 'add' : item));
+  const installer = INSTALLERS.find((item) => item.re.test(program));
+  if (!installer) return [];
+  const sub = rest.findIndex((item) => !item.startsWith('-'));
+  if (sub === -1 || !installer.subs.includes(rest[sub])) return [];
+  const specs = [];
+  for (let index = sub + 1; index < rest.length; index++) {
+    const item = rest[index];
+    if (VALUE_FLAGS.has(item)) { index++; continue; }
+    if (item.startsWith('-')) continue;
+    // Local paths, URLs, git specs, tarballs and requirement files are not registry names.
+    if (/^(?:\.|\/|~|[A-Za-z]:\\)|:\/\/|^git\+|^file:|^link:|\.(?:tgz|tar\.gz|whl|zip)$|^github:/.test(item)) continue;
+    if (item.includes('/') && !item.startsWith('@')) continue;
+    specs.push({ ecosystem: installer.ecosystem, spec: item.replace(/^['"]|['"]$/g, '') });
+  }
+  return specs;
+}
+
+export function extractInstallTargets(command, args) {
+  const text = Array.isArray(args) && args.length ? [command, ...args.map(String)].join(' ') : String(command || '');
+  const out = [];
+  for (const segment of text.split(/\s*(?:&&|\|\||;|\||\n)\s*/)) {
+    const parts = segment.trim().split(/\s+/).filter(Boolean).map((part) => part.replace(/^['"]|['"]$/g, ''));
+    out.push(...installSpecs(parts));
+  }
+  return out.slice(0, 12);
+}
+
+// Vets every registry package a command would install. Returns
+// { missing: [...], warnings: [...], risky } — missing names block the command.
+export async function vetCommandInstalls(command, args, options = {}) {
+  const targets = extractInstallTargets(command, args);
+  if (!targets.length) return { targets, missing: [], warnings: [], risky: false };
+  const results = await Promise.all(targets.map((target) => vetPackage({ ecosystem: target.ecosystem, packageName: target.spec }, options)));
+  const missing = results.filter((result) => result.missing).map((result) => result.name);
+  const warnings = results.flatMap((result) => result.warnings || []);
+  return { targets, missing, warnings, risky: results.some((result) => result.risky), results };
+}
+
+// Shared guard for run_command / run_shell. Returns { blocked } with a tool
+// result when a named package does not exist, or { approvalNote, forceAsk }.
+export async function guardInstallCommand(command, args, { env = process.env, fetchImpl = globalThis.fetch } = {}) {
+  if (/^(0|off|false)$/i.test(String(env.OASIS_PACKAGE_VETTING ?? ''))) return {};
+  const vetting = await vetCommandInstalls(command, args, { env, fetchImpl });
+  if (!vetting.targets.length) return {};
+  if (vetting.missing.length) {
+    return { blocked: { approved: false, blocked: true, vetting: { missing: vetting.missing, warnings: vetting.warnings }, message: vetting.warnings.filter((item) => /does not exist/.test(item)).join(' ') + ' The command was not run. The name may be misspelled or invented; check the exact package name before trying again.' } };
+  }
+  if (!vetting.warnings.length) return {};
+  return { approvalNote: 'Package check: ' + vetting.warnings.join(' '), forceAsk: vetting.risky, warnings: vetting.warnings };
+}
