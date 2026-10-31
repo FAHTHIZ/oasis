@@ -5,7 +5,7 @@
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
 **Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
-**Latest documentation and release-check snapshot:** [`a8fb7b32ee257e265f6e7cb1a5c301345afed901`](https://github.com/FAHTHIZ/oasis/commit/a8fb7b32ee257e265f6e7cb1a5c301345afed901)
+**Latest User Guide and documentation audit snapshot:** [`e9e79441eee7cad70b4229d69b98c18d553020db`](https://github.com/FAHTHIZ/oasis/commit/e9e79441eee7cad70b4229d69b98c18d553020db)
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. It replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
@@ -39,22 +39,24 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Latest release-check snapshot:** `a8fb7b32ee257e265f6e7cb1a5c301345afed901` (October 31, 2026). The earlier fully enumerated CI evidence baseline `5d6225e982755dd333dc0d476e685b4f8f0282ac` remains historical; the checks below refer only to the newer snapshot.
+**Latest release-check snapshot:** `e9e79441eee7cad70b4229d69b98c18d553020db` (October 31, 2026). The earlier fully enumerated CI evidence baseline `5d6225e982755dd333dc0d476e685b4f8f0282ac` remains historical; the checks below are tied to the named commits and workflow runs.
 
 The public release state was checked against live Git refs and the GitHub Releases API:
 
 - The only version tag currently present is `v0.3.0`.
 - There is no published GitHub Release object for `v0.3.0`, and the Releases API returns no published release objects or downloadable assets. A Git tag is not a published GitHub Release.
 - `package.json` on `main` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only. The stable CLI installer therefore still resolves `v0.3.0` at this snapshot.
-- **Installer checks passed on Windows, macOS and Ubuntu** for this exact SHA ([run 41181273991](https://github.com/FAHTHIZ/oasis/actions/runs/41181273991)).
-- **Guarded branch cleanup passed** on this exact SHA ([run 41181274102](https://github.com/FAHTHIZ/oasis/actions/runs/41181274102)).
-- **Quality Checks were not green:** the security/runtime regression jobs on Windows, macOS and Ubuntu passed, but the clean-environment suite reported 839/840 tests passing. Its one failure was the lifecycle test's literal README expectation for the phrase `OASIS is in beta`, which the README presentation edit had removed. This documentation update restores that required wording; a new same-commit run must confirm the fix ([run 41181274088](https://github.com/FAHTHIZ/oasis/actions/runs/41181274088)).
-- **Public-site validation/deployment** was still in progress when this snapshot was checked ([run 41181274087](https://github.com/FAHTHIZ/oasis/actions/runs/41181274087)).
-- **Desktop packaging** was still in progress when this snapshot was checked ([run 41181273970](https://github.com/FAHTHIZ/oasis/actions/runs/41181273970)).
+- **Installer checks passed on Windows, macOS and Ubuntu** for the User Guide audit snapshot ([run 41182250261](https://github.com/FAHTHIZ/oasis/actions/runs/41182250261)).
+- **Guarded branch cleanup passed** for the same snapshot ([run 41182250266](https://github.com/FAHTHIZ/oasis/actions/runs/41182250266)).
+- **The newest Quality Checks run for this snapshot was queued** when this status was recorded ([run 41182250297](https://github.com/FAHTHIZ/oasis/actions/runs/41182250297)). The preceding Quality run on `7c04b82e8458c8327b0e15ed9680e94145b66626` has passed its clean-environment job with **840/840 tests**; its Windows, macOS and Ubuntu security/runtime regressions and Linux/Node 22 PTY integration also passed. Its Node 22, 24 and 26 package-integrity jobs were still running, so the overall Quality workflow had not yet completed.
+- The earlier `a8fb7b32ee257e265f6e7cb1a5c301345afed901` Quality run reported 839/840 tests because the README presentation edit removed the exact Beta phrase expected by a lifecycle regression. The phrase was restored, and the corrected test suite on `7c04b82e8458c8327b0e15ed9680e94145b66626` passed all 840 clean-environment tests.
+- **Public-site validation/deployment** was still in progress for the User Guide audit snapshot ([run 41182250267](https://github.com/FAHTHIZ/oasis/actions/runs/41182250267)).
+- **Desktop packaging** was still in progress for the same snapshot ([run 41182250322](https://github.com/FAHTHIZ/oasis/actions/runs/41182250322)).
 - Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
 - The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
-The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the historical CI evidence baseline above. The README, installer guide, Android guide, changelog, prepared release notes and security policy are being aligned to this snapshot. Any later commit—including the documentation audit commit—needs its own same-SHA release checks; a pass from an earlier commit is historical evidence only.
+The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the historical CI evidence baseline above. The README, documentation index, User Guide, installer guide, Android guide, changelog, prepared release notes and security policy were audited and aligned in the recent documentation pass. The named run states are snapshots, not promises: later commits need same-commit checks, and older passing jobs must not substitute for a newer candidate's results.
+
 
 ## Production-readiness outlook
 
