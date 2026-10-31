@@ -696,6 +696,7 @@ export function createOasisWebServer(options = {}) {
           onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
           onToolStart: ({ name, args, subagent }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100), detail: toolDetail(name, args), ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {}) }),
           onToolResult: ({ name, result: value }) => emit(job, 'tool_result', { name: String(name || 'tool').slice(0, 100), result: summarizeToolResult(value) }),
+          onContextOverflow: (info) => emit(job, 'context_overflow', info),
           onContextPruned: (info) => emit(job, 'context_pruned', info)
         });
         const saved = await saveSession(session, { env });
