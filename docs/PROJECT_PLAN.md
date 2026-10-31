@@ -41,19 +41,18 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Latest release-check snapshot:** `e9e79441eee7cad70b4229d69b98c18d553020db` (October 31, 2026). The earlier fully enumerated CI evidence baseline `5d6225e982755dd333dc0d476e685b4f8f0282ac` remains historical; the checks below are tied to the named commits and workflow runs.
+**Latest release-check snapshot:** `8ebb5cec5a273133950fd5f40f5b36f9da654e8e` (October 31, 2026). Every workflow passed on this exact SHA:
 
-The public release state was checked against live Git refs and the GitHub Releases API:
+- **Quality Checks — all nine jobs green** (Node 22/24/26 full gate, Linux/macOS/Windows security matrix including process-tree cancellation and adversarial URL tests, native PTY, clean environment, browser E2E with axe): [run 41203146905](https://github.com/FAHTHIZ/oasis/actions/runs/41203146905). Before this, the gate had been hanging because bare `node --test` executed a helper LSP server; that is fixed.
+- **Installer checks passed on Windows, macOS and Ubuntu:** [run 41203146915](https://github.com/FAHTHIZ/oasis/actions/runs/41203146915).
+- **Desktop packaging completed** (unsigned): [run 41203146960](https://github.com/FAHTHIZ/oasis/actions/runs/41203146960).
+- **Public-site validation and deployment passed:** [run 41203147018](https://github.com/FAHTHIZ/oasis/actions/runs/41203147018).
+- **Guarded branch cleanup passed:** [run 41203146878](https://github.com/FAHTHIZ/oasis/actions/runs/41203146878).
 
-- The only version tag currently present is `v0.3.0`.
-- There is no published GitHub Release object for `v0.3.0`, and the Releases API returns no published release objects or downloadable assets. A Git tag is not a published GitHub Release.
-- `package.json` on `main` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only. The stable CLI installer therefore still resolves `v0.3.0` at this snapshot.
-- **Installer checks passed on Windows, macOS and Ubuntu** for the User Guide audit snapshot ([run 41182250261](https://github.com/FAHTHIZ/oasis/actions/runs/41182250261)).
-- **Guarded branch cleanup passed** for the same snapshot ([run 41182250266](https://github.com/FAHTHIZ/oasis/actions/runs/41182250266)).
-- **Quality Checks were cancelled when a newer documentation commit superseded this snapshot** ([run 41182250297](https://github.com/FAHTHIZ/oasis/actions/runs/41182250297)). Do not count that run as a pass. The preceding run on `7c04b82e8458c8327b0e15ed9680e94145b66626` passed its clean-environment job with **840/840 tests**, plus Windows/macOS/Ubuntu security-runtime regressions and Linux/Node 22 PTY integration; the overall run was later cancelled before its Node 22/24/26 package-integrity matrix completed.
-- The earlier `a8fb7b32ee257e265f6e7cb1a5c301345afed901` Quality run reported 839/840 tests because the README presentation edit removed the exact Beta phrase expected by a lifecycle regression. The phrase was restored, and the corrected test suite on `7c04b82e8458c8327b0e15ed9680e94145b66626` passed all 840 clean-environment tests.
-- **Public-site validation/deployment was cancelled when a newer commit superseded this snapshot** ([run 41182250267](https://github.com/FAHTHIZ/oasis/actions/runs/41182250267)).
-- **Desktop packaging was cancelled when a newer commit superseded this snapshot** ([run 41182250322](https://github.com/FAHTHIZ/oasis/actions/runs/41182250322)).
+Release state, checked against live Git refs:
+
+- The only version tag is `v0.3.0`; there is no published GitHub Release object or downloadable asset. A Git tag is not a published GitHub Release.
+- `package.json` on `main` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only. The stable CLI installer therefore still resolves `v0.3.0`.
 - Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
 - The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
@@ -106,15 +105,15 @@ Prioritize high-value user journeys: provider setup, project onboarding, CLI/bro
 
 ## Release acceptance checklist
 
-- [ ] Latest Quality Checks pass on the exact candidate SHA.
-- [ ] Public-site validation passes on that same SHA.
-- [ ] Windows/macOS/Linux installer checks pass on that same SHA.
-- [ ] Desktop packaging completes on that same SHA.
-- [ ] Browser end-to-end tests cover first-run, approval/denial, cancellation, edit/verify and recovery paths.
-- [ ] Clean-machine install and first-run behavior is exercised for each advertised desktop OS.
-- [ ] Release version, immutable tag, release notes, checksums and uploaded artifacts agree.
-- [ ] Unsigned status and sandbox/platform limitations are visible.
-- [ ] README, Install, User Guide, Privacy, Security and release notes describe the same product.
-- [ ] Benchmark claims stay within the evidence actually published.
+- [x] Latest Quality Checks pass on the exact candidate SHA. `8ebb5ce` passed all nine jobs (Node 22/24/26 gate, Linux/macOS/Windows security matrix, PTY, clean environment, browser E2E): [run 41203146905](https://github.com/FAHTHIZ/oasis/actions/runs/41203146905). Re-run on the final release SHA before tagging.
+- [x] Public-site validation passes on that same SHA: [run 41203147018](https://github.com/FAHTHIZ/oasis/actions/runs/41203147018).
+- [x] Windows/macOS/Linux installer checks pass on that same SHA: [run 41203146915](https://github.com/FAHTHIZ/oasis/actions/runs/41203146915).
+- [x] Desktop packaging completes on that same SHA: [run 41203146960](https://github.com/FAHTHIZ/oasis/actions/runs/41203146960) (unsigned builds).
+- [x] Browser end-to-end tests cover first-run, approval/denial, cancellation, edit/verify and recovery paths (`.github/scripts/browser-e2e.mjs`: first-run at desktop and 390px, denied delete leaves the file intact, Stop during a pending approval prevents the side effect, write/read/verify with rendered reply, saved-chat recovery, isolated-diff review, axe contrast).
+- [ ] Clean-machine install and first-run behavior is exercised for each advertised desktop OS. (Needs real Windows/macOS/Linux machines; CI builds only.)
+- [ ] Release version, immutable tag, release notes, checksums and uploaded artifacts agree. (Blocked until `v0.4.0` is tagged and published.)
+- [x] Unsigned status and sandbox/platform limitations are visible (README Beta status and Quick start, INSTALL availability note, in-app footer "this is not an OS sandbox").
+- [x] README, Install, User Guide, Privacy, Security and release notes describe the same product (Node 22+, 0.4.0 untagged, `v0.3.0` installer target, unsigned desktop builds; checked 2026-10-31).
+- [x] Benchmark claims stay within the evidence actually published (README states the 33-task suite is a smoke/regression suite with no head-to-head claims; the "about 2.7k tokens" lean-tools figure was re-measured at 10,883 schema characters ≈ 2,721 tokens).
 
 A green CI matrix is necessary, not sufficient. It does not replace security review, real-user journeys, clean-machine installation checks or representative coding evaluation.
