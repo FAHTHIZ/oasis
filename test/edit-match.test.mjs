@@ -75,3 +75,37 @@ test('multi_edit uses relaxed matching and the elision guard', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('relaxed quote matches keep the file’s typographic quotes, dashes and NBSPs outside the changed span', () => {
+  const file = 'const msg = “Don’t stop” — ok;\nconst b = ‘x’;\nconst price = 5\u00A0€;\nconst c = 1;\n';
+  const result = relaxedReplace(file,
+    'const msg = "Don\'t stop" - ok;\nconst b = \'x\';\nconst price = 5 €;\nconst c = 1;',
+    'const msg = "Don\'t stop now" - ok;\nconst b = \'x\';\nconst price = 5 €;\nconst c = 2;');
+  assert.equal(result.strategy, 'typographic quotes');
+  assert.equal(result.next, 'const msg = “Don’t stop now” — ok;\nconst b = ‘x’;\nconst price = 5\u00A0€;\nconst c = 2;\n');
+});
+
+test('typography is kept when lines are added, and new text the model typed stays as typed', () => {
+  const file = '  <p>It’s “here”.</p>\n  <p>End</p>\n';
+  const result = relaxedReplace(file, '<p>It\'s "here".</p>\n<p>End</p>', '<p>It\'s "here".</p>\n<p>New "line"</p>\n<p>End</p>');
+  assert.equal(result.strategy, 'indentation');
+  assert.equal(result.next, '  <p>It’s “here”.</p>\n  <p>New "line"</p>\n  <p>End</p>\n');
+});
+
+test('ASCII-only files are untouched by typography restoration', () => {
+  const result = relaxedReplace('a = "x"  \nb = 1\n', 'a = "x"\nb = 1', 'a = "y"\nb = 1');
+  assert.equal(result.next, 'a = "y"\nb = 1\n');
+});
+
+test('write_file warns when a rewrite flattens typographic quotes into ASCII', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-typo-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'copy.md'), '# Welcome\n\nIt’s “easy” — really.\nPlain line.\n');
+  const flattened = await executeTool('write_file', { path: 'copy.md', content: '# Welcome\n\nIt\'s "easy" - really.\nPlain line.\nNew line.\n' }, { root, autoApprove: true });
+  assert.match(flattened.warning, /Typography changed: 1 line\(s\) in copy\.md lost their curly quotes/);
+  const kept = await executeTool('write_file', { path: 'copy.md', content: '# Welcome\n\nIt\'s "easy" - really.\nPlain line.\nNew line 2.\n' }, { root, autoApprove: true });
+  assert.ok(!kept.warning || !/Typography/.test(kept.warning), 'no warning once the file is ASCII');
+  await writeFile(path.join(root, 'copy.md'), 'It’s “easy”.\n');
+  const reworded = await executeTool('write_file', { path: 'copy.md', content: 'Completely different text.\n' }, { root, autoApprove: true });
+  assert.ok(!reworded.warning || !/Typography/.test(reworded.warning), 'rewording is not flattening');
+});

@@ -50,6 +50,36 @@ function reindent(newLines, oldNeedleLines, actualLines) {
   });
 }
 
+const TYPOGRAPHIC = /[\u2018\u2019\u201A\u201B\u2032\u201C\u201D\u201E\u201F\u2033\u2013\u2014\u00A0]/;
+
+// The model typed ASCII quotes/dashes for text that uses typographic ones. Keep the
+// file's characters wherever the replacement did not actually change the text:
+// unchanged lines are copied from the file, and changed lines keep the file's
+// characters in their common prefix and suffix. normalizeQuotes maps one
+// character to one character, so positions line up.
+function restoreLine(replacementLine, actualLine) {
+  if (!TYPOGRAPHIC.test(actualLine)) return replacementLine;
+  const a = normalizeQuotes(replacementLine);
+  const b = normalizeQuotes(actualLine);
+  if (a === b) return actualLine;
+  let prefix = 0;
+  while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix++;
+  let suffix = 0;
+  while (suffix < a.length - prefix && suffix < b.length - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) suffix++;
+  return actualLine.slice(0, prefix) + replacementLine.slice(prefix, replacementLine.length - suffix) + actualLine.slice(actualLine.length - suffix);
+}
+
+function keepTypography(replacement, needleLines, actual) {
+  if (!actual.some((line) => TYPOGRAPHIC.test(line))) return replacement;
+  const byNormalized = new Map();
+  actual.forEach((line) => { const key = normalizeQuotes(line); if (!byNormalized.has(key)) byNormalized.set(key, line); });
+  return replacement.map((line, index) => {
+    const same = byNormalized.get(normalizeQuotes(line));
+    if (same !== undefined) return same;
+    return replacement.length === needleLines.length ? restoreLine(line, actual[index]) : line;
+  });
+}
+
 /**
  * Try relaxed matching when the exact old_string was not found.
  * Returns { next, strategy, line } on a unique relaxed match, otherwise null.
@@ -69,6 +99,7 @@ export function relaxedReplace(current, oldString, newString) {
     const actual = fileLines.slice(start, start + needleLines.length).map((line) => line.replace(/\r$/, ''));
     let replacement = newString.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
     if (strategy.name === 'indentation') replacement = reindent(replacement, needleLines, actual);
+    if (strategy.name !== 'line endings and trailing whitespace') replacement = keepTypography(replacement, needleLines, actual);
     const hadCr = /\r$/.test(fileLines[start + needleLines.length - 1] || '');
     const replacedLines = replacement.map((line, index) => (eol === '\r\n' && (index < replacement.length - 1 || hadCr) ? line + '\r' : line));
     const nextLines = [...fileLines.slice(0, start), ...replacedLines, ...fileLines.slice(start + needleLines.length)];
@@ -125,4 +156,23 @@ export function closestMatchHint(current, oldString, { maxLines = 12 } = {}) {
   const excerpt = shown.map((line, index) => String(best.start + index + 1).padStart(width, ' ') + '| ' + line).join('\n');
   return 'Closest match (' + Math.round(best.score * 100) + '% similar) starts at line ' + (best.start + 1) + ':\n' + excerpt +
     (span > maxLines ? '\n…' : '') + '\nCopy old_string exactly from this text (without the line-number prefix).';
+}
+
+/**
+ * Warning when a full rewrite turned existing lines with typographic quotes,
+ * dashes or non-breaking spaces into ASCII copies of themselves.
+ */
+export function typographyWarning(previous, next, displayPath) {
+  if (typeof previous !== 'string' || typeof next !== 'string' || !TYPOGRAPHIC.test(previous)) return '';
+  const nextLines = new Set(next.split(/\r?\n/));
+  let flattened = 0;
+  let example = '';
+  for (const line of previous.split(/\r?\n/)) {
+    if (!TYPOGRAPHIC.test(line) || nextLines.has(line)) continue;
+    const ascii = normalizeQuotes(line);
+    if (ascii !== line && nextLines.has(ascii)) { flattened++; if (!example) example = line.trim().slice(0, 80); }
+  }
+  if (flattened < 1) return '';
+  return 'Typography changed: ' + flattened + ' line(s) in ' + displayPath + ' lost their curly quotes, dashes or non-breaking spaces (for example: ' + example +
+    '). Restore the original characters with edit_file unless the user asked for ASCII.';
 }

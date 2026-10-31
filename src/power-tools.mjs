@@ -5,6 +5,7 @@
 //   kill_command   stop a background process
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+import { commandFlagWarning } from './command-hints.mjs';
 import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState } from './file-state.mjs';
@@ -575,8 +576,9 @@ export async function executePowerTool(name, args, context, root) {
         const shellResult = await runShell(root, args, context);
         const pipeWarning = shellResult && typeof shellResult.exitCode === 'number' ? maskedPipelineWarning(args.command, shellResult.exitCode, process.platform === 'win32' ? 'cmd' : 'sh') : '';
         const noOp = editSnapshot && shellResult && typeof shellResult === 'object' ? await noOpEditWarning(editSnapshot, shellResult.exitCode) : '';
-        if (!pipeWarning && !noOp) return shellResult;
-        return { ...shellResult, ...(pipeWarning ? { exitCodeWarning: pipeWarning } : {}), ...(noOp ? { noOpEditWarning: noOp } : {}) };
+        const flagNote = shellResult && typeof shellResult.exitCode === 'number' ? commandFlagWarning(args.command) : '';
+        if (!pipeWarning && !noOp && !flagNote) return shellResult;
+        return { ...shellResult, ...(pipeWarning ? { exitCodeWarning: pipeWarning } : {}), ...(noOp ? { noOpEditWarning: noOp } : {}), ...(flagNote ? { commandWarning: flagNote } : {}) };
       }
     case 'powershell':
       return await runShell(root, args, context, 'powershell');

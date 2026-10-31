@@ -1,8 +1,9 @@
 import * as gitSafety from './git-safety.mjs';
+import { commandFlagWarning } from './command-hints.mjs';
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
-import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
+import { relaxedReplace, closestMatchHint, typographyWarning } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { loadMemory } from './memory.mjs';
 import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
@@ -1856,7 +1857,7 @@ export async function executeTool(name, args = {}, context = {}) {
       await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
-      const writeWarning = previousContent === null ? docWarning : combineWarnings(shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
+      const writeWarning = previousContent === null ? docWarning : combineWarnings(shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
       return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile, ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {
@@ -1914,6 +1915,10 @@ export async function executeTool(name, args = {}, context = {}) {
         maxSeconds: args.max_seconds
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
+      if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {
+        const flagNote = commandFlagWarning([args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '));
+        if (flagNote) commandResult.commandWarning = flagNote;
+      }
       if (editSnapshot && commandResult && typeof commandResult === 'object') {
         const noOp = await noOpEditWarning(editSnapshot, commandResult.exitCode);
         if (noOp) commandResult.noOpEditWarning = noOp;
