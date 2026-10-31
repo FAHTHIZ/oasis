@@ -1,4 +1,5 @@
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
+import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, combineWarnings } from './change-guard.mjs';
 import { loadMemory } from './memory.mjs';
 import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
 import { fetchPublicUrl } from './public-fetch.mjs';
@@ -1773,27 +1774,37 @@ export async function executeTool(name, args = {}, context = {}) {
       const next = args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
       if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('The edited file would exceed the 256 KiB limit.');
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
+      const editDisplayPath = target.relative.split(path.sep).join('/');
+      assertNoNewElision(args.old_string, args.new_string, editDisplayPath);
       await snapshotFile(target.root, target.absolute, 'before-agent-edit');
       await writeFile(target.absolute, next, { encoding: 'utf8' });
       await recordFileState(context, target.absolute);
-      return { path: target.relative.split(path.sep).join('/'), changed: true, replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true };
+      const editWarning = combineWarnings(shrinkWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
+      return { path: editDisplayPath, changed: true, replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
     }
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
       if (Buffer.byteLength(args.content, 'utf8') > MAX_TEXT_FILE) throw new Error('New file content exceeds the 256 KiB limit.');
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       let backedUpExistingFile = false;
+      let previousContent = null;
+      const writeDisplayPath = target.relative.split(path.sep).join('/');
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
-        await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'));
+        await assertFileFresh(context, target.absolute, writeDisplayPath);
+        if (old.isFile() && old.size <= MAX_TEXT_FILE) {
+          try { previousContent = await readFile(target.absolute, 'utf8'); } catch { previousContent = null; }
+        }
+        assertNoNewElision(previousContent, args.content, writeDisplayPath);
         await snapshotFile(target.root, target.absolute, 'before-agent-write');
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       await mkdir(path.dirname(target.absolute), { recursive: true });
       await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: 0o600 });
       await recordFileState(context, target.absolute);
-      return { path: target.relative.split(path.sep).join('/'), writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile };
+      const writeWarning = previousContent === null ? '' : combineWarnings(shrinkWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
+      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile, ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
