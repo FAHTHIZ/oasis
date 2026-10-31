@@ -180,4 +180,4 @@ Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [proj
 
 ## License
 
-OASIS is licensed under the [Apache License 2.0](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE).
