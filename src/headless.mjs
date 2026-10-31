@@ -334,7 +334,11 @@ export async function runHeadless(options) {
         const isEvent = (entry) => entry.kind === 'monitor' || entry.kind === 'monitor-end';
         if (!(session.inbox || []).some(isEvent)) {
           if (!activeAgentMonitors(session).length) break;
-          await new Promise((resolve) => { session.onBackgroundEvent = () => { session.onBackgroundEvent = null; setTimeout(resolve, 300); }; });
+          await new Promise((resolve) => {
+            const done = () => { session.onBackgroundEvent = null; if (signal) signal.removeEventListener('abort', done); resolve(); };
+            session.onBackgroundEvent = () => setTimeout(done, 300);
+            if (signal) signal.addEventListener('abort', done, { once: true });
+          });
           continue;
         }
         const events = session.inbox.filter(isEvent);
