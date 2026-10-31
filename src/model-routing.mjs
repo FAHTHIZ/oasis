@@ -1,5 +1,8 @@
-const HARD_SIGNALS = [
+const SAFETY_SIGNALS = [
   /\b(?:security|authentication|authorization|permissions?|secrets?|credentials?|sandbox|threat model|prompt injection)\b/i,
+];
+
+const HARD_SIGNALS = [
   /\b(?:architect(?:ure)?|refactor|redesign|migration|migrate|upgrade|deployment|production|performance|concurrency|race condition|database|schema)\b/i,
   /\b(?:implement|build|create|add|remove|change|modify|rewrite|debug|fix|repair|test|tests|feature|workflow|integrat(?:e|ion))\b/i,
   /\b(?:multiple files|whole repository|entire repo|end.to.end|full product|across the project)\b/i,
@@ -23,8 +26,10 @@ const MUTATION_SIGNALS = [
 export function classifyTask(prompt, hint = null) {
   const text = String(prompt || '').trim();
   const explicit = String(hint || '').toLowerCase();
-  if (['small', 'easy'].includes(explicit)) return { tier: 'easy', reason: 'benchmark task marked small' };
+  const safetySignal = SAFETY_SIGNALS.find((pattern) => pattern.test(text));
+  if (safetySignal) return { tier: 'strong', reason: 'task contains a security-sensitive signal' };
   if (['large', 'medium', 'hard'].includes(explicit)) return { tier: 'strong', reason: 'benchmark task is not marked small' };
+  if (['small', 'easy'].includes(explicit)) return { tier: 'easy', reason: 'benchmark task marked small' };
   if (!text) return { tier: 'strong', reason: 'empty task defaults to strong model' };
   const hardSignal = HARD_SIGNALS.find((pattern) => pattern.test(text));
   if (hardSignal) return { tier: 'strong', reason: 'task contains a change, complexity, or safety signal' };
