@@ -25,7 +25,16 @@ export const AUDITED_SUPERSEDED_HEADS = new Map([
   ['fix/tool-output-preservation', { sha: 'e8381ca00f778d7944d037f850156e900f56a5e6', paths: ['src/command-output-log.mjs', 'src/tools.mjs', 'test/runtime.test.mjs'] }],
   ['feat/context-ordering-todo', { sha: '7032a34f8a8146b64eafb3e51521cc1ffbc8b2ac', paths: ['src/context.mjs', 'src/agent.mjs', 'test/runtime.test.mjs'] }],
   ['bench/infrastructure-gate-2026-10-31', { sha: 'b0098a8072ff837f46056e70a47a5153d701289d', paths: ['.github/scripts/check-eval-quarantine.mjs', 'test/eval-quarantine.test.mjs', 'bench/README.md'] }],
-  ['docs/alpha-confidence-milestone-2026-10-29', { sha: 'd865e22e5eeb530a8caeab2370e08da519d05dbc', paths: ['docs/NEXT_MILESTONE.md', 'docs/CURRENT_STATUS.md', 'README.md'] }]
+  ['docs/alpha-confidence-milestone-2026-10-29', { sha: 'd865e22e5eeb530a8caeab2370e08da519d05dbc', paths: ['docs/NEXT_MILESTONE.md', 'docs/CURRENT_STATUS.md', 'README.md'] }],
+  ['fix/omniroute-setup-default-20261027', { sha: '669463e59184a95419dfa1d6f51b78b2dbe0a915', paths: ['src/cli.mjs', 'src/config.mjs', 'test/runtime.test.mjs'] }],
+  ['fix/preserve-current-provider-on-setup-20261027', { sha: 'c11d8210d244d8e1121a85beb563e99458f79e71', paths: ['src/cli.mjs', 'src/config.mjs', 'test/runtime.test.mjs'] }],
+  ['fix/safety-part-1-completion', { sha: 'bebab129d0a1168b38c258ed7edbc05f146831c4', paths: ['.github/workflows/pages.yml', 'src/workflow-sandbox.mjs', 'test/workflows.test.mjs', 'test/ci-workflow.test.mjs', 'test/helpers/block-quickjs-loader.mjs'] }],
+  ['ci/gate1-branch-validation', { sha: '271c8a77e3db9b6170838e44a5c9867c7df990b7', paths: ['.github/scripts/browser-e2e.mjs', '.github/workflows/quality.yml', 'index.html', 'scripts/vendor-terminal.mjs', 'src/web.mjs', 'sw.js', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs', 'test/web-terminal-optional.test.mjs'] }],
+  ['ci/gate1-corrected-integrity-check', { sha: 'a949fff353370c4902234162a0a843397d45ba78', paths: ['.github/scripts/browser-e2e.mjs', '.github/workflows/quality.yml', 'index.html', 'scripts/check-site.mjs', 'scripts/vendor-terminal.mjs', 'src/web.mjs', 'sw.js', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs', 'test/web-terminal-optional.test.mjs'] }],
+  ['fix/gate1-optional-terminal', { sha: '133aa7d1c042aaca52387bba62feb7060bc92c4b', paths: ['.github/scripts/browser-e2e.mjs', 'index.html', 'scripts/vendor-terminal.mjs', 'src/web.mjs', 'sw.js', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs', 'test/web-terminal-optional.test.mjs'] }],
+  ['fix/gate1-site-mark-assertion', { sha: 'a949fff353370c4902234162a0a843397d45ba78', paths: ['.github/scripts/browser-e2e.mjs', '.github/workflows/quality.yml', 'index.html', 'scripts/check-site.mjs', 'scripts/vendor-terminal.mjs', 'src/web.mjs', 'sw.js', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs', 'test/web-terminal-optional.test.mjs'] }],
+  ['fix/gate1-static-asset-routes', { sha: 'fae5b813f8e5147e40de04970d6f45a246f60660', paths: ['index.html', 'src/web.mjs', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs'] }],
+  ['test/gate1-browser-and-asset-smoke', { sha: '73d6baecc843fa336c88366f3c57d549673bf2c1', paths: ['.github/scripts/browser-e2e.mjs', 'index.html', 'src/web.mjs', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs'] }]
 ]);
 
 export function classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads = new Map()) {
