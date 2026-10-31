@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           expected="v$(node -p "require('./package.json').version")"
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$REF" = "refs/heads/main" ]; then
             if [ "$REF" != "refs/heads/main" ]; then
               echo "::error::Manual release publication is allowed only from main."
               exit 1
