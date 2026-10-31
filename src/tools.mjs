@@ -387,6 +387,20 @@ export function nonInteractiveEnvironment(env, source = process.env) {
   return next;
 }
 
+// Agents love to drop FINAL_SUMMARY.md / IMPLEMENTATION_NOTES.md files nobody asked for.
+const SUMMARY_DOC = /^(?:[A-Z0-9]+[_-])*(?:SUMMARY|REPORT|NOTES|CHANGES|CHANGELOG_SUMMARY|IMPLEMENTATION|FIXES|PROGRESS|STATUS|ANALYSIS|COMPLETION|WALKTHROUGH|OVERVIEW)(?:[_-][A-Z0-9]+)*\.md$/;
+export function unrequestedDocWarning(displayPath, request) {
+  const base = path.posix.basename(String(displayPath || ''));
+  if (!SUMMARY_DOC.test(base) || /^(?:README|CHANGELOG|CONTRIBUTING|LICENSE)\.md$/i.test(base)) return '';
+  if (typeof request !== 'string') return '';
+  const stem = base.replace(/\.md$/i, '').toLowerCase();
+  const words = stem.split(/[_-]+/).filter((word) => word.length > 2);
+  const asked = new RegExp('\\.md\\b|markdown|\\bdoc(?:s|ument|umentation)?\\b|\\bwrite[- ]?up\\b|\\bfile\\b.*\\b(?:' + words.join('|') + ')|\\b(?:' + words.join('|') + ')\\b.*\\bfile\\b', 'i');
+  if (request.toLowerCase().includes(stem) || asked.test(request)) return '';
+  return 'Unrequested document: ' + displayPath + ' looks like a summary/report file the user did not ask for. Put summaries in your reply instead; ' +
+    'delete this file with delete_file unless the user requested it.';
+}
+
 function commandSafety(command, args) {
   return analyzeCommand(command, args).blocked || null;
 }
@@ -1821,9 +1835,12 @@ export async function executeTool(name, args = {}, context = {}) {
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       await mkdir(path.dirname(target.absolute), { recursive: true });
-      await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: 0o600 });
+      // New project files get normal permissions (umask applies) so web servers, containers and
+      // teammates can read them; only secret-looking files are created owner-only.
+      await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
       await recordFileState(context, target.absolute);
-      const writeWarning = previousContent === null ? '' : combineWarnings(shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
+      const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
+      const writeWarning = previousContent === null ? docWarning : combineWarnings(shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
       return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile, ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {

@@ -3580,6 +3580,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
   let userContent = request;
+  session.currentRequest = request;
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
   // UserPromptExpansion: a typed custom command expanded into this prompt.
   if (options.expansion && !options.isSubagent && hasHooks(session.hooks, 'UserPromptExpansion')) {
