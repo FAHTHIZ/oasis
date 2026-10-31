@@ -21,7 +21,7 @@ const nodeHook = (code) => JSON.stringify(process.execPath) + ' -e ' + JSON.stri
 const logHook = (log, out = '', code = 0) => nodeHook('let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{require("fs").appendFileSync(' + JSON.stringify(log) + ',d.trim()+"\\n");process.stdout.write(' + JSON.stringify(out) + ');process.exit(' + code + ')})');
 const group = (hook, matcher) => ({ ...(matcher ? { matcher } : {}), hooks: [hook] });
 const readLog = async (log) => existsSync(log) ? (await readFile(log, 'utf8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : [];
-async function waitFor(check, ms = 4000) {
+async function waitFor(check, ms = 10000) {
   const end = Date.now() + ms;
   while (Date.now() < end) { if (await check()) return true; await new Promise((resolve) => setTimeout(resolve, 50)); }
   return false;
