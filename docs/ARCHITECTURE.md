@@ -9,42 +9,57 @@ For the feature inventory and release boundaries, see the [project plan](PROJECT
 
 ## System map
 
-The diagram separates user-facing entry points from the local runtime and from external services. The GitHub Action is a CI execution surface; the static dashboard is not an agent runtime.
+The diagram separates runtime placement from the shared implementation. The GitHub Action runs its own OASIS process inside a GitHub Actions runner; it does not call back into the developer's machine. The static dashboard remains browser-only.
 
 ~~~mermaid
 flowchart TB
-  subgraph Surfaces["Entry points"]
-    CLI["Terminal CLI / headless"]
-    WEB["Connected browser workspace<br/>oasis web"]
-    DESKTOP["Electron desktop host"]
-    IDE["VS Code-family extension"]
-    SDK["Node.js SDK"]
-    ACTION["GitHub Action in CI"]
-    STATIC["Static dashboard / PWA shell"]
-    LOCALDATA["Browser local storage<br/>Projects · Tasks · Notes"]
+  subgraph UserHost["User's computer"]
+    subgraph Surfaces["Local entry points"]
+      CLI["Terminal CLI / headless"]
+      BROWSER["Browser client"]
+      DESKTOP["Electron main + renderer"]
+      IDE["VS Code-family extension host"]
+      SDK["Node.js SDK consumer"]
+      STATIC["Static dashboard / PWA shell"]
+      LOCALDATA["Browser local storage<br/>Projects · Tasks · Notes"]
+    end
+    subgraph Runtime["OASIS runtime process"]
+      WEB["Local HTTP(S) server<br/>oasis web"]
+      CORE["Agent session and model/tool loop"]
+      PROVIDER["Provider adapters"]
+      POLICY["Permissions · approvals · risk checks"]
+      TOOLS["Workspace tools · process tools · diagnostics"]
+      CONTEXT["Instructions · memory · context · sessions"]
+      INTEGRATIONS["MCP · hooks · plugins · skills · workflows"]
+      EVENTS["Job events · task records · run monitor"]
+    end
+    IDEBRIDGE["Loopback IDE RPC bridge"]
+    PROJECT["Selected project workspace"]
   end
 
-  subgraph Local["OASIS runtime on the host"]
-    CORE["Agent session and model/tool loop"]
-    PROVIDER["Provider adapters"]
-    POLICY["Permissions · approvals · risk checks"]
-    TOOLS["Workspace tools · process tools · diagnostics"]
-    CONTEXT["Instructions · memory · context · sessions"]
-    INTEGRATIONS["MCP · hooks · plugins · skills · workflows"]
-    EVENTS["Job events · task records · run monitor"]
+  subgraph CIRunner["GitHub Actions runner"]
+    ACTION["OASIS GitHub Action"]
+    CI_SDK["OASIS Node.js SDK"]
+    CI_CORE["Agent runtime in CI process"]
+    CI_WORKSPACE["Checked-out repository"]
   end
 
   MODEL["Chosen model endpoint<br/>hosted or local"]
-  PROJECT["Selected project workspace"]
   EXT["External tools and services<br/>GitHub · MCP servers · OpenHands · LSP servers"]
 
   CLI --> CORE
+  BROWSER <--> WEB
   WEB --> CORE
   DESKTOP --> WEB
-  IDE --> CLI
+  IDE <--> IDEBRIDGE
+  IDEBRIDGE <--> CLI
   SDK --> CORE
-  ACTION --> SDK
   STATIC --> LOCALDATA
+
+  ACTION --> CI_SDK --> CI_CORE
+  CI_CORE <--> MODEL
+  CI_CORE --> CI_WORKSPACE
+  CI_CORE <--> EXT
 
   CORE <--> PROVIDER
   PROVIDER <--> MODEL
@@ -72,6 +87,20 @@ The static dashboard is included as a separate surface because it is easy to con
 | Node.js SDK | `src/sdk.mjs` | In-process access to the agent/headless runtime, event streaming, custom tools, and tool servers. |
 | GitHub Action | `action.yml`, `src/github-action.mjs` | Runs OASIS in a GitHub Actions checkout through the SDK, filters who can trigger mention-based tasks, verifies the result, and can commit/push a branch or open a pull request according to the event. |
 | Static dashboard / PWA shell | `index.html`, `sw.js`, `manifest.webmanifest` | Local Projects, Tasks, and Notes data in browser storage, JSON export/import, and static offline assets. It has no model loop or host-side execution by itself. |
+
+### Process and deployment boundaries
+
+| Component | Process / location | Connection and responsibility |
+|---|---|---|
+| CLI and headless mode | Node.js process on the user's computer | Calls the agent runtime directly; interactive approvals and output are handled by the terminal surface. |
+| Connected browser workspace | Local Node.js HTTP(S) server plus a browser client | The server owns sessions, agent jobs, approvals and terminal APIs. The browser connects with a runtime bearer token; it is not the agent process. |
+| Electron desktop | Electron main process and isolated renderer | The main process starts the same local web server on loopback and opens the renderer against it. The renderer has context isolation, Node integration disabled and sandboxing enabled. Desktop provider keys use Electron OS-backed storage when available. |
+| VS Code-family integration | Editor extension host plus CLI process | The extension hosts a token-authenticated loopback RPC bridge. The CLI discovers the bridge for its workspace and requests selection, diagnostics, file navigation and native diff approval. |
+| Node.js SDK | The consuming Node.js process | Embeds OASIS in-process; it is not a remote service. `query()` streams events and `run()` provides a one-shot convenience API. |
+| GitHub Action | Separate GitHub Actions runner | Uses the SDK inside the CI job against that runner's checkout and credentials. It does not share the developer's local sessions, browser server, processes or filesystem. |
+| Static dashboard / PWA | Browser process only | Reads and writes its own browser storage. It does not connect to the agent API unless the separate connected workspace is opened. |
+
+These are deployment boundaries, not separate product engines: the local surfaces reuse the same runtime modules where stated, while the GitHub Action starts a separate runtime in CI. The editor bridge and browser server are distinct loopback services with different tokens and responsibilities.
 
 ### Shared runtime request path
 
@@ -330,7 +359,7 @@ These are current engineering boundaries, not statements that the corresponding 
 | Electron desktop host | `desktop/main.mjs`, `desktop/secure-secrets.mjs` |
 | VS Code-family extension | `ide/vscode/`, `src/ide.mjs` |
 | Language-server integration | `src/lsp.mjs` |
-| Memory, backups and telemetry | `src/memory.mjs`, `src/backups.mjs`, `src/telemetry.mjs` |
+| Memory, backups, secure storage and telemetry | `src/memory.mjs`, `src/backups.mjs`, `src/secure-store.mjs`, `src/telemetry.mjs`, `desktop/secure-secrets.mjs` |
 
 ## Related references
 
