@@ -47,8 +47,8 @@ Supported provider shapes:
 - Native OpenAI Responses API (`openai-responses`), recommended for current OpenAI reasoning models that require Responses for tool calling.
 - OpenAI-compatible chat completions endpoints, including compatible gateways and local endpoints that expose the same API.
 - Native Anthropic Messages API endpoints. Select `anthropic` during `oasis setup`.
-- Claude on AWS Bedrock (`bedrock`) and Google Vertex AI (`vertex`). Pick the preset in `oasis setup`, or set `OASIS_USE_BEDROCK=1` / `OASIS_USE_VERTEX=1` (or `OASIS_USE_BEDROCK` / `OASIS_USE_VERTEX`) with a model ID in `OASIS_MODEL` or `ANTHROPIC_MODEL`, so an existing compatible ecosystem cloud setup works without changes. Bedrock signs requests with AWS SigV4 from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` or an `AWS_PROFILE` in `~/.aws/credentials`, or uses a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK`. The region comes from `AWS_REGION`. Vertex uses `ANTHROPIC_VERTEX_PROJECT_ID` (or `GOOGLE_CLOUD_PROJECT`) and `CLOUD_ML_REGION` (default `us-east5`, or `global`). Its token comes from `GOOGLE_OAUTH_ACCESS_TOKEN`, or from `gcloud auth print-access-token` (cached for 45 minutes). Vertex replies stream. Bedrock replies arrive in one piece. Thinking, prompt caching, vision and tools all work as they do with native Anthropic.
-- Claude on Microsoft Foundry (`foundry`, Azure). Pick the `foundry` preset or set `OASIS_USE_FOUNDRY=1` (or `OASIS_USE_FOUNDRY=1`) with `ANTHROPIC_FOUNDRY_RESOURCE=my-resource` (the resource name only) or `ANTHROPIC_FOUNDRY_BASE_URL=https://my-resource.services.ai.azure.com/anthropic` (also works for an API Management gateway). The model is your deployment name, from `OASIS_MODEL`, `ANTHROPIC_MODEL` or `ANTHROPIC_DEFAULT_SONNET_MODEL`. Auth order matches compatible ecosystem: `ANTHROPIC_FOUNDRY_AUTH_TOKEN` (an Entra ID bearer token), then `ANTHROPIC_FOUNDRY_API_KEY`, then `az account get-access-token --resource https://ai.azure.com` from an `az login` session (cached for 45 minutes). Replies stream.
+- Claude on AWS Bedrock (`bedrock`) and Google Vertex AI (`vertex`). Pick the preset in `oasis setup`, or set `OASIS_USE_BEDROCK=1` / `OASIS_USE_VERTEX=1` (or `CLAUDE_CODE_USE_BEDROCK` / `CLAUDE_CODE_USE_VERTEX`) with a model ID in `OASIS_MODEL` or `ANTHROPIC_MODEL`, so an existing Claude Code cloud setup works without changes. Bedrock signs requests with AWS SigV4 from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` or an `AWS_PROFILE` in `~/.aws/credentials`, or uses a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK`. The region comes from `AWS_REGION`. Vertex uses `ANTHROPIC_VERTEX_PROJECT_ID` (or `GOOGLE_CLOUD_PROJECT`) and `CLOUD_ML_REGION` (default `us-east5`, or `global`). Its token comes from `GOOGLE_OAUTH_ACCESS_TOKEN`, or from `gcloud auth print-access-token` (cached for 45 minutes). Vertex replies stream. Bedrock replies arrive in one piece. Thinking, prompt caching, vision and tools all work as they do with native Anthropic.
+- Claude on Microsoft Foundry (`foundry`, Azure). Pick the `foundry` preset or set `OASIS_USE_FOUNDRY=1` (or `CLAUDE_CODE_USE_FOUNDRY=1`) with `ANTHROPIC_FOUNDRY_RESOURCE=my-resource` (the resource name only) or `ANTHROPIC_FOUNDRY_BASE_URL=https://my-resource.services.ai.azure.com/anthropic` (also works for an API Management gateway). The model is your deployment name, from `OASIS_MODEL`, `ANTHROPIC_MODEL` or `ANTHROPIC_DEFAULT_SONNET_MODEL`. Auth order matches Claude Code: `ANTHROPIC_FOUNDRY_AUTH_TOKEN` (an Entra ID bearer token), then `ANTHROPIC_FOUNDRY_API_KEY`, then `az account get-access-token --resource https://ai.azure.com` from an `az login` session (cached for 45 minutes). Replies stream.
 - Local Ollama-style endpoints such as `http://localhost:11434/v1`, provided the selected model supports tool calls. Leave the API key blank for a local endpoint.
 - Environment overrides: `OASIS_BASE_URL`, `OASIS_MODEL`, and `OASIS_API_KEY`. Provider-specific keys are recognised for matching presets: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), and `OLLAMA_API_KEY` for Ollama Cloud. Run `oasis doctor --test-provider` to send a live inert-tool probe without executing the tool; a successful check confirms the model can call tools.
 
@@ -153,7 +153,7 @@ OASIS separates three things that are often all called “plugins”:
 
 - **Skills** are reusable workflow instructions that guide the agent through tasks such as debugging, testing, code review, and release preparation.
 - **Capability bundles** package related built-in skills so they can be installed and removed together. Browse with `oasis plugins list`; install with `oasis plugins install code-quality`; remove with `oasis plugins remove code-quality`. Bundles are copied into the current workspace under `.oasis/`.
-- **compatible-format plugins** run natively — no conversion. Add any compatible plugin marketplace and install from it exactly as in compatible ecosystem:
+- **Claude Code-format plugins** run natively, with no conversion. Add any Claude Code plugin marketplace and install from it exactly as in Claude Code:
 
   ```bash
   oasis plugin marketplace add OWNER/REPOSITORY   # GitHub owner/repo, git URL (#ref), or local path
@@ -164,7 +164,7 @@ OASIS separates three things that are often all called “plugins”:
   oasis --plugin-url https://example.com/my-plugin.zip   # download a plugin .zip for this session only
   ```
 
-  Inside a session use `/plugin ...` with the same arguments. An enabled plugin contributes namespaced slash commands (`/feature-dev:feature-dev`), subagents (`feature-dev:code-reviewer`), Agent Skills, hooks (`hooks/hooks.json`, run with `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, and `CLAUDE_PROJECT_DIR` set) and MCP servers (`.mcp.json`, with `${CLAUDE_PLUGIN_ROOT}` expanded). Marketplace entries may use relative, `github`, `url`, or `git-subdir` sources, `metadata.pluginRoot`, and `strict: false`. Enablement uses compatible-format `"enabledPlugins": {"name@marketplace": true}` key: user settings always apply; a project's `.claude/settings.json` can enable plugins once you `oasis trust` the workspace. Plugins you already installed and enabled in compatible ecosystem (`~/.claude/plugins`) load automatically. Plugins run hooks and MCP servers with your permissions, just as in compatible ecosystem, so install only plugins you trust. Set `OASIS_PLUGINS=off` to disable all plugins for a run.
+  Inside a session use `/plugin ...` with the same arguments. An enabled plugin contributes namespaced slash commands (`/feature-dev:feature-dev`), subagents (`feature-dev:code-reviewer`), Agent Skills, hooks (`hooks/hooks.json`, run with `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, and `CLAUDE_PROJECT_DIR` set) and MCP servers (`.mcp.json`, with `${CLAUDE_PLUGIN_ROOT}` expanded). Marketplace entries may use relative, `github`, `url`, or `git-subdir` sources, `metadata.pluginRoot`, and `strict: false`. Enablement uses compatible-format `"enabledPlugins": {"name@marketplace": true}` key: user settings always apply; a project's `.claude/settings.json` can enable plugins once you `oasis trust` the workspace. Plugins you already installed and enabled in Claude Code (`~/.claude/plugins`) load automatically. Plugins run hooks and MCP servers with your permissions, just as in Claude Code, so install only plugins you trust. Set `OASIS_PLUGINS=off` to disable all plugins for a run.
 
   Marketplace entries may point at npm packages: `"source": { "source": "npm", "package": "@acme/plugin", "version": "^2.0.0", "registry": "https://npm.example.com" }`. OASIS runs `npm pack --ignore-scripts`, unpacks the tarball into the plugin cache and records the resolved version and integrity hash. `npm` and `tar` must be on `PATH`.
 
@@ -188,7 +188,7 @@ The `main` installation contains both the terminal agent and the connected brows
 
 ## VS Code, Cursor, and Windsurf
 
-OASIS connects to VS Code (and forks) the way compatible ecosystem does:
+OASIS connects to VS Code (and forks) the way Claude Code does:
 
 ```bash
 oasis ide install      # builds the extension and installs it with code / cursor / windsurf
@@ -246,13 +246,13 @@ OASIS reads layered settings in the same format using the supported format, so a
 
 | File | Scope |
 |---|---|
-| `~/.claude/settings.json` (compatible ecosystem; skip with `OASIS_IGNORE_CLAUDE_SETTINGS=1`) | You, every project |
+| `~/.claude/settings.json` (Claude Code; skip with `OASIS_IGNORE_CLAUDE_SETTINGS=1`) | You, every project |
 | `~/.config/oasis/settings.json` (wins over the Claude file) | You, every project |
 | `.oasis/settings.json`, `.claude/settings.json` | Project (shared) |
 | `.oasis/settings.local.json`, `.claude/settings.local.json` | Project (personal) |
 | `managed-settings.json` (`/etc/compatible-tooling/`, `/Library/Application Support/ClaudeCode/`, `C:\Program Files\ClaudeCode\`, or the `/etc/oasis/` equivalents; `OASIS_MANAGED_SETTINGS` overrides the path) | Organization policy, loads last and wins |
 
-The `env` key sets environment variables for every session (`{ "env": { "ANTHROPIC_MODEL": "...", "NODE_ENV": "test" } }`); it is applied before the provider loads, and an untrusted project cannot set it. `"apiKeyHelper": "/path/to/get-key.sh"` runs a command whose output is the model API key, as in compatible ecosystem: it is used when no key is set, cached for 5 minutes (`the API-key-helper cache TTL setting`), and re-run when the provider rejects the key; project files can set it only after `oasis trust`. For gateways and proxies that need extra request headers, set `ANTHROPIC_CUSTOM_HEADERS` (or `OASIS_CUSTOM_HEADERS`) to `Name: value` lines, add `"customHeaders": { "X-Team": "core" }` to the provider config, or set `"customHeadersHelper": "/path/to/headers.sh"`, a command that prints `Name: value` lines or a JSON object and is cached like `apiKeyHelper` (trusted scopes only). These headers cannot replace `content-type` or `host`, and cannot override the API key OASIS sends. `permissions.disableBypassPermissionsMode: "disable"` blocks `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and `/mode bypassPermissions`.
+The `env` key sets environment variables for every session (`{ "env": { "ANTHROPIC_MODEL": "...", "NODE_ENV": "test" } }`); it is applied before the provider loads, and an untrusted project cannot set it. `"apiKeyHelper": "/path/to/get-key.sh"` runs a command whose output is the model API key, as in Claude Code: it is used when no key is set, cached for 5 minutes (`CLAUDE_CODE_API_KEY_HELPER_TTL_MS` or `OASIS_API_KEY_HELPER_TTL_MS`), and re-run when the provider rejects the key; project files can set it only after `oasis trust`. For gateways and proxies that need extra request headers, set `ANTHROPIC_CUSTOM_HEADERS` (or `OASIS_CUSTOM_HEADERS`) to `Name: value` lines, add `"customHeaders": { "X-Team": "core" }` to the provider config, or set `"customHeadersHelper": "/path/to/headers.sh"`, a command that prints `Name: value` lines or a JSON object and is cached like `apiKeyHelper` (trusted scopes only). These headers cannot replace `content-type` or `host`, and cannot override the API key OASIS sends. `permissions.disableBypassPermissionsMode: "disable"` blocks `--dangerously-skip-permissions`, `--permission-mode bypassPermissions` and `/mode bypassPermissions`.
 
 ~~~json
 {
@@ -265,7 +265,7 @@ The `env` key sets environment variables for every session (`{ "env": { "ANTHROP
 }
 ~~~
 
-Precedence is deny > ask > allow. `name(prefix:*)` matches a command prefix, file rules take globs, `fetch_url(domain:x)` matches a domain and its subdomains, and `mcp_server` matches every tool of one MCP server. compatible ecosystem names (`Bash`, `Edit`, `Write`, `Read`, `WebFetch`, `Grep`, `Glob`) are accepted as aliases. In a terminal, approvals use a portable-format dialog: move with ↑/↓ (or j/k) and press Enter, press 1-3, or answer at once with `y`, `n` or `a` (always allow that command prefix for the rest of the session); Esc declines. The keys live in the `Confirmation` and `Select` keybinding contexts (`confirm:yes`, `confirm:no`, `confirm:always`, `confirm:next`, `confirm:previous`, `select:accept`, `select:cancel`, ...). Set `OASIS_LINE_APPROVALS=1` for the old typed `y/N` prompt. `/model`, `/theme` and `/color` without an argument (and Alt+P for the model) open the same kind of picker, honoring `availableModels`; their keys come from the `ModelPicker`, `ThemePicker` and `Select` contexts.
+Precedence is deny > ask > allow. `name(prefix:*)` matches a command prefix, file rules take globs, `fetch_url(domain:x)` matches a domain and its subdomains, and `mcp_server` matches every tool of one MCP server. Claude Code names (`Bash`, `Edit`, `Write`, `Read`, `WebFetch`, `Grep`, `Glob`) are accepted as aliases. In a terminal, approvals use a portable-format dialog: move with ↑/↓ (or j/k) and press Enter, press 1-3, or answer at once with `y`, `n` or `a` (always allow that command prefix for the rest of the session); Esc declines. The keys live in the `Confirmation` and `Select` keybinding contexts (`confirm:yes`, `confirm:no`, `confirm:always`, `confirm:next`, `confirm:previous`, `select:accept`, `select:cancel`, ...). Set `OASIS_LINE_APPROVALS=1` for the old typed `y/N` prompt. `/model`, `/theme` and `/color` without an argument (and Alt+P for the model) open the same kind of picker, honoring `availableModels`; their keys come from the `ModelPicker`, `ThemePicker` and `Select` contexts.
 
 Modes: `default`, `acceptEdits`, `plan` (read-only), `auto`, and `bypassPermissions` (same as `--yes`). The aliases `manual` → `default` and `accept-edits` (also `accept_edits`) → `acceptEdits` are accepted in settings, `/mode`, and `--permission-mode`; they do not add any permission beyond the canonical mode. Set one per run with `--permission-mode`, or add rules for one run with `--allowedTools` / `--disallowedTools`.
 
@@ -392,7 +392,7 @@ Hooks run your own shell commands at points in the agent lifecycle, using compat
 }
 ~~~
 
-Events: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `PermissionDenied`, `UserPromptSubmit`, `UserPromptExpansion`, `Stop`, `StopFailure`, `TaskCreated`, `TaskCompleted`, `InstructionsLoaded`, `PreModelSwitch`, `PostModelSwitch`, `DirectoryAdded`, `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`, `compact`), `SessionEnd`, `PreCompact`, `PostCompact`, `Notification` (`permission_prompt`), `CwdChanged` (after `/cd`), `FileChanged`, `ConfigChange`, `WorktreeCreate`, `WorktreeRemove`, `TeammateIdle` and `Setup`. Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `error`, `prompt`, `agent_type`, `trigger`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, makes the agent keep working after `Stop`, or cancels a manual `/compact` from `PreCompact`. stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. A `PermissionRequest` hook answers an approval prompt before you see it with `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}` or `"deny"` plus a `message`. This works for background agents too. `PreCompact` context is kept in the summary, and `SessionStart` with matcher `compact` can re-add context after compaction. Matchers compare against the tool name (OASIS or compatible ecosystem names), the session source, the compaction trigger, the notification type, or the subagent type. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
+Events: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `PermissionRequest`, `PermissionDenied`, `UserPromptSubmit`, `UserPromptExpansion`, `Stop`, `StopFailure`, `TaskCreated`, `TaskCompleted`, `InstructionsLoaded`, `PreModelSwitch`, `PostModelSwitch`, `DirectoryAdded`, `SubagentStart`, `SubagentStop`, `SessionStart` (`startup`, `resume`, `compact`), `SessionEnd`, `PreCompact`, `PostCompact`, `Notification` (`permission_prompt`), `CwdChanged` (after `/cd`), `FileChanged`, `ConfigChange`, `WorktreeCreate`, `WorktreeRemove`, `TeammateIdle` and `Setup`. Each hook gets a JSON payload on stdin (`tool_name`, `tool_input`, `tool_response`, `error`, `prompt`, `agent_type`, `trigger`, `cwd`, ...). Exit code `2` blocks: it stops a tool call, rejects a prompt, makes the agent keep working after `Stop`, or cancels a manual `/compact` from `PreCompact`. stderr is passed to the model. JSON output supports `decision`, `hookSpecificOutput.permissionDecision` (`allow`/`deny`/`ask`), `updatedInput`, and `additionalContext`. A `PermissionRequest` hook answers an approval prompt before you see it with `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}` or `"deny"` plus a `message`. This works for background agents too. `PreCompact` context is kept in the summary, and `SessionStart` with matcher `compact` can re-add context after compaction. Matchers compare against the tool name (OASIS or Claude Code names), the session source, the compaction trigger, the notification type, or the subagent type. Hooks run with secrets removed from the environment, and project hooks only run in trusted workspaces.
 
 Besides `command`, there are two more hook types:
 
@@ -403,7 +403,7 @@ Besides `command`, there are two more hook types:
 
 An `http` hook POSTs the payload as JSON, and its response body is read like a command's stdout. A failed request or a non-2xx status is a non-blocking error; only a JSON decision can block. Headers can use only the environment variables listed in `allowedEnvVars`. A `prompt` hook asks the model (optionally a cheaper `model`) whether the payload meets your policy. `$ARGUMENTS` is replaced with the payload, and a reply of `{"ok": false, "reason": "..."}` blocks like exit code 2.
 
-Two more types match compatible ecosystem:
+Two more types match Claude Code:
 
 ~~~json
 { "type": "mcp_tool", "server": "scanner", "tool": "scan_file", "input": { "path": "${tool_input.path}" } }
@@ -420,7 +420,7 @@ Handler options (any type unless noted):
 - `"onFailure": "block"`: treat a crash, timeout, or non-2 exit as a block (not for `Stop`, `SubagentStop`, or `TaskCompleted`).
 - `"timeout"` in seconds. Defaults: 600 for command, http and mcp_tool; 30 for prompt and for `UserPromptSubmit`; 60 for agent.
 
-Matchers follow compatible ecosystem: a matcher made only of letters, digits, `_`, `-`, spaces, `,` and `|` is an exact name or list (`Edit|Write`; `Edit` no longer matches `MultiEdit`). Anything else is an unanchored regular expression (`mcp__memory__.*`, `^Notebook`). MCP tools are seen as `mcp__<server>__<tool>`.
+Matchers follow Claude Code: a matcher made only of letters, digits, `_`, `-`, spaces, `,` and `|` is an exact name or list (`Edit|Write`; `Edit` no longer matches `MultiEdit`). Anything else is an unanchored regular expression (`mcp__memory__.*`, `^Notebook`). MCP tools are seen as `mcp__<server>__<tool>`.
 
 More events:
 
@@ -487,9 +487,9 @@ The native `node-pty` component is an optional dependency. The browser workspace
 
 `/vim` turns on vim editing for the prompt (`/vim off` turns it off). The choice is saved as `"editorMode": "vim"` in your user settings, and compatible-format `editorMode` in `~/.claude.json` is honored too. The input starts in INSERT mode. Esc switches to NORMAL, and the current mode shows under the prompt. Enter sends from either mode.
 
-`/theme` lists and switches color themes, compatible ecosystem style: `dark` (default), `light`, `dark-daltonized`, `light-daltonized` (color-blind friendly), `dark-ansi`, `light-ansi` (16-color terminals) and `auto`, which picks light or dark from `COLORFGBG` (override with `OASIS_TERMINAL_BACKGROUND=light|dark`). The choice is saved as `"theme"` in your user settings; `OASIS_THEME` overrides it and compatible-format `~/.claude.json` `theme` is honored. Custom themes are the same JSON files compatible ecosystem reads from `~/.claude/themes/` (or `<OASIS config>/themes/`), selected as `custom:<slug>`. Saving the file while OASIS runs reloads the theme in place (plugin themes too; `OASIS_DISABLE_THEME_RELOAD=1` turns this off):
+`/theme` lists and switches color themes, Claude Code style: `dark` (default), `light`, `dark-daltonized`, `light-daltonized` (color-blind friendly), `dark-ansi`, `light-ansi` (16-color terminals) and `auto`, which picks light or dark from `COLORFGBG` (override with `OASIS_TERMINAL_BACKGROUND=light|dark`). The choice is saved as `"theme"` in your user settings; `OASIS_THEME` overrides it and compatible-format `~/.claude.json` `theme` is honored. Custom themes are the same JSON files Claude Code reads from `~/.claude/themes/` (or `<OASIS config>/themes/`), selected as `custom:<slug>`. Saving the file while OASIS runs reloads the theme in place (plugin themes too; `OASIS_DISABLE_THEME_RELOAD=1` turns this off):
 
-More compatible ecosystem commands:
+More Claude Code commands:
 
 - `/diff [PATH] [--stat]` shows uncommitted changes (against `HEAD`) and untracked files.
 - `/autocompact PERCENT|off|reset` moves the auto-compaction trigger for this session; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (or `OASIS_AUTOCOMPACT_PCT`) sets it for every session. Subagents can compact at their own point: `"subagentAutoCompactPercent": 40` in settings or `OASIS_SUBAGENT_AUTOCOMPACT_PCT=40` (0 turns it off for subagents), and `"subagentEffort": "low"` (or `OASIS_SUBAGENT_EFFORT`) runs them at a different effort than the main session.
@@ -539,7 +539,7 @@ Every shortcut can be rebound in compatible-format `keybindings.json` format. OA
 }
 ```
 
-- Contexts: `Global`, `Chat`, `Autocomplete`, `HistorySearch`. Other compatible ecosystem contexts are accepted but have no effect yet.
+- Contexts: `Global`, `Chat`, `Autocomplete`, `HistorySearch`. Other Claude Code contexts are accepted but have no effect yet.
 - Keystrokes: `ctrl`, `shift`, `alt`/`opt`/`meta` and `cmd`/`super` modifiers with letters, `enter`, `escape`, `tab`, `space`, arrows, `home`/`end`, `pageup`/`pagedown`, `backspace` and `delete`. A bare uppercase letter such as `K` means Shift+K.
 - Chords are space-separated (`ctrl+k ctrl+s`), and you have 3 seconds between keys.
 - `null` unbinds a key. `command:NAME` runs `/NAME`.
@@ -567,7 +567,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 - `/team-onboarding [DAYS]` drafts ONBOARDING.md for your team from the last 30 days of usage (commands, files, friction) and the project's instruction files, settings, commands, skills, agents and MCP config.
 - `/skill-doctor [DAYS]` lists every skill with its always-loaded listing cost, its body cost (loaded only when used) and how often it was used in the last 30 days (load_skill calls and `/skill` invocations in saved sessions). Turn one off with a `Skill(name)` deny rule (globs like `Skill(legacy-*)` work); denied skills disappear from the system prompt and cannot be loaded. `/new` and `/reset` are aliases for `/clear`, `/proactive` for `/loop`.
 - `/color red|blue|green|yellow|purple|orange|pink|cyan|random|default` colors this session's prompt so parallel terminals are easy to tell apart. `/focus` shows a full-screen view of the last prompt, one line per tool call (with `+added -removed` line counts for edits) and the final response; press Enter to return.
-- Background sessions free the terminal while OASIS keeps working. `oasis --bg "TASK"` starts one; `/background [one more instruction]` (or `/bg`) saves the current conversation and hands it to one, then exits. `oasis bg list` shows runs, `oasis bg logs ID --follow` streams progress, `oasis bg attach ID` continues the conversation in your terminal (stopping it first if it is still running), and `oasis bg stop ID` / `oasis bg rm ID` clean up. The same commands work at the top level, as in compatible ecosystem: `oasis attach`, `oasis logs`, `oasis stop` (or `oasis kill`) and `oasis rm`. They take a full ID, an ID prefix, or part of the session name (`--name`). `oasis respawn ID` restarts a session, running or stopped, with its conversation intact, and `oasis respawn --all` restarts every running one. `oasis --bg --exec 'pytest -x'` runs a shell command as a background job; logs, stop, rm and respawn work for it too, and the exit code is recorded. Background sessions cannot prompt you, so only tools that your permission mode and allow rules permit will run; the conversation is saved, so `oasis --resume SESSION_ID` also works.
+- Background sessions free the terminal while OASIS keeps working. `oasis --bg "TASK"` starts one; `/background [one more instruction]` (or `/bg`) saves the current conversation and hands it to one, then exits. `oasis bg list` shows runs, `oasis bg logs ID --follow` streams progress, `oasis bg attach ID` continues the conversation in your terminal (stopping it first if it is still running), and `oasis bg stop ID` / `oasis bg rm ID` clean up. The same commands work at the top level, as in Claude Code: `oasis attach`, `oasis logs`, `oasis stop` (or `oasis kill`) and `oasis rm`. They take a full ID, an ID prefix, or part of the session name (`--name`). `oasis respawn ID` restarts a session, running or stopped, with its conversation intact, and `oasis respawn --all` restarts every running one. `oasis --bg --exec 'pytest -x'` runs a shell command as a background job; logs, stop, rm and respawn work for it too, and the exit code is recorded. Background sessions cannot prompt you, so only tools that your permission mode and allow rules permit will run; the conversation is saved, so `oasis --resume SESSION_ID` also works.
 - `/subtask TASK` starts a background subagent that gets a copy of the whole conversation so far, works on TASK while you keep going, and reports back to this conversation when it finishes (`/tasks` shows progress). Like other background agents it cannot ask you for approval, so tools your permission rules don't allow are refused.
 - `/btw QUESTION` asks about the session without adding to the conversation and without tools. `/recap` gives a one-line summary.
 - `/batch INSTRUCTION` plans a large change as independent units. After you approve, it runs them in parallel subagents, each in its own git worktree.
@@ -629,7 +629,7 @@ More built-ins:
 - `/resume` lists saved sessions; `/resume N` or `/resume ID` switches to one.
 - A custom command with the same name, such as `.oasis/commands/review.md`, replaces the built-in review prompt.
 
-Custom commands are Markdown files, compatible with compatible ecosystem. `.oasis/commands/review.md` becomes `/review`, and `.oasis/commands/git/pr.md` becomes `/git:pr`. OASIS also reads `.claude/commands/`, `~/.config/oasis/commands/`, and `~/.claude/commands/`.
+Custom commands are Markdown files, compatible with Claude Code. `.oasis/commands/review.md` becomes `/review`, and `.oasis/commands/git/pr.md` becomes `/git:pr`. OASIS also reads `.claude/commands/`, `~/.config/oasis/commands/`, and `~/.claude/commands/`.
 
 ~~~markdown
 ---
@@ -642,7 +642,7 @@ Create a PR titled "$ARGUMENTS". Follow @CONTRIBUTING.md
 
 Use `$ARGUMENTS` for everything after the command and `$1` to `$9` for single words. Writing `@path/to/file` in any prompt or command includes that file (or a directory listing). Secret files such as `.env` and paths outside the workspace are never included.
 
-More front matter, also compatible with compatible ecosystem:
+More front matter, also compatible with Claude Code:
 
 ~~~markdown
 ---
@@ -755,7 +755,7 @@ Other session flags:
 - `--output-format text` (default) prints the final answer. `json` prints one object with `result`, `subtype` (`success`, `error_max_turns`, `error_during_execution`), `is_error`, `num_turns`, `usage`, `tool_calls`, `session_id`, and `permission_denials`. `stream-json` prints one JSON event per line (`system`, `tool_use`, `tool_result`, `assistant`, then `result`).
 - Piped input is added to the prompt inside `<stdin>` tags.
 - With nobody to answer prompts, anything that needs approval is denied and listed in `permission_denials`. Allow what the job needs with `--allowedTools`, settings rules, `--permission-mode`, or `--yes`. High-risk commands stay blocked.
-- **Extra stream-json events (compatible ecosystem flags):** `--include-hook-events` streams `{"type":"system","subtype":"hook_started"|"hook_response","hook_id","hook_name","hook_event","stdout","stderr","exit_code","outcome"}` for every hook (SessionStart and Setup hooks are always streamed). `--forward-subagent-text` (or `CLAUDE_CODE_FORWARD_SUBAGENT_TEXT=1`) streams each subagent's own messages as `assistant` lines with `parent_tool_use_id` set to the `id` on the spawning `tool_use` line. `--prompt-suggestions` adds a `{"type":"prompt_suggestion","suggestion":...}` line after the result with a predicted next prompt. `--exclude-dynamic-system-prompt-sections` moves the workspace path, environment, git state and memory location out of the system prompt into the first user message, so the system prompt stays identical across machines and caches better.
+- **Extra stream-json events (Claude Code flags):** `--include-hook-events` streams `{"type":"system","subtype":"hook_started"|"hook_response","hook_id","hook_name","hook_event","stdout","stderr","exit_code","outcome"}` for every hook (SessionStart and Setup hooks are always streamed). `--forward-subagent-text` (or `CLAUDE_CODE_FORWARD_SUBAGENT_TEXT=1`) streams each subagent's own messages as `assistant` lines with `parent_tool_use_id` set to the `id` on the spawning `tool_use` line. `--prompt-suggestions` adds a `{"type":"prompt_suggestion","suggestion":...}` line after the result with a predicted next prompt. `--exclude-dynamic-system-prompt-sections` moves the workspace path, environment, git state and memory location out of the system prompt into the first user message, so the system prompt stays identical across machines and caches better.
 - **Two-way control (stream-json in and out):** with `--input-format stream-json`, each stdin line is a `{"type":"user","message":{...}}` turn in one session. Add `--permission-prompt-tool stdio` and approvals are sent to you as `{"type":"control_request","request_id":"oasis-1","request":{"subtype":"can_use_tool","tool_name":...,"input":...,"message":...,"permission_suggestions":[...]}}`; answer with `{"type":"control_response","response":{"subtype":"success","request_id":"oasis-1","response":{"behavior":"allow"}}}` (`"deny"`, or add `"always":true` to save the suggested rule). Send `{"type":"control_request","request_id":"x","request":{"subtype":"interrupt"}}` to stop the current turn. This is the same protocol compatible-format SDK uses, and it is what the VS Code chat panel runs on.
 - The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` (`-c`) or `--resume ID` to keep a conversation across runs.
 
@@ -788,7 +788,7 @@ for await (const event of query({ prompt: 'Plan a picnic in Dhaka', options: { t
 
 ## OpenTelemetry
 
-OASIS can export metrics, events and traces over OTLP/HTTP JSON with no extra packages. It is off by default. Turn it on with `OASIS_ENABLE_TELEMETRY=1`; `CLAUDE_CODE_ENABLE_TELEMETRY=1` also works, so an existing compatible ecosystem monitoring setup keeps working.
+OASIS can export metrics, events and traces over OTLP/HTTP JSON with no extra packages. It is off by default. Turn it on with `OASIS_ENABLE_TELEMETRY=1`; `CLAUDE_CODE_ENABLE_TELEMETRY=1` also works, so an existing Claude Code monitoring setup keeps working.
 
 ```bash
 export OASIS_ENABLE_TELEMETRY=1
@@ -816,7 +816,7 @@ Checkpoints last for the current session. Changes made by shell commands (for ex
 
 The `task` tool lets OASIS hand self-contained work to a subagent with its own context window. Only the subagent's final report returns to the main conversation, which keeps long investigations from crowding it out. Several `task` calls in one response run in parallel (up to 6 at once). Built-in agents: `general-purpose` (all tools), `explore` (read-only search), and `plan` (read-only planning).
 
-Define your own in `.oasis/agents/*.md` or `.claude/agents/*.md` (project), or `~/.config/oasis/agents/` / `~/.claude/agents/` (user). compatible ecosystem agent files work unchanged:
+Define your own in `.oasis/agents/*.md` or `.claude/agents/*.md` (project), or `~/.config/oasis/agents/` / `~/.claude/agents/` (user). Claude Code agent files work unchanged:
 
 ~~~markdown
 ---
@@ -935,7 +935,7 @@ These are on by default and each can be switched off.
 - `grep`: regex search backed by ripgrep (JS fallback) with globs, context lines, and `content` / `files_with_matches` / `count` modes. Secret files are never returned.
 - `multi_edit`: several exact-string edits to one file, applied atomically.
 - Images: `read_file` on a PNG, JPEG, GIF, or WebP file (up to about 3.7 MB) shows it to vision-capable models, and `@screenshot.png` in a prompt attaches it. This works with OpenAI-compatible, Responses, and Anthropic providers. Only the four most recent images are sent with each request, and images are not written to saved sessions. If your model is text-only, set `OASIS_VISION=off` or `"vision": false` in the provider config.
-- Extended thinking (Anthropic protocol): as in compatible ecosystem, "think about" gives about 4k thinking tokens, "think hard" about 10k, and "ultrathink" about 32k for that task. Thinking blocks are replayed with their signatures during tool use. Set a default with `"thinkingBudget": 8000` or `MAX_THINKING_TOKENS`; turn it off with `OASIS_THINKING=off`.
+- Extended thinking (Anthropic protocol): as in Claude Code, "think about" gives about 4k thinking tokens, "think hard" about 10k, and "ultrathink" about 32k for that task. Thinking blocks are replayed with their signatures during tool use. Set a default with `"thinkingBudget": 8000` or `MAX_THINKING_TOKENS`; turn it off with `OASIS_THINKING=off`.
 - Output limits: current Claude models (and other modern models) get a 32,000-token output window per response, older 8k models keep 8,192, and GPT-4o gets 16,384. Override with `"maxOutputTokens": 64000`, `OASIS_MAX_OUTPUT_TOKENS`, or compatible-format `CLAUDE_CODE_MAX_OUTPUT_TOKENS`. If a response is cut off at the limit, OASIS never runs the half-written tool call; it tells the model what happened and asks it to resume in smaller pieces (up to three times per turn). If a provider rejects the limit and names its real maximum, OASIS lowers the cap for the session and retries once.
 - File-state safety: OASIS tracks which files the agent has read. Overwriting an existing file with `write_file` requires reading it first, and any edit is refused if the file changed on disk since the agent last saw it (you edited it, a formatter ran, another agent touched it) — the agent re-reads and rebases its change instead of clobbering yours. Set `"requireReadBeforeEdit": "strict"` to require a read before every edit exactly using interoperable conventions, or `false` / `OASIS_REQUIRE_READ_BEFORE_EDIT=0` to turn the guard off.
 - Reasoning effort (OpenAI o-series and gpt-5 models): the same keywords set `reasoning_effort` (chat) or `reasoning.effort` (Responses): "think about" → low, "think hard" → medium, "ultrathink" → high. Set a floor with `"reasoningEffort": "medium"` or `OASIS_REASONING_EFFORT`; setting it explicitly also enables the field for other models.
@@ -1040,7 +1040,7 @@ Compare two completed runs with `oasis eval --compare <run-a.json> <run-b.json>`
 
 ~~~json
 {
-  "label": "compatible ecosystem",
+  "label": "Claude Code",
   "results": [
     {
       "taskId": "config-output-token-limit",
@@ -1054,7 +1054,7 @@ Compare two completed runs with `oasis eval --compare <run-a.json> <run-b.json>`
 
 Use one row per trial; repeated rows with the same `taskId` represent repeated attempts. The comparator accepts `status: "passed"` or `status: "failed"` (or a boolean `passed` field). `wallTimeMs` and `costUSD` are optional. Only task IDs present in both reports contribute to the headline comparison; the headline pass rate averages each task's pass rate equally, then reports median per-task time and mean per-trial cost. Unmatched tasks are listed separately.
 
-**Important:** `--compare` only reads and compares existing JSON reports. It does not launch compatible ecosystem, execute external verifiers, validate claims in an external report, or generate that report automatically. OASIS has not yet published a matched OASIS-vs-compatible ecosystem benchmark. The 33-task suite remains a smoke benchmark, not representative evidence of repository-level coding quality. For a fair comparison, use the same pinned repository snapshot, task text, acceptance tests, allowed tools/permissions and time/cost budget; record model/provider differences and review the resulting diffs.
+**Important:** `--compare` only reads and compares existing JSON reports. It does not launch Claude Code, execute external verifiers, validate claims in an external report, or generate that report automatically. OASIS has not yet published a matched OASIS-vs-Claude Code benchmark. The 33-task suite remains a smoke benchmark, not representative evidence of repository-level coding quality. For a fair comparison, use the same pinned repository snapshot, task text, acceptance tests, allowed tools/permissions and time/cost budget; record model/provider differences and review the resulting diffs.
 
 ## Static browser dashboard
 
