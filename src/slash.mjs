@@ -60,6 +60,7 @@ export const BUILTIN_COMMANDS = {
   style: 'List or switch the active response style (/style [default|concise|explanatory|architect|reviewer])',
   'output-style': 'Legacy alias: list or switch response styles (/output-style NAME)',
   todos: 'Show the current todo list',
+  followups: 'List or resolve loose ends captured from earlier turns: /followups [all|done ID|drop ID|clear]',
   memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
@@ -1458,6 +1459,17 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!todos.length) return { output: 'No todos yet.' };
       const mark = { completed: '[x]', in_progress: '[~]', pending: '[ ]' };
       return { output: todos.map((todo) => (mark[todo.status] || '[ ]') + ' ' + (todo.content || todo.text || todo.title || '')).join('\n') };
+    }
+    case 'followups': {
+      const ledger = await import('./followups.mjs');
+      const [sub, id] = String(argument || '').trim().split(/\s+/);
+      if (sub === 'done' || sub === 'drop') {
+        if (!id) return { output: 'Usage: /followups ' + sub + ' ID' };
+        const item = await ledger.resolveFollowup(root, id, sub === 'done' ? 'done' : 'dropped');
+        return { output: item ? 'Marked ' + item.id + ' as ' + item.status + ': ' + item.text : 'No single follow-up matches "' + id + '".' };
+      }
+      if (sub === 'clear') return { output: 'Removed ' + await ledger.clearResolvedFollowups(root, { all: id === 'all' }) + ' follow-up(s).' };
+      return { output: ledger.formatFollowups(await ledger.loadFollowups(root), { includeResolved: sub === 'all' }) };
     }
     case 'memory': {
       const memory = await import('./auto-memory.mjs');

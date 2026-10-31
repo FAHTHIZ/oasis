@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
@@ -3516,6 +3517,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   }
   const startNotice = drainInbox(session);
   if (startNotice) userContent += '\n\n' + startNotice;
+  if (!options.isSubagent && !options.planOnly && !session.followupsReminded && followupsEnabled(session, options.env || process.env)) {
+    session.followupsReminded = true;
+    try { const reminder = await followupReminder(session.root); if (reminder) userContent += '\n\n' + reminder; } catch {}
+  }
   if (!options.isSubagent) repairInterruptedHistory(session);
   // Non-enumerable so provider credentials in the env never end up in copies or logs.
   if (options.env) Object.defineProperty(session, 'providerEnv', { value: options.env, writable: true, configurable: true, enumerable: false });
@@ -3715,6 +3720,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       const finalText = issues.length ? text : appendLspUnavailableNotice(text, verification);
       assistantMessage.content = finalText;
+      let followupsAdded = [];
+      if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
+        try { followupsAdded = await recordFollowups(session.root, extractFollowups(text), { sessionId: session.sessionId || '' }); } catch {}
+      }
       if (finalText && options.onText) await emitDisplayText(session, options, finalText);
       pruneHistory(session);
       return {
@@ -3726,7 +3735,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verificationIncomplete: issues.length > 0,
         verificationIssues: issues,
         verification: verificationSummary(verification),
-        budgetExceeded: tokensUsed > tokenBudget
+        budgetExceeded: tokensUsed > tokenBudget,
+        ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
       };
     }
     if (text && options.onText) await emitDisplayText(session, options, text);
