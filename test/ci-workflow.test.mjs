@@ -36,14 +36,19 @@ test('public product lifecycle is Beta, not Alpha', async () => {
   assert.match(status, /public product lifecycle is Beta/i);
 });
 
-test('desktop release requires a version tag or explicit opt-in from main', async () => {
+test('desktop Beta release auto-publishes a new main version only after all gates', async () => {
   const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
   const notes = await readFile(new URL('../docs/releases/v0.4.0.md', import.meta.url), 'utf8');
-  assert.ok(workflow.includes("tags: ['v*']"));
+  assert.ok(workflow.includes('branches: [main]'));
+  assert.ok(!workflow.includes("tags: ['v*']"));
+  assert.ok(workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
   assert.ok(workflow.includes('publish_release:'));
   assert.ok(workflow.includes('default: false'));
   assert.ok(workflow.includes('type: boolean'));
   assert.ok(workflow.includes('inputs.publish_release == true'));
+  assert.ok(workflow.includes('echo "publish=false"'));
+  assert.ok(workflow.includes('echo "publish=true"'));
+  assert.ok(workflow.includes("if: steps.release-version.outputs.publish == 'true'"));
   assert.ok(workflow.includes("github.ref == 'refs/heads/main'"));
   assert.ok(workflow.includes('Require same-commit quality, site, and installer gates'));
   for (const name of ['quality.yml', 'pages.yml', 'installer-checks.yml']) assert.ok(workflow.includes(name));
