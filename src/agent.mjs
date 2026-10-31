@@ -2166,6 +2166,9 @@ export function verificationIssues(state) {
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
   }
+  if (Array.isArray(state.testTampering) && state.testTampering.length) {
+    issues.push('tests were weakened instead of the code being fixed (' + state.testTampering.map((item) => item.file + ': ' + item.reason).join('; ') + '); restore them, or explain to the user why this is intended');
+  }
   for (const [file, result] of state.lspVerificationByPath || []) {
     if (!changed.includes(file)) continue;
     if (result.status === 'unavailable') {
@@ -2263,6 +2266,7 @@ function verificationSummary(state) {
     lastCheck,
     lsp,
     ...(state.autoTestLast ? { autoTest: state.autoTestLast } : {}),
+    ...(Array.isArray(state.testTampering) && state.testTampering.length ? { testTampering: state.testTampering } : {}),
     complete: issues.length === 0,
     issues
   };
@@ -3923,6 +3927,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           }
         }
       }
+      if (verification.tamperCheckPending && verification.changedPaths.size) {
+        verification.tamperCheckPending = false;
+        const { detectTestTampering } = await import('./test-tamper.mjs');
+        verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
+      }
       const issues = verificationIssues(verification);
       const blockedText = verification.nudgeUsed ? formatLspVerificationBlocker(issues) : null;
       if (blockedText) {
@@ -4171,6 +4180,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.lastVerificationExitCode = null;
         verification.lastVerificationKind = null;
         verification.autoTestPending = true;
+        verification.tamperCheckPending = true;
       }
       if (result && result.lspVerification && result.lspVerification.path) {
         verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
