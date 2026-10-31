@@ -120,6 +120,14 @@ export function verificationIsComplete(verification) {
     (!Array.isArray(verification.issues) || verification.issues.length === 0);
 }
 
+function safeVerificationText(value, maximum = 240) {
+  return String(value == null ? '' : value)
+    .replace(/[^A-Za-z0-9 _./:,-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maximum);
+}
+
 export function formatVerificationReport(verification) {
   const lines = ['## Verification'];
   if (!verification || typeof verification !== 'object' || Array.isArray(verification)) {
@@ -157,9 +165,9 @@ export function formatVerificationReport(verification) {
 
   if (lsp.length) {
     for (const item of lsp) {
-      const file = String(item && item.path || 'source file').replace(/[\r\n\x60]/g, ' ').slice(0, 180);
+      const file = safeVerificationText(item && item.path || 'source file', 180);
       if (item && item.status === 'unavailable') {
-        const reason = String(item.reason || 'language server unavailable').replace(/[\r\n\x60]/g, ' ').slice(0, 240);
+        const reason = safeVerificationText(item.reason || 'language server unavailable', 240);
         lines.push('- Language server: not run for "' + file + '" (' + reason + ').');
       } else if (item && item.status === 'errors') {
         lines.push('- Language server: ' + Number(item.newErrorCount || 0) + ' new error(s) reported for "' + file + '".');
@@ -180,7 +188,7 @@ export function formatVerificationReport(verification) {
   }
   if (!complete && Array.isArray(verification.issues) && verification.issues.length) {
     lines.push('- Outstanding items: ' + verification.issues.map((item) =>
-      String(item).replace(/[\r\n]/g, ' ').slice(0, 300)
+      safeVerificationText(item, 300)
     ).join('; '));
   }
   return lines.join('\n');
