@@ -127,3 +127,26 @@ test('easy read-only requests use the cheaper model and restore the session defa
   assert.equal(hardResult.modelRouting.selectedModel, 'strong-fixture');
   assert.equal(session.config.model, 'strong-fixture');
 });
+
+test('routing never selects a cheaper model excluded by the user allow-list', async (t) => {
+  const root = await temporaryDirectory(t);
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const { config, requests } = await scriptedModel(t, [
+    { content: 'The README explains the project.' }
+  ]);
+  config.model = 'strong-fixture';
+  const session = await createSession({ root, config, bare: true, env });
+  session.availableModels = ['strong-fixture'];
+  session.settings.modelRouting = {
+    enabled: true,
+    easyModel: 'cheap-fixture',
+    strongModel: 'strong-fixture'
+  };
+  t.after(() => closeSession(session));
+
+  const result = await runAgentTurn(session, 'Summarize the README in three bullets.', { env });
+  assert.equal(requests[0].model, 'strong-fixture');
+  assert.equal(result.modelRouting.enabled, false);
+  assert.match(result.modelRouting.reason, /not in availableModels/);
+  assert.equal(session.config.model, 'strong-fixture');
+});
