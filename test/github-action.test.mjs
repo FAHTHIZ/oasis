@@ -90,6 +90,18 @@ test('GitHub Action never treats an unavailable or unapproved LSP as successful 
   assert.match(report, /Language server: not run for "src\/app\.ts"/);
   assert.match(report, /project test passed|repository test passed|repository test check passed/i);
   assert.match(report, /not counted as a pass/);
+  const notApplicableReport = formatVerificationReport({
+    ...projectTestPassed,
+    lsp: [{ path: 'README.md', status: 'not_applicable', reason: 'No language server is configured for this file type.' }]
+  });
+  assert.match(notApplicableReport, /Language server: not applicable for "README\.md"/);
+
+  const lspErrorButClaimedComplete = {
+    ...projectTestPassed,
+    lsp: [{ path: 'src/app.ts', status: 'errors', newErrorCount: 1 }],
+    complete: true
+  };
+  assert.equal(verificationIsComplete(lspErrorButClaimedComplete), false);
 
   const noPassingCheck = {
     ...projectTestPassed,
