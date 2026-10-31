@@ -975,7 +975,7 @@ test('long sessions compact completed history before the next coding request', a
   assert.equal(compactions[0].notesSaved, true);
   assert.equal(session.messages.length < 40, true);
   const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
-  assert.match(continuity, /Earlier work: README\\.md was inspected/);
+  assert.match(continuity, /Earlier work: README\.md was inspected/);
 });
 
 test('mid-turn compaction summarizes completed tool rounds without dropping the active request or latest tool-call pairing', async (t) => {
