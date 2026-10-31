@@ -29,7 +29,7 @@ import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
-import { microcompact, contextWindowSize, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
+import { estimateTokens, microcompact, contextWindowSize, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
@@ -41,6 +41,7 @@ import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, searchBackends, searchBackend } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { saveSessionNotes } from './session-notes.mjs';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
@@ -100,8 +101,44 @@ function findCompactionBoundary(messages) {
  * If the provider cannot summarize, a local deterministic digest prevents history
  * growth from making the next coding request unusable.
  */
+async function reportCompaction(session, summary, beforeTokens, options = {}, details = {}) {
+  const afterTokens = estimateTokens(session.messages || []);
+  const savedTokens = Math.max(0, beforeTokens - afterTokens);
+  const note = 'Saved about ' + savedTokens.toLocaleString('en-US') +
+    ' tokens by compacting older conversation history.';
+  let notesSaved = false;
+  if (session.root && !options.isSubagent && options.persistSessionNotes !== false) {
+    try {
+      const result = await saveSessionNotes(session.root, summary, { savedTokens });
+      notesSaved = Boolean(result.saved);
+    } catch (error) {
+      if (typeof options.onCompactionError === 'function') {
+        try { options.onCompactionError(error); } catch {}
+      }
+    }
+  }
+  const info = {
+    ...details,
+    beforeTokens,
+    afterTokens,
+    savedTokens,
+    note,
+    notesSaved,
+    notesPath: notesSaved ? '.oasis/session-notes.md' : null
+  };
+  if (typeof options.onCompaction === 'function') {
+    try { await options.onCompaction(info); } catch (error) {
+      if (typeof options.onCompactionError === 'function') {
+        try { options.onCompactionError(error); } catch {}
+      }
+    }
+  }
+  return info;
+}
+
 export async function compactHistoryIfNeeded(session, options = {}) {
   const messages = session.messages || [];
+  const beforeTokens = estimateTokens(messages);
   const thresholdChars = compactionThresholdChars(session.config || {}, options.env || process.env);
   const messageLimit = thresholdChars > HISTORY_COMPACT_THRESHOLD_CHARS ? 400 : 60;
   if (!options.force && messages.length <= messageLimit && historyTextSize(messages) <= thresholdChars) {
@@ -161,7 +198,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     },
     ...messages.slice(boundary)
   ];
-  if (options.onCompaction) options.onCompaction({
+  await reportCompaction(session, summary, beforeTokens, options, {
     removedMessages: oldMessages.length,
     retainedMessages: session.messages.length - 1,
     summaryChars: summary.length,
@@ -179,6 +216,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
  */
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
   const messages = session.messages || [];
+  const beforeTokens = estimateTokens(messages);
   const beforeChars = historyTextSize(messages);
   if (beforeChars <= compactionThresholdChars(session.config || {}, options.env || process.env) || messages.length < requestIndex + 5) {
     return { compacted: false, tokensUsed: 0 };
@@ -247,18 +285,16 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     ...messages.slice(boundary)
   ];
   const afterChars = historyTextSize(session.messages);
-  if (typeof options.onCompaction === 'function') {
-    options.onCompaction({
-      midTurn: true,
-      removedMessages: oldMessages.length,
-      removedToolResults,
-      retainedMessages: session.messages.length - 1,
-      summaryChars: summary.length,
-      usedModelSummary: Boolean(tokensUsed),
-      beforeChars,
-      afterChars
-    });
-  }
+  await reportCompaction(session, summary, beforeTokens, options, {
+    midTurn: true,
+    removedMessages: oldMessages.length,
+    removedToolResults,
+    retainedMessages: session.messages.length - 1,
+    summaryChars: summary.length,
+    usedModelSummary: Boolean(tokensUsed),
+    beforeChars,
+    afterChars
+  });
   if (typeof options.onContextPruned === 'function') {
     options.onContextPruned({
       midTurn: true,
