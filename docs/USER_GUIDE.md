@@ -861,6 +861,7 @@ These are on by default and each can be switched off.
 | Feature | What it does | Opt out |
 | --- | --- | --- |
 | Change guard | Rejects edits that replace code with placeholders like `// ... rest unchanged`; warns on large unexplained shrinkage; flags fix-circling back to an earlier broken state. | — |
+| Claim check | A reply that says "tests pass" while the latest check failed, was piped, or ran before later edits sends the agent back once to rerun and report honestly. | — |
 | Test-weakening check | Edits to test files that drop assertions, add skips or add always-true asserts are flagged so the agent fixes the code instead of the test. | — |
 | Compaction deadline | Context summaries give up after `OASIS_COMPACT_TIMEOUT_SECONDS` (default 90) and use a local summary, with a visible notice. | — |
 | Tolerant edits | `edit_file` / `multi_edit` match through CRLF, trailing spaces, smart quotes and indentation drift; failed matches show the closest candidate. | — |
