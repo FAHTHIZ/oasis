@@ -225,7 +225,7 @@ export async function publishChanges({ root, trigger, context, request, summary,
   await git(['push', '-q', context.remote, 'HEAD:refs/heads/' + branch], root);
   if (!sameRepoPr) {
     const prBody = (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') +
-      summary.slice(0, 52000) + '\n\n' + formatVerificationReport(verification);
+      summary.slice(0, 48000) + '\n\n' + formatVerificationReport(verification);
     pullRequest = await request('POST', '/repos/' + context.repository + '/pulls', {
       title: subject,
       head: branch,
@@ -347,7 +347,7 @@ export async function runAction(options = {}) {
     try { published = await publishChanges({ root, trigger, context, request, summary, verification }); }
     catch (error) { publishError = error.message; }
   }
-  const details = [summary.slice(0, 52000), formatVerificationReport(verification)];
+  const details = [summary.slice(0, 48000), formatVerificationReport(verification)];
   if (published.changed && published.pullRequest) details.push('Opened ' + published.pullRequest.html_url + ' from "' + published.branch + '".');
   else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to "' + published.branch + '".');
   if (publishError) details.push('Could not push the changes: ' + publishError);
