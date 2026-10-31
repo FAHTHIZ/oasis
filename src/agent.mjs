@@ -4288,6 +4288,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
     }
 
+    // Tool output is usually English; restate the reply language so answers don't drift (Claude Code #96326).
+    if (session.language && !/^en(glish)?\b/i.test(String(session.language))) {
+      const lastTool = session.messages[session.messages.length - 1];
+      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>Keep replying to the user in ' + session.language + '.</system-reminder>';
+    }
+
     totalToolCalls += calls.length;
     session.toolCallsThisSession += calls.length;
     // PostToolBatch: once per batch, before the next model request; can stop the loop.
