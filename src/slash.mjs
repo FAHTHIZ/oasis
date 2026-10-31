@@ -504,8 +504,11 @@ export async function runBuiltinCommand(name, argument, state) {
       } else if (action === 'easy' || action === 'strong') {
         const model = String(words.slice(1).join(' ') || '').trim();
         if (!model || model.length > 200 || /[\r\n\0]/.test(model)) return { output: 'Usage: /routing ' + action + ' MODEL_ID' };
-        if (session.availableModels && !modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) {
-          return { output: modelRestrictionMessage(model, session.availableModels) };
+        if (session.availableModels) {
+          const { modelAllowed, modelRestrictionMessage } = await import('./model-aliases.mjs');
+          if (!modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) {
+            return { output: modelRestrictionMessage(model, session.availableModels) };
+          }
         }
         if (action === 'easy') current.easyModel = model;
         else current.strongModel = model;
