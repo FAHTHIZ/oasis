@@ -1724,7 +1724,7 @@ function copy(text,btn){var done=function(){var o=btn.textContent;btn.textConten
 function sendWithMod(){try{return localStorage.getItem('oasis.web.sendKey')==='mod-enter'}catch(e){return false}}
 var modName=/Mac|iPhone|iPad/.test(navigator.platform||'')?'⌘':'Ctrl';
 function renderSendKeyHints(){document.querySelectorAll('[data-send-key-toggle]').forEach(function(b){b.innerHTML=sendWithMod()?'<span><kbd>'+modName+'</kbd><kbd>Enter</kbd> send</span><span><kbd>Enter</kbd> new line</span>':'<span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd><kbd>Enter</kbd> new line</span>';b.setAttribute('aria-label',(sendWithMod()?modName+'+Enter sends, Enter adds a line':'Enter sends, Shift+Enter adds a line')+'. Click to switch.')})}
-document.addEventListener('click',function(e){var b=e.target.closest('[data-send-key-toggle]');if(!b)return;try{localStorage.setItem('oasis.web.sendKey',sendWithMod()?'enter':'mod-enter')}catch(err){}renderSendKeyHints();if(typeof notify==='function')notify(sendWithMod()?modName+'+Enter now sends; Enter adds a new line.':'Enter now sends; Shift+Enter adds a new line.')});
+document.addEventListener('click',function(e){var b=e.target.closest('[data-send-key-toggle]');if(!b)return;try{localStorage.setItem('oasis.web.sendKey',sendWithMod()?'enter':'mod-enter')}catch(err){}renderSendKeyHints();if(typeof window.notify==='function')window.notify(sendWithMod()?modName+'+Enter now sends; Enter adds a new line.':'Enter now sends; Shift+Enter adds a new line.')});
 new MutationObserver(function(){if(document.querySelector('[data-send-key-toggle]:empty'))renderSendKeyHints()}).observe(document.body,{childList:true,subtree:true});
 renderSendKeyHints();
 var prompt=$('agentPrompt'),form=$('agentForm'),send=$('agentSendBtn');
