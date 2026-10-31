@@ -73,3 +73,20 @@ test('repo_map is a registered read-only tool and /map renders or adds the map',
   assert.match(added.output, /Added to the conversation/);
   assert.match(session.messages[0].content, /<repo-map>[\s\S]*src\/core\.js/);
 });
+
+test('settings.repoMap / OASIS_REPO_MAP add a map to the first turn only', async (t) => {
+  const root = await fixture(t);
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel } = await import('./helpers/scripted-model.mjs');
+  const { config, requests } = await scriptedModel(t, [{ content: 'one' }, { content: 'two' }]);
+  const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false }, repoMap: true };
+  const env = { ...process.env, HOME: root, OASIS_REPO_MAP: '' };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'Where is Engine started?', { env, approval: async () => false });
+  await runAgentTurn(session, 'thanks', { env, approval: async () => false });
+  const users = session.messages.filter((m) => m.role === 'user').map((m) => String(m.content));
+  assert.match(users[0], /<repo-map>[\s\S]*src\/core\.js[\s\S]*<\/repo-map>[\s\S]*Where is Engine started\?/);
+  assert.ok(users.slice(1).every((content) => !content.includes('<repo-map>')));
+  assert.ok(requests.length >= 2);
+});

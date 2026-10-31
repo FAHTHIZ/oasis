@@ -3651,6 +3651,21 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let userContent = request;
   session.currentRequest = request;
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
+  // Opt-in repository map on the first turn (settings.repoMap: true | { maxChars }, or OASIS_REPO_MAP=1).
+  if (!options.isSubagent && !session.repoMapInjected && !session.messages.some((message) => message.role === 'user' || message.role === 'assistant')) {
+    const setting = session.settings && session.settings.repoMap;
+    const envFlag = String((options.env || process.env).OASIS_REPO_MAP || '').toLowerCase();
+    const enabled = envFlag ? ['1', 'true', 'on', 'yes'].includes(envFlag) : Boolean(setting);
+    if (enabled) {
+      session.repoMapInjected = true;
+      try {
+        const { buildRepoMap } = await import('./repo-map.mjs');
+        const maxChars = setting && typeof setting === 'object' && setting.maxChars ? setting.maxChars : 6000;
+        const map = await buildRepoMap(session.root, { maxChars, focus: String(request).match(/[\w./-]+\.[a-z]{1,5}\b|\b[A-Za-z_]\w*[A-Z]\w*\b/g) || [] });
+        if (map.files) userContent = '<repo-map>\nRanked outline of ' + map.shownFiles + ' of ' + map.files + ' source files (most-referenced first). Use read_file with an offset to open a definition; call repo_map with focus for more.\n' + map.map + '\n</repo-map>\n\n' + userContent;
+      } catch {}
+    }
+  }
   // UserPromptExpansion: a typed custom command expanded into this prompt.
   if (options.expansion && !options.isSubagent && hasHooks(session.hooks, 'UserPromptExpansion')) {
     const expanded = await runHooks('UserPromptExpansion', { session_id: session.sessionId || 'unsaved', expansion_type: 'slash_command', ...options.expansion }, hookOptions(session, options.env));
