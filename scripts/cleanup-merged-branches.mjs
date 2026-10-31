@@ -15,7 +15,17 @@ export const AUDITED_SUPERSEDED_HEADS = new Map([
   ['fix/unattended-verification-rule', {
     sha: 'a8c514c31305203ce442df86b9ef4652f4f91c7b',
     paths: ['src/agent.mjs', 'test/runtime.test.mjs', 'test/approval-language.test.mjs', 'docs/BENCHMARKS.md', 'docs/CURRENT_STATUS.md']
-  }]
+  }],
+  ['fix/chained-command-permissions', { sha: '20906cc1cecd811b85125c79d9dc51088592b4b0', paths: ['src/permissions.mjs', 'test/permissions.test.mjs'] }],
+  ['security/bound-mcp-oauth-metadata', { sha: '65eb635e7051012edd2f55c64a679bf855cc491f', paths: ['src/mcp-oauth.mjs', 'test/mcp-oauth.test.mjs'] }],
+  ['security/public-fetch-ssrf-hardening', { sha: 'a3d9fd154e16718fc4adfab69f17d40904aef029', paths: ['src/mcp-oauth.mjs', 'test/mcp-oauth.test.mjs'] }],
+  ['feat/cost-aware-model-routing', { sha: 'dd41821b6397f0c227e0a4aa68d76d17eaecb498', paths: ['src/model-routing.mjs', 'src/agent.mjs', 'test/model-routing.test.mjs', 'docs/BENCHMARKS.md'] }],
+  ['fix/approval-secret-redaction', { sha: '81cbd727f5cf60c00c309a62d86b3b5dfff856d9', paths: ['src/approval-language.mjs', 'test/approval-language.test.mjs'] }],
+  ['fix/compaction-session-notes', { sha: '0d4cd105d6cb7170d203db46510fe1a33a53cdc5', paths: ['src/session-notes.mjs', 'src/agent.mjs', 'test/session-notes.test.mjs', 'test/runtime.test.mjs'] }],
+  ['fix/tool-output-preservation', { sha: 'e8381ca00f778d7944d037f850156e900f56a5e6', paths: ['src/command-output-log.mjs', 'src/tools.mjs', 'test/runtime.test.mjs'] }],
+  ['feat/context-ordering-todo', { sha: '7032a34f8a8146b64eafb3e51521cc1ffbc8b2ac', paths: ['src/context.mjs', 'src/agent.mjs', 'test/runtime.test.mjs'] }],
+  ['bench/infrastructure-gate-2026-10-31', { sha: 'b0098a8072ff837f46056e70a47a5153d701289d', paths: ['.github/scripts/check-eval-quarantine.mjs', 'test/eval-quarantine.test.mjs', 'bench/README.md'] }],
+  ['docs/alpha-confidence-milestone-2026-10-29', { sha: 'd865e22e5eeb530a8caeab2370e08da519d05dbc', paths: ['docs/NEXT_MILESTONE.md', 'docs/CURRENT_STATUS.md', 'README.md'] }]
 ]);
 
 export function classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads = new Map()) {
