@@ -595,6 +595,17 @@ document.getElementById('sidebarNewChatBtn').addEventListener('click',function()
 });
 document.getElementById('sidebarRefreshChats').addEventListener('click',function(){void agentLoadHistoryList()});
 document.getElementById('sidebarChatList').addEventListener('click',function(event){
+  var remove=event.target.closest('[data-sidebar-delete-id]');
+  if(remove){
+    event.preventDefault();event.stopPropagation();
+    var id=remove.dataset.sidebarDeleteId,row=remove.closest('.sidebar-chat-row'),label=row&&row.querySelector('.sidebar-chat-item');
+    if(!window.confirm('Delete the saved chat “'+(label?label.textContent:'Untitled chat')+'”? This removes it from disk and cannot be undone.'))return;
+    agentApi('/api/sessions/'+encodeURIComponent(id),{method:'DELETE'}).then(function(){
+      if(id===agentSessionId){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentClearMessages();agentActivity('Chat deleted. Start a new one.')}
+      notify('Chat deleted.');void agentLoadHistoryList();
+    },function(e){notify('Could not delete chat: '+e.message)});
+    return;
+  }
   var button=event.target.closest('[data-sidebar-session-id]');
   if(!button)return;
   navigate('agent');
@@ -658,7 +669,10 @@ function agentRenderSidebarChats(list,emptyMessage){
       button.textContent=(session.title||'Untitled chat').slice(0,64);
       button.title=session.title||'Untitled chat';
       button.setAttribute('aria-current',session.id===agentSessionId?'page':'false');
-      root.appendChild(button);
+      var row=document.createElement('div');row.className='sidebar-chat-row';
+      var del=document.createElement('button');del.type='button';del.className='sidebar-chat-delete';del.dataset.sidebarDeleteId=session.id;
+      del.setAttribute('aria-label','Delete chat '+(session.title||'Untitled chat').slice(0,64));del.title='Delete chat';del.textContent='×';
+      row.append(button,del);root.appendChild(row);
     });
   });
 }
@@ -1655,7 +1669,7 @@ if(emptyTemplate){
   var title=document.createElement('div');title.className='empty-title';title.textContent='What should we build?';
   emptyTemplate.insertBefore(title,emptyTemplate.firstChild);
   var hint=document.createElement('div');hint.className='agent-shortcuts';
-  hint.innerHTML='<span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd><kbd>Enter</kbd> new line</span><span><kbd>/</kbd> commands &amp; skills</span><span><kbd>@</kbd> mention files</span><span><kbd>Ctrl</kbd><kbd>K</kbd> search</span>';
+  hint.innerHTML='<button type="button" class="send-key-toggle" data-send-key-toggle title="Switch which key sends"></button><span><kbd>/</kbd> commands &amp; skills</span><span><kbd>@</kbd> mention files</span><span><kbd>Ctrl</kbd><kbd>K</kbd> search</span>';
   emptyTemplate.appendChild(hint);
   emptyTemplate=emptyTemplate.cloneNode(true);
 }
@@ -1706,7 +1720,13 @@ messages.addEventListener('click',function(e){
 function copy(text,btn){var done=function(){var o=btn.textContent;btn.textContent='Copied';btn.classList.add('copied');setTimeout(function(){btn.textContent=o;btn.classList.remove('copied')},1400)};
   if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(text).then(done,fallback);else fallback();
   function fallback(){var t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();try{document.execCommand('copy');done()}catch(e){}t.remove()}}
-/* ---------- Composer: Enter to send, autosize, live send state ---------- */
+/* ---------- Composer: Enter (or Ctrl/Cmd+Enter) to send, autosize, live send state ---------- */
+function sendWithMod(){try{return localStorage.getItem('oasis.web.sendKey')==='mod-enter'}catch(e){return false}}
+var modName=/Mac|iPhone|iPad/.test(navigator.platform||'')?'⌘':'Ctrl';
+function renderSendKeyHints(){document.querySelectorAll('[data-send-key-toggle]').forEach(function(b){b.innerHTML=sendWithMod()?'<span><kbd>'+modName+'</kbd><kbd>Enter</kbd> send</span><span><kbd>Enter</kbd> new line</span>':'<span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd><kbd>Enter</kbd> new line</span>';b.setAttribute('aria-label',(sendWithMod()?modName+'+Enter sends, Enter adds a line':'Enter sends, Shift+Enter adds a line')+'. Click to switch.')})}
+document.addEventListener('click',function(e){var b=e.target.closest('[data-send-key-toggle]');if(!b)return;try{localStorage.setItem('oasis.web.sendKey',sendWithMod()?'enter':'mod-enter')}catch(err){}renderSendKeyHints();if(typeof notify==='function')notify(sendWithMod()?modName+'+Enter now sends; Enter adds a new line.':'Enter now sends; Shift+Enter adds a new line.')});
+new MutationObserver(function(){if(document.querySelector('[data-send-key-toggle]:empty'))renderSendKeyHints()}).observe(document.body,{childList:true,subtree:true});
+renderSendKeyHints();
 var prompt=$('agentPrompt'),form=$('agentForm'),send=$('agentSendBtn');
 if(prompt){prompt.rows=1;prompt.placeholder='Ask Oasis to build, fix or explain anything…'}
 function autosize(){if(!prompt)return;prompt.style.height='auto';prompt.style.height=Math.min(prompt.scrollHeight,280)+'px';var c=document.querySelector('.agent-compose');if(c&&chatPanel)chatPanel.style.setProperty('--compose-h',c.offsetHeight+'px')}
@@ -1715,7 +1735,7 @@ if(prompt){
   prompt.addEventListener('input',function(){autosize();syncSend()});
   prompt.addEventListener('keydown',function(e){
     if(e.defaultPrevented||e.isComposing)return;
-    if(e.key==='Enter'&&!e.shiftKey&&!e.altKey){e.preventDefault();if(prompt.value.trim()&&!C.busy)form.requestSubmit()}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.altKey){var mod=e.ctrlKey||e.metaKey;if(sendWithMod()&&!mod)return;e.preventDefault();if(prompt.value.trim()&&!C.busy)form.requestSubmit()}
     if(e.key==='Escape'&&C.busy){var stop=$('agentStopBtn');if(stop&&!stop.hidden)stop.click()}
     if(e.key==='ArrowUp'&&!prompt.value&&lastPrompt){e.preventDefault();prompt.value=lastPrompt;autosize();syncSend()}
   });

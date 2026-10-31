@@ -135,6 +135,12 @@ body.light .btn-primary:hover{background:#287A0F}
 .sidebar-chat-group-label{font-size:11px;color:var(--faint);padding:10px 10px 4px;font-weight:550}
 .sidebar-chat-item{display:block;width:100%;text-align:left;padding:7px 10px;border-radius:var(--r-sm);font-size:13px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .12s,color .12s}
 .sidebar-chat-item:hover{background:var(--raised);color:var(--text)}
+.sidebar-chat-row{position:relative;display:flex;align-items:center}
+.sidebar-chat-row .sidebar-chat-item{padding-right:28px}
+.sidebar-chat-delete{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:var(--r-sm);font-size:15px;line-height:1;color:var(--text-3,var(--text-2));opacity:0;transition:opacity .12s,background .12s,color .12s}
+.sidebar-chat-row:hover .sidebar-chat-delete,.sidebar-chat-delete:focus-visible{opacity:1}
+.sidebar-chat-delete:hover{background:var(--surface,var(--raised));color:var(--text)}
+@media (hover:none){.sidebar-chat-delete{opacity:.7}}
 .sidebar-chat-item[aria-current="page"]{background:var(--raised);color:var(--text);box-shadow:inset 2px 0 0 var(--accent)}
 .sidebar-chat-empty{font-size:12.5px;color:var(--faint);padding:10px 10px;line-height:1.5}
 .sidebar-bottom{display:flex;flex-direction:column;gap:1px;padding-top:8px;border-top:1px solid var(--line)}
@@ -439,6 +445,9 @@ body.light .code-block .tok-str{color:#5B6F00}body.light .code-block .tok-kw{col
 #agentSendBtn{background:var(--accent);color:var(--accent-ink)}
 #agentSendBtn:hover{background:#B0FF78}
 #agentSendBtn:disabled{opacity:.35}
+.send-key-toggle{display:inline-flex;gap:inherit;align-items:center;font:inherit;color:inherit;background:none;border:0;padding:2px 4px;margin:-2px -4px;border-radius:var(--r-sm);cursor:pointer}
+.send-key-toggle>span{display:inline-flex;gap:4px;align-items:center}
+.send-key-toggle:hover{background:var(--raised);color:var(--text)}
 .compose-hint{grid-area:tools;justify-self:end;align-self:center;font-size:11px;color:var(--faint);display:flex;gap:10px;margin-right:4px}
 .agent-compose>small{display:block;text-align:center;margin-top:8px;font-size:11px;color:var(--faint);line-height:1.45}
 /* Slash / skill command menu */
