@@ -23,10 +23,10 @@ The second major caveat is execution isolation. OASIS's OS sandbox is optional, 
 
 The repository's default branch contained 585 Git tree entries at the audited revision, including large runtime modules and a broad test suite. The primary sources reviewed include:
 
-- [Agent loop — src/agent.mjs](../src/agent.mjs#L3014-L3395), including [tool authorization/dispatch](../src/agent.mjs#L2803-L2940) and [post-edit verification tracking](../src/agent.mjs#L3209-L3359).
-- [Tool definitions and execution — src/tools.mjs](../src/tools.mjs), plus [power tools](../src/power-tools.mjs), [Git tools](../src/git-tools.mjs), [diagnostics](../src/diagnostics.mjs), [LSP](../src/lsp.mjs), [session tools](../src/session-tools.mjs) and [agent-team tasks](../src/agent-tasks.mjs).
-- [Permission rules and command-risk analysis](../src/permissions.mjs), [OS sandbox selection/wrapping](../src/sandbox.mjs), [memory retrieval](../src/auto-memory.mjs), [memory file loading](../src/memory.mjs), [session persistence](../src/sessions.mjs), [subagent definitions](../src/subagents.mjs), [workflow execution](../src/workflows.mjs), [MCP clients](../src/mcp.mjs), [hooks](../src/hooks.mjs), and [Claude-format plugin interoperability](../src/claude-plugins.mjs).
-- [Runtime regression tests](../test/runtime.test.mjs), [permission tests](../test/permissions.test.mjs), and [evaluation task metadata](../evals/tasks/metadata.json).
+- [Agent loop — src/agent.mjs](../../src/agent.mjs#L3014-L3395), including [tool authorization/dispatch](../../src/agent.mjs#L2803-L2940) and [post-edit verification tracking](../../src/agent.mjs#L3209-L3359).
+- [Tool definitions and execution — src/tools.mjs](../../src/tools.mjs), plus [power tools](../../src/power-tools.mjs), [Git tools](../../src/git-tools.mjs), [diagnostics](../../src/diagnostics.mjs), [LSP](../../src/lsp.mjs), [session tools](../../src/session-tools.mjs) and [agent-team tasks](../../src/agent-tasks.mjs).
+- [Permission rules and command-risk analysis](../../src/permissions.mjs), [OS sandbox selection/wrapping](../../src/sandbox.mjs), [memory retrieval](../../src/auto-memory.mjs), [memory file loading](../../src/memory.mjs), [session persistence](../../src/sessions.mjs), [subagent definitions](../../src/subagents.mjs), [workflow execution](../../src/workflows.mjs), [MCP clients](../../src/mcp.mjs), [hooks](../../src/hooks.mjs), and [Claude-format plugin interoperability](../../src/claude-plugins.mjs).
+- [Runtime regression tests](../../test/runtime.test.mjs), [permission tests](../../test/permissions.test.mjs), and [evaluation task metadata](../../evals/tasks/metadata.json).
 
 This audit records what those files implement and what the checked-in tests exercise. It does not infer behavior merely from a feature name or a README claim.
 
@@ -40,19 +40,19 @@ For that reason, this report does not present a line-by-line comparison with Cla
 
 ### 1. Core agent loop and completion discipline
 
-**Source evidence:** [src/agent.mjs](../src/agent.mjs#L3014-L3395).
+**Source evidence:** [src/agent.mjs](../../src/agent.mjs#L3014-L3395).
 
 The runtime repeatedly requests model output, dispatches tool calls, appends tool results to the conversation and continues until a stop condition or bounded limit. It checks cancellation, caps steps and tool calls, uses a token budget, compacts older history, and repairs interrupted tool-call history. Consecutive read-only work may run concurrently while tool results are restored to the order the model requested.
 
 OASIS also has an explicit post-edit verification state machine. It tracks changed paths, whether the full diff or changed files were reviewed, and the exit status of recognized verification commands. A later edit clears prior review/check state. If the model attempts to finish too early, the runtime sends a targeted continuation requiring a full diff review (or rereading each changed file in a non-Git directory) and a relevant test/check/lint/build/type-check command. The gate can still end as incomplete; a write response alone is not accepted as verification.
 
-**Test evidence:** [test/runtime.test.mjs](../test/runtime.test.mjs#L905-L1457) includes regression cases for long-session compaction, mid-turn compaction preserving the active request and latest tool-call/result pairing, a post-edit verification gate, and cases that reject incomplete reads or irrelevant commands as verification.
+**Test evidence:** [test/runtime.test.mjs](../../test/runtime.test.mjs#L905-L1457) includes regression cases for long-session compaction, mid-turn compaction preserving the active request and latest tool-call/result pairing, a post-edit verification gate, and cases that reject incomplete reads or irrelevant commands as verification.
 
 **Comparison result:** The official Claude Code tool schema exposes a broad tool loop surface, including Agent, Bash, file read/edit/write, plan-mode, task, workflow and worktree contracts. The official documentation also describes an iterative gather-context / act / verify pattern. Those sources support a comparison at the behavior-category level, but not a claim that the internal loops or enforcement logic are identical. Actual relative performance remains a benchmark question.
 
 ### 2. Repository access and edits
 
-**Source evidence:** [src/tools.mjs](../src/tools.mjs), [src/power-tools.mjs](../src/power-tools.mjs), and [test/runtime.test.mjs](../test/runtime.test.mjs).
+**Source evidence:** [src/tools.mjs](../../src/tools.mjs), [src/power-tools.mjs](../../src/power-tools.mjs), and [test/runtime.test.mjs](../../test/runtime.test.mjs).
 
 OASIS has distinct tools for listing, reading, globbing and searching workspace files; exact-string edits, multi-edit, notebook edits and whole-file writes; Git status/diff/log/branch/commit/push and worktree operations; plus bounded text/file output. The primary tools module caps an individual text file at 256 KiB and ordinary tool output at 24 KiB. Workspace traversal, sensitive paths and escaping symlinks are guarded; writes can create recoverable snapshots; deletion requires explicit interactive approval.
 
@@ -62,19 +62,19 @@ The checked-in tests exercise path traversal, sensitive-file reads/edits, escapi
 
 ### 3. Command execution, approvals and sandboxing
 
-**Source evidence:** [src/tools.mjs](../src/tools.mjs), [src/power-tools.mjs](../src/power-tools.mjs), [src/permissions.mjs](../src/permissions.mjs), and [src/sandbox.mjs](../src/sandbox.mjs).
+**Source evidence:** [src/tools.mjs](../../src/tools.mjs), [src/power-tools.mjs](../../src/power-tools.mjs), [src/permissions.mjs](../../src/permissions.mjs), and [src/sandbox.mjs](../../src/sandbox.mjs).
 
 OASIS separates argv-style command execution from shell/PowerShell execution. The tool description requires approval unless the user explicitly enables the yes/auto-approve path, blocks destructive executables or shell interpreters unless explicitly allowed, supports background processes and optional persistent PTYs, and exposes process-output/termination tools. Permission rules have an explicit precedence of deny over ask over allow over the mode default. The command analyzer is deliberately conservative around shell operators and command substitution, so uncertain syntax fails closed rather than being guessed safe.
 
 OS sandbox selection and wrapping are implemented separately from tool-level approvals. They are useful defense-in-depth, but they are not always active: the OS sandbox is optional, disabled by default, and the current project documentation identifies Linux/macOS as its supported targets. Windows therefore remains a material isolation gap compared with a product whose configured execution environment provides the required isolation.
 
-**Test evidence:** [test/permissions.test.mjs](../test/permissions.test.mjs) covers command-prefix allow rules, mixed command chains, quoted operators and fail-closed treatment of command substitution. The CI workflow also runs filesystem, network, secret-store and sandbox regressions on Ubuntu, Windows and macOS.
+**Test evidence:** [test/permissions.test.mjs](../../test/permissions.test.mjs) covers command-prefix allow rules, mixed command chains, quoted operators and fail-closed treatment of command substitution. The CI workflow also runs filesystem, network, secret-store and sandbox regressions on Ubuntu, Windows and macOS.
 
 **Comparison result:** Claude Code's public schema includes Bash and file-operation contracts, and its public documentation describes permission and sandbox controls. The schema does not reveal equivalent enforcement implementation details. Therefore a safe claim is “similar control problem and visible tool contract,” not “equal sandboxing.” Establish parity only with a published policy matrix and matched denial, escape, injection, process cleanup and cancellation tests.
 
 ### 4. Context, memory and sessions
 
-**Source evidence:** [src/agent.mjs](../src/agent.mjs), [src/auto-memory.mjs](../src/auto-memory.mjs), [src/memory.mjs](../src/memory.mjs), and [src/sessions.mjs](../src/sessions.mjs).
+**Source evidence:** [src/agent.mjs](../../src/agent.mjs), [src/auto-memory.mjs](../../src/auto-memory.mjs), [src/memory.mjs](../../src/memory.mjs), and [src/sessions.mjs](../../src/sessions.mjs).
 
 OASIS stores workspace-scoped sessions and has explicit recall, history compaction and mid-turn compaction paths. Memory retrieval ranks candidate saved notes and can redact secrets before persistence. The runtime compacts old completed history while preserving the active request and the newest tool-call/result relationships, rather than simply deleting arbitrary messages.
 
@@ -84,7 +84,7 @@ OASIS stores workspace-scoped sessions and has explicit recall, history compacti
 
 ### 5. Delegation, task coordination and workflows
 
-**Source evidence:** [src/subagents.mjs](../src/subagents.mjs), [src/agent-tasks.mjs](../src/agent-tasks.mjs), [src/worktrees.mjs](../src/worktrees.mjs), [src/workflows.mjs](../src/workflows.mjs), and [src/session-tools.mjs](../src/session-tools.mjs).
+**Source evidence:** [src/subagents.mjs](../../src/subagents.mjs), [src/agent-tasks.mjs](../../src/agent-tasks.mjs), [src/worktrees.mjs](../../src/worktrees.mjs), [src/workflows.mjs](../../src/workflows.mjs), and [src/session-tools.mjs](../../src/session-tools.mjs).
 
 OASIS contains agent definitions and tool restrictions, bounded parallel runners, background-agent lifecycle/status and messaging, named teams, a session-local shared task board, and dynamic JavaScript workflows with phases/pipelines/parallel work and schema-checked results. Editing subagents can use separate Git worktrees. The implementation describes dispatch as model-directed rather than claiming a fully autonomous scheduler, and branches are not merged automatically.
 
@@ -92,7 +92,7 @@ OASIS contains agent definitions and tool restrictions, bounded parallel runners
 
 ### 6. MCP, hooks, skills, plugins, search and IDE surfaces
 
-**Source evidence:** [src/mcp.mjs](../src/mcp.mjs), [src/hooks.mjs](../src/hooks.mjs), [src/claude-plugins.mjs](../src/claude-plugins.mjs), [src/agent.mjs](../src/agent.mjs), [src/web-search.mjs](../src/web-search.mjs), [src/ide.mjs](../src/ide.mjs), and [ide/vscode](../ide/vscode).
+**Source evidence:** [src/mcp.mjs](../../src/mcp.mjs), [src/hooks.mjs](../../src/hooks.mjs), [src/claude-plugins.mjs](../../src/claude-plugins.mjs), [src/agent.mjs](../../src/agent.mjs), [src/web-search.mjs](../../src/web-search.mjs), [src/ide.mjs](../../src/ide.mjs), and [ide/vscode](../../ide/vscode).
 
 These are implemented integrations, not just planned items: configurable MCP servers and tool refresh, hook execution, plugin/marketplace discovery and activation, skills, configurable web search, a VS Code-compatible editor integration and a browser workspace. The product documents specific compatibility limits and does not promise that every third-party or enterprise plugin behaves identically.
 
@@ -204,11 +204,11 @@ No comparison in this document proves exhaustive security, broad real-world codi
 ### OASIS
 
 - [Inspected OASIS source snapshot](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f)
-- [Agent runtime](../src/agent.mjs)
-- [Tool definitions and execution](../src/tools.mjs)
-- [Permissions](../src/permissions.mjs) · [Sandbox](../src/sandbox.mjs) · [Runtime regression tests](../test/runtime.test.mjs)
-- [Task metadata](../evals/tasks/metadata.json) · [Benchmark protocol](BENCHMARKS.md) · [Benchmark audit](BENCHMARKS.md)
-- [Quality workflow](../.github/workflows/quality.yml) · [Successful base-revision run](https://github.com/FAHTHIZ/oasis/actions/runs/40840259970)
+- [Agent runtime](../../src/agent.mjs)
+- [Tool definitions and execution](../../src/tools.mjs)
+- [Permissions](../../src/permissions.mjs) · [Sandbox](../../src/sandbox.mjs) · [Runtime regression tests](../../test/runtime.test.mjs)
+- [Task metadata](../../evals/tasks/metadata.json) · [Benchmark protocol](../BENCHMARKS.md) · [Benchmark audit](../BENCHMARKS.md)
+- [Quality workflow](../../.github/workflows/quality.yml) · [Successful base-revision run](https://github.com/FAHTHIZ/oasis/actions/runs/40840259970)
 
 ### Claude Code — official public artifacts
 
