@@ -1,4 +1,5 @@
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
+import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, combineWarnings } from './change-guard.mjs';
 import { loadMemory } from './memory.mjs';
 import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
@@ -1769,9 +1770,14 @@ export async function executeTool(name, args = {}, context = {}) {
       if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
       let matches = 0, offset = 0;
       while ((offset = current.indexOf(args.old_string, offset)) >= 0) { matches++; offset += args.old_string.length; }
-      if (!matches) throw new Error('old_string was not found. It must match the file exactly, including whitespace and indentation. Re-read the file and try again.');
+      let relaxed = null;
+      if (!matches && args.replace_all !== true) relaxed = relaxedReplace(current, args.old_string, args.new_string);
+      if (!matches && !relaxed) {
+        const hint = closestMatchHint(current, args.old_string);
+        throw new Error('old_string was not found. It must match the file exactly, including whitespace and indentation.' + (hint ? '\n' + hint : ' Re-read the file and try again.'));
+      }
       if (matches > 1 && args.replace_all !== true) throw new Error('old_string appears ' + matches + ' times. Add more surrounding context to make it unique, or set replace_all=true.');
-      const next = args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
+      const next = relaxed ? relaxed.next : args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
       if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('The edited file would exceed the 256 KiB limit.');
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
       const editDisplayPath = target.relative.split(path.sep).join('/');
@@ -1780,7 +1786,7 @@ export async function executeTool(name, args = {}, context = {}) {
       await writeFile(target.absolute, next, { encoding: 'utf8' });
       await recordFileState(context, target.absolute);
       const editWarning = combineWarnings(shrinkWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
-      return { path: editDisplayPath, changed: true, replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
+      return { path: editDisplayPath, changed: true, ...(relaxed ? { matchedBy: relaxed.strategy, matchedAtLine: relaxed.line, note: 'old_string did not match exactly; it matched uniquely after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line + '.' } : {}), replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
     }
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
