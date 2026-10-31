@@ -147,6 +147,8 @@ test('routing never selects a cheaper model excluded by the user allow-list', as
   const result = await runAgentTurn(session, 'Summarize the README in three bullets.', { env });
   assert.equal(requests[0].model, 'strong-fixture');
   assert.equal(result.modelRouting.enabled, false);
+  assert.equal(result.modelRouting.tier, 'strong');
+  assert.equal(result.modelRouting.strongModel, 'strong-fixture');
   assert.match(result.modelRouting.reason, /not in availableModels/);
   assert.equal(session.config.model, 'strong-fixture');
 });
