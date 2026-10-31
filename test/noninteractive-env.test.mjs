@@ -36,3 +36,31 @@ test('git commit without -m fails fast instead of waiting on an editor', { skip:
   assert.notEqual(viaCommand.exitCode, 0);
   assert.ok(Date.now() - started < 20000, 'should not wait for the editor');
 });
+
+test('write_file creates normal project files with umask permissions, secrets owner-only', { skip: process.platform === 'win32' }, async (t) => {
+  const { stat } = await import('node:fs/promises');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mode-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ctx = { root, autoApprove: true, approval: async () => true, env: process.env };
+  await executeTool('write_file', { path: 'public/index.html', content: '<p>hi</p>\n' }, ctx);
+  await executeTool('write_file', { path: '.env.local', content: 'A=1\n' }, ctx).catch(() => {});
+  const umask = process.umask();
+  assert.equal((await stat(path.join(root, 'public/index.html'))).mode & 0o777, 0o666 & ~umask);
+  const env = await stat(path.join(root, '.env.local')).catch(() => null);
+  if (env) assert.equal(env.mode & 0o777, 0o600);
+});
+
+test('write_file flags unrequested summary documents', async (t) => {
+  const { unrequestedDocWarning } = await import('../src/tools.mjs');
+  assert.match(unrequestedDocWarning('FINAL_SUMMARY.md', 'fix the login bug'), /Unrequested document/);
+  assert.match(unrequestedDocWarning('IMPLEMENTATION_NOTES.md', 'add oauth'), /Unrequested document/);
+  assert.equal(unrequestedDocWarning('SUMMARY.md', 'put a summary in SUMMARY.md'), '');
+  assert.equal(unrequestedDocWarning('docs/REPORT.md', 'write a report file'), '');
+  assert.equal(unrequestedDocWarning('README.md', 'fix'), '');
+  assert.equal(unrequestedDocWarning('notes.md', 'fix'), '');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-doc-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const session = { currentRequest: 'fix the parser bug' };
+  const result = await executeTool('write_file', { path: 'FIXES_SUMMARY.md', content: '# Fixes\n' }, { root, session, autoApprove: true, approval: async () => true, env: process.env });
+  assert.match(result.warning, /Unrequested document: FIXES_SUMMARY\.md/);
+});
