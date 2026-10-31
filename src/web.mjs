@@ -10,7 +10,7 @@ import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession, testProviderConnection } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions } from './sessions.mjs';
-import { executeTool, resolveWorkspacePath } from './tools.mjs';
+import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
@@ -19,7 +19,7 @@ import { visionEnabled, imageInputCapability } from './images.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
-import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
+import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
@@ -1376,6 +1376,16 @@ export function createOasisWebServer(options = {}) {
       const body = await readJsonBody(req);
       const result = await startGithubCloneJob(body);
       json(res, 202, result);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/workspace/diff') {
+      try {
+        const result = await readWorkspaceDiff(activeRoot, { env, maxChars: 180000, isSecretPath: sensitivePath });
+        json(res, 200, { workspaceName: path.basename(activeRoot), ...result });
+      } catch (error) {
+        json(res, 500, { error: 'Could not read workspace changes: ' + String(error && error.message || error).slice(0, 300) });
+      }
       return;
     }
 
