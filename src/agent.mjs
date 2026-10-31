@@ -8,6 +8,7 @@ import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBloc
 import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
+import { selectTaskModel } from './model-routing.mjs';
 
 function withResolvedModel(config, env, planMode) {
   if (!config || !isModelAlias(config.model)) return config;
@@ -3318,19 +3319,101 @@ function refreshTodoPrompt(session) {
 
 export async function runAgentTurn(session, prompt, options = {}) {
   const env = options.env || process.env;
-  if (!options.isSubagent && session && session.root) {
-    const messaging = await import('./session-messaging.mjs').catch(() => null);
-    if (messaging) {
-      await messaging.registerActiveSession(session, { env }).catch(() => {});
-      await messaging.updateActiveSession(session, { state: 'busy' }, { env }).catch(() => {});
+  const originalConfig = session && session.config;
+  const originalModel = originalConfig && originalConfig.model || '';
+  const routing = session && session.settings && session.settings.modelRouting || {};
+  const route = options.isSubagent || !session
+    ? { enabled: false, tier: 'strong', model: originalModel, strongModel: originalModel, reason: 'subagents use their configured model' }
+    : selectTaskModel(prompt, originalModel, routing, { hint: options.routingHint });
+  let selectedModel = route.model || originalModel;
+  if (route.enabled && session.availableModels && !modelAllowed(selectedModel, session.availableModels, {
+    env: session.modelEnv || env,
+    protocol: originalConfig && originalConfig.protocol
+  })) {
+    selectedModel = originalModel;
+    route.enabled = false;
+    route.reason = 'the configured routed model is not in availableModels; kept the session model';
+  }
+  const temporarilyRouted = Boolean(route.enabled && originalConfig && selectedModel !== originalModel);
+  if (temporarilyRouted) session.config = { ...originalConfig, model: selectedModel };
+  const taskUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costUSD: 0,
+    strongModelCostUSD: 0,
+    costKnown: true,
+    strongModelCostKnown: true
+  };
+  const onUsage = (entry = {}) => {
+    taskUsage.inputTokens += Number(entry.inputTokens || 0);
+    taskUsage.outputTokens += Number(entry.outputTokens || 0);
+    taskUsage.totalTokens += Number(entry.totalTokens || 0);
+    if (entry.phase === undefined) {
+      const actualModel = String(entry.model || (session && session.config && session.config.model) || selectedModel);
+      const pricingOptions = {
+        config: originalConfig || {},
+        overrides: session && session.pricing || {},
+        env
+      };
+      const actualPriceModel = resolveModelAlias(actualModel, {
+        protocol: originalConfig && originalConfig.protocol,
+        env
+      });
+      const strongPriceModel = resolveModelAlias(route.strongModel || originalModel, {
+        protocol: originalConfig && originalConfig.protocol,
+        env
+      });
+      if (priceFor(actualPriceModel, pricingOptions) === null) taskUsage.costKnown = false;
+      else taskUsage.costUSD += Number(entry.costUsd || 0);
+      if (priceFor(strongPriceModel, pricingOptions) === null) taskUsage.strongModelCostKnown = false;
+      else taskUsage.strongModelCostUSD += estimateCostUsd(strongPriceModel, entry, pricingOptions);
     }
-    try {
-      return await runAgentTurnWithTelemetry(session, prompt, options);
-    } finally {
-      if (messaging) await messaging.updateActiveSession(session, { state: 'active' }, { env }).catch(() => {});
+    if (typeof options.onUsage === 'function') options.onUsage(entry);
+  };
+  const turnOptions = { ...options, onUsage };
+  let result;
+  try {
+    if (!options.isSubagent && session && session.root) {
+      const messaging = await import('./session-messaging.mjs').catch(() => null);
+      if (messaging) {
+        await messaging.registerActiveSession(session, { env }).catch(() => {});
+        await messaging.updateActiveSession(session, { state: 'busy' }, { env }).catch(() => {});
+      }
+      try {
+        result = await runAgentTurnWithTelemetry(session, prompt, turnOptions);
+      } finally {
+        if (messaging) await messaging.updateActiveSession(session, { state: 'active' }, { env }).catch(() => {});
+      }
+    } else {
+      result = await runAgentTurnWithTelemetry(session, prompt, turnOptions);
+    }
+    const known = taskUsage.costKnown && taskUsage.strongModelCostKnown;
+    const savingsUSD = known ? taskUsage.strongModelCostUSD - taskUsage.costUSD : null;
+    return {
+      ...result,
+      modelRouting: {
+        enabled: Boolean(route.enabled),
+        tier: route.tier,
+        selectedModel,
+        strongModel: route.strongModel || originalModel,
+        reason: route.reason
+      },
+      taskUsage: {
+        ...taskUsage,
+        costUSD: taskUsage.costKnown ? taskUsage.costUSD : null,
+        strongModelCostUSD: taskUsage.strongModelCostKnown ? taskUsage.strongModelCostUSD : null,
+        savingsUSD,
+        selectedModel
+      }
+    };
+  } finally {
+    // Preserve a genuine emergency fallback switch, but otherwise return the
+    // session to its chosen default model after this routed task.
+    if (temporarilyRouted && session.config && session.config.model === selectedModel) {
+      session.config = originalConfig;
     }
   }
-  return runAgentTurnWithTelemetry(session, prompt, options);
 }
 
 async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
@@ -3504,9 +3587,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     throwIfCancelled(options.signal);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
-    const stepCost = estimateCostUsd(session.config && session.config.model, usage, { config: session.config, overrides: session.pricing || {}, env: options.env || process.env });
+    const pricedModel = resolveModelAlias(session.config && session.config.model, {
+      protocol: session.config && session.config.protocol,
+      env: options.env || process.env
+    });
+    const stepCost = estimateCostUsd(pricedModel, usage, { config: session.config, overrides: session.pricing || {}, env: options.env || process.env });
     session.costUsd = (session.costUsd || 0) + stepCost;
-    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, step: step + 1 });
+    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, model: pricedModel, step: step + 1 });
     if (session.maxBudgetUsd > 0 && session.costUsd >= session.maxBudgetUsd) throw new BudgetExceededError(session.costUsd, session.maxBudgetUsd);
     let truncationNotice = '';
     if (assistant.truncated) {
