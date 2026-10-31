@@ -165,3 +165,25 @@ export async function deleteSession(root, id, options = {}) {
   await unlink(target);
   return { id: data.id, deleted: true };
 }
+
+/** Saved sessions for this workspace last updated more than `days` days ago (newest first). */
+export async function staleSessions(root, days, options = {}) {
+  const limit = Number(days);
+  if (!Number.isFinite(limit) || limit < 1) throw new Error('Use a whole number of days (1 or more).');
+  const cutoff = (options.now || Date.now()) - Math.floor(limit) * 86400000;
+  return (await listSessions(root, options)).filter((item) => {
+    const at = Date.parse(item.updatedAt);
+    return Number.isFinite(at) && at < cutoff;
+  });
+}
+
+/** Delete saved sessions older than `days`, skipping `keep` ids (e.g. the one being resumed). */
+export async function pruneSessions(root, days, options = {}) {
+  const keep = new Set(options.keep || []);
+  const removed = [];
+  for (const item of await staleSessions(root, days, options)) {
+    if (keep.has(item.id)) continue;
+    try { await deleteSession(root, item.id, options); removed.push(item.id); } catch {}
+  }
+  return removed;
+}
