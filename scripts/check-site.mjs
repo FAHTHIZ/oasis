@@ -185,7 +185,7 @@ assert.equal(manifest.display, 'standalone');
 assert.ok(Array.isArray(manifest.icons) && manifest.icons.some((item) => item.src === './assets/oasis-icon.svg'));
 assert.ok(icon.includes('<svg') && icon.includes('</svg>'), 'PWA icon must be a valid SVG document.');
 assert.ok(sidebarMark.startsWith('<svg') && sidebarMark.includes('<path d='), 'Sidebar brand mark must be a populated SVG document.');
-assert.ok(html.includes('src="./assets/oasis-mark.svg"'), 'Sidebar must reference the OASIS portal mark.');
+assert.ok(html.includes('src="/assets/oasis-mark.svg"'), 'Sidebar must reference the root-relative OASIS portal mark so nested routes resolve it correctly.');
 assert.ok(!html.includes('id="view-agent">\\n<div'), 'Agent view must not contain a literal escaped newline before its runtime note.');
 assert.ok(serviceWorker.includes("self.addEventListener('install'"));
 assert.ok(serviceWorker.includes("self.addEventListener('fetch'"));
