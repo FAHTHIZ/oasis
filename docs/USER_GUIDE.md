@@ -984,7 +984,7 @@ The resulting terminal id can be used with:
 
 Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
 
-The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [Alpha-confidence milestone](PROJECT_PLAN.md) for current platform limitations.
+The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [project plan](PROJECT_PLAN.md) for current platform limitations.
 
 ## Clearing local data
 
