@@ -14,6 +14,7 @@
 import { writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import path from 'node:path';
+import { sanitizeModelRouting } from './model-routing.mjs';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
@@ -218,6 +219,7 @@ export async function loadSettings(root, options = {}) {
     theme: null,
     statusLine: null,
     lspServers: {},
+    modelRouting: { enabled: false, easyModel: '', strongModel: '' },
     trusted: false,
     sources: [],
     ignoredUntrusted: []
@@ -237,7 +239,7 @@ export async function loadSettings(root, options = {}) {
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || settings.env || settings.apiKeyHelper;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || settings.env || settings.apiKeyHelper || settings.modelRouting;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
@@ -299,6 +301,15 @@ export async function loadSettings(root, options = {}) {
       }
     }
     if (settings.pricing && typeof settings.pricing === 'object' && !Array.isArray(settings.pricing)) result.pricing = { ...(result.pricing || {}), ...settings.pricing };
+    if (settings.modelRouting && typeof settings.modelRouting === 'object' && !Array.isArray(settings.modelRouting)) {
+      const routing = sanitizeModelRouting(settings.modelRouting);
+      result.modelRouting = {
+        enabled: typeof settings.modelRouting.enabled === 'boolean' ? routing.enabled : result.modelRouting.enabled,
+        easyModel: routing.easyModel || result.modelRouting.easyModel,
+        strongModel: routing.strongModel || result.modelRouting.strongModel
+      };
+      if (!result.modelRouting.easyModel) result.modelRouting.enabled = false;
+    }
     if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
