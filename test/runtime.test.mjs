@@ -970,7 +970,12 @@ test('long sessions compact completed history before the next coding request', a
   assert.ok(!taskPayload.messages.some((message) => message.role === 'user' && String(message.content).includes('Older task request 0')));
   assert.equal(compactions.length, 1);
   assert.equal(compactions[0].usedModelSummary, true);
+  assert.ok(compactions[0].savedTokens > 0);
+  assert.match(compactions[0].note, /^Saved about [\\d,]+ tokens/);
+  assert.equal(compactions[0].notesSaved, true);
   assert.equal(session.messages.length < 40, true);
+  const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
+  assert.match(continuity, /Earlier work: README\\.md was inspected/);
 });
 
 test('mid-turn compaction summarizes completed tool rounds without dropping the active request or latest tool-call pairing', async (t) => {
