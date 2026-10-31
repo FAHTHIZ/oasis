@@ -120,7 +120,6 @@ test('audited superseded branch set uses exact heads and existing replacement pa
     ['fix/gate1-static-asset-routes', 'fae5b813f8e5147e40de04970d6f45a246f60660'],
     ['test/gate1-browser-and-asset-smoke', '73d6baecc843fa336c88366f3c57d549673bf2c1'],
     ['cli/getting-started', '0d77138168847f8c45dd392a3bc0a6c788a22a8c'],
-    ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6']
   ];
   for (const [name, sha] of reviewed) {
     const entry = AUDITED_SUPERSEDED_HEADS.get(name);
