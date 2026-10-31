@@ -278,6 +278,32 @@ export async function runBuiltinCommand(name, argument, state) {
       sessionOptions.model = selected;
       return { output: 'Model set to ' + selected + '.' };
     }
+    case 'permissions': {
+      const policy = session && session.permissions;
+      if (!policy) return { output: 'Permission mode: default\nNo active permission policy.' };
+      const description = typeof policy.describe === 'function'
+        ? policy.describe()
+        : {
+            mode: policy.mode || 'default',
+            allow: (policy.allow || []).map((rule) => typeof rule === 'string' ? rule : rule.raw).filter(Boolean),
+            ask: (policy.ask || []).map((rule) => typeof rule === 'string' ? rule : rule.raw).filter(Boolean),
+            deny: (policy.deny || []).map((rule) => typeof rule === 'string' ? rule : rule.raw).filter(Boolean),
+            session: (policy.sessionAllow || []).map((rule) => typeof rule === 'string' ? rule : rule.raw).filter(Boolean)
+          };
+      const lines = ['Permission mode: ' + description.mode];
+      for (const kind of ['allow', 'ask', 'deny', 'session']) {
+        const rules = Array.isArray(description[kind]) ? description[kind] : [];
+        if (rules.length) {
+          lines.push(kind + ':');
+          for (const rule of rules) lines.push('  ' + rule);
+        } else {
+          lines.push(kind + ': (none)');
+        }
+      }
+      const permissions = session.settings && session.settings.permissions || {};
+      if (permissions.disableBypassPermissionsMode) lines.push('bypassPermissions: disabled by settings');
+      return { output: lines.join('\n') };
+    }
     case 'mode': {
       const requested = String(argument || '').trim();
       const current = session && session.permissions && session.permissions.mode || sessionOptions.permissionMode || 'default';
