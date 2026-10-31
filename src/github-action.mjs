@@ -120,6 +120,19 @@ export function verificationIsComplete(verification) {
     (!Array.isArray(verification.issues) || verification.issues.length === 0);
 }
 
+export function verificationIsComplete(verification) {
+  if (!verification || typeof verification !== 'object' || Array.isArray(verification)) return false;
+  const required = verification.required === true;
+  const diffReviewed = !required || verification.diffReviewed === true;
+  const check = verification.lastCheck && typeof verification.lastCheck === 'object'
+    ? verification.lastCheck
+    : null;
+  const projectCheckPassed = !required || verification.checkRequired !== true ||
+    Boolean(check && check.passed === true && check.exitCode === 0);
+  return verification.complete === true && diffReviewed && projectCheckPassed &&
+    (!Array.isArray(verification.issues) || verification.issues.length === 0);
+}
+
 function safeVerificationText(value, maximum = 240) {
   return String(value == null ? '' : value)
     .replace(/[^A-Za-z0-9 _./:,-]/g, ' ')
