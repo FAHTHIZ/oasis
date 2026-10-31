@@ -30,6 +30,8 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
     assert.match(script, /api\.github\.com\/repos\/FAHTHIZ\/oasis/);
     assert.match(script, /releases\/latest/);
     assert.match(script, /tags\?per_page=100/);
+    assert.match(script, /ls-remote/);
+    assert.match(script, /resolveFromGitTags/);
     assert.match(script, /commits\//);
     assert.match(script, /archive\/\$?(OASIS_COMMIT|ReleaseCommit)/);
     assert.match(script, /Latest stable release/);

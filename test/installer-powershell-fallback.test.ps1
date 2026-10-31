@@ -61,6 +61,17 @@ try {
 }
 if (-not $rejected) { throw 'The tag resolver accepted a prerelease-only tag list.' }
 
+$gitTagOutput = @"
+1111111111111111111111111111111111111111 refs/tags/v9.9.9
+2222222222222222222222222222222222222222 refs/tags/v9.10.0
+3333333333333333333333333333333333333333 refs/tags/v10.0.0-beta.1
+4444444444444444444444444444444444444444 refs/tags/v10.0.0
+5555555555555555555555555555555555555555 refs/tags/v10.0.0^{}
+"@
+$gitStable = Resolve-OasisStableTagFromGitOutput -Output $gitTagOutput
+Assert-Equal 'v10.0.0' $gitStable.Tag 'newest Git stable semantic version tag'
+Assert-Equal '5555555555555555555555555555555555555555' $gitStable.CommitSha 'peeled annotated tag commit SHA'
+
 $atom = "<?xml version='1.0'?><feed><entry><id>tag:github.com,2008:Grit::Commit/$sha</id></entry></feed>"
 Assert-Equal $sha (Resolve-OasisCommitFromAtom -Content $atom) 'Atom commit SHA'
 

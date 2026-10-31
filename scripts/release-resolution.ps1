@@ -60,6 +60,55 @@ function Resolve-OasisStableTagFromList {
     return $selected
 }
 
+function Resolve-OasisStableTagFromGitOutput {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Output)
+
+    $plain = @{}
+    $peeled = @{}
+    foreach ($line in ($Output -split '\r?\n')) {
+        if ($line -match '^\s*([0-9a-f]{40})\s+refs/tags/(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(\^\{\})?\s*
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Content)
+
+    $entry = [regex]::Match($Content, '<entry\b[^>]*>([\s\S]*?)</entry>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $entry.Success) {
+        throw 'The public tag Atom feed did not contain a commit entry.'
+    }
+
+    $commit = [regex]::Match($entry.Groups[1].Value, '<id>tag:github\.com,2008:Grit::Commit/([0-9a-f]{40})</id>', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $commit.Success) {
+        throw 'The public tag Atom feed did not include an exact commit SHA.'
+    }
+    return $commit.Groups[1].Value.ToLowerInvariant()
+}
+) {
+            $sha = $Matches[1].ToLowerInvariant()
+            $tag = $Matches[2]
+            if ($Matches[3]) { $peeled[$tag] = $sha }
+            elseif (-not $plain.ContainsKey($tag)) { $plain[$tag] = $sha }
+        }
+    }
+
+    $candidates = @(
+        foreach ($tag in $plain.Keys) {
+            $sha = if ($peeled.ContainsKey($tag)) { $peeled[$tag] } else { $plain[$tag] }
+            if ($sha -match '\A[0-9a-f]{40}\z') {
+                [pscustomobject]@{
+                    Tag = $tag
+                    CommitSha = $sha
+                    Version = [version]::Parse($tag.Substring(1))
+                }
+            }
+        }
+    )
+    $selected = $candidates | Sort-Object -Property Version -Descending | Select-Object -First 1
+    if (-not $selected) {
+        throw 'Git did not return a stable version tag with a valid commit SHA.'
+    }
+    return $selected
+}
+
 function Resolve-OasisCommitFromAtom {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Content)
