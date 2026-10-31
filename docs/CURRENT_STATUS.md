@@ -237,3 +237,21 @@ Still requiring deeper passes: full `src/agent.mjs` and context/compaction lifec
 The agent runtime now has a real PTY session manager wired into the approved `run_command` path. Set `interactive=true` to start a persistent interactive session; `terminal_read`, `terminal_input`, `terminal_resize`, `terminal_interrupt`, `terminal_stop`, and `terminal_list` control it. The manager bounds captured output and input, limits active sessions, tracks exit status, supports incremental reads and stops sessions when the parent OASIS session closes. The native `node-pty` binding is optional and lazy-loaded; ordinary commands keep working if it is unavailable.
 
 This is **partial terminal and desktop-install groundwork, not completion of the whole gap**. The browser now has an xterm.js renderer connected to authenticated PTY routes. Native PTY integration is tested on Linux/Node 22. Process-tree termination was added for command/hook timeout and cancellation, but Windows/macOS behavior and cross-platform process cleanup remain open until CI/runtime verification confirms them. Desktop install packaging is scaffolded for Windows, macOS and Linux, but platform build artifacts must pass and signing credentials are not configured, so a verified signed release has not shipped.
+
+---
+
+## Gate 1 repairs and compaction continuity — October 31, 2026
+
+The repair sequence is being developed on isolated branches; these changes are not yet integrated into the default branch.
+
+- Fixed the missing semicolon that prevented the workspace's inline application script from parsing, and added a syntax regression test for inline scripts.
+- Added web-server routes for the local interface stylesheet and the OASIS brand assets. The app-shell asset test discovers local assets referenced by the HTML, service worker and manifest, then checks the HTTP status and content type.
+- Extended the existing Playwright browser smoke test to fail on browser console errors as well as uncaught page errors, including on first-run setup.
+- Made the xterm renderer optional. Missing renderer files receive valid, non-cacheable fallback assets; the Terminal panel shows a plain installation message instead of a broken script or server error.
+- Corrected the sidebar mark assertion to accept the actual root-relative local asset path used in the HTML.
+- Corrected approval-message secret redaction so an API-key placeholder is not redacted a second time into a malformed fragment.
+- The agent already contains post-edit verification, a three-identical-outcome loop breaker, and read-before-edit/stale-file protection. Existing tests cover those behaviors; they were not replaced.
+- Automatic history compaction runs at the boundary before a new user turn, while the previous session is idle. Long-running tasks also compact completed tool rounds without separating tool calls from their results.
+- Compaction now writes a bounded generated section to .oasis/session-notes.md, reports approximate token savings in the CLI and browser activity feed, redacts supported credential formats, preserves user-authored text outside its markers, and refuses symlinked note paths.
+
+**Verification boundary:** source and inline-script syntax checks have passed in this work session. The GitHub Actions quality run for fix/compaction-session-notes is pending; the new Node tests, real HTTP asset requests, and Playwright desktop/390px smoke test are not yet confirmed. Earlier runs passed the clean-environment suite, Linux/Windows/macOS security regression suites and native PTY integration, but their full Node-version jobs were cancelled when newer commits superseded them. Gate 1 is not yet declared passed.
