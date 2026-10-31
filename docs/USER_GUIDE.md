@@ -18,8 +18,6 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 ---
 
----
-
 ## Install the terminal agent
 
 Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch.
