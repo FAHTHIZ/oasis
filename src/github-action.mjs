@@ -142,7 +142,8 @@ export function formatVerificationReport(verification) {
   const check = verification.lastCheck && typeof verification.lastCheck === 'object'
     ? verification.lastCheck
     : null;
-  const lsp = Array.isArray(verification.lsp) ? verification.lsp : [];
+  const allLsp = Array.isArray(verification.lsp) ? verification.lsp : [];
+  const lsp = allLsp.slice(0, 20);
 
   lines.push('- Result: **' + (required ? (complete ? 'VERIFIED' : 'INCOMPLETE') : 'NOT REQUIRED') + '**');
   lines.push('- Changed files: ' + (changed.length ? changed.length.toLocaleString('en-US') : 'none'));
@@ -180,6 +181,9 @@ export function formatVerificationReport(verification) {
   } else if (required) {
     lines.push('- Language server: no diagnostic result was recorded.');
   }
+  if (allLsp.length > lsp.length) {
+    lines.push('- Additional language-server results omitted from this PR summary: ' + (allLsp.length - lsp.length) + '.');
+  }
 
   if (lsp.some((item) => item && item.status === 'unavailable') && complete &&
       check && check.passed === true && check.exitCode === 0) {
@@ -187,9 +191,12 @@ export function formatVerificationReport(verification) {
       ' passed. The optional language-server check was unavailable and was not counted as a pass.');
   }
   if (!complete && Array.isArray(verification.issues) && verification.issues.length) {
-    lines.push('- Outstanding items: ' + verification.issues.map((item) =>
+    lines.push('- Outstanding items: ' + verification.issues.slice(0, 20).map((item) =>
       safeVerificationText(item, 300)
     ).join('; '));
+    if (verification.issues.length > 20) {
+      lines.push('- Additional outstanding items omitted: ' + (verification.issues.length - 20) + '.');
+    }
   }
   return lines.join('\n');
 }
@@ -218,7 +225,7 @@ export async function publishChanges({ root, trigger, context, request, summary,
   await git(['push', '-q', context.remote, 'HEAD:refs/heads/' + branch], root);
   if (!sameRepoPr) {
     const prBody = (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') +
-      summary.slice(0, 60000) + '\n\n' + formatVerificationReport(verification);
+      summary.slice(0, 52000) + '\n\n' + formatVerificationReport(verification);
     pullRequest = await request('POST', '/repos/' + context.repository + '/pulls', {
       title: subject,
       head: branch,
@@ -340,7 +347,7 @@ export async function runAction(options = {}) {
     try { published = await publishChanges({ root, trigger, context, request, summary, verification }); }
     catch (error) { publishError = error.message; }
   }
-  const details = [summary.slice(0, 60000), formatVerificationReport(verification)];
+  const details = [summary.slice(0, 52000), formatVerificationReport(verification)];
   if (published.changed && published.pullRequest) details.push('Opened ' + published.pullRequest.html_url + ' from "' + published.branch + '".');
   else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to "' + published.branch + '".');
   if (publishError) details.push('Could not push the changes: ' + publishError);
