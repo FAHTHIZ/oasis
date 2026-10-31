@@ -294,12 +294,15 @@ export async function validateEvaluationSuite(options = {}) {
   for (const dir of dirs) {
     let task;
     let tempRoot;
+    let noOpExitCode = null;
+    let referenceExitCode = null;
     try {
       task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
       tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-eval-validate-'));
       const noOpRoot = path.join(tempRoot, 'no-op');
       await copySnapshot(task.repoDir, noOpRoot);
       const noOp = await runVerifier(task, noOpRoot, env);
+      noOpExitCode = noOp.exitCode;
       if (noOp.exitCode === 0) {
         throw new Error('No-op check failed: verify script passes before the reference patch is applied.');
       }
@@ -310,17 +313,41 @@ export async function validateEvaluationSuite(options = {}) {
         throw new Error('Reference patch could not be applied (' + patch.stage + '): ' + (patch.output || patch.error || 'unknown git error'));
       }
       const reference = await runVerifier(task, referenceRoot, env);
+      referenceExitCode = reference.exitCode;
       if (reference.exitCode !== 0) {
         throw new Error('Reference patch failed its verifier: ' + (reference.output || 'exit code ' + reference.exitCode));
       }
       results.push({ id: task.id, category: task.category, difficulty: task.difficulty, ok: true, noOpExitCode: noOp.exitCode, referenceExitCode: reference.exitCode, taskFingerprint: task.taskFingerprint });
     } catch (error) {
-      results.push({ id: path.basename(dir), ok: false, error: error.message || String(error) });
+      results.push({ id: path.basename(dir), ok: false, noOpExitCode, referenceExitCode, error: error.message || String(error) });
     } finally {
       if (tempRoot) await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
     }
   }
   return { ok: results.length > 0 && results.every((result) => result.ok), total: results.length, results };
+}
+
+/**
+ * Run the existing fixture suite without an agent: leave every snapshot untouched
+ * and count any verifier that unexpectedly accepts that unchanged workspace.
+ * A valid fixture must also pass its reference patch, so broken fixtures fail closed.
+ */
+export async function runEvalNegativeControl(options = {}) {
+  const report = await validateEvaluationSuite(options);
+  const noOpPasses = report.results.filter((result) => result.noOpExitCode === 0).length;
+  const total = report.total;
+  const passRate = total > 0 ? noOpPasses / total : 1;
+  const threshold = 0.10;
+  const ok = report.ok && passRate < threshold;
+  return {
+    ok,
+    total,
+    noOpPasses,
+    passRate,
+    threshold,
+    fixturesValid: report.ok,
+    results: report.results
+  };
 }
 
 
@@ -649,13 +676,14 @@ export async function compareEvalReports(paths, options = {}) {
 
 function parseArgs(args) {
   const config = {
-    validate: false, task: null, trials: 3, help: false, compare: null, compareOutput: null, compareHtml: null,
+    validate: false, negativeControl: false, task: null, trials: 3, help: false, compare: null, compareOutput: null, compareHtml: null,
     claudeCode: false, model: null, maxTurns: 30, timeoutSeconds: 600,
     timeoutExplicit: false, budgetUSD: null, claudeOptionsUsed: false
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--validate') { config.validate = true; continue; }
+    if (arg === '--negative-control') { config.negativeControl = true; continue; }
     if (arg === '--compare') {
       if (config.compare) throw new Error('--compare may be specified only once.');
       if (!args[i + 1] || !args[i + 2]) throw new Error('--compare requires two JSON report paths.');
@@ -729,10 +757,11 @@ function parseArgs(args) {
   if (config.claudeOptionsUsed && !config.claudeCode) {
     throw new Error('--model, --max-turns and --budget-usd require --claude-code.');
   }
-  if (config.claudeCode && (config.validate || config.compare)) {
+  if (config.claudeCode && (config.validate || config.negativeControl || config.compare)) {
     throw new Error('--claude-code cannot be combined with --validate or --compare.');
   }
-  if (config.validate && (config.task || config.trials !== 3 || config.compare || config.claudeCode || config.timeoutExplicit || config.compareOutput || config.compareHtml)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials, --compare, --timeout-seconds, --out, --html or --claude-code.');
+  if (config.validate && (config.negativeControl || config.task || config.trials !== 3 || config.compare || config.claudeCode || config.timeoutExplicit || config.compareOutput || config.compareHtml)) throw new Error('--validate runs the complete suite; do not combine it with --negative-control, --task, --trials, --compare, --timeout-seconds, --out, --html or --claude-code.');
+  if (config.negativeControl && (config.validate || config.task || config.trials !== 3 || config.compare || config.claudeCode || config.timeoutExplicit || config.compareOutput || config.compareHtml)) throw new Error('--negative-control runs the complete unchanged-snapshot control; do not combine it with --validate, --task, --trials, --compare, --timeout-seconds, --out, --html or --claude-code.');
   if (config.compare && (config.task || config.trials !== 3 || config.claudeCode || config.timeoutExplicit)) throw new Error('--compare cannot be combined with --task, --trials, --timeout-seconds or --claude-code.');
   return config;
 }
@@ -1025,7 +1054,7 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
@@ -1036,6 +1065,20 @@ export async function runEvalCommand(args = [], options = {}) {
   });
 
   if (config.claudeCode) return await runClaudeCodeEval(config, { ...options, env, tasksDir, output });
+
+  if (config.negativeControl) {
+    const control = await runEvalNegativeControl({ tasksDir, env, snapshotsDir: options.snapshotsDir });
+    const pct = (control.passRate * 100).toFixed(2);
+    output.write('Evaluation negative control: ' + (control.ok ? 'PASS' : 'FAIL') + '\\n');
+    output.write('Unchanged snapshots accepted: ' + control.noOpPasses + '/' + control.total + ' (' + pct + '%); required: below ' + (control.threshold * 100).toFixed(0) + '%.\\n');
+    if (!control.fixturesValid) {
+      output.write('Fixture validation failed. The reference-patch checks or fixture structure must be repaired before this control can pass.\\n');
+      for (const result of control.results.filter((item) => !item.ok)) {
+        output.write('  FAIL ' + result.id + ': ' + (result.error || 'invalid fixture') + '\\n');
+      }
+    }
+    return { ok: control.ok, negativeControl: control };
+  }
 
   if (config.validate) {
     const report = await validateEvaluationSuite({ tasksDir, env, snapshotsDir: options.snapshotsDir });
