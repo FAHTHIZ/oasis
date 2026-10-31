@@ -137,6 +137,23 @@ test('audited superseded branch set uses exact heads and existing replacement pa
   }
 });
 
+test('unreviewed CLI, UX, and phase-0 branches fail closed', () => {
+  const unreviewed = [
+    ['cli/getting-started', '0d77138168847f8c45dd392a3bc0a6c788a22a8c'],
+    ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6'],
+    ['fix/phase-0-finish-plan-20261030', '7862c21ea72db14b2a801b0c7684578cfae05d3c'],
+    ['fix/phase-0-finish-plan-20261030-sync', 'c31c38037c59a7f11dec1d7e382ef29996e47333']
+  ];
+  for (const [name, sha] of unreviewed) {
+    assert.equal(AUDITED_SUPERSEDED_HEADS.has(name), false, name + ' must not be in the superseded allowlist');
+    assert.equal(
+      classifyRetirement({ name, commit: { sha } }, null, 'main', openPRs, mainTree).retire,
+      false,
+      name + ' must remain preserved until its unique changes are reviewed'
+    );
+  }
+});
+
 test('default, protected, and open-PR branches are never retired', () => {
   const behind = { status: 'behind', ahead_by: 0, behind_by: 10, files: [] };
   assert.equal(classifyRetirement({ name: 'main' }, behind, 'main', openPRs, mainTree).retire, false);
