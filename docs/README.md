@@ -16,7 +16,7 @@ This directory contains the detailed references behind the root [README](../READ
 
 | Document | Purpose |
 |---|---|
-| [Architecture](ARCHITECTURE.md) | Runtime components, request flow, data ownership, and trust boundaries. |
+| [Architecture](ARCHITECTURE.md) | System map, shared runtime, provider adapters, execution/policy boundaries, agent coordination, browser/desktop/editor surfaces, data ownership, and integration trust boundaries. |
 | [Workflows and skills](WORKFLOWS_AND_SKILLS.md) | Workflow interaction model, reusable skills, and plugin behavior. |
 | [Keyboard shortcuts](KEYS.md) | Terminal shortcuts, keybinding behavior, and mobile notes. |
 | [Brand guide](BRAND.md) | Official OASIS naming, visual identity, colors, and logo usage. |
