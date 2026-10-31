@@ -170,7 +170,7 @@ test('eval negative control fails when an unchanged fixture is accepted', async 
   const tasksDir = path.join(tmp, 'tasks');
   await mkdir(tasksDir);
   const taskDir = await createFixtureTask(tasksDir, 'broken-negative-control');
-  await writeFile(path.join(taskDir, 'verify.mjs'), 'process.exit(0);\\n');
+  await writeFile(path.join(taskDir, 'verify.mjs'), 'process.exit(0);\n');
   const output = { text: '', write(value) { this.text += String(value); } };
 
   const result = await runEvalCommand(['--negative-control'], {
