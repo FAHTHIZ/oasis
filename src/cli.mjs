@@ -1787,7 +1787,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         : 'LSP not reported';
       stdout.write('[verification] ' + (evidence.complete ? 'Complete' : 'Incomplete') +
         ' · diff ' + (evidence.diffReviewed ? 'reviewed' : 'not reviewed') +
-        ' · check ' + check + ' · ' + lspStatus + '\n');
+        ' · check ' + check + ' · ' + lspStatus +
+        (evidence.autoTest ? ' · auto-test ' + (evidence.autoTest.passed ? 'passed' : 'failed') + ' (' + evidence.autoTest.attempts + ' run' + (evidence.autoTest.attempts === 1 ? '' : 's') + ')' : '') + '\n');
       if (!evidence.complete && Array.isArray(evidence.issues) && evidence.issues.length) {
         stdout.write('[verification] Blockers: ' + evidence.issues.join('; ') + '. Do not treat the task as fully verified yet.\n');
       }
