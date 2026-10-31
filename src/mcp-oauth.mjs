@@ -276,10 +276,18 @@ async function safeOAuthFetch(fetchImpl, url, options = {}, safety = {}, maxByte
   return await fetchPinned(url, { ...options, redirect: 'manual' }, safety, maxBytes);
 }
 
-async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAUTH_METADATA_BYTES, safety = {}) {
+function normalizeOAuthTimeout(value = OAUTH_METADATA_TIMEOUT_MS) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(30000, Math.max(1, Math.trunc(parsed)))
+    : OAUTH_METADATA_TIMEOUT_MS;
+}
+
+async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAUTH_METADATA_BYTES, safety = {}, timeoutMs = OAUTH_METADATA_TIMEOUT_MS) {
   await requireSafeEndpoint(url, 'OAuth request URL', safety);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
+  const timeout = normalizeOAuthTimeout(timeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await safeOAuthFetch(fetchImpl, url, { ...options, signal: controller.signal }, safety, maxBytes);
     // Do not let discovery, registration or token exchange silently cross hosts via redirects.
@@ -294,9 +302,9 @@ async function fetchBoundedJson(fetchImpl, url, options = {}, maxBytes = MAX_OAU
   } finally { clearTimeout(timer); }
 }
 
-async function getJson(fetchImpl, url, safety = {}) {
+async function getJson(fetchImpl, url, safety = {}, timeoutMs = OAUTH_METADATA_TIMEOUT_MS) {
   try {
-    const { response, body } = await fetchBoundedJson(fetchImpl, url, { headers: { accept: 'application/json' } }, MAX_OAUTH_METADATA_BYTES, safety);
+    const { response, body } = await fetchBoundedJson(fetchImpl, url, { headers: { accept: 'application/json' } }, MAX_OAUTH_METADATA_BYTES, safety, timeoutMs);
     if (!response.ok) return null;
     return body;
   } catch { return null; }
@@ -312,13 +320,14 @@ function wellKnownUrls(base, suffix) {
 }
 
 // Finds the authorization server for an MCP server URL.
-export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, lookupImpl = lookup } = {}) {
+export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, lookupImpl = lookup, fetchTimeoutMs = OAUTH_METADATA_TIMEOUT_MS } = {}) {
+  const timeoutMs = normalizeOAuthTimeout(fetchTimeoutMs);
   const safety = oauthSafetyForServer(serverUrl, lookupImpl);
   await requireSafeEndpoint(serverUrl, 'MCP server URL', safety);
   let resourceMetadata = null;
   if (!resourceMetadataUrl) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), OAUTH_METADATA_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const probe = await safeOAuthFetch(fetchImpl, serverUrl, {
         method: 'POST',
@@ -333,7 +342,7 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
     finally { clearTimeout(timer); }
   }
   for (const candidate of resourceMetadataUrl ? [resourceMetadataUrl] : wellKnownUrls(serverUrl, 'oauth-protected-resource')) {
-    resourceMetadata = await getJson(fetchImpl, candidate, safety);
+    resourceMetadata = await getJson(fetchImpl, candidate, safety, timeoutMs);
     if (resourceMetadata) break;
   }
   const issuer = resourceMetadata && Array.isArray(resourceMetadata.authorization_servers) && resourceMetadata.authorization_servers[0] || new URL(serverUrl).origin;
@@ -342,7 +351,7 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
   const candidates = [...wellKnownUrls(issuer, 'oauth-authorization-server'), ...wellKnownUrls(issuer, 'openid-configuration')];
   if (issuerUrl.pathname.replace(/\/$/, '')) candidates.push(issuer.replace(/\/$/, '') + '/.well-known/openid-configuration');
   for (const candidate of candidates) {
-    metadata = await getJson(fetchImpl, candidate, safety);
+    metadata = await getJson(fetchImpl, candidate, safety, timeoutMs);
     if (metadata && metadata.authorization_endpoint && metadata.token_endpoint) break;
     metadata = null;
   }
