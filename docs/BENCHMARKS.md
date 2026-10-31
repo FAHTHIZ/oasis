@@ -106,3 +106,36 @@ The comparator now fingerprints each task's prompt, shared repository snapshot, 
 ## Result status
 
 No live Claude Code results are included yet. The CLI integration is testable with a fake runner, but this task-authoring session did not run an authenticated Claude Code CLI benchmark. Before publishing head-to-head numbers, run both agents against identical task fingerprints, use the same model when comparing harnesses, publish every trial and failure, and retain the complete machine-readable reports.
+## Cost-aware model routing experiment
+
+OASIS can route clearly small, read-only tasks to a cheaper model while keeping implementation, security-sensitive, ambiguous, and larger tasks on a strong model. Routing is deliberately conservative; it is not a guarantee that every easy request can be recognized.
+
+Configure the interactive agent with:
+
+```text
+/routing easy MODEL_ID
+/routing strong MODEL_ID
+/routing on
+/routing status
+```
+
+The strong model defaults to the provider model for the session if no separate strong model is configured. Routing settings are saved in user settings. Untrusted project settings cannot switch the user's model routing policy.
+
+Run the full task suite with three trials per task and explicit model IDs:
+
+```sh
+node src/cli.mjs eval \
+  --route-easy-model CHEAPER_MODEL_ID \
+  --route-strong-model STRONG_MODEL_ID \
+  --trials 3 \
+  --timeout-seconds 600 \
+  --yes
+```
+
+Run a separate baseline without the routing flags. Keep both runs on the same source revision, task fingerprints, provider configuration, and trial count. Do not compare runs with different revisions or task fingerprints as though they were paired.
+
+Routed OASIS trial records include the selected model, requested/default model, route tier and reason, strong-model baseline, token totals, estimated cost, estimated savings, and a costSource field. When a model has no configured price, routed cost and savings remain unknown rather than being inferred from the other model's rate. Configure model prices in settings when a provider/model is not covered by the built-in pricing table.
+
+**Interpretation boundary:** the strong-model comparison estimates what the same observed token counts would cost at the strong model's configured rate. It is a counterfactual price estimate, not a second run and not evidence that the stronger model would use the same number of tokens or produce the same result. Run the unrouted baseline separately to compare pass rate, time, and actual token consumption. Do not present the estimated per-task saving as a measured quality or performance improvement.
+
+The default classifier sends only short, clearly read-only prompts to the easy model. The evaluator also passes the task's small / medium / large metadata as a routing hint: small tasks use the easy model; medium and large tasks use the strong model. Those labels are fixture metadata, not a calibrated model of task complexity.
