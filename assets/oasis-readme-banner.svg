@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-<title id="title">OASIS OSS — Code. Automate. Flourish.</title><desc id="desc">The OASIS green portal mark and wordmark over a dark reflective grid, representing a focused local-first coding workspace.</desc>
+<title id="title">OASIS — Code. Automate. Flourish.</title><desc id="desc">The OASIS green portal mark and wordmark over a dark reflective grid, representing a focused local-first coding workspace.</desc>
 <defs>
 <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#050907"/><stop offset=".55" stop-color="#0B0F0C"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
 <radialGradient id="glow"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".27"/><stop offset=".46" stop-color="#32E07A" stop-opacity=".12"/><stop offset="1" stop-color="#0B0F0C" stop-opacity="0"/></radialGradient>
@@ -12,7 +12,7 @@
 <path d="M0 475H1200M0 515H1200M0 565H1200M0 615H1200" stroke="#32E07A" stroke-opacity=".12"/>
 <g transform="translate(128 170) scale(.94)"><path d="M18 151 C18 76 76 13 150 13 C224 13 282 76 282 151 L224 151 C224 101 194 63 150 63 C106 63 76 101 76 151 Z" fill="url(#portal)"/><path d="M76 150 C76 99 107 61 150 61 C193 61 224 99 224 150" fill="none" stroke="#32E07A" stroke-width="4.5" stroke-linecap="round"/><g fill="url(#strata)"><path d="M18 151 H98 V160 H18 Z M202 151 H282 V160 H202 Z"/><path d="M21 168 H92 V176 H21 Z M208 168 H279 V176 H208 Z"/><path d="M27 185 H99 V193 H27 Z M201 185 H273 V193 H201 Z"/><path d="M36 202 H113 V210 H36 Z M187 202 H264 V210 H187 Z"/><path d="M46 219 H124 V227 H46 Z M176 219 H254 V227 H176 Z"/><path d="M58 236 H132 V244 H58 Z M168 236 H242 V244 H168 Z"/><path d="M73 253 H133 V260 H73 Z M167 253 H227 V260 H167 Z"/><path d="M91 269 H132 V275 H91 Z M168 269 H209 V275 H168 Z"/></g></g>
 <text x="476" y="260" font-family="Space Grotesk,Inter,DejaVu Sans,Arial,sans-serif" font-size="108" font-weight="500" letter-spacing="16" fill="url(#white)">OASIS</text>
-<path d="M480 307H645 M812 307H1085" stroke="#32E07A" stroke-width="2" opacity=".8"/><text x="728" y="317" text-anchor="middle" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="11" fill="#7CFF5E">OSS</text>
+<path d="M480 307H1085" stroke="#32E07A" stroke-width="2" opacity=".8"/>
 <text x="482" y="382" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="4.4" fill="#E6F5EA">CODE. AUTOMATE. <tspan fill="#7CFF5E">FLOURISH.</tspan></text>
 <text x="484" y="431" font-family="Inter,DejaVu Sans,Arial,sans-serif" font-size="20" fill="#AEBEB2">An open-source coding agent and local-first workspace.</text>
 <rect x="18" y="18" width="1164" height="594" rx="24" fill="none" stroke="#7CFF5E" stroke-opacity=".13" stroke-width="2"/>
