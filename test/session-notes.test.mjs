@@ -41,6 +41,7 @@ test('session notes redact credentials and preserve user-authored text around th
   notes = await readFile(file, 'utf8');
   assert.match(notes, /Keep this reminder exactly as written\./);
   assert.match(notes, /My own footer must survive updates\./);
+  assert.match(notes, /<!-- OASIS GENERATED SESSION NOTES END -->\n\nMy own footer must survive updates\./);
   assert.match(notes, /The next compacted summary still mentions Project Phoenix\./);
   assert.doesNotMatch(notes, /Project Phoenix began in src\/app\.mjs/);
   assert.equal(notes.split('<!-- OASIS GENERATED SESSION NOTES START -->').length - 1, 1);
