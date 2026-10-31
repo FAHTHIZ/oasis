@@ -291,6 +291,13 @@ export async function loadSettings(root, options = {}) {
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
     if (settings.autoMemory === true) result.autoMemory = true;
     if (typeof settings.verbose === 'boolean') result.verbose = settings.verbose;
+    // Session behavior switches read by createSession (previously dropped here, so they never applied).
+    for (const key of ['fastMode', 'ultracode', 'mcpNonBlocking', 'workflowsEnabled', 'leanTools']) if (typeof settings[key] === 'boolean') result[key] = settings[key];
+    if (['low', 'medium', 'high', 'max'].includes(String(settings.subagentEffort || '').toLowerCase())) result.subagentEffort = String(settings.subagentEffort).toLowerCase();
+    if (['on', 'off'].includes(String(settings.systemPromptSnapshot || '').toLowerCase())) result.systemPromptSnapshot = String(settings.systemPromptSnapshot).toLowerCase();
+    if (['auto', 'tmux', 'in-process'].includes(String(settings.teammateMode || '').toLowerCase())) result.teammateMode = String(settings.teammateMode).toLowerCase();
+    if (Number.isInteger(settings.subagentAutoCompactPercent) && settings.subagentAutoCompactPercent >= 0 && settings.subagentAutoCompactPercent <= 100) result.subagentAutoCompactPercent = settings.subagentAutoCompactPercent;
+    if (Number.isInteger(settings.toolSearchThreshold) && settings.toolSearchThreshold >= 1 && settings.toolSearchThreshold <= 1000) result.toolSearchThreshold = settings.toolSearchThreshold;
     // Claude Code's autoCompactEnabled: false turns automatic compaction off.
     if (typeof settings.autoCompactEnabled === 'boolean') result.autoCompactEnabled = settings.autoCompactEnabled;
     // Auto mode classifier. Claude Code's schema { environment, allow, soft_deny, hard_deny } (each

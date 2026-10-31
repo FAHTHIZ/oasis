@@ -492,7 +492,7 @@ The native `node-pty` component is an optional dependency. The browser workspace
 More compatible ecosystem commands:
 
 - `/diff [PATH] [--stat]` shows uncommitted changes (against `HEAD`) and untracked files.
-- `/autocompact PERCENT|off|reset` moves the auto-compaction trigger for this session; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (or `OASIS_AUTOCOMPACT_PCT`) sets it for every session.
+- `/autocompact PERCENT|off|reset` moves the auto-compaction trigger for this session; `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (or `OASIS_AUTOCOMPACT_PCT`) sets it for every session. Subagents can compact at their own point: `"subagentAutoCompactPercent": 40` in settings or `OASIS_SUBAGENT_AUTOCOMPACT_PCT=40` (0 turns it off for subagents), and `"subagentEffort": "low"` (or `OASIS_SUBAGENT_EFFORT`) runs them at a different effort than the main session.
 - `/reload-plugins` and `/reload-skills` rebuild the session from current settings, plugins, skills, agents, hooks and MCP servers without losing the conversation (running background commands are stopped).
 - `/list-agents` (alias `/peers`) lists running subagents, teams and background processes.
 - `/statusline [what to show]` has the agent write and register a status line script; `/update-config DESCRIPTION` has it edit the right `settings.json`.

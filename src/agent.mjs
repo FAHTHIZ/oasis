@@ -716,6 +716,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   session.branchRules = extractBranchRules(projectContext);
   session.rulesRefreshedAtChars = historyTextSize(session.messages || []);
   if (['low', 'medium', 'high', 'max'].includes(String(loadedSettings && loadedSettings.subagentEffort || '').toLowerCase())) session.subagentEffort = String(loadedSettings.subagentEffort).toLowerCase();
+  if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoCompactPercent)) session.subagentAutoCompactPercent = loadedSettings.subagentAutoCompactPercent;
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
   if (deferredMcp || deferredRare) systemText += '\n\n' + deferredToolsPrompt(session);
@@ -1090,7 +1091,12 @@ export function stripInlineEffort(text) {
 function subagentEffortConfig(parent, agent, env, config) {
   const level = [agent && agent.effort, env.OASIS_SUBAGENT_EFFORT, env.CLAUDE_CODE_SUBAGENT_EFFORT, parent.subagentEffort]
     .map((value) => String(value || '').trim().toLowerCase()).find((value) => ['low', 'medium', 'high', 'max'].includes(value));
-  return level ? applyEffort(config, level) : config;
+  const withEffort = level ? applyEffort(config, level) : config;
+  // Subagents can compact at their own threshold (OASIS_SUBAGENT_AUTOCOMPACT_PCT or settings
+  // subagentAutoCompactPercent; 0 turns it off), separate from the coordinator's.
+  const raw = env.OASIS_SUBAGENT_AUTOCOMPACT_PCT !== undefined && env.OASIS_SUBAGENT_AUTOCOMPACT_PCT !== '' ? env.OASIS_SUBAGENT_AUTOCOMPACT_PCT : parent.subagentAutoCompactPercent;
+  const pct = raw === undefined || raw === null || raw === '' ? NaN : Number(raw);
+  return Number.isInteger(pct) && pct >= 0 && pct <= 100 ? { ...withEffort, autoCompactPercent: pct } : withEffort;
 }
 const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
 export function applyEffort(config = {}, level, base = {}) {
