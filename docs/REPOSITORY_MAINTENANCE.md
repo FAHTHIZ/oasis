@@ -16,7 +16,7 @@ This document is the canonical record for repository layout, intentional copies,
 | `plugins/` | Reviewed example/plugin packages and catalog. |
 | `evals/tasks/` | Frozen task prompts, snapshots, reference patches and independent verifiers. |
 | `evals/snapshots/` | Immutable evaluation repository snapshots. Never silently replace with live source. |
-| `docs/` | Product, architecture, contributor, security, benchmark and user documentation. |
+| `docs/` | Canonical product, architecture, release, security, benchmark and user documentation; supporting research lives under `docs/research/`. |
 | `.github/workflows/`, `.github/scripts/` | CI, release, public-site and guarded branch-maintenance automation. |
 
 ## Intentional exact-content copies
@@ -90,3 +90,19 @@ These are historical change notes, not current verification evidence. Use the la
 - Do not merge frozen eval fixtures, generated public-site assets or security boundaries just to lower a file count.
 - Run `npm run check` after documentation/code changes; for releases, require all applicable same-commit CI workflows.
 - Update this document only when canonical ownership, duplicate decisions or actual cleanup receipts change.
+
+
+## Public site and repository identity
+
+The static public landing page lives in `site/`. The root `index.html` is the local browser workspace; these two files have different owners and must not be merged. The Pages workflow in `.github/workflows/pages.yml` validates the site and deploys only `site/`. Deployment and repository-metadata updates are separate from pull-request validation and may be skipped when the required repository secret is absent.
+
+The intended public identity is:
+
+- Product name: **OASIS**
+- Primary tagline: **Code. Automate. Flourish.**
+- Description: Open-source, local-first AI coding agent and developer workspace.
+- License: Apache-2.0.
+
+Keep release, download, quality and benchmark badges tied to real published artifacts or current evidence. Search metadata and social previews do not guarantee indexing, traffic or ranking. Repository administration credentials belong only in GitHub Actions secrets; never commit or paste them into documentation.
+
+For the logo, color tokens and interface rules, see [Brand](BRAND.md). For user-visible product claims, the README and [Project plan](PROJECT_PLAN.md) are authoritative.
