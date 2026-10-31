@@ -2,6 +2,22 @@
 
 For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
+## Quick navigation
+
+Start with the overview you need, then jump straight to a workflow or reference.
+
+| Area | Go to |
+|---|---|
+| Getting started | [Install and set up](#install-the-terminal-agent) · [Connect the browser workspace](#connected-browser-workspace-and-runtime) · [Try plain-English tasks](#use-it-in-plain-english) |
+| Product capabilities | [Implemented capabilities](#what-is-implemented) · [Native plugin packages](#native-oasis-plugin-packages) · [Plugins and integrations](#plugins-integrations-and-installation) · [Editor integration](#vs-code-cursor-and-windsurf) · [OpenHands bridge](#optional-openhands-delegation) |
+| Safety and configuration | [Safety model](#safety-model) · [Permissions](#permission-rules-and-modes) · [MCP servers](#project-mcp-servers-mcpjson) · [Hooks](#hooks) · [Settings](#settings-pane) |
+| Terminal and sessions | [Interactive terminal](#the-interactive-terminal) · [PTY sessions](#interactive-pty-terminal-sessions) · [Slash commands](#slash-commands-mentions-and-memory) · [Auto memory](#auto-memory) · [Clear local data](#clearing-local-data) |
+| Automation and developer tools | [Headless mode](#headless-mode-for-scripts-and-ci) · [GitHub Action](#github-mention-oasis) · [SDK](#sdk-build-on-oasis-from-node) · [OpenTelemetry](#opentelemetry) · [Subagents](#subagents) · [Workflows](#dynamic-workflows) · [Agent tools](#extra-agent-tools) · [LSP and diagnostics](#lsp-verification-and-context-estimates) |
+| Browser workspace | [Static dashboard](#static-browser-dashboard) · [Run monitor](#monitor-agent-runs-and-worker-activity) |
+| Evaluation and project upkeep | [Coding-agent evaluations](#coding-agent-evaluations-experimental) · [Development checks](#development-and-verification) · [Known limitations](#known-limitations--not-claimed-as-finished) · [Contributing](#contributing) · [License](#license) |
+
+---
+
 ---
 
 ## Install the terminal agent
@@ -14,7 +30,7 @@ During setup, choose a provider preset or a custom endpoint: **OmniRoute**, Open
 
 **Setup verifies before saving.** OASIS sends a small test prompt with one inert tool schema and saves provider credentials only after the model returns the expected tool-call response. The probe is inspected but never executed. A failed test does not overwrite the current config. Key input is hidden in the CLI; the browser provider form accepts credentials only from the same device over localhost. In the Electron desktop app, the provider form stores keys through Electron's OS-backed secure storage and refuses to save a new key when encryption is unavailable. In CLI/browser mode (`oasis setup` or `oasis web` outside the desktop host), the key is stored in the user-level OASIS configuration file with restrictive POSIX permissions where supported; this is not OS-backed encryption. The API key is never returned to the browser after saving and should never be pasted into a chat prompt, source file, or screenshot.
 
-### Use the connected browser agent from main
+## Connected browser workspace and runtime
 
 The authenticated browser runtime and extension hub are included in the default `main` installation. From the project you want OASIS to operate on:
 
@@ -45,6 +61,20 @@ OASIS does not include an API subscription or a model. A provider must be reacha
 The interactive terminal footer shows the connected model, a rough context-window percentage, and the session cost when OASIS has pricing information for that model. If the model has no known price, the cost is shown as unknown rather than guessed. When a budget limit is configured, the footer warns when estimated usage reaches 50% and 90%. Use `/cost` for the detailed usage view, `/context` for context details, and `/help` for commands grouped into Getting started, Working, Safety, Settings, and More commands.
 
 A rotating startup tip is shown on launch. Set `OASIS_TIP=off` or `OASIS_NO_TIPS=1` to turn it off. Set `NO_COLOR` for plain terminal output, or use `--ax-screen-reader` for the accessible plain-text mode. Read approval prompts carefully: OASIS runs approved commands with the permissions of your operating-system account.
+
+## Settings pane
+
+`/config` opens a settings pane in the terminal, like compatible-format. Pick a setting with the arrow keys and Enter, choose a value, and press Esc when you are done. Changes are saved to your user settings and take effect in the current session where possible. The pane covers theme, default model, default permission mode, editor mode (vim), output style, verbose output, auto-compact, auto memory, the Chrome browser tool, the shell for `!` commands, and channels.
+
+Outside a terminal, or in scripts, use these forms:
+
+- `/config list` shows every value.
+- `/config get KEY` shows one value.
+- `/config set KEY VALUE` changes one, for example `/config set verbose on` or `/config set permissions.defaultMode plan`.
+
+The keys match `settings.json`.
+
+Verbose output (`--verbose`, `"verbose": true`, or `/config set verbose on`) prints each tool's output, dimmed, under its call: command stdout and stderr, file reads, and search results. It is capped at 400 lines per call; Ctrl+O still shows the full transcript. `"autoCompactEnabled": false` (compatible-format key) turns automatic compaction off for new sessions.
 
 ## Use it in plain English
 
@@ -260,7 +290,6 @@ OASIS also reads compatible-format `autoMode` schema, so the same block works in
 
 **Trust:** a cloned repository can ship any settings file. Project rules that make OASIS stricter (`deny`, `ask`) always apply. Rules that loosen it (`allow`, hooks, mode, sandbox) apply only after you run `oasis trust` in that workspace. `oasis permissions` shows the effective policy.
 
-
 In `plan` mode (`--permission-mode plan` or `/mode plan`), OASIS researches with read-only tools, then presents its plan and asks whether to start. Say yes and it leaves plan mode and implements the plan in the same turn; say no and it stays in plan mode so you can ask for changes.
 ## Project MCP servers (.mcp.json)
 
@@ -401,6 +430,25 @@ Interactive sessions also pick up settings edits live: when a settings file chan
 
 Run `oasis` in a project to open the interactive prompt. Press `?` on an empty line for shortcuts, or run `/keybindings`.
 
+### Interactive PTY terminal sessions
+
+For commands that need a real terminal (for example, an interactive REPL or an installer prompt), OASIS can start a persistent PTY rather than a one-shot pipe process. The agent uses `run_command` with `interactive: true`; it must still pass normal command safety analysis and approval rules.
+
+The resulting terminal id can be used with:
+
+| Tool | Purpose |
+| --- | --- |
+| `terminal_read` | Read streamed output by cursor; optionally wait up to 30 seconds for new output. |
+| `terminal_input` | Send text/keystrokes to the already-approved process. |
+| `terminal_resize` | Change terminal columns/rows. |
+| `terminal_interrupt` | Send Ctrl+C. |
+| `terminal_stop` | Terminate the terminal process. |
+| `terminal_list` | List terminal ids, state and exit status. |
+
+Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
+
+The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [project plan](PROJECT_PLAN.md) for current platform limitations.
+
 | Keys | What they do |
 | --- | --- |
 | Enter | Send |
@@ -449,8 +497,6 @@ Colors accept `#rrggbb`, `#rgb`, `rgb(r,g,b)`, `ansi256(n)` and `ansi:<name>` (f
 Esc in NORMAL mode keeps its usual role, so Esc Esc still clears the input or rewinds. Ctrl shortcuts, Tab, and Shift+Tab work the same in both modes.
 
 ### Keybindings, external editor and stash
-
-Use `/keys` for the shortcut cheat sheet and `/tips` for a rotating practical suggestion. Start with `/help` for grouped commands. `oasis --calm` disables animated startup output; `OASIS_NO_ANIMATION=1` does the same, and `OASIS_NO_TIPS=1` hides rotating startup tips.
 
 Use `/keys` for the shortcut cheat sheet and `/tips` for a rotating practical suggestion. Start with `/help` for grouped commands. `oasis --calm` disables animated startup output; `OASIS_NO_ANIMATION=1` does the same, and `OASIS_NO_TIPS=1` hides rotating startup tips.
 
@@ -621,6 +667,18 @@ OASIS keeps durable notes across sessions on its own, so you don't repeat yourse
 - Secrets (API keys, tokens, private keys, passwords in URLs) and anything inside `<private>...</private>` are redacted before a memory is written. Near-duplicates merge into the existing memory instead of piling up.
 - `/memory` lists them; `/memory search WORDS`, `/memory show ID`, `/memory forget ID`, `/memory add NOTE` (start with `user:` for every project) and `/memory path` manage them. `/remember [focus]` asks the agent to review the conversation and save what is worth keeping. The same commands work as `oasis memory ...` in a terminal.
 - Turn it off with `"autoMemory": false` in settings or `OASIS_AUTO_MEMORY=0`.
+
+## Clearing local data
+
+`oasis purge [PATH]` removes the saved transcripts and task metadata for one project, debug logs for those sessions, background-session entries and logs, the project's prompt-history lines, and its workspace-trust entry. File rewind checkpoints are kept in memory during the active session; they are not stored in the saved transcript. Without a path it opens a picker of the projects that have saved state. Options:
+
+- `--dry-run` lists what would go and deletes nothing.
+- `-y` skips the confirmation.
+- `-i` asks about each item.
+- `--all` purges every project.
+- `--memory` also deletes the project's auto memory, which is kept by default.
+
+Running background sessions are skipped.
 
 ## Headless mode for scripts and CI
 
@@ -820,6 +878,14 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 - `monitor` (compatible-format Monitor tool): watch something in the background and react to each new line without polling, such as tailing a log for errors, polling CI or a PR, or following a long script. Give `command` + `args` (same analysis, Bash permission rules and approvals as `run_command`) or `ws: { url }` to treat WebSocket messages as events. `pattern` keeps only matching lines; `timeout_ms` defaults to 5 minutes (max 1 hour) and `persistent: true` runs until the session ends. Bursts are batched into one `<monitor-event>` and an "ended" event follows. Events are added between steps while the agent works, and when you are idle at the prompt OASIS starts a turn so the agent reacts right away (it waits if you're typing). In `-p` mode the run stays open while the agent's monitors run (capped at 10 minutes) and emits a `system`/`monitor_event` line for each batch. Stop a monitor with `kill_command`.
 - Background events wake an idle session everywhere: the interactive CLI, `-p` runs with active monitors, and long-lived `--input-format stream-json` sessions such as the VS Code chat panel. Monitor events, channel messages, finished background commands and finished background agents queue a synthetic turn (emitted as `system`/`background_event`, never replayed as a user message). Stream-json sessions also start `always` plugin monitors unless `OASIS_DISABLE_PLUGIN_MONITORS=1`.
 
+## LSP verification and context estimates
+
+OASIS can use configured language servers for post-edit diagnostics and symbol navigation. TypeScript/JavaScript support uses built-in server discovery; TypeScript 5/6 installations typically need \`typescript-language-server\` and a project or global TypeScript installation, while supported newer TypeScript releases may provide a native \`--lsp --stdio\` server. Other languages depend on their configured server command and supported extensions.
+
+A post-edit result distinguishes diagnostics from server availability. If a configured server cannot start or return diagnostics, OASIS reports verification as unavailable; it must not label that LSP check as clean. For changed files with a configured server, `/diagnostics` asks OASIS to run both LSP per-file diagnostics and the project's type checkers/linters, keeping the sources separate and grouping Errors, Warnings, Information, and Verification unavailable. When no paths are supplied, it uses current changed source files where available. `/fix` must not claim success while new or unclassified LSP errors remain, and a successful final response explicitly notes when LSP verification could not be collected.
+
+\`/context all\` shows approximate system, memory, skill, local-tool, MCP-schema, history, file-result, command-output and largest-message costs. Categories can overlap because some items are already embedded in the system prompt or conversation. Provider-specific tokenization and hidden request metadata are unavailable to OASIS, so these are estimates rather than billing-grade counts.
+
 ## Useful commands
 
 - Plugin manifests can set `"defaultEnabled": false` (the plugin stays off until enabled in `enabledPlugins`; default is on) and `"dependencies"` (`"name"`, `"name@marketplace"` or `{ "name", "marketplace" }`; bare names use the plugin's own marketplace). Dependencies of an active plugin load automatically unless you explicitly disabled them, and `oasis plugin list` reports missing or disabled dependencies.
@@ -893,7 +959,7 @@ Each task under `evals/tasks/<id>/` contains a pre-change repository snapshot, a
 
 Model runs require explicit `--yes` because agent-generated changes and commands run automatically inside disposable copies. **These copies are not OS sandboxes**: approved code may still access the host's user-level privileges and network. Run only trusted evaluation tasks, and do not use the harness as a security boundary.
 
-Results are written as JSON under the user-level OASIS configuration directory in `eval-results/` (or `OASIS_EVAL_RESULTS_DIR`). To estimate costs, set `OASIS_EVAL_INPUT_USD_PER_MILLION_TOKENS` and `OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS` to the rates for the selected model. These are estimates and do not separate cached-token pricing. The current 21-task suite is an initial smoke benchmark: most are standalone helper tasks, not a representative benchmark of full-project changes. Replace or expand them with real, reviewed OASIS tasks before drawing conclusions about model quality or parity.
+Results are written as JSON under the user-level OASIS configuration directory in `eval-results/` (or `OASIS_EVAL_RESULTS_DIR`). To estimate costs, set `OASIS_EVAL_INPUT_USD_PER_MILLION_TOKENS` and `OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS` to the rates for the selected model. These are estimates and do not separate cached-token pricing. The current 33-task suite is an initial smoke/regression benchmark: most tasks exercise bounded helper behavior and are not a representative benchmark of full-project changes. It does not establish repository-scale coding quality or parity. Replace or expand them with real, reviewed OASIS tasks before drawing conclusions about model quality or parity.
 
 Compare two completed runs with `oasis eval --compare <run-a.json> <run-b.json>`. OASIS run files already contain per-trial task IDs, pass/fail status, elapsed time, and estimated cost. To compare an external agent, create a normalized JSON report after that agent has completed the same tasks, for example:
 
@@ -915,9 +981,11 @@ Use one row per trial; repeated rows with the same `taskId` represent repeated a
 
 **Important:** `--compare` only reads and compares existing JSON reports. It does not launch compatible ecosystem, execute external verifiers, validate claims in an external report, or generate that report automatically. OASIS has not yet published a matched OASIS-vs-compatible ecosystem benchmark. The 33-task suite remains a smoke benchmark, not representative evidence of repository-level coding quality. For a fair comparison, use the same pinned repository snapshot, task text, acceptance tests, allowed tools/permissions and time/cost budget; record model/provider differences and review the resulting diffs.
 
-## Run the browser workspace
+## Static browser dashboard
 
-No build step or package installation is needed for the static workspace. Open `index.html` in a modern browser, or run:
+This is the static workspace shell for the local Projects, Tasks, and Notes interface. It does **not** start the coding-agent runtime, provide provider setup, or connect the agent terminal. To use chat, approvals, the connected terminal, and the live run monitor, start `oasis web` and connect the Agent view using the one-time token described in [Connected browser workspace and runtime](#connected-browser-workspace-and-runtime).
+
+No build step or package installation is needed for this static shell. From the repository folder, run:
 
 ~~~bash
 python -m http.server 8000
@@ -925,7 +993,7 @@ python -m http.server 8000
 
 Then open `http://localhost:8000`.
 
-### Monitor agent runs and worker activity
+## Monitor agent runs and worker activity
 
 When the local browser runtime is connected, choose **Run monitor** in the left navigation. The view lists recent coding-agent runs and provides a selected run's worker/team status and lifecycle timeline. It refreshes while the view is open; use **Refresh** to request an immediate update. If the runtime is not connected, open the **Agent** view and connect using the token printed by `oasis web`.
 
@@ -946,14 +1014,14 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 ## Known limitations — not claimed as finished
 
-- The built-in capability catalog contains reviewed workflow-skill bundles only. OASIS can install supported external Agent Skills through the pinned Vercel Skills CLI and import reviewed Markdown prompts from GitHub extensions, but that is not a general remote plugin marketplace. Signed publisher manifests and fully native lifecycle compatibility are not implemented.
+- The built-in OASIS capability-bundle catalog contains reviewed workflow-skill bundles. Separately, OASIS supports external Agent Skills, reviewed GitHub extension imports, and Claude Code-compatible plugin marketplaces through the `oasis plugin marketplace` / `oasis plugin install` commands described above. Compatibility is feature-specific: signed publisher manifests and complete support for every plugin lifecycle feature are not implemented.
 - The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default, and there is no Windows sandbox or container isolation yet.
 - Checkpoints only track changes made through OASIS's file tools, and they live in memory for the current session; they are not saved with resumed sessions.
 - Saved conversations are on by default and workspace-scoped. OASIS provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions. Parallel subagents (the `task` tool) run in separate contexts, but they share one workspace, so OASIS does not resolve conflicting edits between them; give parallel agents separate files, read-only work, or `"isolation": "worktree"` so each one gets its own branch.
 - The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
-- GitHub connection currently reuses GitHub CLI authentication (`gh auth login`) on the host; embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, creating repositories, branch/push/PR workflows, and fine-grained GitHub App scopes are not implemented yet.
+- The browser's GitHub repository browser reuses host-side GitHub CLI authentication (`gh auth login`); it does not provide embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, repository creation, or browser-based branch/push/PR management. The separate OASIS GitHub Action does support issue and pull-request automation; see [the GitHub Action guide](github-action.md). Fine-grained GitHub App scopes are not implemented.
 - The browser Terminal panel supports a PTY-backed interactive path with bundled xterm.js rendering when the optional native dependency is available. The lifecycle is not yet validated across all operating systems, and Termux/native PTY support remains experimental; see [the project plan](PROJECT_PLAN.md).
 - Browser projects/tasks/notes still use browser local storage and do not sync with the CLI workspace. Agent sessions are stored separately in the user-level OASIS session directory.
 - GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
@@ -965,58 +1033,3 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md), [SECURITY.md](../SECURITY.md), and [t
 ## License
 
 Apache License 2.0. See [LICENSE](../LICENSE).
-
-
-## Interactive PTY terminal sessions
-
-For commands that need a real terminal (for example, an interactive REPL or an installer prompt), OASIS can start a persistent PTY rather than a one-shot pipe process. The agent uses `run_command` with `interactive: true`; it must still pass normal command safety analysis and approval rules.
-
-The resulting terminal id can be used with:
-
-| Tool | Purpose |
-| --- | --- |
-| `terminal_read` | Read streamed output by cursor; optionally wait up to 30 seconds for new output. |
-| `terminal_input` | Send text/keystrokes to the already-approved process. |
-| `terminal_resize` | Change terminal columns/rows. |
-| `terminal_interrupt` | Send Ctrl+C. |
-| `terminal_stop` | Terminate the terminal process. |
-| `terminal_list` | List terminal ids, state and exit status. |
-
-Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
-
-The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [project plan](PROJECT_PLAN.md) for current platform limitations.
-
-## Clearing local data
-
-`oasis purge [PATH]` deletes all local OASIS state for one project: saved transcripts (with their task lists and checkpoints), debug logs for those sessions, background-session entries and logs, the project's prompt-history lines, and its workspace-trust entry. Without a path it opens a picker of the projects that have saved state. Options:
-
-- `--dry-run` lists what would go and deletes nothing.
-- `-y` skips the confirmation.
-- `-i` asks about each item.
-- `--all` purges every project.
-- `--memory` also deletes the project's auto memory, which is kept by default.
-
-Running background sessions are skipped.
-
-## Settings pane
-
-`/config` opens a settings pane in the terminal, like compatible-format. Pick a setting with the arrow keys and Enter, choose a value, and press Esc when you are done. Changes are saved to your user settings and take effect in the current session where possible. The pane covers theme, default model, default permission mode, editor mode (vim), output style, verbose output, auto-compact, auto memory, the Chrome browser tool, the shell for `!` commands, and channels.
-
-Outside a terminal, or in scripts, use these forms:
-
-- `/config list` shows every value.
-- `/config get KEY` shows one value.
-- `/config set KEY VALUE` changes one, for example `/config set verbose on` or `/config set permissions.defaultMode plan`.
-
-The keys match `settings.json`.
-
-Verbose output (`--verbose`, `"verbose": true`, or `/config set verbose on`) prints each tool's output, dimmed, under its call: command stdout and stderr, file reads, and search results. It is capped at 400 lines per call; Ctrl+O still shows the full transcript. `"autoCompactEnabled": false` (compatible-format key) turns automatic compaction off for new sessions.
-
-
-## LSP verification and context estimates
-
-OASIS can use configured language servers for post-edit diagnostics and symbol navigation. TypeScript/JavaScript support uses built-in server discovery; TypeScript 5/6 installations typically need \`typescript-language-server\` and a project or global TypeScript installation, while supported newer TypeScript releases may provide a native \`--lsp --stdio\` server. Other languages depend on their configured server command and supported extensions.
-
-A post-edit result distinguishes diagnostics from server availability. If a configured server cannot start or return diagnostics, OASIS reports verification as unavailable; it must not label that LSP check as clean. For changed files with a configured server, `/diagnostics` asks OASIS to run both LSP per-file diagnostics and the project's type checkers/linters, keeping the sources separate and grouping Errors, Warnings, Information, and Verification unavailable. When no paths are supplied, it uses current changed source files where available. `/fix` must not claim success while new or unclassified LSP errors remain, and a successful final response explicitly notes when LSP verification could not be collected.
-
-\`/context all\` shows approximate system, memory, skill, local-tool, MCP-schema, history, file-result, command-output and largest-message costs. Categories can overlap because some items are already embedded in the system prompt or conversation. Provider-specific tokenization and hidden request metadata are unavailable to OASIS, so these are estimates rather than billing-grade counts.
