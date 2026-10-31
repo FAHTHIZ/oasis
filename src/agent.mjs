@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
+import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
 import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
@@ -2050,6 +2051,10 @@ function isCompleteFileRead(args, result) {
 }
 
 
+const FILE_EDITING_TOOL_NAMES = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file', 'apply_patch']);
+const RETRY_TRACKED_COMMANDS = new Set(['run_command', 'run_shell', 'powershell']);
+const RETRY_WARN_AT = 3;
+const RETRY_HALT_AT = 5;
 const AUTO_LSP_EDIT_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 
 function successfulMutation(name, result) {
@@ -3676,6 +3681,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
   const claimState = newClaimState();
   let correctionNudged = false;
+  const failedCommandRuns = new Map();
   session.turnQuestionCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -3967,6 +3973,25 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (lastToolOutcome.count >= 3) {
           loopBreakMessage = 'I’m stuck: the same ' + lastToolOutcome.name +
             ' tool call with the same inputs produced the same result 3 times. I stopped instead of repeating it again. I need to try a different approach or get your guidance.';
+        }
+        // Same failing command again and again with nothing changed in between
+        // (outputs differ by timestamps, so the identical-outcome check misses it).
+        const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
+        if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) failedCommandRuns.clear();
+        else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
+          const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
+          const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
+          if (!failed) failedCommandRuns.delete(key);
+          else {
+            const count = (failedCommandRuns.get(key) || 0) + 1;
+            failedCommandRuns.set(key, count);
+            const label = commandText.slice(0, 160);
+            if (count >= RETRY_HALT_AT) {
+              loopBreakMessage = 'I’m stuck: `' + label + '` has failed ' + count + ' times in a row with no file changes in between, so retrying it again will not help. I stopped here; I need to change approach or get your guidance.';
+            } else if (count >= RETRY_WARN_AT && typeof item.content === 'string') {
+              item.content += '\n\n<system-reminder>This exact command has now failed ' + count + ' times with no file changes in between. Do not run it again unchanged. Read the error, explain the cause, and change something (code, arguments, or approach) first; if it is interactive or waiting on input, use a non-interactive form.</system-reminder>';
+            }
+          }
         }
       }
       if ((name === 'run_specialist_review' || name === 'task') && result && typeof result === 'object') {
