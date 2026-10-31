@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
 import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
@@ -3632,6 +3633,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let lastToolOutcome = null;
   let loopBreakMessage = '';
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
+  const claimState = newClaimState();
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
@@ -3772,6 +3774,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
           ].join('\n')
         });
+        continue;
+      }
+      const claimNudge = claimIssue(claimState, text);
+      if (claimNudge) {
+        if (text && options.onText) await emitDisplayText(session, options, text);
+        session.messages.push({ role: 'user', content: claimNudge });
         continue;
       }
       const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';
@@ -3929,12 +3937,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (name === 'run_command' && result) {
         const args = safeToolArguments(call.function && call.function.arguments);
         if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
+          recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
           verification.lastVerificationExitCode = result.exitCode;
           verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
         }
       }
       if (name === 'run_shell' && result && result.approved !== false && typeof result.exitCode === 'number') {
-        const target = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command);
+        const shellCommand = safeToolArguments(call.function && call.function.arguments).command;
+        const target = shellExitTarget(shellCommand);
+        if (target && isVerificationCommand(target.command, target.args)) recordClaimCheck(claimState, { command: shellCommand, exitCode: result.exitCode, masked: Boolean(target.piped || result.exitCodeWarning) });
         // A check whose status is masked by a pipe (npm test | tail) proves nothing.
         if (target && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
           verification.lastVerificationExitCode = result.exitCode;
@@ -3947,6 +3958,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         name === 'delete_file' && result.deleted === true
       )) {
         const changedPath = normalizeReviewPath(result.path);
+        recordClaimEdit(claimState);
         verification.changedPaths.add(changedPath);
         verification.lspVerificationByPath.delete(changedPath);
         verification.diffReviewedAll = false;

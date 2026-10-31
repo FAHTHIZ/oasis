@@ -8,6 +8,7 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
 - **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
+- **Claim check** — if the final reply says tests/build pass but the latest check in that turn failed, was piped (masked exit status) or is stale after later edits, the agent is sent back once to rerun and report the real outcome.
 - **Test-weakening check** — edits to test files that remove assertions, add `skip`/`xit`/`@pytest.mark.skip` markers or always-true asserts are reported back to the agent, which must fix the code instead or tell the user why the test changed.
 - **Compaction deadline** — the summary request is bounded (`OASIS_COMPACT_TIMEOUT_SECONDS`, default 90) and falls back to a local summary; a "Compacting…" notice shows while it runs.
 - **Tolerant edit matching** — `edit_file` and `multi_edit` recover from CRLF, trailing whitespace, smart quotes and indentation drift, and give a closest-match hint instead of a bare "not found".
