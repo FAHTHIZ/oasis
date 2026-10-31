@@ -10,14 +10,13 @@
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
   <img src="https://img.shields.io/badge/status-beta-7CFF5E.svg?style=flat" alt="Beta software" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases"><img src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?display_name=tag" alt="Latest published release" /></a>
 </p>
 
 OASIS connects the model you choose to a real project workspace. It can inspect a codebase, plan work, edit files, run approved commands, use developer tools, coordinate bounded agent tasks, and collect verification evidence—all through one runtime with several ways to work.
 
 It is more than a chat window, but it is not a hosted AI service or a model of its own. **You choose the model and provider; OASIS supplies the coding-agent runtime, workspace tools, controls, integrations, and user interfaces.**
 
-> **Release status:** OASIS is in **Beta**. The repository's source package is version **0.4.0** and its release notes are prepared, but 0.4.0 is not yet a published GitHub Release. The latest published release remains the one shown on the [releases page](https://github.com/FAHTHIZ/oasis/releases).
+> **Release status:** OASIS is in **Beta**. The repository's source package is version **0.4.0** and its release notes are prepared, but 0.4.0 is not yet tagged or published. The only version tag currently present is `v0.3.0`; there are no published GitHub Release assets available for download.
 
 ---
 
@@ -104,12 +103,12 @@ Choose the path that matches how you want to use OASIS:
 
 | Want to… | Start here |
 |---|---|
-| Install the desktop app without using a terminal | [Desktop installation](docs/INSTALL.md#desktop-app--no-terminal-required) |
+| Check desktop app availability and first-launch instructions | [Desktop app guide](docs/INSTALL.md#desktop-app--no-terminal-required) |
 | Install the CLI on macOS, Linux, Windows, or Termux | [CLI installation](docs/INSTALL.md#command-line-installation) |
 | Use OASIS on Android through Termux | [Android / Termux guide](docs/TERMUX.md) |
 | Learn the commands, tools, integrations, and settings | [User guide](docs/USER_GUIDE.md) |
 
-Desktop downloads are available from the [latest published GitHub release](https://github.com/FAHTHIZ/oasis/releases/latest). The current prepared 0.4.0 notes should not be mistaken for a published installer release.
+Desktop installers are built by CI, but public desktop download assets are not currently published. Check the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases) for availability; until a release with assets is published, use the CLI installation path. The prepared 0.4.0 notes are not a downloadable installer release.
 
 ### Your first task
 
