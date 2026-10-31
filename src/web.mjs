@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession, testProviderConnection } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
-import { saveSession, loadSession, listSessions } from './sessions.mjs';
+import { saveSession, loadSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
@@ -1425,6 +1425,15 @@ export function createOasisWebServer(options = {}) {
       const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim())
         .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
       json(res, 200, { id, updatedAt: saved.updatedAt, messages });
+      return;
+    }
+
+    if (req.method === 'DELETE' && sessionMatch) {
+      const id = sessionMatch[1].toLowerCase();
+      if (busySessions.has(id) || startingSessions.has(id)) { json(res, 409, { error: 'That chat is still running. Stop it before deleting it.' }); return; }
+      try { await deleteSession(activeRoot, id, { env }); } catch (error) { json(res, error && error.code === 'ENOENT' ? 404 : 400, { error: 'Could not delete that chat: ' + (error && error.message || 'unknown error') }); return; }
+      activeSessions.delete(id);
+      json(res, 200, { id, deleted: true });
       return;
     }
 
