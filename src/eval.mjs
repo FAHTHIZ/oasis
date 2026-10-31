@@ -1211,6 +1211,12 @@ export async function runEvalCommand(args = [], options = {}) {
     taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
     timeoutSeconds: config.timeoutSeconds,
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    routing: config.routeEasyModel ? {
+      enabled: true,
+      easyModel: config.routeEasyModel,
+      strongModel: config.routeStrongModel || provider.model,
+      note: 'Fixture difficulty labels are routing hints; unlabeled requests use conservative prompt classification.'
+    } : { enabled: false },
     passRate: trials.length ? passedCount / trials.length : 0,
     passed: passedCount, failed: trials.length - passedCount,
     medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
