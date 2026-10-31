@@ -201,6 +201,7 @@ export async function saveConfig(config, options = {}) {
   if (config.promptCache === false) safe.promptCache = false;
   if (config.readDedup === false) safe.readDedup = false;
   if (config.followups === false) safe.followups = false;
+  if (config.secretShield === false) safe.secretShield = false;
   const thinkingBudget = strictInteger(config.thinkingBudget);
   if (thinkingBudget !== null && thinkingBudget >= 1024 && thinkingBudget <= 64000) safe.thinkingBudget = thinkingBudget;
   if (config.requireReadBeforeEdit === false || config.requireReadBeforeEdit === 'strict') safe.requireReadBeforeEdit = config.requireReadBeforeEdit;
