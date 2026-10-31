@@ -25,6 +25,8 @@ test('only short, clearly read-only requests qualify for the cheaper model', () 
   assert.equal(classifyTask('Review the permission checks for a security issue.').tier, 'strong');
   assert.equal(classifyTask('Make this application production-ready.').tier, 'strong');
   assert.equal(classifyTask('Tell me everything about this 400-file repository.').tier, 'strong');
+  assert.equal(classifyTask('Change the demo file.', 'small').tier, 'easy');
+  assert.equal(classifyTask('Summarize the authentication and permissions code.', 'small').tier, 'strong');
 });
 
 test('model selection keeps hard and ambiguous work on the configured strong model', () => {
