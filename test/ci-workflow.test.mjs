@@ -42,6 +42,8 @@ test('desktop Beta release auto-publishes a new main version only after all gate
   assert.ok(workflow.includes('branches: [main]'));
   assert.ok(!workflow.includes("tags: ['v*']"));
   assert.ok(workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
+  assert.ok(workflow.includes('[ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$REF" = "refs/heads/main" ]'));
+  assert.ok(workflow.includes('tag="$expected"'));
   assert.ok(workflow.includes('publish_release:'));
   assert.ok(workflow.includes('default: false'));
   assert.ok(workflow.includes('type: boolean'));
