@@ -378,6 +378,7 @@ export async function runHeadless(options) {
     permission_denials: denied,
     ...(structured !== undefined ? { structured_output: structured } : {}),
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
+    ...(result && result.verification ? { verification: result.verification } : {}),
     ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {}),
     ...(session && Array.isArray(session.reportedFindings) ? { findings: session.reportedFindings, ...(session.findingsSummary ? { findings_summary: session.findingsSummary } : {}) } : {})
   };
