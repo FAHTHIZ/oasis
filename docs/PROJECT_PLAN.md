@@ -3,7 +3,8 @@
 **Updated:** October 31, 2026  
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
-**Audited main snapshot:** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`
+**Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
+**Current documentation / release-status snapshot:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. It replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
@@ -37,18 +38,22 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Latest main snapshot rechecked:** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf` (October 31, 2026). The repository package is version `0.4.0`; its release notes are prepared, but no `v0.4.0` tag or GitHub Release was present at the time of inspection. The latest published release remains `v0.3.0`.
+**Current `main` snapshot rechecked:** `5d6225e982755dd333dc0d476e685b4f8f0282ac` (October 31, 2026). The source package is version `0.4.0`; its release notes are prepared, but `v0.4.0` has not been tagged or published.
 
-Historical checks listed below belong to their named snapshots and are not release evidence for the latest main SHA:
+The public release state was checked against the repository's Git refs and Releases API:
 
-- `package.json` is version **0.4.0** and the release notes are prepared.
-- The only Git tag found was `v0.3.0`; no `v0.4.0` tag or GitHub Release had been published.
-- Earlier installer and quality checks passed on their respective audited snapshots; they are historical evidence only.
-- A recent workflow run for the latest main activity was still in progress during the recheck. No pass is inferred from a pending run.
-- Desktop installers are unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
-- The full 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
+- The only version tag currently present is `v0.3.0`.
+- The GitHub Releases API currently returns no published release objects or downloadable release assets. A version tag is not the same as a published GitHub Release.
+- `package.json` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only.
+- **Installer checks passed on Windows, Ubuntu and macOS** for this exact SHA ([run 41180252724](https://github.com/FAHTHIZ/oasis/actions/runs/41180252724)).
+- **Quality Checks** were queued/pending when this snapshot was recorded ([run 41180252743](https://github.com/FAHTHIZ/oasis/actions/runs/41180252743)); they must finish successfully before the same-SHA quality gate is called green.
+- **Public-site validation/deployment** was still in progress ([run 41180252729](https://github.com/FAHTHIZ/oasis/actions/runs/41180252729)).
+- **Desktop packaging** was still in progress ([run 41180252715](https://github.com/FAHTHIZ/oasis/actions/runs/41180252715)).
+- The guarded branch-cleanup workflow passed ([run 41180252736](https://github.com/FAHTHIZ/oasis/actions/runs/41180252736)).
+- Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
+- The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
-This documentation branch changes the source SHA again. Re-run the required workflows against the exact merged release candidate; evidence from an earlier SHA is useful history, not proof for the final documentation commit.
+The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; this is intentionally distinct from the current documentation/release-status snapshot. All CI statements above are tied to `5d6225e982755dd333dc0d476e685b4f8f0282ac`. Any later commit needs its own same-SHA checks; a pass from an earlier commit is historical evidence only.
 
 ## Production-readiness outlook
 
