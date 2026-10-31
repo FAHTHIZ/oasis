@@ -349,6 +349,10 @@ If a server fails to start, OASIS prints the reason once and keeps it in `/mcp`.
 
 Add your own as Markdown in `.oasis/output-styles/NAME.md` (or `.claude/output-styles/`, `~/.config/oasis/output-styles/`, `~/.claude/output-styles/`). Use front matter with `name` and `description`; the body is the instruction. Set a default with `"outputStyle": "explanatory"` in `.oasis/settings.json` or your user settings.
 
+### Reply language
+
+`/language Bengali` pins the language OASIS writes its replies, plans and questions in for the current session; `/language off` unpins it. To keep it for every session, set `"language": "Bengali"` in your settings or `OASIS_LANGUAGE=Bengali`. Code, commands, file paths and quoted text stay as they are. This stops replies drifting into the language of a file, log or web page the agent just read. Only plain language names are accepted.
+
 ## Status line
 
 Show your own status line above the input prompt, using the same settings format using the supported format:

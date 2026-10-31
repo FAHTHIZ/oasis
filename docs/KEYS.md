@@ -51,6 +51,7 @@ This is the current shortcut reference for the terminal experience. Exact key be
 | **/config** | Open general settings. |
 | **/color** | Change the prompt color. |
 | **/output-style** | View or change output style. |
+| **/language** | Pin the reply language (`/language Bengali`, `/language off`). |
 | **/keybindings** | Inspect keybinding files and supported actions. |
 
 ## Command palette notes

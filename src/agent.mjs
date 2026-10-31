@@ -45,7 +45,8 @@ import { estimateTokens, microcompact, contextWindowSize, compactionThresholdCha
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
-import { loadSettings } from './settings.mjs';
+import { loadSettings, normalizeLanguage } from './settings.mjs';
+import { withReplyLanguage } from './reply-language.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
@@ -663,6 +664,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     else session.styleWarning = 'Output style "' + styleName + '" was not found; using default.';
   }
   session.outputStyle = styleName && !session.styleWarning ? styleName : 'default';
+  // Reply language: OASIS_LANGUAGE or the "language" setting pins the reply language so
+  // replies do not drift into the language of a file, log or web page.
+  const replyLanguage = normalizeLanguage(env.OASIS_LANGUAGE) || loadedSettings.language || null;
+  if (replyLanguage) {
+    session.language = replyLanguage;
+    systemText = withReplyLanguage(systemText, replyLanguage);
+  }
   // Main-thread agent (--agent, "agent" setting, or a plugin's settings.json default):
   // the session runs with that agent's instructions and tool list, like Claude Code.
   const mainAgentName = bare ? null : (agent || loadedSettings.agent || null);
