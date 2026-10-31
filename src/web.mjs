@@ -35,7 +35,12 @@ export function webSessionState(session, env = process.env) {
     contextTokens,
     contextWindow: windowSize,
     contextPercent: windowSize ? Math.min(100, Math.round(contextTokens / windowSize * 100)) : 0,
-    totalTokens: Number(usage.totalTokens || 0)
+    totalTokens: Number(usage.totalTokens || 0),
+    estimatedCostUSD: Number(usage.costUSD || 0),
+    costKnown: Number(usage.costRequests || 0) > 0 && usage.costKnown !== false,
+    routingTasks: Number(usage.routingTasks || 0),
+    routingSavingsUSD: Number(usage.routingSavingsUSD || 0),
+    routingSavingsKnown: usage.routingSavingsKnown !== false
   };
 }
 
