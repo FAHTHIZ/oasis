@@ -1,5 +1,5 @@
 import * as gitSafety from './git-safety.mjs';
-import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
+import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
@@ -1861,7 +1861,10 @@ export async function executeTool(name, args = {}, context = {}) {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       const info = await lstat(target.absolute);
       if (!info.isFile() || info.isSymbolicLink()) throw new Error('Only regular files can be deleted with this tool.');
-      if (!context.approval || !(await context.approval('Delete the workspace file ' + target.relative + '? Its current contents will be backed up first.'))) {
+      const protectedHit = protectedEditsAllowed(context.env || process.env) || (context.autoApprove && context.permissionMode === 'bypassPermissions') ? null : protectedConfigPath(target.root, target.absolute);
+      const deletePrompt = (protectedHit ? 'Warning: ' + target.relative + ' is a protected configuration file — ' + protectedHit.reason + '. Deleting it can remove deny rules or safety hooks.\n' : '') +
+        'Delete the workspace file ' + target.relative + '? Its current contents will be backed up first.';
+      if (!context.approval || !(await context.approval(deletePrompt, Boolean(protectedHit)))) {
         return { approved: false, path: target.relative, message: 'Deletion was not approved. No file was removed.' };
       }
       await snapshotFile(target.root, target.absolute, 'before-agent-delete');

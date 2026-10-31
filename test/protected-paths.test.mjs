@@ -117,3 +117,22 @@ test('allowed shell and argv commands that write protected files still prompt wi
   assert.equal(bypass.exitCode, 0);
   assert.equal(prompts.length, 2);
 });
+
+test('deleting a protected settings file asks with force and a warning', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-protected-del-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, '.oasis'), { recursive: true });
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(path.join(root, '.oasis', 'settings.json'), '{"permissions":{"deny":["run_shell(rm:*)"]}}');
+  await writeFile(path.join(root, 'old.txt'), 'x');
+  const prompts = [];
+  const approval = async (message, force) => { prompts.push({ message, force }); return false; };
+  const env = { ...process.env, OASIS_ALLOW_CONFIG_EDITS: '' };
+  const denied = await executeTool('delete_file', { path: '.oasis/settings.json' }, { root, autoApprove: true, approval, env });
+  assert.equal(denied.approved, false);
+  assert.equal(prompts[0].force, true);
+  assert.match(prompts[0].message, /^Warning: \.oasis\/settings\.json is a protected configuration file/);
+  await executeTool('delete_file', { path: 'old.txt' }, { root, autoApprove: true, approval, env });
+  assert.equal(prompts[1].force, false);
+  assert.doesNotMatch(prompts[1].message, /Warning/);
+});
