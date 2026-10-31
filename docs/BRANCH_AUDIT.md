@@ -6,7 +6,7 @@
 
 ## Current inventory and cleanup receipt — October 31, 2026
 
-At `main` snapshot [8cac1f6](https://github.com/FAHTHIZ/oasis/commit/8cac1f6b08145081d18465827d7a8e0ff1aecb18), the guarded cleanup workflow retired **9 exact audited/superseded branch refs** and preserved **11 divergent refs**. The cleanup-policy regression suite passed before deletion ([cleanup run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215)). A follow-up cleanup on the next snapshot found no additional safe deletions and again preserved all 11 remaining refs ([cleanup run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382)).
+Across the cleanup sequence on [67e44ae](https://github.com/FAHTHIZ/oasis/commit/67e44ae3f238330d8d838662eba7d29e19087520) and [8cac1f6](https://github.com/FAHTHIZ/oasis/commit/8cac1f6b08145081d18465827d7a8e0ff1aecb18), the guarded workflow retired **9 exact audited/superseded branch refs** and preserved **11 divergent refs**. The first cleanup-policy regression suite passed before deletion and produced the 9/11 receipt ([run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215), on 67e44ae). A follow-up cleanup on 8cac1f6 found no additional safe deletions and again preserved all 11 remaining refs ([run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382)).
 
 **Retired after exact-head and replacement-path checks:**
 - `fix/omniroute-setup-default-20261027`
