@@ -82,6 +82,7 @@ OASIS follows the familiar agent-harness design (tools, subagents, hooks, MCP, s
 | "It killed my app / wiped my changes" | `kill`, `taskkill`, `Stop-Process` and similar need approval; **git safety snapshots** are taken before `git checkout .`, `git restore`, `rm` and friends. |
 | "It installed a hallucinated package" | **Package vetting** looks names up on npm, PyPI or crates.io before installing. |
 | "It burns tokens" | **Lean tool loading** defers rarely used tool schemas (~2.7k tokens per request), **read dedup** skips unchanged re-reads, and a compact subagent schema keeps big agent lists cheap. |
+| "It reads the whole repo and still gets lost" | **`repo_map`** / `/map` gives a ranked outline of files and their top-level symbols, so the agent opens the right file at the right line first. |
 | "It retries the same failing command forever" | **Retry guard** stops repeated identical failures and asks for a different approach. |
 
 The complete list is in the [changelog](CHANGELOG.md). These guards reduce common failure modes; they do not make any model infallible.

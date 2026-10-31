@@ -710,3 +710,13 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 .agent-utility-view[hidden]{display:none!important}
 #view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel,#agentChangesUtilityPanel .cloud-changes-panel{margin:0;box-shadow:none}
 .first-run-status[data-error="true"]{color:var(--danger);border-color:#FF8A8A55;background:#FF8A8A0d}
+/* Split view: give the permission select its full label before the model name, which already ellipsizes. */
+@container chat (max-width:600px){
+  .agent-session-tools select{max-width:none;width:auto}
+  .agent-model-pill{max-width:150px}
+}
+@container chat (max-width:420px){.agent-model-pill{max-width:110px}}
+/* Extensions importer: URL, destination and action on one row; the button keeps its natural width. */
+.extension-form{grid-template-columns:minmax(0,1fr) minmax(180px,auto) auto}
+.extension-form>.btn{justify-self:start;white-space:nowrap}
+@media (max-width:760px){.extension-form{grid-template-columns:1fr}}

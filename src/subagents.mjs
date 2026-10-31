@@ -27,7 +27,7 @@ const CLAUDE_TO_OASIS = {
   todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command']
 };
 
-const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'memory_search', 'memory_read'];
+const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'memory_search', 'memory_read'];
 
 export const BUILTIN_AGENTS = {
   'general-purpose': {

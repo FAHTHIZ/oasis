@@ -72,6 +72,7 @@ export const BUILTIN_COMMANDS = {
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
   diagnostics: 'Run type checkers and linters, then fix errors (/diagnostics [paths])',
+  map: 'Show a ranked map of files and their top-level symbols (/map [dir] [symbol|file ...] [--add])',
   'security-review': 'Security review of pending changes (/security-review [PR number | git ref])',
   copy: 'Copy the last reply (or the Nth most recent) to the clipboard (/copy [N])',
   fork: 'Fork the conversation: keep the original saved and continue in a copy (alias /branch)',
@@ -660,6 +661,28 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'pr': {
       return { prompt: 'Open a pull request for my work' + (argument ? ' into ' + argument : '') + '. Steps: 1) read git_status, git_diff, and git_log; 2) if I am on the default branch, create a descriptive feature branch with git_branch; 3) if there are uncommitted changes that belong in this PR, commit them with git_commit; 4) call create_pull_request' + (argument ? ' with base ' + JSON.stringify(argument) : '') + ' with a short title and a body containing "## Summary" (bullet points) and "## Test plan" (what was run or should be checked). Reply with the PR URL.' };
+    }
+    case 'map': {
+      const { buildRepoMap } = await import('./repo-map.mjs');
+      const words = String(argument || '').split(/\s+/).filter(Boolean);
+      const add = words.includes('--add');
+      const terms = words.filter((word) => word !== '--add');
+      let dir = '.';
+      if (terms[0]) {
+        const { stat: statPath } = await import('node:fs/promises');
+        const { resolve: resolvePath } = await import('node:path');
+        const info = await statPath(resolvePath(root || '.', terms[0])).catch(() => null);
+        if (info && info.isDirectory()) dir = terms.shift();
+      }
+      const result = await buildRepoMap(root || process.cwd(), { path: dir, focus: terms, maxChars: add ? 8000 : 16000 });
+      const header = 'Repository map · ' + result.shownFiles + ' of ' + result.files + ' source files' + (terms.length ? ' · focus: ' + terms.join(', ') : '');
+      if (add) {
+        if (session && Array.isArray(session.messages)) {
+          session.messages.push({ role: 'user', content: '<repo-map>\n' + header + '\n' + result.map + '\n</repo-map>\nThis is a ranked outline of the repository for orientation. Use read_file with an offset to open a definition.' });
+        }
+        return { output: header + '\nAdded to the conversation (' + result.map.length + ' characters).' };
+      }
+      return { output: header + '\n\n' + result.map + '\n\n' + result.hint };
     }
     case 'diagnostics': {
       const targets = argument ? argument.split(/\s+/).filter(Boolean) : [];

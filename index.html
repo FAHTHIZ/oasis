@@ -1732,5 +1732,23 @@ function syncChips(){
 ['agentRuntimeState','agentModelName','githubStatus'].forEach(function(id){var n=$(id);if(n)new MutationObserver(syncChips).observe(n,{childList:true,characterData:true,subtree:true,attributes:true})});
 syncChips();
 })();
+
+/* Topbar panel buttons are pressed only while the agent view is showing that side panel. */
+(function(){
+  var view=document.getElementById('view-agent'),grid=document.getElementById('agentWorkspaceGrid');
+  if(!view||!grid||!window.MutationObserver)return;
+  function sync(){
+    var on=view.classList.contains('active')&&grid.dataset.terminalVisible==='true';
+    var active=window.oasisAgentGetUtilityPanel?window.oasisAgentGetUtilityPanel():'terminal';
+    document.querySelectorAll('[data-topbar-panel]').forEach(function(button){
+      var want=String(on&&button.getAttribute('data-topbar-panel')===active);
+      if(button.getAttribute('aria-pressed')!==want)button.setAttribute('aria-pressed',want);
+    });
+  }
+  new MutationObserver(sync).observe(view,{attributes:true,attributeFilter:['class']});
+  new MutationObserver(sync).observe(grid,{attributes:true,attributeFilter:['data-terminal-visible']});
+  document.querySelectorAll('[data-topbar-panel]').forEach(function(b){b.addEventListener('click',function(){setTimeout(sync,0)})});
+  sync();
+})();
 </script>
 </body></html>

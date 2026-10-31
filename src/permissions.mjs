@@ -36,6 +36,7 @@ const TOOL_ALIASES = {
   pr: ['create_pull_request'],
   grep: ['grep', 'search_files'],
   glob: ['glob_files'],
+  repomap: ['repo_map'],
   ls: ['list_files'],
   task: ['task'],
   todowrite: ['todo_write']

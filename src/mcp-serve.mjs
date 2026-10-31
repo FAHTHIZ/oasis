@@ -9,7 +9,7 @@ import { TOOL_DEFINITIONS, executeTool } from './tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { webSearchEnabled } from './web-search.mjs';
 
-export const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
+export const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
 export const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
 export const SERVE_COMMANDS = ['run_command', 'command_output', 'kill_command', 'list_background'];
 const PROTOCOL_VERSION = '2025-06-18';
