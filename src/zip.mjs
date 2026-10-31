@@ -300,6 +300,7 @@ export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tm
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   let buffer;
+  let finalHref = currentUrl;
   try {
     for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
       const { url: parsed, addresses } = await validateArchiveTarget(currentUrl, lookupImpl);
@@ -308,6 +309,7 @@ export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tm
       }
       if (visited.has(parsed.href)) throw new Error('--plugin-url redirect loop detected.');
       visited.add(parsed.href);
+      finalHref = parsed.href;
       let result;
       if (fetchImpl === globalThis.fetch) {
         result = await fetchPinnedArchiveBytes(parsed, addresses, limit, controller.signal);
@@ -352,7 +354,7 @@ export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tm
     if (await isPlugin(dir)) return dir;
     const top = (await readdir(dir, { withFileTypes: true })).filter((entry) => !entry.name.startsWith('__MACOSX'));
     if (top.length === 1 && top[0].isDirectory() && await isPlugin(path.join(dir, top[0].name))) return path.join(dir, top[0].name);
-    throw new Error('--plugin-url archive has no plugin (expected .claude-plugin/plugin.json): ' + parsed.href);
+    throw new Error('--plugin-url archive has no plugin (expected .claude-plugin/plugin.json): ' + finalHref);
   } catch (error) {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     throw error;
