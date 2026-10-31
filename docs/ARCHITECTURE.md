@@ -1,4 +1,4 @@
-# Oasis OSS architecture
+# OASIS architecture
 
 Oasis has a local-first browser workspace and a CLI agent runtime. Running `oasis web` serves the same browser UI from Node and connects it to the chosen workspace through an authenticated local HTTP API. The current implementation inventory and verified baseline are tracked in [PROJECT_PLAN.md](PROJECT_PLAN.md); this document describes system boundaries and implementation constraints without implying outcome parity from feature names alone.
 
