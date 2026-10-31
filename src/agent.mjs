@@ -30,7 +30,7 @@ import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
-import { microcompact, contextWindowSize, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
+import { estimateTokens, microcompact, contextWindowSize, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
