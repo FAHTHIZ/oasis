@@ -1,10 +1,42 @@
 # OASIS branch audit
 
-**Audit date:** 2026-10-29  
+**Original audit date:** 2026-10-29  
 **Canonical destination:** `main`  
-**Scope:** 37 non-main branch tips visible during the October 29, 2026 audit. Comparisons were made against `main`; old branch names alone are not proof that their contents remain useful.
+**Current branch inventory and cleanup receipt:** October 31, 2026
 
-**Current-main baseline:** `db3d49c8729f8dc6e264dad294e878aeca0eed08`. The latest Quality Checks, installer checks and branch-cleanup jobs are queued; no new passing result or branch-deletion receipt is claimed for this SHA.
+## Current inventory and cleanup receipt — October 31, 2026
+
+At `main` snapshot [8cac1f6](https://github.com/FAHTHIZ/oasis/commit/8cac1f6b08145081d18465827d7a8e0ff1aecb18), the guarded cleanup workflow retired **9 exact audited/superseded branch refs** and preserved **11 divergent refs**. The cleanup-policy regression suite passed before deletion ([cleanup run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215)). A follow-up cleanup on the next snapshot found no additional safe deletions and again preserved all 11 remaining refs ([cleanup run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382)).
+
+**Retired after exact-head and replacement-path checks:**
+- `fix/omniroute-setup-default-20261027`
+- `fix/preserve-current-provider-on-setup-20261027`
+- `fix/safety-part-1-completion`
+- `ci/gate1-branch-validation`
+- `ci/gate1-corrected-integrity-check`
+- `fix/gate1-optional-terminal`
+- `fix/gate1-site-mark-assertion`
+- `fix/gate1-static-asset-routes`
+- `test/gate1-browser-and-asset-smoke`
+
+**Preserved because their net contents remain non-equivalent or unverified:**
+- `app/alpha-readiness-gaps`
+- `app/empty-chat`
+- `app/first-run`
+- `app/status-activity`
+- `app/workspace-layout`
+- `cli/getting-started`
+- `cloud-engine/maturity-foundation`
+- `fix/phase-0-finish-plan-20261030-sync`
+- `fix/phase-0-finish-plan-20261030`
+- `ux/chat-first-step-0`
+- `ux/chat-first-step-1`
+
+No preserved branch was merged into `main`. The cleanup workflow does not infer equivalence from branch names or ancestry alone: reviewed superseded refs require the exact recorded head and canonical replacement paths; other divergent refs are removed only when every net changed-file state matches the default branch. The remaining 11 refs should stay available until their unique work is reviewed and either deliberately ported or explicitly rejected.
+
+## Historical audit decisions and inventory — October 29, 2026
+
+The October 29 baseline below is retained as historical context and is superseded by the current inventory above.
 
 ## Decisions
 
