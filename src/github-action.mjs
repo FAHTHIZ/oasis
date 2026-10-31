@@ -107,7 +107,88 @@ function commentBody(status, details = []) {
 
 // Commits whatever the agent changed and pushes it. For pull requests from this
 // repository, it pushes to the PR branch. Otherwise it pushes a new branch and opens a PR.
-export async function publishChanges({ root, trigger, context, request, summary }) {
+export function verificationIsComplete(verification) {
+  if (!verification || typeof verification !== 'object' || Array.isArray(verification)) return false;
+  const required = verification.required === true;
+  const diffReviewed = !required || verification.diffReviewed === true;
+  const check = verification.lastCheck && typeof verification.lastCheck === 'object'
+    ? verification.lastCheck
+    : null;
+  const projectCheckPassed = !required || verification.checkRequired !== true ||
+    Boolean(check && check.passed === true && check.exitCode === 0);
+  return verification.complete === true && diffReviewed && projectCheckPassed &&
+    (!Array.isArray(verification.issues) || verification.issues.length === 0);
+}
+
+export function formatVerificationReport(verification) {
+  const lines = ['## Verification'];
+  if (!verification || typeof verification !== 'object' || Array.isArray(verification)) {
+    lines.push('- Result: **UNCONFIRMED** — the runtime did not return structured verification details.');
+    lines.push('- Do not interpret the model summary alone as proof that checks passed.');
+    return lines.join('\n');
+  }
+
+  const required = verification.required === true;
+  const complete = verificationIsComplete(verification);
+  const changed = Array.isArray(verification.changedPaths) ? verification.changedPaths : [];
+  const check = verification.lastCheck && typeof verification.lastCheck === 'object'
+    ? verification.lastCheck
+    : null;
+  const lsp = Array.isArray(verification.lsp) ? verification.lsp : [];
+
+  lines.push('- Result: **' + (required ? (complete ? 'VERIFIED' : 'INCOMPLETE') : 'NOT REQUIRED') + '**');
+  lines.push('- Changed files: ' + (changed.length ? changed.length.toLocaleString('en-US') : 'none'));
+  if (required) lines.push('- Diff review: ' + (verification.diffReviewed === true ? 'complete' : 'incomplete'));
+
+  if (verification.checkRequired === true) {
+    if (check && check.passed === true && check.exitCode === 0) {
+      lines.push('- Repository check: **' + String(check.kind || 'check') + ' passed** (exit code 0).');
+    } else if (check) {
+      lines.push('- Repository check: **not passed** (' + String(check.kind || 'check') +
+        ', exit code ' + (Number.isInteger(check.exitCode) ? check.exitCode : 'unknown') + ').');
+    } else {
+      lines.push('- Repository check: **not recorded**; source changes require a passing project check.');
+    }
+  } else if (required) {
+    lines.push('- Repository check: not required for these changed file types.');
+  } else {
+    lines.push('- Repository check: not required because no files changed.');
+  }
+
+  if (lsp.length) {
+    for (const item of lsp) {
+      const file = String(item && item.path || 'source file').replace(/[\r\n\x60]/g, ' ').slice(0, 180);
+      if (item && item.status === 'unavailable') {
+        const reason = String(item.reason || 'language server unavailable').replace(/[\r\n\x60]/g, ' ').slice(0, 240);
+        lines.push('- Language server: not run for "' + file + '" (' + reason + ').');
+      } else if (item && item.status === 'errors') {
+        lines.push('- Language server: ' + Number(item.newErrorCount || 0) + ' new error(s) reported for "' + file + '".');
+      } else if (item && item.status === 'warnings') {
+        lines.push('- Language server: ' + Number(item.newWarningCount || 0) + ' warning(s) reported for "' + file + '".');
+      } else {
+        lines.push('- Language server: diagnostics clean for "' + file + '".');
+      }
+    }
+  } else if (required) {
+    lines.push('- Language server: no diagnostic result was recorded.');
+  }
+
+  if (lsp.some((item) => item && item.status === 'unavailable') && complete &&
+      check && check.passed === true && check.exitCode === 0) {
+    lines.push('- Acceptance basis: the repository ' + String(check.kind || 'check') +
+      ' passed. The optional language-server check was unavailable and was not counted as a pass.');
+  }
+  if (!complete && Array.isArray(verification.issues) && verification.issues.length) {
+    lines.push('- Outstanding items: ' + verification.issues.map((item) =>
+      String(item).replace(/[\r\n]/g, ' ').slice(0, 300)
+    ).join('; '));
+  }
+  return lines.join('\n');
+}
+
+// Commits whatever the agent changed and pushes it. For pull requests from this
+// repository, it pushes to the PR branch. Otherwise it pushes a new branch and opens a PR.
+export async function publishChanges({ root, trigger, context, request, summary, verification = null }) {
   const status = await git(['status', '--porcelain'], root);
   if (!status) return { changed: false };
   await git(['config', 'user.name', context.gitName], root).catch(() => {});
@@ -128,33 +209,45 @@ export async function publishChanges({ root, trigger, context, request, summary 
   await git(['commit', '-q', '-m', subject, '-m', 'Requested by @' + (trigger.author || 'unknown') + ' and made by Oasis.'], root);
   await git(['push', '-q', context.remote, 'HEAD:refs/heads/' + branch], root);
   if (!sameRepoPr) {
+    const prBody = (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') +
+      summary.slice(0, 60000) + '\n\n' + formatVerificationReport(verification);
     pullRequest = await request('POST', '/repos/' + context.repository + '/pulls', {
       title: subject,
       head: branch,
       base: trigger.isPullRequest ? context.prBaseRef || context.defaultBranch : context.baseBranch || context.defaultBranch,
-      body: (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') + summary.slice(0, 60000)
+      body: prBody
     });
   }
   return { changed: true, branch, pullRequest, files: status.split('\n').length };
 }
 
-export function actionStatus(result, published, summary) {
-  if (result && result.is_error) return 'ran into a problem (' + result.subtype + ').';
-  const text = String(summary || '');
-  const languageServerNotApproved =
-    /^Verification incomplete:/im.test(text) &&
-    /LSP verification unavailable[^\n]*Starting the .+ language server was not approved\./i.test(text);
-  if (languageServerNotApproved) {
-    return published && published.changed
-      ? 'pushed changes; language-server check was not run.'
-      : 'language-server check was not run.';
+export function actionStatus(result, published, summary, verification = result && result.verification) {
+  if (result && (result.is_error || /^error_/.test(String(result.subtype || '')))) {
+    return 'ran into a problem (' + String(result.subtype || 'execution error') + ').';
   }
-  if (/^Verification incomplete:/im.test(text)) {
+
+  if (verification && typeof verification === 'object') {
+    if (!verificationIsComplete(verification)) {
+      return published && published.changed
+        ? 'pushed changes, but verification is incomplete.'
+        : 'verification is incomplete.';
+    }
+    if (verification.required === true) {
+      return published && published.changed
+        ? 'verified and pushed changes.'
+        : 'verified changes.';
+    }
+    return published && published.changed ? 'finished and pushed changes.' : 'finished.';
+  }
+
+  if (/^Verification incomplete:/im.test(String(summary || ''))) {
     return published && published.changed
       ? 'pushed changes, but verification is incomplete.'
       : 'verification is incomplete.';
   }
-  return published && published.changed ? 'finished and pushed changes.' : 'finished.';
+  return published && published.changed
+    ? 'pushed changes, but verification status is unavailable.'
+    : 'finished; no code changes were verified.';
 }
 
 export async function runAction(options = {}) {
