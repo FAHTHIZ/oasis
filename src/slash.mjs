@@ -43,6 +43,7 @@ export const BUILTIN_COMMANDS = {
   'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id])',
+  routing: 'Route clearly easy read-only tasks to a cheaper model (/routing easy MODEL, strong MODEL, on|off|status|reset)',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
@@ -180,7 +181,7 @@ export async function runBuiltinCommand(name, argument, state) {
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
         { title: 'Working', commands: ['clear', 'compact', 'diagnostics', 'audit', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
-        { title: 'Settings', commands: ['model', 'effort', 'config', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
+        { title: 'Settings', commands: ['model', 'routing', 'effort', 'config', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
       const used = new Set();
       const lines = [];
@@ -485,6 +486,45 @@ export async function runBuiltinCommand(name, argument, state) {
       const priced = priceFor(model, { config: session && session.config || {}, overrides: session && session.pricing || {} });
       const money = priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.' : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
       return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money };
+    }
+    case 'routing': {
+      if (!session) return { output: 'Start a provider session before configuring model routing.' };
+      const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      const action = String(words[0] || 'status').toLowerCase();
+      const current = { enabled: false, easyModel: '', strongModel: '', ...(session.settings && session.settings.modelRouting || {}) };
+      const describe = (value) => value.enabled && value.easyModel
+        ? 'Automatic routing is on. Clearly read-only requests use ' + value.easyModel + '; hard, ambiguous, and change requests use ' + (value.strongModel || session.config.model) + '.'
+        : 'Automatic model routing is off. Current model: ' + session.config.model + '.';
+      if (action === 'status') return { output: describe(current) + ' Configure with /routing easy MODEL and /routing on.' };
+      if (action === 'off' || action === 'disable') {
+        current.enabled = false;
+      } else if (action === 'on' || action === 'enable') {
+        if (!current.easyModel) return { output: 'Set a cheaper model first with /routing easy MODEL. The current session model remains the strong-model default.' };
+        current.enabled = true;
+      } else if (action === 'easy' || action === 'strong') {
+        const model = String(words.slice(1).join(' ') || '').trim();
+        if (!model || model.length > 200 || /[\r\n\0]/.test(model)) return { output: 'Usage: /routing ' + action + ' MODEL_ID' };
+        if (session.availableModels && !modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) {
+          return { output: modelRestrictionMessage(model, session.availableModels) };
+        }
+        if (action === 'easy') current.easyModel = model;
+        else current.strongModel = model;
+      } else if (action === 'reset') {
+        current.enabled = false;
+        current.easyModel = '';
+        current.strongModel = '';
+      } else {
+        return { output: 'Usage: /routing [status|easy MODEL|strong MODEL|on|off|reset]' };
+      }
+      const { updateUserSettings } = await import('./settings.mjs');
+      await updateUserSettings((settings) => {
+        if (action === 'reset') delete settings.modelRouting;
+        else settings.modelRouting = current;
+        return settings;
+      }, env);
+      session.settings ||= {};
+      session.settings.modelRouting = action === 'reset' ? { enabled: false, easyModel: '', strongModel: '' } : current;
+      return { output: action === 'reset' ? 'Automatic model routing reset.' : describe(current) + ' Saved to user settings.' };
     }
     case 'model': {
       if (!argument) return { output: 'Model: ' + (session ? session.config.model : '(provider default; start a task first)') + '. Use /model MODEL_ID or an alias (opus, sonnet, haiku, fable, best, opusplan) to switch for this session, /model default to reset.' };
