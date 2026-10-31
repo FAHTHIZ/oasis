@@ -14,6 +14,7 @@
 import { writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { sanitizeModelRouting } from './model-routing.mjs';
+import { normalizeAutoTestSetting } from './auto-test.mjs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -240,7 +241,7 @@ export async function loadSettings(root, options = {}) {
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.autoTest;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
@@ -315,6 +316,9 @@ export async function loadSettings(root, options = {}) {
     // repoMap: true | false | { maxChars } — add a ranked repository outline to the first turn.
     if (typeof settings.repoMap === 'boolean') result.repoMap = settings.repoMap;
     else if (settings.repoMap && typeof settings.repoMap === 'object' && !Array.isArray(settings.repoMap)) result.repoMap = { maxChars: Math.max(1000, Math.min(30000, Number.parseInt(settings.repoMap.maxChars, 10) || 6000)) };
+    // autoTest: "npm test" | { command, maxAttempts, timeoutSeconds } — Oasis runs it after edits (trusted scopes only).
+    if (settings.autoTest === false) result.autoTest = null;
+    else if (settings.autoTest) { const autoTest = normalizeAutoTestSetting(settings.autoTest); if (autoTest) result.autoTest = autoTest; }
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
 

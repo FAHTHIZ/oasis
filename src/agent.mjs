@@ -2262,6 +2262,7 @@ function verificationSummary(state) {
     checkRequired,
     lastCheck,
     lsp,
+    ...(state.autoTestLast ? { autoTest: state.autoTestLast } : {}),
     complete: issues.length === 0,
     issues
   };
@@ -3900,6 +3901,28 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
     if (!calls.length) {
+      if (verification.autoTestPending && verification.changedPaths.size && !options.isSubagent) {
+        verification.autoTestPending = false;
+        const { resolveAutoTest, runAutoTest, autoTestFailurePrompt } = await import('./auto-test.mjs');
+        const autoTest = resolveAutoTest(session.settings, options.env || process.env);
+        if (autoTest && (verification.autoTestAttempts || 0) < autoTest.maxAttempts) {
+          verification.autoTestAttempts = (verification.autoTestAttempts || 0) + 1;
+          const call = { id: 'auto_test_' + verification.autoTestAttempts, type: 'function', function: { name: 'auto_test', arguments: JSON.stringify({ command: autoTest.command }) } };
+          if (options.onToolStart) options.onToolStart({ name: 'auto_test', call, args: { command: autoTest.command } });
+          const outcome = await runAutoTest(session.root, autoTest.command, { timeoutMs: autoTest.timeoutMs, signal: options.signal, env: { ...process.env, ...(session.settings && session.settings.env || {}) } });
+          if (options.onToolResult) options.onToolResult({ name: 'auto_test', call, result: { command: outcome.command, exitCode: outcome.exitCode, passed: outcome.passed, timedOut: outcome.timedOut, durationMs: outcome.durationMs, output: outcome.output.slice(-2000) } });
+          recordClaimCheck(claimState, { command: autoTest.command, exitCode: outcome.exitCode });
+          verification.lastVerificationExitCode = outcome.passed ? 0 : outcome.exitCode || 1;
+          verification.lastVerificationKind = 'test';
+          verification.autoTestLast = { command: outcome.command, exitCode: outcome.exitCode, passed: outcome.passed, attempts: verification.autoTestAttempts };
+          if (outcome.cancelled) throw Object.assign(new Error('Agent task cancelled by the user.'), { name: 'AbortError' });
+          if (!outcome.passed) {
+            if (text && options.onText) await emitDisplayText(session, options, text);
+            session.messages.push({ role: 'user', content: autoTestFailurePrompt(outcome, verification.autoTestAttempts, autoTest.maxAttempts) });
+            continue;
+          }
+        }
+      }
       const issues = verificationIssues(verification);
       const blockedText = verification.nudgeUsed ? formatLspVerificationBlocker(issues) : null;
       if (blockedText) {
@@ -4147,6 +4170,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.diffReviewedPaths.clear();
         verification.lastVerificationExitCode = null;
         verification.lastVerificationKind = null;
+        verification.autoTestPending = true;
       }
       if (result && result.lspVerification && result.lspVerification.path) {
         verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
