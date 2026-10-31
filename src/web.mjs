@@ -522,7 +522,9 @@ export function createOasisWebServer(options = {}) {
       try {
         const finalized = await finishWorktree(workspaceKey, taskWorktree, {
           env, message: 'OASIS browser task: ' + incomingMessage.replace(/\s+/g, ' ').slice(0, 160),
-          blockSecrets: true
+          blockSecrets: true,
+          // This background commit is unattended: do not execute repository-controlled Git hooks.
+          skipHooks: true
         });
         return { ...finalized, isolation: 'worktree', baseCommit: taskWorktree.base };
       } catch (error) {
