@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
 import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
@@ -36,7 +37,7 @@ import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescri
 import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
-import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS } from './auto-memory.mjs';
+import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { estimateTokens, microcompact, contextWindowSize, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges } from './telemetry.mjs';
@@ -576,6 +577,11 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.recalledMemoryIds = new Set();
     session.toolDefinitions = session.toolDefinitions.concat(MEMORY_TOOL_DEFINITIONS);
     try { const memoryText = await memoryIndexPrompt(root, { env }); if (dynamicSections) dynamicSections.push(memoryText); else systemText += '\n\n' + memoryText; } catch {}
+  }
+  // Standing corrections ("stop saying X") from settings and from earlier sessions.
+  addCorrections(session, Array.isArray(loadedSettings.avoidPhrases) ? loadedSettings.avoidPhrases.filter((item) => typeof item === 'string') : []);
+  if (session.autoMemory) {
+    try { addCorrections(session, correctionsFromMemories(await listMemories(root, { env, scope: 'user' }))); } catch {}
   }
   const shellEnabled = Boolean(loadedSettings.shell && loadedSettings.shell.enabled) || Boolean(sandbox.enabled && sandbox.available);
   if (shellEnabled) session.toolDefinitions = session.toolDefinitions.concat([SHELL_TOOL_DEFINITION]);
@@ -3583,6 +3589,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (resolved && resolved.error) return { text: resolved.error, toolCalls: 0, tokensUsed: Number(compaction.tokensUsed || 0), finished: false };
     if (resolved) userContent = resolved.prompt;
   }
+  if (!options.isSubagent) {
+    const added = addCorrections(session, extractCorrections(request));
+    if (added.length && session.autoMemory && !/^(0|false|off|no)$/i.test(String((options.env || process.env).OASIS_STANDING_CORRECTIONS || ''))) {
+      for (const phrase of added) {
+        try { await saveMemory(session.root, { scope: 'user', category: 'preferences', name: CORRECTION_MEMORY_PREFIX + phrase, description: 'The user asked never to use the phrase "' + phrase + '" in replies.', content: 'The user explicitly asked never to use the word or phrase "' + phrase + '" in replies. Phrase things differently.' }, { env: options.env || process.env, source: 'standing-correction' }); } catch {}
+      }
+    }
+    const reminder = correctionsReminder(session.standingCorrections);
+    if (reminder) userContent += '\n\n' + reminder;
+  }
   if (session.autoMemory && !options.isSubagent && !options.planOnly) {
     try {
       const recalled = await recallForPrompt(session.root, request, { env: options.env || process.env, exclude: session.recalledMemoryIds });
@@ -3659,6 +3675,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let loopBreakMessage = '';
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
   const claimState = newClaimState();
+  let correctionNudged = false;
   session.turnQuestionCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -3807,6 +3824,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (text && options.onText) await emitDisplayText(session, options, text);
         session.messages.push({ role: 'user', content: claimNudge });
         continue;
+      }
+      if (!options.isSubagent && !correctionNudged && session.standingCorrections && session.standingCorrections.length) {
+        const violations = correctionViolations(session.standingCorrections, text);
+        if (violations.length) {
+          correctionNudged = true;
+          session.messages.push({ role: 'user', content: correctionNudge(violations) });
+          continue;
+        }
       }
       const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';
       if (session.hooks && hasHooks(session.hooks, stopEvent) && stopHookContinuations < 3) {
