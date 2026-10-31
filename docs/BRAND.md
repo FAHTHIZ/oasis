@@ -1,7 +1,6 @@
-# OASIS brand
+# OASIS brand guide
 
 **Primary name:** OASIS  
-**Secondary identifier:** OSS (optional descriptor, not part of the spoken product name)  
 **Primary tagline:** Code. Automate. Flourish.
 
 OASIS is an open-source coding agent and local-first developer workspace. The portal mark is an arch with a fine inner contour and horizontal strata that taper inward as they descend. Preserve that silhouette; do not replace it with a generic ring, orb, lens, or unrelated geometric symbol.
@@ -21,7 +20,7 @@ Use the three greens as a restrained portal gradient, not as three competing acc
 
 ## Coding workspace palette
 
-The coding workspace has a separate flat interface palette defined by the October 30, 2026 app redesign brief. These interface colors do not recolor the existing portal mark or app-icon artwork.
+The coding workspace uses a flat interface palette. These interface colors do not recolor the portal mark or app-icon artwork.
 
 | Token | Hex | Use |
 |---|---|---|
@@ -42,7 +41,7 @@ Use Inter for interface text and JetBrains Mono for code. Keep surfaces flat, us
 
 - The standalone portal mark is the default sidebar, favicon-adjacent, and small-space mark.
 - The app icon uses the same mark on a rounded Night square.
-- The wordmark is **OASIS**. **OSS** may sit below it as a small secondary identifier with short horizontal rules, as shown in the identity board; do not append OSS to the spoken product name.
+- The wordmark is **OASIS**. Use OASIS consistently as the public product name; do not add secondary product-name suffixes.
 - The primary tagline is **CODE. AUTOMATE. FLOURISH.** Use it once per placement.
 - Keep clear space around the mark and do not stretch, rotate, or redraw its strata.
 
@@ -66,20 +65,6 @@ Motion should feel like the portal activating: short, calm fades and a restraine
 - `site/assets/oasis-mark.svg` — public website header mark.
 - `site/assets/oasis-icon.svg` — public website app icon.
 
-## Alternative taglines
+## Naming
 
-- Your workspace. Your flow.
-- From intent to implementation.
-- Make the next step happen.
-- Your ideas, in motion.
-- Build with focus.
-- Less busywork. More building.
-- One workspace. More ways to build.
-- Plan clearly. Build confidently.
-- Tools connected. Work moving.
-- Start with an idea. Ship with OASIS.
-- A better path from request to result.
-- Bring your workflow together.
-- Clear context. Focused execution.
-- Work locally. Build freely.
-- A calmer way to get code done.
+Use **OASIS** as the product name and **Code. Automate. Flourish.** as the primary tagline. Avoid introducing alternate public product names or competing taglines in the repository's primary identity materials.
