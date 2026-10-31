@@ -266,3 +266,31 @@ test('git_commit refuses credentials hardcoded in source, with file:line and a m
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('raw git commit through run_command / run_shell gets the same secret scan', async () => {
+  const { executeTool } = await import('../src/tools.mjs');
+  const { executePowerTool } = await import('../src/power-tools.mjs');
+  const { gitCommitInvocation } = await import('../src/git-safety.mjs');
+  assert.deepEqual(gitCommitInvocation('git', ['commit', '-m', 'x']), { all: false });
+  assert.deepEqual(gitCommitInvocation('npm test && git commit -am "x"'), { all: true });
+  assert.equal(gitCommitInvocation('git', ['status']), null);
+  const root = await mkdtemp(path.join(tmpdir(), 'oasis-raw-commit-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: root });
+    await writeFile(path.join(root, 'a.js'), 'const a = 1;\n');
+    execFileSync('git', ['add', '.'], { cwd: root });
+    execFileSync('git', ['commit', '-qm', 'init'], { cwd: root });
+    await writeFile(path.join(root, 'a.js'), "const token = 'ghp_" + 'Zx9Yw8Vu7Ts6Rq5Po4Nm3Lk2Ji1Hg0Fe9Dc8' + "';\n");
+    const tracked = await executePowerTool('run_shell', { command: 'git commit -am "add token"' }, { root, autoApprove: true, approval: async () => true, env: process.env }, root);
+    assert.equal(tracked.blocked, true);
+    assert.match(tracked.message, /a\.js:1\s+token/);
+    execFileSync('git', ['add', 'a.js'], { cwd: root });
+    const staged = await executeTool('run_command', { command: 'git', args: ['commit', '-m', 'add token'] }, { root, autoApprove: true, approval: async () => true, env: process.env });
+    assert.equal(staged.blocked, true);
+    assert.equal(execFileSync('git', ['log', '--oneline'], { cwd: root, encoding: 'utf8' }).trim().split('\n').length, 1, 'no commit was made');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

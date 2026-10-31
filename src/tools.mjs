@@ -1828,6 +1828,12 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'run_command': {
       const env = context.env || process.env;
       const discard = gitSafety.gitSafetyEnabled(env) ? gitSafety.discardingGitCommand(args.command, args.args || []) : '';
+      const commitCall = gitSafety.gitCommitInvocation(args.command, args.args || []);
+      if (commitCall) {
+        const { rawCommitSecretHits, formatSecretHits } = await import('./git-tools.mjs');
+        const hits = await rawCommitSecretHits(root, { all: commitCall.all, env }).catch(() => []);
+        if (hits.length) return { command: args.command, approved: false, blocked: true, secretHits: hits.slice(0, 15), message: formatSecretHits(hits) + ' The command was not run.' };
+      }
       const { guardInstallCommand } = await import('./package-vetting.mjs');
       const install = await guardInstallCommand(args.command, args.args || [], { env, fetchImpl: context.fetchImpl || globalThis.fetch });
       if (install.blocked) return { command: args.command, ...install.blocked };
