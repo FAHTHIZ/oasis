@@ -970,7 +970,12 @@ test('long sessions compact completed history before the next coding request', a
   assert.ok(!taskPayload.messages.some((message) => message.role === 'user' && String(message.content).includes('Older task request 0')));
   assert.equal(compactions.length, 1);
   assert.equal(compactions[0].usedModelSummary, true);
+  assert.ok(compactions[0].savedTokens > 0);
+  assert.match(compactions[0].note, /^Saved about [\d,]+ tokens/);
+  assert.equal(compactions[0].notesSaved, true);
   assert.equal(session.messages.length < 40, true);
+  const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
+  assert.match(continuity, /Earlier work: README\\.md was inspected/);
 });
 
 test('mid-turn compaction summarizes completed tool rounds without dropping the active request or latest tool-call pairing', async (t) => {
@@ -1059,7 +1064,11 @@ test('large command output keeps its beginning, ending, exit code and truncation
   t.after(() => rm(root, { recursive: true, force: true }));
   const script = [
     "process.stdout.write('BEGIN-MARKER\\n');",
-    "for (let i = 0; i < 5000; i++) process.stdout.write('LINE-' + i + ' ' + 'x'.repeat(30) + '\\n');",
+    "for (let i = 0; i < 5000; i++) {",
+    "  if (i === 2500) process.stdout.write('ERROR: middle failure marker\\n');",
+    "  if (i === 2600) process.stdout.write('api_key=full-log-secret-value\\n');",
+    "  process.stdout.write('LINE-' + i + ' ' + 'x'.repeat(30) + '\\n');",
+    "}",
     "process.stdout.write('END-MARKER\\n');"
   ].join('\n');
   await writeFile(path.join(root, 'output-fixture.mjs'), script);
@@ -1071,6 +1080,20 @@ test('large command output keeps its beginning, ending, exit code and truncation
   assert.match(result.stdout, /END-MARKER/);
   assert.match(result.stdout, /OASIS omitted \d+ characters from the middle/);
   assert.doesNotMatch(result.stdout, /LINE-2000/);
+  assert.match(result.stdout, /ERROR: middle failure marker/);
+  assert.match(result.stdoutLogPath, /^\.oasis\/command-logs\/[a-f0-9-]+\.stdout\.log$/i);
+  const fullLogPath = path.join(root, result.stdoutLogPath);
+  const fullLog = await readFile(fullLogPath, 'utf8');
+  assert.match(fullLog, /BEGIN-MARKER/);
+  assert.match(fullLog, /LINE-2000/);
+  assert.match(fullLog, /ERROR: middle failure marker/);
+  assert.match(fullLog, /END-MARKER/);
+  assert.match(fullLog, /api_key=\[redacted\]/);
+  assert.doesNotMatch(fullLog, /full-log-secret-value/);
+  if (process.platform !== 'win32') {
+    const logStat = await stat(fullLogPath);
+    assert.equal(logStat.mode & 0o777, 0o600, 'retained command logs must be private to the current user');
+  }
 });
 
 test('agent stops after the same tool call returns the same result three times', async (t) => {
