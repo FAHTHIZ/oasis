@@ -971,7 +971,7 @@ test('long sessions compact completed history before the next coding request', a
   assert.equal(compactions.length, 1);
   assert.equal(compactions[0].usedModelSummary, true);
   assert.ok(compactions[0].savedTokens > 0);
-  assert.match(compactions[0].note, /^Saved about [\\d,]+ tokens/);
+  assert.match(compactions[0].note, /^Saved about [\d,]+ tokens/);
   assert.equal(compactions[0].notesSaved, true);
   assert.equal(session.messages.length < 40, true);
   const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
@@ -1058,7 +1058,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.equal(compactions[0].usedModelSummary, true);
   assert.ok(compactions[0].afterChars < compactions[0].beforeChars);
   assert.ok(compactions[0].savedTokens > 0);
-  assert.match(compactions[0].note, /^Saved about [\\d,]+ tokens/);
+  assert.match(compactions[0].note, /^Saved about [\d,]+ tokens/);
   assert.equal(compactions[0].notesSaved, true);
   const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
   assert.match(continuity, /The completed earlier rounds read large\\.txt repeatedly/);
