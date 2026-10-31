@@ -8,6 +8,7 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
 - **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
+- **Stop on fatal account errors** — a 429 that really means out of quota/billing/account on hold is no longer retried, and loops, cron prompts and background wake-ups pause after an authentication or billing error until you send the next message.
 - **Honest workflow status** — workflows whose agents failed inside `pipeline`/`parallel` now report the failed count, names and errors (`failedAgents`, `warning`, `partial` in `/workflows`) instead of a plain "completed".
 - Fixed a FileChanged race: an unlink that happened while a hook ran could be dropped when the hook returned `watchPaths`.
 - **Question budget** — at most two `ask_user_question` prompts per turn by default; further questions are answered with "pick a sensible default, state the assumption, keep working" so long runs are not stalled. Configure with `maxQuestionsPerTurn` or `OASIS_MAX_QUESTIONS_PER_TURN` (`off` removes the cap).
