@@ -11,7 +11,11 @@ export const AUDITED_SUPERSEDED_HEADS = new Map([
   ['chore/current-head-verification-status', { sha: '5c719841bc2a399b7668467d6998685ff5d93278', paths: ['STATUS.md', 'CHANGELOG.md'] }],
   ['docs/termux-install-guide-2026-10-29', { sha: 'c676743c1ac889de78a09ac1dcbf18114045a50d', paths: ['docs/TERMUX.md'] }],
   ['installer/painless-cli-2026-10-29', { sha: '984e6c6bfb8ddbd151bdcf4b63ef81e494b739ef', paths: ['scripts/install.sh'] }],
-  ['installer/windows-powershell-2026-10-29', { sha: '69b5e88dfc546ed16dafabd436fa8deaec530840', paths: ['scripts/install.ps1'] }]
+  ['installer/windows-powershell-2026-10-29', { sha: '69b5e88dfc546ed16dafabd436fa8deaec530840', paths: ['scripts/install.ps1'] }],
+  ['fix/unattended-verification-rule', {
+    sha: 'a8c514c31305203ce442df86b9ef4652f4f91c7b',
+    paths: ['src/agent.mjs', 'test/runtime.test.mjs', 'test/approval-language.test.mjs', 'docs/BENCHMARKS.md', 'docs/CURRENT_STATUS.md']
+  }]
 ]);
 
 export function classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads = new Map()) {
