@@ -7,7 +7,6 @@ import { redactApprovalSecrets } from './approval-language.mjs';
 
 const MAX_LOG_BYTES = 32 * 1024 * 1024;
 const MAX_LINE_CHARS = 1024 * 1024;
-const MAX_PENDING_LINE_CHARS = 1024 * 1024;
 
 async function ensureRealDirectory(directory) {
   try {
@@ -41,21 +40,29 @@ export async function createCommandOutputLog(root) {
   const flags = fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY |
     (process.platform === 'win32' ? 0 : (fsConstants.O_NOFOLLOW || 0));
 
-  for (const name of ['stdout', 'stderr']) {
-    const temporaryPath = path.join(logDirectory, '.' + id + '.' + name + '.tmp');
-    const finalPath = path.join(logDirectory, id + '.' + name + '.log');
-    const descriptor = openSync(temporaryPath, flags, 0o600);
-    streams[name] = {
-      descriptor,
-      temporaryPath,
-      finalPath,
-      bytes: 0,
-      truncated: false,
-      failed: false,
-      decoder: new StringDecoder('utf8'),
-      pending: '',
-      discardUntilNewline: false
-    };
+  try {
+    for (const name of ['stdout', 'stderr']) {
+      const temporaryPath = path.join(logDirectory, '.' + id + '.' + name + '.tmp');
+      const finalPath = path.join(logDirectory, id + '.' + name + '.log');
+      const descriptor = openSync(temporaryPath, flags, 0o600);
+      streams[name] = {
+        descriptor,
+        temporaryPath,
+        finalPath,
+        bytes: 0,
+        truncated: false,
+        failed: false,
+        decoder: new StringDecoder('utf8'),
+        pending: '',
+        discardUntilNewline: false
+      };
+    }
+  } catch (error) {
+    for (const state of Object.values(streams)) {
+      try { closeSync(state.descriptor); } catch {}
+      try { unlinkSync(state.temporaryPath); } catch {}
+    }
+    throw error;
   }
 
   function writeRedacted(state, text) {
@@ -114,13 +121,7 @@ export async function createCommandOutputLog(root) {
       writeRedacted(state, '[OASIS omitted one output line longer than 1 MiB for safe log redaction.]\n');
       state.pending = '';
       state.discardUntilNewline = true;
-    } else if (state.pending.length > MAX_PENDING_LINE_CHARS) {
-      // Do not split an unusually long line: doing so could separate a key name
-      // from its value and leak the remainder after redaction.
-      writeRedacted(state, '[OASIS omitted one output line longer than 1 MiB for safe log redaction.]\n');
-      state.pending = '';
-      state.discardUntilNewline = true;
-    }
+
   }
 
   function flushState(state) {
