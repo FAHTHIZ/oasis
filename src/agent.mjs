@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { maskSecrets, unmaskSecrets, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
@@ -1363,7 +1364,7 @@ async function runPostCompactHooks(session, trigger, summary, options) {
   return started.additionalContext.join('\n').slice(0, 10000);
 }
 
-const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed/i;
+const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed|stream stalled|timed out after \d+ seconds waiting/i;
 
 // --prompt-suggestions: one short guess at the user's next message, from the recent conversation.
 export async function suggestNextPrompt(session, options = {}) {
@@ -1538,9 +1539,15 @@ async function requestCompletionRaw(session, options = {}) {
   }
 
   const controller = new AbortController();
-  const timeoutMs = Math.min(120000, Math.max(1000, Number(options.timeoutMs) || 120000));
+  // timeoutMs bounds the wait for response headers. Once a stream starts, an
+  // idle watchdog (reset on every chunk) replaces it, so long generations are
+  // never cut off while tokens are still arriving, but a silent hang is.
+  const configuredTimeoutSeconds = Number(providerEnv.OASIS_REQUEST_TIMEOUT_SECONDS) || 0;
+  const timeoutMs = Math.min(900000, Math.max(1000, Number(options.timeoutMs) || configuredTimeoutSeconds * 1000 || (typeof options.onDelta === 'function' ? 120000 : 600000)));
+  const streamIdleMs = Math.min(900000, Math.max(1000, Number(options.streamIdleMs) || Number(providerEnv.OASIS_STREAM_IDLE_SECONDS) * 1000 || 120000));
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  let stalled = false;
+  let timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : fetch;
   const abortFromCaller = () => controller.abort();
   if (options.signal) {
@@ -1589,8 +1596,15 @@ async function requestCompletionRaw(session, options = {}) {
     const contentType = response.headers.get('content-type') || '';
     const streamed = Boolean(typeof options.onDelta === 'function' && contentType.toLowerCase().includes('text/event-stream'));
     let data;
-    if (streamed) data = await readProviderStream(response, config.protocol, options.onDelta);
-    else {
+    if (streamed) {
+      clearTimeout(timer);
+      const armIdle = () => { clearTimeout(timer); timer = setTimeout(() => { stalled = true; controller.abort(); }, streamIdleMs); };
+      armIdle();
+      const watched = response.body && typeof response.body.pipeThrough === 'function'
+        ? new Response(response.body.pipeThrough(new TransformStream({ transform(chunk, sink) { armIdle(); sink.enqueue(chunk); } })), { status: response.status, headers: response.headers })
+        : response;
+      data = await readProviderStream(watched, config.protocol, options.onDelta);
+    } else {
       const body = await response.text();
       try { data = JSON.parse(body); } catch {
         throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.');
@@ -1639,7 +1653,8 @@ async function requestCompletionRaw(session, options = {}) {
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after ' + Math.round(timeoutMs / 1000) + ' seconds.');
+    if (stalled) throw new Error('The model stream stalled: no data arrived for ' + Math.round(streamIdleMs / 1000) + ' seconds (set OASIS_STREAM_IDLE_SECONDS to change this).');
+    if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after ' + Math.round(timeoutMs / 1000) + ' seconds waiting for a response (set OASIS_REQUEST_TIMEOUT_SECONDS to change this).');
     if (error instanceof TypeError) throw new Error('Could not reach the model provider. Check the network and provider base URL.');
     throw error;
   } finally {
@@ -3092,7 +3107,29 @@ async function runToolFailureHooks(session, name, args, error, context) {
   return [failed.reason, ...failed.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
 }
 
+function availableToolNames(session) {
+  return new Set((session.toolDefinitions || []).map((tool) => tool && tool.function && tool.function.name).filter(Boolean));
+}
+
 async function executeOneCall(session, call, context, options) {
+  // Map Claude Code style names (Read, Bash, Edit …) onto OASIS tools in place,
+  // so the assistant history and the tool result stay consistent.
+  if (call && call.function && call.function.name) {
+    const alias = resolveToolAlias(call.function.name, safeToolArguments(call.function.arguments), availableToolNames(session));
+    if (alias && alias.name) {
+      call.function.name = alias.name;
+      call.function.arguments = JSON.stringify(alias.args || {});
+    }
+  }
+  const message = await executeOneCallTraced(session, call, context, options);
+  if (message && typeof message.content === 'string' && message.content.includes('Unknown or unavailable tool')) {
+    const hint = resolveToolAlias(call.function && call.function.name, {}, availableToolNames(session));
+    if (hint && hint.error) message.content = JSON.stringify({ error: hint.error });
+  }
+  return message;
+}
+
+async function executeOneCallTraced(session, call, context, options) {
   const tel = getTelemetry(context && context.env || process.env);
   if (!tel) return executeOneCallRaw(session, call, context, options);
   const name = call.function && call.function.name || 'unknown';
