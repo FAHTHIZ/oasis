@@ -96,3 +96,24 @@ test('an agent turn exports turn, model and tool spans plus metrics to a collect
   assert.match(logs, /oasis\.tool_result/);
   assert.doesNotMatch(logs, /secret prompt text/);
 });
+
+test('events carry the git branch as vcs.ref.head.name', async () => {
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { gitBranchName } = await import('../src/telemetry.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-otel-branch-'));
+  await mkdir(path.join(root, '.git'));
+  await writeFile(path.join(root, '.git', 'HEAD'), 'ref: refs/heads/feature/login\n');
+  assert.equal(gitBranchName(root), 'feature/login');
+  const sent = [];
+  const tel = new Telemetry({}, { manual: true, fetch: async (url, init) => { sent.push(JSON.parse(init.body)); return { ok: true }; } });
+  tel.root = root;
+  tel.event('oasis.user_prompt', {});
+  await tel.flush();
+  const logs = sent.find((body) => body.resourceLogs);
+  const attrs = logs.resourceLogs[0].scopeLogs[0].logRecords[0].attributes;
+  assert.ok(attrs.some((a) => a.key === 'vcs.ref.head.name' && a.value.stringValue === 'feature/login'));
+  const detached = await mkdtemp(path.join(os.tmpdir(), 'oasis-otel-detached-'));
+  await mkdir(path.join(detached, '.git'));
+  await writeFile(path.join(detached, '.git', 'HEAD'), '0123456789abcdef0123456789abcdef01234567\n');
+  assert.equal(gitBranchName(detached), '');
+});
