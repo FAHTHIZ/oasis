@@ -29,23 +29,74 @@ import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
 import { isPdfPath, readPdf } from './pdf.mjs';
 import { GIT_TOOL_DEFINITIONS, GIT_TOOL_NAMES, runGitTool } from './git-tools.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
+import { createCommandOutputLog } from './command-output-log.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
 
 function createBoundedOutput(maxChars = MAX_TOOL_OUTPUT) {
-  const headLimit = Math.floor(maxChars / 4);
-  const tailLimit = maxChars - headLimit;
+  const headLimit = Math.floor(maxChars / 3);
+  const tailLimit = Math.floor(maxChars / 3);
+  const maxErrorLines = 25;
+  const maxErrorLineChars = 220;
+  const maxErrorChars = Math.floor(maxChars / 4);
+  const errorPattern = /\b(?:error|failed|failure|exception|fatal|traceback|panic|segmentation fault|not found|timed out)\b|npm\s+ERR!|TS\d{3,5}:/i;
   let complete = '';
   let head = '';
   let tail = '';
   let totalChars = 0;
   let truncated = false;
+  let lineBuffer = '';
+  let errorChars = 0;
+  const firstErrors = [];
+  const recentErrors = [];
+
+  function rememberError(line) {
+    if (!errorPattern.test(line)) return;
+    const text = String(line).trim().slice(0, maxErrorLineChars);
+    if (!text || firstErrors.includes(text) || recentErrors.includes(text)) return;
+    if (firstErrors.length < 5) {
+      firstErrors.push(text);
+      errorChars += text.length;
+      return;
+    }
+    recentErrors.push(text);
+    errorChars += text.length;
+    while (recentErrors.length > maxErrorLines - firstErrors.length || errorChars > maxErrorChars) {
+      const removed = recentErrors.shift();
+      if (!removed) break;
+      errorChars -= removed.length;
+    }
+  }
+
+  function scanErrors(text) {
+    lineBuffer += text;
+    let newline = lineBuffer.indexOf('\n');
+    while (newline >= 0) {
+      rememberError(lineBuffer.slice(0, newline).replace(/\r$/, ''));
+      lineBuffer = lineBuffer.slice(newline + 1);
+      newline = lineBuffer.indexOf('\n');
+    }
+    if (lineBuffer.length > 16 * 1024) {
+      // Keep only a small bounded preview of a pathological unbroken line.
+      rememberError(lineBuffer.slice(0, maxErrorLineChars));
+      lineBuffer = lineBuffer.slice(-maxErrorLineChars);
+    }
+  }
+
+  function errorSection() {
+    if (lineBuffer) rememberError(lineBuffer);
+    const lines = [...firstErrors, ...recentErrors];
+    return lines.length
+      ? '\n\n[Error/failure lines retained from command output]\n' + lines.join('\n') + '\n'
+      : '';
+  }
 
   return {
     append(chunk) {
       const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
       totalChars += text.length;
+      scanErrors(text);
       if (!truncated) {
         complete += text;
         if (complete.length <= maxChars) return;
@@ -57,10 +108,14 @@ function createBoundedOutput(maxChars = MAX_TOOL_OUTPUT) {
       }
       tail = (tail + text).slice(-tailLimit);
     },
-    text() {
+    text(logPath = null, logTruncated = false) {
       if (!truncated) return complete;
       const omitted = Math.max(0, totalChars - head.length - tail.length);
-      return head + '\n[OASIS omitted ' + omitted + ' characters from the middle of command output; the complete output was not retained.]\n' + tail;
+      const errors = errorSection();
+      const saved = logPath
+        ? 'Full redacted output saved to ' + logPath + (logTruncated ? ' (file capped at 32 MiB).' : '.')
+        : 'The full output could not be saved to a local log file.';
+      return head + errors + '\n[OASIS omitted ' + omitted + ' characters from the middle of command output. ' + saved + ']\n' + tail;
     },
     get truncated() { return truncated; }
   };
@@ -361,6 +416,10 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     const launch = wrapCommand(command, args, sandbox, root);
     return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onLine: options.onLine, onExit: options.onExit, monitor: options.monitor });
   }
+  let outputLog = null;
+  if (options.persistOutputLogs !== false) {
+    try { outputLog = await createCommandOutputLog(root); } catch { outputLog = null; }
+  }
   return await new Promise((resolve) => {
     const stdoutBuffer = createBoundedOutput();
     const stderrBuffer = createBoundedOutput();
@@ -373,7 +432,11 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     const append = (target, chunk) => {
       (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(chunk);
+      if (outputLog) outputLog.append(target, chunk);
     };
+    const finishOutputLog = () => outputLog
+      ? outputLog.finish({ stdout: stdoutBuffer.truncated, stderr: stderrBuffer.truncated })
+      : {};
     const cleanup = () => {
       clearTimeout(timer);
       // Keep a scheduled force-kill alive after the leader exits: descendants may
@@ -407,20 +470,26 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     child.on('error', (error) => {
       if (settled) return;
       settled = true; cleanup();
+      const logFiles = finishOutputLog();
       resolve({
         command, approved: true, exitCode: null,
-        stdout: stdoutBuffer.text(), stderr: stderrBuffer.text(),
+        stdout: stdoutBuffer.text(logFiles.stdoutLogPath, logFiles.stdoutLogTruncated),
+        stderr: stderrBuffer.text(logFiles.stderrLogPath, logFiles.stderrLogTruncated),
         stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated,
+        ...logFiles,
         error: error.message, timedOut, cancelled
       });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true; cleanup();
+      const logFiles = finishOutputLog();
       resolve({
         command, approved: true, exitCode: code, signal,
-        stdout: stdoutBuffer.text(), stderr: stderrBuffer.text(),
+        stdout: stdoutBuffer.text(logFiles.stdoutLogPath, logFiles.stdoutLogTruncated),
+        stderr: stderrBuffer.text(logFiles.stderrLogPath, logFiles.stderrLogTruncated),
         stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated,
+        ...logFiles,
         timedOut, cancelled, ...(sandbox && sandbox.available ? { sandboxed: sandbox.kind } : {})
       });
     });
