@@ -135,6 +135,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Typing `/` in the agent composer lists every command the browser can run: built-in commands, your project, user and plugin custom commands, and skills, with substring search. Custom commands (`/ship 2.1.0`) and skills (`/skill-name request`) expand in the browser exactly as they do in the terminal.
 - Saved chats can be deleted from the sidebar (the × on hover, with a confirmation); a chat that is still running cannot be deleted. The API is `DELETE /api/sessions/:id`.
 - Settings → Appearance has Chat width (Comfortable, Wide or Full width; also "Cycle chat width" in the Ctrl+K palette) and Send key. Both are remembered in this browser.
+- When a turn finishes after two or more tool calls, its steps fold into one "Worked for 42s · 6 tool calls" line. Click it to see every step. Choose Settings → Appearance → Finished turns → "Keep every step visible" to turn this off.
 - Click the `Enter send` hint under the examples to switch the composer to Ctrl/⌘+Enter to send with Enter for a new line; the choice is remembered in this browser. Ctrl/⌘+Enter always sends.
 - An integrated argv-based command runner that captures command output and requires per-command approval.
 - GitHub CLI integration to check the host's existing authentication, list up to 30 repositories accessible to that account, clone a selected repo after approval, and switch the active agent workspace.
