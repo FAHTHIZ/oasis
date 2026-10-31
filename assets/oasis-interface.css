@@ -634,3 +634,11 @@ dialog.modal[open]{animation:dialog-in .18s var(--ease)}
 .agent-message.assistant.is-placeholder{display:none}
 .agent-message.activity+.agent-message.assistant{margin-top:8px}
 body.agent-busy .agent-send{display:none}
+@media (max-width:760px){
+  .setup-drawer[open] .setup-drawer-body{max-height:46dvh;overflow-y:auto;overscroll-behavior:contain}
+  .agent-chat-panel>.agent-chat-header{gap:6px;padding:6px 10px;overflow-x:auto;scrollbar-width:none}
+  .agent-chat-panel>.agent-chat-header::-webkit-scrollbar{display:none}
+  #agentRuntimeState{max-width:96px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .agent-session-tools select{max-width:120px}
+  #newAgentSessionBtn{padding:6px}
+}

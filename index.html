@@ -452,7 +452,7 @@ function importBackup(file){if(!file)return;var reader=new FileReader();reader.o
   }
   button.addEventListener('click',function(){setOpen(!sidebar.classList.contains('mobile-open'))});
   document.addEventListener('click',function(event){
-    if(document.body.classList.contains('sidebar-open')&&!sidebar.contains(event.target)&&event.target!==button)setOpen(false);
+    if(document.body.classList.contains('sidebar-open')&&!sidebar.contains(event.target)&&!button.contains(event.target))setOpen(false);
   });
   document.addEventListener('keydown',function(event){
     if(event.key==='Escape'&&document.body.classList.contains('sidebar-open')){setOpen(false);button.focus()}
