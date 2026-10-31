@@ -1,3 +1,9 @@
+## Quality queue rotation — 2026-10-31
+
+The Quality concurrency group was rotated from `oasis-quality-v10` to `oasis-quality-v11` because an older run remained active while a newer main snapshot waited. This starts an independent full verification on current `main`. No tests, requirements, or release gates were removed or relaxed.
+
+---
+
 ## Quality verification queue — 2026-10-31
 
 The Quality concurrency group has been rotated from `oasis-quality-v9` to `oasis-quality-v10` after the prior run continued against an older source commit. The rotation starts independent verification for the current main snapshot; it does not remove tests, relax gates, or mark any prior run as passed.
