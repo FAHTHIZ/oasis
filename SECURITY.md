@@ -4,7 +4,7 @@
 
 See [Security and reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md) for recent fixes, verification status and open security boundaries. This is a source-level pass, not a guarantee that every defect has been found.
 
-Oasis OSS has two parts:
+OASIS has two parts:
 
 - The browser workspace is a static client-side app. Projects, tasks, and notes are stored in browser local storage and are not encrypted by the application.
 - The terminal coding agent runs with the current OS user's permissions. It uses a remote or local model provider and launches local tools/commands as requested.
