@@ -36,6 +36,9 @@ import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClien
 import { createCommandOutputLog } from './command-output-log.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
+// Exact-string edits only rewrite the matched span, so they can safely handle files far
+// larger than a single read (generated code, big bundles, long data files).
+const MAX_EDIT_FILE = 4 * 1024 * 1024;
 const MAX_TOOL_OUTPUT = 24 * 1024;
 
 function createBoundedOutput(maxChars = MAX_TOOL_OUTPUT) {
@@ -1794,7 +1797,7 @@ export async function executeTool(name, args = {}, context = {}) {
         throw error;
       }
       if (!info.isFile() || info.isSymbolicLink()) throw new Error('That path is not a regular file.');
-      if (info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit for edits.');
+      if (info.size > MAX_EDIT_FILE) throw new Error('File is larger than the 4 MiB limit for edits.');
       await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
       const current = await readFile(target.absolute, 'utf8');
       if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
@@ -1808,7 +1811,7 @@ export async function executeTool(name, args = {}, context = {}) {
       }
       if (matches > 1 && args.replace_all !== true) throw new Error('old_string appears ' + matches + ' times. Add more surrounding context to make it unique, or set replace_all=true.');
       const next = relaxed ? relaxed.next : args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
-      if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_FILE) throw new Error('The edited file would exceed the 256 KiB limit.');
+      if (Buffer.byteLength(next, 'utf8') > MAX_EDIT_FILE) throw new Error('The edited file would exceed the 4 MiB edit limit.');
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
       const editDisplayPath = target.relative.split(path.sep).join('/');
       assertNoNewElision(args.old_string, args.new_string, editDisplayPath);

@@ -78,3 +78,17 @@ test('write_file refuses to overwrite a file the agent only partly read', async 
   const written = await executeTool('write_file', { path: 'big.txt', content: body.replace('line 0', 'first') }, ctx);
   assert.equal(written.backedUpExistingFile, true);
 });
+
+test('edit_file and multi_edit handle files larger than one read (up to 4 MiB)', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bigedit-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const lines = Array.from({ length: 12000 }, (_, i) => 'export const v' + i + ' = ' + i + '; // generated value padding');
+  await writeFile(path.join(root, 'gen.js'), lines.join('\n') + '\n');
+  const ctx = { root, session: { config: {} }, autoApprove: true, approval: async () => true, env: process.env };
+  await executeTool('read_file', { path: 'gen.js', offset: 11000, limit: 20 }, ctx);
+  const edited = await executeTool('edit_file', { path: 'gen.js', old_string: 'export const v11005 = 11005;', new_string: 'export const v11005 = -1;' }, ctx);
+  assert.equal(edited.changed, true);
+  assert.ok(edited.beforeBytes > 256 * 1024);
+  const multi = await executePowerTool('multi_edit', { path: 'gen.js', edits: [{ old_string: 'v11006 = 11006;', new_string: 'v11006 = -2;' }] }, ctx, root);
+  assert.equal(multi.changed ?? true, true);
+});
