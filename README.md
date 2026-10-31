@@ -83,6 +83,7 @@ OASIS follows the familiar agent-harness design (tools, subagents, hooks, MCP, s
 | "It installed a hallucinated package" | **Package vetting** looks names up on npm, PyPI or crates.io before installing. |
 | "It burns tokens" | **Lean tool loading** defers rarely used tool schemas (~2.7k tokens per request), **read dedup** skips unchanged re-reads, and a compact subagent schema keeps big agent lists cheap. |
 | "It reads the whole repo and still gets lost" | **`repo_map`** / `/map` gives a ranked outline of files and their top-level symbols, so the agent opens the right file at the right line first. |
+| "I have to leave my editor to ask for every small change" | **`oasis watch`** acts on comments ending in `AI!` (change) or `AI?` (question) as you save files, with normal approvals. |
 | "It retries the same failing command forever" | **Retry guard** stops repeated identical failures and asks for a different approach. |
 
 The complete list is in the [changelog](CHANGELOG.md). These guards reduce common failure modes; they do not make any model infallible.

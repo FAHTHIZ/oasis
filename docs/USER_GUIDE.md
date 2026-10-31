@@ -666,6 +666,16 @@ OASIS keeps durable notes across sessions on its own, so you don't repeat yourse
 - `/memory` lists them; `/memory search WORDS`, `/memory show ID`, `/memory forget ID`, `/memory add NOTE` (start with `user:` for every project) and `/memory path` manage them. `/remember [focus]` asks the agent to review the conversation and save what is worth keeping. The same commands work as `oasis memory ...` in a terminal.
 - Turn it off with `"autoMemory": false` in settings or `OASIS_AUTO_MEMORY=0`.
 
+## Watch mode: AI comments in your editor
+
+`oasis watch` keeps running in a terminal next to your editor and acts on comments you leave in the code, in any language and comment style (`//`, `#`, `--`, `/* */`, `<!-- -->`, `;`):
+
+- A comment ending in `AI!` asks for a change, for example `// validate the email before saving AI!`.
+- A comment ending in `AI?` asks a question about the code; OASIS answers in the terminal and does not edit.
+- A comment ending in plain `AI` adds context and never starts a run by itself; it is included with the next `AI!` or `AI?`.
+
+OASIS collects every AI comment in the files Git tracks or would track (ignored files and secret files such as `.env` are skipped), sends them with a few lines of surrounding code, and asks the agent to remove each comment it handled. Comments that were already present when the watcher started do not fire until you add a new `AI!` or `AI?`, and the agent's own edits do not trigger another run. Normal permissions apply: edits and commands still ask for approval unless you pass `--yes`. The conversation is kept between requests, so later comments can refer to earlier ones. Press Ctrl+C to stop.
+
 ## Clearing local data
 
 `oasis purge [PATH]` removes the saved transcripts and task metadata for one project, debug logs for those sessions, background-session entries and logs, the project's prompt-history lines, and its workspace-trust entry. File rewind checkpoints are kept in memory during the active session; they are not stored in the saved transcript. Without a path it opens a picker of the projects that have saved state. Options:
