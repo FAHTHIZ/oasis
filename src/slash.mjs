@@ -278,6 +278,20 @@ export async function runBuiltinCommand(name, argument, state) {
       sessionOptions.model = selected;
       return { output: 'Model set to ' + selected + '.' };
     }
+    case 'agents': {
+      const definitions = await loadAgentDefinitions(root, { env });
+      const available = Object.values(definitions).sort((a, b) => a.name.localeCompare(b.name));
+      if (!available.length) return { output: 'No subagents are configured.' };
+      const lines = ['Available subagents:'];
+      for (const agent of available) {
+        const source = agent.source === 'built-in' ? 'built-in' :
+          agent.source.startsWith('plugin:') ? agent.source :
+            agent.source.startsWith('project:') ? 'project' : 'user';
+        lines.push('  ' + agent.name + ' [' + source + '] ' + agent.description);
+      }
+      lines.push('Use the task tool with subagent_type to launch one. /tasks lists running agents.');
+      return { output: lines.join('\\n') };
+    }
     case 'permissions': {
       const policy = session && session.permissions;
       if (!policy) return { output: 'Permission mode: default\nNo active permission policy.' };
