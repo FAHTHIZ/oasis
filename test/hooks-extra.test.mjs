@@ -40,6 +40,20 @@ test('PostToolUseFailure runs for failed tools (and PostToolUse does not)', asyn
   closeSession(session);
 });
 
+test('PostToolUseFailure can replace the error the model sees', async (t) => {
+  const root = await tmp(t);
+  const log = path.join(root, 'failures.jsonl');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'read_file', { path: 'missing.txt' }), { content: 'done' }]);
+  const session = await createSession({ root, config, settings: settingsWith({
+    PostToolUseFailure: [{ matcher: 'Read', ...command(recorder(log, JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUseFailure', updatedError: 'File not found. Try glob first.' } }))) }]
+  }) });
+  await runAgentTurn(session, 'read it');
+  const content = requests[1].messages.find((m) => m.role === 'tool').content;
+  assert.match(content, /File not found\. Try glob first\./);
+  assert.doesNotMatch(content, /ENOENT/);
+  closeSession(session);
+});
+
 test('PermissionRequest hooks approve or deny before the user is asked', async (t) => {
   const root = await tmp(t);
   const log = path.join(root, 'requests.jsonl');

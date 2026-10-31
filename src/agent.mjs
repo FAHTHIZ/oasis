@@ -3298,7 +3298,19 @@ async function runToolFailureHooks(session, name, args, error, context) {
     tool_input: args, error: String(error || '').slice(0, 8000)
   }, hookOptions(session, context.env));
   session.hookMessages.push(...failed.messages);
-  return [failed.reason, ...failed.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
+  const feedback = [failed.reason, ...failed.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
+  if (failed.updatedToolOutput === undefined) return feedback;
+  const out = failed.updatedToolOutput;
+  const replacement = out && typeof out === 'object' && !Array.isArray(out) ? out : { error: String(out).slice(0, 20000) };
+  return { feedback, replacement };
+}
+
+function applyFailureHookResult(result, hook) {
+  if (!hook) return result;
+  if (typeof hook === 'string') { result.hookFeedback = hook; return result; }
+  const next = { ...hook.replacement };
+  if (hook.feedback) next.hookFeedback = hook.feedback;
+  return next;
 }
 
 function availableToolNames(session) {
@@ -3482,8 +3494,7 @@ async function executeOneCallRaw(session, call, context, options) {
     if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
     if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;
     if (result && typeof result === 'object' && typeof result.error === 'string' && result.error) {
-      const feedback = await runToolFailureHooks(session, name, args, result.error, context);
-      if (feedback) result.hookFeedback = feedback;
+      result = applyFailureHookResult(result, await runToolFailureHooks(session, name, args, result.error, context));
     } else if (hasHooks(session.hooks, 'PostToolUse')) {
       const post = await runHooks('PostToolUse', {
         session_id: session.sessionId || 'unsaved',
@@ -3504,8 +3515,7 @@ async function executeOneCallRaw(session, call, context, options) {
     result = { error: error.message || String(error) };
     if (callContext && callContext.permissionHookDenial && !result.error.includes(callContext.permissionHookDenial)) result.error += ' (' + callContext.permissionHookDenial + ')';
     if (attemptedArgs && error.name !== 'AbortError') {
-      const feedback = await runToolFailureHooks(session, name, attemptedArgs, result.error, context).catch(() => '');
-      if (feedback) result.hookFeedback = feedback;
+      result = applyFailureHookResult(result, await runToolFailureHooks(session, name, attemptedArgs, result.error, context).catch(() => ''));
     }
   }
   if (options.onToolResult) options.onToolResult({ name, result, call });
