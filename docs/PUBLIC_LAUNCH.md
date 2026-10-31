@@ -1,55 +1,47 @@
-# OASIS public launch setup
+# OASIS public launch and discoverability
 
-The public landing page and repository metadata automation live in this repository. The landing page is separate from the root `index.html`, which remains the local browser workspace used by `oasis web`.
+This is the canonical guide for the static homepage, GitHub repository metadata and search-facing identity. It describes setup and automation, not a promise of search ranking or traffic.
 
-## What the launch workflow does
+## Homepage and deployment
 
-On pushes to `main` and when manually run on `main`, `.github/workflows/pages.yml`:
+The static public landing page is in `site/`. The root `index.html` is the actual local browser workspace and must remain separate. The `.github/workflows/pages.yml` workflow:
 
-1. Runs the existing app/runtime/evaluation checks plus the public-site checks.
-2. Enables GitHub Pages for the repository if necessary.
-3. Deploys the `site/` directory as the public homepage.
-4. Uses the verified deployment URL as the repository homepage.
-5. Applies and verifies the GitHub About description and 20 topics.
+1. Validates the application, evaluation fixtures and public site.
+2. Enables GitHub Pages when required.
+3. Deploys only the `site/` directory.
+4. Uses the actual deployment URL as the repository homepage.
+5. Applies and verifies the repository About description and topic list.
 
-Pull requests run validation only. They never receive the repository metadata credential.
+Pull-request runs validate only; they do not receive the repository administration secret.
 
-## One-time authorization required
+## One-time authorization
 
-GitHub protects repository description, homepage, and topic updates behind repository administration permissions. The normal Actions `GITHUB_TOKEN` cannot perform this settings update. The Pages action also requires a separate token to enable Pages on a repository that has not been enabled yet. The workflow reads one Actions secret; it never asks for a token in source code or logs.
+GitHub protects repository description, homepage and topic updates behind administration permissions. The workflow uses one Actions secret, `OASIS_REPO_ADMIN_TOKEN`. Create a fine-grained personal access token scoped only to `FAHTHIZ/oasis` with:
 
-Create a **fine-grained personal access token** scoped only to `FAHTHIZ/oasis` with these repository permissions:
+- **Administration: Read and write** — update About description, homepage and topics.
+- **Pages: Read and write** — enable and publish GitHub Pages.
 
-- **Administration: Read and write** — required for the About description, homepage, and topics.
-- **Pages: Read and write** — required to enable and publish GitHub Pages.
+Add the token at [OASIS repository Actions secrets](https://github.com/FAHTHIZ/oasis/settings/secrets/actions) as `OASIS_REPO_ADMIN_TOKEN`. Then run [Publish OASIS homepage and repository metadata](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml) on the `main` branch. The workflow skips deployment and repository metadata updates when the secret is absent and writes that outcome to its summary. Never commit the token or paste it into issues or chat.
 
-Keep the token private. Do not commit it to this repository or paste it into issues or chat.
+## Repository About identity
 
-Then add it as a repository Actions secret:
+**Product name:** OASIS  
+**Tagline:** Code. Automate. Flourish.  
+**Description:** Open-source, local-first AI coding agent and developer workspace with CLI, browser workspace, desktop packaging, multi-provider models, MCP, skills, hooks and agent workflows.  
+**License:** Apache-2.0
 
-1. Open [OASIS repository secrets](https://github.com/FAHTHIZ/oasis/settings/secrets/actions).
-2. Choose **New repository secret**.
-3. Set the name to `OASIS_REPO_ADMIN_TOKEN`.
-4. Paste the token into the secret value and save it.
-
-After the secret exists, open [Actions → Publish OASIS homepage and repository metadata](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml), select **Run workflow** on the `main` branch, and run it. A merge before the secret exists safely runs validation but skips the live deployment and settings update; the workflow summary will say so.
-
-## Metadata applied after deployment succeeds
-
-**Repository description**
-
-> Open-source AI coding agent and local-first developer workspace with a CLI, browser UI, multi-provider LLMs, MCP integrations, skills, hooks, memory, and subagents.
-
-**Topics**
+**Topics:**
 
 ```text
 ai-coding-agent coding-agent ai-agents developer-tools developer-workspace cli terminal-agent llm mcp model-context-protocol agent-skills agentic-workflows local-first open-source javascript nodejs automation subagents ollama multi-provider
 ```
 
-The homepage field is set to the actual URL returned by the deployment action, not a guessed value. If deployment fails, the metadata update does not run.
+The description and tags should reflect OASIS itself, not external products or unmeasured claims. Keep the quality and license badges factual; add release/download/benchmark badges only when a genuine release or result exists.
 
-## Search visibility
+## Search-facing content
 
-The landing page includes a descriptive title, search snippet, canonical URL, Open Graph metadata, `robots.txt`, and an XML sitemap. These foundations help discovery but do not guarantee search rankings or instant traffic. Once the page is public, add it to Google Search Console to monitor indexing.
+The static homepage includes a descriptive title, search snippet, canonical URL, Open Graph metadata, `robots.txt` and an XML sitemap. These foundations make the site easier to classify, but crawlers determine when to index pages and what snippets to display. Metadata is not a ranking promise.
 
-Keep repository badges factual: quality checks, Apache-2.0 license, and Node.js runtime. Add release/download/trending/benchmark badges only when there is a genuine release, verified data, or measured result to support them.
+After deployment, Google Search Console can be used to monitor indexing and request a crawl. A request is not a guarantee of indexing or ranking.
+
+For logo usage, colors, interface palette and alternative taglines, see [Brand](BRAND.md). For the actual product description and supported capabilities, use the [README](../README.md) and [project plan](PROJECT_PLAN.md).

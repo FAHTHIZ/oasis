@@ -1,19 +1,12 @@
 # Oasis OSS — Detailed User Guide
 
-For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](CURRENT_STATUS.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
+For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
 ---
 
 ## Install the terminal agent
 
-Requirements: Node.js 22+ and npm. Git is required for installing directly from this repository.
-
-~~~bash
-npm install -g git+https://github.com/FAHTHIZ/oasis.git#main
-oasis
-~~~
-
-To update later, run `oasis update`. It compares your installed commit with GitHub `main` and installs the newer version after you confirm. `oasis update --check` only reports the versions, and `--yes` skips the prompt.
+Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch.
 
 When you launch `oasis` for the first time without a configured model, Oasis shows three routes: use an API key, use the OmniRoute gateway, or use a local Ollama model. Press Enter to take the default OmniRoute route, choose `1`, `2`, or `3` explicitly, or choose `4` to set it up later. The first-run screen is designed for a person who does not yet know provider names. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation, gateway startup, and provider changes are confirmed and verified; free/keyless model routes depend on upstream availability and limits. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
 
@@ -936,7 +929,7 @@ Then open `http://localhost:8000`.
 
 When the local browser runtime is connected, choose **Run monitor** in the left navigation. The view lists recent coding-agent runs and provides a selected run's worker/team status and lifecycle timeline. It refreshes while the view is open; use **Refresh** to request an immediate update. If the runtime is not connected, open the **Agent** view and connect using the token printed by `oasis web`.
 
-The monitor reports lifecycle metadata, branch/worktree details, approval counts and available token totals—not full worker prompts or conversation transcripts. It uses the existing local task history; no separate hosted service is involved. The run record can survive a runtime restart, but the actual in-memory agent processes and pending approvals are not restored. If a restart interrupts work, former workers and outstanding approvals are explicitly marked interrupted rather than shown as live or still awaiting a click. For a completed/interrupted **workspace-mode** run, select it and choose **Open saved chat** (labelled **Review saved chat** after restart) to reopen the saved parent conversation in Agent. This lets you inspect context and choose a new user-directed step; it does not resurrect a dead worker or replay an old approval. The control is hidden for isolated worktree runs and while the browser already has an active agent turn. The monitor otherwise remains read-only: it does not pause/resume workers, resolve conflicting worktree diffs, or merge branches automatically. Quality Checks and publishing validation for the verified monitor and recovery action are linked in [Current status](CURRENT_STATUS.md); restart-safe orchestration remains future work.
+The monitor reports lifecycle metadata, branch/worktree details, approval counts and available token totals—not full worker prompts or conversation transcripts. It uses the existing local task history; no separate hosted service is involved. The run record can survive a runtime restart, but the actual in-memory agent processes and pending approvals are not restored. If a restart interrupts work, former workers and outstanding approvals are explicitly marked interrupted rather than shown as live or still awaiting a click. For a completed/interrupted **workspace-mode** run, select it and choose **Open saved chat** (labelled **Review saved chat** after restart) to reopen the saved parent conversation in Agent. This lets you inspect context and choose a new user-directed step; it does not resurrect a dead worker or replay an old approval. The control is hidden for isolated worktree runs and while the browser already has an active agent turn. The monitor otherwise remains read-only: it does not pause/resume workers, resolve conflicting worktree diffs, or merge branches automatically. Quality Checks and publishing validation for the verified monitor and recovery action are linked in [Current status](PROJECT_PLAN.md); restart-safe orchestration remains future work.
 
 ## Development and verification
 
@@ -961,7 +954,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 - Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions. Parallel subagents (the `task` tool) run in separate contexts, but they share one workspace, so Oasis does not resolve conflicting edits between them; give parallel agents separate files, read-only work, or `"isolation": "worktree"` so each one gets its own branch.
 - The agent runtime is reachable from the browser only when `oasis web` is running; opening the static GitHub Pages site or `index.html` alone does not provide runtime execution.
 - GitHub connection currently reuses GitHub CLI authentication (`gh auth login`) on the host; embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, creating repositories, branch/push/PR workflows, and fine-grained GitHub App scopes are not implemented yet.
-- The browser Terminal panel supports a PTY-backed interactive path with bundled xterm.js rendering when the optional native dependency is available. The lifecycle is not yet validated across all operating systems, and Termux/native PTY support remains experimental; see [the Alpha-confidence milestone](NEXT_MILESTONE.md).
+- The browser Terminal panel supports a PTY-backed interactive path with bundled xterm.js rendering when the optional native dependency is available. The lifecycle is not yet validated across all operating systems, and Termux/native PTY support remains experimental; see [the Alpha-confidence milestone](PROJECT_PLAN.md).
 - Browser projects/tasks/notes still use browser local storage and do not sync with the CLI workspace. Agent sessions are stored separately in the user-level Oasis session directory.
 - GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
 
@@ -991,7 +984,7 @@ The resulting terminal id can be used with:
 
 Example agent request: “Run `python` interactively, read its startup banner, evaluate `2 + 2`, show the result, then stop the session.” The command itself remains subject to OASIS's command policy; an interactive flag does not bypass blocked executable checks or approval.
 
-The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [Alpha-confidence milestone](NEXT_MILESTONE.md) for current platform limitations.
+The native `node-pty` component is an optional dependency. The browser workspace bundles xterm.js and has a PTY-backed interaction path, but automated native PTY integration currently covers Linux/Node.js 22 only; broader browser-terminal E2E, process-tree cleanup and Windows/macOS validation remain open. See [Install OASIS](INSTALL.md) and the [Alpha-confidence milestone](PROJECT_PLAN.md) for current platform limitations.
 
 ## Clearing local data
 

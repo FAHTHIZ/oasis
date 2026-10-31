@@ -1,102 +1,21 @@
 # Changelog
 
-OASIS is an open-source coding-agent project. This file records notable user-facing changes; it does not imply that a release has been published.
+This file records notable user-facing product changes. It does not imply that an entry has been published as a GitHub Release.
 
 ## Unreleased
 
-## 0.4.0 — 2026-10-31
+## 0.4.0 — prepared Beta version (not yet published)
 
-- Confirmed Beta as the public lifecycle label while the Beta confidence and release-quality gates remain open. Removed the stray literal newline from the Agent view and added checks for the sidebar brand asset and markup.
-- Added a credential-redaction regression for the malformed placeholder report.
-- Restricted unattended GitHub Action runs from starting language-server processes; repository test, lint, build, or type-check commands remain the verification path.
+- Expanded the local-first coding workspace across CLI, browser, editor integration and desktop packaging.
+- Added or extended multi-provider setup, optional cost-aware model routing, local Ollama/gateway paths and explicit provider verification.
+- Improved agent workflows with subagents, task coordination, task checkpoints, isolated worktrees, run monitoring and safer recovery records.
+- Expanded MCP, skills, hooks, native plugin packages and workflow automation.
+- Strengthened permission boundaries, command-risk handling, URL and DNS validation, secret redaction, bounded storage/output, process-tree cleanup and post-edit verification.
+- Improved installer resolution so supported installers select an immutable stable versioned commit rather than a moving branch.
+- Added evaluation report comparison and strengthened fixture validation/quarantine controls.
 
-- Made session shutdown await language-server process exit and background-agent cancellation, paused auto-dispatch during teardown, and added LSP shutdown and cleanup regressions. Current-head verification is required before marking this behavior verified.
-- Changed desktop release publication to require an explicit `v*` tag matching `package.json`; ordinary pushes to `main` still build and validate but cannot publish a release. Desktop installers remain unsigned.
-- Hardened CLI installers to fall back to the newest stable semantic-version Git tag when no GitHub Release object is available; when GitHub's REST API is rate-limited, they can use read-only Git tag transport before the public release-page fallback. Installs still use an immutable commit SHA.
-- Restored the missing token-estimation import used by mid-turn compaction, repaired evaluation cost-output reporting, added the missing /audit handler for the bundled multi-review workflow, and made the workspace-lock test close both local HTTP servers during teardown. Tightened the CI concurrency regression to distinguish release SHA pinning from the workflow concurrency key. Removed the duplicated evaluation source tail and restored the documented /add-dir and /artifact handlers. Added the read-only `/permissions` summary command for the active allow/ask/deny policy.
-- Added opt-in automatic model routing with user-configured easy/strong models, trusted-settings loading, model allow-list checks, per-turn route reporting, and pricing-based cost estimates.
-- Extended OASIS evaluation runs with optional easy/strong routing and per-task selected-model/cost reporting. Benchmark difficulty hints are controlled by pinned fixture metadata and are not used for ordinary interactive prompts.
-- Added explicit manual release publishing from `main`, gated on same-commit Quality, Pages, and installer checks; release assets include a SHA-256 manifest and the release is marked GitHub Latest.
-
-- Pinned the branch-deletion workflow's checkout and Node setup actions to exact commit SHAs, and added a regression test ensuring cleanup-policy tests must pass before the deletion step can run.
-
-
-- Refreshed the branch audit against main SHA db3d49c8729f8dc6e264dad294e878aeca0eed08: 40 non-main refs, 18 exact merged-PR heads, three additional behind-only refs, and four exact reviewed/superseded heads are eligible for guarded retirement. The cleanup workflow now runs the branch-cleanup, installer-hash and path-collision regression tests before attempting deletion. Current action and quality results remain pending.
-
-
-- Hardened branch cleanup so exact merged PR heads and SHA-pinned superseded refs can be retired from their direct evidence without first depending on a separate compare request. Protected/default/open-PR branches remain preserved; transient compare failures still retain uncertain refs. The cleanup workflow now cancels stale in-flight cleanup attempts in favor of the latest main revision.
-
-
-- Fixed README installer bootstrap races by using unique temporary filenames and reliable cleanup on Unix/Termux and Windows. Added tests for the published installer checksums, immutable source revision and Termux documentation link.
-- Added a guarded branch-retirement workflow with tests for default/protected/open-PR preservation, merged-PR evidence, exact audited replacement heads, content-equivalent diffs and fail-closed handling of incomplete or oversized comparisons. Branch removals must be confirmed from the action log.
-
-
-- Added structured shared-task progress checkpoints with bounded fields, basic credential redaction, active-claim enforcement, and recovery after saved-session restoration. The feature preserves progress for a replacement worker; it does not resurrect the old worker process. Current-main CI is pending.
-
-- Hardened persisted session and backup storage: session loads/listings use bounded descriptor reads, symlinked sessions are rejected/omitted, backup manifests are capped at 64 KiB, and restore rejects POSIX/Windows absolute paths and traversal segments. Added adversarial storage regressions; current-main CI is pending.
-
-- Hardened isolated worktree Git subprocesses: no-shell spawning, 4 MiB per-stream output bounds, explicit timeout results, and process-tree TERM/KILL escalation now apply to worktree creation, diff inspection and merge preflight. Added a child/grandchild timeout regression; current-main CI is pending.
-
-- Hardened HTTP MCP header helpers: stdout uses a strict 64 KiB byte cap, stderr retention is bounded, the production timeout is fixed at 10 seconds, and overflow/timeout/client shutdown terminate the helper process tree. Added regression tests for overflow, timeout and in-flight shutdown; current-head CI is pending.
-
-- Revised CI concurrency to keep only the latest run per ref and avoid queueing obsolete test matrices during rapid development. Publishing groups are isolated by ref so pull requests cannot cancel main. Added regression coverage; current-head validation remains pending.
-
-- Hardened task-history event sanitization for unusual JSON keys and added one focused persistence regression test. Current-head CI is pending.
-
-- Native Oasis plugins now validate author/license/minimum version metadata, support `subagents/` manifests, and can be installed or validated from local folders and explicit HTTPS/SSH/file Git URLs. Remote sources use bounded non-shell Git cloning and are removed after staging; no package scripts run automatically. Tests and current-head CI validation are tracked separately.
-
-- Simplified the invalid-version regression assertion and removed duplicated native-plugin verification wording; current-main CI remains the release gate.
-
-- Hardened native plugin rollback: uninstall restores the package and registry if settings updates fail. Version ordering handles hyphenated prerelease identifiers and large numeric core values; regression tests cover subagent grants. Current-main CI is pending.
-
-- Removed a case-colliding duplicate pull-request template, retained the richer lowercase canonical template, added a repository-wide case-only path collision regression test, and documented intentional exact-content copies used by static-site deployment and frozen evaluation snapshots. Refreshed the branch inventory for all 37 non-main refs and identified 22 retirement candidates; divergent feature/security branches remain preserved. No remote ref is claimed deleted because the available GitHub connection has no delete-ref operation.
-
-
-- Fixed native plugin capability exposure so explicitly granted agent definitions are included in the compatibility manifest; added semantic prerelease ordering and validation tests, and removed duplicate MCP coverage. Current-main CI is pending.
-
-- Added native local plugin packages using root `plugin.json`, allowlisted bundled commands/skills/agents/hooks/MCP server files, explicit permissions, namespaced commands, conflict checks, versioned updates and permission-diff previews/confirmation. Tests cover installation, permission isolation, unrequested grants, conflicts, updates, MCP paths and uninstall; current-head CI pending.
-
-- LSP completion responses now explicitly disclose when language-server diagnostics were unavailable even if independent checks passed; `/diagnostics` directs the agent to collect both LSP and project-checker results and report Errors, Warnings, Information, and Verification unavailable separately.
-
-- Hardened GitHub Action completion wording so an incomplete verification result is not described as finished successfully; added a focused status test.
-- Updated path-scoped memory coverage to assert matching-only on-demand loading, restored the reviewer style's evidence-first wording, and made the `/audit` test fixture self-contained. Latest full-suite validation is still pending.
-
-- Added an explicit clean protocol-level LSP fixture to the post-edit verification happy-path tests, fixed diagnostic offset calculation in the fake LSP, and added `/context all` category/caveat regression coverage. The tests are committed for current-head CI; no passing result is claimed yet.
-
-- Added `/artifact NAME` with an auto-refreshing local-only investigation page and structured event store. Active sessions record task starts, commands, changed files, test outcomes and tool errors; users can add hypotheses/rollback notes, list/open/stop/delete artifacts, and common secrets are redacted before local storage. Focused tests added; current-head CI pending.
-
-- Added a license-consistency regression test covering the full Apache-2.0 sections/application appendix, package metadata, README badge/statement, and project-license claims in public documentation.
-
-- Completed the project license consistency audit on main: aligned DISCOVERABILITY.md, PUBLIC_LAUNCH.md and USER_GUIDE.md with Apache-2.0, while retaining accurate MIT references for third-party dependencies and projects. Root LICENSE and package metadata were already Apache-2.0; no project-wide NOTICE requirement was identified.
-
-- Wired durable session messages into `/notify` and `/inbox`; agent-turn lifecycle marks live sessions busy/idle, queued delivery waits while the target is busy, cached target objects are revalidated against the live registry, and inbox read/dismiss actions are available. Message text is displayed as untrusted data and never returned as an agent prompt. Focused tests and current-head CI pending.
-
-- Implemented the requested built-in response styles (default, concise, explanatory, architect, reviewer) and the /style command while retaining /output-style compatibility. Added style-switching tests for one-active-style and preserving project instructions; CI verification pending.
-- Corrected path-scoped rules so frontmatter-scoped instructions stay out of base memory and load only for matching paths. Added safe glob matching and broad-to-specific/user-to-project rule ordering tests; CI verification pending.
-
-- Added canonical permission-mode normalization across settings, `PermissionPolicy`, `/mode`, and `--permission-mode`. `manual` maps to `default`; `accept-edits` and `accept_edits` map to `acceptEdits`. This is an alias-only change; no new permission bypass was added. Current-head CI is pending.
-
-- Updated STATUS.md directly on main to use four evidence/maturity categories and to keep current-head verification unclaimed until fresh checks pass on the exact revision. Added a focused verification matrix; this is a documentation/status change, not a test result.
-
-- Added detailed `/context all` accounting and a two-step `/compact` preview/confirm/cancel flow. Must-preserve records are bounded, included in compaction summaries and persisted across session save/resume; stale previews are rejected without mutating history. Focused tests cover redaction and freshness checks; full current-head CI remains pending.
-
-- Added JSON and self-contained offline HTML exports for Arena comparisons, including paired per-task wins/ties/losses and sample/provenance caveats; report writes are atomic and refuse symlink destinations.
-- Added structured post-edit verification evidence to agent results and surfaced it in the CLI/browser: changed files, diff-review state, latest recognized check result, LSP status and blockers. Missing optional LSP tooling is disclosed without substituting for a real code check.
-- Added post-edit LSP verification for source edits where a language server is configured, including baseline-aware diagnostics and explicit unavailable states when a server does not answer.
-- Added a completion blocker for new or unclassified LSP errors and focused tests for TypeScript-style diagnostics, diagnostic timeouts, startup failure, and the /fix gate. Full current-head checks remain pending.
-- Added a built-in `/audit` workflow that runs isolated security, performance, test-coverage and dependency reviewers, merges duplicate findings, verifies up to four high/critical findings, and separates verified from unverified results. Worker timeout/cancellation stress coverage and full current-head validation remain open.
-
-- Added a root capability status with Implemented, Actively hardening, Experimental, and Not yet guaranteed sections.
-- Added a source-backed implementation plan and capability matrix for LSP verification, multi-agent audit, cross-session messaging, context controls, deterministic policy, session forking/steering, plugin packaging, investigation artifacts, scoped rules/styles, and remote execution.
-- Audited the root license: the current Apache-2.0 body includes sections 1–9 and the application appendix, so no unsupported rewrite was made.
-- Recorded that historical CI results do not verify the current main head. A root NOTICE is deferred until a project-wide attribution obligation is established.
-
-- Added the first-run model connection choices to the browser/desktop workspace.
-- Added fixed-localhost Ollama model discovery for the first-run flow.
-- Added Electron OS-backed encryption for API keys entered through the desktop provider form, with fail-closed behavior if encryption is unavailable.
-- Added secure-secret storage regression tests and CI screenshots for desktop and 390px browser layouts.
+**Release boundaries:** this version remains Beta. Desktop installers are unsigned; automatic desktop updates and publisher provenance are not configured. There is no native Android APK. The 33-fixture evaluator is not a representative repository-scale coding benchmark. See [the v0.4.0 Beta notes](docs/releases/v0.4.0.md) and [project plan](docs/PROJECT_PLAN.md).
 
 ## 0.3.0
 
-See the Git history and [release page](https://github.com/FAHTHIZ/oasis/releases) for changes included in the existing package version.
-- Added `docs/REMOTE_RUNNER_DESIGN.md`, a security-first design for local, self-hosted and future optional managed execution; no runner implementation is claimed.
+See the [existing release page](https://github.com/FAHTHIZ/oasis/releases/tag/v0.3.0) for the published 0.3.0 assets and notes.
