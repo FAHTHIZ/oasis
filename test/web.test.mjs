@@ -1326,6 +1326,67 @@ test('Ollama discovery cannot be used by a non-loopback client', async (t) => {
 });
 
 
+test('browser task worktree finalization scans secrets and skips repository-controlled Git hooks', async () => {
+  const source = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('const finalizeTaskWorktree = async () =>');
+  assert.notEqual(start, -1);
+  const end = source.indexOf('\n    };', start);
+  assert.ok(end > start);
+  const finalizer = source.slice(start, end);
+  assert.match(finalizer, /blockSecrets:\s*true/);
+  assert.match(finalizer, /skipHooks:\s*true/);
+});
+
+test('browser task history API exposes interrupted task recovery state after runtime restart', async (t) => {
+  const root = await tempDir();
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const store = createCloudTaskStore(root, { env });
+  const interruptedId = randomUUID();
+  const timestamp = new Date().toISOString();
+  await store.save({
+    id: interruptedId,
+    type: 'agent',
+    title: 'Work interrupted before restart',
+    status: 'running',
+    sessionId: randomUUID(),
+    workspaceName: 'oasis',
+    createdAt: timestamp,
+    events: [{ id: 1, type: 'started', at: timestamp, data: { isolation: 'workspace' } }],
+    nextEventId: 2,
+    result: null,
+    error: null
+  });
+
+  const app = await startOasisWebServer({
+    root, host: '127.0.0.1', port: 0, env,
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const base = 'http://127.0.0.1:' + app.port;
+  const headers = { authorization: 'Bearer ' + app.token };
+  const denied = await fetch(base + '/api/jobs/' + interruptedId);
+  assert.equal(denied.status, 401);
+
+  const listResponse = await fetch(base + '/api/jobs', { headers });
+  assert.equal(listResponse.status, 200);
+  const list = await listResponse.json();
+  const listed = list.jobs.find((item) => item.id === interruptedId);
+  assert.ok(listed, 'interrupted task should remain in durable task history');
+  assert.equal(listed.status, 'interrupted');
+
+  const detailResponse = await fetch(base + '/api/jobs/' + interruptedId, { headers });
+  assert.equal(detailResponse.status, 200);
+  const detail = await detailResponse.json();
+  assert.equal(detail.status, 'interrupted');
+  assert.equal(detail.events.at(-1).type, 'interrupted');
+  assert.match(detail.error, /runtime restarted/i);
+  assert.match(detail.events.at(-1).data.message, /live processes and pending approvals were not restored/i);
+});
+
 test('browser monitor only merges a committed isolated worktree after an explicit current review', async (t) => {
   const root = await tempDir();
   const home = await tempDir();
