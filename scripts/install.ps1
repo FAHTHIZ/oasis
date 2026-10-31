@@ -83,6 +83,19 @@ try {
     $apiFailure = $_.Exception.Message
 }
 
+$tagApiFailure = ''
+if (-not $ReleaseCommit) {
+    try {
+        $tagList = Invoke-RestMethod -Uri "$ApiBase/tags?per_page=100" -Headers $ApiHeaders -TimeoutSec 15
+        $stableTag = Resolve-OasisStableTagFromList -Tags @($tagList)
+        $ReleaseTag = [string]$stableTag.Tag
+        $ReleaseCommit = [string]$stableTag.CommitSha
+        Write-Host "No published stable release object was available; using stable Git tag $ReleaseTag."
+    } catch {
+        $tagApiFailure = $_.Exception.Message
+    }
+}
+
 if (-not $ReleaseCommit) {
     Write-Host "GitHub API unavailable ($apiFailure); trying the official public release page..."
     try {
@@ -101,7 +114,7 @@ if (-not $ReleaseCommit) {
             $ReleaseCommit = Resolve-OasisCommitFromAtom -Content ([string]$atomPage.Content)
         }
     } catch {
-        Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; public release page: " + $_.Exception.Message)
+        Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; tags API: " + $tagApiFailure + "; public release page: " + $_.Exception.Message)
         exit 1
     }
 }

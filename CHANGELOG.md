@@ -12,6 +12,7 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 - Made session shutdown await language-server process exit and background-agent cancellation, paused auto-dispatch during teardown, and added LSP shutdown and cleanup regressions. Current-head verification is required before marking this behavior verified.
 - Changed desktop release publication to require an explicit `v*` tag matching `package.json`; ordinary pushes to `main` still build and validate but cannot publish a release. Desktop installers remain unsigned.
+- Hardened CLI installers to fall back to the newest stable semantic-version Git tag when no GitHub Release object is available, while still resolving and installing an immutable commit SHA.
 - Added opt-in automatic model routing with user-configured easy/strong models, trusted-settings loading, model allow-list checks, per-turn route reporting, and pricing-based cost estimates.
 - Extended OASIS evaluation runs with optional easy/strong routing and per-task selected-model/cost reporting. Benchmark difficulty hints are controlled by pinned fixture metadata and are not used for ordinary interactive prompts.
 - Added explicit manual release publishing from `main`, gated on same-commit Quality, Pages, and installer checks; release assets include a SHA-256 manifest and the release is marked GitHub Latest.

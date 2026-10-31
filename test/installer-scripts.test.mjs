@@ -29,6 +29,7 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
   for (const script of [shell, powershell]) {
     assert.match(script, /api\.github\.com\/repos\/FAHTHIZ\/oasis/);
     assert.match(script, /releases\/latest/);
+    assert.match(script, /tags\?per_page=100/);
     assert.match(script, /commits\//);
     assert.match(script, /archive\/\$?(OASIS_COMMIT|ReleaseCommit)/);
     assert.match(script, /Latest stable release/);
@@ -46,6 +47,34 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
   assert.match(install, /TERMUX\.md/);
 });
 
+
+test('shell release resolver falls back to the newest stable Git tag when no Release object exists', async () => {
+  const shell = await read('scripts/install.sh');
+  const embedded = shell.match(/node --input-type=module -e '\n([\s\S]*?)\n'\n}/);
+  assert.ok(embedded, 'installer must contain its embedded Node release resolver');
+  const olderSha = '1111111111111111111111111111111111111111';
+  const latestSha = '2222222222222222222222222222222222222222';
+  const prereleaseSha = '3333333333333333333333333333333333333333';
+  const tags = [
+    { name: 'v9.9.9', commit: { sha: olderSha } },
+    { name: 'v9.10.0', commit: { sha: latestSha } },
+    { name: 'v10.0.0-beta.1', commit: { sha: prereleaseSha } },
+    { name: 'release-candidate', commit: { sha: prereleaseSha } }
+  ];
+  const harness = [
+    'globalThis.fetch = async (url) => {',
+    '  const target = String(url);',
+    '  if (target === "https://api.github.com/repos/FAHTHIZ/oasis/releases/latest") return { ok: false, status: 404, json: async () => ({ message: "Not Found" }) };',
+    '  if (target === "https://api.github.com/repos/FAHTHIZ/oasis/tags?per_page=100") return { ok: true, status: 200, json: async () => ' + JSON.stringify(tags) + ' };',
+    '  throw new Error("Unexpected URL: " + target);',
+    '};',
+    embedded[1]
+  ].join('\n');
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout.trim(), 'v9.10.0\n' + latestSha);
+  assert.match(result.stderr, /using stable Git tag v9\.10\.0/);
+});
 
 test('shell release resolver is valid JavaScript and falls back from API rate limits', async () => {
   const shell = await read('scripts/install.sh');
