@@ -688,6 +688,7 @@ export function createOasisWebServer(options = {}) {
           approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
           askUser: (question) => questionFor(job, question),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
+          onCompaction: (info) => emit(job, 'context_compacted', info),
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
