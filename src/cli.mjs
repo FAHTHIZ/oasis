@@ -77,6 +77,7 @@ function printHelp() {
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
+    '  oasis exec PROMPT [flags]  Same as oasis -p (non-interactive run)',
     '  oasis watch [--yes]       Act on code comments ending in AI! (change) or AI? (question)',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
@@ -2788,6 +2789,8 @@ async function manageExternalExtensions(root, args, autoApprove) {
 
 async function main() {
   const rawArgs = process.argv.slice(2);
+  // `oasis exec PROMPT` is an alias for `oasis -p PROMPT` (Codex CLI muscle memory).
+  if (rawArgs[0] === 'exec') rawArgs[0] = '-p';
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
   if (process.env.CLAUDE_CODE_SAFE_MODE === '1' || process.env.OASIS_SAFE_MODE === '1') { SESSION_OPTIONS.safeMode = true; process.env.OASIS_SAFE_MODE = '1'; }
   // Sessions are saved by default (resume with -c / -r / /resume), like Claude Code.

@@ -695,7 +695,7 @@ Running background sessions are skipped.
 
 ## Headless mode for scripts and CI
 
-`oasis -p "task"` runs one task without any prompts and prints the answer, like `claude -p`.
+`oasis -p "task"` runs one task without any prompts and prints the answer, like `claude -p`. `oasis exec "task"` is the same command for people used to `codex exec`.
 
 ~~~bash
 oasis -p "summarize what changed in the last commit"
