@@ -11,21 +11,25 @@ const read = (file) => readFile(path.join(ROOT, file), 'utf8');
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 test('published installer checksums match the exact checked-in scripts', async () => {
-  const [readme, shell, powershell, powershellHelper] = await Promise.all([read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1'), read('scripts/release-resolution.ps1')]);
-  assert.equal(readme.match(/expected=([a-f0-9]{64})/)?.[1], sha256(shell));
-  assert.equal(readme.match(/\$expected='([a-f0-9]{64})'/)?.[1], sha256(powershell));
-  assert.equal(readme.match(/\$helperExpected='([a-f0-9]{64})'/)?.[1], sha256(powershellHelper));
-  assert.equal(readme.match(/\*\*Published installer SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(shell));
-  assert.equal(readme.match(/\*\*Published Windows installer SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(powershell));
-  assert.equal(readme.match(/\*\*Published Windows resolver helper SHA-256:\*\*\s*`([a-f0-9]{64})`/)?.[1], sha256(powershellHelper));
-  assert.match(readme, /mktemp.*oasis-install/);
-  assert.match(readme, /NewGuid\(\)\.ToString\('N'\)/);
-  assert.ok(readme.includes('scripts/release-resolution.ps1'), 'Windows quick install must download the companion resolver helper.');
-  assert.ok(readme.includes('$helperExpected='), 'Windows quick install must verify the companion helper checksum before running.');
+  const [installGuide, shell, powershell, powershellHelper] = await Promise.all([
+    read('docs/INSTALL.md'), read('scripts/install.sh'), read('scripts/install.ps1'), read('scripts/release-resolution.ps1')
+  ]);
+  assert.equal(installGuide.match(/expected=([a-f0-9]{64})/)?.[1], sha256(shell));
+  assert.equal(installGuide.match(/\$expected='([a-f0-9]{64})'/)?.[1], sha256(powershell));
+  assert.equal(installGuide.match(/\$helperExpected='([a-f0-9]{64})'/)?.[1], sha256(powershellHelper));
+  assert.equal(installGuide.match(/\*\*Installer SHA-256:\*\*\s*\x60([a-f0-9]{64})\x60/)?.[1], sha256(shell));
+  assert.equal(installGuide.match(/\*\*Windows installer SHA-256:\*\*\s*\x60([a-f0-9]{64})\x60/)?.[1], sha256(powershell));
+  assert.equal(installGuide.match(/\*\*Windows resolver helper SHA-256:\*\*\s*\x60([a-f0-9]{64})\x60/)?.[1], sha256(powershellHelper));
+  assert.match(installGuide, /mktemp.*oasis-install/);
+  assert.match(installGuide, /NewGuid\(\)\.ToString\('N'\)/);
+  assert.ok(installGuide.includes('scripts/release-resolution.ps1'), 'Windows install guide must include the companion resolver helper.');
+  assert.ok(installGuide.includes('$helperExpected='), 'Windows install guide must verify the companion helper checksum before running.');
 });
 
 test('installers resolve the latest stable release to an immutable commit SHA', async () => {
-  const [readme, shell, powershell, termux, install] = await Promise.all([read('README.md'), read('scripts/install.sh'), read('scripts/install.ps1'), read('docs/TERMUX.md'), read('docs/INSTALL.md')]);
+  const [shell, powershell, termux, install] = await Promise.all([
+    read('scripts/install.sh'), read('scripts/install.ps1'), read('docs/TERMUX.md'), read('docs/INSTALL.md')
+  ]);
   for (const script of [shell, powershell]) {
     assert.match(script, /api\.github\.com\/repos\/FAHTHIZ\/oasis/);
     assert.match(script, /releases\/latest/);
@@ -38,18 +42,16 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
     assert.match(script, /Latest stable release/);
     assert.doesNotMatch(script, /d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a|v0\.3\.0/);
   }
-  assert.match(readme, /latest stable GitHub release/i);
+  assert.match(install, /latest stable versioned Git tag/i);
   assert.match(termux, /latest stable GitHub release/i);
-  assert.match(install, /latest stable GitHub release/i);
   assert.match(termux, /official.*Termux/i);
-  assert.match(readme, /command -v curl/);
-  assert.match(readme, /command -v wget/);
+  assert.match(install, /command -v curl/);
+  assert.match(install, /command -v wget/);
   assert.match(termux, /command -v curl/);
   assert.match(termux, /command -v wget/);
   assert.match(termux, /Android is not yet a fully verified support target/i);
   assert.match(install, /TERMUX\.md/);
 });
-
 
 test('shell release resolver falls back to the newest stable Git tag when no Release object exists', async () => {
   const shell = await read('scripts/install.sh');

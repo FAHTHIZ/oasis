@@ -8,8 +8,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => readFile(path.join(root, relative), 'utf8');
 
 test('the canonical project license and package/README declarations agree on Apache-2.0', async () => {
-  const [license, pkgText, readme, status] = await Promise.all([
-    read('LICENSE'), read('package.json'), read('README.md'), read('STATUS.md')
+  const [license, pkgText, readme, projectPlan] = await Promise.all([
+    read('LICENSE'), read('package.json'), read('README.md'), read('docs/PROJECT_PLAN.md')
   ]);
   const pkg = JSON.parse(pkgText);
   assert.match(license, /Apache License[\s\S]*Version 2\.0, January 2004/);
@@ -19,17 +19,15 @@ test('the canonical project license and package/README declarations agree on Apa
   assert.equal(pkg.license, 'Apache-2.0');
   assert.match(readme, /license-Apache--2\.0/);
   assert.match(readme, /Apache License 2\.0 — see \[LICENSE\]\(LICENSE\)/);
-  assert.match(status, /Apache-2\.0/);
+  assert.match(projectPlan, /\*\*Lifecycle:\*\* Beta/);
 });
 
 test('published documentation describes the project as Apache-2.0, not MIT', async () => {
-  const [discoverability, launch, guide] = await Promise.all([
-    read('docs/DISCOVERABILITY.md'), read('docs/PUBLIC_LAUNCH.md'), read('docs/USER_GUIDE.md')
+  const [launch, brand, guide] = await Promise.all([
+    read('docs/PUBLIC_LAUNCH.md'), read('docs/BRAND.md'), read('docs/USER_GUIDE.md')
   ]);
-  assert.match(discoverability, /Project license:\*\* Apache-2\.0/);
-  assert.doesNotMatch(discoverability, /MIT license badge|\*\*License:\*\* MIT/);
-  assert.match(discoverability, /Apache-2\.0 license badge/);
-  assert.match(launch, /Apache-2\.0 license/);
-  assert.doesNotMatch(launch, /MIT license/);
+  assert.match(launch, /\*\*License:\*\* Apache-2\.0/);
+  assert.doesNotMatch(launch, /MIT license/i);
+  assert.match(brand, /Code\. Automate\. Flourish\./);
   assert.match(guide, /## License\s+\s+Apache License 2\.0\. See \[LICENSE\]\(\.\.\/LICENSE\)\./);
 });

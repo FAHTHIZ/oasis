@@ -64,7 +64,7 @@ After reviewing the explanation, try:
 
 ## Important Beta boundaries
 
-OASIS is Beta software. Desktop installers are unsigned, and automatic desktop updates are not configured. The optional Linux/macOS OS sandbox is disabled by default and is not full filesystem-read isolation; native Windows OS sandboxing is not implemented. Approval prompts are not a substitute for OS isolation.
+OASIS is in Beta. Desktop installers are unsigned, and automatic desktop updates are not configured. The optional Linux/macOS OS sandbox is disabled by default and is not full filesystem-read isolation; native Windows OS sandboxing is not implemented. Approval prompts are not a substitute for OS isolation.
 
 There is no native Android APK. The CLI can be tried in Termux, but native PTY and background execution are not guaranteed. The browser workspace does not yet fully synchronize project/task/note state with the CLI. Agent run records can survive restarts, but live worker processes and pending approvals are not resurrected.
 
@@ -98,4 +98,4 @@ The check pipeline validates the public site and benchmark fixtures, runs the No
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE).

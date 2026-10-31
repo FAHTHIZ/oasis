@@ -29,11 +29,11 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
 
 test('public product lifecycle is Beta, not Alpha', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
-  const status = await readFile(new URL('../docs/CURRENT_STATUS.md', import.meta.url), 'utf8');
+  const status = await readFile(new URL('../docs/PROJECT_PLAN.md', import.meta.url), 'utf8');
   assert.match(readme, /status-beta-/);
   assert.match(readme, /OASIS is in beta/i);
   assert.doesNotMatch(readme, /status-alpha|OASIS is in alpha/i);
-  assert.match(status, /public product lifecycle is Beta/i);
+  assert.match(status, /\*\*Lifecycle:\*\* Beta/);
 });
 
 test('desktop Beta release auto-publishes a new main version only after all gates', async () => {
