@@ -1369,6 +1369,17 @@ async function runVercelSkillsCli(root, cliArgs, description, autoApprove) {
   return { ok: true };
 }
 
+async function installSkill(root, name) {
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(name || '')) throw new Error('Skill name must use lowercase letters, numbers, and hyphens. Usage: oasis skills install NAME');
+  const source = path.join(APP_ROOT, 'skills', name, 'SKILL.md');
+  const destination = path.join(root, '.oasis', 'skills', name, 'SKILL.md');
+  try { await access(source); } catch { throw new Error('No bundled skill named "' + name + '". Use oasis skills list.'); }
+  try { await access(destination); stdout.write('Skill already exists at ' + destination + '; leaving it unchanged.\n'); return; } catch {}
+  await mkdir(path.dirname(destination), { recursive: true });
+  await copyFile(source, destination, 0);
+  stdout.write('Installed skill "' + name + '" into ' + destination + '. It will be loaded as project context in the next agent session.\n');
+}
+
 async function manageSkills(root, args, autoApprove) {
   const action = String(args[0] || 'list').toLowerCase();
   const rest = args.slice(1);
