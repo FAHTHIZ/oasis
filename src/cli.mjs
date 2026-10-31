@@ -77,6 +77,7 @@ function printHelp() {
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
+    '  oasis watch [--yes]       Act on code comments ending in AI! (change) or AI? (question)',
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
@@ -2502,6 +2503,29 @@ async function interactive(root, autoApprove, persistence = {}) {
 }
 
 
+async function watchCommentsCommand(root, autoApprove, persistence = {}) {
+  await ensureModelProviderSetup(root);
+  const { watchAiComments } = await import('./ai-comments.mjs');
+  let session = null;
+  stdout.write('Watching ' + root + ' for AI comments. End a comment with AI! to request a change or AI? to ask a question; plain AI adds context. Press Ctrl+C to stop.\n');
+  const watcher = watchAiComments(root, {
+    onTrigger: async ({ byFile, prompt }) => {
+      const where = [...byFile.entries()].map(([file, items]) => file + ':' + items.map((item) => item.line).join(',')).join('  ');
+      stdout.write('\n[watch] ' + where + '\n');
+      try { session = await runPrompt(prompt, root, autoApprove, session, persistence); }
+      catch (error) { stderr.write('[watch] ' + (error && error.message || error) + '\n'); }
+      stdout.write('\n[watch] Waiting for the next AI! or AI? comment.\n');
+    },
+    onError: (error) => stderr.write('[watch] ' + (error && error.message || error) + '\n')
+  });
+  await new Promise((resolve) => {
+    const finish = () => { watcher.stop(); resolve(); };
+    process.once('SIGINT', finish);
+    process.once('SIGTERM', finish);
+  });
+  if (session) closeSession(session);
+}
+
 async function startWebWorkspace(root, args) {
   await ensureModelProviderSetup(root);
   let host = '127.0.0.1';
@@ -3043,6 +3067,7 @@ async function main() {
   if (command === 'update') return await updateOasis(rest);
   if (command === 'uninstall') return await uninstallOasis(rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
+  if (command === 'watch') return await watchCommentsCommand(workspace, autoApprove || rest.includes('--yes'), persistence);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();
     if (!planPrompt) throw new Error('Usage: oasis plan "Describe the task to plan"');
