@@ -76,6 +76,20 @@ Both OASIS and Claude Code modes accept **--timeout-seconds** (30–3600 seconds
 
 The runner writes JSON reports in the OASIS config directory under **eval-results/** by default. You can select a different destination using **OASIS_EVAL_RESULTS_DIR**.
 
+### Optional model-routing trials
+
+OASIS evals can opt into a second model for the easy tier:
+
+```sh
+node src/cli.mjs eval --task clamp-integer --trials 3 \
+  --route-easy-model LOW_COST_MODEL_ID \
+  --route-strong-model STRONG_MODEL_ID --yes
+```
+
+These flags apply only to OASIS eval runs and cannot be combined with `--claude-code`. The evaluator passes each pinned fixture's difficulty label as an explicit routing hint. A fixture marked `small` can therefore test the easy model even if it includes a code edit. This is a controlled benchmark override; normal interactive prompts use the conservative read-only classifier and do not inherit fixture labels.
+
+Routed reports record requested and selected models, route tier/reason, per-model cost estimates, and the estimated difference versus the strong model. Estimates use the routed task's observed token counts and configured model pricing; a strong-model answer could use a different number of tokens. Missing price data is reported as unknown. Compare routed and unrouted runs as distinct configurations with the same task snapshot, verifier, trial count, timeout, and provider constraints.
+
 Compare the two reports using the generated paths:
 
 ```sh

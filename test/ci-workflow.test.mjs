@@ -25,11 +25,32 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
   assert.ok(publishing.includes('group: oasis-public-launch-${{ github.ref }}'));
 });
 
-test('desktop artifacts publish only from explicit package-version tags', async () => {
+test('public product lifecycle is Beta, not Alpha', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const status = await readFile(new URL('../docs/CURRENT_STATUS.md', import.meta.url), 'utf8');
+  assert.match(readme, /status-beta-/);
+  assert.match(readme, /OASIS is in beta/i);
+  assert.doesNotMatch(readme, /status-alpha|OASIS is in alpha/i);
+  assert.match(status, /public product lifecycle is Beta/i);
+});
+
+test('desktop release requires a version tag or explicit opt-in from main', async () => {
   const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
-  assert.ok(workflow.includes("tags: ['v*']"), 'version tags must trigger desktop release validation');
-  assert.ok(workflow.includes("if: startsWith(github.ref, 'refs/tags/v')"), 'publishing must be restricted to explicit version tags');
-  assert.ok(workflow.includes('TAG_NAME: ${{ github.ref_name }}'));
-  assert.ok(workflow.includes('expected="v$(node -p "require(\'./package.json\').version")"'));
-  assert.ok(!workflow.includes('git push origin "$tag"'), 'the build must not create and publish tags from an ordinary main push');
+  const notes = await readFile(new URL('../docs/releases/v0.4.0.md', import.meta.url), 'utf8');
+  assert.ok(workflow.includes("tags: ['v*']"));
+  assert.ok(workflow.includes('publish_release:'));
+  assert.ok(workflow.includes('default: false'));
+  assert.ok(workflow.includes('type: boolean'));
+  assert.ok(workflow.includes('inputs.publish_release == true'));
+  assert.ok(workflow.includes("github.ref == 'refs/heads/main'"));
+  assert.ok(workflow.includes('Require same-commit quality, site, and installer gates'));
+  for (const name of ['quality.yml', 'pages.yml', 'installer-checks.yml']) assert.ok(workflow.includes(name));
+  assert.ok(workflow.includes('target_commitish: ${{ steps.release-version.outputs.target_commitish }}'));
+  assert.ok(workflow.includes('make_latest: true'));
+  assert.ok(workflow.includes('body_path: ${{ steps.release-version.outputs.notes_path }}'));
+  assert.ok(workflow.includes('sha256sum'));
+  assert.ok(!workflow.includes('git push origin "$tag"'));
+  assert.match(notes, /OASIS 0\.4\.0.*Beta/i);
+  assert.match(notes, /unsigned/i);
+  assert.match(notes, /SHA256SUMS/);
 });

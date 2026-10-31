@@ -4,14 +4,17 @@ OASIS is an open-source coding-agent project. This file records notable user-fac
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-31
+
 - Confirmed Beta as the public lifecycle label while the Beta confidence and release-quality gates remain open. Removed the stray literal newline from the Agent view and added checks for the sidebar brand asset and markup.
 - Added a credential-redaction regression for the malformed placeholder report.
 - Restricted unattended GitHub Action runs from starting language-server processes; repository test, lint, build, or type-check commands remain the verification path.
 
 - Made session shutdown await language-server process exit and background-agent cancellation, paused auto-dispatch during teardown, and added LSP shutdown and cleanup regressions. Current-head verification is required before marking this behavior verified.
 - Changed desktop release publication to require an explicit `v*` tag matching `package.json`; ordinary pushes to `main` still build and validate but cannot publish a release. Desktop installers remain unsigned.
-
-## 0.4.0 — 2026-10-30
+- Added opt-in automatic model routing with user-configured easy/strong models, trusted-settings loading, model allow-list checks, per-turn route reporting, and pricing-based cost estimates.
+- Extended OASIS evaluation runs with optional easy/strong routing and per-task selected-model/cost reporting. Benchmark difficulty hints are controlled by pinned fixture metadata and are not used for ordinary interactive prompts.
+- Added explicit manual release publishing from `main`, gated on same-commit Quality, Pages, and installer checks; release assets include a SHA-256 manifest and the release is marked GitHub Latest.
 
 - Pinned the branch-deletion workflow's checkout and Node setup actions to exact commit SHAs, and added a regression test ensuring cleanup-policy tests must pass before the deletion step can run.
 

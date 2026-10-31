@@ -55,7 +55,7 @@ If the checksum does not match, stop and do not run the downloaded script. Read 
    - **Linux (x86_64):** `.AppImage` or `.deb`
 3. Open it, choose a project folder, and follow the model setup.
 
-The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured. Android does not have a native APK release yet; use the Termux install command above.
+The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured. Releases include a `SHA256SUMS` manifest; after downloading assets into one folder, run `sha256sum -c SHA256SUMS` there on Linux or macOS. Checksums detect transfer corruption but are not a publisher signature. Android does not have a native APK release yet; use the Termux install command above.
 
 ## What is OASIS?
 
@@ -70,9 +70,10 @@ OASIS is released under the **Apache-2.0 license**. Apache License 2.0 — see [
 - **Model choice:** supported cloud providers, compatible endpoints, OmniRoute, and local Ollama setups.
 - **Review before action:** approval prompts, file snapshots, and verification commands help you inspect changes rather than blindly trusting a completion message.
 - **Extensible:** MCP tools, skills, hooks, plugins, and bounded subagents add capabilities.
+- **Cost-aware routing:** optional user-configured routing uses a lower-cost model only for clearly read-only requests; ambiguous, security-sensitive, and change-oriented work stays on the strong model.
 - **Open source:** Apache-2.0 licence.
 
-We do not publish token-savings claims: there is no current, representative measurement that supports a number.
+We do not claim measured token savings or Claude Code parity. Routing estimates use configured model prices and observed task tokens; they are not a counterfactual benchmark or billing quote.
 
 ## Limits to know
 

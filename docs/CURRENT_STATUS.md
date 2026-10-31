@@ -1,3 +1,13 @@
+## Cost-aware model routing — 2026-10-31
+
+- Added opt-in `/routing` configuration for user-selected easy and strong model IDs, loaded only from trusted user settings.
+- Ordinary terminal and browser prompts use a conservative read-only classifier. The evaluation harness can separately supply pinned fixture-difficulty hints for controlled routed trials.
+- Per-turn summaries and evaluation reports expose selected models and pricing-based cost estimates. Comparisons use observed token counts and are not measured counterfactuals or guaranteed savings.
+
+**Verification boundary:** the feature and its focused regression tests are present on `main`. Treat it as implemented, not as evidence of real-world cost savings or capability parity; current release readiness is governed by the same-commit Quality, Pages, installer, and desktop workflows.
+
+---
+
 ## Phase 2 workspace shell and navigation — October 30, 2026
 
 The main browser shell now follows the redesign brief's chat-first navigation model.
