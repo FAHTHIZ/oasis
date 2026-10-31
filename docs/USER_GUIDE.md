@@ -861,6 +861,8 @@ These are on by default and each can be switched off.
 | Feature | What it does | Opt out |
 | --- | --- | --- |
 | Change guard | Rejects edits that replace code with placeholders like `// ... rest unchanged`; warns on large unexplained shrinkage; flags fix-circling back to an earlier broken state. | — |
+| Standing corrections | "Stop saying 'load-bearing'" (or `never say "..."`) bans that phrase: it is restated every turn so compaction cannot drop it, saved to user memory so new sessions inherit it, and a reply that still uses it is sent back once for a rewrite. Preset bans with `"avoidPhrases": ["..."]` in settings; remove one with `oasis memory forget`. | `OASIS_STANDING_CORRECTIONS=0` (no memory save) |
+| Non-interactive commands | Agent commands run with pagers and editors disabled and credential prompts off, so `git log`, `git commit` without `-m`, and password-prompting clones fail fast instead of hanging. | `OASIS_NONINTERACTIVE_ENV=0` |
 | Commit secret scan | `git_commit` refuses commits whose added lines contain real-looking credentials and shows `file:line` with a masked preview. | `OASIS_COMMIT_SECRET_SCAN=0` |
 | Package vetting | `install_package` refuses names missing from npm/PyPI/crates.io and requires a human for typosquat-like, brand-new or barely-downloaded packages. | `OASIS_PACKAGE_VETTING=0` |
 | Git safety snapshots | Before a git command that discards local work (`checkout .`, `restore`, `switch --discard-changes`, `stash drop` …), the working tree and untracked files are saved to `refs/oasis/safety/…`. Restore with the command shown in the result, or list with `git for-each-ref refs/oasis/safety`. | `OASIS_GIT_SAFETY=0` |
