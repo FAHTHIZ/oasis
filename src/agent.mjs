@@ -3390,6 +3390,11 @@ export async function runAgentTurn(session, prompt, options = {}) {
     }
     const known = taskUsage.costKnown && taskUsage.strongModelCostKnown;
     const savingsUSD = known ? taskUsage.strongModelCostUSD - taskUsage.costUSD : null;
+    if (session && session.webUsage && route.enabled && route.tier === 'easy') {
+      session.webUsage.routingTasks = Number(session.webUsage.routingTasks || 0) + 1;
+      if (savingsUSD !== null) session.webUsage.routingSavingsUSD = Number(session.webUsage.routingSavingsUSD || 0) + savingsUSD;
+      else session.webUsage.routingSavingsKnown = false;
+    }
     return {
       ...result,
       modelRouting: {
@@ -3591,9 +3596,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       protocol: session.config && session.config.protocol,
       env: options.env || process.env
     });
-    const stepCost = estimateCostUsd(pricedModel, usage, { config: session.config, overrides: session.pricing || {}, env: options.env || process.env });
+    const stepPricing = { config: session.config, overrides: session.pricing || {}, env: options.env || process.env };
+    const stepCost = estimateCostUsd(pricedModel, usage, stepPricing);
+    const costKnown = priceFor(pricedModel, stepPricing) !== null;
     session.costUsd = (session.costUsd || 0) + stepCost;
-    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, model: pricedModel, step: step + 1 });
+    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, costKnown, model: pricedModel, step: step + 1 });
     if (session.maxBudgetUsd > 0 && session.costUsd >= session.maxBudgetUsd) throw new BudgetExceededError(session.costUsd, session.maxBudgetUsd);
     let truncationNotice = '';
     if (assistant.truncated) {
