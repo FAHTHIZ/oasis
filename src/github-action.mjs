@@ -105,9 +105,109 @@ function commentBody(status, details = []) {
   return ['**Oasis** ' + status, ...details].join('\n\n');
 }
 
+function safeVerificationText(value, maximum = 240) {
+  return String(value == null ? '' : value)
+    .replace(/[^A-Za-z0-9 _./:,-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maximum);
+}
+
+export function verificationIsComplete(verification) {
+  if (!verification || typeof verification !== 'object' || Array.isArray(verification)) return false;
+  const required = verification.required === true;
+  const diffReviewed = !required || verification.diffReviewed === true;
+  const check = verification.lastCheck && typeof verification.lastCheck === 'object'
+    ? verification.lastCheck
+    : null;
+  const projectCheckPassed = !required || verification.checkRequired !== true ||
+    Boolean(check && check.passed === true && check.exitCode === 0);
+  const lspHasErrors = Array.isArray(verification.lsp) && verification.lsp.some((item) =>
+    item && (item.status === 'errors' || Number(item.newErrorCount || 0) > 0)
+  );
+  return verification.complete === true && diffReviewed && projectCheckPassed && !lspHasErrors &&
+    (!Array.isArray(verification.issues) || verification.issues.length === 0);
+}
+
+export function formatVerificationReport(verification) {
+  const lines = ['## Verification'];
+  if (!verification || typeof verification !== 'object' || Array.isArray(verification)) {
+    lines.push('- Result: **UNCONFIRMED** — the runtime did not return structured verification details.');
+    lines.push('- Do not interpret the model summary alone as proof that checks passed.');
+    return lines.join('\n');
+  }
+
+  const required = verification.required === true;
+  const complete = verificationIsComplete(verification);
+  const changed = Array.isArray(verification.changedPaths) ? verification.changedPaths : [];
+  const check = verification.lastCheck && typeof verification.lastCheck === 'object'
+    ? verification.lastCheck
+    : null;
+  const allLsp = Array.isArray(verification.lsp) ? verification.lsp : [];
+  const lsp = allLsp.slice(0, 20);
+
+  lines.push('- Result: **' + (required ? (complete ? 'VERIFIED' : 'INCOMPLETE') : 'NOT REQUIRED') + '**');
+  lines.push('- Changed files: ' + (changed.length ? changed.length.toLocaleString('en-US') : 'none'));
+  if (required) lines.push('- Diff review: ' + (verification.diffReviewed === true ? 'complete' : 'incomplete'));
+
+  if (verification.checkRequired === true) {
+    if (check && check.passed === true && check.exitCode === 0) {
+      lines.push('- Repository check: **' + String(check.kind || 'check') + ' passed** (exit code 0).');
+    } else if (check) {
+      lines.push('- Repository check: **not passed** (' + String(check.kind || 'check') +
+        ', exit code ' + (Number.isInteger(check.exitCode) ? check.exitCode : 'unknown') + ').');
+    } else {
+      lines.push('- Repository check: **not recorded**; source changes require a passing project check.');
+    }
+  } else if (required) {
+    lines.push('- Repository check: not required for these changed file types.');
+  } else {
+    lines.push('- Repository check: not required because no files changed.');
+  }
+
+  if (lsp.length) {
+    for (const item of lsp) {
+      const file = safeVerificationText(item && item.path || 'source file', 180);
+      if (item && item.status === 'unavailable') {
+        const reason = safeVerificationText(item.reason || 'language server unavailable', 240);
+        lines.push('- Language server: not run for "' + file + '" (' + reason + ').');
+      } else if (item && item.status === 'not_applicable') {
+        const reason = safeVerificationText(item.reason || 'no language server is configured for this file type', 240);
+        lines.push('- Language server: not applicable for "' + file + '" (' + reason + ').');
+      } else if (item && item.status === 'errors') {
+        lines.push('- Language server: ' + Number(item.newErrorCount || 0) + ' new error(s) reported for "' + file + '".');
+      } else if (item && item.status === 'warnings') {
+        lines.push('- Language server: ' + Number(item.newWarningCount || 0) + ' warning(s) reported for "' + file + '".');
+      } else {
+        lines.push('- Language server: diagnostics clean for "' + file + '".');
+      }
+    }
+  } else if (required) {
+    lines.push('- Language server: no diagnostic result was recorded.');
+  }
+  if (allLsp.length > lsp.length) {
+    lines.push('- Additional language-server results omitted from this PR summary: ' + (allLsp.length - lsp.length) + '.');
+  }
+
+  if (lsp.some((item) => item && item.status === 'unavailable') && complete &&
+      check && check.passed === true && check.exitCode === 0) {
+    lines.push('- Acceptance basis: the repository ' + String(check.kind || 'check') +
+      ' passed. The optional language-server check was unavailable and was not counted as a pass.');
+  }
+  if (!complete && Array.isArray(verification.issues) && verification.issues.length) {
+    lines.push('- Outstanding items: ' + verification.issues.slice(0, 20).map((item) =>
+      safeVerificationText(item, 300)
+    ).join('; '));
+    if (verification.issues.length > 20) {
+      lines.push('- Additional outstanding items omitted: ' + (verification.issues.length - 20) + '.');
+    }
+  }
+  return lines.join('\n');
+}
+
 // Commits whatever the agent changed and pushes it. For pull requests from this
 // repository, it pushes to the PR branch. Otherwise it pushes a new branch and opens a PR.
-export async function publishChanges({ root, trigger, context, request, summary }) {
+export async function publishChanges({ root, trigger, context, request, summary, verification = null }) {
   const status = await git(['status', '--porcelain'], root);
   if (!status) return { changed: false };
   await git(['config', 'user.name', context.gitName], root).catch(() => {});
@@ -128,33 +228,45 @@ export async function publishChanges({ root, trigger, context, request, summary 
   await git(['commit', '-q', '-m', subject, '-m', 'Requested by @' + (trigger.author || 'unknown') + ' and made by Oasis.'], root);
   await git(['push', '-q', context.remote, 'HEAD:refs/heads/' + branch], root);
   if (!sameRepoPr) {
+    const prBody = (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') +
+      summary.slice(0, 48000) + '\n\n' + formatVerificationReport(verification);
     pullRequest = await request('POST', '/repos/' + context.repository + '/pulls', {
       title: subject,
       head: branch,
       base: trigger.isPullRequest ? context.prBaseRef || context.defaultBranch : context.baseBranch || context.defaultBranch,
-      body: (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') + summary.slice(0, 60000)
+      body: prBody
     });
   }
   return { changed: true, branch, pullRequest, files: status.split('\n').length };
 }
 
-export function actionStatus(result, published, summary) {
-  if (result && result.is_error) return 'ran into a problem (' + result.subtype + ').';
-  const text = String(summary || '');
-  const languageServerNotApproved =
-    /^Verification incomplete:/im.test(text) &&
-    /LSP verification unavailable[^\n]*Starting the .+ language server was not approved\./i.test(text);
-  if (languageServerNotApproved) {
-    return published && published.changed
-      ? 'pushed changes; language-server check was not run.'
-      : 'language-server check was not run.';
+export function actionStatus(result, published, summary, verification = result && result.verification) {
+  if (result && (result.is_error || /^error_/.test(String(result.subtype || '')))) {
+    return 'ran into a problem (' + String(result.subtype || 'execution error') + ').';
   }
-  if (/^Verification incomplete:/im.test(text)) {
+
+  if (verification && typeof verification === 'object') {
+    if (!verificationIsComplete(verification)) {
+      return published && published.changed
+        ? 'pushed changes, but verification is incomplete.'
+        : 'verification is incomplete.';
+    }
+    if (verification.required === true) {
+      return published && published.changed
+        ? 'verified and pushed changes.'
+        : 'verified changes.';
+    }
+    return published && published.changed ? 'finished and pushed changes.' : 'finished.';
+  }
+
+  if (/^Verification incomplete:/im.test(String(summary || ''))) {
     return published && published.changed
       ? 'pushed changes, but verification is incomplete.'
       : 'verification is incomplete.';
   }
-  return published && published.changed ? 'finished and pushed changes.' : 'finished.';
+  return published && published.changed
+    ? 'pushed changes, but verification status is unavailable.'
+    : 'finished; no code changes were verified.';
 }
 
 export async function runAction(options = {}) {
@@ -222,7 +334,7 @@ export async function runAction(options = {}) {
       maxTurns: Number(input(env, 'max_turns', '40')) || 40,
       appendSystemPrompt: [
         input(env, 'append_system_prompt'),
-        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. If no relevant check passes, report verification as incomplete.'
+        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. Report which check kind ran and whether its exit code was zero. A disabled or unavailable language server is not a passing check; a relevant project check must pass. Never claim verification is complete unless the runtime verification gate reports complete.'
       ].filter(Boolean).join('\n\n'),
       ...(options.runOptions || {})
     });
@@ -230,19 +342,22 @@ export async function runAction(options = {}) {
     result = { is_error: true, subtype: 'error_during_execution', result: error.message };
   }
   const summary = String(result && result.result || '').trim() || '(no summary)';
+  const verification = result && result.verification && typeof result.verification === 'object'
+    ? result.verification
+    : null;
   let published = { changed: false };
   let publishError = null;
   if (!result.is_error) {
-    try { published = await publishChanges({ root, trigger, context, request, summary }); }
+    try { published = await publishChanges({ root, trigger, context, request, summary, verification }); }
     catch (error) { publishError = error.message; }
   }
-  const details = [summary.slice(0, 60000)];
-  if (published.changed && published.pullRequest) details.push('Opened ' + published.pullRequest.html_url + ' from `' + published.branch + '`.');
-  else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to `' + published.branch + '`.');
+  const details = [summary.slice(0, 48000), formatVerificationReport(verification)];
+  if (published.changed && published.pullRequest) details.push('Opened ' + published.pullRequest.html_url + ' from "' + published.branch + '".');
+  else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to "' + published.branch + '".');
   if (publishError) details.push('Could not push the changes: ' + publishError);
   if (result.permission_denials && result.permission_denials.length) details.push('<details><summary>' + result.permission_denials.length + ' action(s) were not allowed</summary>\n\n' + result.permission_denials.map((item) => '- ' + (item.tool_name || 'tool') + ': ' + item.detail).join('\n') + '\n</details>');
   if (runUrl) details.push('[View the run](' + runUrl + ')');
-  const status = actionStatus(result, published, summary);
+  const status = actionStatus(result, published, summary, verification);
   const body = commentBody(status, details);
   if (progress && progress.id) await request('PATCH', '/repos/' + repository + '/issues/comments/' + progress.id, { body }).catch((error) => log('Could not update the comment: ' + error.message));
   else if (trigger.number) await request('POST', '/repos/' + repository + '/issues/' + trigger.number + '/comments', { body }).catch((error) => log('Could not post the comment: ' + error.message));
