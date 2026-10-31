@@ -1066,7 +1066,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.equal(usageEvents[0].model, 'fixture-model');
   assert.equal(usageEvents[0].step, 1);
   const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
-  assert.match(continuity, /The completed earlier rounds read large\\.txt repeatedly/);
+  assert.match(continuity, /The completed earlier rounds read large\.txt repeatedly/);
   assert.ok(compactions[0].afterChars < compactions[0].beforeChars);
 });
 
