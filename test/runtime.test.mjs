@@ -1059,7 +1059,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.equal(compactions[0].removedToolResults, 3);
   assert.equal(compactions[0].usedModelSummary, true);
   assert.ok(compactions[0].savedTokens > 0);
-  assert.match(compactions[0].note, /^Saved about [\\d,]+ tokens/);
+  assert.match(compactions[0].note, /^Saved about [\d,]+ tokens/);
   assert.equal(compactions[0].notesSaved, true);
   assert.ok(usageEvents.length > 0);
   assert.equal(usageEvents[0].costKnown, false, 'unknown model prices must not look like free usage');
