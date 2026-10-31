@@ -88,7 +88,7 @@ export async function isPrivateBrowserRequest(rawUrl, lookupImpl = lookup) {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
   let host = parsed.hostname.toLowerCase();
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
-  if (host.endsWith('.')) host = host.slice(0, -1);
+  host = host.replace(/\.+$/, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
       host.endsWith('.internal') || host.endsWith('.home.arpa') ||
       host === 'metadata' || host === 'metadata.google.internal' || (!host.includes('.') && isIP(host) === 0)) return true;
