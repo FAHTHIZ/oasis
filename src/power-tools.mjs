@@ -447,6 +447,22 @@ export function shellCommandBlocked(command) {
   return null;
 }
 
+// Commands that attach to or control applications the user already has open.
+// A rule or sandbox auto-allow never covers these (anthropics/claude-code#106370:
+// COM automation attached to the user's PowerPoint and Quit() closed it).
+const APP_CONTROL_PATTERNS = [
+  [/-ComObject\b|\bGetActiveObject\b|\bCreateObject\s*\(|\bwin32com\b|\bcomtypes\.client\b/i, 'COM automation can attach to Office or other apps you have open'],
+  [/\bosascript\b|\btell\s+application\b|\bSystem Events\b/i, 'AppleScript can control or quit apps you have open'],
+  [/\b(xdotool|ydotool|wmctrl|xte|cliclick|nircmdc?|AutoHotkey\w*)\b/i, 'desktop automation sends input to or closes your windows'],
+  [/\b(Stop-Process|taskkill|tskill|killall|pkill|xkill)\b|\bkill\s+-9?\s*\$\(|\.(Quit|CloseMainWindow)\s*\(/i, 'it can close or kill applications you have open']
+];
+
+export function appControlRisk(command) {
+  const text = String(command || '');
+  for (const [pattern, reason] of APP_CONTROL_PATTERNS) if (pattern.test(text)) return reason;
+  return null;
+}
+
 async function runShell(root, args, context, flavor = 'sh') {
   const command = String(args.command || '').trim();
   if (!command) throw new Error('Provide a shell command.');
@@ -473,9 +489,11 @@ async function runShell(root, args, context, flavor = 'sh') {
   const { guardInstallCommand } = await import('./package-vetting.mjs');
   const install = await guardInstallCommand(command, null, { env: context.env || process.env, fetchImpl: context.fetchImpl || globalThis.fetch });
   if (install.blocked) return { command, ...install.blocked };
-  const autoAllowed = !install.forceAsk && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));
+  const appRisk = appControlRisk(command);
+  const bypass = Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions');
+  const autoAllowed = !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));
   if (!autoAllowed) {
-    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox);
+    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (appRisk ? 'Warning: ' + appRisk + '. Unsaved work in those apps could be lost.\n' : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk));
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };
   }
   if (context.signal && context.signal.aborted) {
