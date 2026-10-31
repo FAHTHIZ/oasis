@@ -75,7 +75,8 @@ runs:
         OASIS_BASE_URL: ${{ inputs.base_url }}
         OASIS_MODEL: ${{ inputs.model }}
         OASIS_AUTO_MEMORY: '0'
-        # Never launch language-server processes in unattended runs.
+        # PR code is untrusted: never auto-launch its language-server processes.
+        # The Action uses the runtime's structured project-check result instead.
         OASIS_DISABLE_LSP: '1'
         INPUT_PROMPT: ${{ inputs.prompt }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
