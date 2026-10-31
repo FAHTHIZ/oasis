@@ -68,3 +68,12 @@ test('the browser server delivers every asset referenced by the app shell', asyn
     assert.ok((await response.text()).length > 0, asset + ' must not be empty');
   }
 });
+
+test('service worker serves app CSS/JS network-first so updates are never mixed with stale assets', async () => {
+  const sw = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
+  const tail = sw.slice(sw.indexOf("startsWith('/assets/vendor/')"));
+  assert.ok(tail.length > 40, 'vendor files are the only cache-first branch');
+  const appBranch = tail.slice(tail.indexOf('return;'));
+  assert.match(appBranch, /event\.respondWith\(\s*fetch\(request\)/, 'non-vendor assets must try the network first');
+  assert.match(appBranch, /caches\.match\(request\)/, 'and fall back to the cache offline');
+});
