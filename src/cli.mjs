@@ -853,7 +853,7 @@ function endStream() {
 function describeToolStart({ name, args = {}, subagent }) {
   let detail = '';
   if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
-  else if (name === 'run_shell') detail = String(args.command || '');
+  else if (name === 'run_shell' || name === 'auto_test') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
   if (detail.length > 140) detail = detail.slice(0, 137) + '...';
@@ -1744,6 +1744,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
+        if (name === 'auto_test' && result && result.passed) stdout.write('[auto-test] passed in ' + (Math.round(result.durationMs / 100) / 10) + 's\n');
         if (name === 'report_findings' && result && !result.error) { endStream(); stdout.write('\n[findings]\n' + formatFindings(session.reportedFindings, { color: colorEnabled(stdout) }) + '\n'); }
         if (verboseEnabled(session)) { const shown = verboseToolOutput(name, result, { color: colorEnabled(stdout) }); if (shown) stdout.write(shown + '\n'); }
       },

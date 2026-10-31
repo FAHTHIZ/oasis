@@ -342,8 +342,8 @@ export function toolLabel(name) {
 export function describeTool({ name, args = {}, subagent }, { color = true } = {}) {
   let detail = '';
   if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
-  if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
-  else if (name === 'run_shell') detail = String(args.command || '');
+  else if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
+  else if (name === 'run_shell' || name === 'auto_test') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
   if (detail.length > 140) detail = detail.slice(0, 137) + '...';

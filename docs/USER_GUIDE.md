@@ -666,6 +666,10 @@ OASIS keeps durable notes across sessions on its own, so you don't repeat yourse
 - `/memory` lists them; `/memory search WORDS`, `/memory show ID`, `/memory forget ID`, `/memory add NOTE` (start with `user:` for every project) and `/memory path` manage them. `/remember [focus]` asks the agent to review the conversation and save what is worth keeping. The same commands work as `oasis memory ...` in a terminal.
 - Turn it off with `"autoMemory": false` in settings or `OASIS_AUTO_MEMORY=0`.
 
+## Auto-test after edits
+
+Set `"autoTest": "npm test"` (or `{ "command": "pytest -q", "maxAttempts": 3, "timeoutSeconds": 600 }`) in your user settings, or export `OASIS_AUTO_TEST="npm test"`, and OASIS runs that command itself whenever the agent has edited files and is about to finish. If it fails or times out, the tail of the output goes back to the agent with instructions to fix the cause, not to weaken or skip tests, and the cycle repeats up to `maxAttempts` times (default 3, at most 10). A passing run satisfies the post-edit check requirement, and the result appears as `verification.autoTest` in `--output-format json`. The command runs from the workspace root with `CI=1`. Because it runs a shell command, an `autoTest` key in a repository's `.oasis/settings.json` is ignored until you trust that workspace (`oasis trust`). `OASIS_AUTO_TEST=0` turns it off for one run. Subagents do not run it; the parent task does.
+
 ## Watch mode: AI comments in your editor
 
 `oasis watch` keeps running in a terminal next to your editor and acts on comments you leave in the code, in any language and comment style (`//`, `#`, `--`, `/* */`, `<!-- -->`, `;`):
