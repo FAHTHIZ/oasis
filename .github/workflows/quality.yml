@@ -9,7 +9,7 @@ permissions:
 concurrency:
   # Let an active quality run finish so the branch badge always gets a real result.
   # GitHub keeps only the newest pending run for this group when more pushes arrive.
-  group: oasis-quality-v14-${{ github.ref }}
+  group: oasis-quality-v15-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   integrity:
