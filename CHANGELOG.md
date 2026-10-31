@@ -4,6 +4,21 @@ This file records notable user-facing product changes. It does not imply that an
 
 ## Unreleased
 
+Reliability and token-efficiency work driven by common coding-agent complaints:
+
+- **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
+- **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
+- **Tolerant edit matching** — `edit_file` and `multi_edit` recover from CRLF, trailing whitespace, smart quotes and indentation drift, and give a closest-match hint instead of a bare "not found".
+- **Read dedup** — unchanged re-reads return a short pointer instead of the whole file again (`readDedup: false` / `OASIS_READ_DEDUP=0`).
+- **Follow-up ledger** — deferred TODOs the agent mentions are captured in `.oasis/followups.json`; manage with `/followups [all|done ID|drop ID|clear]`.
+- **Secret shield** — credentials in tool output are masked as `«secret:ID»` placeholders before reaching the model and restored only inside tool arguments (`secretShield: false` / `OASIS_SECRET_SHIELD=0`).
+- **Pipe-masked exit warnings** — `cmd | tail` style commands that hide a failing exit status are flagged so "tests pass" claims are not based on a masked result.
+- **Background watchdog** — `max_seconds` for background commands, stuck notices after `OASIS_BACKGROUND_STUCK_SECONDS` (default 300) without output, and fixed missing exit notifications for background `run_shell`.
+- **`/scope` lock** — restrict edits to given paths (`OASIS_EDIT_SCOPE`) to stop edits beyond the requested scope.
+- **Stream watchdog** — long streams are no longer killed by a 120s whole-request timer; idle streams are detected (`OASIS_STREAM_IDLE_SECONDS`, default 120) and can trigger the fallback model. `OASIS_REQUEST_TIMEOUT_SECONDS` overrides the timeout.
+- **Tool aliases** — Claude Code style tool names (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `TodoWrite`, …) and argument shapes map onto OASIS tools; unknown names get did-you-mean suggestions.
+- Fixed `oasis skills install` (missing `installSkill`) and the plugin-URL error path in `zip.mjs`.
+
 ## 0.4.0 — prepared Beta version (not yet published)
 
 - Expanded the local-first coding workspace across CLI, browser, editor integration and desktop packaging.
