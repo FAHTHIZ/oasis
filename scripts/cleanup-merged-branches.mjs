@@ -35,7 +35,6 @@ export const AUDITED_SUPERSEDED_HEADS = new Map([
   ['fix/gate1-site-mark-assertion', { sha: 'a949fff353370c4902234162a0a843397d45ba78', paths: ['.github/scripts/browser-e2e.mjs', '.github/workflows/quality.yml', 'index.html', 'scripts/check-site.mjs', 'scripts/vendor-terminal.mjs', 'src/web.mjs', 'sw.js', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs', 'test/web-terminal-optional.test.mjs'] }],
   ['fix/gate1-static-asset-routes', { sha: 'fae5b813f8e5147e40de04970d6f45a246f60660', paths: ['index.html', 'src/web.mjs', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs'] }],
   ['test/gate1-browser-and-asset-smoke', { sha: '73d6baecc843fa336c88366f3c57d549673bf2c1', paths: ['.github/scripts/browser-e2e.mjs', 'index.html', 'src/web.mjs', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs'] }],
-  ['ux/chat-first-step-0', { sha: 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6', paths: ['index.html', 'scripts/check-site.mjs', 'test/web.test.mjs'] }]
 ]);
 
 export function classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads = new Map()) {
