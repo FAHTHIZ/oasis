@@ -4,7 +4,7 @@
 
 <h1 align="center">OASIS</h1>
 <p align="center"><strong>Code. Automate. Flourish.</strong></p>
-<p align="center">An open-source, local-first AI coding agent and developer workspace.</p>
+<p align="center">An open-source, local-first AI coding agent and developer workspace. OASIS is in Beta.</p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
