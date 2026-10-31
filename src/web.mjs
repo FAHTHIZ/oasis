@@ -14,8 +14,9 @@ import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
-import { expandFileMentions } from './commands.mjs';
+import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCustomCommands } from './commands.mjs';
 import { visionEnabled, imageInputCapability } from './images.mjs';
+import { loadSettings } from './settings.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
@@ -548,7 +549,13 @@ export function createOasisWebServer(options = {}) {
       const importedCommand = incomingMessage.startsWith('/')
         ? await resolveImportedSlashCommand(taskRoot, incomingMessage, { env })
         : null;
-      const message = importedCommand ? importedCommand.prompt : incomingMessage;
+      // Project, user and plugin custom commands (/name args) and skills (/skill-name args) work in
+      // the browser too, like the terminal. Built-in commands keep precedence.
+      const slashName = !importedCommand && (incomingMessage.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s|$)/i) || [])[1];
+      const expandedCommand = slashName && !Object.hasOwn(BUILTIN_COMMANDS, slashName.toLowerCase())
+        ? await expandWebSlashCommand(taskRoot, incomingMessage, env)
+        : null;
+      const message = importedCommand ? importedCommand.prompt : expandedCommand ? expandedCommand.prompt : incomingMessage;
       if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
 
       const config = await getConfig();
@@ -634,7 +641,7 @@ export function createOasisWebServer(options = {}) {
         let planOnly = false;
         session.webUsage = session.webUsage || createUsageTracker();
         const slash = message.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
-        if (!importedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
+        if (!importedCommand && !expandedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
           session.webOptions = session.webOptions || {};
           session.webUsage = session.webUsage || createUsageTracker();
           const slashName = slash[1].toLowerCase();
@@ -1239,6 +1246,11 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'GET' && pathname === '/api/slash-commands') {
+      json(res, 200, { commands: await webSlashCommands(activeRoot, env) });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/status') {
       let provider = null;
       let providerConfigured = false;
@@ -1797,6 +1809,36 @@ export function createOasisWebServer(options = {}) {
       await taskStore.flush([...jobs.values()]);
     }
   };
+}
+
+
+export async function expandWebSlashCommand(root, text, env) {
+  const { PermissionPolicy } = await import('./permissions.mjs');
+  const settings = await loadSettings(root, { env }).catch(() => null);
+  const custom = await resolveCustomCommand(root, text, { env, trusted: Boolean(settings && settings.trusted), policy: settings ? new PermissionPolicy(settings) : null });
+  if (custom) return { kind: 'command', name: custom.name, prompt: custom.prompt };
+  const skill = await resolveSkillCommand(root, text, { env }).catch(() => null);
+  if (skill && skill.prompt) return { kind: 'skill', name: skill.name, prompt: skill.prompt };
+  return null;
+}
+
+/** Every slash command the browser chat can run: built-ins, custom/plugin commands and skills. */
+export async function webSlashCommands(root, env = process.env) {
+  const list = [];
+  const seen = new Set();
+  const add = (name, description, kind) => {
+    const key = String(name || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    list.push({ name: String(name), description: String(description || '').replace(/\s+/g, ' ').slice(0, 160), kind });
+  };
+  for (const [name, description] of Object.entries(BUILTIN_COMMANDS)) if (!WEB_UNSUPPORTED_COMMANDS.has(name)) add(name, description, 'builtin');
+  try { for (const [name, command] of (await loadCustomCommands(root, { env })).entries()) add(name, command && command.description || 'Custom command', 'command'); } catch { /* ignore broken command folders */ }
+  try {
+    const { listAvailableSkills } = await import('./tools.mjs');
+    for (const skill of await listAvailableSkills(root, { env })) if (skill.userInvocable !== false) add(skill.name, skill.description || 'Skill', 'skill');
+  } catch { /* ignore broken skill folders */ }
+  return list;
 }
 
 export async function startOasisWebServer(options = {}) {

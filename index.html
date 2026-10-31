@@ -1380,6 +1380,7 @@ window.oasisCore={
   }
 };
 window.navigate=window.navigate||function(v){return navigate(v)};
+window.oasisAgentApi=function(url,options){return agentApi(url,options)};
 
 })();
 </script>
@@ -1401,13 +1402,25 @@ window.navigate=window.navigate||function(v){return navigate(v)};
   menu.className='skill-command-menu';
   menu.hidden=true;
   menu.setAttribute('role','listbox');
-  menu.setAttribute('aria-label','Core OASIS slash commands');
+  menu.setAttribute('aria-label','OASIS slash commands and skills');
   document.body.appendChild(menu);
   input.setAttribute('role','combobox');
   input.setAttribute('aria-autocomplete','list');
   input.setAttribute('aria-haspopup','listbox');
   input.setAttribute('aria-controls',menu.id);
   input.setAttribute('aria-expanded','false');
+  var extra=[];
+  var extraLoadedAt=0;
+  var KIND_LABEL={builtin:'Built-in',command:'Custom command',skill:'Skill'};
+  function loadExtra(){
+    if(Date.now()-extraLoadedAt<30000||typeof window.oasisAgentApi!=='function')return;
+    extraLoadedAt=Date.now();
+    Promise.resolve().then(function(){return window.oasisAgentApi('/api/slash-commands')}).then(function(data){
+      var core={};commands.forEach(function(item){core[item.name]=true});
+      extra=(data&&Array.isArray(data.commands)?data.commands:[]).filter(function(item){return item&&typeof item.name==='string'&&!core[item.name.toLowerCase()]}).map(function(item){return{name:item.name,description:String(item.description||''),mode:KIND_LABEL[item.kind]||'Command'}});
+      if(!menu.hidden||/^\/[a-z0-9:_-]*$/i.test(input.value))render();
+    }).catch(function(){extraLoadedAt=0});
+  }
   var matches=[];
   var selected=0;
   function close(){
@@ -1417,9 +1430,14 @@ window.navigate=window.navigate||function(v){return navigate(v)};
   }
   function position(){
     var rect=input.getBoundingClientRect();
-    var width=Math.min(460,Math.max(240,window.innerWidth-24));
+    var width=Math.min(520,Math.max(240,window.innerWidth-24));
+    var maxHeight=Math.round(Math.min(340,window.innerHeight*.55));
+    menu.style.position='fixed';
+    menu.style.right='auto';
+    menu.style.bottom='auto';
+    menu.style.maxHeight=maxHeight+'px';
     menu.style.width=width+'px';
-    var height=Math.min(menu.scrollHeight||280,Math.min(340,window.innerHeight*.55));
+    var height=Math.min(menu.scrollHeight||280,maxHeight);
     var below=window.innerHeight-rect.bottom;
     var top=below>=height+12?rect.bottom+8:Math.max(12,rect.top-height-8);
     menu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-width-12))+'px';
@@ -1433,17 +1451,21 @@ window.navigate=window.navigate||function(v){return navigate(v)};
     input.dispatchEvent(new Event('input',{bubbles:true}));
   }
   function render(){
-    var match=input.value.match(/^\/([a-z0-9-]*)$/i);
+    var match=input.value.match(/^\/([a-z0-9:_-]*)$/i);
     if(!match){close();return}
+    loadExtra();
     var query=match[1].toLowerCase();
-    matches=commands.filter(function(item){return item.name.indexOf(query)===0});
+    var all=commands.concat(extra);
+    var prefix=all.filter(function(item){return item.name.toLowerCase().indexOf(query)===0});
+    var inner=query?all.filter(function(item){var name=item.name.toLowerCase();return name.indexOf(query)>0||(item.description.toLowerCase().indexOf(query)>=0&&name.indexOf(query)!==0)}):[];
+    matches=prefix.concat(inner).slice(0,40);
     if(!matches.length){close();return}
     selected=0;
     menu.replaceChildren();
     var heading=document.createElement('div');
     heading.className='skill-command-menu-heading';
     var label=document.createElement('span');
-    label.textContent='Core workflows';
+    label.textContent=query?'Commands matching /'+query:'Commands and skills';
     var shortcut=document.createElement('kbd');
     shortcut.textContent='↑ ↓  ·  Enter';
     heading.append(label,shortcut);

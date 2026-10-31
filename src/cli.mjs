@@ -24,7 +24,7 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { startOasisWebServer } from './web.mjs';
 import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, normalizePermissionMode, userSettingsPath } from './settings.mjs';
 import { detectSandbox, resolveSandbox } from './sandbox.mjs';
-import { resolveCustomCommand, expandFileMentions, loadCustomCommands } from './commands.mjs';
+import { resolveCustomCommand, expandFileMentions, loadCustomCommands, resolveSkillCommand } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { searchBackend } from './web-search.mjs';
 import { loadAgentDefinitions } from './subagents.mjs';
@@ -2021,26 +2021,6 @@ function customRunOptions(custom) {
 
 function reportInlineShell(ran = []) {
   for (const item of ran) stdout.write(item.skipped ? '[command] Skipped !`' + item.command + '`: ' + item.skipped + '\n' : '[command] Ran !`' + item.command + '`' + (item.code ? ' (exit ' + item.code + ')' : '') + '\n');
-}
-
-// "/skill-name args" runs a skill directly, like Claude Code.
-async function resolveSkillCommand(root, text) {
-  const match = String(text).trim().match(/^\/([a-zA-Z][a-zA-Z0-9-]{0,63})(?:\s+([\s\S]*))?$/);
-  if (!match) return null;
-  const { loadSkillText } = await import('./tools.mjs');
-  const { parseFrontMatter } = await import('./subagents.mjs');
-  const { commandOptions } = await import('./commands.mjs');
-  let skill;
-  try { skill = await loadSkillText(root, match[1], { env: process.env }); } catch { return null; }
-  const { data, body } = parseFrontMatter(skill.content);
-  const request = String(match[2] || '').trim();
-  const options = commandOptions(data);
-  if (options.context === 'fork') {
-    const prompt = body.trim().replace(/\$ARGUMENTS/g, request) + (request && !body.includes('$ARGUMENTS') ? '\n\nTask: ' + request : '');
-    return { name: skill.name, prompt, options: { fork: { agent: options.agent, label: 'the ' + skill.name + ' skill' }, ...(data.model ? { model: String(data.model) } : {}) } };
-  }
-  const prompt = 'Use the "' + skill.name + '" skill for this request.\n\n<skill name="' + skill.name + '">\n' + body.trim() + '\n</skill>\n\n' + (request ? 'Request: ' + request : 'Follow the skill for the current workspace.');
-  return { name: skill.name, prompt, options: data.model ? { model: String(data.model) } : {} };
 }
 
 async function runLoop(loop, root, autoApprove, session, persistence) {

@@ -311,3 +311,22 @@ export async function expandFileMentions(root, text, options = {}) {
   if (!attachments.length) return { text: source, files, images };
   return { text: source + '\n\nReferenced files:\n' + attachments.join('\n'), files, images };
 }
+
+// "/skill-name args" runs a skill directly, like Claude Code.
+export async function resolveSkillCommand(root, text, context = {}) {
+  const match = String(text).trim().match(/^\/([a-zA-Z][a-zA-Z0-9-]{0,63})(?:\s+([\s\S]*))?$/);
+  if (!match) return null;
+  const { loadSkillText } = await import('./tools.mjs');
+  const { parseFrontMatter } = await import('./subagents.mjs');
+  let skill;
+  try { skill = await loadSkillText(root, match[1], { env: context.env || process.env }); } catch { return null; }
+  const { data, body } = parseFrontMatter(skill.content);
+  const request = String(match[2] || '').trim();
+  const options = commandOptions(data);
+  if (options.context === 'fork') {
+    const prompt = body.trim().replace(/\$ARGUMENTS/g, request) + (request && !body.includes('$ARGUMENTS') ? '\n\nTask: ' + request : '');
+    return { name: skill.name, prompt, options: { fork: { agent: options.agent, label: 'the ' + skill.name + ' skill' }, ...(data.model ? { model: String(data.model) } : {}) } };
+  }
+  const prompt = 'Use the "' + skill.name + '" skill for this request.\n\n<skill name="' + skill.name + '">\n' + body.trim() + '\n</skill>\n\n' + (request ? 'Request: ' + request : 'Follow the skill for the current workspace.');
+  return { name: skill.name, prompt, options: data.model ? { model: String(data.model) } : {} };
+}

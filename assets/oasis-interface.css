@@ -443,7 +443,7 @@ body.light .code-block .tok-str{color:#5B6F00}body.light .code-block .tok-kw{col
 .agent-compose>small{display:block;text-align:center;margin-top:8px;font-size:11px;color:var(--faint);line-height:1.45}
 /* Slash / skill command menu */
 .skill-command-menu{position:absolute;left:0;right:0;bottom:calc(100% + 8px);max-height:320px;overflow:auto;padding:6px;border-radius:var(--r-lg);border:1px solid var(--line-strong);background:var(--panel);box-shadow:var(--shadow-lg);z-index:20}
-.skill-command-menu-heading{padding:6px 10px 4px;font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:650}
+.skill-command-menu-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 10px 4px;font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:650}
 .skill-command-option{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border-radius:var(--r-sm)}
 .skill-command-option:hover,.skill-command-option[aria-selected="true"],.skill-command-option.active{background:var(--raised)}
 .skill-command-copy{display:flex;flex-direction:column;min-width:0;flex:1}
@@ -727,3 +727,4 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 .extension-form>.btn{align-self:end;min-height:40px}
 .extension-form{margin-bottom:12px}
 .panel+.section-head{margin-top:24px}
+.skill-command-menu-heading kbd{text-transform:none;letter-spacing:0;font-weight:500;white-space:nowrap}
