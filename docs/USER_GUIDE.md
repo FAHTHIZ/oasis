@@ -861,6 +861,7 @@ These are on by default and each can be switched off.
 | Feature | What it does | Opt out |
 | --- | --- | --- |
 | Change guard | Rejects edits that replace code with placeholders like `// ... rest unchanged`; warns on large unexplained shrinkage; flags fix-circling back to an earlier broken state. | — |
+| Git safety snapshots | Before a git command that discards local work (`checkout .`, `restore`, `switch --discard-changes`, `stash drop` …), the working tree and untracked files are saved to `refs/oasis/safety/…`. Restore with the command shown in the result, or list with `git for-each-ref refs/oasis/safety`. | `OASIS_GIT_SAFETY=0` |
 | Question budget | At most two interactive questions per turn; after that the agent picks a sensible default, states it, and keeps going. | `maxQuestionsPerTurn: "off"`, `OASIS_MAX_QUESTIONS_PER_TURN=off` (or a number) |
 | Claim check | A reply that says "tests pass" while the latest check failed, was piped, or ran before later edits sends the agent back once to rerun and report honestly. | — |
 | Test-weakening check | Edits to test files that drop assertions, add skips or add always-true asserts are flagged so the agent fixes the code instead of the test. | — |

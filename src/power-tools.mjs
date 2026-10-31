@@ -5,6 +5,7 @@
 //   kill_command   stop a background process
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState } from './file-state.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFile, writeFile, lstat, stat, realpath } from 'node:fs/promises';
@@ -463,6 +464,8 @@ async function runShell(root, args, context, flavor = 'sh') {
   if (context.signal && context.signal.aborted) {
     return { approved: false, command, cancelled: true, message: 'Task was cancelled before the shell command started.' };
   }
+  const discard = gitSafety.gitSafetyEnabled(context.env || process.env) ? gitSafety.discardingGitCommand(command) : '';
+  const safetySnapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard).catch(() => null) : null;
   let shell;
   if (flavor === 'powershell') {
     const exe = context.powershell || findPowerShell(context.env || process.env);
@@ -475,7 +478,8 @@ async function runShell(root, args, context, flavor = 'sh') {
     const registry = context.session && (context.session.background ||= new Map());
     if (!registry) throw new Error('Background commands are not available in this session.');
     const { backgroundExitNotifier, backgroundStuckNotifier } = await import('./monitors.mjs');
-    return startBackgroundProcess(registry, launch, { cwd: root, env, display: command, sandboxed: sandbox ? sandbox.kind : null, maxSeconds: args.max_seconds, onExit: backgroundExitNotifier(context.session), onStuck: backgroundStuckNotifier(context.session) });
+    const started = await startBackgroundProcess(registry, launch, { cwd: root, env, display: command, sandboxed: sandbox ? sandbox.kind : null, maxSeconds: args.max_seconds, onExit: backgroundExitNotifier(context.session), onStuck: backgroundStuckNotifier(context.session) });
+    return safetySnapshot && started && typeof started === 'object' ? { ...started, safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : started;
   }
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(args.timeoutSeconds, 10) || 120));
   return await new Promise((resolve) => {
@@ -510,13 +514,13 @@ async function runShell(root, args, context, flavor = 'sh') {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({ approved: true, command, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled });
+      resolve({ approved: true, command, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({ approved: true, command, exitCode: code, stdout, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal });
+      resolve({ approved: true, command, exitCode: code, stdout, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
   });
 }

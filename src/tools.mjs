@@ -1,3 +1,4 @@
+import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
@@ -1824,8 +1825,11 @@ export async function executeTool(name, args = {}, context = {}) {
       forgetFileState(context, target.absolute);
       return { path: target.relative, deleted: true, backupCreated: true };
     }
-    case 'run_command':
-      return await runWorkspaceCommand(root, args.command, args.args || [], {
+    case 'run_command': {
+      const env = context.env || process.env;
+      const discard = gitSafety.gitSafetyEnabled(env) ? gitSafety.discardingGitCommand(args.command, args.args || []) : '';
+      const snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard).catch(() => null) : null;
+      const commandResult = await runWorkspaceCommand(root, args.command, args.args || [], {
         approval: context.approval,
         autoApprove: Boolean(context.autoApprove),
         timeoutSeconds: Math.min(args.timeoutSeconds || context.maxCommandSeconds || 120, context.maxCommandSeconds || 600),
@@ -1840,7 +1844,13 @@ export async function executeTool(name, args = {}, context = {}) {
         onExit: args.run_in_background === true && context.session ? backgroundExitNotifier(context.session) : undefined,
         onStuck: args.run_in_background === true && context.session ? backgroundStuckNotifier(context.session) : undefined,
         maxSeconds: args.max_seconds
-      });
+      }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
+      if (snapshot) {
+        if (commandResult && commandResult.approved === false) await gitSafety.dropSnapshot(snapshot);
+        else if (commandResult && typeof commandResult === 'object') commandResult.safetySnapshot = gitSafety.snapshotNote(snapshot);
+      }
+      return commandResult;
+    }
     case 'monitor': {
       const session = context.session;
       if (!session) throw new Error('monitor is only available in an agent session.');
