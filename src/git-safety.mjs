@@ -152,3 +152,18 @@ export function gitCommitInvocation(command, args) {
   }
   return null;
 }
+
+// `git push ...` in a command line: returns the arguments after `push`, or null.
+export function gitPushInvocation(command, args) {
+  const text = Array.isArray(args) && args.length ? [command, ...args.map(String)].join(' ') : String(command || '');
+  for (const segment of text.split(SHELL_SPLIT)) {
+    const parts = tokens(segment);
+    const at = parts.findIndex((part) => part === 'git' || part.endsWith('/git'));
+    if (at === -1) continue;
+    const rest = parts.slice(at + 1);
+    let index = 0;
+    while (index < rest.length && rest[index].startsWith('-')) index += (rest[index] === '-C' || rest[index] === '-c') ? 2 : 1;
+    if (rest[index] === 'push') return rest.slice(index + 1);
+  }
+  return null;
+}
