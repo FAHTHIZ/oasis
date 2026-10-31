@@ -315,7 +315,7 @@ export async function runAction(options = {}) {
       maxTurns: Number(input(env, 'max_turns', '40')) || 40,
       appendSystemPrompt: [
         input(env, 'append_system_prompt'),
-        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. If no relevant check passes, report verification as incomplete.'
+        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. Report which check kind ran and whether its exit code was zero. A disabled or unavailable language server is not a passing check; a relevant project check must pass. Never claim verification is complete unless the runtime verification gate reports complete.'
       ].filter(Boolean).join('\n\n'),
       ...(options.runOptions || {})
     });
@@ -323,19 +323,22 @@ export async function runAction(options = {}) {
     result = { is_error: true, subtype: 'error_during_execution', result: error.message };
   }
   const summary = String(result && result.result || '').trim() || '(no summary)';
+  const verification = result && result.verification && typeof result.verification === 'object'
+    ? result.verification
+    : null;
   let published = { changed: false };
   let publishError = null;
   if (!result.is_error) {
-    try { published = await publishChanges({ root, trigger, context, request, summary }); }
+    try { published = await publishChanges({ root, trigger, context, request, summary, verification }); }
     catch (error) { publishError = error.message; }
   }
-  const details = [summary.slice(0, 60000)];
-  if (published.changed && published.pullRequest) details.push('Opened ' + published.pullRequest.html_url + ' from `' + published.branch + '`.');
-  else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to `' + published.branch + '`.');
+  const details = [summary.slice(0, 60000), formatVerificationReport(verification)];
+  if (published.changed && published.pullRequest) details.push('Opened ' + published.pullRequest.html_url + ' from "' + published.branch + '".');
+  else if (published.changed) details.push('Pushed ' + published.files + ' changed file(s) to "' + published.branch + '".');
   if (publishError) details.push('Could not push the changes: ' + publishError);
   if (result.permission_denials && result.permission_denials.length) details.push('<details><summary>' + result.permission_denials.length + ' action(s) were not allowed</summary>\n\n' + result.permission_denials.map((item) => '- ' + (item.tool_name || 'tool') + ': ' + item.detail).join('\n') + '\n</details>');
   if (runUrl) details.push('[View the run](' + runUrl + ')');
-  const status = actionStatus(result, published, summary);
+  const status = actionStatus(result, published, summary, verification);
   const body = commentBody(status, details);
   if (progress && progress.id) await request('PATCH', '/repos/' + repository + '/issues/comments/' + progress.id, { body }).catch((error) => log('Could not update the comment: ' + error.message));
   else if (trigger.number) await request('POST', '/repos/' + repository + '/issues/' + trigger.number + '/comments', { body }).catch((error) => log('Could not post the comment: ' + error.message));
