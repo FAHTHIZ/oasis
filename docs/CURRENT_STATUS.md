@@ -255,3 +255,12 @@ The repair sequence is being developed on isolated branches; these changes are n
 - Compaction now writes a bounded generated section to .oasis/session-notes.md, reports approximate token savings in the CLI and browser activity feed, redacts supported credential formats, preserves user-authored text outside its markers, and refuses symlinked note paths.
 
 **Verification boundary:** source and inline-script syntax checks have passed in this work session. The GitHub Actions quality run for fix/compaction-session-notes is pending; the new Node tests, real HTTP asset requests, and Playwright desktop/390px smoke test are not yet confirmed. Earlier runs passed the clean-environment suite, Linux/Windows/macOS security regression suites and native PTY integration, but their full Node-version jobs were cancelled when newer commits superseded them. Gate 1 is not yet declared passed.
+
+## Large command-output preservation — October 31, 2026
+
+- Large non-interactive command output now keeps a bounded preview: the beginning, ending, and a bounded sample of detected error/failure lines.
+- When stdout or stderr exceeds the in-memory limit, OASIS stores a full redacted stream under .oasis/command-logs/ and includes the relative path in the tool result so the agent can read the omitted details when needed.
+- Log files are created with owner-only permissions, common credential patterns are redacted before writing, and the directory is ignored by Git. Short commands do not retain a log file.
+- Each stream log is capped at 32 MiB. A single unbroken line over 1 MiB is omitted from the saved log to avoid splitting a credential across redaction boundaries. If the log directory is not safe or writable, the command still runs and the result says a complete local log was unavailable.
+
+**Verification boundary:** source syntax checks have passed. The 5,000-line regression test checks first/last/error-line visibility, full-log retention, credential redaction, and file permissions. CI for this branch is pending; the runtime test has not yet been confirmed by GitHub Actions.
