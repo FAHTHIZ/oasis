@@ -156,10 +156,13 @@ test('eval negative control passes only when unchanged snapshots stay below the 
   });
 
   assert.equal(result.ok, true, output.text);
+  assert.equal(result.negativeControl.referencePasses, 1);
+  assert.equal(result.negativeControl.referencePassRate, 1);
   assert.equal(result.negativeControl.noOpPasses, 0);
   assert.equal(result.negativeControl.total, 1);
   assert.equal(result.negativeControl.passRate, 0);
   assert.equal(result.negativeControl.threshold, 0.10);
+  assert.equal(result.negativeControl.strictlyWorse, true);
   assert.equal(result.negativeControl.fixturesValid, true);
   assert.match(output.text, /required: below 10%/);
 });
@@ -178,8 +181,11 @@ test('eval negative control fails when an unchanged fixture is accepted', async 
   });
 
   assert.equal(result.ok, false);
+  assert.equal(result.negativeControl.referencePasses, 0);
+  assert.equal(result.negativeControl.referencePassRate, 0);
   assert.equal(result.negativeControl.noOpPasses, 1);
   assert.equal(result.negativeControl.passRate, 1);
+  assert.equal(result.negativeControl.strictlyWorse, false);
   assert.equal(result.negativeControl.fixturesValid, false);
   assert.match(output.text, /Evaluation negative control: FAIL/);
 });
