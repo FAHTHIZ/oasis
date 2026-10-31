@@ -272,6 +272,77 @@ export async function runBuiltinCommand(name, argument, state) {
         prompt: 'Run the built-in workflow named "audit" for the requested scope. Use its security, performance, test-coverage, and dependency reviewers; merge duplicate findings, independently verify severe findings, and report verified and unverified findings separately. Do not modify files or apply fixes. Scope: ' + scope
       };
     }
+    case 'add-dir': {
+      if (!session) return { output: 'Start a session before adding a working directory.' };
+      const requested = String(argument || '').trim();
+      const current = Array.isArray(session.additionalDirectories) ? session.additionalDirectories : [];
+      if (!requested) {
+        return {
+          output: current.length
+            ? 'Additional working directories:\n' + current.map((dir) => '  ' + dir).join('\n')
+            : 'No additional working directories. Use /add-dir PATH to add a folder.'
+        };
+      }
+      const updated = await setAdditionalDirectories(root, [...current, requested]);
+      const added = updated.accepted.filter((dir) => !current.includes(dir));
+      if (!added.length) {
+        const rejected = updated.rejected.find((item) => item.dir === requested);
+        if (rejected) return { output: 'Could not add ' + requested + ': ' + rejected.error + '.' };
+        session.additionalDirectories = updated.accepted;
+        return { output: 'That folder is already inside the workspace or is already added.' };
+      }
+      session.additionalDirectories = updated.accepted;
+      const systemMessage = session.messages && session.messages.find((message) => message.role === 'system');
+      if (systemMessage && typeof systemMessage.content === 'string') {
+        systemMessage.content += '\n\nAdditional working directory added: ' + added.join(', ') +
+          '. You may read and edit files there using the normal workspace tools and permission checks.';
+      }
+      return { output: 'Added additional working directory: ' + added.join(', ') };
+    }
+    case 'artifact': {
+      const artifacts = await import('./artifacts.mjs');
+      const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      if (!words.length) {
+        return { output: 'Usage: /artifact NAME [GOAL], /artifact add NAME TYPE DETAILS, /artifact goal NAME GOAL, /artifact list, /artifact delete NAME.' };
+      }
+      const subcommand = words[0].toLowerCase();
+      if (subcommand === 'list') {
+        const items = await artifacts.listArtifacts(root, { env });
+        return { output: items.length
+          ? 'Investigation artifacts:\n' + items.map((item) => '  ' + item.slug + ' — ' + (item.goal || item.name)).join('\n')
+          : 'No investigation artifacts yet.' };
+      }
+      if (subcommand === 'delete' || subcommand === 'remove') {
+        const slug = words[1];
+        if (!slug) return { output: 'Usage: /artifact delete NAME' };
+        await artifacts.deleteArtifact(root, slug, { env });
+        if (session && session.activeArtifact === slug) session.activeArtifact = null;
+        return { output: 'Artifact deleted: ' + slug };
+      }
+      if (subcommand === 'add') {
+        const slug = words[1];
+        const type = words[2];
+        const details = words.slice(3).join(' ');
+        if (!slug || !type || !details) return { output: 'Usage: /artifact add NAME TYPE DETAILS' };
+        await artifacts.recordArtifactEvent(root, slug, type, details, { env });
+        return { output: 'Added ' + type + ' to artifact ' + slug + '.' };
+      }
+      if (subcommand === 'goal') {
+        const slug = words[1];
+        const goal = words.slice(2).join(' ');
+        if (!slug || !goal) return { output: 'Usage: /artifact goal NAME GOAL' };
+        await artifacts.recordArtifactEvent(root, slug, 'goal', goal, { env });
+        return { output: 'Updated goal for artifact ' + slug + '.' };
+      }
+      const slug = words[0];
+      const goal = words.slice(1).join(' ');
+      const created = await artifacts.createArtifact(root, slug, { env, goal });
+      if (session) session.activeArtifact = created.artifact.slug;
+      return {
+        output: 'Created or resumed artifact ' + created.artifact.slug + ': ' + created.fileUrl +
+          (goal ? '\nGoal: ' + goal : '')
+      };
+    }
     case 'rollback': {
       if (!session || !session.checkpoints || !session.checkpoints.turns.length) {
         if (session) session.pendingSkillRollback = null;
