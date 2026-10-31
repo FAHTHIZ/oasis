@@ -3332,6 +3332,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
   })) {
     selectedModel = originalModel;
     route.enabled = false;
+    route.tier = 'strong';
+    route.strongModel = originalModel;
     route.reason = 'the configured routed model is not in availableModels; kept the session model';
   }
   const temporarilyRouted = Boolean(route.enabled && originalConfig && selectedModel !== originalModel);
