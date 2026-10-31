@@ -1,3 +1,9 @@
+## Quality verification queue — 2026-10-31
+
+The Quality concurrency group has been rotated from `oasis-quality-v9` to `oasis-quality-v10` after the prior run continued against an older source commit. The rotation starts independent verification for the current main snapshot; it does not remove tests, relax gates, or mark any prior run as passed.
+
+---
+
 ## Cost-aware model routing — 2026-10-31
 
 - Added opt-in `/routing` configuration for user-selected easy and strong model IDs, loaded only from trusted user settings.
