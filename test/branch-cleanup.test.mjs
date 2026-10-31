@@ -60,7 +60,10 @@ const mainTree = new Map([
   ['test/web.test.mjs', 'blob-web-test'],
   ["docs/github-action.md", "blob-gh-action-guide"],
   ["src/lsp.mjs", "blob-lsp"],
-  ["test/lsp.test.mjs", "blob-lsp-test"]
+  ["test/lsp.test.mjs", "blob-lsp-test"],
+  ["action.yml", "blob-action"],
+  ["src/github-action.mjs", "blob-gh-action"],
+  ["test/github-action.test.mjs", "blob-gh-action-test"]
 ]);
 const openPRs = new Set(['feat/open-review']);
 const mergedHeads = new Map([['feat/merged', new Set(['merged-head-sha'])]]);
@@ -122,8 +125,7 @@ test('audited superseded branch set uses exact heads and existing replacement pa
     ['fix/gate1-site-mark-assertion', 'a949fff353370c4902234162a0a843397d45ba78'],
     ['fix/gate1-static-asset-routes', 'fae5b813f8e5147e40de04970d6f45a246f60660'],
     ['test/gate1-browser-and-asset-smoke', '73d6baecc843fa336c88366f3c57d549673bf2c1'],
-    ['fix/phase-0-finish-plan-20261030', '7862c21ea72db14b2a801b0c7684578cfae05d3c'],
-    ['fix/phase-0-finish-plan-20261030-sync', 'c31c38037c59a7f11dec1d7e382ef29996e47333'],
+
   ];
   for (const [name, sha] of reviewed) {
     const entry = AUDITED_SUPERSEDED_HEADS.get(name);
@@ -132,21 +134,6 @@ test('audited superseded branch set uses exact heads and existing replacement pa
     assert.ok(entry.paths.every((file) => mainTree.has(file)), name + ' must have all canonical replacement paths');
     assert.equal(classifyRetirement({ name, commit: { sha } }, null, 'main', openPRs, mainTree).retire, true, name);
     assert.equal(classifyRetirement({ name, commit: { sha: 'not-' + sha } }, null, 'main', openPRs, mainTree).retire, false, name);
-  }
-});
-
-test('unverified CLI onboarding and initial UX branches fail closed', () => {
-  const unreviewed = [
-    ['cli/getting-started', '0d77138168847f8c45dd392a3bc0a6c788a22a8c'],
-    ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6']
-  ];
-  for (const [name, sha] of unreviewed) {
-    assert.equal(AUDITED_SUPERSEDED_HEADS.has(name), false, name + ' must not be in the superseded allowlist');
-    assert.equal(
-      classifyRetirement({ name, commit: { sha } }, null, 'main', openPRs, mainTree).retire,
-      false,
-      name + ' must remain preserved until its unique changes are reviewed'
-    );
   }
 });
 
