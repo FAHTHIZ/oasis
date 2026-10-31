@@ -96,6 +96,7 @@ This paragraph is intentionally left for the project owner to write in their own
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security and reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md)
 - [Whole-codebase gap register](docs/WHOLE_CODEBASE_GAP_REGISTER.md)
+- [Benchmark suite and results](bench/README.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
