@@ -6,7 +6,7 @@
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
 **Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
 **Architecture source baseline (system-map audit):** [`e43d4187825a3a31bdcbe4136d0afab05a980641`](https://github.com/FAHTHIZ/oasis/commit/e43d4187825a3a31bdcbe4136d0afab05a980641)  
-**Architecture guide revision:** [`a8d2a703ae5a542e7c5b63654cff278e9beaf17c`](https://github.com/FAHTHIZ/oasis/commit/a8d2a703ae5a542e7c5b63654cff278e9beaf17c)  
+**Architecture guide revision:** [`aba586eda6f440be86c5e8b978f9e973f44034d2`](https://github.com/FAHTHIZ/oasis/commit/aba586eda6f440be86c5e8b978f9e973f44034d2)  
 **Latest User Guide and documentation audit snapshot:** [`e9e79441eee7cad70b4229d69b98c18d553020db`](https://github.com/FAHTHIZ/oasis/commit/e9e79441eee7cad70b4229d69b98c18d553020db)
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. The [architecture guide](ARCHITECTURE.md) is its companion system map for how those implemented components fit together. This plan replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
@@ -57,7 +57,7 @@ The public release state was checked against live Git refs and the GitHub Releas
 - Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
 - The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
-The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the historical CI evidence baseline above. The README, documentation index, User Guide, architecture guide, installer guide, Android guide, changelog, prepared release notes and security policy were audited and aligned in the recent documentation pass. The architecture guide revision `a8d2a703ae5a542e7c5b63654cff278e9beaf17c` changes documentation only; its same-commit CI checks are tracked separately. The named run states are snapshots, not promises: later commits need same-commit checks, and older passing jobs must not substitute for a newer candidate's results.
+The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the historical CI evidence baseline above. The README, documentation index, User Guide, architecture guide, installer guide, Android guide, changelog, prepared release notes and security policy were audited and aligned in the recent documentation pass. The architecture guide revision `aba586eda6f440be86c5e8b978f9e973f44034d2` changes documentation only; its same-commit CI checks are tracked separately. The named run states are snapshots, not promises: later commits need same-commit checks, and older passing jobs must not substitute for a newer candidate's results.
 
 
 ## Production-readiness outlook
