@@ -596,6 +596,7 @@ More session commands:
 - `/fork` (or `/branch`) saves the conversation so far and continues in a copy, so you can try another approach and `/resume` the original later.
 - `/loop [30s|5m|1h] [x5] PROMPT` runs a prompt now and again on an interval (for example `/loop 5m check whether CI passed`). Ctrl+C stops it.
 - `/cd PATH` switches the workspace and starts a fresh conversation there.
+- `/web URL` fetches a public page (HTTP/HTTPS, private and local addresses refused, up to three validated redirects), strips scripts and markup, and adds the text to the conversation marked as untrusted data, so the agent can read API docs or an issue without a tool call. `/web URL --show` prints it instead.
 - `/sandbox [on|off|network on|network off]` changes the OS sandbox for the current session.
 - `/skills`, `/config`, `/doctor` and `/release-notes` list skills, show effective settings and where they come from, check the workspace (tools, checkers, language servers, sandbox, context use), and show recent OASIS changes.
 
