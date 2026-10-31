@@ -23,7 +23,9 @@ function replaceGeneratedSection(existing, section) {
         existing.indexOf(END, afterEnd) >= 0) {
       throw new Error('Session notes contain duplicate OASIS-managed markers; the file was left unchanged.');
     }
-    return existing.slice(0, start).trimEnd() + '\n\n' + section + existing.slice(afterEnd).trimStart();
+    const prefix = existing.slice(0, start).trimEnd();
+    const suffix = existing.slice(afterEnd).trim();
+    return (prefix ? prefix + '\n\n' : '') + section + (suffix ? '\n\n' + suffix : '') + '\n';
   }
   const preserved = existing.trimEnd();
   return preserved ? preserved + '\n\n' + section + '\n' : section + '\n';
