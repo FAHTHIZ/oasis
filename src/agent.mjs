@@ -463,7 +463,8 @@ export async function createSession({ root, config, restore = null, permissionMo
     settingSources = ['managed'];
     if (permissionMode === 'bypassPermissions') throw new Error('--restricted refuses bypassPermissions mode.');
   }
-  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env }), loadSkillDescriptions(root, { env })]);
+  const instructionNotices = [];
+  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env, notices: instructionNotices }), loadSkillDescriptions(root, { env })]);
   let loadedSettings = settings;
   let settingsError = null;
   if (!loadedSettings) {
@@ -680,6 +681,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.restricted = true;
   }
   if (subagentSystemAppend) session.subagentSystemAppend = String(subagentSystemAppend);
+  session.instructionNotices = instructionNotices;
   session.hardRules = extractHardRules(projectContext);
   session.branchRules = extractBranchRules(projectContext);
   session.rulesRefreshedAtChars = historyTextSize(session.messages || []);
