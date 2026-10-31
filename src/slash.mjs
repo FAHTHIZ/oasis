@@ -2,7 +2,7 @@
 // { output } text, and optionally { prompt } to send to the agent, or
 // { resetSession: true } when the caller should drop the current session.
 import { describeHook, runHooks, hasHooks } from './hooks.mjs';
-import { compactHistoryIfNeeded, hookOptions } from './agent.mjs';
+import { compactHistoryIfNeeded, hookOptions, undoCompaction } from './agent.mjs';
 import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES, normalizePermissionMode } from './settings.mjs';
@@ -36,7 +36,7 @@ export const BUILTIN_COMMANDS = {
   fix: 'Reproduce, diagnose, fix, and verify one bug (/fix BUG)',
   diagnose: 'Analyze an error, log, screenshot, or failing output (/diagnose INPUT)',
   rollback: 'Preview and restore the latest file checkpoint (/rollback, then /rollback confirm)',
-  compact: 'Summarize the conversation to free context (/compact [focus])',
+  compact: 'Summarize the conversation to free context (/compact [focus]; /compact undo restores the full history)',
   context: 'Show how much of the context window is in use',
   cost: 'Show token usage for this session',
   usage: 'Show token usage for this session (same as /cost)',
@@ -490,6 +490,11 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'compact': {
       if (!session || session.messages.length <= 1) return { output: 'Nothing to compact yet.' };
       const input = String(argument || '').trim();
+      if (/^undo$/i.test(input)) {
+        const result = undoCompaction(session);
+        if (!result.restored) return { output: 'There is no compaction to undo in this session.' };
+        return { output: 'Restored the full history from before the last ' + result.trigger + ' compaction (' + result.messages + ' messages' + (result.carriedOver ? ', including ' + result.carriedOver + ' added since' : '') + '). The context is large again; /compact when you are ready.' };
+      }
       if (/^cancel$/i.test(input)) {
         if (!session.pendingCompactionPreview) return { output: 'There is no pending compaction preview to cancel.' };
         delete session.pendingCompactionPreview;
@@ -533,7 +538,7 @@ export async function runBuiltinCommand(name, argument, state) {
         if (result.blockedByHook) return { output: 'A PreCompact hook cancelled /compact: ' + (result.reason || 'no reason given') + '. The preview remains available; history was not changed.' };
         delete session.pendingCompactionPreview;
         const after = estimateTokens(session.messages);
-        return { output: result.compacted ? 'Conversation compacted: about ' + formatNumber(before) + ' -> ' + formatNumber(after) + ' tokens. Must-preserve records were appended to the context digest.' : 'Nothing to compact yet.' };
+        return { output: result.compacted ? 'Conversation compacted: about ' + formatNumber(before) + ' -> ' + formatNumber(after) + ' tokens. Must-preserve records were appended to the context digest. Changed your mind? /compact undo restores the full history.' : 'Nothing to compact yet.' };
       }
       const focus = input.replace(/^preview\s*/i, '').trim();
       const preview = createCompactionPreview(session, focus);
