@@ -551,6 +551,7 @@ body.light .terminal-xterm,body.light .terminal-output,body.light .cloud-run-dif
 .settings-row small,.settings-control-row small{display:block;font-size:12px;color:var(--muted);margin-top:1px}
 .settings-row>span:last-child{color:var(--faint);font-size:16px}
 .settings-control-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-top:1px solid var(--line-soft);flex-wrap:wrap}
+.settings-control-row select.settings-select{width:auto;min-width:200px;max-width:100%}
 .settings-advanced summary{cursor:pointer;font-weight:600;font-size:13.5px;list-style:none;display:flex;justify-content:space-between}
 .settings-advanced summary::after{content:"›";color:var(--faint);transition:transform .15s}
 .settings-advanced[open] summary::after{transform:rotate(90deg)}
