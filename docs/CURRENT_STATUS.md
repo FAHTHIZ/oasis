@@ -264,3 +264,12 @@ The repair sequence is being developed on isolated branches; these changes are n
 - Each stream log is capped at 32 MiB. A single unbroken line over 1 MiB is omitted from the saved log to avoid splitting a credential across redaction boundaries. If the log directory is not safe or writable, the command still runs and the result says a complete local log was unavailable.
 
 **Verification boundary:** source syntax checks have passed. The 5,000-line regression test checks first/last/error-line visibility, full-log retention, credential redaction, and file permissions. CI for this branch is pending; the runtime test has not yet been confirmed by GitHub Actions.
+## Cost-aware model routing — October 31, 2026
+
+- Added a conservative easy/strong classifier. Only short, clearly read-only requests are eligible for the cheaper model; edits, tests, security-sensitive work, long tasks and ambiguous prompts stay on the strong model.
+- Added user-level /routing easy MODEL, /routing strong MODEL, /routing on|off|status|reset controls. Untrusted project settings cannot change the user's model-routing policy; configured model allow-lists are respected.
+- Each task reports the selected model, tier and reason, tokens, estimated actual cost, strong-model cost estimate, and the difference when both model prices are known. CLI usage totals and browser session state include the accumulated routed-task savings.
+- Extended the evaluator with --route-easy-model and --route-strong-model; fixture difficulty is passed as a routing hint and the chosen model and per-task cost fields are stored in each trial record.
+- Added regression coverage for conservative classification, settings trust, routing controls, model restoration, pricing visibility, evaluator option validation, and per-trial routing metrics.
+
+**Verification boundary:** syntax checks for the modified agent, settings, CLI, web, evaluator, routing module and new tests passed in this work session. GitHub Actions has not yet confirmed the full test suite or browser E2E for this branch. No 33-task / three-trial benchmark has been run here, so no real-world savings or quality claim is made. Routing savings in a trial are a price estimate using observed token counts at the strong-model rate, not a second execution.
