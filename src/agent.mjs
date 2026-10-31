@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
 import { protectedConfigPath, protectedEditMessage, protectedEditsAllowed, ruleNamesProtectedPath } from './protected-paths.mjs';
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
@@ -712,6 +713,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
   if (deferredMcp || deferredRare) systemText += '\n\n' + deferredToolsPrompt(session);
+  // Session scratch space for throwaway files (src/scratch.mjs). Created on the first turn.
+  if (scratchEnabled(env) && !systemPromptOverride && !bare) {
+    session.scratchDir = scratchRelative(scratchKey(session.sessionId));
+    systemText += '\n\n' + scratchPrompt(session.scratchDir);
+  }
   // Non-blocking MCP connections finish after this prompt is composed. Retain
   // the completed base so their instructions can be added to the system prompt.
   session.mcpSystemPromptBase = systemPromptOverride ? null : systemText;
@@ -3536,6 +3542,10 @@ function refreshTodoPrompt(session) {
 
 export async function runAgentTurn(session, prompt, options = {}) {
   const env = options.env || process.env;
+  if (session && session.scratchDir && !session.scratchReady && !options.isSubagent) {
+    session.scratchReady = true;
+    await ensureScratch(session.root, session.scratchDir.slice(SCRATCH_ROOT.length + 1));
+  }
   const originalConfig = session && session.config;
   const originalModel = originalConfig && originalConfig.model || '';
   const routing = session && session.settings && session.settings.modelRouting || {};
@@ -4186,7 +4196,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           verification.lastVerificationKind = verificationCommandKind(target.command, target.args);
         }
       }
-      if (result && result.path && (
+      // Scratch-space files (.oasis/scratch/) are throwaway and do not count as project changes.
+      if (result && result.path && !isScratchPath(normalizeReviewPath(result.path)) && (
         (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
         name === 'write_file' && typeof result.writtenBytes === 'number' ||
         name === 'delete_file' && result.deleted === true
