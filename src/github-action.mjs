@@ -120,6 +120,14 @@ export function verificationIsComplete(verification) {
     (!Array.isArray(verification.issues) || verification.issues.length === 0);
 }
 
+function safeVerificationText(value, maximum = 240) {
+  return String(value == null ? '' : value)
+    .replace(/[^A-Za-z0-9 _./:,-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maximum);
+}
+
 export function verificationIsComplete(verification) {
   if (!verification || typeof verification !== 'object' || Array.isArray(verification)) return false;
   const required = verification.required === true;
@@ -129,16 +137,11 @@ export function verificationIsComplete(verification) {
     : null;
   const projectCheckPassed = !required || verification.checkRequired !== true ||
     Boolean(check && check.passed === true && check.exitCode === 0);
-  return verification.complete === true && diffReviewed && projectCheckPassed &&
+  const lspHasErrors = Array.isArray(verification.lsp) && verification.lsp.some((item) =>
+    item && (item.status === 'errors' || Number(item.newErrorCount || 0) > 0)
+  );
+  return verification.complete === true && diffReviewed && projectCheckPassed && !lspHasErrors &&
     (!Array.isArray(verification.issues) || verification.issues.length === 0);
-}
-
-function safeVerificationText(value, maximum = 240) {
-  return String(value == null ? '' : value)
-    .replace(/[^A-Za-z0-9 _./:,-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maximum);
 }
 
 export function formatVerificationReport(verification) {
@@ -183,6 +186,9 @@ export function formatVerificationReport(verification) {
       if (item && item.status === 'unavailable') {
         const reason = safeVerificationText(item.reason || 'language server unavailable', 240);
         lines.push('- Language server: not run for "' + file + '" (' + reason + ').');
+      } else if (item && item.status === 'not_applicable') {
+        const reason = safeVerificationText(item.reason || 'no language server is configured for this file type', 240);
+        lines.push('- Language server: not applicable for "' + file + '" (' + reason + ').');
       } else if (item && item.status === 'errors') {
         lines.push('- Language server: ' + Number(item.newErrorCount || 0) + ' new error(s) reported for "' + file + '".');
       } else if (item && item.status === 'warnings') {
