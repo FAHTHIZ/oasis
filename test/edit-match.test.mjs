@@ -55,3 +55,23 @@ test('edit_file applies a unique relaxed match and reports how it matched', asyn
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('multi_edit uses relaxed matching and the elision guard', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-multiedit-'));
+  try {
+    await writeFile(path.join(root, 'b.js'), 'const a = 1;   \nconst b = 2;\n');
+    const result = await executeTool('multi_edit', { path: 'b.js', edits: [
+      { old_string: 'const a = 1;', new_string: 'const a = 10;' },
+      { old_string: 'const b = 2;  ', new_string: 'const b = 20;' }
+    ] }, { root });
+    assert.equal(result.changed, true);
+    assert.match(result.note || '', /Edit 2 matched/);
+    assert.equal(await readFile(path.join(root, 'b.js'), 'utf8'), 'const a = 10;   \nconst b = 20;\n');
+    await assert.rejects(
+      executeTool('multi_edit', { path: 'b.js', edits: [{ old_string: 'const a = 10;', new_string: '// ... rest of the code unchanged' }] }, { root }),
+      /placeholder/
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

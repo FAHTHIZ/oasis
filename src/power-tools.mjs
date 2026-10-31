@@ -12,6 +12,8 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
+import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
+import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, combineWarnings } from './change-guard.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
@@ -286,13 +288,25 @@ export async function multiEditFile(root, args = {}, context = {}) {
   if (original.includes('\0')) throw new Error('This looks like a binary file.');
   let next = original;
   let replacements = 0;
+  const relaxedNotes = [];
   args.edits.forEach((edit, index) => {
     const label = 'Edit ' + (index + 1) + ': ';
     if (!edit || typeof edit.old_string !== 'string' || typeof edit.new_string !== 'string') throw new Error(label + 'old_string and new_string must be strings.');
     if (!edit.old_string) throw new Error(label + 'old_string must not be empty.');
     if (edit.old_string === edit.new_string) throw new Error(label + 'old_string and new_string are identical.');
+    assertNoNewElision(edit.old_string, edit.new_string, target.relative.split(path.sep).join('/'));
     const count = next.split(edit.old_string).length - 1;
-    if (!count) throw new Error(label + 'old_string was not found (after applying earlier edits). No edits were applied.');
+    if (!count) {
+      const relaxed = edit.replace_all === true ? null : relaxedReplace(next, edit.old_string, edit.new_string);
+      if (relaxed) {
+        next = relaxed.next;
+        replacements += 1;
+        relaxedNotes.push('Edit ' + (index + 1) + ' matched after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line);
+        return;
+      }
+      const hint = closestMatchHint(next, edit.old_string);
+      throw new Error(label + 'old_string was not found (after applying earlier edits). No edits were applied.' + (hint ? '\n' + hint : ''));
+    }
     if (count > 1 && edit.replace_all !== true) throw new Error(label + 'old_string appears ' + count + ' times; add context or set replace_all. No edits were applied.');
     next = edit.replace_all === true ? next.split(edit.old_string).join(edit.new_string) : next.replace(edit.old_string, () => edit.new_string);
     replacements += edit.replace_all === true ? count : 1;
@@ -303,7 +317,8 @@ export async function multiEditFile(root, args = {}, context = {}) {
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
   await writeFile(target.absolute, next, 'utf8');
   await recordFileState(context, target.absolute);
-  return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true };
+  const warning = combineWarnings(shrinkWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
+  return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true, ...(relaxedNotes.length ? { note: relaxedNotes.join('; ') + '.' } : {}), ...(warning ? { warning } : {}) };
 }
 
 // ---------------------------------------------------------------- background processes
