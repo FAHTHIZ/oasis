@@ -26,4 +26,4 @@ The browser dashboard stores some projects, tasks and notes in browser local sto
 
 The default runtime is loopback-only. Do not port-forward it or publish it to the Internet. Non-loopback listeners require TLS unless the operator deliberately opts into unencrypted LAN access. A future phone connection mode must remain opt-in, use pairing and revocable device tokens, and have a separate reviewed threat note before implementation.
 
-OASIS is an alpha hobby project. These notes describe intended behavior and known boundaries, not a guarantee that every configuration is private or secure. Review [SECURITY.md](../SECURITY.md) before using it with sensitive work.
+OASIS is Beta software. These notes describe stated behavior and known boundaries; they are not a guarantee that every configuration is private or secure. Review [SECURITY.md](../SECURITY.md) before using it with sensitive work.
