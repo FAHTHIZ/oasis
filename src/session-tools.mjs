@@ -424,3 +424,37 @@ export async function waitForMcpServers(session, args = {}, options = {}) {
   const failed = (session.mcpFailures || []).map((item) => ({ name: item.name, error: String(item.error).slice(0, 300) }));
   return { still_connecting: Boolean(session.mcpConnecting), ...(timedOut ? { timed_out_after_seconds: seconds } : {}), ready, failed, tools: session.mcpToolMap ? [...session.mcpToolMap.keys()].slice(0, 200) : [] };
 }
+
+// Rarely used built-in tools whose schemas cost context on every request.
+// They stay callable: their names are listed in the system prompt, tool_search
+// loads them, and a direct call auto-loads them (see loadDeferredTool).
+export const RARE_BUILTIN_TOOLS = Object.freeze([
+  'install_extension', 'setup_omniroute', 'configure_provider', 'install_external_skill',
+  'configure_mcp_server', 'delegate_openhands', 'install_plugin', 'worktree_inspect', 'worktree_merge',
+  'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop',
+  'cron_create', 'cron_list', 'cron_delete', 'memory_delete', 'run_specialist_review',
+]);
+
+export function deferRareBuiltinTools(session, { env = process.env, settings = {} } = {}) {
+  const setting = String(env.OASIS_LEAN_TOOLS ?? '').toLowerCase();
+  if (setting === '0' || setting === 'off' || setting === 'false') return 0;
+  if (!setting && settings.leanTools === false) return 0;
+  const rare = new Set(RARE_BUILTIN_TOOLS);
+  const picked = session.toolDefinitions.filter((tool) => rare.has(tool.function.name));
+  if (picked.length < 3) return 0;
+  if (!session.deferredTools) session.deferredTools = new Map();
+  for (const tool of picked) session.deferredTools.set(tool.function.name, tool);
+  session.toolDefinitions = session.toolDefinitions.filter((tool) => !rare.has(tool.function.name));
+  if (!session.toolDefinitions.some((tool) => tool.function.name === 'tool_search')) session.toolDefinitions.push(TOOL_SEARCH_DEFINITION);
+  return picked.length;
+}
+
+// Loads a deferred tool on first direct use so the model never hits
+// "unknown tool" just because the schema was not sent yet.
+export function loadDeferredTool(session, name) {
+  const deferred = session && session.deferredTools;
+  if (!deferred || !deferred.has(name)) return false;
+  session.toolDefinitions.push(deferred.get(name));
+  deferred.delete(name);
+  return true;
+}
