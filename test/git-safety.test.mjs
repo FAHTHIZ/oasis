@@ -64,3 +64,28 @@ test('denied commands leave no snapshot and OASIS_GIT_SAFETY=0 disables it', asy
   const off = await executeTool('run_command', { command: 'git', args: ['checkout', '.'] }, { root, autoApprove: true, approval: async () => true, env: { ...process.env, OASIS_GIT_SAFETY: '0' } });
   assert.equal(off.safetySnapshot, undefined);
 });
+
+test('shell deletions are snapshotted too', async (t) => {
+  assert.match(discardingGitCommand('rm', ['notes.md']), /^rm notes\.md/);
+  assert.match(discardingGitCommand('rm -r build && npm test'), /^rm -r build/);
+  assert.equal(discardingGitCommand('find . -name "*.tmp" -delete'), 'find -delete');
+  assert.equal(discardingGitCommand('git', ['rm', 'a.txt']), 'git rm');
+  assert.equal(discardingGitCommand('rm', ['-h']), '');
+  assert.equal(discardingGitCommand('npm', ['run', 'build']), '');
+  assert.equal(discardingGitCommand('echo rm is fine'), '');
+  const root = await repo(t);
+  await writeFile(path.join(root, 'draft.md'), 'untracked draft\n');
+  const { executePowerTool } = await import('../src/power-tools.mjs');
+  const result = await executePowerTool('run_shell', { command: 'rm draft.md' }, { root, autoApprove: true, approval: async () => true, env: process.env }, root);
+  assert.equal(result.exitCode, 0);
+  assert.match(String(result.safetySnapshot || ''), /refs\/oasis\/safety/);
+  const ref = result.safetySnapshot.match(/(refs\/oasis\/safety\/\S+?) /)[1];
+  assert.equal(git(root, 'show', ref + ':draft.md'), 'untracked draft');
+});
+
+test('deletions are only matched in command position', () => {
+  assert.match(discardingGitCommand('sudo rm -r dist'), /^rm -r dist/);
+  assert.match(discardingGitCommand('FOO=1 rm x'), /^rm x/);
+  assert.match(discardingGitCommand('ls | xargs rm'), /^rm/, 'xargs feeds the paths');
+  assert.equal(discardingGitCommand('grep -r rm src'), '');
+});

@@ -35,15 +35,39 @@ export function discardReason(args) {
   return '';
 }
 
-// Finds a discarding git invocation in an argv command or a shell string.
+// File deletions through the shell bypass OASIS checkpoints (/rewind), so they
+// get the same snapshot. Only the program name matters here.
+const PREFIX_WRAPPERS = new Set(['sudo', 'doas', 'command', 'time', 'nice', 'nohup', 'xargs', 'env', 'exec']);
+function programIndex(parts) {
+  let index = 0;
+  while (index < parts.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(parts[index]) || PREFIX_WRAPPERS.has(path.basename(parts[index])) || (index > 0 && parts[index].startsWith('-') && PREFIX_WRAPPERS.has(path.basename(parts[index - 1]))))) index++;
+  return index;
+}
+
+function deleteReason(parts) {
+  const first = programIndex(parts);
+  const at = /^(?:.*\/)?(?:rm|unlink|rmdir|shred)$/.test(parts[first] || '') ? first : -1;
+  if (at !== -1 && (parts.slice(at + 1).some((part) => !part.startsWith('-')) || parts.slice(0, at).some((part) => path.basename(part) === 'xargs'))) return path.basename(parts[at]) + ' ' + parts.slice(at + 1).join(' ').slice(0, 120);
+  const find = parts[first] === 'find' || String(parts[first] || '').endsWith('/find') ? first : -1;
+  if (find !== -1 && parts.slice(find + 1).includes('-delete')) return 'find -delete';
+  return '';
+}
+
+// Finds a command that discards or deletes local work, in argv form or a shell string.
 export function discardingGitCommand(command, args) {
-  if (Array.isArray(args) && path.basename(String(command || '')) === 'git') return discardReason(args);
-  const text = Array.isArray(args) && args.length ? [command, ...args].join(' ') : String(command || '');
+  const base = path.basename(String(command || ''));
+  if (Array.isArray(args) && base === 'git') return discardReason(args) || (String(args.find((arg) => !String(arg).startsWith('-')) || '') === 'rm' ? 'git rm' : '');
+  if (Array.isArray(args) && args.length && base !== 'sh' && base !== 'bash' && base !== 'zsh') return deleteReason([command, ...args.map(String)]);
+  const text = Array.isArray(args) && args.length ? args.map(String).join(' ') : String(command || '');
   for (const segment of text.split(SHELL_SPLIT)) {
     const parts = tokens(segment);
     const at = parts.findIndex((part) => part === 'git' || part.endsWith('/git'));
-    if (at === -1) continue;
-    const reason = discardReason(parts.slice(at + 1));
+    if (at !== -1) {
+      const reason = discardReason(parts.slice(at + 1)) || (parts.slice(at + 1).find((part) => !part.startsWith('-')) === 'rm' ? 'git rm' : '');
+      if (reason) return reason;
+      continue;
+    }
+    const reason = deleteReason(parts);
     if (reason) return reason;
   }
   return '';
