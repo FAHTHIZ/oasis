@@ -13,6 +13,7 @@
 // with `oasis trust` or `/trust`. User-level settings always apply.
 import { writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
 import { readBoundedRegularFile } from './safe-storage.mjs';
+import { sanitizeModelRouting } from './model-routing.mjs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -218,6 +219,7 @@ export async function loadSettings(root, options = {}) {
     theme: null,
     statusLine: null,
     lspServers: {},
+    modelRouting: { enabled: false, easyModel: '', strongModel: '' },
     trusted: false,
     sources: [],
     ignoredUntrusted: []
@@ -299,6 +301,15 @@ export async function loadSettings(root, options = {}) {
       }
     }
     if (settings.pricing && typeof settings.pricing === 'object' && !Array.isArray(settings.pricing)) result.pricing = { ...(result.pricing || {}), ...settings.pricing };
+    if (settings.modelRouting && typeof settings.modelRouting === 'object' && !Array.isArray(settings.modelRouting)) {
+      const routing = sanitizeModelRouting(settings.modelRouting);
+      result.modelRouting = {
+        enabled: typeof settings.modelRouting.enabled === 'boolean' ? routing.enabled : result.modelRouting.enabled,
+        easyModel: routing.easyModel || result.modelRouting.easyModel,
+        strongModel: routing.strongModel || result.modelRouting.strongModel
+      };
+      if (!result.modelRouting.easyModel) result.modelRouting.enabled = false;
+    }
     if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
