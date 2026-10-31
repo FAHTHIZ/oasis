@@ -16,7 +16,7 @@ import { snapshotFile } from './backups.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
-import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
+import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -482,7 +482,7 @@ async function runShell(root, args, context, flavor = 'sh') {
     shell = powerShellLaunch(exe, command, context.env || process.env);
   } else shell = process.platform === 'win32' ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { command: '/bin/sh', args: ['-c', command] };
   const launch = wrapCommand(shell.command, shell.args, sandbox, root);
-  const env = scrubEnvironment(context.env || process.env);
+  const env = nonInteractiveEnvironment(scrubEnvironment(context.env || process.env), context.env || process.env);
   if (args.run_in_background === true) {
     const registry = context.session && (context.session.background ||= new Map());
     if (!registry) throw new Error('Background commands are not available in this session.');
