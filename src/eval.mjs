@@ -334,17 +334,29 @@ export async function validateEvaluationSuite(options = {}) {
  */
 export async function runEvalNegativeControl(options = {}) {
   const report = await validateEvaluationSuite(options);
-  const noOpPasses = report.results.filter((result) => result.noOpExitCode === 0).length;
+
+  // The reference patches are the positive control: every valid task should accept them.
+  const referencePasses = report.results.filter((result) => result.referenceExitCode === 0).length;
   const total = report.total;
+  const referencePassRate = total > 0 ? referencePasses / total : 0;
+
+  // The untouched repository is the no-op negative control: it should not pass the task.
+  const noOpPasses = report.results.filter((result) => result.noOpExitCode === 0).length;
   const passRate = total > 0 ? noOpPasses / total : 1;
   const threshold = 0.10;
-  const ok = report.ok && passRate < threshold;
+
+  // A low negative score is meaningful only when it is strictly below the positive score.
+  const strictlyWorse = passRate < referencePassRate;
+  const ok = report.ok && passRate < threshold && strictlyWorse;
   return {
     ok,
     total,
+    referencePasses,
+    referencePassRate,
     noOpPasses,
     passRate,
     threshold,
+    strictlyWorse,
     fixturesValid: report.ok,
     results: report.results
   };
