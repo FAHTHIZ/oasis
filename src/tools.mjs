@@ -1828,15 +1828,19 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'run_command': {
       const env = context.env || process.env;
       const discard = gitSafety.gitSafetyEnabled(env) ? gitSafety.discardingGitCommand(args.command, args.args || []) : '';
+      const { guardInstallCommand } = await import('./package-vetting.mjs');
+      const install = await guardInstallCommand(args.command, args.args || [], { env, fetchImpl: context.fetchImpl || globalThis.fetch });
+      if (install.blocked) return { command: args.command, ...install.blocked };
+      const approval = install.approvalNote && context.approval ? (text, ...rest) => context.approval(install.approvalNote + '\n' + text, ...rest) : context.approval;
       const snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard).catch(() => null) : null;
       const commandResult = await runWorkspaceCommand(root, args.command, args.args || [], {
-        approval: context.approval,
-        autoApprove: Boolean(context.autoApprove),
+        approval,
+        autoApprove: Boolean(context.autoApprove) && !install.forceAsk,
         timeoutSeconds: Math.min(args.timeoutSeconds || context.maxCommandSeconds || 120, context.maxCommandSeconds || 600),
         env: context.env || process.env,
         signal: context.signal,
         sandbox: context.sandbox,
-        ruleAllowed: Boolean(context.ruleAllowed),
+        ruleAllowed: Boolean(context.ruleAllowed) && !install.forceAsk,
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),
@@ -1845,6 +1849,7 @@ export async function executeTool(name, args = {}, context = {}) {
         onStuck: args.run_in_background === true && context.session ? backgroundStuckNotifier(context.session) : undefined,
         maxSeconds: args.max_seconds
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
+      if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
       if (snapshot) {
         if (commandResult && commandResult.approved === false) await gitSafety.dropSnapshot(snapshot);
         else if (commandResult && typeof commandResult === 'object') commandResult.safetySnapshot = gitSafety.snapshotNote(snapshot);
