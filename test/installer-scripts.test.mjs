@@ -26,7 +26,7 @@ test('published installer checksums match the exact checked-in scripts', async (
   assert.ok(installGuide.includes('$helperExpected='), 'Windows install guide must verify the companion helper checksum before running.');
 });
 
-test('installers resolve the latest stable release to an immutable commit SHA', async () => {
+test('installers resolve the latest stable versioned Git tag to an immutable commit SHA', async () => {
   const [shell, powershell, termux, install] = await Promise.all([
     read('scripts/install.sh'), read('scripts/install.ps1'), read('docs/TERMUX.md'), read('docs/INSTALL.md')
   ]);
@@ -43,7 +43,7 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
     assert.doesNotMatch(script, /d3a2156924e7fe6bfd8f7bad5b49b8531f740a0a|v0\.3\.0/);
   }
   assert.match(install, /latest stable versioned Git tag/i);
-  assert.match(termux, /latest stable GitHub release/i);
+  assert.match(termux, /latest stable semantic-version Git tag/i);
   assert.match(termux, /official.*Termux/i);
   assert.match(install, /command -v curl/);
   assert.match(install, /command -v wget/);
