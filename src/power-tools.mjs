@@ -456,6 +456,12 @@ async function runShell(root, args, context, flavor = 'sh') {
   const requestedSandbox = context.sandbox && context.sandbox.enabled ? context.sandbox : null;
   assertSandboxAvailable(requestedSandbox);
   const sandbox = requestedSandbox;
+  const commitCall = gitSafety.gitCommitInvocation(command);
+  if (commitCall) {
+    const { rawCommitSecretHits, formatSecretHits } = await import('./git-tools.mjs');
+    const hits = await rawCommitSecretHits(root, { all: commitCall.all, env: context.env || process.env }).catch(() => []);
+    if (hits.length) return { command, approved: false, blocked: true, secretHits: hits.slice(0, 15), message: formatSecretHits(hits) + ' The command was not run.' };
+  }
   const { guardInstallCommand } = await import('./package-vetting.mjs');
   const install = await guardInstallCommand(command, null, { env: context.env || process.env, fetchImpl: context.fetchImpl || globalThis.fetch });
   if (install.blocked) return { command, ...install.blocked };

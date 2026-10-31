@@ -207,6 +207,23 @@ async function stagedSecretHits(root, prefixes, env) {
   }
 }
 
+// For raw `git commit` through run_command/run_shell: scans the real index
+// (plus tracked changes with -a/--all) without modifying anything.
+export async function rawCommitSecretHits(root, { all = false, env = process.env } = {}) {
+  if (/^(0|off|false)$/i.test(String(env.OASIS_COMMIT_SECRET_SCAN ?? ''))) return [];
+  const { findSecretsInDiff } = await import('./secret-shield.mjs');
+  const hasHead = (await git(root, ['rev-parse', '--verify', '-q', 'HEAD'], { env })).exitCode === 0;
+  const base = hasHead ? 'HEAD' : '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+  const args = all ? ['diff', base] : ['diff', '--cached', base];
+  const diff = await git(root, [...args, '--no-color', '--no-ext-diff', '--no-renames', '-U0', '--diff-filter=AM'], { env });
+  return diff.exitCode === 0 ? findSecretsInDiff(String(diff.stdout || '').slice(0, 20 * 1024 * 1024)) : [];
+}
+
+export function formatSecretHits(hits) {
+  return 'Refusing to commit: the changes contain what looks like real credentials:\n' + hits.slice(0, 15).map((hit) => '  ' + hit.file + ':' + hit.line + '  ' + hit.kind + '  ' + hit.preview).join('\n') +
+    '\nMove the value into an environment variable or an ignored .env file and reference it from code. If it is a deliberate test fixture, the user can commit it themselves (or set OASIS_COMMIT_SECRET_SCAN=0).';
+}
+
 async function gitCommit(root, args, options) {
   const { resolveWorkspacePath, sensitivePath } = await workspaceTools();
   const env = await commandEnv(options.env || process.env, false);
@@ -230,8 +247,7 @@ async function gitCommit(root, args, options) {
   if (secrets.length) return fail('Refusing to commit files that look like secrets: ' + secrets.join(', ') + '. Add them to .gitignore, or commit them yourself if this is intentional.', { blocked: secrets });
   const leaked = await stagedSecretHits(root, prefixes, env);
   if (leaked.length) {
-    return fail('Refusing to commit: the changes contain what looks like real credentials:\n' + leaked.slice(0, 15).map((hit) => '  ' + hit.file + ':' + hit.line + '  ' + hit.kind + '  ' + hit.preview).join('\n') +
-      '\nMove the value into an environment variable or an ignored .env file and reference it from code. If it is a deliberate test fixture, the user can commit it themselves (or set OASIS_COMMIT_SECRET_SCAN=0).', { secretHits: leaked.slice(0, 15) });
+    return fail(formatSecretHits(leaked), { secretHits: leaked.slice(0, 15) });
   }
   const branch = await currentBranch(root, env);
   const lines = selected.slice(0, 40).map((entry) => '  ' + describeStatus(entry.status).padEnd(9) + ' ' + entry.file);

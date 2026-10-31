@@ -134,3 +134,21 @@ export function snapshotNote(snapshot) {
 export function gitSafetyEnabled(env = process.env) {
   return !/^(0|off|false)$/i.test(String(env.OASIS_GIT_SAFETY ?? ''));
 }
+
+// Detects `git commit` in argv or shell form. Returns null or { all } where
+// all=true when -a/--all (or -am) stages tracked changes as part of the commit.
+export function gitCommitInvocation(command, args) {
+  const text = Array.isArray(args) && args.length ? [command, ...args.map(String)].join(' ') : String(command || '');
+  for (const segment of text.split(SHELL_SPLIT)) {
+    const parts = tokens(segment);
+    const at = parts.findIndex((part) => part === 'git' || part.endsWith('/git'));
+    if (at === -1) continue;
+    const rest = parts.slice(at + 1);
+    let index = 0;
+    while (index < rest.length && rest[index].startsWith('-')) index += (rest[index] === '-C' || rest[index] === '-c') ? 2 : 1;
+    if (rest[index] !== 'commit') continue;
+    const flags = rest.slice(index + 1).filter((part) => part.startsWith('-'));
+    return { all: flags.some((flag) => flag === '--all' || /^-[a-zA-Z]*a/.test(flag) && !flag.startsWith('--')) };
+  }
+  return null;
+}
