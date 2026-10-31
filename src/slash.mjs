@@ -499,14 +499,20 @@ export async function runBuiltinCommand(name, argument, state) {
       const { formatUsd, priceFor } = await import('./pricing.mjs');
       const model = session && session.config && session.config.model || '';
       const priced = priceFor(model, { config: session && session.config || {}, overrides: session && session.pricing || {} });
-      const trackedCost = Number.isFinite(u.costUSD) && (u.costRequests || 0) > 0 && u.costKnown !== false;
+      const hasTrackedRequests = Number(u.costRequests || 0) > 0;
+      const trackingUnknown = hasTrackedRequests && u.costKnown === false;
+      const trackedCost = hasTrackedRequests && !trackingUnknown;
       const spent = trackedCost ? u.costUSD : (session && typeof session.costUsd === 'number' ? session.costUsd : 0);
-      const money = trackedCost
-        ? ' Estimated cost: ' + formatUsd(spent) + (priced && priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
-        : priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
-          : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
+      const money = trackingUnknown
+        ? ' Estimated cost: unknown (one or more requests used a model without configured pricing).'
+        : trackedCost
+          ? ' Estimated cost: ' + formatUsd(spent) + (priced && priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
+          : priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
+            : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
       const routingNote = Number(u.routingTasks || 0) > 0
-        ? ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); estimated net savings versus the strong model: ' + formatUsd(u.routingSavingsUSD || 0) + '.'
+        ? (u.routingSavingsKnown === false
+          ? ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); net savings are unknown because at least one model price is unavailable.'
+          : ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); estimated net savings versus the strong model: ' + formatUsd(u.routingSavingsUSD || 0) + '.')
         : '';
       return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money + routingNote };
     }
