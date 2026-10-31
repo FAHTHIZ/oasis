@@ -854,6 +854,24 @@ Enable the optional OS sandbox to restrict command writes and, by default, netwo
 
 On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is read-only, the workspace is writable, `/tmp` is private, and the network is unshared unless `network` is true. On macOS it uses `sandbox-exec`. Inside the sandbox, normal (not high-risk) commands run without a prompt; set `autoAllowCommands: false` to keep prompting. `OASIS_SANDBOX=1` enables it for one run.
 
+## Agent guardrails and token savers
+
+These are on by default and each can be switched off.
+
+| Feature | What it does | Opt out |
+| --- | --- | --- |
+| Change guard | Rejects edits that replace code with placeholders like `// ... rest unchanged`; warns on large unexplained shrinkage; flags fix-circling back to an earlier broken state. | — |
+| Tolerant edits | `edit_file` / `multi_edit` match through CRLF, trailing spaces, smart quotes and indentation drift; failed matches show the closest candidate. | — |
+| Read dedup | Re-reading an unchanged file returns a short pointer instead of the full contents. | `readDedup: false`, `OASIS_READ_DEDUP=0` |
+| Lean tools | Rarely used setup/install/terminal/cron tools are listed by name only and load on first call or through `tool_search`. | `leanTools: false`, `OASIS_LEAN_TOOLS=0` |
+| Secret shield | Secrets in tool output reach the model as `«secret:ID»`; real values are restored only inside tool arguments. | `secretShield: false`, `OASIS_SECRET_SHIELD=0` |
+| Follow-ups | TODOs the agent defers are saved to `.oasis/followups.json`. Use `/followups`, `/followups all`, `/followups done ID`, `/followups drop ID`, `/followups clear`. | `followups: false`, `OASIS_FOLLOWUPS=0` |
+| Pipe warning | Commands like `npm test \| tail` that hide a failing exit status are flagged. | — |
+| Background watchdog | Background commands accept `max_seconds`; a stuck notice fires after `OASIS_BACKGROUND_STUCK_SECONDS` (default 300) with no output. | — |
+| Scope lock | `/scope src/api/**` (or `OASIS_EDIT_SCOPE`) blocks edits outside the given paths. `/scope off` clears it. | — |
+| Stream watchdog | Idle streams are detected after `OASIS_STREAM_IDLE_SECONDS` (default 120) and retried or sent to the fallback model. `OASIS_REQUEST_TIMEOUT_SECONDS` sets the request timeout. | — |
+| Tool aliases | Claude Code style tool names (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `TodoWrite`, `Task` …) work and are mapped to OASIS tools. | — |
+
 ## Extra agent tools
 
 - `grep`: regex search backed by ripgrep (JS fallback) with globs, context lines, and `content` / `files_with_matches` / `count` modes. Secret files are never returned.
