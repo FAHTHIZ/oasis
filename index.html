@@ -271,6 +271,7 @@
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Appearance and backup</h2><div class="section-sub">Preferences and a copy of your local workspace.</div></div></div>
       <div class="settings-control-row"><span><strong>Theme</strong><small>Choose a comfortable appearance.</small></span><button class="btn btn-secondary" id="themeToggle" type="button">Toggle theme</button></div>
+      <div class="settings-control-row"><span><strong>Finished turns</strong><small>Fold a finished turn's tool steps into one "Worked for…" line.</small></span><select id="collapseWorkSelect" class="settings-select" aria-label="Finished turns"><option value="on">Fold tool steps</option><option value="off">Keep every step visible</option></select></div>
       <div class="settings-control-row"><span><strong>Chat width</strong><small>How wide the conversation column is.</small></span><select id="chatWidthSelect" class="settings-select" aria-label="Chat width"><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="full">Full width</option></select></div>
       <div class="settings-control-row"><span><strong>Send key</strong><small>Which key sends a message in the composer.</small></span><select id="sendKeySelect" class="settings-select" aria-label="Send key"><option value="enter">Enter sends, Shift+Enter new line</option><option value="mod-enter">Ctrl/⌘+Enter sends, Enter new line</option></select></div>
       <div class="settings-control-row"><span><strong>Search</strong><small>Find local projects and tasks.</small></span><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label></div>
@@ -637,6 +638,8 @@ document.getElementById('exportBtn').addEventListener('click',exportBackup);docu
   window.oasisSetChatWidth=function(value){try{localStorage.setItem('oasis.web.chatWidth',value)}catch(e){}applyWidth(value)};
   applyWidth(stored('oasis.web.chatWidth','comfortable'));
   var widthSel=document.getElementById('chatWidthSelect');if(widthSel)widthSel.addEventListener('change',function(){window.oasisSetChatWidth(widthSel.value)});
+  var foldSel=document.getElementById('collapseWorkSelect');
+  if(foldSel){foldSel.value=stored('oasis.web.collapseWork','on')==='off'?'off':'on';foldSel.addEventListener('change',function(){try{localStorage.setItem('oasis.web.collapseWork',foldSel.value)}catch(e){}})}
   var keySel=document.getElementById('sendKeySelect');
   if(keySel){keySel.value=stored('oasis.web.sendKey','enter')==='mod-enter'?'mod-enter':'enter';keySel.addEventListener('change',function(){try{localStorage.setItem('oasis.web.sendKey',keySel.value)}catch(e){}document.querySelectorAll('[data-send-key-toggle]').forEach(function(b){b.textContent=''})})}
 })();
@@ -1678,6 +1681,27 @@ C.hook('agentActivity',function(){return function(text){
 var typing=document.createElement('div');typing.className='agent-typing';typing.setAttribute('aria-hidden','true');typing.innerHTML='<i></i><i></i><i></i><span>Working…</span>';
 C.hook('agentSetBusy',function(coreBusy){return function(v){coreBusy(v);if(!v&&typeof loadWorkspaceDiff==='function')setTimeout(function(){loadWorkspaceDiff(true)},300);document.body.classList.toggle('agent-busy',!!v);if(v){messages.appendChild(typing);stick=true;agentScroll()}else{typing.remove();var last=lastAssistant();if(last&&last.dataset.raw!=null){pending.set(last,last.dataset.raw);if(!raf)raf=requestAnimationFrame(paint)}}syncSend()}});
 new MutationObserver(function(){if(typing.isConnected&&messages.lastElementChild!==typing)messages.appendChild(typing)}).observe(messages,{childList:true});
+/* ---------- Finished turns fold their tool steps into "Worked for …" ---------- */
+var workStart=0,workMark=null;
+function fmtWork(ms){var sec=Math.max(1,Math.round(ms/1000));return sec<60?sec+'s':Math.floor(sec/60)+'m '+String(sec%60).padStart(2,'0')+'s'}
+function collapseWork(){
+  var pref='on';try{pref=localStorage.getItem('oasis.web.collapseWork')||'on'}catch(e){}
+  if(pref==='off')return;
+  var node=workMark&&workMark.parentNode===messages?workMark.nextElementSibling:messages.firstElementChild,steps=[];
+  for(;node;node=node.nextElementSibling)if(node.classList.contains('activity')&&(node.classList.contains('tool-call')||node.classList.contains('tool-result')))steps.push(node);
+  var calls=steps.filter(function(n){return n.classList.contains('tool-call')}).length;
+  if(calls<2)return;
+  var box=document.createElement('details');box.className='turn-work';
+  var sum=document.createElement('summary');sum.textContent='Worked for '+fmtWork(Date.now()-workStart)+' · '+calls+' tool call'+(calls===1?'':'s');
+  var inner=document.createElement('div');inner.className='turn-work-steps';
+  box.appendChild(sum);box.appendChild(inner);messages.insertBefore(box,steps[0]);
+  steps.forEach(function(n){inner.appendChild(n)});
+}
+C.hook('agentSetBusy',function(prev){return function(v){
+  if(v&&!workStart){workStart=Date.now();workMark=messages.lastElementChild;if(workMark===typing)workMark=workMark.previousElementSibling}
+  prev(v);
+  if(!v&&workStart){try{collapseWork()}catch(e){}workStart=0;workMark=null}
+}});
 /* ---------- Empty state survives "New chat" ---------- */
 var emptyTemplate=$('agentEmptyState');
 if(emptyTemplate){

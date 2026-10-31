@@ -738,3 +738,12 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 .extension-form{margin-bottom:12px}
 .panel+.section-head{margin-top:24px}
 .skill-command-menu-heading kbd{text-transform:none;letter-spacing:0;font-weight:500;white-space:nowrap}
+.turn-work{align-self:stretch;margin:-6px 0;padding:4px 10px 4px 34px;position:relative;font:12.5px/1.5 var(--font-mono);color:var(--faint)}
+.turn-work::before{content:"";position:absolute;left:11px;top:11px;width:6px;height:6px;border-radius:50%;background:var(--accent-2)}
+.turn-work>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.turn-work>summary::-webkit-details-marker{display:none}
+.turn-work>summary::after{content:"›";display:inline-block;transition:transform .15s;font-weight:700}
+.turn-work[open]>summary::after{transform:rotate(90deg)}
+.turn-work>summary:hover{color:var(--text-2)}
+.turn-work-steps{display:flex;flex-direction:column;gap:2px;margin:6px 0 0 -34px}
+.turn-work-steps>.agent-message.activity{margin:0}
