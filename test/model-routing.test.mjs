@@ -70,7 +70,7 @@ test('user can configure model routing with slash commands and /usage reports sa
   const state = { root, session, env, sessionOptions: {} };
 
   const easy = await runBuiltinCommand('routing', 'easy cheap-model', state);
-  assert.match(easy.output, /clearly read-only requests use cheap-model/);
+  assert.match(easy.output, /Easy model: cheap-model; strong model: strong-model/);
   const enabled = await runBuiltinCommand('routing', 'on', state);
   assert.match(enabled.output, /Automatic routing is on/);
   assert.equal(session.settings.modelRouting.enabled, true);
