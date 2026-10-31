@@ -1612,6 +1612,18 @@ async function requestCompletionRaw(session, options = {}) {
     headers.authorization = 'Bearer ' + apiKey;
   }
 
+  // Gateway headers (ANTHROPIC_CUSTOM_HEADERS, customHeaders, customHeadersHelper). They never replace
+  // the body headers, and only fill authorization / x-api-key when OASIS did not set a key itself.
+  if (config.customHeaders || config.customHeadersHelper || providerEnv.ANTHROPIC_CUSTOM_HEADERS || providerEnv.OASIS_CUSTOM_HEADERS || providerEnv.OASIS_CUSTOM_HEADERS_HELPER) {
+    const { customHeadersFor } = await import('./api-key-helper.mjs');
+    const extra = await customHeadersFor(config, { env: providerEnv, cwd: session.root, refresh: Boolean(options.refreshApiKey) });
+    for (const [name, value] of Object.entries(extra)) {
+      if (name === 'accept' || name === 'anthropic-version') continue;
+      if ((name === 'authorization' || name === 'x-api-key') && (headers.authorization || headers['x-api-key'])) continue;
+      headers[name] = value;
+    }
+  }
+
   let endpoint;
   let bodyObject;
   let outputLimit = 0;
