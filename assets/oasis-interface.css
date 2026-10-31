@@ -702,3 +702,11 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
   #newAgentSessionBtn::before{content:"+";font-size:18px;line-height:1}
   .agent-session-tools select{max-width:132px}
 }
+
+/* Runtime scope note: keep the local-only/token-safety boundary visible in Connections. */
+.runtime-scope-note{margin:12px 0 0;padding:10px 12px;border:1px solid var(--accent-line,#9BFF5533);border-radius:var(--r-md);background:#9BFF5508;color:var(--muted);font-size:var(--fs-xs,12px);line-height:1.55}
+.runtime-scope-note strong{color:var(--text)}
+@media(max-width:390px){.first-run-wizard{padding:14px}.first-run-choice{gap:8px}.composer{padding:8px}.agent-chat-header{gap:6px}}
+.agent-utility-view[hidden]{display:none!important}
+#view-agent.active .agent-workspace-grid .agent-utility-view .cloud-runs-panel,#agentChangesUtilityPanel .cloud-changes-panel{margin:0;box-shadow:none}
+.first-run-status[data-error="true"]{color:var(--danger);border-color:#FF8A8A55;background:#FF8A8A0d}

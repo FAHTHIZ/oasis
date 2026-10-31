@@ -32,15 +32,59 @@ OASIS is not a model of its own or a hosted AI service. **You bring the model; O
 
 ---
 
+<p align="center">
+  <img src="assets/demo/oasis-demo.gif" alt="OASIS fixing a failing test in the browser workspace: it reads the code, edits one line, asks before running npm test, reviews the diff and reports verified results" width="100%" />
+  <br/><sub>Real recording of the browser workspace (<a href="assets/demo/oasis-demo.mp4">MP4</a>). The model is a scripted local stub so the run is reproducible; the tools, approval prompt, verification gate and Changes panel are the real OASIS runtime.</sub>
+</p>
+
 ## On this page
 
-[Overview](#what-is-oasis) · [Capabilities](#capabilities) · [Architecture](#how-it-works) · [Interfaces](#ways-to-use-oasis) · [Models](#models-and-providers) · [Safety](#control-and-safety) · [Getting started](#getting-started) · [Beta status](#beta-status) · [Documentation](#documentation)
+[Quick start](#quick-start) · [Overview](#what-is-oasis) · [Why OASIS](#why-oasis) · [Capabilities](#capabilities) · [Architecture](#how-it-works) · [Interfaces](#ways-to-use-oasis) · [Models](#models-and-providers) · [Safety](#control-and-safety) · [Beta status](#beta-status) · [Documentation](#documentation)
+
+## Quick start
+
+Requires **Node.js 22+** and Git.
+
+```bash
+# Latest main (recommended while 0.4.0 is unreleased)
+git clone https://github.com/FAHTHIZ/oasis.git
+cd oasis && npm install && npm install -g .
+
+oasis setup              # pick a provider: OpenAI, Anthropic, Gemini, OpenRouter, Ollama, or any OpenAI-compatible URL
+cd ~/your-project
+oasis                    # interactive terminal agent
+oasis web                # browser workspace (prints a local URL and access token)
+oasis -p "fix the failing tests" --output-format json   # one-shot, for scripts and CI
+oasis doctor --test-provider                           # check the environment and live tool calling
+```
+
+The [checksum-verified installers](docs/INSTALL.md#command-line-installation) install the latest **tagged** release (`v0.3.0`), which predates most of the work below. Use the source install above to get current `main`.
 
 ## What is OASIS?
 
-OASIS is a coding-agent runtime connected to your actual project—not just a chat window that suggests code. You describe a task; the selected model reasons about it and requests tools; OASIS applies its execution rules, works within the configured workspace, returns results, and helps you inspect the changes.
+OASIS is a coding-agent runtime connected to your actual project, not just a chat window that suggests code. You describe a task; the selected model reasons about it and requests tools; OASIS applies its execution rules, works within the configured workspace, returns results, and helps you inspect the changes.
 
 One runtime supports multiple ways to work. You can change model providers without rebuilding your workflow around a single vendor.
+
+## Why OASIS
+
+OASIS follows the familiar agent-harness design (tools, subagents, hooks, MCP, skills, CLAUDE.md/AGENTS.md instructions, Claude Code style tool names) and adds guards aimed at the most common complaints about coding agents. Each guard below is implemented and covered by tests in `test/`:
+
+| Complaint | What OASIS does |
+|---|---|
+| "It replaced my code with `// ... rest unchanged`" | **Change guard** refuses elision placeholders in `edit_file`, `write_file` and `notebook_edit`, and warns on large unexplained shrinkage. |
+| "It said tests pass when they didn't" | **Verification gate** + **claim check**: a code edit is only reported verified after a real check passes and the diff was reviewed; pipe-masked exit codes (`npm test \| tail`) don't count. |
+| "It deleted or skipped my tests" | **Test-weakening check** flags removed assertions and new `skip`/`xit` markers. |
+| "It committed my API key" | **Commit secret scan** builds the commit in a throwaway index and refuses credential hits; **secret shield** masks secrets in tool output before they reach the model. |
+| "It forgot my CLAUDE.md rules" | **Rule refresh** restates `NEVER`/`ALWAYS`/`MUST` rules after compaction and every ~60k characters; oversized instruction files are truncated **visibly**, never silently. |
+| "Compaction lost my context" | **`/compact undo`** restores the pre-compaction history; context-overflow errors trigger recovery instead of a dead session. |
+| "It hung on a pager / prompt" | Commands run non-interactively (`PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, SSH batch mode); idle streams and stuck background jobs are detected. |
+| "It killed my app / wiped my changes" | `kill`, `taskkill`, `Stop-Process` and similar need approval; **git safety snapshots** are taken before `git checkout .`, `git restore`, `rm` and friends. |
+| "It installed a hallucinated package" | **Package vetting** looks names up on npm, PyPI or crates.io before installing. |
+| "It burns tokens" | **Lean tool loading** defers rarely used tool schemas (~2.7k tokens per request), **read dedup** skips unchanged re-reads, and a compact subagent schema keeps big agent lists cheap. |
+| "It retries the same failing command forever" | **Retry guard** stops repeated identical failures and asks for a different approach. |
+
+The complete list is in the [changelog](CHANGELOG.md). These guards reduce common failure modes; they do not make any model infallible.
 
 ## Capabilities
 
