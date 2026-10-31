@@ -12,7 +12,12 @@ const mainTree = new Map([
   ['CHANGELOG.md', 'blob-changelog'],
   ['docs/TERMUX.md', 'blob-termux'],
   ['scripts/install.sh', 'blob-sh'],
-  ['scripts/install.ps1', 'blob-ps']
+  ['scripts/install.ps1', 'blob-ps'],
+  ['src/agent.mjs', 'blob-agent'],
+  ['test/runtime.test.mjs', 'blob-runtime'],
+  ['test/approval-language.test.mjs', 'blob-approval'],
+  ['docs/BENCHMARKS.md', 'blob-benchmarks'],
+  ['docs/CURRENT_STATUS.md', 'blob-status-current']
 ]);
 const openPRs = new Set(['feat/open-review']);
 const mergedHeads = new Map([['feat/merged', new Set(['merged-head-sha'])]]);
@@ -37,6 +42,20 @@ test('reviewed superseded heads retire only when the exact SHA and replacement p
   const missing = new Map(mainTree); missing.delete('scripts/install.sh');
   assert.equal(classifyRetirement({ name: 'installer/painless-cli-2026-10-29', commit: { sha: entry.sha } }, null, 'main', openPRs, missing).retire, false);
   assert.equal(classifyRetirement({ name: 'installer/painless-cli-2026-10-29', commit: { sha: 'changed-head' } }, null, 'main', openPRs, mainTree).retire, false);
+});
+
+test('the reviewed unattended-verification branch retires only at its exact audited head', () => {
+  const entry = AUDITED_SUPERSEDED_HEADS.get('fix/unattended-verification-rule');
+  assert.ok(entry);
+  const branch = { name: 'fix/unattended-verification-rule', commit: { sha: entry.sha } };
+  assert.equal(classifyRetirement(branch, null, 'main', openPRs, mainTree).retire, true);
+  assert.equal(
+    classifyRetirement({ ...branch, commit: { sha: 'different-head' } }, null, 'main', openPRs, mainTree).retire,
+    false
+  );
+  const missing = new Map(mainTree);
+  missing.delete('docs/BENCHMARKS.md');
+  assert.equal(classifyRetirement(branch, null, 'main', openPRs, missing).retire, false);
 });
 
 test('default, protected, and open-PR branches are never retired', () => {
