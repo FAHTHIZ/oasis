@@ -8,6 +8,8 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
 - **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
+- **Test-weakening check** — edits to test files that remove assertions, add `skip`/`xit`/`@pytest.mark.skip` markers or always-true asserts are reported back to the agent, which must fix the code instead or tell the user why the test changed.
+- **Compaction deadline** — the summary request is bounded (`OASIS_COMPACT_TIMEOUT_SECONDS`, default 90) and falls back to a local summary; a "Compacting…" notice shows while it runs.
 - **Tolerant edit matching** — `edit_file` and `multi_edit` recover from CRLF, trailing whitespace, smart quotes and indentation drift, and give a closest-match hint instead of a bare "not found".
 - **Read dedup** — unchanged re-reads return a short pointer instead of the whole file again (`readDedup: false` / `OASIS_READ_DEDUP=0`).
 - **Follow-up ledger** — deferred TODOs the agent mentions are captured in `.oasis/followups.json`; manage with `/followups [all|done ID|drop ID|clear]`.

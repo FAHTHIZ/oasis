@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
-import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, combineWarnings } from './change-guard.mjs';
+import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
@@ -318,7 +318,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
   await writeFile(target.absolute, next, 'utf8');
   await recordFileState(context, target.absolute);
-  const warning = combineWarnings(shrinkWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
+  const warning = combineWarnings(shrinkWarning(original, next, relative), testTamperWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
   return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true, ...(relaxedNotes.length ? { note: relaxedNotes.join('; ') + '.' } : {}), ...(warning ? { warning } : {}) };
 }
 

@@ -861,6 +861,8 @@ These are on by default and each can be switched off.
 | Feature | What it does | Opt out |
 | --- | --- | --- |
 | Change guard | Rejects edits that replace code with placeholders like `// ... rest unchanged`; warns on large unexplained shrinkage; flags fix-circling back to an earlier broken state. | — |
+| Test-weakening check | Edits to test files that drop assertions, add skips or add always-true asserts are flagged so the agent fixes the code instead of the test. | — |
+| Compaction deadline | Context summaries give up after `OASIS_COMPACT_TIMEOUT_SECONDS` (default 90) and use a local summary, with a visible notice. | — |
 | Tolerant edits | `edit_file` / `multi_edit` match through CRLF, trailing spaces, smart quotes and indentation drift; failed matches show the closest candidate. | — |
 | Read dedup | Re-reading an unchanged file returns a short pointer instead of the full contents. | `readDedup: false`, `OASIS_READ_DEDUP=0` |
 | Lean tools | Rarely used setup/install/terminal/cron tools are listed by name only and load on first call or through `tool_search`. | `leanTools: false`, `OASIS_LEAN_TOOLS=0` |

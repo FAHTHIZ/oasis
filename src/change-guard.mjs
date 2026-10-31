@@ -93,6 +93,39 @@ export function recordAndDetectCircling(holder, absolutePath, previousText, next
     'output, state a new hypothesis, and try a genuinely different approach (or ask the user) instead of repeating earlier attempts.';
 }
 
+// 4. Test tampering: an edit to a test file that removes assertions or adds
+//    skips/trivial assertions — the classic "make the tests pass by weakening
+//    the tests" failure. This warns (it does not block) because removing an
+//    obsolete test can be legitimate; the model must say so to the user.
+const TEST_PATH = /(^|[\\/])(tests?|__tests__|spec|specs)[\\/]|\.(test|spec)\.[cm]?[jt]sx?$|_test\.(go|py|rb|exs?)$|(^|[\\/])test_[^\\/]+\.py$|Tests?\.(java|kt|cs|swift)$/i;
+const ASSERTION = /\b(?:assert(?:_\w+|[A-Z]\w*)?|expect|should|t\.(?:equal|deepEqual|ok|is|true|false|throws|match|assert\w*)|require\.\w+|EXPECT_\w+|ASSERT_\w+|XCTAssert\w*)\s*[.(!]|^\s*assert\s+(?!True\b)\S/gm;
+const SKIP = /\b(?:(?:it|test|describe|context)\.(?:skip|todo)|x(?:it|test|describe)|test\.fixme)\s*\(|@pytest\.mark\.(?:skip|xfail)\b|@unittest\.skip|\bt\.Skip(?:Now|f)?\(|@Disabled\b|@Ignore\b|\{\s*skip\s*:\s*true\s*\}|#\[ignore\]/g;
+const TRIVIAL = /expect\(\s*(?:true|1)\s*\)\.(?:toBe|toEqual)\(\s*(?:true|1)\s*\)|\bassert\s+True\b|assert\.ok\(\s*true\s*\)|assert\(\s*true\s*\)|assertTrue\(\s*true\s*\)/g;
+
+export function isTestPath(displayPath) {
+  return TEST_PATH.test(String(displayPath || ''));
+}
+
+function countMatches(text, pattern) {
+  const found = String(text || '').match(pattern);
+  return found ? found.length : 0;
+}
+
+export function testTamperWarning(previousText, nextText, displayPath) {
+  if (previousText === null || previousText === undefined || !isTestPath(displayPath)) return '';
+  const removedAssertions = countMatches(previousText, ASSERTION) - countMatches(nextText, ASSERTION);
+  const addedSkips = countMatches(nextText, SKIP) - countMatches(previousText, SKIP);
+  const addedTrivial = countMatches(nextText, TRIVIAL) - countMatches(previousText, TRIVIAL);
+  const signs = [];
+  if (removedAssertions > 0) signs.push('removed ' + removedAssertions + ' assertion(s)');
+  if (addedSkips > 0) signs.push('added ' + addedSkips + ' skip/disable marker(s)');
+  if (addedTrivial > 0) signs.push('added ' + addedTrivial + ' always-true assertion(s)');
+  if (!signs.length) return '';
+  return 'Test-weakening check: this edit to ' + displayPath + ' ' + signs.join(', ') + '. Do not make failing tests pass by ' +
+    'loosening or skipping them. If the test is correct, fix the code under test instead; if the test itself is genuinely wrong ' +
+    'or obsolete, keep the change but tell the user explicitly which test you changed and why.';
+}
+
 export function combineWarnings(...warnings) {
   const list = warnings.filter(Boolean);
   return list.length ? list.join(' ') : '';
