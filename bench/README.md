@@ -45,7 +45,7 @@ The 33 existing fixtures remain a utility-focused regression/smoke suite. They a
 
 ## Current verification status
 
-**No benchmark track is complete. No current-HEAD fixture pass is claimed here.** The latest inspected repository commit is `58cb29e9d3df07a02c10e8d0941721cf0aa27c1b`. The repository's status audit explicitly says that no features were verified on its then-current HEAD; a fresh run against the exact commit used for this benchmark is required.
+**No benchmark track is complete. No current-HEAD fixture pass is claimed here.** The source-inspection baseline was `58cb29e9d3df07a02c10e8d0941721cf0aa27c1b`. The repository's status audit explicitly says that no features were verified on that audited HEAD; a fresh run against the exact commit used for this benchmark is required.
 
 Source inspection confirms that the existing CLI exposes `oasis eval --validate`, and that the existing Claude Code runner requests restricted mode and rejects versions older than v2.1.248. This is source inspection, not a successful runtime test. The quarantine workflow and current-HEAD fixture results remain to be verified before the infrastructure audit gate can close.
 
