@@ -2187,7 +2187,7 @@ export function appendLspUnavailableNotice(text, state) {
   const changed = new Set(state && state.changedPaths instanceof Set ? state.changedPaths : []);
   const unavailable = [...(state && state.lspVerificationByPath instanceof Map ? state.lspVerificationByPath.entries() : [])]
     .filter(([file, result]) => changed.has(file) && result && result.status === 'unavailable')
-    .map(([file, result]) => file + (result.reason ? ': ' + String(result.reason).replace(/\s*Meanwhile, use grep or the diagnostics tool\.?/i, '').slice(0, 240) : ''));
+    .map(([file, result]) => file + (result.reason ? ': ' + String(result.reason).replace(/\s*Meanwhile, use grep or the diagnostics tool\.?/i, '').slice(0, 240).replace(/[.\s]+$/, '') : ''));
   if (!unavailable.length) return String(text || '');
   return String(text || '').trimEnd() +
     '\n\nLSP verification unavailable for ' + unavailable.join('; ') +
