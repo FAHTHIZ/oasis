@@ -358,6 +358,13 @@ Each session gets a git-ignored folder, `.oasis/scratch/<session>/`, and the age
 
 `/language Bengali` pins the language OASIS writes its replies, plans and questions in for the current session; `/language off` unpins it. To keep it for every session, set `"language": "Bengali"` in your settings or `OASIS_LANGUAGE=Bengali`. Code, commands, file paths and quoted text stay as they are. This stops replies drifting into the language of a file, log or web page the agent just read. Only plain language names are accepted.
 
+### Writing rules: banned phrases and code comments
+
+Corrections given in chat ("stop saying load-bearing", "no comments") get summarized away at compaction. OASIS keeps them in settings and the system prompt instead, so they hold across compaction and new sessions.
+
+- `/avoid PHRASE` bans a word or phrase from replies, code comments, commit messages and docs; `/avoid remove PHRASE` lifts it and `/avoid` lists the current set. Phrases are saved as `"avoidPhrases": [...]` in your user settings; project settings can add more. "load-bearing" and "belt-and-suspenders" are banned by default; `OASIS_AVOID_PHRASES=0` drops the defaults.
+- `/comments none` tells the agent not to add code comments, and any edit that adds comment lines comes back with a warning asking it to remove them. `/comments minimal` allows only comments that explain a non-obvious reason. `/comments default` clears it. The setting is `"codeComments"`; `OASIS_CODE_COMMENTS` overrides it for one run.
+
 ## Status line
 
 Show your own status line above the input prompt, using the same settings format using the supported format:

@@ -7,6 +7,7 @@ import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPre
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLanguage } from './settings.mjs';
 import { applyReplyLanguage } from './reply-language.mjs';
+import { applyWritingRules, effectivePhrases, normalizePhrases, normalizeCommentMode, DEFAULT_AVOID_PHRASES } from './style-rules.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
@@ -60,6 +61,8 @@ export const BUILTIN_COMMANDS = {
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
   style: 'List or switch the active response style (/style [default|concise|explanatory|architect|reviewer])',
   language: 'Pin the reply language (/language Bengali, /language off)',
+  avoid: 'Ban a word or phrase from replies, comments and commits (/avoid PHRASE, /avoid remove PHRASE)',
+  comments: 'Set how many code comments the agent adds (/comments none|minimal|default)',
   'output-style': 'Legacy alias: list or switch response styles (/output-style NAME)',
   todos: 'Show the current todo list',
   scope: 'Lock file edits to paths for this session: /scope src/** test/** | /scope off',
@@ -207,7 +210,7 @@ export async function runBuiltinCommand(name, argument, state) {
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
         { title: 'Working', commands: ['clear', 'compact', 'diagnostics', 'audit', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
-        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
+        { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
       const used = new Set();
       const lines = [];
@@ -1360,6 +1363,41 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!session) return { output: 'Reply language for the next session: ' + (language || 'not pinned') + '.' };
       applyReplyLanguage(session, language);
       return { output: language ? 'Replies will be written in ' + language + ' for this session.' : 'Reply language is no longer pinned for this session.' };
+    }
+    case 'avoid': {
+      const text = String(argument || '').trim();
+      const removing = /^(?:remove|rm|delete|unban)\s+/i.test(text);
+      const phrase = text.replace(/^(?:remove|rm|delete|unban)\s+/i, '').replace(/^["']|["']$/g, '').trim();
+      const { updateUserSettings } = await import('./settings.mjs');
+      let saved = [];
+      if (!text) {
+        const list = session && session.avoidPhrases || effectivePhrases({}, env || process.env);
+        return { output: 'Avoided phrases: ' + (list.length ? list.map((p) => '"' + p + '"').join(', ') : 'none') + '.\nUsage: /avoid PHRASE | /avoid remove PHRASE. Saved to your user settings ("avoidPhrases"). Built-ins (' + DEFAULT_AVOID_PHRASES.join(', ') + ') are off with OASIS_AVOID_PHRASES=0.' };
+      }
+      if (!normalizePhrases([phrase]).length) return { output: 'Use a short single-line phrase (60 characters or fewer, no < > { } or backticks).' };
+      await updateUserSettings((settings) => {
+        const current = normalizePhrases(settings.avoidPhrases);
+        settings.avoidPhrases = removing ? current.filter((p) => p.toLowerCase() !== phrase.toLowerCase()) : normalizePhrases([...current, phrase]);
+        if (!settings.avoidPhrases.length) delete settings.avoidPhrases;
+        saved = settings.avoidPhrases || [];
+        return settings;
+      }, env || process.env);
+      if (session) {
+        let list = normalizePhrases([...(session.avoidPhrases || []), ...saved]);
+        if (removing) list = list.filter((p) => p.toLowerCase() !== phrase.toLowerCase());
+        applyWritingRules(session, list, session.commentMode);
+      }
+      return { output: removing ? 'No longer avoiding "' + phrase + '".' : 'Will avoid "' + phrase + '" in replies, comments, commit messages and docs (saved for future sessions).' };
+    }
+    case 'comments': {
+      const text = String(argument || '').trim().toLowerCase();
+      if (!text) return { output: 'Code comments: ' + (session && session.commentMode || 'default') + '.\nUsage: /comments none | minimal | default. Saved to your user settings ("codeComments"). With none, edits that add comment lines come back with a warning.' };
+      const mode = normalizeCommentMode(text);
+      if (!mode && text !== 'default') return { output: 'Usage: /comments none | minimal | default' };
+      const { updateUserSettings } = await import('./settings.mjs');
+      await updateUserSettings((settings) => { if (mode) settings.codeComments = mode; else delete settings.codeComments; return settings; }, env || process.env);
+      if (session) applyWritingRules(session, session.avoidPhrases || [], mode);
+      return { output: mode === 'none' ? 'The agent will not add code comments (saved).' : mode === 'minimal' ? 'The agent will only add comments that explain non-obvious reasons (saved).' : 'Code comments back to the default (saved).' };
     }
     case 'style':
     case 'output-style': {
