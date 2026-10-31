@@ -4,7 +4,8 @@
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
-**Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`
+**Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
+**Latest documentation and release-check snapshot:** [`a8fb7b32ee257e265f6e7cb1a5c301345afed901`](https://github.com/FAHTHIZ/oasis/commit/a8fb7b32ee257e265f6e7cb1a5c301345afed901)
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. It replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
@@ -38,22 +39,22 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Last fully enumerated validation snapshot:** `5d6225e982755dd333dc0d476e685b4f8f0282ac` (October 31, 2026). The source package was version `0.4.0`; its release notes were prepared, but `v0.4.0` had not been tagged or published.
+**Latest release-check snapshot:** `a8fb7b32ee257e265f6e7cb1a5c301345afed901` (October 31, 2026). The earlier fully enumerated CI evidence baseline `5d6225e982755dd333dc0d476e685b4f8f0282ac` remains historical; the checks below refer only to the newer snapshot.
 
-The public release state was checked against the repository's Git refs and Releases API:
+The public release state was checked against live Git refs and the GitHub Releases API:
 
 - The only version tag currently present is `v0.3.0`.
-- The GitHub Releases API currently returns no published release objects or downloadable release assets. A version tag is not the same as a published GitHub Release.
-- `package.json` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only.
-- **Installer checks passed on Windows, Ubuntu and macOS** for this exact SHA ([run 41180252724](https://github.com/FAHTHIZ/oasis/actions/runs/41180252724)).
-- **Quality Checks** were queued/pending when this snapshot was recorded ([run 41180252743](https://github.com/FAHTHIZ/oasis/actions/runs/41180252743)); they must finish successfully before the same-SHA quality gate is called green.
-- **Public-site validation/deployment** was still in progress ([run 41180252729](https://github.com/FAHTHIZ/oasis/actions/runs/41180252729)).
-- **Desktop packaging** was still in progress ([run 41180252715](https://github.com/FAHTHIZ/oasis/actions/runs/41180252715)).
-- The guarded branch-cleanup workflow passed ([run 41180252736](https://github.com/FAHTHIZ/oasis/actions/runs/41180252736)).
+- There is no published GitHub Release object for `v0.3.0`, and the Releases API returns no published release objects or downloadable assets. A Git tag is not a published GitHub Release.
+- `package.json` on `main` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only. The stable CLI installer therefore still resolves `v0.3.0` at this snapshot.
+- **Installer checks passed on Windows, macOS and Ubuntu** for this exact SHA ([run 41181273991](https://github.com/FAHTHIZ/oasis/actions/runs/41181273991)).
+- **Guarded branch cleanup passed** on this exact SHA ([run 41181274102](https://github.com/FAHTHIZ/oasis/actions/runs/41181274102)).
+- **Quality Checks were not green:** the security/runtime regression jobs on Windows, macOS and Ubuntu passed, but the clean-environment suite reported 839/840 tests passing. Its one failure was the lifecycle test's literal README expectation for the phrase `OASIS is in beta`, which the README presentation edit had removed. This documentation update restores that required wording; a new same-commit run must confirm the fix ([run 41181274088](https://github.com/FAHTHIZ/oasis/actions/runs/41181274088)).
+- **Public-site validation/deployment** was still in progress when this snapshot was checked ([run 41181274087](https://github.com/FAHTHIZ/oasis/actions/runs/41181274087)).
+- **Desktop packaging** was still in progress when this snapshot was checked ([run 41181273970](https://github.com/FAHTHIZ/oasis/actions/runs/41181273970)).
 - Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
 - The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
-The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the CI evidence baseline `5d6225e982755dd333dc0d476e685b4f8f0282ac`. All CI statements above refer only to that exact SHA. Subsequent documentation follow-ups—README, installer availability wording, the public homepage and its validator—were committed directly to `main` after this validation snapshot. Those later commits need their own same-SHA checks; a pass from an earlier commit is historical evidence only.
+The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the historical CI evidence baseline above. The README, installer guide, Android guide, changelog, prepared release notes and security policy are being aligned to this snapshot. Any later commit—including the documentation audit commit—needs its own same-SHA release checks; a pass from an earlier commit is historical evidence only.
 
 ## Production-readiness outlook
 

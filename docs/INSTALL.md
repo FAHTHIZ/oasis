@@ -27,7 +27,7 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 
 ## Command-line installation
 
-The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
+The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. At this snapshot, `v0.3.0` is the only version tag, so the installer currently installs that version; source package `0.4.0` on `main` is prepared but is not yet a tagged install target. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
 ### macOS, Linux and Android/Termux
 

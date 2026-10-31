@@ -18,7 +18,7 @@
 
 OASIS is not a model of its own or a hosted AI service. **You bring the model; OASIS provides the agent runtime, workspace, tools, controls, integrations, and interfaces.**
 
-> **Beta status:** The source package is version `0.4.0`, but it has not been tagged or published. The only version tag currently present is `v0.3.0`; no public GitHub Release assets are available to download. See [current limits](#beta-status).
+> **Beta status:** OASIS is in Beta. The source package is version `0.4.0`, but it has not been tagged or published. The only version tag currently present is `v0.3.0`; no public GitHub Release assets are available to download. See [current limits](#beta-status).
 
 <p align="center">
   <a href="#getting-started"><strong>Get started</strong></a>
@@ -137,7 +137,7 @@ The next milestone is a production-oriented release gated on same-commit CI, pla
 
 ## Documentation
 
-Open the guide for the level of detail you need:
+The [documentation index](docs/README.md) maps every canonical guide, integration reference, release note, and research archive. Open the guide for the level of detail you need:
 
 | Topic | Reference |
 |---|---|
@@ -146,6 +146,8 @@ Open the guide for the level of detail you need:
 | Trust and evaluation | [Security audit](docs/SECURITY_RELIABILITY_AUDIT.md) · [Security policy](SECURITY.md) · [Privacy](docs/PRIVACY.md) · [Benchmarks](docs/BENCHMARKS.md) |
 | Extensibility and experience | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) · [Shortcuts](docs/KEYS.md) · [Brand guide](docs/BRAND.md) |
 | Project upkeep and research | [Repository maintenance](docs/REPOSITORY_MAINTENANCE.md) · [Research notes](docs/research/README.md) |
+| Automation on GitHub | [GitHub Action guide](docs/github-action.md) · [workflow example](docs/examples/oasis-github.yml) |
+| Release history | [Changelog](CHANGELOG.md) · [prepared 0.4.0 notes](docs/releases/v0.4.0.md) |
 | Contributions | [Contributing guide](CONTRIBUTING.md) |
 
 ## Development

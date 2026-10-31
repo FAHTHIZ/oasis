@@ -18,4 +18,4 @@ This file records notable user-facing product changes. It does not imply that an
 
 ## 0.3.0
 
-See the [existing release page](https://github.com/FAHTHIZ/oasis/releases/tag/v0.3.0) for the published 0.3.0 assets and notes.
+The repository retains the `v0.3.0` Git tag, but no corresponding GitHub Release object or downloadable assets are currently published. The tag is the latest stable versioned install target at this snapshot; check the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases) for actual published releases.
