@@ -44,6 +44,21 @@ test('quarantine detects an exact task prompt inside nested JSON training data',
   assert.doesNotMatch(report.errors.join('\n'), /Change the greeting but preserve/);
 });
 
+test('quarantine recognizes underscore and dataset aliases for training directories', async (t) => {
+  const root = await createRepo();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const training = path.join(root, 'data', 'train_data');
+  await mkdir(training, { recursive: true });
+  await writeFile(path.join(training, 'dialogues.jsonl'), JSON.stringify({
+    messages: [{ role: 'user', content: 'Change the greeting but preserve the exported API.' }]
+  }) + '\\n');
+
+  const report = await checkEvalQuarantine(root);
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.protectedDirectories, ['data/train_data']);
+  assert.match(report.errors.join('\\n'), /exact benchmark prompt match/);
+});
+
 test('quarantine checks snapshot directories for exact task prompt leakage', async (t) => {
   const root = await createRepo();
   t.after(() => rm(root, { recursive: true, force: true }));
