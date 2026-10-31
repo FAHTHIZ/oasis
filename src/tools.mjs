@@ -1,4 +1,5 @@
 import * as gitSafety from './git-safety.mjs';
+import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
@@ -397,6 +398,7 @@ export function nonInteractiveEnvironment(env, source = process.env) {
 const SUMMARY_DOC = /^(?:[A-Z0-9]+[_-])*(?:SUMMARY|REPORT|NOTES|CHANGES|CHANGELOG_SUMMARY|IMPLEMENTATION|FIXES|PROGRESS|STATUS|ANALYSIS|COMPLETION|WALKTHROUGH|OVERVIEW)(?:[_-][A-Z0-9]+)*\.md$/;
 export function unrequestedDocWarning(displayPath, request) {
   const base = path.posix.basename(String(displayPath || ''));
+  if (isScratchPath(displayPath)) return '';
   if (!SUMMARY_DOC.test(base) || /^(?:README|CHANGELOG|CONTRIBUTING|LICENSE)\.md$/i.test(base)) return '';
   if (typeof request !== 'string') return '';
   const stem = base.replace(/\.md$/i, '').toLowerCase();
