@@ -517,7 +517,9 @@ export async function runBuiltinCommand(name, argument, state) {
       const current = { enabled: false, easyModel: '', strongModel: '', ...(session.settings && session.settings.modelRouting || {}) };
       const describe = (value) => value.enabled && value.easyModel
         ? 'Automatic routing is on. Clearly read-only requests use ' + value.easyModel + '; hard, ambiguous, and change requests use ' + (value.strongModel || session.config.model) + '.'
-        : 'Automatic model routing is off. Current model: ' + session.config.model + '.';
+        : value.easyModel
+          ? 'Automatic model routing is off. Easy model: ' + value.easyModel + '; strong model: ' + (value.strongModel || session.config.model) + '. Run /routing on to enable it.'
+          : 'Automatic model routing is off. Current model: ' + session.config.model + '.';
       if (action === 'status') return { output: describe(current) + ' Configure with /routing easy MODEL and /routing on.' };
       if (action === 'off' || action === 'disable') {
         current.enabled = false;
