@@ -375,6 +375,18 @@ export function scrubEnvironment(source = process.env) {
   return env;
 }
 
+// Agent commands have no usable terminal: stdin is closed and nobody is watching
+// a pager or editor. Without these, `git log` / `git commit` (no -m) / a git clone
+// that wants a password can open /dev/tty and hang until the timeout. Applied to
+// non-interactive run_command / run_shell children; OASIS_NONINTERACTIVE_ENV=0 opts out.
+export function nonInteractiveEnvironment(env, source = process.env) {
+  if (String(source.OASIS_NONINTERACTIVE_ENV || '').trim() === '0') return env;
+  const next = { ...env, GIT_PAGER: 'cat', PAGER: 'cat', GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true', GIT_SEQUENCE_EDITOR: 'true', GH_PROMPT_DISABLED: '1', GCM_INTERACTIVE: 'never', DEBIAN_FRONTEND: 'noninteractive', PIP_NO_INPUT: '1', HOMEBREW_NO_AUTO_UPDATE: '1' };
+  if (process.platform !== 'win32') { next.EDITOR = 'true'; next.VISUAL = 'true'; }
+  if (!env.GIT_SSH_COMMAND && !env.GIT_SSH) next.GIT_SSH_COMMAND = 'ssh -o BatchMode=yes';
+  return next;
+}
+
 function commandSafety(command, args) {
   return analyzeCommand(command, args).blocked || null;
 }
@@ -403,7 +415,8 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
-  const env = scrubEnvironment(options.env || process.env);
+  const baseEnv = scrubEnvironment(options.env || process.env);
+  const env = options.interactive ? baseEnv : nonInteractiveEnvironment(baseEnv, options.env || process.env);
   if (options.interactive) {
     if (options.background) throw new Error('Choose either interactive=true or run_in_background=true, not both.');
     if (!options.ptyManager) throw new Error('Interactive terminal sessions are not available in this context.');
