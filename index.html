@@ -271,6 +271,8 @@
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Appearance and backup</h2><div class="section-sub">Preferences and a copy of your local workspace.</div></div></div>
       <div class="settings-control-row"><span><strong>Theme</strong><small>Choose a comfortable appearance.</small></span><button class="btn btn-secondary" id="themeToggle" type="button">Toggle theme</button></div>
+      <div class="settings-control-row"><span><strong>Chat width</strong><small>How wide the conversation column is.</small></span><select id="chatWidthSelect" class="settings-select" aria-label="Chat width"><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="full">Full width</option></select></div>
+      <div class="settings-control-row"><span><strong>Send key</strong><small>Which key sends a message in the composer.</small></span><select id="sendKeySelect" class="settings-select" aria-label="Send key"><option value="enter">Enter sends, Shift+Enter new line</option><option value="mod-enter">Ctrl/⌘+Enter sends, Enter new line</option></select></div>
       <div class="settings-control-row"><span><strong>Search</strong><small>Find local projects and tasks.</small></span><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label></div>
       <div class="settings-control-row"><span><strong>Backup</strong><small>Export before clearing browser data or switching devices.</small></span><div class="agent-buttons"><button class="btn btn-secondary" id="exportBtn" type="button">Export backup</button><button class="btn btn-secondary" id="importBtn" type="button">Import backup</button></div></div>
     </section>
@@ -494,6 +496,7 @@ function commandPaletteItems(){
     {id:'nav-extensions',label:'Open extensions',description:'Browse available extension and skill sources',category:'Navigate',keywords:'skills plugins',run:function(){navigate('extensions')}},
     {id:'nav-integrations',label:'Open integrations',description:'Review runtime and connector options',category:'Navigate',keywords:'mcp connector server',run:function(){navigate('integrations')}},
     {id:'project-new',label:'Create a project',description:'Open the new-project form',category:'Workspace',keywords:'add project',run:function(){navigate('projects');window.setTimeout(addProject,100)}},
+    {id:'chat-width',label:'Cycle chat width',description:'Comfortable, wide or full-width conversation',category:'Settings',keywords:'layout wide full width column',run:function(){var order=['comfortable','wide','full'],cur='comfortable';try{cur=localStorage.getItem('oasis.web.chatWidth')||'comfortable'}catch(e){}var next=order[(order.indexOf(cur)+1)%order.length];window.oasisSetChatWidth(next);notify('Chat width: '+next+'.')}},
     {id:'task-new',label:'Add a task',description:'Open the task form',category:'Workspace',keywords:'new todo next step',run:function(){navigate('tasks');window.setTimeout(addTaskDialog,100)}},
     {id:'backup-export',label:'Export workspace backup',description:'Download the projects, tasks and notes in this browser',category:'Workspace',keywords:'backup download export data',run:function(){document.getElementById('exportBtn').click()}},
     {id:'theme-toggle',label:'Toggle light / dark theme',description:'Switch the workspace appearance',category:'Settings',keywords:'appearance theme color',run:function(){document.getElementById('themeToggle').click()}},
@@ -627,6 +630,16 @@ document.getElementById('globalSearch').addEventListener('input',function(){var 
 document.getElementById('notesEditor').addEventListener('input',function(){state.notes=this.value;save(false);document.getElementById('noteStatus').textContent='Saved on this device';renderStats()});
 document.getElementById('clearNotesBtn').addEventListener('click',function(){if(window.confirm('Clear your working notes? This cannot be undone without a backup.')){state.notes='';save();render();notify('Notes cleared.')}});
 document.getElementById('exportBtn').addEventListener('click',exportBackup);document.getElementById('importBtn').addEventListener('click',function(){document.getElementById('importFile').click()});document.getElementById('importFile').addEventListener('change',function(){importBackup(this.files&&this.files[0])});
+(function(){
+  var widths={comfortable:'780px',wide:'1040px',full:'100%'};
+  function stored(key,fallback){try{return localStorage.getItem(key)||fallback}catch(e){return fallback}}
+  function applyWidth(value){if(!widths[value])value='comfortable';document.documentElement.style.setProperty('--chat-w',widths[value]);var sel=document.getElementById('chatWidthSelect');if(sel)sel.value=value}
+  window.oasisSetChatWidth=function(value){try{localStorage.setItem('oasis.web.chatWidth',value)}catch(e){}applyWidth(value)};
+  applyWidth(stored('oasis.web.chatWidth','comfortable'));
+  var widthSel=document.getElementById('chatWidthSelect');if(widthSel)widthSel.addEventListener('change',function(){window.oasisSetChatWidth(widthSel.value)});
+  var keySel=document.getElementById('sendKeySelect');
+  if(keySel){keySel.value=stored('oasis.web.sendKey','enter')==='mod-enter'?'mod-enter':'enter';keySel.addEventListener('change',function(){try{localStorage.setItem('oasis.web.sendKey',keySel.value)}catch(e){}document.querySelectorAll('[data-send-key-toggle]').forEach(function(b){b.textContent=''})})}
+})();
 document.getElementById('themeToggle').addEventListener('click',function(){document.body.classList.toggle('light');var light=document.body.classList.contains('light');try{localStorage.setItem('oasis.oss.theme',light?'light':'dark')}catch(e){}this.textContent=light?'☾':'☼';this.setAttribute('aria-label',light?'Switch to dark theme':'Switch to light theme')});
 document.getElementById('todayLabel').textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date()).toUpperCase();try{if(localStorage.getItem('oasis.oss.theme')==='light'){document.body.classList.add('light');document.getElementById('themeToggle').textContent='☾'}}catch(e){}load();render();
 if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js').catch(function(){console.warn('Offline cache was not enabled in this browser.')})})}
@@ -1639,6 +1652,8 @@ C.hook('agentAssistantUpdate',function(coreUpdate){return function(jobId,text){
 }});
 /* ---------- Activity rows ---------- */
 var coreAppend=null;C.hook('agentAppendMessage',function(f){coreAppend=f;return f});
+/* Saved chats reopen through agentAppendMessage, not agentAssistantUpdate: render their markdown too. */
+C.hook('agentAppendMessage',function(f){return function(kind,text){var el=f.apply(null,arguments);if(kind==='assistant'&&el&&text&&!/^Oasis is working…?$/.test(String(text).trim())){pending.set(el,String(text));if(!raf)raf=requestAnimationFrame(paint)}return el}});
 C.hook('agentActivity',function(){return function(text){
   text=String(text||'');var m;
   var empty=$('agentEmptyState');
