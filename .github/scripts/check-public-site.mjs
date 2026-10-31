@@ -18,7 +18,7 @@ const [html, robots, sitemap, icon, socialPreview, packageText, readme, licenseT
 
 const expectedUrl = 'https://fahthiz.github.io/oasis/';
 const expectedRepoUrl = 'https://github.com/FAHTHIZ/oasis.git';
-const expectedDescription = 'OASIS is an open-source AI coding agent. Bring your own model for local-first coding workflows, tools, and multi-step software work.';
+const expectedDescription = 'OASIS is an open-source, local-first AI coding agent and developer workspace. Bring your model to a connected coding runtime.';
 const required = [
   '<!doctype html>', '<html lang="en">', '<meta name="description"',
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
@@ -33,7 +33,7 @@ assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the
 assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta description must match the approved concise description.');
 assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.svg"'), 'Homepage must point Open Graph at the social preview image.');
 assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.includes('<svg'), 'Social preview must be a 1200x630 SVG image.');
-assert.ok(socialPreview.includes('OASIS OSS') && socialPreview.includes('CODE. AUTOMATE.') && socialPreview.includes('local-first workspace'), 'Social preview must use the current OASIS portal identity and descriptor.');
+assert.ok(socialPreview.includes('OASIS') && !socialPreview.includes('OASIS OSS') && socialPreview.includes('CODE. AUTOMATE.') && socialPreview.includes('local-first workspace'), 'Social preview must use the current OASIS-only product identity and descriptor.');
 assert.ok(html.includes('Beta · Open source · Apache-2.0'), 'Public homepage must show the Beta stage.');
 for (const [name, sticker] of [['wide beta sticker', betaSticker], ['round beta seal', betaSeal], ['compact beta mark', betaMark]]) {
   assert.ok(sticker.startsWith('<svg') && sticker.includes('</svg>'), name + ' must be an SVG document.');
