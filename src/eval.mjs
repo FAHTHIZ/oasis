@@ -651,7 +651,8 @@ function parseArgs(args) {
   const config = {
     validate: false, task: null, trials: 3, help: false, compare: null, compareOutput: null, compareHtml: null,
     claudeCode: false, model: null, maxTurns: 30, timeoutSeconds: 600,
-    timeoutExplicit: false, budgetUSD: null, claudeOptionsUsed: false
+    timeoutExplicit: false, budgetUSD: null, claudeOptionsUsed: false,
+    routeEasyModel: null, routeStrongModel: null, routingOptionsUsed: false
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -669,6 +670,16 @@ function parseArgs(args) {
       const value = args[++i];
       if (!value || value.startsWith('--')) throw new Error(label + ' requires an output file path.');
       config[option] = value;
+      continue;
+    }
+    if (arg === '--route-easy-model' || arg === '--route-strong-model') {
+      const value = args[++i];
+      if (!value || value.startsWith('--') || value.length > 200 || /[\r\n\0]/.test(value)) {
+        throw new Error(arg + ' requires a model ID up to 200 characters.');
+      }
+      if (arg === '--route-easy-model') config.routeEasyModel = value;
+      else config.routeStrongModel = value;
+      config.routingOptionsUsed = true;
       continue;
     }
     if (arg === '--claude-code') { config.claudeCode = true; continue; }
@@ -729,9 +740,17 @@ function parseArgs(args) {
   if (config.claudeOptionsUsed && !config.claudeCode) {
     throw new Error('--model, --max-turns and --budget-usd require --claude-code.');
   }
+  if (config.routingOptionsUsed && config.claudeCode) {
+    throw new Error('--route-easy-model and --route-strong-model apply only to OASIS eval runs, not --claude-code.');
+  }
+  if (config.routeStrongModel && !config.routeEasyModel) {
+    throw new Error('--route-strong-model requires --route-easy-model.');
+  }
   if (config.claudeCode && (config.validate || config.compare)) {
     throw new Error('--claude-code cannot be combined with --validate or --compare.');
   }
+  if (config.validate && config.routingOptionsUsed) throw new Error('--validate cannot be combined with model-routing options.');
+  if (config.compare && config.routingOptionsUsed) throw new Error('--compare cannot be combined with model-routing options.');
   if (config.validate && (config.task || config.trials !== 3 || config.compare || config.claudeCode || config.timeoutExplicit || config.compareOutput || config.compareHtml)) throw new Error('--validate runs the complete suite; do not combine it with --task, --trials, --compare, --timeout-seconds, --out, --html or --claude-code.');
   if (config.compare && (config.task || config.trials !== 3 || config.claudeCode || config.timeoutExplicit)) throw new Error('--compare cannot be combined with --task, --trials, --timeout-seconds or --claude-code.');
   return config;
@@ -1025,7 +1044,7 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
@@ -1081,6 +1100,14 @@ export async function runEvalCommand(args = [], options = {}) {
         try {
           process.env.OASIS_CONFIG_DIR = isolatedConfigDir;
           session = await createSession({ root: workspace, config: provider });
+          if (config.routeEasyModel) {
+            session.settings ||= {};
+            session.settings.modelRouting = {
+              enabled: true,
+              easyModel: config.routeEasyModel,
+              strongModel: config.routeStrongModel || provider.model
+            };
+          }
           timeoutController = new AbortController();
           timeoutTimer = setTimeout(() => {
             timeoutController.abort();
@@ -1094,6 +1121,7 @@ export async function runEvalCommand(args = [], options = {}) {
             env: process.env,
             maxSteps: provider.maxSteps,
             signal: timeoutController.signal,
+            ...(config.routeEasyModel ? { routingHint: task.difficulty } : {}),
             onUsage: (entry) => {
               usage.inputTokens += Number(entry.inputTokens || 0);
               usage.outputTokens += Number(entry.outputTokens || 0);
@@ -1114,22 +1142,132 @@ export async function runEvalCommand(args = [], options = {}) {
         if (!errorText && agentResult) verification = await runVerifier(task, workspace, env);
         const elapsedMs = Date.now() - trialStarted;
         const totalTokens = usage.inputTokens + usage.outputTokens;
-        const costUSD = costEstimate(usage.inputTokens, usage.outputTokens, inputRate, outputRate);
+        const taskUsage = agentResult && agentResult.taskUsage && typeof agentResult.taskUsage === 'object'
+          ? agentResult.taskUsage
+          : null;
+        const routed = agentResult && agentResult.modelRouting && typeof agentResult.modelRouting === 'object'
+          ? agentResult.modelRouting
+          : null;
+        const model = routed && typeof routed.selectedModel === 'string' ? routed.selectedModel : provider.model;
+        const routedCostKnown = Boolean(taskUsage && taskUsage.costKnown === true && typeof taskUsage.costUSD === 'number');
+        const costUSD = routedCostKnown
+          ? taskUsage.costUSD
+          : config.routeEasyModel ? null : costEstimate(usage.inputTokens, usage.outputTokens, inputRate, outputRate);
+        const strongModelCostUSD = taskUsage && typeof taskUsage.strongModelCostUSD === 'number'
+          ? taskUsage.strongModelCostUSD
+          : null;
+        const routingSavingsUSD = taskUsage && typeof taskUsage.savingsUSD === 'number'
+          ? taskUsage.savingsUSD
+          : null;
+        const costSource = routedCostKnown ? 'per-model pricing estimate'
+          : config.routeEasyModel ? 'unknown: configure pricing for both routed models'
+            : costUSD === null ? 'unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS'
+              : 'uniform benchmark token-rate estimate';
         const passed = !errorText && Boolean(agentResult && agentResult.finished) && verification.exitCode === 0;
         trials.push({
           taskId: task.id, taskFingerprint: task.taskFingerprint, category: task.category, difficulty: task.difficulty, trial,
           status: passed ? 'passed' : 'failed',
-          model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL,
+          model, requestedModel: provider.model, routeTier: routed && routed.tier || 'strong',
+          routeReason: routed && routed.reason || null,
+          strongModel: routed && routed.strongModel || config.routeStrongModel || provider.model,
+          protocol: provider.protocol, baseURL: provider.baseURL,
           maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null,
           inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens,
-          costUSD, wallTimeMs: elapsedMs, finished: Boolean(agentResult && agentResult.finished),
+          costUSD, strongModelCostUSD, routingSavingsUSD, costSource,
+          wallTimeMs: elapsedMs, finished: Boolean(agentResult && agentResult.finished),
           toolCalls: agentResult ? agentResult.toolCalls : 0,
           verification: { exitCode: verification.exitCode, output: verification.output },
           error: errorText
         });
         output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
+          ' · ' + (routed && routed.tier || 'strong') + '/' + model +
           ' · ' + totalTokens + ' tokens · ' + elapsedMs + ' ms' +
-          (costUSD === null ? ' · cost n/a (set OASIS_EVAL_*_USD_PER_MILLION_TOKENS)' : ' · $' + costUSD.toFixed(6)) + '\n');
+          (costUSD === null ? ' · cost unknown' : ' · 
+        await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } finally {
+    if (originalConfigDir === undefined) delete process.env.OASIS_CONFIG_DIR;
+    else process.env.OASIS_CONFIG_DIR = originalConfigDir;
+  }
+
+  const passedCount = trials.filter((item) => item.status === 'passed').length;
+  const durations = trials.map((item) => item.wallTimeMs).sort((a, b) => a - b);
+  const middle = Math.floor(durations.length / 2);
+  const medianTimeMs = durations.length
+    ? (durations.length % 2 ? durations[middle] : Math.round((durations[middle - 1] + durations[middle]) / 2))
+    : null;
+  const knownCosts = trials.length > 0 && trials.every((item) => item.costUSD !== null);
+  const totalCostUSD = knownCosts
+    ? Math.round(trials.reduce((sum, item) => sum + item.costUSD, 0) * 1000000) / 1000000
+    : null;
+  const costPerPassedTaskUSD = passedCount > 0 && totalCostUSD !== null
+    ? Math.round((totalCostUSD / passedCount) * 1000000) / 1000000
+    : null;
+  const summary = {
+    sourceRevision: await detectSourceRevision(env),
+    runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
+    startedAt, completedAt: new Date().toISOString(),
+    taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
+    timeoutSeconds: config.timeoutSeconds,
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    passRate: trials.length ? passedCount / trials.length : 0,
+    passed: passedCount, failed: trials.length - passedCount,
+    medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
+    provider: { model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL, maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null },
+    pricing: { inputUsdPerMillionTokens: inputRate, outputUsdPerMillionTokens: outputRate, note: 'Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking.' }
+  };
+  const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
+  output.write('Eval result: ' + resultPath + '\n');
+  output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
+  output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
+  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+}
+ + costUSD.toFixed(6)) +
+          (routingSavingsUSD === null ? '' : ' · saved vs strong 
+        await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } finally {
+    if (originalConfigDir === undefined) delete process.env.OASIS_CONFIG_DIR;
+    else process.env.OASIS_CONFIG_DIR = originalConfigDir;
+  }
+
+  const passedCount = trials.filter((item) => item.status === 'passed').length;
+  const durations = trials.map((item) => item.wallTimeMs).sort((a, b) => a - b);
+  const middle = Math.floor(durations.length / 2);
+  const medianTimeMs = durations.length
+    ? (durations.length % 2 ? durations[middle] : Math.round((durations[middle - 1] + durations[middle]) / 2))
+    : null;
+  const knownCosts = trials.length > 0 && trials.every((item) => item.costUSD !== null);
+  const totalCostUSD = knownCosts
+    ? Math.round(trials.reduce((sum, item) => sum + item.costUSD, 0) * 1000000) / 1000000
+    : null;
+  const costPerPassedTaskUSD = passedCount > 0 && totalCostUSD !== null
+    ? Math.round((totalCostUSD / passedCount) * 1000000) / 1000000
+    : null;
+  const summary = {
+    sourceRevision: await detectSourceRevision(env),
+    runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
+    startedAt, completedAt: new Date().toISOString(),
+    taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
+    timeoutSeconds: config.timeoutSeconds,
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    passRate: trials.length ? passedCount / trials.length : 0,
+    passed: passedCount, failed: trials.length - passedCount,
+    medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
+    provider: { model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL, maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null },
+    pricing: { inputUsdPerMillionTokens: inputRate, outputUsdPerMillionTokens: outputRate, note: 'Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking.' }
+  };
+  const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
+  output.write('Eval result: ' + resultPath + '\n');
+  output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
+  output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
+  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+}
+ + routingSavingsUSD.toFixed(6)) + '\n');
         await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
       }
     }
