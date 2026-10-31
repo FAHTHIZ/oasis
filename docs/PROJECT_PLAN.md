@@ -41,13 +41,13 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Latest release-check snapshot:** `30a1a9bae0d666e57912ae9e14854cc3eb781ab2` (October 31, 2026). Every workflow passed on this exact SHA:
+**Latest release-check snapshot:** `e510b2c0f5ec88c1fb2a906151c7e1ffaf683dc1` (October 31, 2026). Every workflow passed on this exact SHA:
 
-- **Quality Checks — all nine jobs green** (Node 22/24/26 full gate, Linux/macOS/Windows security matrix including process-tree cancellation and adversarial URL tests, native PTY, clean environment, browser E2E with axe): [run 41204345336](https://github.com/FAHTHIZ/oasis/actions/runs/41204345336). The first all-green SHA was `8ebb5ce` (after fixing a gate hang caused by bare `node --test` running a helper LSP server).
-- **Installer checks passed on Windows, macOS and Ubuntu:** [run 41204345509](https://github.com/FAHTHIZ/oasis/actions/runs/41204345509).
-- **Desktop packaging completed** (unsigned): [run 41204345152](https://github.com/FAHTHIZ/oasis/actions/runs/41204345152).
-- **Public-site validation and deployment passed:** [run 41204345138](https://github.com/FAHTHIZ/oasis/actions/runs/41204345138).
-- **Guarded branch cleanup passed:** [run 41204345312](https://github.com/FAHTHIZ/oasis/actions/runs/41204345312).
+- **Quality Checks — all nine jobs green** (Node 22/24/26 full gate, Linux/macOS/Windows security matrix including process-tree cancellation and adversarial URL tests, native PTY, clean environment, browser E2E with axe): [run 41209039058](https://github.com/FAHTHIZ/oasis/actions/runs/41209039058). The first all-green SHA was `8ebb5ce` (after fixing a gate hang caused by bare `node --test` running a helper LSP server).
+- **Installer checks passed on Windows, macOS and Ubuntu:** [run 41209039046](https://github.com/FAHTHIZ/oasis/actions/runs/41209039046).
+- **Desktop packaging completed** (unsigned): [run 41209039077](https://github.com/FAHTHIZ/oasis/actions/runs/41209039077).
+- **Public-site validation and deployment passed:** [run 41209039094](https://github.com/FAHTHIZ/oasis/actions/runs/41209039094).
+- **Guarded branch cleanup passed:** [run 41209039089](https://github.com/FAHTHIZ/oasis/actions/runs/41209039089).
 
 Release state, checked against live Git refs:
 
@@ -105,10 +105,10 @@ Prioritize high-value user journeys: provider setup, project onboarding, CLI/bro
 
 ## Release acceptance checklist
 
-- [x] Latest Quality Checks pass on the exact candidate SHA. `30a1a9b` passed all nine jobs (Node 22/24/26 gate, Linux/macOS/Windows security matrix, PTY, clean environment, browser E2E): [run 41204345336](https://github.com/FAHTHIZ/oasis/actions/runs/41204345336). Re-run on the final release SHA before tagging.
-- [x] Public-site validation passes on that same SHA: [run 41204345138](https://github.com/FAHTHIZ/oasis/actions/runs/41204345138).
-- [x] Windows/macOS/Linux installer checks pass on that same SHA: [run 41204345509](https://github.com/FAHTHIZ/oasis/actions/runs/41204345509).
-- [x] Desktop packaging completes on that same SHA: [run 41204345152](https://github.com/FAHTHIZ/oasis/actions/runs/41204345152) (unsigned builds).
+- [x] Latest Quality Checks pass on the exact candidate SHA. `e510b2c` passed all nine jobs (Node 22/24/26 gate, Linux/macOS/Windows security matrix, PTY, clean environment, browser E2E): [run 41209039058](https://github.com/FAHTHIZ/oasis/actions/runs/41209039058). Re-run on the final release SHA before tagging.
+- [x] Public-site validation passes on that same SHA: [run 41209039094](https://github.com/FAHTHIZ/oasis/actions/runs/41209039094).
+- [x] Windows/macOS/Linux installer checks pass on that same SHA: [run 41209039046](https://github.com/FAHTHIZ/oasis/actions/runs/41209039046).
+- [x] Desktop packaging completes on that same SHA: [run 41209039077](https://github.com/FAHTHIZ/oasis/actions/runs/41209039077) (unsigned builds).
 - [x] Browser end-to-end tests cover first-run, approval/denial, cancellation, edit/verify and recovery paths (`.github/scripts/browser-e2e.mjs`: first-run at desktop and 390px, denied delete leaves the file intact, Stop during a pending approval prevents the side effect, write/read/verify with rendered reply, saved-chat recovery, isolated-diff review, axe contrast).
 - [ ] Clean-machine install and first-run behavior is exercised for each advertised desktop OS. (Needs real Windows/macOS/Linux machines; CI builds only.)
 - [ ] Release version, immutable tag, release notes, checksums and uploaded artifacts agree. (Blocked until `v0.4.0` is tagged and published.)
