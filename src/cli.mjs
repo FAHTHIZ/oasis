@@ -1825,16 +1825,39 @@ async function streamInputChannel() {
   return createStreamJsonChannel(lines, (event) => stdout.write(JSON.stringify(event) + '\n'));
 }
 
-async function readPipedStdin() {
+async function readPipedStdin(options = {}) {
   // Only read stdin when it is a pipe, socket, or redirected file (not a terminal or
   // /dev/null). Use `< /dev/null` if a job inherits an open stdin it never closes.
   let info;
   try { info = fstatSync(0); } catch { return ''; }
   if (stdin.isTTY || !(info.isFIFO() || info.isFile() || info.isSocket())) return '';
+  // With a prompt already on the command line, an inherited pipe that never sends
+  // anything (CI runners, IDE tasks, `nohup`) used to hang `oasis -p` silently forever.
+  // Wait a few seconds for the first byte, then go on without stdin.
+  const firstByteMs = info.isFile() ? 0 : Number(options.firstByteMs || 0);
   let data = '';
-  for await (const chunk of stdin) {
-    data += chunk;
-    if (data.length > 1024 * 1024) break;
+  const iterator = stdin[Symbol.asyncIterator]();
+  try {
+    let first = true;
+    while (true) {
+      let timer = null;
+      const next = iterator.next();
+      const step = first && firstByteMs > 0
+        ? await Promise.race([next, new Promise((resolve) => { timer = setTimeout(() => resolve({ timeout: true }), firstByteMs); })])
+        : await next;
+      if (timer) clearTimeout(timer);
+      if (step.timeout) {
+        process.stderr.write('[oasis] stdin is open but sent nothing for ' + Math.round(firstByteMs / 1000) + 's; continuing with the prompt only (redirect `< /dev/null` to skip the wait).\n');
+        try { stdin.pause(); stdin.unref?.(); } catch {}
+        return '';
+      }
+      first = false;
+      if (step.done) break;
+      data += step.value;
+      if (data.length > 1024 * 1024) break;
+    }
+  } finally {
+    if (data.length > 1024 * 1024) { try { await iterator.return?.(); } catch {} }
   }
   return data.slice(0, 1024 * 1024);
 }
@@ -1842,7 +1865,8 @@ async function readPipedStdin() {
 async function printMode(root, headless, args, autoApprove, persistence) {
   let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
   const streamInput = headless.inputFormat === 'stream-json';
-  const piped = streamInput ? '' : await readPipedStdin();
+  const stdinWait = Number(process.env.OASIS_STDIN_WAIT_SECONDS);
+  const piped = streamInput ? '' : await readPipedStdin({ firstByteMs: prompt ? (Number.isFinite(stdinWait) && stdinWait >= 0 ? stdinWait : 3) * 1000 : 0 });
   if (piped.trim()) prompt = prompt ? prompt + '\n\n<stdin>\n' + piped + '\n</stdin>' : piped;
   if (prompt.trim().startsWith('/')) {
     // oasis -p "/review src" runs a custom command or skill, like the interactive prompt.
