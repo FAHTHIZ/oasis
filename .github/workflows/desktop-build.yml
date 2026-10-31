@@ -155,6 +155,7 @@ jobs:
           echo "notes_path=$notes_path" >> "$GITHUB_OUTPUT"
       - name: Require same-commit quality, site, and installer gates
         if: steps.release-version.outputs.publish == 'true'
+        timeout-minutes: 45
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ github.sha }}
@@ -167,12 +168,25 @@ jobs:
             exit 1
           fi
           for workflow in quality.yml pages.yml installer-checks.yml; do
-            response="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$TARGET_SHA&per_page=20")"
-            latest="$(printf '%s' "$response" | jq -r --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.created_at) | last // {}')"
-            status="$(printf '%s' "$latest" | jq -r '.status // "missing"')"
-            conclusion="$(printf '%s' "$latest" | jq -r '.conclusion // ""')"
-            if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
-              echo "::error::Required $workflow gate for $TARGET_SHA is $status/$conclusion."
+            echo "Waiting for $workflow to pass on $TARGET_SHA..."
+            passed=false
+            for attempt in $(seq 1 90); do
+              response="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$TARGET_SHA&per_page=20")"
+              latest="$(printf '%s' "$response" | jq -r --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.created_at) | last // {}')"
+              status="$(printf '%s' "$latest" | jq -r '.status // "missing"')"
+              conclusion="$(printf '%s' "$latest" | jq -r '.conclusion // ""')"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" != "success" ]; then
+                  echo "::error::Required $workflow gate for $TARGET_SHA completed with $conclusion."
+                  exit 1
+                fi
+                passed=true
+                break
+              fi
+              if [ "$attempt" -lt 90 ]; then sleep 20; fi
+            done
+            if [ "$passed" != "true" ]; then
+              echo "::error::Timed out waiting for $workflow to pass on $TARGET_SHA."
               exit 1
             fi
           done

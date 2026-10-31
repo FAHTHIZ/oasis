@@ -53,6 +53,10 @@ test('desktop Beta release auto-publishes a new main version only after all gate
   assert.ok(workflow.includes("if: steps.release-version.outputs.publish == 'true'"));
   assert.ok(workflow.includes("github.ref == 'refs/heads/main'"));
   assert.ok(workflow.includes('Require same-commit quality, site, and installer gates'));
+  assert.ok(workflow.includes('timeout-minutes: 45'));
+  assert.ok(workflow.includes('Waiting for $workflow to pass on $TARGET_SHA'));
+  assert.ok(workflow.includes('sleep 20'));
+  assert.ok(workflow.includes('Timed out waiting for $workflow to pass'));
   for (const name of ['quality.yml', 'pages.yml', 'installer-checks.yml']) assert.ok(workflow.includes(name));
   assert.ok(workflow.includes('target_commitish: ${{ steps.release-version.outputs.target_commitish }}'));
   assert.ok(workflow.includes('make_latest: true'));
