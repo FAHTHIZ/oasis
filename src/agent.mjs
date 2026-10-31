@@ -1849,9 +1849,24 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   description: 'Only in plan mode: present your finished implementation plan to the user and ask to start implementing it. Use it once research is done and the plan is concrete (files, steps, verification). Do not use it for pure research questions.',
   parameters: { type: 'object', properties: { plan: { type: 'string', description: 'The plan in concise Markdown' } }, required: ['plan'] }
 } };
+// Users report agents halting mid-task to ask several obvious questions per
+// turn. Cap interactive questions per turn (default 2); further calls tell the
+// model to decide and state its assumption. OASIS_MAX_QUESTIONS_PER_TURN or
+// config.maxQuestionsPerTurn overrides; "off"/"unlimited" removes the cap.
+function questionBudget(session, options = {}) {
+  const env = options.env || process.env;
+  const raw = env.OASIS_MAX_QUESTIONS_PER_TURN !== undefined && env.OASIS_MAX_QUESTIONS_PER_TURN !== ''
+    ? env.OASIS_MAX_QUESTIONS_PER_TURN
+    : session && session.config && session.config.maxQuestionsPerTurn;
+  if (raw === undefined || raw === null || raw === '') return 2;
+  if (/^(off|unlimited|none|false)$/i.test(String(raw))) return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : 2;
+}
+
 const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
   name: 'ask_user_question',
-  description: 'Ask the user a multiple-choice question when a decision really changes the work (which approach, library, scope, or behavior) and you cannot settle it from the code or the request. Offer 2-4 concrete options; the user can also type their own answer. Do not use it for permission (tools ask for that automatically) or for things you can find out yourself.',
+  description: 'Ask the user a multiple-choice question when a decision really changes the work (which approach, library, scope, or behavior) and you cannot settle it from the code or the request. Offer 2-4 concrete options; the user can also type their own answer. Do not use it for permission (tools ask for that automatically) or for things you can find out yourself. Ask at most one or two questions per turn; for minor choices pick a sensible default and state it.',
   parameters: { type: 'object', properties: {
     question: { type: 'string', description: 'One clear question ending with a question mark' },
     header: { type: 'string', description: 'Very short label, up to 12 characters' },
@@ -3214,7 +3229,11 @@ async function executeOneCallRaw(session, call, context, options) {
     const outOfScope = scopeViolation(session, name, args);
     if (outOfScope) throw new Error(outOfScope);
     if (name === 'ask_user_question') {
-      result = await askUserQuestion(session, args, options);
+      const budget = questionBudget(session, options);
+      session.turnQuestionCount = Number(session.turnQuestionCount || 0) + 1;
+      result = budget !== null && session.turnQuestionCount > budget
+        ? { answered: false, questionBudgetExceeded: true, budget, message: 'Question limit for this turn (' + budget + ') is used up, so this question was not shown. Do not stop to ask more: choose the most reasonable option yourself, keep working, and list the assumption in one line in your final reply so the user can correct it.' }
+        : await askUserQuestion(session, args, options);
       if (options.onToolResult) options.onToolResult({ name, result, call });
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
@@ -3634,6 +3653,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let loopBreakMessage = '';
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
   const claimState = newClaimState();
+  session.turnQuestionCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
