@@ -62,6 +62,25 @@ test('FileChanged fires for add/change/unlink of matcher files and honors watchP
   assert.ok(!entries.some((entry) => entry.file_path === extra));
 });
 
+test('an unlink that happens while a FileChanged hook runs is not lost when watchPaths are applied', async (t) => {
+  const root = await tmp(t);
+  const log = path.join(root, 'log.jsonl');
+  const target = path.join(root, '.envrc');
+  const extraA = path.join(root, 'a.txt');
+  const extraB = path.join(root, 'b.txt');
+  // On "change", the hook deletes the watched file itself and returns a new watchPaths list,
+  // which makes the watcher rebuild right while the unlink event is pending.
+  const hook = nodeHook('let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const fs=require("fs");const p=JSON.parse(d);fs.appendFileSync(' + JSON.stringify(log) + ',d.trim()+"\\n");if(p.event==="change")fs.rmSync(' + JSON.stringify(target) + ');process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"FileChanged",watchPaths:[p.event==="change"?' + JSON.stringify(extraB) + ':' + JSON.stringify(extraA) + ']}}))})');
+  await writeFile(target, 'export A=1\n');
+  const session = { root, sessionId: 's-race', hookMessages: [], hooks: { FileChanged: [group({ type: 'command', command: hook }, '.envrc')] } };
+  const watchers = startHookWatchers(session, {});
+  t.after(() => watchers.stop());
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  await writeFile(target, 'export A=2\n');
+  assert.ok(await waitFor(async () => (await readLog(log)).some((entry) => entry.event === 'change')), 'change fired');
+  assert.ok(await waitFor(async () => (await readLog(log)).some((entry) => entry.event === 'unlink')), 'unlink during hook was delivered');
+});
+
 test('ConfigChange runs on settings edits and a block skips the live reload', async (t) => {
   const root = await tmp(t);
   await mkdir(path.join(root, '.claude'), { recursive: true });

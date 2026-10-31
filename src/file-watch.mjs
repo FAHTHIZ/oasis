@@ -87,7 +87,10 @@ export function startHookWatchers(session, options = {}) {
 
   const states = new Map(); // file -> existed
   const watchForHooks = (file) => {
-    states.set(file, existsSync(file));
+    // Keep the known state across refreshes: re-reading it here would make an
+    // unlink that happened while a hook ran look like "absent -> absent" and
+    // the pending event would be dropped.
+    if (!states.has(file)) states.set(file, existsSync(file));
     watchFile(file, () => debounce('file:' + file, async () => {
       const { event, exists } = fileChanged(file, states.get(file));
       states.set(file, exists);
@@ -131,9 +134,12 @@ export function startHookWatchers(session, options = {}) {
   };
 
   const setDynamicPaths = (paths) => {
-    dynamic = paths.filter((item) => typeof item === 'string' && path.isAbsolute(item));
+    const next = paths.filter((item) => typeof item === 'string' && path.isAbsolute(item));
+    const unchanged = next.length === dynamic.length && next.every((item, index) => item === dynamic[index]);
+    dynamic = next;
     session.hookWatchPaths = dynamic.slice();
-    if (!stopped) refresh();
+    // Rebuilding watchers drops events that arrive mid-rebuild; skip it when nothing changed.
+    if (!stopped && !unchanged) refresh();
   };
 
   const stop = () => {
