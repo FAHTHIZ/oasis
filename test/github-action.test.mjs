@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import { readTrigger, buildPrompt, runAction, actionStatus } from '../src/github-action.mjs';
+import { readTrigger, buildPrompt, runAction, actionStatus, formatVerificationReport, verificationIsComplete } from '../src/github-action.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
@@ -48,16 +48,91 @@ function fakeGitHub() {
   return { calls, request };
 }
 
-test('GitHub Action distinguishes an unapproved language-server check from incomplete verification', () => {
-  const notApproved = 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\\n' +
-    '- LSP verification unavailable for src/app.ts: Starting the TypeScript language server was not approved. Use grep or read_file instead.\\n' +
+test('GitHub Action never treats an unavailable or unapproved LSP as successful verification', () => {
+  const notApproved = 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\n' +
+    '- LSP verification unavailable for src/app.ts: Starting the TypeScript language server was not approved. Use grep or read_file instead.\n' +
     'Fix or explicitly resolve these diagnostics, then run verification again.';
-  assert.equal(actionStatus({ is_error: false }, { changed: true }, notApproved), 'pushed changes; language-server check was not run.');
-  assert.equal(actionStatus({ is_error: false }, { changed: false }, notApproved), 'language-server check was not run.');
-  assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Verification incomplete: LSP reports 1 new or unclassified error(s) in src/app.ts.'), 'pushed changes, but verification is incomplete.');
-  assert.equal(actionStatus({ is_error: false }, { changed: false }, 'Verification incomplete: a diagnostic remains.'), 'verification is incomplete.');
-  assert.equal(actionStatus({ is_error: false }, { changed: true }, 'Fixed the bug and tests passed.'), 'finished and pushed changes.');
-  assert.equal(actionStatus({ is_error: true, subtype: 'error_during_execution' }, { changed: true }, notApproved), 'ran into a problem (error_during_execution).');
+  assert.equal(
+    actionStatus({ is_error: false }, { changed: true }, notApproved),
+    'pushed changes, but verification is incomplete.'
+  );
+  assert.equal(
+    actionStatus({ is_error: false }, { changed: false }, notApproved),
+    'verification is incomplete.'
+  );
+
+  const projectTestPassed = {
+    required: true,
+    changedPaths: ['src/app.ts'],
+    diffReviewed: true,
+    checkRequired: true,
+    lastCheck: { kind: 'test', exitCode: 0, passed: true },
+    lsp: [{
+      path: 'src/app.ts',
+      status: 'unavailable',
+      newErrorCount: 0,
+      newWarningCount: 0,
+      reason: 'Language-server startup is disabled for unattended GitHub Action runs.'
+    }],
+    complete: true,
+    issues: []
+  };
+  assert.equal(verificationIsComplete(projectTestPassed), true);
+  assert.equal(verificationIsComplete({ ...projectTestPassed, lastCheck: null }), false);
+  assert.equal(verificationIsComplete({ ...projectTestPassed, diffReviewed: false }), false);
+  assert.equal(
+    actionStatus({ is_error: false }, { changed: true }, 'Updated src/app.ts.', projectTestPassed),
+    'verified and pushed changes.'
+  );
+  const report = formatVerificationReport(projectTestPassed);
+  assert.match(report, /Result: \*\*VERIFIED\*\*/);
+  assert.match(report, /Repository check: \*\*test passed\*\* \(exit code 0\)/);
+  assert.match(report, /Language server: not run for "src\/app\.ts"/);
+  assert.match(report, /project test passed|repository test passed|repository test check passed/i);
+  assert.match(report, /not counted as a pass/);
+  const notApplicableReport = formatVerificationReport({
+    ...projectTestPassed,
+    lsp: [{ path: 'README.md', status: 'not_applicable', reason: 'No language server is configured for this file type.' }]
+  });
+  assert.match(notApplicableReport, /Language server: not applicable for "README\.md"/);
+
+  const lspErrorButClaimedComplete = {
+    ...projectTestPassed,
+    lsp: [{ path: 'src/app.ts', status: 'errors', newErrorCount: 1 }],
+    complete: true
+  };
+  assert.equal(verificationIsComplete(lspErrorButClaimedComplete), false);
+
+  const noPassingCheck = {
+    ...projectTestPassed,
+    lastCheck: null,
+    complete: false,
+    issues: ['no relevant test, check, lint, build, or type-check command has passed after the latest code edit']
+  };
+  assert.equal(
+    actionStatus({ is_error: false }, { changed: true }, 'Everything is done!', noPassingCheck),
+    'pushed changes, but verification is incomplete.'
+  );
+  assert.match(formatVerificationReport(noPassingCheck), /Repository check: \*\*not recorded\*\*/);
+
+  const lspErrors = {
+    ...projectTestPassed,
+    lsp: [{ path: 'src/app.ts', status: 'errors', newErrorCount: 1, newWarningCount: 0 }],
+    complete: false,
+    issues: ['LSP reports 1 new or unclassified error(s) in src/app.ts']
+  };
+  assert.equal(
+    actionStatus({ is_error: false }, { changed: true }, 'Tests passed.', lspErrors),
+    'pushed changes, but verification is incomplete.'
+  );
+  assert.equal(
+    actionStatus({ is_error: true, subtype: 'error_during_execution' }, { changed: true }, notApproved),
+    'ran into a problem (error_during_execution).'
+  );
+  assert.equal(
+    actionStatus({ is_error: false }, { changed: true }, 'Fixed the bug and tests passed.'),
+    'pushed changes, but verification status is unavailable.'
+  );
 });
 
 test('readTrigger responds only to trusted human mentions', () => {
