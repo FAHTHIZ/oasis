@@ -54,7 +54,7 @@ jobs:
       - name: Install production dependencies
         run: npm install --omit=dev --no-audit --no-fund
       - name: Run portable security and filesystem regressions
-        run: node --test test/permissions.test.mjs test/network-safety.test.mjs test/secure-store.test.mjs test/sandbox.test.mjs test/sandbox-enforcement.test.mjs
+        run: node --test test/permissions.test.mjs test/network-safety.test.mjs test/url-adversarial.test.mjs test/process-tree-cancel.test.mjs test/secure-store.test.mjs test/sandbox.test.mjs test/sandbox-enforcement.test.mjs
       - name: Verify portable global skill path regression
         run: node --test --test-name-pattern="portable project and global Agent Skills" test/runtime.test.mjs
   clean-environment-tests:
