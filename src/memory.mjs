@@ -1,6 +1,8 @@
 // Hierarchical memory, like Claude Code's CLAUDE.md files.
 //   user     ~/.config/oasis/OASIS.md and ~/.claude/CLAUDE.md  (all projects)
 //   project  OASIS.md, AGENTS.md, CLAUDE.md                     (shared, committed)
+//            plus GEMINI.md, .github/copilot-instructions.md, .cursorrules,
+//            .windsurfrules, .clinerules, CONVENTIONS.md (other agents' rules)
 //   local    OASIS.local.md, CLAUDE.local.md                    (personal, gitignored)
 // README.md is still included as general project context.
 //   parent   CLAUDE.md, CLAUDE.local.md, AGENTS.md, OASIS.md in directories above the
@@ -16,6 +18,7 @@ import { getConfigDirectory } from './config.mjs';
 const MAX_MEMORY_FILE = 40 * 1024;
 const MAX_TOTAL = 40000;
 const PER_FILE_LIMIT = 9000;
+export const OTHER_AGENT_RULES = ['GEMINI.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', '.clinerules', 'CONVENTIONS.md'];
 
 export function memoryFiles(root, options = {}) {
   const env = options.env || process.env;
@@ -36,6 +39,9 @@ export function memoryFiles(root, options = {}) {
     { label: 'project', path: path.join(workspace, 'AGENTS.md') },
     { label: 'project', path: path.join(workspace, 'CLAUDE.md') },
     { label: 'project', path: path.join(workspace, '.claude', 'CLAUDE.md') },
+    // Instructions written for other coding agents, so a repository set up for
+    // Gemini CLI, Copilot, Cursor, Windsurf, Cline or Aider works without copying files.
+    ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : OTHER_AGENT_RULES.map((name) => ({ label: 'project', path: path.join(workspace, name) }))),
     { label: 'local', path: path.join(workspace, 'OASIS.local.md') },
     { label: 'local', path: path.join(workspace, 'CLAUDE.local.md') },
     { label: 'readme', path: path.join(workspace, 'README.md') }
@@ -97,6 +103,10 @@ export async function loadMemory(root, options = {}) {
     let content;
     try { content = await readFile(real, 'utf8'); } catch { continue; }
     if (!content.trim() || content.includes('\0')) continue;
+    // Many repositories keep identical copies (CLAUDE.md = AGENTS.md = GEMINI.md); load one.
+    const fingerprint = content.replace(/\s+/g, ' ').trim();
+    if (file.label !== 'readme' && seen.has('content:' + fingerprint)) continue;
+    seen.add('content:' + fingerprint);
     if (file.label !== 'readme') content = await readImports(root, content);
     const name = file.label === 'user' || file.label === 'parent' ? file.path.replace(os.homedir(), '~') : path.relative(path.resolve(root), file.path);
     const heading = file.label === 'user' ? 'User memory (applies to all projects)' : file.label === 'local' ? 'Personal project memory' : file.label === 'parent' ? 'Parent directory memory' : 'Project context';

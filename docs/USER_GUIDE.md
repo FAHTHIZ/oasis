@@ -649,6 +649,9 @@ Memory files are loaded into every session, from broadest to most specific:
 | User (all projects) | `~/.config/oasis/OASIS.md`, `~/.claude/CLAUDE.md` |
 | Project (commit it) | `OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` |
 | Personal (gitignore it) | `OASIS.local.md`, `CLAUDE.local.md` |
+| Other agents' rules (project) | `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`, `.clinerules` (file form), `CONVENTIONS.md`. Turn off with `OASIS_OTHER_AGENT_RULES=0`. |
+
+Files with the same content (for example `CLAUDE.md` copied to `AGENTS.md` and `GEMINI.md`) are loaded once.
 
 A line like `@docs/style.md` inside a memory file includes that file. Start a message with `#` to save a note: `# use pnpm, not npm` appends to `OASIS.md`, `# user: answer briefly` goes to your user memory, and `# local: my dev port is 4000` goes to `OASIS.local.md`.
 
