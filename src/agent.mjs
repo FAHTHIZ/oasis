@@ -48,6 +48,7 @@ import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from '
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
+import { saveSessionNotes } from './session-notes.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -82,6 +83,40 @@ function deterministicHistorySummary(messages) {
   return (text.length > 16000 ? '[Earlier history clipped; most recent details retained]\n' + text.slice(-16000) : text) || 'No usable earlier conversation details were available.';
 }
 
+async function reportCompaction(session, summary, beforeTokens, options = {}, details = {}) {
+  const afterTokens = estimateTokens(session.messages || []);
+  const savedTokens = Math.max(0, beforeTokens - afterTokens);
+  const note = 'Saved about ' + savedTokens.toLocaleString('en-US') +
+    ' tokens by compacting older conversation history.';
+  let notesSaved = false;
+  if (session.root && !options.isSubagent && options.persistSessionNotes !== false) {
+    try {
+      const result = await saveSessionNotes(session.root, summary, { savedTokens });
+      notesSaved = Boolean(result.saved);
+    } catch (error) {
+      if (typeof options.onCompactionError === 'function') {
+        try { options.onCompactionError(error); } catch {}
+      }
+    }
+  }
+  const info = {
+    ...details,
+    beforeTokens,
+    afterTokens,
+    savedTokens,
+    note,
+    notesSaved,
+    notesPath: notesSaved ? '.oasis/session-notes.md' : null
+  };
+  if (typeof options.onCompaction === 'function') {
+    try { await options.onCompaction(info); } catch (error) {
+      if (typeof options.onCompactionError === 'function') {
+        try { options.onCompactionError(error); } catch {}
+      }
+    }
+  }
+  return info;
+}
 function findCompactionBoundary(messages) {
   const minimumIndex = Math.max(2, messages.length - HISTORY_COMPACT_KEEP_MESSAGES);
   for (let i = minimumIndex; i < messages.length; i++) {
@@ -161,7 +196,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     },
     ...messages.slice(boundary)
   ];
-  if (options.onCompaction) options.onCompaction({
+  await reportCompaction(session, summary, beforeTokens, options, {
     removedMessages: oldMessages.length,
     retainedMessages: session.messages.length - 1,
     summaryChars: summary.length,
@@ -179,6 +214,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
  */
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
   const messages = session.messages || [];
+  const beforeTokens = estimateTokens(messages);
   const beforeChars = historyTextSize(messages);
   if (beforeChars <= compactionThresholdChars(session.config || {}, options.env || process.env) || messages.length < requestIndex + 5) {
     return { compacted: false, tokensUsed: 0 };
@@ -247,18 +283,16 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     ...messages.slice(boundary)
   ];
   const afterChars = historyTextSize(session.messages);
-  if (typeof options.onCompaction === 'function') {
-    options.onCompaction({
-      midTurn: true,
-      removedMessages: oldMessages.length,
-      removedToolResults,
-      retainedMessages: session.messages.length - 1,
-      summaryChars: summary.length,
-      usedModelSummary: Boolean(tokensUsed),
-      beforeChars,
-      afterChars
-    });
-  }
+  await reportCompaction(session, summary, beforeTokens, options, {
+    midTurn: true,
+    removedMessages: oldMessages.length,
+    removedToolResults,
+    retainedMessages: session.messages.length - 1,
+    summaryChars: summary.length,
+    usedModelSummary: Boolean(tokensUsed),
+    beforeChars,
+    afterChars
+  });
   if (typeof options.onContextPruned === 'function') {
     options.onContextPruned({
       midTurn: true,
