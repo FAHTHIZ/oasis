@@ -1701,6 +1701,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
+      onCompaction: (info) => stdout.write('\n[context] ' + String(info.note || 'Compacted older conversation history.') + (info.notesSaved ? ' Continuity note saved in .oasis/session-notes.md.' : ' Continuity note was not saved.') + '\n'),
       // MessageDisplay hooks see whole messages, so streaming is off while any are configured.
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' && !hasConfiguredHooks(session.hooks || {}, 'MessageDisplay') ? { onDelta: streamDelta } : {}),
       onToolResult: ({ name, result, call }) => {
