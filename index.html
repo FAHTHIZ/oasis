@@ -163,7 +163,7 @@
         <button class="text-link" id="newAgentSessionBtn" type="button">＋ New chat</button>
       </div>
     </div>
-    <div class="agent-messages" id="agentMessages" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
+    <div class="agent-messages" id="agentMessages" tabindex="0" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
       <p>Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
       <div class="agent-example-prompts" aria-label="Example tasks">
         <button class="agent-example-prompt" type="button" data-agent-example="Explain this project">Explain this project<span>Read the important files and explain how they fit together.</span></button>
@@ -197,7 +197,7 @@
     <button class="agent-utility-tab" id="agentChangesUtilityTab" type="button" role="tab" aria-selected="false" aria-controls="agentChangesUtilityPanel">Changes</button>
     <button class="agent-utility-tab" id="agentTasksUtilityTab" type="button" role="tab" aria-selected="false" aria-controls="agentTasksUtilityPanel">Tasks</button>
   </div>
-  <div class="agent-utility-view" id="agentTerminalUtilityPanel" role="tabpanel" aria-labelledby="agentTerminalUtilityTab">
+  <div class="agent-utility-view" id="agentTerminalUtilityPanel" tabindex="0" role="tabpanel" aria-labelledby="agentTerminalUtilityTab">
 <div class="panel agent-terminal">
     <div class="agent-chat-header"><span><strong>Terminal</strong> · command runner</span><span id="terminalStatus">Ready when runtime is connected</span></div>
     <div class="panel-pad">
@@ -211,12 +211,12 @@
         <label for="terminalInput">Send input to active terminal<input id="terminalInput" maxlength="16000" placeholder="Type input, then send (Enter is added)"></label>
         <div class="agent-buttons"><button class="btn btn-secondary" id="terminalSendInputBtn" type="button">Send input ↵</button><button class="btn btn-secondary" id="terminalInterruptBtn" type="button">Ctrl+C</button><button class="btn btn-danger" id="terminalStopBtn" type="button">Stop session</button></div>
       </div>
-      <div class="terminal-xterm" id="terminalXterm" aria-label="Interactive terminal"></div><pre class="terminal-output" id="terminalOutput" role="log" aria-live="polite" hidden>OASIS terminal renderer is unavailable. Reinstall OASIS to restore the bundled terminal assets.</pre>
+      <div class="terminal-xterm" id="terminalXterm" aria-label="Interactive terminal"></div><pre class="terminal-output" id="terminalOutput" tabindex="0" role="log" aria-live="polite" hidden>OASIS terminal renderer is unavailable. Reinstall OASIS to restore the bundled terminal assets.</pre>
       <p class="agent-help">Every process passes the existing command-safety and approval checks. Interactive terminal sessions support live output, input, resize, Ctrl+C and stop. Full-screen terminal emulation and the no-terminal desktop installer are still separate gaps.</p>
     </div>
   </div>
   </div>
-  <div class="agent-utility-view" id="agentTasksUtilityPanel" role="tabpanel" aria-labelledby="agentTasksUtilityTab" hidden>
+  <div class="agent-utility-view" id="agentTasksUtilityPanel" tabindex="0" role="tabpanel" aria-labelledby="agentTasksUtilityTab" hidden>
   <div class="panel github-panel cloud-runs-panel">
     <div class="agent-chat-header"><span><strong>Tasks</strong> · recent coding runs</span><span id="cloudRunsStatus" class="github-state" data-connected="false">Connect runtime</span></div>
     <div class="panel-pad">
@@ -225,7 +225,7 @@
     </div>
   </div>
   </div>
-<div class="agent-utility-view" id="agentChangesUtilityPanel" role="tabpanel" aria-labelledby="agentChangesUtilityTab" hidden>
+<div class="agent-utility-view" id="agentChangesUtilityPanel" tabindex="0" role="tabpanel" aria-labelledby="agentChangesUtilityTab" hidden>
   <div class="panel github-panel cloud-changes-panel">
     <div class="agent-chat-header"><span><strong>Changes</strong> · review before keeping</span><button class="btn btn-secondary" id="cloudRunTasksBackBtn" type="button">← All tasks</button></div>
     <div class="panel-pad">
@@ -233,7 +233,7 @@
       <div class="cloud-run-detail" id="cloudRunDetail" hidden>
         <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="github-actions"><button class="btn btn-secondary" id="cloudRunDiffBtn" type="button" hidden>Review diff</button><button class="btn btn-primary" id="cloudRunMergeBtn" type="button" hidden>Merge reviewed changes</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
         <div class="cloud-run-events" id="cloudRunEvents"></div>
-        <div class="cloud-run-detail" id="cloudRunDiffDetail" hidden><div class="cloud-run-detail-head"><strong id="cloudRunDiffTitle">Isolated changes</strong><button class="btn btn-secondary" id="cloudRunDiffClose" type="button">Close diff</button></div><pre class="cloud-run-diff-pre" id="cloudRunDiffText"></pre></div>
+        <div class="cloud-run-detail" id="cloudRunDiffDetail" hidden><div class="cloud-run-detail-head"><strong id="cloudRunDiffTitle">Isolated changes</strong><button class="btn btn-secondary" id="cloudRunDiffClose" type="button">Close diff</button></div><pre class="cloud-run-diff-pre" id="cloudRunDiffText" tabindex="0"></pre></div>
       </div>
     </div>
   </div>
@@ -435,6 +435,16 @@ function importBackup(file){if(!file)return;var reader=new FileReader();reader.o
         var terminalTab=document.getElementById('agentTerminalTab');
         if(terminalTab)terminalTab.click();
       }
+    });
+    /* Roving arrow keys across the top-bar panel buttons, mirroring the utility tablist. */
+    button.addEventListener('keydown',function(event){
+      if(['ArrowLeft','ArrowRight','Home','End'].indexOf(event.key)<0)return;
+      var all=[].slice.call(document.querySelectorAll('[data-topbar-panel]')),i=all.indexOf(button);
+      var n=event.key==='Home'?0:event.key==='End'?all.length-1:(i+(event.key==='ArrowRight'?1:all.length-1))%all.length;
+      event.preventDefault();
+      var grid=document.getElementById('agentWorkspaceGrid');
+      if(grid&&grid.dataset.terminalVisible==='true'&&window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel(all[n].getAttribute('data-topbar-panel'));
+      all[n].focus();
     });
   });
 })();
@@ -1062,7 +1072,7 @@ document.querySelectorAll('[data-first-run]').forEach(function(button){
   }
   function setVisible(visible){
     grid.dataset.terminalVisible=String(!!visible);
-    toggle.textContent=visible?'Hide side panel':'Show side panel';
+    toggle.textContent=visible?'Hide side panel':'Show side panel';toggle.title=toggle.textContent;toggle.setAttribute('aria-label',toggle.textContent);
     toggle.setAttribute('aria-expanded',String(!!visible));
     persist('oasis.agent.terminalVisible',String(!!visible));
     if(!visible)setPanel('chat');
@@ -1532,7 +1542,7 @@ function renderMarkdown(src){
       flush();var fence=m[1],lang=m[2]||'',body=[];i++;
       while(i<lines.length&&!lines[i].trim().startsWith(fence))body.push(lines[i++]);
       i++;
-      html+='<div class="code-block"><div class="code-block-head"><span>'+esc(lang||'text')+'</span><button type="button" class="code-copy" data-copy-code>Copy</button></div><pre><code>'+highlight(body.join('\n'),lang)+'</code></pre></div>';
+      html+='<div class="code-block"><div class="code-block-head"><span>'+esc(lang||'text')+'</span><button type="button" class="code-copy" data-copy-code>Copy</button></div><pre tabindex="0"><code>'+highlight(body.join('\n'),lang)+'</code></pre></div>';
       continue;
     }
     if(!line.trim()){flush();i++;continue}
@@ -1567,9 +1577,12 @@ var stick=true,jump=document.createElement('button');
 jump.type='button';jump.className='jump-latest';jump.innerHTML='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Jump to latest';
 var chatPanel=messages.closest('.agent-chat-panel');if(chatPanel)chatPanel.appendChild(jump);
 function distance(){return messages.scrollHeight-messages.scrollTop-messages.clientHeight}
-messages.addEventListener('scroll',function(){stick=distance()<90;jump.classList.toggle('show',!stick)},{passive:true});
+var userScrollAt=0;['wheel','touchmove'].forEach(function(t){messages.addEventListener(t,function(){userScrollAt=Date.now()},{passive:true})});
+messages.addEventListener('keydown',function(e){if(/^(PageUp|PageDown|ArrowUp|ArrowDown|Home|End| )$/.test(e.key))userScrollAt=Date.now()});
+/* Only a user-initiated scroll can unstick; layout shifts and clamped scrollTop keep following the latest output. */
+messages.addEventListener('scroll',function(){var near=distance()<90;if(near)stick=true;else if(Date.now()-userScrollAt<1200)stick=false;else if(stick)messages.scrollTop=messages.scrollHeight;jump.classList.toggle('show',!stick&&distance()>=90)},{passive:true});
 jump.addEventListener('click',function(){stick=true;messages.scrollTop=messages.scrollHeight;jump.classList.remove('show')});
-var C=window.oasisCore;var agentScroll=function(force){if(force===true)stick=true;if(stick){messages.scrollTop=messages.scrollHeight;jump.classList.remove('show')}else jump.classList.add('show')};C.hook('agentScroll',function(){return agentScroll});
+var C=window.oasisCore;var agentScroll=function(force){if(force===true)stick=true;if(stick){messages.scrollTop=messages.scrollHeight;jump.classList.remove('show')}else jump.classList.toggle('show',distance()>=90)};C.hook('agentScroll',function(){return agentScroll});
 /* ---------- Assistant messages as markdown ---------- */
 var pending=new Map(),raf=0;
 function paint(){raf=0;pending.forEach(function(text,node){node.classList.add('md');node.dataset.raw=text;node.innerHTML=renderMarkdown(text)+(document.body.classList.contains('agent-busy')&&node===lastAssistant()?'':'<div class="msg-actions"><button type="button" class="msg-action" data-copy-message>Copy</button></div>')});pending.clear();agentScroll()}
@@ -1584,13 +1597,19 @@ C.hook('agentAssistantUpdate',function(coreUpdate){return function(jobId,text){
 /* ---------- Activity rows ---------- */
 var coreAppend=null;C.hook('agentAppendMessage',function(f){coreAppend=f;return f});
 C.hook('agentActivity',function(){return function(text){
-  text=String(text||'');var el=coreAppend('activity','');var m;
+  text=String(text||'');var m;
+  var empty=$('agentEmptyState');
+  if(empty&&!/^(\[[^\]]+\]\s+)?Working:|^[\w.:-]+ result: /.test(text)){
+    var line=empty.querySelector('.empty-status');if(!line){line=document.createElement('div');line.className='empty-status';line.setAttribute('role','status');empty.appendChild(line)}
+    line.textContent=text;line.classList.toggle('notice-warn',/incomplete|blocker|failed|denied|not approved|error/i.test(text));return line;
+  }
+  var el=coreAppend('activity','');
   if((m=text.match(/^(\[[^\]]+\]\s+)?Working:\s+([\w.:-]+)\s*([\s\S]*)$/))){
     el.classList.add('tool-call');el.innerHTML=(m[1]?'<span class="tool-chip">'+esc(m[1].trim())+'</span>':'')+'<span class="tool-chip">'+esc(m[2])+'</span>'+esc(m[3]||'');
   }else if((m=text.match(/^([\w.:-]+) result: ([\s\S]*)$/))){
     var body=m[2],linesN=body.split('\n').length;el.classList.add('tool-result');
     if(body.length<=140&&linesN===1)el.innerHTML='<span class="tool-result-inline">↳ '+esc(body)+'</span>';
-    else el.innerHTML='<details class="tool-result-details"><summary>'+esc(m[1])+' output · '+linesN+' line'+(linesN===1?'':'s')+'</summary><pre>'+esc(body)+'</pre></details>';
+    else el.innerHTML='<details class="tool-result-details"><summary>'+esc(m[1])+' output · '+linesN+' line'+(linesN===1?'':'s')+'</summary><pre tabindex="0">'+esc(body)+'</pre></details>';
   }else{
     if(/incomplete|blocker|failed|denied|not approved|error/i.test(text))el.classList.add('notice-warn');
     el.textContent=text;
