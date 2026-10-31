@@ -1,9 +1,9 @@
 # OASIS Implementation Audit and External Capability Benchmark
 
 **Updated:** October 31, 2026  
-**OASIS source snapshot reviewed:** [508a0a68d4760f07c22a4037eeb26a6d83c7216f](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f)  
-**Claude Code evidence:** current official documentation pages retrieved on October 31, 2026 (linked in the comparison below).  
-**Method:** inspect current OASIS source, registered tools, tests, fixtures, product-readiness records and CI configuration; compare them with current official Claude Code documentation. Claude Code's private runtime remains unavailable for a line-by-line source audit. This is a source-and-documentation comparison, not a measured head-to-head benchmark or a claim of parity.
+**OASIS source snapshot reviewed:** [508a0a68d4760f07c22a4037eeb26a6d83c7216f](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f); subsequent commits fixed test-only assertion patterns and refreshed this comparison.  
+**Claude Code stable release:** [2.1.314](https://github.com/anthropics/claude-code/releases/tag/v2.1.314), published October 30, 2026; 2.1.315 was listed on the `next` tag and is not treated as stable here.  
+**Method:** inspect OASIS source, registered tools, tests, fixtures, product-readiness records and CI configuration; compare them with Claude Code's official release notes and documentation. Claude Code's private runtime remains unavailable for a line-by-line source audit. This is a source-and-documentation comparison, not a measured head-to-head benchmark or a claim of parity.
 
 ## Executive verdict: OASIS on its own merits
 
@@ -13,7 +13,7 @@ That establishes **broad architectural and capability overlap** with Claude Code
 
 The most important gap supported by current evidence is **benchmark strength**: the checked-in evaluation manifest has 33 tasks (16 labelled small and 17 medium, none large). Most exercise bounded helper logic, input handling and security/configuration cases. They are useful regression tests, but not enough to support a broad “as capable as Claude Code” claim. The existing benchmark audit also records that no authenticated live head-to-head result has been published. See [Benchmark audit](BENCHMARK_AUDIT.md) and the actual [task manifest](../evals/tasks/metadata.json).
 
-The second major caveat is platform isolation: OASIS's OS sandbox is optional and disabled by default, targets Linux/macOS, and does not currently provide equivalent native sandbox/container isolation on Windows. This is explicitly reflected in the code and the product's own limits. See [sandbox implementation](../src/sandbox.mjs) and [README limitations](../README.md).
+The second major caveat is execution isolation. OASIS's OS sandbox is optional, disabled by default, and targets Linux/macOS; native Windows commands use approval controls without OASIS OS sandbox enforcement. Claude Code's shell sandbox is also off by default, supports macOS/Linux/WSL2, and does not sandbox native Windows commands. In both products the sandbox is a shell-process boundary, not full OS isolation of every file tool, MCP server or hook. OASIS's built-in file tools separately constrain access to the workspace and explicitly added directories. Neither product should be called fully secure merely because sandboxing exists. See OASIS [sandbox implementation](../src/sandbox.mjs) and Claude Code's [sandbox documentation](https://code.claude.com/docs/en/sandboxing).
 
 ## Evidence boundary: what can and cannot be compared
 
@@ -30,7 +30,7 @@ This audit records what those files implement and what the checked-in tests exer
 
 ### Claude Code's official release is not a public runtime source tree
 
-The official [Claude Code GitHub repository](https://github.com/anthropics/claude-code) publishes project documentation, scripts, examples, plugin material and supporting files. The official [2.1.312 npm package listing](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/) contains a platform-specific CLI executable/package, installer and wrapper files, package metadata, and a generated [SDK tool-input/output declaration file](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/sdk-tools.d.ts). The generated declaration file is useful evidence of the shipped tool contracts; it is **not** the private CLI runtime implementation.
+The official [Claude Code GitHub repository](https://github.com/anthropics/claude-code) publishes project documentation, scripts, examples, plugin material and supporting files. The stable [2.1.314 npm package listing](https://unpkg.com/@anthropic-ai/claude-code@2.1.314/) contains its platform-specific CLI package, installer/wrapper files, package metadata and generated [SDK tool-input/output declarations](https://unpkg.com/@anthropic-ai/claude-code@2.1.314/sdk-tools.d.ts). The 2.1.314 release notes document a working-directory write guard for file writes/edits/notebook edits and idle compaction for Desktop/VS Code conversations above 200K tokens. The published declarations and release notes establish shipped contracts and documented behavior; they are **not** the private CLI runtime implementation.
 
 For that reason, this report does not present a line-by-line comparison with Claude Code internals, invent hidden implementation details, or treat documentation as proof of enforcement. Claude's public schema proves that a tool contract is shipped; it does not, by itself, prove how that tool is implemented internally, the conditions under which it is allowed, or its failure rate. Where no corresponding public runtime implementation was available, the report labels the internal comparison **not verifiable from official public artifacts**.
 
@@ -78,7 +78,7 @@ OASIS stores workspace-scoped sessions and has explicit recall, history compacti
 
 **Test evidence:** Runtime tests assert that older history is summarized before a later request and that mid-turn compaction preserves the current task and the latest call/result pair.
 
-**Comparison result:** Claude Code's official CLI tool schema and documentation expose memory and file-reading behavior, including a file-read output field for automatic token-cap pagination. The published schema cannot establish Claude's internal memory ranking or context-compaction algorithm. OASIS's implementation is inspectable; a meaningful comparison requires long-session tasks with predefined facts, context pressure, interruption/restart and measured recall correctness.
+**Comparison result:** Claude Code 2.1.314 documents idle compaction for Desktop and VS Code conversations above 200K tokens that remain idle. OASIS compacts older history at configured thresholds before a later request and has a separate mid-turn compaction path; it does not currently provide the same idle-triggered Desktop/VS Code behavior. Neither product's public contracts prove its internal memory-ranking quality. A meaningful quality comparison requires long-session tasks with predefined facts, context pressure, interruption/restart and measured recall correctness.
 
 ### 5. Delegation, task coordination and workflows
 
@@ -105,12 +105,12 @@ Claude Code's official repository exposes public plugin and example material, an
 | Shell and terminal work | argv execution, shell/PowerShell, PTY/background process handling, permission analysis | Bash schema and public terminal workflow descriptions | Broad overlap; sandbox equivalence not demonstrated |
 | Plan and task state | Plan mode, todo list, task board and session tools | EnterPlanMode/ExitPlanMode, TodoWrite, Task* contracts | Broad overlap |
 | Subagents and parallelism | Bounded agent pool, teams, background agents and worktree support | Agent and worktree/task contracts | Broad overlap; outcome quality unmeasured |
-| Context and memory | Source-level session persistence, retrieval, compaction and tests | Public memory/file-read contracts; internal algorithm not published | OASIS implementation observable; no internal parity claim |
-| Permissions and OS isolation | Explicit rules, fail-closed command parsing and optional Linux/macOS sandbox | Public permission/sandbox docs; released tool schemas only | High-priority validation area; OASIS Windows isolation is weaker |
+| Context and memory | Source-level session persistence, retrieval, threshold-based pre-request compaction and mid-turn compaction tests | Public memory/file-read contracts; v2.1.314 adds idle compaction in Desktop/VS Code | Broad overlap; OASIS lacks the same idle-triggered UI compaction behavior; no memory-quality parity claim |
+| Permissions and OS isolation | Explicit rules, fail-closed command parsing, workspace path validation and optional Linux/macOS shell sandbox | Claude's shell sandbox is optional and supports macOS/Linux/WSL2, not native Windows; v2.1.314 adds a write-outside-working-directories guard for file tools | Both have a default-off shell-sandbox boundary; test platform behavior directly. OASIS file tools already confine writes to workspace/explicit dirs, but neither tool-level path policy equals OS-level shell isolation |
 | MCP/hooks/plugins/skills | Source-backed clients, hooks and plugin integration | Public contracts, GitHub plugin material and SDK tool types | Strong interoperability/capability overlap; compatibility remains feature-specific |
 | Diagnostics/language services | Diagnostics and LSP modules | The inspected official tool schema is not a complete inventory of every internal runtime feature | Compare by task results, not tool-name count |
 | Browser, IDE and workflow surfaces | Browser workspace, VS Code integration, dynamic workflows and monitors | Official repository/docs expose terminal, IDE, plugins and public tool contracts | Different product surfaces; compare specific user journeys |
-| Product-specific tools and hosted features | Some same-named tools not present in the built-in OASIS registry reviewed | SDK schema includes Projects, ClaudeDesign, Artifacts, RemoteTrigger and notification-related contracts | Potential feature-level gaps; verify user need and implement deliberately rather than adding empty stubs |
+| Product-specific tools and hosted features | OASIS centers on local workspaces, sessions, artifacts, workflows, browser history and integrations | Claude Code documents hosted cloud sessions, mobile Dispatch, remote/SSH environments and additional IDE surfaces | Potential product-surface gaps; verify user need and implement deliberately rather than adding empty stubs |
 | Proven coding performance | 33 deterministic regression/eval tasks in manifest | No comparable result inferred from tool schemas | Not established for either side by this audit |
 
 ## Current Claude Code capability comparison — October 31, 2026
@@ -193,7 +193,7 @@ Official comparison references: [Claude Code overview](https://code.claude.com/d
 
 ## Verification boundary for the inspected source revision
 
-The current-main source snapshot reviewed for this update is [508a0a68d4760f07c22a4037eeb26a6d83c7216f](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f). For that exact SHA, the installer-check workflow passed on Windows, macOS and Linux ([run 41173654892](https://github.com/FAHTHIZ/oasis/actions/runs/41173654892)). The Quality matrix was still running, with macOS and Windows security regressions and Linux PTY integration already successful; Node 22/24/26 full quality gates and clean-environment tests were not yet complete when this section was updated. Publishing validation and the three-platform desktop packaging workflow were also still running. The 0.4.0 package version and curated release notes exist, but the `v0.4.0` tag and GitHub Release did not yet exist at this audit check. Do not interpret a pending workflow as a pass.
+The source snapshot assessed for this update is [508a0a68d4760f07c22a4037eeb26a6d83c7216f](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f); later `main` commits corrected test assertions and refreshed this comparison. On 508, installer checks passed on Windows, macOS and Linux, while the clean-environment suite exposed two stale test matchers; these have been corrected on current `main`. The final current-main Quality Checks, public-site validation, installer checks and three-platform desktop build must all pass on the same SHA before a release is verified. Package version 0.4.0 and curated notes exist, but no GitHub Release is claimed by this audit until the publishing workflow confirms it. Do not treat pending or cancelled workflows as passes.
 
 No comparison in this document proves exhaustive security, broad real-world coding ability, or Claude Code parity. The evidence needed for that is a green same-commit release matrix plus representative, reproducible head-to-head task outcomes with task-level failures and human-reviewed diffs.
 
@@ -201,7 +201,7 @@ No comparison in this document proves exhaustive security, broad real-world codi
 
 ### OASIS
 
-- [Inspected OASIS code/test commit](https://github.com/FAHTHIZ/oasis/commit/45eeaeabc0cc1d6c4154960df58ebee5dcce352d)
+- [Inspected OASIS source snapshot](https://github.com/FAHTHIZ/oasis/commit/508a0a68d4760f07c22a4037eeb26a6d83c7216f)
 - [Agent runtime](../src/agent.mjs)
 - [Tool definitions and execution](../src/tools.mjs)
 - [Permissions](../src/permissions.mjs) · [Sandbox](../src/sandbox.mjs) · [Runtime regression tests](../test/runtime.test.mjs)
@@ -211,9 +211,10 @@ No comparison in this document proves exhaustive security, broad real-world codi
 ### Claude Code — official public artifacts
 
 - [Official repository](https://github.com/anthropics/claude-code)
-- [Official release package listing, 2.1.312](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/)
-- [Published package manifest](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/package.json)
-- [Published SDK tool schemas](https://unpkg.com/@anthropic-ai/claude-code@2.1.312/sdk-tools.d.ts)
+- [Stable release v2.1.314 (October 30, 2026)](https://github.com/anthropics/claude-code/releases/tag/v2.1.314)
+- [Published package, 2.1.314](https://unpkg.com/@anthropic-ai/claude-code@2.1.314/)
+- [Published package manifest](https://unpkg.com/@anthropic-ai/claude-code@2.1.314/package.json)
+- [Published SDK tool schemas](https://unpkg.com/@anthropic-ai/claude-code@2.1.314/sdk-tools.d.ts)
 - [Official Claude Code overview](https://code.claude.com/docs/en/overview) · [Sandboxing](https://code.claude.com/docs/en/sandboxing) · [Agent teams](https://code.claude.com/docs/en/agent-teams) · [Current public releases](https://github.com/anthropics/claude-code/releases)
 
 ---
