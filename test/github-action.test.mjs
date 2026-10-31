@@ -264,9 +264,9 @@ test('GitHub Action passes the unattended LSP restriction into the agent runtime
   assert.equal(outcome.responded, true);
   assert.equal(outcome.result.is_error, false);
   assert.equal(capturedOptions.env.OASIS_DISABLE_LSP, '1');
-  assert.match(capturedOptions.appendSystemPrompt, /report verification as incomplete whenever that gate is not complete/i);
+  assert.match(capturedOptions.appendSystemPrompt, /do not use LSP or start language-server processes/i);
   assert.match(capturedOptions.appendSystemPrompt, /repository's own test, lint, build, or type-check commands/i);
-  assert.match(capturedOptions.appendSystemPrompt, /report verification as incomplete/i);
+  assert.match(capturedOptions.appendSystemPrompt, /report verification as incomplete whenever that gate is not complete/i);
   assert.equal(outcome.published.changed, false);
 });
 
