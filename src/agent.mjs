@@ -3340,6 +3340,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    requests: 0,
     costUSD: 0,
     strongModelCostUSD: 0,
     costKnown: true,
@@ -3350,6 +3351,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     taskUsage.outputTokens += Number(entry.outputTokens || 0);
     taskUsage.totalTokens += Number(entry.totalTokens || 0);
     if (entry.phase === undefined) {
+      taskUsage.requests += 1;
       const actualModel = String(entry.model || (session && session.config && session.config.model) || selectedModel);
       const pricingOptions = {
         config: originalConfig || {},
@@ -3388,9 +3390,12 @@ export async function runAgentTurn(session, prompt, options = {}) {
     } else {
       result = await runAgentTurnWithTelemetry(session, prompt, turnOptions);
     }
-    const known = taskUsage.costKnown && taskUsage.strongModelCostKnown;
-    const savingsUSD = known ? taskUsage.strongModelCostUSD - taskUsage.costUSD : null;
-    if (session && session.webUsage && route.enabled && route.tier === 'easy') {
+    const actualCostKnown = taskUsage.requests > 0 && taskUsage.costKnown;
+    const strongCostKnown = taskUsage.requests > 0 && taskUsage.strongModelCostKnown;
+    const savingsUSD = actualCostKnown && strongCostKnown
+      ? taskUsage.strongModelCostUSD - taskUsage.costUSD
+      : null;
+    if (session && session.webUsage && route.enabled && route.tier === 'easy' && taskUsage.requests > 0) {
       session.webUsage.routingTasks = Number(session.webUsage.routingTasks || 0) + 1;
       if (savingsUSD !== null) session.webUsage.routingSavingsUSD = Number(session.webUsage.routingSavingsUSD || 0) + savingsUSD;
       else session.webUsage.routingSavingsKnown = false;
@@ -3406,8 +3411,10 @@ export async function runAgentTurn(session, prompt, options = {}) {
       },
       taskUsage: {
         ...taskUsage,
-        costUSD: taskUsage.costKnown ? taskUsage.costUSD : null,
-        strongModelCostUSD: taskUsage.strongModelCostKnown ? taskUsage.strongModelCostUSD : null,
+        costUSD: actualCostKnown ? taskUsage.costUSD : null,
+        strongModelCostUSD: strongCostKnown ? taskUsage.strongModelCostUSD : null,
+        costKnown: actualCostKnown,
+        strongModelCostKnown: strongCostKnown,
         savingsUSD,
         selectedModel
       }
