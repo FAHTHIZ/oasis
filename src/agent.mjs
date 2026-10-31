@@ -3164,6 +3164,8 @@ async function authorizeCall(session, name, args, context, options) {
       runHooks('Notification', { session_id: session.sessionId || 'unsaved', notification_type: 'permission_prompt', title: 'Permission needed', message: 'Oasis needs your permission to use ' + (CLAUDE_TOOL_NAMES[name] || name) }, hookOptions(session, context.env))
         .then((note) => session.hookMessages.push(...note.messages)).catch(() => {});
     }
+    const nearMiss = policy && typeof policy.allowNearMiss === 'function' ? policy.allowNearMiss(name, args) : '';
+    if (nearMiss && !String(message || '').includes('Why this asks:')) message = String(message || '') + '\n' + nearMiss;
     const answer = await baseApproval(message, force, { tool: name, suggestion, input: args });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);

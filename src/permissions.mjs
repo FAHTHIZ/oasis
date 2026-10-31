@@ -319,6 +319,24 @@ export class PermissionPolicy {
     return { decision: 'default', rule: null };
   }
 
+  // When a shell command falls through to a prompt even though an allow rule covers
+  // part of it, explain why (the common "I allowed git:* and it still asks" confusion).
+  allowNearMiss(toolName, args = {}) {
+    if (!['run_command', 'run_shell', 'monitor', 'powershell'].includes(toolName)) return '';
+    const line = toolName === 'run_shell' || toolName === 'powershell' ? String(args.command || '').trim() : commandLine(args.command, args.args);
+    const rules = [...this.allow, ...this.sessionAllow].filter((rule) => rule.tools.includes(toolName));
+    const partial = rules.find((rule) => ruleMatches(rule, toolName, args, { root: this.root, requireEveryCommand: false }));
+    if (!partial) return '';
+    const parsed = splitShellCommands(line);
+    if (!parsed.safe) {
+      const what = /\$\(|`/.test(line) ? 'command substitution ($(...) or backticks)' : /<\(|>\(/.test(line) ? 'process substitution' : /[<>]/.test(line) ? 'a redirect' : 'grouping or syntax the permission parser does not trust';
+      return 'Why this asks: your allow rule ' + partial.raw + ' matches part of this command, but it uses ' + what + ', which allow rules never auto-approve. Splitting it into separate plain commands lets the rule apply.';
+    }
+    const uncovered = parsed.commands.filter((piece) => !rules.some((rule) => matchSingleCommandSpecifier(rule.specifier, piece)));
+    if (!uncovered.length) return '';
+    return 'Why this asks: your allow rule ' + partial.raw + ' covers part of this command, but not ' + uncovered.slice(0, 3).map((piece) => JSON.stringify(piece.length > 60 ? piece.slice(0, 57) + '...' : piece)).join(', ') + '. Every command joined with &&, ||, ; or | must be allowed for it to run without asking.';
+  }
+
   describe() {
     return {
       mode: this.mode,
