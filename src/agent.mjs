@@ -2087,11 +2087,13 @@ function verificationSummary(state) {
       path: file,
       status: result && result.status === 'unavailable'
         ? 'unavailable'
-        : result && Array.isArray(result.newErrors) && result.newErrors.length
-          ? 'errors'
-          : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
-            ? 'warnings'
-            : 'clean',
+        : result && result.status === 'not_applicable'
+          ? 'not_applicable'
+          : result && Array.isArray(result.newErrors) && result.newErrors.length
+            ? 'errors'
+            : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
+              ? 'warnings'
+              : 'clean',
       newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0,
       newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0,
       ...(result && result.reason ? { reason: String(result.reason).replace(/[\r\n\0]/g, ' ').slice(0, 240) } : {})
