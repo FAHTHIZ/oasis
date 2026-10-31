@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
-  <img src="https://img.shields.io/badge/status-alpha-7CFF5E.svg?style=flat" alt="Alpha software" />
+  <img src="https://img.shields.io/badge/status-beta-7CFF5E.svg?style=flat" alt="Beta software" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache License 2.0" /></a>
 </p>
 
@@ -76,7 +76,7 @@ We do not publish token-savings claims: there is no current, representative meas
 
 ## Limits to know
 
-OASIS is in alpha, with platform and release gaps remaining. Commands normally run with your user permissions. The optional OS sandbox is disabled by default and currently targets Linux and macOS; Windows isolation is not available. `node-pty` is optional, and its native terminal behavior is not guaranteed on Android/Termux. The desktop installers are unsigned, automatic desktop updates are not implemented, and the browser workspace does not sync projects/tasks/notes with the CLI. Approval prompts reduce risk; they are not a substitute for isolation. See [current status and limitations](docs/CURRENT_STATUS.md) and the [security audit](docs/SECURITY_RELIABILITY_AUDIT.md).
+OASIS is in beta, with known platform, reliability, and release-readiness gaps remaining. Commands normally run with your user permissions. The optional OS sandbox is disabled by default and currently targets Linux and macOS; Windows isolation is not available. `node-pty` is optional, and its native terminal behavior is not guaranteed on Android/Termux. The desktop installers are unsigned, automatic desktop updates are not implemented, and the browser workspace does not sync projects/tasks/notes with the CLI. Approval prompts reduce risk; they are not a substitute for isolation. See [current status and limitations](docs/CURRENT_STATUS.md) and the [security audit](docs/SECURITY_RELIABILITY_AUDIT.md).
 
 ## A real demo is still needed
 
