@@ -807,3 +807,114 @@ test('OASIS eval applies a whole-turn timeout and aborts the agent session', asy
   assert.match(result.results[0].error, /Task exceeded the 1-second task timeout/);
   assert.equal(observedSignal.aborted, true);
 });
+
+test('OASIS eval records selected routed model, per-task cost and savings', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configDir = path.join(tmp, 'user-config');
+  const resultsDir = path.join(tmp, 'eval-results');
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  const taskDir = await createFixtureTask(tasksDir);
+  await writeFile(path.join(tasksDir, 'metadata.json'), JSON.stringify({
+    schemaVersion: 1,
+    categories: { 'utility-logic': 'Read-only fixture category.' },
+    difficulties: ['small', 'medium', 'large'],
+    tasks: {
+      'fixture-task': { category: 'utility-logic', difficulty: 'small', rationale: 'Use the cheap model for a clearly small task.' }
+    }
+  }));
+  let capturedSessionRouting = null;
+  let capturedHint = null;
+  const env = {
+    ...process.env,
+    OASIS_CONFIG_DIR: configDir,
+    GITHUB_SHA: 'd'.repeat(40)
+  };
+  await saveConfig({
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:1/v1',
+    model: 'strong-model',
+    apiKey: '',
+    maxSteps: 4
+  }, { env });
+
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand([
+    '--task', 'fixture-task',
+    '--trials', '1',
+    '--route-easy-model', 'cheap-model',
+    '--route-strong-model', 'strong-model'
+  ], {
+    autoApprove: true,
+    env,
+    tasksDir,
+    resultsDir,
+    output,
+    agentRunner: async (session, _prompt, options) => {
+      capturedSessionRouting = { ...session.settings.modelRouting };
+      capturedHint = options.routingHint;
+      await writeFile(path.join(session.root, 'demo.txt'), 'new\n');
+      return {
+        finished: true,
+        toolCalls: 1,
+        modelRouting: {
+          enabled: true,
+          tier: 'easy',
+          selectedModel: 'cheap-model',
+          strongModel: 'strong-model',
+          reason: 'benchmark task marked small'
+        },
+        taskUsage: {
+          inputTokens: 1000,
+          outputTokens: 200,
+          totalTokens: 1200,
+          costUSD: 0.001,
+          strongModelCostUSD: 0.004,
+          savingsUSD: 0.003,
+          costKnown: true,
+          strongModelCostKnown: true
+        }
+      };
+    }
+  });
+
+  assert.equal(result.ok, true, output.text);
+  assert.deepEqual(capturedSessionRouting, {
+    enabled: true,
+    easyModel: 'cheap-model',
+    strongModel: 'strong-model'
+  });
+  assert.equal(capturedHint, 'small');
+  assert.equal(result.results[0].model, 'cheap-model');
+  assert.equal(result.results[0].requestedModel, 'strong-model');
+  assert.equal(result.results[0].routeTier, 'easy');
+  assert.equal(result.results[0].costUSD, 0.001);
+  assert.equal(result.results[0].strongModelCostUSD, 0.004);
+  assert.equal(result.results[0].routingSavingsUSD, 0.003);
+  assert.equal(result.results[0].costSource, 'per-model pricing estimate');
+  assert.equal(result.summary.routing.enabled, true);
+  assert.equal(result.summary.routing.easyModel, 'cheap-model');
+  assert.match(output.text, /easy\/cheap-model/);
+  assert.match(output.text, /saved vs strong \$0\.003000/);
+
+  const stored = JSON.parse(await readFile(result.resultsPath, 'utf8'));
+  assert.equal(stored.results[0].model, 'cheap-model');
+  assert.equal(stored.results[0].routingSavingsUSD, 0.003);
+  assert.equal(stored.summary.routing.strongModel, 'strong-model');
+});
+
+test('eval routing options require an easy model and cannot be used in Claude Code or validation mode', async () => {
+  await assert.rejects(
+    runEvalCommand(['--route-strong-model', 'strong-model'], { autoApprove: true }),
+    /requires --route-easy-model/
+  );
+  await assert.rejects(
+    runEvalCommand(['--claude-code', '--route-easy-model', 'cheap-model'], { autoApprove: true }),
+    /apply only to OASIS eval runs/
+  );
+  await assert.rejects(
+    runEvalCommand(['--validate', '--route-easy-model', 'cheap-model'], { autoApprove: true }),
+    /cannot be combined with model-routing options/
+  );
+});
