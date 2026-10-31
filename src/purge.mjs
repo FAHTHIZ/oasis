@@ -1,7 +1,8 @@
-// `oasis purge [path]` (Claude Code's `claude purge`): delete all local Oasis state for a
-// project — saved transcripts (with their checkpoints / file-edit history), debug logs for
-// those sessions, background-session entries and logs, prompt-history lines, and the
-// project's workspace-trust entry. Auto memory is kept unless --memory is passed.
+// `oasis purge [path]` (Claude Code's `claude purge`): remove local OASIS state for a
+// project — saved transcripts and task metadata, debug logs, background-session records
+// and logs, prompt-history lines, and the workspace-trust entry. File rewind checkpoints
+// live only in the active session; they are not part of the saved transcript. Auto memory
+// is kept unless --memory is passed.
 //
 //   oasis purge [path] [--dry-run] [-y|--yes] [-i|--interactive] [--all] [--memory]
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
