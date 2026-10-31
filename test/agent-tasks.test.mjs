@@ -394,7 +394,16 @@ test('dispatch_ready_tasks rejects overlapping dispatch attempts without claimin
 test('dispatch_ready_tasks launches dependency-ready work in isolated waves and carries task IDs into agent status', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-home-'));
-  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  // Close the session before removing the fixture repository. Background agents
+  // may still be finalizing Git worktrees after their shared task is marked complete.
+  let session = null;
+  t.after(async () => {
+    if (session) await closeSession(session);
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      rm(home, { recursive: true, force: true })
+    ]);
+  });
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'dispatch@example.com');
@@ -449,8 +458,7 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
     }
   });
   const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
-  const session = await createSession({ root, config, settings, env });
-  t.after(() => closeSession(session));
+  session = await createSession({ root, config, settings, env });
 
   const first = await runAgentTurn(session, 'Create the shared dependency tasks and start wave one.', { autoApprove: true, env, approval: async () => true });
   assert.equal(first.text, 'dispatch wave finished');
@@ -461,6 +469,10 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
   }, 15000, () => 'first wave did not complete; tasks=' + JSON.stringify(session.sharedTasks.tasks) +
     '; agents=' + JSON.stringify([...session.agentTasks.agents.values()].map(summarizeAgent)) +
     '; events=' + JSON.stringify(agentEvents(session, { limit: 30 }).events));
+  await until(() => [...session.agentTasks.agents.values()].length === 2 &&
+    [...session.agentTasks.agents.values()].every((worker) => worker.status === 'completed'), 15000,
+  () => 'first-wave workers did not finish worktree finalization; agents=' +
+    JSON.stringify([...session.agentTasks.agents.values()].map(summarizeAgent)));
 
   // Assert the dispatcher's effect through task/agent registries rather than a
   // provider-specific string serialization of the tool result.
@@ -481,6 +493,9 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
     () => 'dependent task did not complete; task=' + JSON.stringify(session.sharedTasks.tasks.find((task) => task.id === 'task_2')) +
       '; agents=' + JSON.stringify([...session.agentTasks.agents.values()].map(summarizeAgent)) +
       '; events=' + JSON.stringify(agentEvents(session, { limit: 30 }).events));
+  await until(() => session.agentTasks.agents.get('agent_3')?.status === 'completed', 15000,
+    () => 'dependent worker did not finish worktree finalization; agent=' +
+      JSON.stringify(summarizeAgent(session.agentTasks.agents.get('agent_3'))));
   assert.equal(session.agentTasks.agents.size, 3);
   assert.equal(session.agentTasks.agents.get('agent_3').sharedTaskId, 'task_2');
   assert.ok(childRequests.some((request) => text(request.messages).includes('You have been assigned shared task task_2')));
