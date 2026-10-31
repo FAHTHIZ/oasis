@@ -1,5 +1,6 @@
 // Dependency-aware task coordination shared by the main agent and its subagents.
 // This is a session-local board, not a substitute for worktree isolation when agents edit code.
+import { isWorktreeBranchName } from './branch-names.mjs';
 const MAX_TASKS = 100;
 const MAX_DEPENDENCIES = 20;
 const MAX_CHECKPOINT_TEXT = 2000;
@@ -99,7 +100,7 @@ export function sanitizeSharedTaskStore(value) {
     const checkpoint = normalizeCheckpoint(item.checkpoint, timestamp);
     // A restored session has no live agent processes, so never restore a live lease.
     const worktreeChanged = item.worktreeChanged === true;
-    const worktreeBranch = typeof item.worktreeBranch === 'string' && /^oasis\/[a-z0-9-]{1,100}$/i.test(item.worktreeBranch) ? item.worktreeBranch.slice(0, 120) : '';
+    const worktreeBranch = typeof item.worktreeBranch === 'string' && isWorktreeBranchName(item.worktreeBranch) ? item.worktreeBranch : '';
     const worktreeCommit = typeof item.worktreeCommit === 'string' && /^[0-9a-f]{40}$/i.test(item.worktreeCommit) ? item.worktreeCommit.toLowerCase() : '';
     tasks.push({ id, subject, description, status, owner, blockedBy: blockedBy.filter((dep) => dep !== id), createdBy, createdAt: timestamp(item.createdAt), updatedAt: timestamp(item.updatedAt), claimedBy: '', claimExpiresAt: null, worktreeChanged, worktreeBranch, worktreeCommit, checkpoint });
     ids.add(id);

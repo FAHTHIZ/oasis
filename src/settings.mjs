@@ -243,6 +243,7 @@ export async function loadSettings(root, options = {}) {
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
+    if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
     // Writing rules: phrases accumulate across scopes; the most specific codeComments wins.
     if (settings.avoidPhrases !== undefined) result.avoidPhrases = normalizePhrases([...(result.avoidPhrases || []), ...normalizePhrases(settings.avoidPhrases)]);
     if (normalizeCommentMode(settings.codeComments)) result.codeComments = normalizeCommentMode(settings.codeComments);

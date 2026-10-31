@@ -3,6 +3,7 @@
 // This is a local persistence layer, not a hosted cloud scheduler. It deliberately
 // stores task state under the user's private Oasis config directory, never in the
 // project checkout, and uses restrictive permissions plus atomic replacement.
+import { isWorktreeBranchName } from './branch-names.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -72,7 +73,7 @@ function makeSnapshot(job, maxEvents) {
     workspaceRoot: typeof job.workspaceRoot === 'string' && path.isAbsolute(job.workspaceRoot) ? path.resolve(job.workspaceRoot) : null,
     executionRoot: typeof job.executionRoot === 'string' && path.isAbsolute(job.executionRoot) ? path.resolve(job.executionRoot) : null,
     worktreePath: typeof job.worktreePath === 'string' && job.worktreePath.startsWith('.oasis/worktrees/') && /^[a-z0-9-]+$/i.test(job.worktreePath.slice('.oasis/worktrees/'.length)) ? job.worktreePath : null,
-    worktreeBranch: typeof job.worktreeBranch === 'string' && job.worktreeBranch.startsWith('oasis/') && /^[a-z0-9-]+$/i.test(job.worktreeBranch.slice('oasis/'.length)) ? job.worktreeBranch : null,
+    worktreeBranch: typeof job.worktreeBranch === 'string' && isWorktreeBranchName(job.worktreeBranch) ? job.worktreeBranch : null,
     worktreeBaseCommit: /^[a-f0-9]{40}$/i.test(String(job.worktreeBaseCommit || '')) ? String(job.worktreeBaseCommit) : null,
     result: job.result == null ? null : safeValue(job.result),
     error: job.error == null ? null : scrubText(job.error, 4000),
