@@ -859,6 +859,8 @@ The default per-task budget is now 60 model steps and 300 tool calls (it was 12 
 
 The general `run_command` tool runs one executable with an argument array and no shell. Beyond the executable denylist, OASIS now unwraps wrapper programs (`env`, `xargs`, `timeout`, `nice`, `nohup`, ...) and checks the program they launch, so `env rm` or `xargs rm` are blocked like `rm`. Commands that run inline code or arbitrary programs (`node -e`, `python -c`, `perl -e`, `find -exec/-delete`, `awk 'system()'`, `git -c`, `curl -o`, ...) are classified as **high risk**: they always need an interactive answer, even with `--yes`, unless an explicit permission rule allows them.
 
+Shell commands (`run_shell`, `powershell`) that attach to or control applications you already have open (COM automation such as `New-Object -ComObject` or `GetActiveObject`, `win32com`, AppleScript `osascript` / `tell application`, `xdotool`/`wmctrl`/AutoHotkey, `Stop-Process`, `taskkill`, `pkill`, `killall`, `.Quit()`) always ask you, with a warning that unsaved work could be lost. Allow rules, sandbox auto-allow and auto mode do not cover them; only `bypassPermissions` does.
+
 Enable the optional OS sandbox to restrict command writes and, by default, network access on supported Linux and macOS systems (this is not full filesystem-read isolation):
 
 ~~~json
