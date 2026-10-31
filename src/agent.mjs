@@ -250,11 +250,38 @@ export async function compactHistoryIfNeeded(session, options = {}) {
  * result can be separated from its matching tool-call ID. The active user request
  * remains in place; the summary is informational context, never a replacement task.
  */
+// Reactive compaction after the provider rejected a request as too long: fold earlier
+// turns, then in-turn history, then (second attempt) shrink old tool outputs hard.
+async function recoverFromContextOverflow(session, requestIndex, options, attempt) {
+  const before = historyTextSize(session.messages || []);
+  let tokensUsed = 0;
+  try {
+    const earlier = await compactHistoryIfNeeded(session, { ...options, force: true });
+    tokensUsed += Number(earlier.tokensUsed || 0);
+  } catch {}
+  try {
+    const midTurn = await compactMidTurnHistoryIfNeeded(session, requestIndex, { ...options, force: true });
+    tokensUsed += Number(midTurn.tokensUsed || 0);
+  } catch {}
+  const window = contextWindowSize(session.config, options.env || process.env);
+  const squeezed = microcompact(session.messages, { windowTokens: window, triggerRatio: 0, targetRatio: attempt > 1 ? 0.15 : 0.3, keepRecentTokens: Math.floor(window * (attempt > 1 ? 0.05 : 0.1)) });
+  if (squeezed.pruned > 0) session.messages = squeezed.messages;
+  // The newest tool output can be the culprit itself (a huge read or log); clip oversized ones.
+  if (historyTextSize(session.messages || []) >= before || attempt > 1) {
+    const limit = attempt > 1 ? 12000 : 40000;
+    session.messages = session.messages.map((message) => message && message.role === 'tool' && typeof message.content === 'string' && message.content.length > limit
+      ? { ...message, content: message.content.slice(0, Math.floor(limit * 0.7)) + '\n\n[OASIS: ' + (message.content.length - limit) + ' characters of this tool output were cut because the request exceeded the model context window. Re-run with a narrower range or filter if you need them.]\n\n' + message.content.slice(-Math.floor(limit * 0.3)) }
+      : message);
+  }
+  const after = historyTextSize(session.messages || []);
+  return { changed: after < before, beforeChars: before, afterChars: after, tokensUsed };
+}
+
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
   const messages = session.messages || [];
   const beforeTokens = estimateTokens(messages);
   const beforeChars = historyTextSize(messages);
-  if (beforeChars <= compactionThresholdChars(session.config || {}, options.env || process.env) || messages.length < requestIndex + 5) {
+  if ((!options.force && beforeChars <= compactionThresholdChars(session.config || {}, options.env || process.env)) || messages.length < requestIndex + 5) {
     return { compacted: false, tokensUsed: 0 };
   }
 
@@ -1357,6 +1384,16 @@ export function hookOptions(session, env) {
   };
 }
 
+// Provider said the request does not fit the context window (estimates drift:
+// images, tool schemas, tokenizer differences). Compact and retry instead of dying.
+export function isContextOverflowError(error) {
+  if (!error || error.name === 'AbortError') return false;
+  const status = Number(error.status || error.statusCode);
+  const text = String(error.message || '');
+  if (/max_tokens|max_output|output tokens/i.test(text) && !/prompt|input|context/i.test(text)) return false;
+  return status === 413 || /prompt is too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum )?context/i.test(text);
+}
+
 export function stopFailureType(error) {
   const status = Number(error && (error.status || error.statusCode));
   const text = String(error && error.message || '').toLowerCase();
@@ -1365,6 +1402,7 @@ export function stopFailureType(error) {
   if (status === 529 || /overloaded/.test(text)) return 'overloaded';
   if (status === 401 || status === 403 || /unauthori[sz]ed|invalid api key|authentication/.test(text)) return 'authentication_failed';
   if (status === 404 || /model.*not.?found|unknown model/.test(text)) return 'model_not_found';
+  if (isContextOverflowError(error)) return 'context_overflow';
   if (/max.?(output|tokens)/.test(text)) return 'max_output_tokens';
   if (status === 400) return 'invalid_request';
   if (status >= 500) return 'server_error';
@@ -3670,6 +3708,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (!options.isSubagent) beginCheckpoint(session, userMessage, request);
   let stopHookContinuations = 0;
   let outputRecoveries = 0;
+  let overflowRecoveries = 0;
   let pendingTruncationNotice = '';
   const { maxSteps, tokenBudget, maxToolCalls } = resolveTurnLimits(options, session.config);
   const context = {
@@ -3749,6 +3788,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         } } : {})
       });
     } catch (error) {
+      if (isContextOverflowError(error) && overflowRecoveries < 2 && !(options.signal && options.signal.aborted)) {
+        overflowRecoveries++;
+        const recovered = await recoverFromContextOverflow(session, activeRequestIndex, options, overflowRecoveries);
+        tokensUsed += Number(recovered.tokensUsed || 0);
+        if (recovered.changed) {
+          if (typeof options.onContextOverflow === 'function') { try { options.onContextOverflow({ attempt: overflowRecoveries, ...recovered }); } catch {} }
+          step--;
+          continue;
+        }
+      }
       // StopFailure: the turn ended on an API error (observability only).
       if (error && error.name !== 'AbortError' && hasHooks(session.hooks, 'StopFailure')) {
         await runHooks('StopFailure', { session_id: session.sessionId || 'unsaved', error_type: stopFailureType(error), error: String(error.message || error).slice(0, 2000) }, hookOptions(session, options.env)).catch(() => {});
