@@ -231,7 +231,7 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Fix added on main:** when a `PreToolUse` hook changes tool input, OASIS evaluates the final merged arguments again. A matching deny rule blocks immediately; an explicit ask is preserved; and an allow for the original inputs no longer authorizes a different command by accident. Auto-mode shell classification is re-applied to the final decision. Regression tests cover both fresh approval after an input rewrite and enforcement of a deny rule against the rewritten command.
 
-**Verification boundary:** current main CI is being rerun against the test and source changes. This is a source-level finding/fix, not a penetration-test result. See [open-source security research](OPEN_SOURCE_SECURITY_RESEARCH.md) for the component evaluation and integration constraints.
+**Verification boundary:** current main CI is being rerun against the test and source changes. This is a source-level finding/fix, not a penetration-test result. See [additional component research](#additional-component-research-and-authorization-decisions) for the component evaluation and integration constraints.
 
 ## Follow-up hardening: fail closed when the requested OS sandbox is unavailable
 
