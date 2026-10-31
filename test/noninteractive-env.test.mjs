@@ -64,3 +64,17 @@ test('write_file flags unrequested summary documents', async (t) => {
   const result = await executeTool('write_file', { path: 'FIXES_SUMMARY.md', content: '# Fixes\n' }, { root, session, autoApprove: true, approval: async () => true, env: process.env });
   assert.match(result.warning, /Unrequested document: FIXES_SUMMARY\.md/);
 });
+
+test('write_file refuses to overwrite a file the agent only partly read', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-partial-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const body = Array.from({ length: 300 }, (_, i) => 'line ' + i).join('\n') + '\n';
+  await writeFile(path.join(root, 'big.txt'), body);
+  const ctx = { root, session: { config: {} }, autoApprove: true, approval: async () => true, env: process.env };
+  await executeTool('read_file', { path: 'big.txt', offset: 1, limit: 50 }, ctx);
+  await assert.rejects(executeTool('write_file', { path: 'big.txt', content: 'short\n' }, ctx), /Only part of big\.txt has been read \(lines 1-50 of 30\d\)/);
+  await executeTool('read_file', { path: 'big.txt' }, ctx);
+  await executeTool('read_file', { path: 'big.txt', offset: 10, limit: 5 }, ctx);
+  const written = await executeTool('write_file', { path: 'big.txt', content: body.replace('line 0', 'first') }, ctx);
+  assert.equal(written.backedUpExistingFile, true);
+});

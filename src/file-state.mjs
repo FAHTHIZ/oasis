@@ -28,13 +28,17 @@ function store(context) {
 }
 
 /** Record the on-disk state of a file the model has just seen or written. */
-export async function recordFileState(context, absolute) {
+export async function recordFileState(context, absolute, options = {}) {
   if (!fileStateEnabled(context)) return;
   try {
     const info = await stat(absolute);
     if (!info.isFile()) return;
     const content = await readFile(absolute);
-    store(context).set(absolute, { mtimeMs: info.mtimeMs, size: info.size, sha256: hash(content) });
+    const sha256 = hash(content);
+    const previous = store(context).get(absolute);
+    // A ranged re-read of a file already seen in full (unchanged) keeps it "fully read".
+    const partial = options.partial && !(previous && previous.sha256 === sha256 && !previous.partial) ? options.partial : '';
+    store(context).set(absolute, { mtimeMs: info.mtimeMs, size: info.size, sha256, ...(partial ? { partial } : {}) });
   } catch { /* unreadable files simply stay untracked */ }
 }
 
@@ -60,6 +64,10 @@ export async function assertFileFresh(context, absolute, relative, options = {})
     // full overwrites (and every edit in strict mode) require a prior read.
     if (options.exactMatch && !strict) return;
     throw new Error('File has not been read yet: ' + relative + '. Read it with read_file before editing or overwriting it, so the change is based on its current contents.');
+  }
+  if (options.fullOverwrite && record.partial) {
+    throw new Error('Only part of ' + relative + ' has been read (' + record.partial + '). Overwriting it with write_file would replace lines you have not seen. ' +
+      'Read the whole file first, or change just the relevant section with edit_file / multi_edit.');
   }
   if (record.mtimeMs === info.mtimeMs && record.size === info.size) return;
   const current = hash(await readFile(absolute));

@@ -1731,7 +1731,8 @@ export async function executeTool(name, args = {}, context = {}) {
       if (isNotebookPath(args.path) && args.offset === undefined && args.limit === undefined) return await readNotebook(root, args.path);
       {
         const read = await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit });
-        await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute);
+        const partial = read && read.totalLines && (read.startLine > 1 || read.truncated) ? 'lines ' + read.startLine + '-' + read.endLine + ' of ' + read.totalLines : '';
+        await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute, { partial });
         return read;
       }
     case 'glob_files':
@@ -1826,7 +1827,7 @@ export async function executeTool(name, args = {}, context = {}) {
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
-        await assertFileFresh(context, target.absolute, writeDisplayPath);
+        await assertFileFresh(context, target.absolute, writeDisplayPath, { fullOverwrite: true });
         if (old.isFile() && old.size <= MAX_TEXT_FILE) {
           try { previousContent = await readFile(target.absolute, 'utf8'); } catch { previousContent = null; }
         }
