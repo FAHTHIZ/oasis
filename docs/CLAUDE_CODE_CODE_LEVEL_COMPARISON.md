@@ -11,7 +11,7 @@ OASIS is an independent product with its own roadmap and engineering identity. T
 
 That establishes **broad architectural and capability overlap** with Claude Code. It does **not** establish equal success rate, patch quality, speed, reliability or security. Those are behavioral outcomes that need controlled evaluation.
 
-The most important gap supported by current evidence is **benchmark strength**: the checked-in evaluation manifest has 33 tasks (16 labelled small and 17 medium, none large). Most exercise bounded helper logic, input handling and security/configuration cases. They are useful regression tests, but not enough to support a broad “as capable as Claude Code” claim. The existing benchmark audit also records that no authenticated live head-to-head result has been published. See [Benchmark audit](BENCHMARK_AUDIT.md) and the actual [task manifest](../evals/tasks/metadata.json).
+The most important gap supported by current evidence is **benchmark strength**: the checked-in evaluation manifest has 33 tasks (16 labelled small and 17 medium, none large). Most exercise bounded helper logic, input handling and security/configuration cases. They are useful regression tests, but not enough to support a broad “as capable as Claude Code” claim. The existing benchmark audit also records that no authenticated live head-to-head result has been published. See [Benchmark audit](BENCHMARKS.md) and the actual [task manifest](../evals/tasks/metadata.json).
 
 The second major caveat is execution isolation. OASIS's OS sandbox is optional, disabled by default, and targets Linux/macOS; native Windows commands use approval controls without OASIS OS sandbox enforcement. Claude Code's shell sandbox is also off by default, supports macOS/Linux/WSL2, and does not sandbox native Windows commands. In both products the sandbox is a shell-process boundary, not full OS isolation of every file tool, MCP server or hook. OASIS's built-in file tools separately constrain access to the workspace and explicitly added directories. Neither product should be called fully secure merely because sandboxing exists. See OASIS [sandbox implementation](../src/sandbox.mjs) and Claude Code's [sandbox documentation](https://code.claude.com/docs/en/sandboxing).
 
@@ -205,7 +205,7 @@ No comparison in this document proves exhaustive security, broad real-world codi
 - [Agent runtime](../src/agent.mjs)
 - [Tool definitions and execution](../src/tools.mjs)
 - [Permissions](../src/permissions.mjs) · [Sandbox](../src/sandbox.mjs) · [Runtime regression tests](../test/runtime.test.mjs)
-- [Task metadata](../evals/tasks/metadata.json) · [Benchmark protocol](BENCHMARKS.md) · [Benchmark audit](BENCHMARK_AUDIT.md)
+- [Task metadata](../evals/tasks/metadata.json) · [Benchmark protocol](BENCHMARKS.md) · [Benchmark audit](BENCHMARKS.md)
 - [Quality workflow](../.github/workflows/quality.yml) · [Successful base-revision run](https://github.com/FAHTHIZ/oasis/actions/runs/40840259970)
 
 ### Claude Code — official public artifacts

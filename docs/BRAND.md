@@ -65,3 +65,21 @@ Motion should feel like the portal activating: short, calm fades and a restraine
 - `assets/oasis-social-preview.svg` — social preview.
 - `site/assets/oasis-mark.svg` — public website header mark.
 - `site/assets/oasis-icon.svg` — public website app icon.
+
+## Alternative taglines
+
+- Your workspace. Your flow.
+- From intent to implementation.
+- Make the next step happen.
+- Your ideas, in motion.
+- Build with focus.
+- Less busywork. More building.
+- One workspace. More ways to build.
+- Plan clearly. Build confidently.
+- Tools connected. Work moving.
+- Start with an idea. Ship with OASIS.
+- A better path from request to result.
+- Bring your workflow together.
+- Clear context. Focused execution.
+- Work locally. Build freely.
+- A calmer way to get code done.

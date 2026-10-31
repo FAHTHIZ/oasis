@@ -1,104 +1,85 @@
 <p align="center">
-  <img src="assets/oasis-readme-portal.svg" alt="OASIS OSS — Code. Automate. Flourish." width="100%" />
+  <img src="assets/oasis-readme-portal.svg" alt="OASIS — Code. Automate. Flourish." width="100%" />
 </p>
 
-<p align="center"><strong>Code. Automate. Flourish.</strong> An open-source coding agent and local-first developer workspace. Your projects. Your choice of model.</p>
+<h1 align="center">OASIS</h1>
+<p align="center"><strong>Code. Automate. Flourish.</strong></p>
+<p align="center">An open-source, local-first AI coding agent and developer workspace. Bring the model you choose; keep the project workspace under your control.</p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
   <img src="https://img.shields.io/badge/status-beta-7CFF5E.svg?style=flat" alt="Beta software" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache License 2.0" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
 </p>
 
-## Two ways to start
+OASIS is more than a chat panel. It is a coding-agent runtime with a CLI, local authenticated browser workspace, VS Code-compatible integration and desktop application packaging. It connects model reasoning to project files, Git, terminals, diagnostics and extensible tools—with explicit approval and verification paths around real changes.
 
-### Install from the terminal — macOS, Linux, or Android/Termux
+## What you can do
 
-**Easy install:** open your terminal and paste this one command:
+- **Understand a codebase.** Explore files, search code, inspect Git changes, read project instructions and build context before editing.
+- **Plan and implement.** Break work into steps, make focused file changes, run shell or PowerShell commands, inspect diffs and iterate on failures.
+- **Verify instead of guessing.** Use configured language servers, tests, linters, builds and type checks. OASIS tracks whether changes were reviewed and whether a recognized check actually ran.
+- **Keep work connected.** Save sessions, recall workspace memory, compact long context, use checkpoints and rewind supported file changes.
+- **Delegate bounded work.** Use specialist reviewers, subagents, task boards, dependency-aware dispatch, isolated worktrees and sandboxed JavaScript workflows.
+- **Extend the workspace.** Connect MCP servers, hooks, Agent Skills, plugin packages, model gateways and editor integrations.
 
-```sh
-sh -c 'f=$(mktemp) || exit; url=https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh; if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$f"; elif command -v wget >/dev/null 2>&1; then wget -qO "$f" "$url"; else echo "Install curl or wget first, then retry." >&2; rm -f "$f"; exit 1; fi && sh "$f"; r=$?; rm -f "$f"; exit "$r"'
-```
+## One engine, several ways to work
 
-The guided installer checks for Node.js 22 or newer. On Termux, it can offer to install Node.js through `pkg`; on a Mac with Homebrew, it can offer Homebrew installation. It downloads the latest stable GitHub release of OASIS, or falls back to the newest stable versioned Git tag when no release record exists. If GitHub's API is rate-limited, it can use Git's read-only tag transport when Git is already installed; Git is not an install prerequisite. It resolves the selected tag to an exact commit before installing. It installs into your user folder, checks the environment, and opens provider setup. It does not need Git or administrator access. Review the prompts before approving changes.
+| Surface | What it is |
+|---|---|
+| **Terminal CLI** | Interactive coding agent, one-shot tasks, commands, diagnostics and model/provider setup. |
+| **Browser workspace** | Local authenticated chat, project tools, approvals, terminal and run history through `oasis web`. |
+| **VS Code integration** | Editor-side chat and runtime connection for a VS Code-compatible environment. |
+| **Desktop app** | Electron application for Windows, macOS and Linux, with a project-folder picker and local backend. |
 
-This quick command runs the installer fetched from the official OASIS repository over HTTPS. For an additional SHA-256 check before running the installer, use the verified version below.
+The browser workspace and desktop app run locally. OASIS is not a hosted cloud coding service; remote-provider requests still send the relevant prompt and code context to the provider you configure.
 
-<details>
-<summary>Use the checksum-verified shell installer</summary>
+## Choose your model
 
-```sh
-sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { rm -f "$f"; }; trap cleanup EXIT; trap "exit 1" HUP INT TERM; url=https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh; if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$f"; elif command -v wget >/dev/null 2>&1; then wget -qO "$f" "$url"; else echo "Install curl or wget first, then retry." >&2; exit 1; fi; expected=3d2c26fce56885b9ae7a62274b9e5bb8f54510836e3cff68c87cc91b9dede181; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
-```
+OASIS does not bundle a model or a paid API subscription. Connect a provider or compatible endpoint, use a local Ollama model, or configure a gateway such as OmniRoute. The runtime includes adapters for OpenAI Responses, OpenAI-compatible Chat Completions and Anthropic Messages, with supported cloud-provider paths documented in the user guide.
 
-**Published installer SHA-256:** `3d2c26fce56885b9ae7a62274b9e5bb8f54510836e3cff68c87cc91b9dede181`
+Provider setup tests tool calling before saving a new configuration. A failed probe does not replace the existing provider settings. Optional easy/strong model routing is available, but its cost outputs are estimates—not guaranteed savings or proof of equal answer quality.
 
-</details>
+## Built around control and inspectability
 
-For **Windows PowerShell**, paste this one line. It checks the downloaded script's hash before running it:
+- **Permission-aware execution:** allow/ask/deny rules, command-risk analysis, approval prompts and explicit permission modes.
+- **Workspace safeguards:** path checks, snapshots, bounded output, sensitive-path handling and Git worktree isolation options.
+- **Truthful verification:** denied actions remain denied; unavailable diagnostics are not shown as clean; new edits invalidate old verification evidence.
+- **Extensible, not locked to one provider:** MCP, hooks, skills, plugins, workflows and subagents build on the existing runtime.
+- **Open source:** Apache-2.0 licensed. Your model provider and its account terms remain your choice.
 
-```powershell
-$d=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Force -Path $d | Out-Null; $p=Join-Path $d 'install.ps1'; $h=Join-Path $d 'release-resolution.ps1'; try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/release-resolution.ps1' -OutFile $h; $expected='46ac435b8c2d0f68504ac2bec8b8fa0f9786c073f670a6980e56315d50650a3e'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); $helperExpected='a88ec877205ab792310c04179f702ceff13bfb3adb5d2d58345bb70fc459a19d'; $helperActual=(Get-FileHash $h -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected -or $helperActual -ne $helperExpected){throw 'Installer checksum mismatch. Do not run either file.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
-```
+## Get started
 
-**Published Windows installer SHA-256:** `46ac435b8c2d0f68504ac2bec8b8fa0f9786c073f670a6980e56315d50650a3e`
-**Published Windows resolver helper SHA-256:** `a88ec877205ab792310c04179f702ceff13bfb3adb5d2d58345bb70fc459a19d`
+**Desktop:** download the latest published build from the [OASIS releases page](https://github.com/FAHTHIZ/oasis/releases/latest), then follow the [installation and first-run guide](docs/INSTALL.md).
 
-If the checksum does not match, stop and do not run the downloaded script. Read the [installation guide](docs/INSTALL.md) or the [Android/Termux guide](docs/TERMUX.md).
+**CLI:** use the verified installer instructions in [Install OASIS](docs/INSTALL.md). They cover macOS, Linux, Windows PowerShell and Android/Termux.
 
-### Download the app — no terminal needed
+**First task:** open a project you understand and ask:
 
-1. Open the [OASIS releases page](https://github.com/FAHTHIZ/oasis/releases/latest).
-2. Download the file for your computer:
-   - **Windows (x64):** `.exe` installer
-   - **macOS (Apple Silicon / arm64):** `.dmg` disk image
-   - **Linux (x86_64):** `.AppImage` or `.deb`
-3. Open it, choose a project folder, and follow the model setup.
+> Read this repository. Explain its main parts and how they connect. Do not change any files yet.
 
-The installers are currently unsigned. Your operating system may show a warning. Before continuing, confirm the download came from the official OASIS release page. Signing and automatic updates are not yet configured. Releases include a `SHA256SUMS` manifest; after downloading assets into one folder, run `sha256sum -c SHA256SUMS` there on Linux or macOS. Checksums detect transfer corruption but are not a publisher signature. Android does not have a native APK release yet; use the Termux install command above.
+After reviewing the explanation, try:
 
-## What is OASIS?
+> Find one clear bug. Explain the evidence and a minimal fix, change only the necessary files, and run the relevant tests. Tell me clearly if you cannot verify the result.
 
-OASIS is an open-source, local-first AI coding agent. It helps inspect a codebase, plan focused edits, make approved changes, run checks, and explain what changed. Bring a supported model/provider of your choice; OASIS does not include a model or paid subscription.
+## Important Beta boundaries
 
-## License
+OASIS is Beta software. Desktop installers are unsigned, and automatic desktop updates are not configured. The optional Linux/macOS OS sandbox is disabled by default and is not full filesystem-read isolation; native Windows OS sandboxing is not implemented. Approval prompts are not a substitute for OS isolation.
 
-OASIS is released under the **Apache-2.0 license**. Apache License 2.0 — see [LICENSE](LICENSE).
+There is no native Android APK. The CLI can be tried in Termux, but native PTY and background execution are not guaranteed. The browser workspace does not yet fully synchronize project/task/note state with the CLI. Agent run records can survive restarts, but live worker processes and pending approvals are not resurrected.
 
-## Why OASIS
+The current 33-task evaluator is a regression suite, not a representative repository-scale coding benchmark. No Claude Code parity, speed or accuracy claim is made. See the [project plan and release gates](docs/PROJECT_PLAN.md) for the current engineering priorities.
 
-- **Model choice:** supported cloud providers, compatible endpoints, OmniRoute, and local Ollama setups.
-- **Review before action:** approval prompts, file snapshots, and verification commands help you inspect changes rather than blindly trusting a completion message.
-- **Extensible:** MCP tools, skills, hooks, plugins, and bounded subagents add capabilities.
-- **Cost-aware routing:** optional user-configured routing uses a lower-cost model only for clearly read-only requests; ambiguous, security-sensitive, and change-oriented work stays on the strong model.
-- **Open source:** Apache-2.0 licence.
+## Explore OASIS
 
-We do not claim measured token savings or Claude Code parity. Routing estimates use configured model prices and observed task tokens; they are not a counterfactual benchmark or billing quote.
-
-## Limits to know
-
-OASIS is in beta, with known platform, reliability, and release-readiness gaps remaining. Commands normally run with your user permissions. The optional OS sandbox is disabled by default and currently targets Linux and macOS; Windows isolation is not available. `node-pty` is optional, and its native terminal behavior is not guaranteed on Android/Termux. The desktop installers are unsigned, automatic desktop updates are not implemented, and the browser workspace does not sync projects/tasks/notes with the CLI. Approval prompts reduce risk; they are not a substitute for isolation. See [current status and limitations](docs/CURRENT_STATUS.md) and the [security audit](docs/SECURITY_RELIABILITY_AUDIT.md).
-
-## A real demo is still needed
-
-The banner above is branding artwork, not a screen recording. A genuine 10–20 second recording of OASIS finding a bug, applying a fix, and running a verification command has not been captured yet. We will add it only after recording the real application.
-
-## How it was built
-
-This paragraph is intentionally left for the project owner to write in their own words. It should state which parts Fahim wrote, what AI tools helped with, and how the result was reviewed. We should not guess or invent authorship details.
-
-## Explore the project
-
-- [5-minute quickstart](docs/QUICKSTART.md)
-- [Installation guide](docs/INSTALL.md)
-- [Android/Termux guide](docs/TERMUX.md)
+- [Installation and first run](docs/INSTALL.md)
 - [Detailed user guide](docs/USER_GUIDE.md)
-- [Current status](docs/CURRENT_STATUS.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Project plan and release status](docs/PROJECT_PLAN.md)
 - [Security and reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md)
-- [Whole-codebase gap register](docs/WHOLE_CODEBASE_GAP_REGISTER.md)
-- [Benchmark suite and results](bench/README.md)
-- [Roadmap](docs/ROADMAP.md)
+- [Privacy notes](docs/PRIVACY.md)
+- [Benchmarks and evaluation](docs/BENCHMARKS.md)
+- [Repository maintenance and intentional copies](docs/REPOSITORY_MAINTENANCE.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
@@ -113,8 +94,8 @@ npm install
 npm run check
 ```
 
-The quality workflow tests Node.js 22, 24, and 26; runs portable security regressions on Ubuntu, macOS, and Windows; exercises a clean environment and the Linux PTY path; and runs browser end-to-end smoke checks. The new installer workflow exercises the pinned CLI installer on fresh Windows, macOS, and Linux runners. These checks are useful evidence, not a full security audit or a claim of complete platform parity.
+The check pipeline validates the public site and benchmark fixtures, runs the Node test suite and evaluation controls. GitHub Actions adds the supported Node-version matrix, cross-platform security/runtime regressions, browser E2E, installer checks and desktop packaging. A passing automated suite is useful evidence, not a full security audit or proof of every platform journey.
 
-## Licence
+## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
