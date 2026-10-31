@@ -652,6 +652,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.restricted = true;
   }
   if (subagentSystemAppend) session.subagentSystemAppend = String(subagentSystemAppend);
+  if (['low', 'medium', 'high', 'max'].includes(String(loadedSettings && loadedSettings.subagentEffort || '').toLowerCase())) session.subagentEffort = String(loadedSettings.subagentEffort).toLowerCase();
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
   if (deferredMcp || deferredRare) systemText += '\n\n' + deferredToolsPrompt(session);
@@ -1007,6 +1008,14 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
 // (Anthropic) and a reasoning effort (OpenAI reasoning models); prompt keywords
 // such as "ultrathink" can still raise it for one turn. auto (null) restores base.
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max', 'auto'];
+// Subagent effort: agent frontmatter `effort:` wins, then OASIS_SUBAGENT_EFFORT /
+// CLAUDE_CODE_SUBAGENT_EFFORT, then settings `subagentEffort`. Lets a cheap low-effort
+// explorer run under a high-effort main session (or the reverse).
+function subagentEffortConfig(parent, agent, env, config) {
+  const level = [agent && agent.effort, env.OASIS_SUBAGENT_EFFORT, env.CLAUDE_CODE_SUBAGENT_EFFORT, parent.subagentEffort]
+    .map((value) => String(value || '').trim().toLowerCase()).find((value) => ['low', 'medium', 'high', 'max'].includes(value));
+  return level ? applyEffort(config, level) : config;
+}
 const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
 export function applyEffort(config = {}, level, base = {}) {
   const next = { ...config };
@@ -2401,7 +2410,7 @@ async function runSubagent(parent, args, context, options) {
   const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
   const child = {
     root: worktree ? worktree.path : parent.root,
-    config: args.model && modelAllowed(String(args.model), parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: String(args.model) } : agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: agent.model } : parent.config,
+    config: subagentEffortConfig(parent, agent, options.env || process.env, args.model && modelAllowed(String(args.model), parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: String(args.model) } : agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: agent.model } : parent.config),
     sessionId: parent.sessionId,
     messages: [{ role: 'system', content: systemText + isolationNote }, ...(args.fork_context === true ? forkedConversation(parent) : [])],
     baseSystemPrompt: systemText + isolationNote,

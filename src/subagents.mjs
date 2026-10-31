@@ -112,6 +112,7 @@ export async function loadAgentDefinitions(root, options = {}) {
         tools: mapToolNames(data.tools),
         model: data.model && data.model !== 'inherit' ? String(data.model) : null,
         isolation: String(data.isolation || '').toLowerCase() === 'worktree' ? 'worktree' : null,
+        effort: ['low', 'medium', 'high', 'max'].includes(String(data.effort || '').toLowerCase()) ? String(data.effort).toLowerCase() : null,
         prompt: body.trim().slice(0, 30000),
         source: source + ':' + path.join(dir, entry.name)
       };
@@ -132,6 +133,7 @@ export async function loadAgentDefinitions(root, options = {}) {
         tools: mapToolNames(data.tools),
         model: data.model && data.model !== 'inherit' ? String(data.model) : null,
         isolation: String(data.isolation || '').toLowerCase() === 'worktree' ? 'worktree' : null,
+        effort: ['low', 'medium', 'high', 'max'].includes(String(data.effort || '').toLowerCase()) ? String(data.effort).toLowerCase() : null,
         prompt: body.trim().slice(0, 30000),
         source: 'plugin:' + item.plugin
       };
