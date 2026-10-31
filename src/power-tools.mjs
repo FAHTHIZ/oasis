@@ -57,7 +57,7 @@ export const POWER_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'list_background', description: 'List background processes in this session with their status.', parameters: { type: 'object', properties: {} } } }
 ];
 
-export const SHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'run_shell', description: 'Run a shell command line with pipes, &&, redirects, and globbing in the workspace. Only available when the user enabled shell access or the OS sandbox. Requires approval unless a permission rule or the sandbox allows it. Prefer run_command for single programs.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'Shell command line' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120' }, run_in_background: { type: 'boolean', description: 'Start without waiting; read with command_output' } }, required: ['command'] } } };
+export const SHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'run_shell', description: 'Run a shell command line with pipes, &&, redirects, and globbing in the workspace. Only available when the user enabled shell access or the OS sandbox. Requires approval unless a permission rule or the sandbox allows it. Prefer run_command for single programs.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'Shell command line' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120' }, run_in_background: { type: 'boolean', description: 'Start without waiting; read with command_output' }, max_seconds: { type: 'integer', description: 'With run_in_background: stop automatically after this many seconds' } }, required: ['command'] } } };
 
 export const POWERSHELL_TOOL_DEFINITION = { type: 'function', function: { name: 'powershell', description: 'Run a PowerShell command in the workspace (pwsh 7+, or Windows PowerShell 5.1). Use it for Windows-native work, PowerShell scripts and cmdlets. Profiles are not loaded. Requires approval unless a PowerShell(...) permission rule allows it.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'PowerShell command' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120' }, run_in_background: { type: 'boolean', description: 'Start without waiting; read with command_output' } }, required: ['command'] } } };
 export const POWER_TOOL_NAMES = new Set(['grep', 'multi_edit', 'notebook_edit', 'command_output', 'kill_command', 'list_background', 'run_shell', 'powershell']);
@@ -340,8 +340,33 @@ export function startBackgroundProcess(registry, launch, options) {
 
   const id = 'bg_' + randomUUID().slice(0, 8);
   const child = spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
-  const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: '', readOffset: 0, dropped: 0, startedAt: new Date().toISOString(), child, sandboxed: options.sandboxed };
+  const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: '', readOffset: 0, dropped: 0, startedAt: new Date().toISOString(), lastOutputAt: Date.now(), child, sandboxed: options.sandboxed };
+  // Optional hard cap on runtime, and a one-time notice when the process goes
+  // quiet for a long time (likely stuck, or waiting on input it cannot get).
+  const maxSeconds = Number.parseInt(options.maxSeconds, 10);
+  if (Number.isFinite(maxSeconds) && maxSeconds > 0) {
+    entry.maxSeconds = Math.min(maxSeconds, 7 * 24 * 3600);
+    entry.maxTimer = setTimeout(() => {
+      if (entry.status !== 'running') return;
+      entry.timedOut = true;
+      entry.output += '\n[oasis] stopped after reaching max_seconds=' + entry.maxSeconds + '\n';
+      signalProcessTree(child, 'SIGTERM');
+      setTimeout(() => { if (entry.status === 'running') signalProcessTree(child, 'SIGKILL'); }, 3000).unref?.();
+    }, entry.maxSeconds * 1000);
+    entry.maxTimer.unref?.();
+  }
+  const stuckSeconds = Number.parseInt(options.stuckSeconds ?? process.env.OASIS_BACKGROUND_STUCK_SECONDS ?? 300, 10);
+  if (typeof options.onStuck === 'function' && Number.isFinite(stuckSeconds) && stuckSeconds > 0 && !options.monitor) {
+    entry.stuckTimer = setInterval(() => {
+      if (entry.status !== 'running') { clearInterval(entry.stuckTimer); return; }
+      if (entry.stuckNotified || Date.now() - entry.lastOutputAt < stuckSeconds * 1000) return;
+      entry.stuckNotified = true;
+      try { options.onStuck(entry, Math.round((Date.now() - entry.lastOutputAt) / 1000)); } catch {}
+    }, Math.max(250, Math.min(30000, stuckSeconds * 250)));
+    entry.stuckTimer.unref?.();
+  }
   const append = (chunk) => {
+    entry.lastOutputAt = Date.now();
     entry.output += chunk.toString();
     if (entry.output.length > MAX_BACKGROUND_BUFFER) {
       const cut = entry.output.length - MAX_BACKGROUND_BUFFER;
@@ -366,8 +391,9 @@ export function startBackgroundProcess(registry, launch, options) {
   child.on('error', (error) => { entry.status = 'failed'; append('\n[oasis] ' + error.message + '\n'); });
   child.on('close', (code, signal) => {
     const stoppedByUser = entry.status === 'killed';
-    if (entry.status === 'running') entry.status = signal ? 'killed' : 'exited';
+    if (entry.status === 'running') entry.status = entry.timedOut ? 'timed_out' : signal ? 'killed' : 'exited';
     entry.exitCode = code; entry.signal = signal; entry.endedAt = Date.now();
+    clearTimeout(entry.maxTimer); clearInterval(entry.stuckTimer);
     if (onLine && pending) { try { onLine(pending, entry); } catch {} pending = ''; }
     if (typeof options.onExit === 'function') { try { options.onExit(entry, { stoppedByUser }); } catch {} }
   });
@@ -400,7 +426,8 @@ export function killAllBackground(registry) {
 }
 
 function describeBackground(entry) {
-  return { id: entry.id, command: entry.command, pid: entry.pid, status: entry.status, exitCode: entry.exitCode, startedAt: entry.startedAt, ...(entry.monitor ? { monitor: entry.monitor.description } : {}) };
+  const idleSeconds = entry.status === 'running' && entry.lastOutputAt ? Math.round((Date.now() - entry.lastOutputAt) / 1000) : undefined;
+  return { id: entry.id, command: entry.command, pid: entry.pid, status: entry.status, exitCode: entry.exitCode, startedAt: entry.startedAt, ...(idleSeconds !== undefined ? { secondsSinceOutput: idleSeconds } : {}), ...(entry.maxSeconds ? { maxSeconds: entry.maxSeconds } : {}), ...(entry.monitor ? { monitor: entry.monitor.description } : {}) };
 }
 
 // ---------------------------------------------------------------- run_shell
@@ -447,7 +474,8 @@ async function runShell(root, args, context, flavor = 'sh') {
   if (args.run_in_background === true) {
     const registry = context.session && (context.session.background ||= new Map());
     if (!registry) throw new Error('Background commands are not available in this session.');
-    return startBackgroundProcess(registry, launch, { cwd: root, env, display: command, sandboxed: sandbox ? sandbox.kind : null });
+    const { backgroundExitNotifier, backgroundStuckNotifier } = await import('./monitors.mjs');
+    return startBackgroundProcess(registry, launch, { cwd: root, env, display: command, sandboxed: sandbox ? sandbox.kind : null, maxSeconds: args.max_seconds, onExit: backgroundExitNotifier(context.session), onStuck: backgroundStuckNotifier(context.session) });
   }
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(args.timeoutSeconds, 10) || 120));
   return await new Promise((resolve) => {
