@@ -383,6 +383,9 @@ export async function runHooks(event, payload, options = {}) {
       }
       if (specific.updatedInput && typeof specific.updatedInput === 'object') result.updatedInput = specific.updatedInput;
       if (event === 'PostToolUse' && specific.updatedToolOutput !== undefined) result.updatedToolOutput = specific.updatedToolOutput;
+      // PostToolUseFailure may rewrite the error the model sees (updatedError text, or a whole updatedToolOutput).
+      if (event === 'PostToolUseFailure' && specific.updatedToolOutput !== undefined) result.updatedToolOutput = specific.updatedToolOutput;
+      else if (event === 'PostToolUseFailure' && typeof specific.updatedError === 'string' && result.updatedToolOutput === undefined) result.updatedToolOutput = { error: specific.updatedError.slice(0, 20000) };
       if (event === 'PostToolUse' && specific.updatedMCPToolOutput !== undefined && result.updatedToolOutput === undefined) result.updatedToolOutput = specific.updatedMCPToolOutput;
       if (event === 'PermissionDenied' && specific.retry === true) result.retry = true;
       if (event === 'MessageDisplay' && typeof specific.displayContent === 'string') result.displayContent = specific.displayContent;
