@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { shellExitTarget } from './pipe-status.mjs';
+import { maskSecrets, unmaskSecrets, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -3131,7 +3133,7 @@ async function executeOneCallRaw(session, call, context, options) {
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    let args = safeToolArguments(call.function && call.function.arguments);
+    let args = unmaskSecrets(session, safeToolArguments(call.function && call.function.arguments));
     if (session.allowedToolNames && !session.allowedToolNames.has(name)) {
       throw new Error('The tool ' + name + ' is not available to this agent.');
     }
@@ -3855,6 +3857,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
         }
       }
+      if (name === 'run_shell' && result && result.approved !== false && typeof result.exitCode === 'number') {
+        const target = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command);
+        // A check whose status is masked by a pipe (npm test | tail) proves nothing.
+        if (target && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
+          verification.lastVerificationExitCode = result.exitCode;
+          verification.lastVerificationKind = verificationCommandKind(target.command, target.args);
+        }
+      }
       if (result && result.path && (
         (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
         name === 'write_file' && typeof result.writtenBytes === 'number' ||
@@ -3870,6 +3880,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       if (result && result.lspVerification && result.lspVerification.path) {
         verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
+      }
+      if (typeof item.content === 'string' && secretShieldEnabled(session, options.env || process.env)) {
+        const shielded = maskSecrets(session, item.content);
+        if (shielded.count) {
+          item.content = shielded.text + (session.secretShieldNoted ? '' : '\n\n[OASIS secret shield] ' + SECRET_SHIELD_NOTE);
+          session.secretShieldNoted = true;
+          session.secretsShielded = (session.secretsShielded || 0) + shielded.count;
+        }
       }
       session.messages.push({
         role: 'tool',
