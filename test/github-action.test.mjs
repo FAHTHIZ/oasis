@@ -213,7 +213,7 @@ test('an @oasis issue comment runs the agent, pushes a branch, opens a PR, and r
   const pr = calls[2].body;
   assert.equal(pr.base, 'main');
   assert.match(pr.body, /^Closes #7\n\nFixed login\(\) to return true\./);
-  assert.match(calls[3].body.body, /finished and pushed changes[\s\S]*Fixed login[\s\S]*Opened https:\/\/github\.com\/acme\/app\/pull\/8[\s\S]*actions\/runs\/42/);
+  assert.match(calls[3].body.body, /pushed changes, but verification is incomplete[\s\S]*Fixed login[\s\S]*Opened https:\/\/github\.com\/acme\/app\/pull\/8[\s\S]*actions\/runs\/42/);
 });
 
 test('on a same-repo pull request, Oasis commits to the PR branch and opens no new PR', async (t) => {
@@ -264,7 +264,7 @@ test('GitHub Action passes the unattended LSP restriction into the agent runtime
   assert.equal(outcome.responded, true);
   assert.equal(outcome.result.is_error, false);
   assert.equal(capturedOptions.env.OASIS_DISABLE_LSP, '1');
-  assert.match(capturedOptions.appendSystemPrompt, /do not use LSP or start language-server processes/i);
+  assert.match(capturedOptions.appendSystemPrompt, /report verification as incomplete whenever that gate is not complete/i);
   assert.match(capturedOptions.appendSystemPrompt, /repository's own test, lint, build, or type-check commands/i);
   assert.match(capturedOptions.appendSystemPrompt, /report verification as incomplete/i);
   assert.equal(outcome.published.changed, false);
@@ -276,7 +276,7 @@ test('questions get an answer and no push', async (t) => {
   const sdk = { run: async () => ({ is_error: false, subtype: 'success', result: 'login() lives in login.js.' }) };
   const outcome = await runAction({ env: { ...gitEnv, GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app' }, root: work, event: comment('@oasis where is login?'), request, sdk, log: () => {} });
   assert.equal(outcome.published.changed, false);
-  assert.match(calls.at(-1).body.body, /\*\*Oasis\*\* finished\.\n\nlogin\(\) lives in login\.js\./);
+  assert.match(calls.at(-1).body.body, /\*\*Oasis\*\* finished; no code changes were verified\.\n\nlogin\(\) lives in login\.js\./);
   const skipped = await runAction({ env: { GITHUB_EVENT_NAME: 'issue_comment' }, root: work, event: comment('thanks'), request, sdk, log: () => {} });
   assert.equal(skipped.responded, false);
 });

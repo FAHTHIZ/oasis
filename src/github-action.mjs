@@ -334,7 +334,7 @@ export async function runAction(options = {}) {
       maxTurns: Number(input(env, 'max_turns', '40')) || 40,
       appendSystemPrompt: [
         input(env, 'append_system_prompt'),
-        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. Report which check kind ran and whether its exit code was zero. A disabled or unavailable language server is not a passing check; a relevant project check must pass. Never claim verification is complete unless the runtime verification gate reports complete.'
+        'Unattended GitHub Action policy: do not use LSP or start language-server processes. Verify source changes with the repository\'s own test, lint, build, or type-check commands. Report which check kind ran and whether its exit code was zero. A disabled or unavailable language server is not a passing check; a relevant project check must pass. Never claim verification is complete unless the runtime verification gate reports complete. Report verification as incomplete whenever that gate is not complete.'
       ].filter(Boolean).join('\n\n'),
       ...(options.runOptions || {})
     });

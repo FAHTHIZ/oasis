@@ -20,7 +20,7 @@ test('desktop error dialog offers a copy action and copies the selected details'
 test('desktop error details redact API keys before showing or copying them', async () => {
   const h = harness(0);
   await showErrorWithCopy({ ...h, title: 'Error', message: 'Failed', detail: 'token=sk-proj-12345678901234567890' });
-  assert.match(h.calls[0].options.detail, /\[redacted\]/);
+  assert.match(h.calls[0].options.detail, /\[redacted(?: secret)?\]/);
   assert.doesNotMatch(h.calls[1].copiedText, /sk-proj-12345678901234567890/);
 });
 
