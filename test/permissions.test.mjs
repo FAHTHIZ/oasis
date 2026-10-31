@@ -77,3 +77,17 @@ test('read deny rules normalize workspace-relative and absolute paths case-insen
     );
   }
 });
+
+test('desktop automation, container teardown and cluster changes are high risk', async () => {
+  const { analyzeCommand } = await import('../src/permissions.mjs');
+  for (const [command, args] of [
+    ['wmctrl', ['-c', 'Firefox']], ['xdotool', ['key', 'ctrl+q']], ['ydotool', ['type', 'x']], ['cliclick', ['c:10,10']],
+    ['tmux', ['kill-server']], ['screen', ['-S', 'x', '-X', 'quit']],
+    ['docker', ['stop', 'db']], ['docker', ['rm', '-f', 'db']], ['docker', ['compose', 'down', '-v']], ['docker', ['container', 'prune']],
+    ['docker', ['volume', 'rm', 'data']], ['docker', ['system', 'prune', '-a']], ['podman', ['kill', 'x']], ['kubectl', ['delete', 'pod', 'x']]
+  ]) assert.ok(analyzeCommand(command, args).highRisk, command + ' ' + args.join(' '));
+  for (const [command, args] of [
+    ['docker', ['ps']], ['docker', ['build', '.']], ['docker', ['run', '--rm', 'alpine', 'rm', 'x']], ['docker', ['compose', 'up', '-d']],
+    ['tmux', ['ls']], ['kubectl', ['get', 'pods']]
+  ]) assert.equal(analyzeCommand(command, args).highRisk, undefined, command + ' ' + args.join(' '));
+});
