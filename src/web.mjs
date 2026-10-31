@@ -254,9 +254,9 @@ const STATIC_FILES = new Map([
 ]);
 
 const OPTIONAL_TERMINAL_ASSETS = new Map([
-  ['/assets/vendor/xterm.js', '/* Optional OASIS terminal renderer is not installed. */\\n;'],
-  ['/assets/vendor/xterm.css', '/* Optional OASIS terminal styles are not installed. */\\n'],
-  ['/assets/vendor/xterm-addon-fit.js', '/* Optional OASIS terminal fit addon is not installed. */\\n;']
+  ['/assets/vendor/xterm.js', '/* Optional OASIS terminal renderer is not installed. */;'],
+  ['/assets/vendor/xterm.css', '/* Optional OASIS terminal styles are not installed. */'],
+  ['/assets/vendor/xterm-addon-fit.js', '/* Optional OASIS terminal fit addon is not installed. */;']
 ]);
 
 function json(res, status, value) {
