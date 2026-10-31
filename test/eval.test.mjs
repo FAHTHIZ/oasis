@@ -143,6 +143,47 @@ test('eval suite validation requires no-op failure and reference-patch success',
   assert.equal(report.results[0].referenceExitCode, 0);
 });
 
+test('eval negative control passes only when unchanged snapshots stay below the strict 10% threshold', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  await createFixtureTask(tasksDir, 'negative-control-task');
+  const output = { text: '', write(value) { this.text += String(value); } };
+
+  const result = await runEvalCommand(['--negative-control'], {
+    tasksDir, env: { ...process.env }, output
+  });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.negativeControl.noOpPasses, 0);
+  assert.equal(result.negativeControl.total, 1);
+  assert.equal(result.negativeControl.passRate, 0);
+  assert.equal(result.negativeControl.threshold, 0.10);
+  assert.equal(result.negativeControl.fixturesValid, true);
+  assert.match(output.text, /required: below 10%/);
+});
+
+test('eval negative control fails when an unchanged fixture is accepted', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  const taskDir = await createFixtureTask(tasksDir, 'broken-negative-control');
+  await writeFile(path.join(taskDir, 'verify.mjs'), 'process.exit(0);\\n');
+  const output = { text: '', write(value) { this.text += String(value); } };
+
+  const result = await runEvalCommand(['--negative-control'], {
+    tasksDir, env: { ...process.env }, output
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.negativeControl.noOpPasses, 1);
+  assert.equal(result.negativeControl.passRate, 1);
+  assert.equal(result.negativeControl.fixturesValid, false);
+  assert.match(output.text, /Evaluation negative control: FAIL/);
+});
+
 test('evaluation metadata is validated and becomes part of task fingerprints', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
