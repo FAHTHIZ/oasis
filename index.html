@@ -50,7 +50,7 @@
   <div class="topbar-actions">
     <div class="topbar-panel-tabs" role="toolbar" aria-label="Workspace side panel">
       <button class="topbar-panel-button" id="topbarTerminalBtn" type="button" data-topbar-panel="terminal" aria-pressed="false" title="Terminal (Ctrl+`)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 7 5 5-5 5M12 17h7"/></svg><span>Terminal</span></button>
-      <button class="topbar-panel-button" id="topbarChangesBtn" type="button" data-topbar-panel="changes" aria-pressed="false" title="Changes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5V21M18 15.5V3M10 6h4a3 3 0 0 1 3 3M14 18h-4a3 3 0 0 1-3-3"/></svg><span>Changes</span></button>
+      <button class="topbar-panel-button" id="topbarChangesBtn" type="button" data-topbar-panel="changes" aria-pressed="false" title="Changes"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5V21M18 15.5V3M10 6h4a3 3 0 0 1 3 3M14 18h-4a3 3 0 0 1-3-3"/></svg><span>Changes</span> <span class="topbar-task-count" id="topbarChangesCount" hidden>0</span></button>
       <button class="topbar-panel-button" id="topbarTasksBtn" type="button" data-topbar-panel="tasks" aria-pressed="false" title="Tasks"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg><span>Tasks</span> <span class="topbar-task-count" id="topbarTaskCount">0</span></button>
     </div>
     <button class="icon-btn" id="commandPaletteButton" type="button" aria-label="Open command palette" title="Search everything (Ctrl+K or ?)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
@@ -229,6 +229,12 @@
   <div class="panel github-panel cloud-changes-panel">
     <div class="agent-chat-header"><span><strong>Changes</strong> · review before keeping</span><button class="btn btn-secondary" id="cloudRunTasksBackBtn" type="button">← All tasks</button></div>
     <div class="panel-pad">
+      <section class="ws-changes" id="wsChanges" aria-labelledby="wsChangesTitle">
+        <div class="ws-changes-head"><div class="ws-changes-title"><strong id="wsChangesTitle">Working tree</strong><span id="wsChangesSummary">Connect the runtime to see uncommitted changes.</span></div><button class="btn btn-secondary btn-sm" id="wsChangesRefresh" type="button">Refresh</button></div>
+        <ul class="ws-files" id="wsChangesFiles" aria-label="Changed files"></ul>
+        <div class="ws-diff" id="wsChangesDiff" tabindex="0" aria-label="Working tree diff" hidden></div>
+      </section>
+      <div class="ws-section-label">Isolated runs</div>
       <div class="cloud-run-empty" id="cloudRunChangesEmpty">Choose a run in Tasks to inspect its activity and review isolated changes.</div>
       <div class="cloud-run-detail" id="cloudRunDetail" hidden>
         <div class="cloud-run-detail-head"><strong id="cloudRunDetailTitle">Task details</strong><div class="github-actions"><button class="btn btn-secondary" id="cloudRunDiffBtn" type="button" hidden>Review diff</button><button class="btn btn-primary" id="cloudRunMergeBtn" type="button" hidden>Merge reviewed changes</button><button class="btn btn-secondary" id="cloudRunDetailClose" type="button">Close</button></div></div>
@@ -1618,7 +1624,7 @@ C.hook('agentActivity',function(){return function(text){
 }});
 /* ---------- Typing indicator ---------- */
 var typing=document.createElement('div');typing.className='agent-typing';typing.setAttribute('aria-hidden','true');typing.innerHTML='<i></i><i></i><i></i><span>Working…</span>';
-C.hook('agentSetBusy',function(coreBusy){return function(v){coreBusy(v);document.body.classList.toggle('agent-busy',!!v);if(v){messages.appendChild(typing);stick=true;agentScroll()}else{typing.remove();var last=lastAssistant();if(last&&last.dataset.raw!=null){pending.set(last,last.dataset.raw);if(!raf)raf=requestAnimationFrame(paint)}}syncSend()}});
+C.hook('agentSetBusy',function(coreBusy){return function(v){coreBusy(v);if(!v&&typeof loadWorkspaceDiff==='function')setTimeout(function(){loadWorkspaceDiff(true)},300);document.body.classList.toggle('agent-busy',!!v);if(v){messages.appendChild(typing);stick=true;agentScroll()}else{typing.remove();var last=lastAssistant();if(last&&last.dataset.raw!=null){pending.set(last,last.dataset.raw);if(!raf)raf=requestAnimationFrame(paint)}}syncSend()}});
 new MutationObserver(function(){if(typing.isConnected&&messages.lastElementChild!==typing)messages.appendChild(typing)}).observe(messages,{childList:true});
 /* ---------- Empty state survives "New chat" ---------- */
 var emptyTemplate=$('agentEmptyState');
@@ -1630,6 +1636,41 @@ if(emptyTemplate){
   emptyTemplate.appendChild(hint);
   emptyTemplate=emptyTemplate.cloneNode(true);
 }
+/* ---------- Live working-tree diff in the Changes panel ---------- */
+var wsBusy=false,wsLast=0;
+function wsEl(id){return document.getElementById(id)}
+function renderDiff(text,filter){
+  var out='',file='',lines=String(text||'').split('\n');
+  for(var i=0;i<lines.length;i++){var l=lines[i];
+    if(/^diff --git /.test(l)){var m=l.match(/ b\/(.*)$/);file=m?m[1]:'';if(filter&&file!==filter)continue;out+='<div class="ws-diff-file" data-file="'+esc(file)+'">'+esc(file)+'</div>';continue}
+    if(filter&&file!==filter)continue;
+    if(/^(index |new file mode|deleted file mode|similarity |rename |--- |\+\+\+ )/.test(l))continue;
+    var cls=/^@@/.test(l)?'hunk':/^\+/.test(l)?'add':/^-/.test(l)?'del':/^#/.test(l)?'note':'ctx';
+    out+='<div class="ws-line '+cls+'">'+(esc(l)||'&nbsp;')+'</div>'}
+  return out||'<div class="ws-line note">No textual diff to show.</div>'}
+async function loadWorkspaceDiff(force){
+  var summary=wsEl('wsChangesSummary'),list=wsEl('wsChangesFiles'),box=wsEl('wsChangesDiff'),badge=wsEl('topbarChangesCount');
+  if(!summary||!list||!box)return;
+  if(!C.token){summary.textContent='Connect the runtime to see uncommitted changes.';list.innerHTML='';box.hidden=true;if(badge)badge.hidden=true;return}
+  if(wsBusy||(!force&&Date.now()-wsLast<1500))return;wsBusy=true;wsLast=Date.now();summary.textContent='Loading…';
+  try{
+    var r=await fetch('/api/workspace/diff',{headers:{Authorization:'Bearer '+C.token}});var d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    if(!d.git){summary.textContent='This workspace is not a Git repository.';list.innerHTML='';box.hidden=true;if(badge)badge.hidden=true;return}
+    var files=d.files||[],add=0,del=0;files.forEach(function(f){add+=f.added||0;del+=f.removed||0});
+    summary.textContent=files.length?(files.length+' file'+(files.length===1?'':'s')+' changed · +'+add+' −'+del+(d.branch?' · '+d.branch:'')):'No uncommitted changes'+(d.branch?' on '+d.branch:'')+'.';
+    if(d.hiddenFiles&&d.hiddenFiles.length)summary.textContent+=' · '+d.hiddenFiles.length+' sensitive file'+(d.hiddenFiles.length===1?'':'s')+' hidden';
+    list.innerHTML=files.map(function(f){return '<li><button type="button" class="ws-file" data-ws-file="'+esc(f.path)+'"><span class="ws-file-status '+esc(f.status)+'">'+(f.status==='untracked'?'U':'M')+'</span><span class="ws-file-path">'+esc(f.path)+'</span><span class="ws-file-stat"><b class="add">+'+(f.added==null?'?':f.added)+'</b> <b class="del">−'+(f.removed==null?'?':f.removed)+'</b></span></button></li>'}).join('');
+    box.dataset.raw=d.diff||'';box.dataset.filter='';box.innerHTML=renderDiff(d.diff,'')+(d.truncated?'<div class="ws-line note">Diff truncated. Use git diff for the full output.</div>':'');box.hidden=!files.length;
+    if(badge){badge.textContent=String(files.length);badge.hidden=!files.length}
+  }catch(err){summary.textContent='Could not load changes: '+err.message}
+  finally{wsBusy=false}}
+document.addEventListener('click',function(e){
+  if(e.target.closest('#wsChangesRefresh')){loadWorkspaceDiff(true);return}
+  var f=e.target.closest('[data-ws-file]');if(f){var box=wsEl('wsChangesDiff'),name=f.getAttribute('data-ws-file'),next=box.dataset.filter===name?'':name;box.dataset.filter=next;box.innerHTML=renderDiff(box.dataset.raw,next);document.querySelectorAll('[data-ws-file]').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-ws-file')===next)});box.hidden=false;return}
+  if(e.target.closest('#topbarChangesBtn,#agentChangesUtilityTab'))setTimeout(function(){loadWorkspaceDiff(true)},0);
+});
+window.oasisLoadWorkspaceDiff=loadWorkspaceDiff;
 C.hook('agentClearMessages',function(coreClear){return function(){coreClear();typing.remove();if(emptyTemplate&&!$('agentEmptyState'))messages.appendChild(emptyTemplate.cloneNode(true));stick=true}});
 messages.addEventListener('click',function(e){
   var ex=e.target.closest('[data-agent-example]');
@@ -1644,7 +1685,7 @@ function copy(text,btn){var done=function(){var o=btn.textContent;btn.textConten
   function fallback(){var t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();try{document.execCommand('copy');done()}catch(e){}t.remove()}}
 /* ---------- Composer: Enter to send, autosize, live send state ---------- */
 var prompt=$('agentPrompt'),form=$('agentForm'),send=$('agentSendBtn');
-if(prompt){prompt.rows=1;prompt.placeholder='Ask Oasis to build, fix or explain anything…  ( / for commands, @ for files )'}
+if(prompt){prompt.rows=1;prompt.placeholder='Ask Oasis to build, fix or explain anything…'}
 function autosize(){if(!prompt)return;prompt.style.height='auto';prompt.style.height=Math.min(prompt.scrollHeight,280)+'px';var c=document.querySelector('.agent-compose');if(c&&chatPanel)chatPanel.style.setProperty('--compose-h',c.offsetHeight+'px')}
 function syncSend(){if(send&&prompt)send.disabled=!!C.busy||!prompt.value.trim()}
 if(prompt){
@@ -1677,6 +1718,7 @@ if(drawer){
 function chip(id,ok,label){var c=$(id);if(!c)return;c.dataset.ok=ok;if(label)c.title=label}
 function syncChips(){
   var rt=$('agentRuntimeState'),connected=!!C.token&&rt&&!/not connected|paste|failed|unavailable|could not/i.test(rt.textContent);
+  if(connected&&!window.__oasisWsLoaded&&window.oasisLoadWorkspaceDiff){window.__oasisWsLoaded=true;setTimeout(function(){window.oasisLoadWorkspaceDiff(true)},200)}
   var model=$('agentModelName'),modelOk=connected&&model&&!/choose a model/i.test(model.textContent);
   var gh=$('githubStatus'),ghOk=gh&&gh.dataset.connected==='true';
   chip('setupChipRuntime',connected?'true':'false',rt&&rt.textContent);

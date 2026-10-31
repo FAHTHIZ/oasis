@@ -473,3 +473,61 @@ export async function mergeWorktree(root, branchValue, options = {}) {
     message: 'Merged ' + branch + ' into ' + inspection.current_branch + '. The source worktree was preserved for review and cleanup.'
   };
 }
+
+// Live working-tree review for the active workspace (the browser Changes panel).
+// Shows tracked changes against HEAD plus small untracked text files, scoped to the
+// workspace directory. Secret-looking paths (.env, keys, credentials) are listed by
+// name only so the browser never receives their contents.
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+export async function readWorkspaceDiff(workspaceRoot, options = {}) {
+  const env = options.env || process.env;
+  const root = path.resolve(workspaceRoot);
+  const isSecret = typeof options.isSecretPath === 'function' ? options.isSecretPath : (file) => SENSITIVE_PATH.test(path.posix.basename(file));
+  const maxChars = Math.max(1000, Math.min(250000, Number(options.maxChars) || 180000));
+  try { await git(root, ['rev-parse', '--is-inside-work-tree'], env, 10000); } catch { return { git: false, files: [], diff: '', truncated: false, hiddenFiles: [] }; }
+  let base = EMPTY_TREE;
+  let branch = '';
+  try { base = (await git(root, ['rev-parse', 'HEAD'], env, 10000)).trim(); } catch {}
+  try { branch = (await git(root, ['rev-parse', '--abbrev-ref', 'HEAD'], env, 10000)).trim(); } catch {}
+  const numstat = await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', '--relative', '-z', base, '--', '.'], env, 30000).catch(() => '');
+  const files = [];
+  const hiddenFiles = [];
+  const parts = numstat.split('\0');
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i];
+    if (!entry) continue;
+    const match = entry.match(/^(\d+|-)\t(\d+|-)\t(.*)$/s);
+    if (!match) continue;
+    let file = match[3];
+    if (file === '') { i += 2; file = parts[i] || ''; } // rename: "<old>\0<new>"
+    const label = file.split(path.sep).join('/');
+    if (isSecret(label)) { hiddenFiles.push(label); continue; }
+    files.push({ path: label, added: match[1] === '-' ? null : Number(match[1]), removed: match[2] === '-' ? null : Number(match[2]), status: 'modified' });
+  }
+  let diff = '';
+  const visible = files.map((file) => file.path);
+  if (visible.length) {
+    diff = await git(root, ['diff', '--no-ext-diff', '--no-textconv', '--unified=3', '--relative', base, '--', ...visible.slice(0, 400)], env, 30000).catch(() => '');
+  }
+  const listed = await git(root, ['ls-files', '--others', '--exclude-standard', '-z', '--', '.'], env, 15000).catch(() => '');
+  for (const candidate of listed.split('\0').filter(Boolean).slice(0, 200)) {
+    const absolute = path.resolve(root, candidate);
+    if (path.isAbsolute(candidate) || !absolute.startsWith(root + path.sep)) continue;
+    const label = candidate.split(path.sep).join('/');
+    if (isSecret(label)) { hiddenFiles.push(label); continue; }
+    const info = await lstat(absolute).catch(() => null);
+    if (!info || !info.isFile() || info.isSymbolicLink()) continue;
+    const entry = { path: label, added: null, removed: 0, status: 'untracked' };
+    files.push(entry);
+    if (info.size > 30000) { diff += '\n# Untracked file omitted from preview (over 30 KB): ' + label + '\n'; continue; }
+    const bytes = await readFile(absolute).catch(() => null);
+    if (!bytes) continue;
+    if (bytes.includes(0)) { diff += '\n# Binary untracked file omitted from text preview: ' + label + '\n'; continue; }
+    const lines = bytes.toString('utf8').replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+    entry.added = lines.length;
+    diff += (diff && !diff.endsWith('\n') ? '\n' : '') + 'diff --git a/' + label + ' b/' + label + '\nnew file mode 100644\n--- /dev/null\n+++ b/' + label + '\n@@ -0,0 +1,' + lines.length + ' @@\n' + lines.map((line) => '+' + line).join('\n') + '\n';
+  }
+  const truncated = diff.length > maxChars;
+  if (truncated) diff = diff.slice(0, maxChars);
+  return { git: true, branch, base: base === EMPTY_TREE ? '' : base, files, diff, truncated, hiddenFiles };
+}
