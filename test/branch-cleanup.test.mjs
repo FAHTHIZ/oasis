@@ -34,7 +34,7 @@ const mainTree = new Map([
   ['scripts/check-site.mjs', 'blob-check-site'],
   ['test/index-inline-scripts.test.mjs', 'blob-inline-script-test'],
   ['test/web-static-assets.test.mjs', 'blob-static-assets-test'],
-  ['test/web-terminal-optional.test.mjs', 'blob-optional-terminal-test']
+  ['test/web-terminal-optional.test.mjs', 'blob-optional-terminal-test'],
   ['src/permissions.mjs', 'blob-permissions'],
   ['test/permissions.test.mjs', 'blob-permissions-test'],
   ['src/mcp-oauth.mjs', 'blob-mcp-oauth'],
