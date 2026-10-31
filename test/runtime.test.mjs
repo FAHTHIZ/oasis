@@ -1021,8 +1021,9 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
 
   const config = {
     protocol: 'openai-compatible',
-    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
-    model: 'fixture-model',
+    // Keep the configured provider remote so fixture-model-unpriced has no local/free price.
+    baseURL: 'https://unpriced-provider.example/v1',
+    model: 'fixture-model-unpriced',
     apiKey: '',
     contextWindow: 2_000_000,
     compactThresholdChars: 60_000,
@@ -1033,6 +1034,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   const compactions = [];
   const usageEvents = [];
   const result = await runAgentTurn(session, 'Inspect large.txt repeatedly and report what you learned.', {
+    fetchImpl: (_url, init) => fetch('http://127.0.0.1:' + server.address().port + '/v1/chat/completions', init),
     onCompaction: (event) => compactions.push(event),
     onUsage: (event) => usageEvents.push(event)
   });
@@ -1063,7 +1065,7 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.equal(compactions[0].notesSaved, true);
   assert.ok(usageEvents.length > 0);
   assert.equal(usageEvents[0].costKnown, false, 'unknown model prices must not look like free usage');
-  assert.equal(usageEvents[0].model, 'fixture-model');
+  assert.equal(usageEvents[0].model, 'fixture-model-unpriced');
   assert.equal(usageEvents[0].step, 1);
   const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
   assert.match(continuity, /The completed earlier rounds read large\.txt repeatedly/);
