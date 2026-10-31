@@ -3,7 +3,7 @@
 **Updated:** October 31, 2026  
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
-**Audited main snapshot:** `51590f2f27e9378724e8325dc954ff1ac3a0f313`
+**Audited main snapshot:** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. It replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
@@ -37,17 +37,22 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-At the audited snapshot:
+**Latest main snapshot rechecked:** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf` (October 31, 2026). The repository package is version `0.4.0`; its release notes are prepared, but no `v0.4.0` tag or GitHub Release was present at the time of inspection. The latest published release remains `v0.3.0`.
+
+Historical checks listed below belong to their named snapshots and are not release evidence for the latest main SHA:
 
 - `package.json` is version **0.4.0** and the release notes are prepared.
 - The only Git tag found was `v0.3.0`; no `v0.4.0` tag or GitHub Release had been published.
-- Installer checks passed on Windows, macOS and Linux for the audited main snapshot.
-- The branch-cleanup workflow passed and preserved all 11 remaining divergent branches.
-- Quality Checks, public-site validation and desktop packaging were still running when checked. They must not be described as passing from a pending status.
+- Earlier installer and quality checks passed on their respective audited snapshots; they are historical evidence only.
+- A recent workflow run for the latest main activity was still in progress during the recheck. No pass is inferred from a pending run.
 - Desktop installers are unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
 - The full 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
 
-The final documentation consolidation changes the source SHA. Re-run the required workflows after these changes; evidence from the audited base SHA is useful history, not proof for the final documentation commit.
+This documentation branch changes the source SHA again. Re-run the required workflows against the exact merged release candidate; evidence from an earlier SHA is useful history, not proof for the final documentation commit.
+
+## Production-readiness outlook
+
+The working planning target is to reach a production-oriented release in the coming weeks. This is a target, not a release promise. It depends on the P0 acceptance gates below, clean-machine first-run checks, critical user journeys, security-boundary validation, and accurate release artifacts. Do not describe OASIS as production-ready until those gates have been demonstrated on the same candidate commit.
 
 ## Known boundaries
 
