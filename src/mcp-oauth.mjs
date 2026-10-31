@@ -119,7 +119,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error(label + ' is not a valid URL.'); }
   if (parsed.username || parsed.password) throw new Error(label + ' must not include credentials.');
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
   const local = isLoopbackUrl(parsed.toString());
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local && safety.localOrigin === parsed.origin)) {
     throw new Error(label + ' must use HTTPS, except for the configured loopback MCP server origin.');
@@ -183,7 +183,7 @@ async function readJsonBody(response, maxBytes = MAX_OAUTH_METADATA_BYTES) {
 }
 
 function normalizedHostname(url) {
-  return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
 }
 
 // The standard fetch implementation resolves hostnames again when it connects.

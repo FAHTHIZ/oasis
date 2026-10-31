@@ -17,8 +17,9 @@ async function validatePublicUrl(raw, options = {}) {
   try { url = new URL(raw); } catch { throw new Error('Provide a valid public URL.'); }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP and HTTPS links can be fetched.');
   if (url.username || url.password) throw new Error('URLs containing credentials are blocked.');
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === 'metadata.google.internal') throw new Error('Local and metadata URLs are blocked.');
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  if (!host) throw new Error('Provide a valid public URL.');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === 'metadata.google.internal' || host.endsWith('.internal') || host.endsWith('.home.arpa')) throw new Error('Local and metadata URLs are blocked.');
   const ip = isIP(host);
   if (ip && isPrivateAddress(host)) throw new Error('Private-network addresses are blocked.');
   let addresses = null;
