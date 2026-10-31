@@ -200,6 +200,7 @@ export async function saveConfig(config, options = {}) {
   if (config.vision === false) safe.vision = false;
   if (config.promptCache === false) safe.promptCache = false;
   if (config.readDedup === false) safe.readDedup = false;
+  if (config.leanTools === false) safe.leanTools = false;
   if (config.followups === false) safe.followups = false;
   if (config.secretShield === false) safe.secretShield = false;
   const thinkingBudget = strictInteger(config.thinkingBudget);

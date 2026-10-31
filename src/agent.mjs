@@ -7,7 +7,7 @@ import { extractFollowups, recordFollowups, followupReminder, followupsEnabled }
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
-import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
+import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
@@ -619,7 +619,9 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.restricted = true;
   }
   if (subagentSystemAppend) session.subagentSystemAppend = String(subagentSystemAppend);
-  if (deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env })) systemText += '\n\n' + deferredToolsPrompt(session);
+  const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
+  const deferredRare = deferRareBuiltinTools(session, { env, settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
+  if (deferredMcp || deferredRare) systemText += '\n\n' + deferredToolsPrompt(session);
   // Non-blocking MCP connections finish after this prompt is composed. Retain
   // the completed base so their instructions can be added to the system prompt.
   session.mcpSystemPromptBase = systemPromptOverride ? null : systemText;
@@ -3108,18 +3110,22 @@ async function runToolFailureHooks(session, name, args, error, context) {
 }
 
 function availableToolNames(session) {
-  return new Set((session.toolDefinitions || []).map((tool) => tool && tool.function && tool.function.name).filter(Boolean));
+  const names = new Set((session.toolDefinitions || []).map((tool) => tool && tool.function && tool.function.name).filter(Boolean));
+  if (session.deferredTools) for (const name of session.deferredTools.keys()) names.add(name);
+  return names;
 }
 
 async function executeOneCall(session, call, context, options) {
   // Map Claude Code style names (Read, Bash, Edit …) onto OASIS tools in place,
   // so the assistant history and the tool result stay consistent.
   if (call && call.function && call.function.name) {
+    loadDeferredTool(session, call.function.name);
     const alias = resolveToolAlias(call.function.name, safeToolArguments(call.function.arguments), availableToolNames(session));
     if (alias && alias.name) {
       call.function.name = alias.name;
       call.function.arguments = JSON.stringify(alias.args || {});
     }
+    loadDeferredTool(session, call.function.name);
   }
   const message = await executeOneCallTraced(session, call, context, options);
   if (message && typeof message.content === 'string' && message.content.includes('Unknown or unavailable tool')) {
