@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
@@ -3210,7 +3211,7 @@ async function executeOneCallRaw(session, call, context, options) {
         lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, callContext, options);
       }
       if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
-      result = await executeTool(name, args, callContext);
+      result = (name === 'read_file' ? await dedupedReadHit(session, args, callContext.env || process.env) : null) || await executeTool(name, args, callContext);
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
       if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext.env || process.env });
@@ -3867,6 +3868,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         content: item.content,
         ...(item.result && item.result.imageData ? { images: [item.result.imageData] } : {})
       });
+      if (name === 'read_file' && item.result && !item.result.error) {
+        await recordDedupedRead(session, safeToolArguments(call.function && call.function.arguments), item.tool_call_id, item, options.env || process.env).catch(() => {});
+      }
     }
 
     totalToolCalls += calls.length;
