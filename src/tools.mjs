@@ -1867,7 +1867,15 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'install_package': {
       const name = normalizePackageName(args.packageName);
       const plan = planPackageInstall({ packageName: name, ecosystem: args.ecosystem || 'auto', workspaceRoot: root, env: context.env || process.env });
-      return await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove), env: context.env || process.env, signal: context.signal });
+      const { vetPackage } = await import('./package-vetting.mjs');
+      const vetting = await vetPackage(plan, { fetchImpl: context.fetchImpl || globalThis.fetch, env: context.env || process.env });
+      if (vetting.missing) {
+        return { approved: false, blocked: true, plan, vetting, message: vetting.warnings.join(' ') + ' Nothing was installed. The name may be misspelled or invented; check the exact package name in the project docs before trying again.' };
+      }
+      if (vetting.warnings.length) plan.note = plan.note + '\nPackage check: ' + vetting.warnings.join(' ');
+      // Suspicious packages always need a human, even in auto-approve modes.
+      const installResult = await runInstallPlan(plan, { root, approval: context.approval, autoApprove: Boolean(context.autoApprove) && !vetting.risky, env: context.env || process.env, signal: context.signal });
+      return vetting.warnings.length ? { ...installResult, vetting } : installResult;
     }
     case 'fetch_url':
       return await fetchPublicUrl(args.url, { lookupImpl: context.lookupImpl, requestImpl: context.requestImpl });
