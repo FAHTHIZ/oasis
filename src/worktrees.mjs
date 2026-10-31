@@ -9,6 +9,8 @@ import { randomBytes } from 'node:crypto';
 import { appendFile, lstat, mkdir, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { runHooks, hasHooks } from './hooks.mjs';
+import { normalizeBranchPrefix } from './branch-names.mjs';
+export { normalizeBranchPrefix } from './branch-names.mjs';
 
 const MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024;
 const GIT_KILL_GRACE_MS = 750;
@@ -192,6 +194,19 @@ async function createHookWorktree(root, label, options) {
   return { name, branch: null, path: absolute, relative: (relative && !relative.startsWith('..') ? relative : absolute).split(path.sep).join('/'), base: null, hook: true };
 }
 
+// Branch prefix for OASIS-made worktrees: "oasis/" unless the team has a naming
+// convention (settings "worktree": { "branchPrefix": "feature/" } or
+// OASIS_WORKTREE_BRANCH_PREFIX). Kept to a conservative ref-safe charset.
+export async function worktreeBranchPrefix(root, env = process.env) {
+  const fromEnv = normalizeBranchPrefix(env.OASIS_WORKTREE_BRANCH_PREFIX);
+  if (fromEnv) return fromEnv;
+  try {
+    const { loadSettings } = await import('./settings.mjs');
+    const settings = await loadSettings(root, { env, skipPlugins: true });
+    return normalizeBranchPrefix(settings.worktree && settings.worktree.branchPrefix) || 'oasis/';
+  } catch { return 'oasis/'; }
+}
+
 export async function createWorktree(root, label, options = {}) {
   const env = options.env || process.env;
   if (options.hookOptions && hasHooks(options.hookOptions.hooks, 'WorktreeCreate')) return createHookWorktree(root, label, options);
@@ -208,7 +223,7 @@ export async function createWorktree(root, label, options = {}) {
   const commonDir = path.resolve(root, await git(root, ['rev-parse', '--git-common-dir'], env));
   await excludeWorktreeDir(commonDir);
   const name = worktreeSlug(label) + '-' + randomBytes(3).toString('hex');
-  const branch = 'oasis/' + name;
+  const branch = (normalizeBranchPrefix(options.branchPrefix) || await worktreeBranchPrefix(root, env)) + name;
   const relative = path.join(WORKTREE_DIR, name);
   const worktreeParent = await ensureWorktreeParent(root);
   const absolute = path.join(worktreeParent, name);
@@ -365,9 +380,10 @@ export async function listWorktrees(root, options = {}) {
 }
 
 
-function validateOasisBranch(value) {
+function validateOasisBranch(value, prefix = 'oasis/') {
   const branch = String(value || '').trim();
-  if (!/^oasis\/[a-z0-9][a-z0-9-]{0,63}$/.test(branch)) {
+  const managed = (start) => branch.startsWith(start) && /^[a-z0-9][a-z0-9-]{0,63}$/.test(branch.slice(start.length));
+  if (!managed('oasis/') && !managed(prefix)) {
     throw new Error('Expected an OASIS-managed branch, such as oasis/fix-tests-a1b2c3.');
   }
   return branch;
@@ -401,7 +417,7 @@ export async function isCommitIntegrated(root, commitValue, options = {}) {
 /** Inspect an attached OASIS worktree without changing either checkout. */
 export async function inspectWorktree(root, branchValue, options = {}) {
   const env = options.env || process.env;
-  const branch = validateOasisBranch(branchValue);
+  const branch = validateOasisBranch(branchValue, await worktreeBranchPrefix(root, env));
   const top = await git(root, ['rev-parse', '--show-toplevel'], env);
   if (path.resolve(top) !== path.resolve(root)) {
     throw new Error('Worktree inspection must run from the repository root (' + top + ').');
@@ -446,7 +462,7 @@ export async function inspectWorktree(root, branchValue, options = {}) {
 /** Integrate a reviewed worktree only after preflight and user approval. */
 export async function mergeWorktree(root, branchValue, options = {}) {
   const env = options.env || process.env;
-  const branch = validateOasisBranch(branchValue);
+  const branch = validateOasisBranch(branchValue, await worktreeBranchPrefix(root, env));
   const inspection = await inspectWorktree(root, branch, { env });
   if (options.expectedHead && inspection.head !== options.expectedHead) throw new Error('The main branch changed after review; inspect again.');
   if (options.expectedBranchHead && inspection.branch_head !== options.expectedBranchHead) throw new Error('The agent branch changed after review; inspect again.');

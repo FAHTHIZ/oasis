@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isWorktreeBranchName } from './branch-names.mjs';
 import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
 import { protectedConfigPath, protectedEditMessage, protectedEditsAllowed, ruleNamesProtectedPath } from './protected-paths.mjs';
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
@@ -2642,7 +2643,7 @@ function recordSharedTaskWorktree(parent, record, worktreeResult) {
   const branch = String(worktreeResult && worktreeResult.branch || '');
   const fullCommit = String(worktreeResult && worktreeResult.commitSha || '').toLowerCase();
   task.worktreeChanged = changed;
-  task.worktreeBranch = changed && /^oasis\/[a-z0-9-]{1,100}$/i.test(branch) ? branch.slice(0, 120) : '';
+  task.worktreeBranch = changed && isWorktreeBranchName(branch) ? branch : '';
   task.worktreeCommit = changed && /^[0-9a-f]{40}$/.test(fullCommit) ? fullCommit : '';
   task.updatedAt = new Date().toISOString();
   recordAgentEvent(parent, 'task.worktree_recorded', {
