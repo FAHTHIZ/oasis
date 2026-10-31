@@ -24,6 +24,7 @@
     "manifest.webmanifest",
     "sw.js",
     "assets/",
+    "!assets/demo/",
     "scripts/",
     "skills/",
     "plugins/",
