@@ -31,7 +31,8 @@ test('installers resolve the latest stable release to an immutable commit SHA', 
     assert.match(script, /releases\/latest/);
     assert.match(script, /tags\?per_page=100/);
     assert.match(script, /ls-remote/);
-    assert.match(script, /resolveFromGitTags/);
+    if (script === shell) assert.match(script, /resolveFromGitTags/);
+    else assert.match(script, /Resolve-OasisStableTagFromGitOutput/);
     assert.match(script, /commits\//);
     assert.match(script, /archive\/\$?(OASIS_COMMIT|ReleaseCommit)/);
     assert.match(script, /Latest stable release/);
@@ -72,7 +73,11 @@ test('shell release resolver falls back to the newest stable Git tag when no Rel
     '};',
     embedded[1]
   ].join('\n');
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], {
+    encoding: 'utf8',
+    timeout: 10000,
+    env: { ...process.env, PATH: '', Path: '' }
+  });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(result.stdout.trim(), 'v9.10.0\n' + latestSha);
   assert.match(result.stderr, /using stable Git tag v9\.10\.0/);
@@ -93,7 +98,11 @@ test('shell release resolver is valid JavaScript and falls back from API rate li
     '};',
     embedded[1]
   ].join('\n');
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], {
+    encoding: 'utf8',
+    timeout: 10000,
+    env: { ...process.env, PATH: '', Path: '' }
+  });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(result.stdout.trim(), 'v9.8.7\n' + sha);
   assert.match(result.stderr, /GitHub API unavailable/);
@@ -115,7 +124,11 @@ test('shell release resolver falls back to the public Atom feed when release HTM
     '};',
     embedded[1]
   ].join('\n');
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], { encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', harness], {
+    encoding: 'utf8',
+    timeout: 10000,
+    env: { ...process.env, PATH: '', Path: '' }
+  });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(result.stdout.trim(), 'v9.8.7\n' + sha);
   assert.match(result.stderr, /GitHub API unavailable/);
