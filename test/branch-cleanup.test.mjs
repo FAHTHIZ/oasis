@@ -17,7 +17,24 @@ const mainTree = new Map([
   ['test/runtime.test.mjs', 'blob-runtime'],
   ['test/approval-language.test.mjs', 'blob-approval'],
   ['docs/BENCHMARKS.md', 'blob-benchmarks'],
-  ['docs/CURRENT_STATUS.md', 'blob-status-current']
+  ['docs/CURRENT_STATUS.md', 'blob-status-current'],
+  ['src/permissions.mjs', 'blob-permissions'],
+  ['test/permissions.test.mjs', 'blob-permissions-test'],
+  ['src/mcp-oauth.mjs', 'blob-mcp-oauth'],
+  ['test/mcp-oauth.test.mjs', 'blob-mcp-oauth-test'],
+  ['src/model-routing.mjs', 'blob-routing'],
+  ['test/model-routing.test.mjs', 'blob-routing-test'],
+  ['src/approval-language.mjs', 'blob-approval-language'],
+  ['src/session-notes.mjs', 'blob-session-notes'],
+  ['test/session-notes.test.mjs', 'blob-session-notes-test'],
+  ['src/command-output-log.mjs', 'blob-command-output'],
+  ['src/tools.mjs', 'blob-tools'],
+  ['src/context.mjs', 'blob-context'],
+  ['.github/scripts/check-eval-quarantine.mjs', 'blob-quarantine'],
+  ['test/eval-quarantine.test.mjs', 'blob-quarantine-test'],
+  ['bench/README.md', 'blob-bench'],
+  ['docs/NEXT_MILESTONE.md', 'blob-next-milestone'],
+  ['README.md', 'blob-readme']
 ]);
 const openPRs = new Set(['feat/open-review']);
 const mergedHeads = new Map([['feat/merged', new Set(['merged-head-sha'])]]);
@@ -56,6 +73,29 @@ test('the reviewed unattended-verification branch retires only at its exact audi
   const missing = new Map(mainTree);
   missing.delete('docs/BENCHMARKS.md');
   assert.equal(classifyRetirement(branch, null, 'main', openPRs, missing).retire, false);
+});
+
+test('audited superseded branch set uses exact heads and existing replacement paths', () => {
+  const reviewed = [
+    ['fix/chained-command-permissions', '20906cc1cecd811b85125c79d9dc51088592b4b0'],
+    ['security/bound-mcp-oauth-metadata', '65eb635e7051012edd2f55c64a679bf855cc491f'],
+    ['security/public-fetch-ssrf-hardening', 'a3d9fd154e16718fc4adfab69f17d40904aef029'],
+    ['feat/cost-aware-model-routing', 'dd41821b6397f0c227e0a4aa68d76d17eaecb498'],
+    ['fix/approval-secret-redaction', '81cbd727f5cf60c00c309a62d86b3b5dfff856d9'],
+    ['fix/compaction-session-notes', '0d4cd105d6cb7170d203db46510fe1a33a53cdc5'],
+    ['fix/tool-output-preservation', 'e8381ca00f778d7944d037f850156e900f56a5e6'],
+    ['feat/context-ordering-todo', '7032a34f8a8146b64eafb3e51521cc1ffbc8b2ac'],
+    ['bench/infrastructure-gate-2026-10-31', 'b0098a8072ff837f46056e70a47a5153d701289d'],
+    ['docs/alpha-confidence-milestone-2026-10-29', 'd865e22e5eeb530a8caeab2370e08da519d05dbc']
+  ];
+  for (const [name, sha] of reviewed) {
+    const entry = AUDITED_SUPERSEDED_HEADS.get(name);
+    assert.ok(entry, name + ' must have an explicit audit record');
+    assert.equal(entry.sha, sha, name + ' must match the audited head exactly');
+    assert.ok(entry.paths.every((file) => mainTree.has(file)), name + ' must have all canonical replacement paths');
+    assert.equal(classifyRetirement({ name, commit: { sha } }, null, 'main', openPRs, mainTree).retire, true, name);
+    assert.equal(classifyRetirement({ name, commit: { sha: 'not-' + sha } }, null, 'main', openPRs, mainTree).retire, false, name);
+  }
 });
 
 test('default, protected, and open-PR branches are never retired', () => {
