@@ -140,8 +140,22 @@ export async function loadAgentDefinitions(root, options = {}) {
   return agents;
 }
 
+const TASK_AGENT_LIST_BUDGET = 3000;
+
 export function taskToolDefinition(agents) {
-  const list = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + agent.description + (agent.tools ? ' (tools: ' + agent.tools.join(', ') + ')' : '')).join('\n');
+  // Keep the schema lean: projects with dozens of custom agents used to send
+  // every 600-char description on every request. Clip each entry and cap the list.
+  const clip = (text, max) => { const value = String(text || '').replace(/\s+/g, ' ').trim(); return value.length > max ? value.slice(0, max - 1).trimEnd() + '…' : value; };
+  const entries = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + clip(agent.description, 220) + (agent.tools ? ' (tools: ' + clip(agent.tools.join(', '), 120) + ')' : ''));
+  const kept = [];
+  let used = 0;
+  for (const entry of entries) {
+    if (used + entry.length > TASK_AGENT_LIST_BUDGET && kept.length) break;
+    kept.push(entry);
+    used += entry.length + 1;
+  }
+  if (kept.length < entries.length) kept.push('- …and ' + (entries.length - kept.length) + ' more (' + Object.keys(agents).slice(kept.length).join(', ') + ')');
+  const list = kept.join('\n');
   return { type: 'function', function: {
     name: 'task',
     description: 'Launch a subagent to handle a complex, multi-step task autonomously in its own context window. The subagent returns one final report; it cannot see this conversation, so give it a complete, self-contained prompt. Launch several task calls in ONE response to run them in parallel (up to ' + MAX_PARALLEL_SUBAGENTS + ' at once) when the work is independent. Set run_in_background for long jobs you do not need to wait on; every task returns an id that send_message can use to follow up with the same agent later.\nAvailable agent types:\n' + list,
