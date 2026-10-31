@@ -131,7 +131,7 @@ test('deleting a protected settings file asks with force and a warning', async (
   const denied = await executeTool('delete_file', { path: '.oasis/settings.json' }, { root, autoApprove: true, approval, env });
   assert.equal(denied.approved, false);
   assert.equal(prompts[0].force, true);
-  assert.match(prompts[0].message, /^Warning: \.oasis\/settings\.json is a protected configuration file/);
+  assert.match(prompts[0].message, /^Warning: \.oasis[\\/]settings\.json is a protected configuration file/);
   await executeTool('delete_file', { path: 'old.txt' }, { root, autoApprove: true, approval, env });
   assert.equal(prompts[1].force, false);
   assert.doesNotMatch(prompts[1].message, /Warning/);
