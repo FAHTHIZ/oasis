@@ -66,9 +66,11 @@ async function readImports(root, text, depth = 0) {
       const relative = path.relative(workspace, target);
       if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) { lines.push(line); continue; }
       const info = await lstat(target);
-      if (!info.isFile() || info.size > MAX_MEMORY_FILE) { lines.push(line); continue; }
+      if (!info.isFile()) { lines.push(line); continue; }
+      if (info.size > MAX_MEMORY_FILE) { lines.push(line + '  [not imported: ' + relative + ' is ' + info.size + ' bytes, over the ' + MAX_MEMORY_FILE + '-byte import limit; read_file it if it matters]'); continue; }
       const imported = await readFile(target, 'utf8');
-      lines.push('--- imported ' + relative + ' ---', await readImports(root, imported.slice(0, PER_FILE_LIMIT), depth + 1), '--- end ' + relative + ' ---');
+      const clippedImport = imported.length > PER_FILE_LIMIT ? imported.slice(0, PER_FILE_LIMIT) + '\n[... ' + relative + ' truncated: ' + (imported.length - PER_FILE_LIMIT) + ' more characters not imported ...]' : imported;
+      lines.push('--- imported ' + relative + ' ---', await readImports(root, clippedImport, depth + 1), '--- end ' + relative + ' ---');
     } catch { lines.push(line); }
   }
   return lines.join('\n');
@@ -116,7 +118,7 @@ export async function loadMemory(root, options = {}) {
   }
   const env = options.env || process.env;
   const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
-  const rules = [...await loadRules(path.join(claudeHome, 'rules'), 'user'), ...await loadRules(path.join(path.resolve(root), '.claude', 'rules'), 'project', path.resolve(root))];
+  const rules = [...await loadRules(path.join(claudeHome, 'rules'), 'user', null, notices), ...await loadRules(path.join(path.resolve(root), '.claude', 'rules'), 'project', path.resolve(root), notices)];
   // Scoped instructions are deliberately excluded from base memory to keep the prompt small.
   for (const rule of rules) {
     if (rule.paths.length || seen.has(rule.real)) continue;
@@ -134,7 +136,7 @@ export async function loadMemory(root, options = {}) {
 }
 
 // Claude Code rules: every .md file under a rules/ directory (recursive, sorted).
-async function loadRules(dir, scope, workspace = null) {
+async function loadRules(dir, scope, workspace = null, notices = null) {
   const out = [];
   const walk = async (current, depth) => {
     if (depth > 4 || out.length >= 60) return;
@@ -146,7 +148,7 @@ async function loadRules(dir, scope, workspace = null) {
       else if (entry.isFile() && entry.name.endsWith('.md')) {
         try {
           const info = await lstat(full);
-          if (info.size > MAX_MEMORY_FILE) continue;
+          if (info.size > MAX_MEMORY_FILE) { if (notices) notices.push((scope === 'user' ? 'User' : 'Project') + ' rule ' + path.relative(dir, full).split(path.sep).join('/') + ' (' + info.size + ' bytes) is over the ' + MAX_MEMORY_FILE + '-byte limit and was not loaded.'); continue; }
           const real = await realpath(full);
           if (workspace) {
             const relative = path.relative(await realpath(workspace).catch(() => workspace), real);
@@ -224,16 +226,25 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
       if (loaded.has(file)) continue;
       try {
         const info = await lstat(file);
-        if (!info.isFile() || info.size > MAX_MEMORY_FILE) continue;
+        if (!info.isFile()) continue;
         const real = await realpath(file);
         const back = path.relative(workspace, real);
         if (back.startsWith('..') || path.isAbsolute(back)) continue;
         loaded.add(file);
-        const text = (await readImports(workspace, (await readFile(file, 'utf8')).slice(0, PER_FILE_LIMIT))).trim();
-        if (!text || budget <= 0) continue;
-        const clipped = text.slice(0, budget);
+        const shown = path.relative(workspace, file);
+        if (info.size > MAX_MEMORY_FILE) {
+          found.push({ path: shown, text: '[' + shown + ' applies to this directory but is ' + info.size + ' bytes, over the ' + MAX_MEMORY_FILE + '-byte limit, so it was not loaded. read_file it before editing here.]' });
+          continue;
+        }
+        const raw = await readFile(file, 'utf8');
+        let text = (await readImports(workspace, raw.slice(0, PER_FILE_LIMIT))).trim();
+        if (raw.length > PER_FILE_LIMIT) text += '\n[... ' + shown + ' truncated: ' + (raw.length - PER_FILE_LIMIT) + ' more characters not loaded. read_file it if the rest matters ...]';
+        if (!text) continue;
+        if (budget <= 0) { found.push({ path: shown, text: '[' + shown + ' also applies here but the nested-instruction budget was used up. read_file it before editing here.]' }); continue; }
+        let clipped = text.slice(0, budget);
+        if (clipped.length < text.length) clipped += '\n[... nested-instruction budget reached: ' + (text.length - clipped.length) + ' characters of ' + shown + ' not loaded ...]';
         budget -= clipped.length;
-        found.push({ path: path.relative(workspace, file), text: clipped });
+        found.push({ path: shown, text: clipped });
       } catch {}
     }
   }
