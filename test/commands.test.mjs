@@ -102,7 +102,7 @@ test('built-in slash commands report state and switch modes', async () => {
   const state = { root, session, env, usage, sessionOptions: {} };
   assert.match((await runBuiltinCommand('cost', '', state)).output, /15 tokens \(10 input, 5 output\) across 1 model requests/);
   assert.match((await runBuiltinCommand('context', '', state)).output, /Estimated context: \[/);
-  assert.match((await runBuiltinCommand('permissions', '', state)).output, /allow:\s*Bash\(npm test:\*\)/);
+  assert.match((await runBuiltinCommand('permissions', '', state)).output, /allow:?\s+Bash\(npm test:\*\)/);
   assert.match((await runBuiltinCommand('mode', 'plan', state)).output, /set to plan/);
   assert.equal(session.permissions.mode, 'plan');
   assert.match((await runBuiltinCommand('mode', 'bogus', state)).output, /Unknown mode/);
