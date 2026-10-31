@@ -96,6 +96,8 @@ function printHelp() {
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
     '  oasis sessions list           List locally saved sessions for this workspace',
+    '  oasis sessions clear ID       Delete one saved session',
+    '  oasis sessions prune [--older-than DAYS]  Delete saved sessions unused for DAYS (default 30)',
     '  oasis --continue              Resume the most recent saved session and keep saving it',
     '  oasis --resume SESSION_ID     Resume one saved session',
     '  oasis mcp list                List configured Model Context Protocol servers',
