@@ -260,6 +260,18 @@ export async function runBuiltinCommand(name, argument, state) {
         prompt: loadSkillInstruction('diagnose') + 'Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\n\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
       };
     }
+    case 'audit': {
+      const workflows = await import('./workflows.mjs');
+      const available = await workflows.loadWorkflows(root, { env }).catch(() => new Map());
+      if (!available.has('audit')) {
+        return { output: 'The built-in audit workflow is unavailable in this installation. No files were changed.' };
+      }
+      const scope = String(argument || '').trim() || '.';
+      return {
+        output: 'Preview: run the built-in, read-only audit workflow for ' + scope + '. It coordinates independent reviewers, deduplicates their findings, and verifies severe findings. No files will be modified.',
+        prompt: 'Run the built-in workflow named "audit" for the requested scope. Use its security, performance, test-coverage, and dependency reviewers; merge duplicate findings, independently verify severe findings, and report verified and unverified findings separately. Do not modify files or apply fixes. Scope: ' + scope
+      };
+    }
     case 'rollback': {
       if (!session || !session.checkpoints || !session.checkpoints.turns.length) {
         if (session) session.pendingSkillRollback = null;
