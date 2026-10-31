@@ -16,7 +16,7 @@ Paste this single command into Termux and press **Enter**:
 sh -c 'f=$(mktemp) || exit; url=https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh; if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$f"; elif command -v wget >/dev/null 2>&1; then wget -qO "$f" "$url"; else echo "Install curl or wget first, then retry." >&2; rm -f "$f"; exit 1; fi && sh "$f"; r=$?; rm -f "$f"; exit "$r"'
 ```
 
-The installer checks for Node.js 22 or newer. If it is missing, it offers to install Node.js with Termux's package manager. It then downloads the latest stable GitHub release of OASIS, installs it in your user folder, checks the environment, and starts guided provider setup. You do not need to clone the repository, install Git, or type separate npm commands.
+The installer checks for Node.js 22 or newer. If it is missing, it offers to install Node.js with Termux's package manager. It resolves the latest stable semantic-version Git tag to an exact commit SHA, installs that version in your user folder, checks the environment, and starts guided provider setup. At this snapshot, `v0.3.0` is the only version tag; source package `0.4.0` on `main` is prepared but is not yet a tagged install target. You do not need to clone the repository, install Git, or type separate npm commands.
 
 The easy command runs the installer from the official repository over HTTPS. For the checksum-verified copyable command and current installer hash, use [Install OASIS](INSTALL.md#command-line-installation).
 
