@@ -4,7 +4,9 @@ OASIS is Beta software. Use a project folder you trust, review permission prompt
 
 ## Desktop app — no terminal required
 
-The Electron app is packaged for Windows, macOS and Linux. Open the [latest published OASIS release](https://github.com/FAHTHIZ/oasis/releases/latest) and choose the matching asset. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
+> **Availability:** Desktop packages are built by CI, but there is currently no published GitHub Release or public desktop installer asset to download. The source package is version 0.4.0 and its notes are prepared, but `v0.4.0` has not been tagged or published. Use the CLI installation path below until a release with desktop assets is published.
+
+The Electron app is configured for Windows, macOS and Linux. When public release assets are available, choose the matching file from the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases). The packaged app includes its own runtime: you do not need to install Node.js or Git separately. The first-launch guidance below describes the intended packaged-app flow.
 
 | Operating system | Download | First launch |
 |---|---|---|
