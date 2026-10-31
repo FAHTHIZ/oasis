@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import { readTrigger, buildPrompt, runAction, actionStatus, formatVerificationReport } from '../src/github-action.mjs';
+import { readTrigger, buildPrompt, runAction, actionStatus, formatVerificationReport, verificationIsComplete } from '../src/github-action.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
@@ -77,6 +77,9 @@ test('GitHub Action never treats an unavailable or unapproved LSP as successful 
     complete: true,
     issues: []
   };
+  assert.equal(verificationIsComplete(projectTestPassed), true);
+  assert.equal(verificationIsComplete({ ...projectTestPassed, lastCheck: null }), false);
+  assert.equal(verificationIsComplete({ ...projectTestPassed, diffReviewed: false }), false);
   assert.equal(
     actionStatus({ is_error: false }, { changed: true }, 'Updated src/app.ts.', projectTestPassed),
     'verified and pushed changes.'
