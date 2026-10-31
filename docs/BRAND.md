@@ -59,7 +59,7 @@ Motion should feel like the portal activating: short, calm fades and a restraine
 
 - `assets/oasis-icon.svg` — app icon and favicon.
 - `assets/oasis-mark.svg` — transparent standalone mark.
-- `assets/oasis-logo.svg` — horizontal logo lockup with optional OSS descriptor.
+- `assets/oasis-logo.svg` — horizontal OASIS logo lockup.
 - `assets/oasis-readme-banner.svg` — panoramic README hero.
 - `assets/oasis-social-preview.svg` — social preview.
 - `site/assets/oasis-mark.svg` — public website header mark.
