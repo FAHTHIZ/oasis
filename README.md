@@ -57,7 +57,7 @@ These are implemented product areas, not a claim that every provider, integratio
 
 ## How it works
 
-OASIS is the orchestration and control layer between your project and the model you select.
+OASIS is the orchestration and control layer between your project and the model you select. The [architecture guide](docs/ARCHITECTURE.md) maps the actual runtime, entry points, execution boundaries, data stores, and integrations.
 
 ```mermaid
 flowchart TD

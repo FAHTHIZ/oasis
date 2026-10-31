@@ -5,9 +5,10 @@
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
 **Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
+**Architecture source baseline (system-map audit):** [`e43d4187825a3a31bdcbe4136d0afab05a980641`](https://github.com/FAHTHIZ/oasis/commit/e43d4187825a3a31bdcbe4136d0afab05a980641)  
 **Latest User Guide and documentation audit snapshot:** [`e9e79441eee7cad70b4229d69b98c18d553020db`](https://github.com/FAHTHIZ/oasis/commit/e9e79441eee7cad70b4229d69b98c18d553020db)
 
-This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. It replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
+This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. The [architecture guide](ARCHITECTURE.md) is its companion system map for how those implemented components fit together. This plan replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
 ## Product direction
 

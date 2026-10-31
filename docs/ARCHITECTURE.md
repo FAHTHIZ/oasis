@@ -1,111 +1,342 @@
 # OASIS architecture
 
-OASIS has a local-first browser workspace and a CLI agent runtime. Running `oasis web` serves the same browser UI from Node and connects it to the chosen workspace through an authenticated local HTTP API. The current implementation inventory and verified baseline are tracked in [PROJECT_PLAN.md](PROJECT_PLAN.md); this document describes system boundaries and implementation constraints without implying outcome parity from feature names alone.
+**Last audited:** October 31, 2026  
+**Implementation reference:** the current `main` source tree. This document explains the architecture that exists in code; it is not a promise that every platform or integration is release-certified.
 
-## Terminal runtime
+OASIS is a local-first coding-agent runtime with several ways to interact with it. The CLI, connected browser workspace, Electron desktop app, VS Code-family extension, SDK, and GitHub Action are different entry points around shared agent and tool-execution code. OASIS is not itself a model or a hosted inference service. You choose the model/provider, and provider traffic follows that provider's data-handling terms.
 
-- `src/cli.mjs` is the command-line entry point exposed by the `oasis` executable in `package.json`.
-- `src/config.mjs` loads environment overrides or user-level config. Provider keys are never placed in project files by the CLI.
-- src/agent.mjs implements multi-step tool-calling loops for the OpenAI Responses API, OpenAI-compatible Chat Completions, and native Anthropic Messages. Responses API output items are replayed locally with `store: false` so tool-call continuation does not depend on server-side conversation storage. Long histories are compacted between turns using a tool-free model summary, with a deterministic bounded fallback if summarization fails. During a task, oversized history estimates also trigger deterministic pruning of older bulky tool outputs; this preserves tool-call/result pairing and leaves recent output intact. `OASIS_CONTEXT_WINDOW` can set the context-window estimate, defaulting to 32,768 tokens.
-- When the browser runtime requests live output, `src/agent.mjs` requests provider SSE streams and normalizes text/tool-call deltas across Chat Completions, Responses, and Anthropic Messages. Stream payloads are capped at 8 MiB; providers that respond with ordinary JSON fall back to a completed-text event rather than failing the task.
-- Browser jobs own an abort controller. The authenticated cancel route denies pending approvals, aborts model requests, and forwards cancellation to supported child-process commands and package installs; jobs end in an explicit `cancelled` state and the current session is saved when possible. Cancellation cannot roll back file changes that completed before the request.
-- The `run_specialist_review` tool creates a separate, bounded reviewer session for code review, security review, architecture, or test strategy. It receives only file-search/read and Git-inspection tools, has no MCP client, cannot run commands or edit, caps itself at eight read-only tool calls and 18,000 tokens, and is limited to two reviews per parent task. Nested token/tool use is included in the parent usage totals.
-- src/tools.mjs exposes a session-local `todo_write` checklist, read-only Git status/diff inspection, file listing, glob matching, literal search, line-ranged reads, exact-string edit_file patches with snapshots, whole-file writes, approved deletes, argv-only process execution, package installation, skill discovery/loading, and bounded public-document fetching. Whole-worktree diffs exclude common secret-bearing paths; explicitly scoped paths pass through workspace/sensitive-path checks.
-- `src/lsp.mjs` owns a per-session JSON-RPC language-server client for diagnostics and symbol navigation. After successful edit/write/multi-edit operations on a file with a configured LSP, `src/agent.mjs` requests post-edit diagnostics and attaches a structured verification result to the tool response. It compares against a baseline when a previously approved server was already active; without one, remaining errors are conservatively treated as unclassified. Missing servers/timeouts return `unavailable`, not success. The post-edit completion gate gives the agent one repair opportunity and then emits a deterministic verification-incomplete response if LSP blockers remain.
-- `src/context.mjs` estimates context size, reports a detailed breakdown through `/context all`, and bounds compaction preservation records. `/compact` is a preview/confirm/cancel flow: the preview is read-only, stores a fingerprint of the current messages, and refuses stale confirmation. Must-preserve records are sanitized and persisted by `src/sessions.mjs`, then appended to automatic/manual summaries; token numbers remain estimates and message-category breakdowns can overlap.
-- `src/installer.mjs` parses simple installation requests and selects a package ecosystem or host package manager.
-- `src/backups.mjs` snapshots changed files to the user's OASIS config directory, outside the project, and restores them by ID.
-- src/eval.mjs runs reference tasks in disposable copies, captures token/time/cost estimates, and stores JSON results. evals/tasks/<id>/ keeps the task prompt, pre-change snapshot, patch, and verifier outside the agent's workspace.
-- `skills/*/SKILL.md` contains bundled workflow guidance. `plugins/catalog.json` defines reviewed skill bundles; `src/plugins.mjs` installs/removes these bundles under `.oasis/plugins/` and `.oasis/skills/`. Bundles currently contain instruction files only; MCP server configuration is separate and explicit. The agent initially receives compact skill descriptions and loads the full relevant guide only on demand. OASIS also discovers portable project skills under `.agents/skills/<name>/SKILL.md` and Vercel universal global skills under `~/.config/agents/skills/<name>/SKILL.md`. `oasis skills find|inspect|add` launches the pinned `skills@1.7.4` CLI only after approval (unless the operator already enabled `--yes`), uses `--copy` and `--agent universal`, and disables telemetry; imported instructions/resources remain untrusted text. Standard skill resources are restricted to regular text files under `references/` or `assets/` with path and symlink checks.
-- The runtime exposes `setup_omniroute`, `configure_provider`, `install_external_skill`, `configure_mcp_server`, and `delegate_openhands` as normal agent tools. Provider changes are verify-before-save; MCP activation requires dedicated manual approval, starts the exact configured stdio command, checks its handshake, then refreshes the current session's tool map. External Agent Skill instructions remain untrusted text; imported hooks/scripts are not activated. OpenHands delegation requires a preconfigured Agent Profile and server URL, always asks OASIS for manual approval, sends no OASIS model credentials, requests OpenHands' AlwaysConfirm policy and a worktree, and returns a conversation ID when the remote task is pending.
-- `src/memory.mjs` loads layered memory: user (`~/.config/oasis/OASIS.md`, `~/.claude/CLAUDE.md`), project (`OASIS.md`, `AGENTS.md`, `CLAUDE.md`), local (`OASIS.local.md`, `CLAUDE.local.md`), and `README.md`, with `@path` imports limited to the workspace. Lines typed as `# note` are appended to the chosen memory file.
+For the feature inventory and release boundaries, see the [project plan](PROJECT_PLAN.md). For security-review findings and remaining risks, see the [security and reliability audit](SECURITY_RELIABILITY_AUDIT.md). For setup and command-level instructions, see the [user guide](USER_GUIDE.md).
 
-### External-format interoperability
+## System map
 
-- `src/settings.mjs` merges user, project (`.claude/settings.json`, `.oasis/settings.json`), and local (`*.local.json`) settings. In untrusted workspaces only deny/ask rules apply; allow rules, hooks, modes, sandbox, and shell settings wait for `oasis trust`.
-- `src/permissions.mjs` parses rules such as `Bash(npm test:*)`, `Edit(src/**)`, and `WebFetch(domain:docs.github.com)`, evaluates them in the order deny, ask, allow, session approvals, then default, and implements the `default`, `acceptEdits`, `plan`, and `bypassPermissions` modes. `analyzeCommand` unwraps wrappers like `env`, `xargs`, and `timeout` and flags high-risk commands, which always need an interactive approval.
-- `src/hooks.mjs` runs `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`, `SessionStart`, and `SessionEnd` hooks through `/bin/sh` with secrets removed from the environment. Exit code 2 blocks, and JSON output can allow, deny, rewrite tool input, or add context.
-- `src/sandbox.mjs` wraps commands in bubblewrap (Linux) or sandbox-exec (macOS): the host is read-only, the workspace is writable, `/tmp` is private, and the network is off unless enabled.
-- `src/power-tools.mjs` adds `grep` (ripgrep with a JS fallback), atomic `multi_edit`, background processes (`command_output`, `kill_command`, `list_background`), and the opt-in `run_shell`.
-- `src/subagents.mjs` defines built-in and custom agents (`.oasis/agents`, `.claude/agents`). `agent.mjs` runs each `task` call in a child session that shares permissions, hooks, sandbox, background processes, and checkpoints with its parent; consecutive `task` calls run in a pool of up to six.
-- `src/shared-tasks.mjs` provides `task_create`, `task_list`, `task_get`, and `task_update` for one dependency-aware task board shared by the main session and its child agents. It validates IDs, prerequisites, cycles and status transitions. `src/session-tools.mjs` registers the tools; `src/sessions.mjs` sanitizes and persists the board with saved sessions. It does not provide atomic claims, a task scheduler, cross-session synchronization, peer messages, or a visual team manager.
-- `src/commands.mjs` loads custom slash commands and expands `@path` mentions. `src/slash.mjs` implements the built-in interactive commands.
-- `src/checkpoints.mjs` saves each file's original content before its first change in a turn, and `/rewind` restores files and trims the conversation.
-- `src/headless.mjs` implements `oasis -p` with `text`, `json`, and `stream-json` output; approvals that would need a person are denied and reported.
+The diagram separates user-facing entry points from the local runtime and from external services. The GitHub Action is a CI execution surface; the static dashboard is not an agent runtime.
 
-### Data and trust boundaries
+~~~mermaid
+flowchart TB
+  subgraph Surfaces["Entry points"]
+    CLI["Terminal CLI / headless"]
+    WEB["Connected browser workspace<br/>oasis web"]
+    DESKTOP["Electron desktop host"]
+    IDE["VS Code-family extension"]
+    SDK["Node.js SDK"]
+    ACTION["GitHub Action in CI"]
+    STATIC["Static dashboard / PWA shell"]
+    LOCALDATA["Browser local storage<br/>Projects · Tasks · Notes"]
+  end
 
-Workspace file tools apply path traversal and symlink checks, block common credential-file patterns, and cap individual text-file sizes. A snapshot is created before overwriting an existing file. Deletion needs interactive approval. Shell interpreters and selected high-impact commands are denied by the general command tool; normal commands require approval unless automatic approval is deliberately enabled.
+  subgraph Local["OASIS runtime on the host"]
+    CORE["Agent session and model/tool loop"]
+    PROVIDER["Provider adapters"]
+    POLICY["Permissions · approvals · risk checks"]
+    TOOLS["Workspace tools · process tools · diagnostics"]
+    CONTEXT["Instructions · memory · context · sessions"]
+    INTEGRATIONS["MCP · hooks · plugins · skills · workflows"]
+    EVENTS["Job events · task records · run monitor"]
+  end
 
-Processes launch with an argument array and `shell: false`; common credential environment variables are filtered. The package installer is a separate, explicit side-effecting tool and its command plan is shown before approval. Public URL fetching checks host resolution for private addresses, rejects redirects, and limits content size.
+  MODEL["Chosen model endpoint<br/>hosted or local"]
+  PROJECT["Selected project workspace"]
+  EXT["External tools and services<br/>GitHub · MCP servers · OpenHands · LSP servers"]
 
-Without the optional OS sandbox, an approved test, build, or project script can execute code with the current user's privileges. With the sandbox on, commands can only write inside the workspace and have no network unless it is enabled. A local model endpoint may avoid sending prompts to a hosted provider, but that does not itself sandbox command execution.
+  CLI --> CORE
+  WEB --> CORE
+  DESKTOP --> WEB
+  IDE --> CLI
+  SDK --> CORE
+  ACTION --> SDK
+  STATIC --> LOCALDATA
 
-## Browser agent runtime
+  CORE <--> PROVIDER
+  PROVIDER <--> MODEL
+  CORE <--> CONTEXT
+  CORE --> POLICY
+  POLICY --> TOOLS
+  TOOLS <--> PROJECT
+  TOOLS <--> EXT
+  INTEGRATIONS <--> CORE
+  INTEGRATIONS <--> EXT
+  CORE --> EVENTS
+  EVENTS --> WEB
+~~~
 
-- `src/web.mjs` serves the static UI and a same-origin JSON API over HTTP on loopback by default, or HTTPS when a certificate/key pair is supplied. The CLI prints a fresh random bearer token for that process. API requests require that token, and browser API requests must use a literal-IP/localhost Host and a matching same-origin Origin with the same HTTP/HTTPS scheme.
-- Chat jobs call the same `createSession` and `runAgentTurn` runtime used by the CLI. Job events expose assistant output, tool activity, usage, completion, and pending approvals. The browser can approve or deny a consequential action once. Saved agent sessions use the existing private user-level session store.
-- The Terminal panel calls the existing `run_command` tool with an executable and a JSON argv array. It intentionally has no shell expansion and is **not a full PTY**; interactive shell programs, TUI applications, and programs that require stdin are not supported by this bridge.
-- Non-loopback listeners require TLS certificate/key files by default. OASIS enforces TLS 1.2 or newer and, on POSIX hosts, rejects TLS private-key files whose permissions grant group/other access. Unencrypted HTTP on a non-loopback address requires the explicit `--allow-insecure-lan` opt-in and prints a warning. Certificate provisioning, trust installation on phones, reverse-proxy guidance, and real-device TLS tests remain follow-up work.
-- The service worker must not cache `/api/*` responses because Cache Storage does not isolate entries by bearer Authorization header. It caches only the static app shell.
+The static dashboard is included as a separate surface because it is easy to confuse with the connected browser workspace. Opening `index.html` or the GitHub Pages site gives the Projects, Tasks, and Notes interface; it does not start the agent. The connected workspace requires the local `oasis web` process.
 
-### Multi-agent run monitor
+## Entry points and ownership
 
-The browser run monitor is an observer over the existing agent registry and cloud task history, not a second scheduler. `recordAgentEvent` publishes bounded lifecycle metadata through a failure-isolated observer; workers capture their originating run ID so completion and failure events are not reassigned to a later prompt. `GET /api/agent-monitor` returns summaries for recent coding-agent jobs through the same bearer-token-protected API boundary as other browser runtime endpoints. The page shows worker/team statuses, worktree metadata, available token totals, approval counts and a redacted lifecycle timeline; it does not expose the prompt or full conversation. For completed, failed, cancelled or interrupted workspace-mode runs with a validated saved session ID, the monitor can open the saved parent chat in Agent. This restores the transcript for user-directed follow-up; it neither revives a terminated worker nor replays an outstanding approval. Isolated worktree runs do not expose this action.
+| Surface | Implementation | What it owns |
+|---|---|---|
+| Terminal CLI | `src/cli.mjs`, `src/headless.mjs` | Interactive terminal, one-shot tasks, setup, diagnostics, background commands, and non-interactive/script output. |
+| Connected browser workspace | `src/web.mjs` plus the packaged static UI | Authenticated local HTTP API, chat jobs, approvals, project/tool integrations, terminal sessions, job history, and run monitoring. It calls the same session/agent functions as the CLI. |
+| Electron desktop app | `desktop/main.mjs`, `desktop/secure-secrets.mjs` | Folder selection, desktop window lifecycle, local runtime startup/shutdown, renderer isolation, and OS-backed provider-key storage where available. It hosts the connected browser workspace; it is not a second agent engine. |
+| VS Code-family extension | `ide/vscode/`, `src/ide.mjs` | Editor chat, selection context, native diff review, editor diagnostics, and a local bridge to the CLI. Cursor and Windsurf are supported editor targets through their VS Code-compatible interfaces. |
+| Node.js SDK | `src/sdk.mjs` | In-process access to the agent/headless runtime, event streaming, custom tools, and tool servers. |
+| GitHub Action | `action.yml`, `src/github-action.mjs` | Runs OASIS in a GitHub Actions checkout through the SDK, filters who can trigger mention-based tasks, verifies the result, and can commit/push a branch or open a pull request according to the event. |
+| Static dashboard / PWA shell | `index.html`, `sw.js`, `manifest.webmanifest` | Local Projects, Tasks, and Notes data in browser storage, JSON export/import, and static offline assets. It has no model loop or host-side execution by itself. |
 
-The existing `src/cloud-task-store.mjs` stores sanitized job events beneath the user's private OASIS configuration directory and marks jobs interrupted if the runtime restarts. The monitor now derives interrupted worker/team state from that record and counts unresolved approvals as interrupted; it shows the saved restart event rather than stale live states. [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/40879705797) and [publishing validation](https://github.com/FAHTHIZ/oasis/actions/runs/40879705789) passed on the current implementation revision. This preserves the run record, **not** the live Node.js worker process, in-memory team registry, or pending approval state. The view cannot restore an interrupted worker, pause/resume orchestration across restarts, resolve worktree conflicts, or merge branches.
+### Shared runtime request path
 
-## GitHub connection and workspace switching
+A normal coding-agent turn follows this shape:
 
-- The browser UI reuses the host's GitHub CLI login instead of collecting a personal token in the page. The runtime exposes fixed read-only commands for `gh auth status` and `gh api user/repos`; it does not accept arbitrary GitHub CLI arguments from the browser.
-- The repository picker lists at most 30 repositories from the authenticated user's accessible `user/repos` endpoint. Cloning validates `owner/name`, resolves a destination beneath the launch workspace's `.oasis/workspaces/` directory with workspace path checks, requires an explicit approval, then uses `gh repo clone` with shell expansion disabled. It never runs the repository's install scripts as part of cloning.
-- A successful clone switches the process's active workspace for new agent sessions and terminal commands. A request cannot switch workspaces while any tracked job or agent turn is running. Existing clone destinations are reused only after their origin matches the selected GitHub repository.
-- This is a GitHub CLI integration, not embedded OAuth. The user must install `gh` and run `gh auth login` on the host first. Repository creation, branch/push/PR orchestration, GitHub Apps, detailed scope management, and organization-wide repository discovery are not implemented.
+1. An entry point creates or resumes a session for a selected project directory.
+2. OASIS loads provider configuration, user/project instructions, memory, settings, tool definitions, and the session's permission context.
+3. The selected model receives the conversation and the tools available in that session.
+4. The model may return text, a tool call, or both. OASIS validates and routes each requested tool through the appropriate execution and permission checks.
+5. The tool result is bounded, redacted where appropriate, recorded in the conversation, and returned to the model for the next step.
+6. OASIS performs applicable post-edit diagnostics and completion checks, emits the final result, and persists the session/job state where enabled.
 
-## External GitHub agent/skill imports
+The browser's chat path uses `createSession` and `runAgentTurn`; CLI/headless and SDK paths use the same underlying runtime modules with different presentation and approval adapters. Streaming output is normalized across provider protocols. If a provider does not stream, supported paths can fall back to a completed response rather than requiring a streaming-only server.
 
-- `src/extensions.mjs` inspects public GitHub repository metadata, resolves a default-branch commit SHA, and selects bounded Markdown agent/skill prompt files. The review endpoint returns repository, license, commit, importable-file count, and a count of executable/source files detected.
-- Import requires a second request carrying the commit SHA shown by inspection; a changed default-branch commit is rejected rather than importing a revision the user did not review.
-- OASIS only writes normalized Markdown prompts plus an extension manifest. It does not import or execute repository scripts, copy executables, install dependencies, enable hooks, or configure MCP servers. Each prompt carries source/commit attribution and an untrusted-instructions notice.
-- Global extensions live under the user-level OASIS config `extensions/`; project extensions live under `.oasis/extensions/`. The `self`, `project`, and `both` scopes support reuse between projects. A staging directory and atomic rename are used for installs, and an incomplete multi-scope install is rolled back.
-- Every imported prompt has a SHA-256 record. Removal verifies that the extension has no unexpected files and that prompt contents still match their installation hashes; modified content is preserved rather than deleted. Installed extensions are exposed to normal skill discovery so imported guidance can be loaded on demand.
-- Browser routes for inspect/install/remove and inventory are protected by the same bearer-token API authentication. Importing an instruction file does not constitute sandboxing; agent prompts remain untrusted context and never override the base system policy.
+~~~mermaid
+sequenceDiagram
+  participant U as User / surface
+  participant A as Agent runtime
+  participant M as Model provider
+  participant P as Permission policy
+  participant T as Tool executor
+  participant W as Workspace / service
 
-## Integration hub
+  U->>A: Prompt and session context
+  A->>M: Messages + available tool schemas
+  M-->>A: Text or proposed tool call
+  A->>P: Validate tool and requested action
+  alt Approval required
+    P-->>U: Approval request
+    U-->>P: Allow or deny
+  else Allowed by policy
+    P-->>A: Permission decision
+  end
+  P->>T: Approved tool execution
+  T->>W: Bounded file, process, or integration operation
+  W-->>T: Result / diagnostics
+  T-->>A: Tool result
+  A->>M: Continue with result
+  M-->>A: Final response or next tool call
+  A-->>U: Events, result, and verification state
+~~~
 
-The browser provides tabs for Connectors, MCP servers, API & models, and Tools. GitHub status is sourced from the host GitHub CLI, provider status from the local runtime, and MCP configuration from the user configuration file. Unsupported connector cards and custom tool/webhook authoring are explicitly labelled as planned rather than reporting fictitious connections. Saving an enabled MCP server updates future session configuration; it does not launch the process during save, but creating a new agent session starts configured enabled servers.
+The model proposes actions; OASIS owns the local policy decision and execution boundary. A model response is not itself proof that a file changed correctly or that a test passed.
 
-## Optional OpenHands Agent Server bridge
+## Model and provider boundary
 
-`delegate_openhands` connects to an already-running server over HTTP(S). The default endpoint is loopback `http://127.0.0.1:8000`; remote deployments must use HTTPS and an explicit server-side workspace path. `OPENHANDS_AGENT_PROFILE_ID` selects a server-owned Agent Profile, and the optional `OPENHANDS_SESSION_API_KEY` is read only from the OASIS host environment and sent in the server's `X-Session-API-Key` header. No OASIS provider key is forwarded. Redirects are disabled for authenticated requests. Delegation always requires manual approval, asks OpenHands for `AlwaysConfirm` and a worktree, polls the conversation for a bounded time, and best-effort interrupts the remote conversation if OASIS cancellation occurs. OpenHands tool confirmations must be reviewed through OpenHands itself; OASIS does not approve them automatically. This bridge does not install or configure the OpenHands server or its model profile.
+The provider adapter code is primarily in `src/config.mjs`, `src/cloud-providers.mjs`, and the request/stream handling in `src/agent.mjs`.
 
-## Model provider interface
+| Provider protocol / route | How it is connected |
+|---|---|
+| OpenAI Responses | Native Responses API path. |
+| OpenAI-compatible Chat Completions | Compatible gateways and local endpoints; the Gemini preset uses this protocol against Google's OpenAI-compatible endpoint. OmniRoute and OpenRouter are also configured through compatible endpoints. |
+| Anthropic Messages | Native Anthropic Messages API path. |
+| AWS Bedrock | Anthropic Messages-compatible request shape with Bedrock endpoint and AWS bearer-token or SigV4 authentication. Bedrock responses currently use the non-streaming invocation path. |
+| Google Vertex AI | Anthropic Messages-compatible request shape with Vertex endpoint, project/region and Google access-token authentication. |
+| Microsoft Foundry | Anthropic Messages-compatible request shape with Foundry deployment endpoint and Entra ID or API-key authentication. |
 
-The runtime supports the native OpenAI Responses API (`/responses` appended to the configured base URL), OpenAI-compatible Chat Completions (`/chat/completions`), and the native Anthropic Messages API (`/v1/messages`). The `setup_omniroute` chat/CLI tool can install OmniRoute after approval, start its local gateway after approval, run an inert tool-call probe, and save `http://127.0.0.1:20128/v1` with model `auto` only after the probe succeeds. `configure_provider` applies the same verify-before-save rule for supported presets. Loopback endpoints can use HTTP and optional local gateway keys; non-local providers must use HTTPS. Credentials are stored in the user config and never passed through model tool arguments.
+This is a protocol distinction, not a claim that every model on every provider has identical tool-calling, streaming, vision, context-window, or pricing behavior. The selected model and endpoint determine those capabilities. The Gemini setup is an OpenAI-compatible provider route; OASIS does not claim a separate native Gemini protocol adapter.
 
-## Browser workspace
+Provider setup tests a small inert tool-call schema before saving supported configurations. The probe response is checked but the proposed tool is not executed. A failed verification should not replace the previously working provider configuration. Optional easy/strong model routing is separate from provider selection, is off by default, and estimates cost from configured rates and observed usage; it does not guarantee savings or equal answer quality.
 
-The root `index.html` provides a dependency-free dashboard for projects, tasks, and notes. The browser stores workspace data in local storage and exports/imports JSON backups. The PWA manifest, SVG icon, and service worker support an installable app shell and static offline cache on compatible HTTPS hosts. Browser data is not encrypted and does not sync between devices.
+### Credential ownership
 
-## Quality gates
+- CLI and ordinary local browser mode use user-level OASIS configuration and environment overrides. On POSIX hosts, configuration files are written with restrictive permissions where supported; this is file-permission protection, not OS-backed encryption.
+- The Electron desktop provider form stores the API key separately using Electron `safeStorage`. It refuses to save a newly supplied key when the operating-system encryption facility is unavailable or is not considered secure by the host check.
+- The browser does not return a saved key to the page after configuration. Provider credentials should not be supplied in chat prompts, project files, screenshots, or tool arguments.
+- A local model endpoint can keep inference on the machine, but it does not change the privilege level of commands that OASIS launches.
 
-- `scripts/check-site.mjs`: validates interface anchors, inline JavaScript syntax, and PWA assets.
-- `test/runtime.test.mjs`: exercises configuration, install parsing, path protections, snapshots, approvals, environment filtering, private URL rejection, and a mock local model/tool loop.
-- test/eval.test.mjs covers task validation and a model run against a local OpenAI-compatible fixture server.
-- `.github/workflows/quality.yml`: runs the checks and package dry-run for pushes and pull requests.
-- The agent also has a read-only plan mode (`oasis plan` or `/plan`) with a separate tool allowlist and an executor-side check against write/command/install/delete/MCP calls. The quality gate runs `oasis eval --validate` to ensure each reference patch turns a failing no-op verifier into a passing verification.
-- `.github/workflows/pages.yml`: checks the repository and deploys the static site when GitHub Pages is configured.
+## Workspace tools and execution
 
-## Current architectural gaps
+The principal tool catalog and execution boundary live in `src/tools.mjs`; related command helpers live in `src/power-tools.mjs`, `src/process-tree.mjs`, `src/installer.mjs`, and `src/permissions.mjs`.
 
-OASIS is not feature-parity complete. It has a persistent PTY session API and browser xterm.js renderer, but native process-tree cleanup and Windows/macOS validation remain incomplete. There is no native VS Code/JetBrains extension; no Chrome-control, cloud-session, Remote Control, Slack, or cross-session messaging surface; no embedded GitHub OAuth; no general remote plugin marketplace; no Windows sandbox; and no native Gemini or Azure Foundry adapter. Shared agent tasks support exclusive lease claims/renewal, peer messages, named team lifecycle and bounded `dispatch_ready_tasks` waves in isolated worktrees. The dispatcher is model-directed, not an autonomous persistent scheduler; there is no dedicated visual team monitor or automatic conflict repair. Branch merges remain separately reviewed and approval-gated. The browser projects/tasks/notes store remains separate from CLI task/session data. HTTPS depends on user-provided certificates, with onboarding and real-device validation still incomplete. History compaction is best-effort and does not replace long-horizon evaluation. See [PROJECT_PLAN.md](PROJECT_PLAN.md) and [PROJECT_PLAN.md](PROJECT_PLAN.md) for the prioritized view.
+### File operations
 
+Workspace file tools include listing, globbing, literal search, bounded reads, exact-string edits, whole-file writes, notebook operations, and approved deletes. Paths are resolved against the selected workspace, with traversal and symlink checks and exclusions for common secret-bearing files. Additional directories can be granted explicitly in trusted settings. File reads and tool output have size limits.
 
-## Cross-ecosystem extension compatibility
+Before supported OASIS file edits, writes, and deletes, the runtime can capture the original file state for `/rewind`. Separate backup snapshots are stored outside the project in the user's OASIS configuration area. Shell commands such as `npm install`, custom scripts, formatters, and arbitrary programs are not automatically reversible by OASIS file checkpoints; use Git or the backup tools for those operations.
 
-OASIS's extension inspector detects portable Agent Skills layouts and compatible ecosystem, Codex, and Gemini CLI markers from a public GitHub tree. The report separates Markdown prompts the current runtime can load from commands, MCP declarations, hooks, executable files, and plugin-specific behavior that is only detected. Finding a manifest does not mean the full extension is operational. Imported prompt content remains untrusted, commit-pinned and integrity-tracked. Future adapters must convert each ecosystem into an explicit install plan, validate paths and dependency boundaries, and gate tool servers and lifecycle code through review, permissions, audit logs and rollback.
+### Command execution and approvals
 
+- The general `run_command` path starts one executable with an argument array and `shell: false`; it does not implicitly parse shell operators, pipes, substitutions, or redirections.
+- The optional `run_shell` path is a separate capability for shell syntax and is controlled by settings and permission policy.
+- Command/package operations go through permission modes, allow/ask/deny rules, command-risk analysis, and approval prompts. High-impact or ambiguous command forms receive stricter handling; an explicit `--yes` setting is not a universal override for every destructive or high-risk action.
+- Hooks can inspect, block, or rewrite tool requests. OASIS rechecks applicable permissions after pre-tool hooks have changed an input.
+- Common credential variables are filtered from child-process environments by default. Extra variables should be allowlisted only when a specific command needs them.
+- Process-tree management is used for cancellation and timeouts so child processes and descendants are not intentionally left running after a managed command is stopped.
 
-## Portable Agent Skills resources
+An approval prompt is a user decision about an operation; it is not an operating-system sandbox. Unsandboxed child processes normally run with the operating-system permissions of the user who launched OASIS.
 
-For standard `skills/<name>/SKILL.md` packages, OASIS preserves bounded text references/assets under `references/` and `assets/` beside the imported skill. Resource hashes are recorded in the extension manifest. `read_skill_resource` rejects traversal and symbolic links, only reads manifest-listed text files, and verifies integrity before returning content. Scripts, binaries, lifecycle hooks, MCP configuration and dependency installation remain inactive; this is portable-skill resource support, not full third-party plugin compatibility.
+### Optional OS sandbox
+
+The OS sandbox is implemented in `src/sandbox.mjs` and is disabled by default.
+
+| Host | Mechanism | Boundary |
+|---|---|---|
+| Linux | bubblewrap (`bwrap`) | Read-only host view, writable workspace and explicitly configured additional directories, private temporary area, and network namespace disabled unless enabled. Requires a working bubblewrap/user-namespace setup. |
+| macOS | `sandbox-exec` profile | Restricts writes outside permitted workspace/temp paths and can deny network access unless enabled. |
+| Windows / other unsupported hosts | No OASIS-native OS sandbox | Approval and command controls remain available, but they are not equivalent to OS isolation. |
+
+If the user explicitly enables the OS sandbox and the required mechanism is unavailable, OASIS refuses to run the command without the requested isolation. The sandbox is not full filesystem-read isolation. It should not be described as a hardened container or a guarantee that arbitrary project code is safe.
+
+## Agent coordination and longer work
+
+OASIS has multiple coordination mechanisms. They share concepts such as task records and worker events, but they are not one persistent distributed scheduler.
+
+### Subagents and named teams
+
+`src/subagents.mjs` and `src/agent-tasks.mjs` define child agents, the bounded parallel launch pool, background-worker records, named team rosters, and lifecycle events.
+
+- A subagent receives its own context window and a bounded task description. Its final report is returned to the parent.
+- Several subagent calls can run in parallel (the regular subagent pool is bounded at six). The separate background-agent registry has its own limit.
+- Agents in the same workspace can share session-local task state and, when placed in a named team, can send coordination messages to teammates.
+- By default, agents may share the same workspace. Parallel editing in a shared checkout can conflict; use read-only work, explicitly separated files, or `isolation: "worktree"`.
+- Named teams have create/status/shutdown operations and a roster. Team metadata and in-memory worker processes are not a persistent service that survives a runtime restart.
+
+### Shared task board and isolated dispatch
+
+`src/shared-tasks.mjs` provides a dependency-aware task board for the current session. It validates identifiers, dependencies, cycles, ownership and status transitions. Claims use an exclusive expiring lease (default 15 minutes; configurable from 30 seconds to one hour). Workers can renew or release their own lease, save a bounded redacted task checkpoint, and claim a ready task after a previous lease expires.
+
+`dispatch_ready_tasks` can send a bounded wave of ready tasks to background agents. Those dispatched workers use separate Git worktrees, must claim their assigned task, and do not merge their branches automatically. Optional auto-dispatch can keep filling available slots while the originating OASIS session remains alive; it pauses on failed/cancelled work or tasks left incomplete. It is not an always-on service, and a worktree merge remains a separate review/approval action.
+
+The shared task board is persisted as sanitized session metadata. On session restoration, active leases are deliberately cleared because their worker processes did not survive. A task checkpoint can help a later worker continue, but it does not revive the original process or prove that work resumed.
+
+### Dynamic workflow scripts
+
+`src/workflows.mjs` and `src/workflow-sandbox.mjs` implement JavaScript orchestration scripts. A workflow can describe phases, call agents, fan work out through pipelines or parallel groups, collect structured results, and report progress. The workflow script runs in a restricted JavaScript environment: it does not receive general filesystem, shell, module-import, wall-clock, or random-number access. The agents it asks to do work use the normal OASIS session, permission and tool boundaries.
+
+Workflow orchestration limits work and concurrency; it is not a replacement for the permission system on the worker agents. A failed child result is represented explicitly rather than being silently treated as successful completion.
+
+### Background jobs and restart behavior
+
+The browser run monitor observes existing job/agent records; it is not a second orchestrator. `src/cloud-task-store.mjs` is named for historical reasons: it is a local persistence layer under the user's private OASIS configuration directory, not a hosted cloud scheduler or remote database. It stores bounded, sanitized job metadata and event history using restrictive permissions and atomic replacement.
+
+When the browser runtime restarts, the stored run record can be shown as interrupted. It does not restore the in-memory worker process, team registry, pending approval, or a live PTY. The monitor can reopen a validated saved parent conversation for user-directed follow-up on eligible workspace-mode runs; it does not revive a worker, replay an old approval, resolve worktree conflicts, or merge a branch.
+
+A separate background-session facility can persist command/session records and can start a new process to continue an explicitly resumable CLI session. That is a new process using saved session context, not restoration of the original process identity or memory.
+
+## Connected browser workspace
+
+`src/web.mjs` hosts the local UI and its JSON API. By default it binds to loopback (`127.0.0.1`) on a selected port. The process creates a fresh random bearer token; API requests require that token in the Authorization header. API routes additionally validate the Host and same-origin Origin against localhost or a literal IP address, and request bodies are bounded. The service worker caches static app assets only; it must not cache authenticated `/api/*` responses.
+
+For a non-loopback listener, HTTPS with a user-supplied certificate and private key is required by default. OASIS enforces TLS 1.2 or newer and checks private-key permissions on POSIX hosts. Plain HTTP on a non-loopback address requires the explicit `--allow-insecure-lan` opt-in and is not suitable for untrusted networks. The local bearer token is a connection credential for that runtime; it is not the provider's model API key. Do not expose the browser bridge to the public Internet.
+
+### Chat and approvals
+
+Browser chat jobs call the shared agent runtime and stream bounded events for assistant output, tool activity, usage, completion, and approval requests. Consequential operations can be approved or denied in the browser. Cancellation denies outstanding approvals, aborts supported model/command operations, and records a terminal state; it cannot undo changes that completed before cancellation.
+
+### Terminal
+
+The browser workspace has two execution shapes that should not be conflated:
+
+- The ordinary command/job path launches an argv-based command through the normal OASIS execution controls.
+- The interactive Terminal panel has a persistent PTY path managed by `src/pty-sessions.mjs`. It uses the optional native `node-pty` dependency, has bounded output/session limits, and exposes read, input, resize, interrupt and stop operations through authenticated API routes.
+
+If the optional native PTY dependency is unavailable, normal command execution remains available but the interactive PTY path is not. Automated native PTY integration currently covers Linux/Node.js 22; the wider cross-platform browser-terminal lifecycle still needs additional testing. Android/Termux PTY support is not guaranteed.
+
+### Browser state ownership
+
+The Projects, Tasks and Notes dashboard data is stored in browser local storage and can be exported/imported as JSON. It is not the same store as CLI project instructions, agent conversations, shared agent tasks, or local job history. Agent sessions are stored in the host user's OASIS config directory. A browser page opened without the local runtime cannot execute agent tools.
+
+## Integrations and extension boundaries
+
+Integrations are separate trust domains. Enabling an integration makes its tool definitions available; it does not make the external code trustworthy.
+
+| Integration | Implementation and behavior |
+|---|---|
+| MCP | `src/mcp.mjs` and related modules connect configured stdio and HTTP MCP servers, negotiate capabilities, discover tools, and map them into the agent session. Calls are permission-controlled; configuration and activation are explicit. |
+| Hooks | `src/hooks.mjs` implements lifecycle hooks, including command, HTTP, MCP-tool, prompt and agent hook types. Hooks can block, rewrite, or add context. Hooks may execute code or send data externally and are loaded from user settings or trusted project settings. |
+| Built-in capability bundles | `plugins/catalog.json` and `src/plugins.mjs` install reviewed bundles of workflow instructions. The bundle install itself does not silently run setup scripts, install dependencies, start servers, or grant credentials. |
+| Compatible plugin marketplaces | `src/claude-plugins.mjs` supports a substantial set of Claude Code-compatible marketplace/plugin components, including commands, skills, hooks, MCP, LSP, monitors and executable plugin bins. This is feature-specific compatibility, not a guarantee that every third-party plugin works identically. Plugin hooks, MCP servers and executables can run with the user's permissions. |
+| Native OASIS plugin packages | `src/native-plugins.mjs` validates local package manifests and explicit permissions, and supports staged installation/update/uninstall. Capability changes require explicit acceptance. This is a distinct package format from the compatible marketplace adapter. |
+| GitHub extension import | `src/extensions.mjs` inspects a public GitHub repository, presents detected components, and pins import/update to a reviewed commit. Markdown agent/skill prompts and approved portable text resources can be imported with source/integrity metadata. It does not activate imported scripts, hooks, binaries, dependencies or MCP servers as part of prompt import. |
+| OpenHands bridge | `delegate_openhands` connects to an already-running Agent Server and server-owned Agent Profile. Delegation requires OASIS approval; OASIS does not pass its own model credential to OpenHands and does not approve OpenHands tool confirmations. |
+| Language servers | `src/lsp.mjs` manages configured LSP processes for symbol navigation and diagnostics. Servers start on demand with approval; an unavailable server is reported as unavailable, not as a clean check. |
+
+### GitHub paths
+
+There are two separate GitHub integrations:
+
+1. The browser repository browser reuses the host's GitHub CLI authentication. It supports status, bounded repository listing and approved clone into the launch workspace's `.oasis/workspaces/` directory. It is not embedded OAuth or a browser UI for arbitrary branch/push/PR operations.
+2. The GitHub Action runs in a GitHub Actions checkout using the OASIS SDK. It can react to authorized `@oasis` mentions on issues and pull requests, run a task, verify it, and publish changes. Depending on the triggering event, it can push to a PR branch or create a branch and open a PR for an issue/task. This CI automation is separate from the browser repository picker.
+
+## Data stores and lifetimes
+
+| Data | Location / owner | Lifetime and important boundary |
+|---|---|---|
+| Provider configuration | User-level OASIS config plus environment overrides | Not written into the project by normal CLI setup. CLI config-file storage is permission-restricted where supported, not encrypted by default. Desktop API keys use OS-backed Electron storage when available. |
+| Saved agent sessions | User-level config, under a workspace-derived session directory | Bounded JSON records written atomically with restrictive POSIX permissions where supported. Message history is capped; image attachments are not saved. Sessions are workspace-bound and validated when loaded. |
+| Rewind checkpoints | In-memory session state | Captures supported OASIS file-tool changes for recent turns. Not persisted as a durable restore point and does not capture arbitrary shell side effects. |
+| Backup snapshots | User-level OASIS config directory | Separate recoverable copies of supported file changes; outside the project checkout. |
+| Memory and instructions | User/project instruction files and OASIS memory directories | Layered text context. Imported/project instructions are data for the model, not a way to override OASIS's base policy. |
+| Shared task board | Sanitized saved-session metadata | Tasks and progress checkpoints can persist; active leases are cleared on restore because worker processes are not restored. |
+| Browser job history | User-level OASIS config directory | Bounded local metadata and event history. Restart converts unfinished browser jobs to interrupted records. |
+| Browser Projects/Tasks/Notes | Browser local storage | Local to that browser profile; separate from CLI sessions and workspace files. |
+| MCP / plugin configuration | User/project config and plugin directories | Activation may start third-party processes or execute hooks; review before enabling. |
+| Telemetry | Disabled unless explicitly enabled | Optional OTLP/HTTP metrics, events and traces. Prompt text is not exported unless the relevant explicit opt-in is enabled. |
+
+`oasis purge` removes selected project-scoped local state after confirmation; memory is kept unless the memory option is explicitly requested. It is not a secure-erasure tool for backups, external providers, system logs, or arbitrary files created by project commands.
+
+## Trust boundaries
+
+The important boundaries are:
+
+1. **Model provider:** prompts, selected context, and tool results needed for the task may leave the machine when using a hosted model. Provider retention and processing are governed by the provider's own terms.
+2. **Project workspace:** repository files and project instructions are untrusted input. Workspace path checks limit OASIS file tools, but they do not make project scripts benign.
+3. **Operating-system process:** approved commands and installers execute code. Without the optional OS sandbox, they run with the launching user's OS privileges.
+4. **Third-party integration:** MCP servers, hooks, plugins, imported skills, LSP servers, and OpenHands are distinct components with their own code and data access. Their permissions and network behavior must be reviewed.
+5. **Browser client:** the local API is protected by a random bearer token and same-origin/host validation. Anyone who obtains that token and can reach the listener may be able to act through the local runtime; keep it private.
+6. **Persisted local data:** sessions, job history, task metadata, and browser local storage contain project/workflow context. Restrictive file permissions are not the same as encryption.
+
+Approval prompts, model instructions, imported skills, and this architecture document are not security boundaries. The enforcement boundary is the OASIS runtime's validated tool execution, permission policy, and—where supported and explicitly enabled—the OS sandbox.
+
+## Quality and verification architecture
+
+The repository uses several levels of verification; each answers a different question.
+
+- Unit and integration tests exercise provider configuration, tool contracts, path handling, permission decisions, hooks, MCP, sessions, worktrees, task leases, PTY lifecycle, browser API behavior, and platform-specific code paths where available.
+- The public-site checks validate the static dashboard and repository metadata.
+- Installer checks exercise supported installer scripts on Windows, macOS and Ubuntu.
+- Quality Checks run the test suite, Node/package-integrity matrix, evaluation-manifest validation and other repository gates.
+- Desktop packaging builds platform artifacts in CI. A successful build does not prove clean-machine install, first-run, updates, publisher identity, or security certification.
+- The evaluation harness validates pinned reference tasks and can compare saved reports. The current 33-task suite is a smoke/regression harness, not a representative repository-scale coding benchmark.
+
+CI passing is evidence for the exact commit and jobs that ran. A green older run is not verification of a newer commit. For current statuses and release gates, use the [project plan](PROJECT_PLAN.md).
+
+## Current architectural limits
+
+- OASIS is Beta software; no production security certification or universal platform qualification is claimed.
+- The optional OS sandbox is Linux/macOS only, disabled by default, and not full filesystem-read isolation. There is no native Windows OS sandbox.
+- Android has no native APK release. The CLI can be tried through Termux; native PTY and background behavior are not guaranteed.
+- Browser Projects/Tasks/Notes data does not synchronize with CLI task/session state. There is no hosted account or cloud synchronization layer.
+- Browser job records and task checkpoints can survive a runtime restart, but the live worker processes, in-memory team registry, PTY sessions and pending approvals do not.
+- Parallel subagents that share one working tree can conflict. Worktree isolation separates edits, but branch merges remain separately reviewed; automatic conflict resolution is not provided.
+- The browser GitHub repository picker is limited and uses host-side GitHub CLI authentication. It is not embedded OAuth or a complete GitHub project-management client.
+- Plugin and extension compatibility is feature-specific; detected metadata is not proof that every component can run.
+- Desktop packages are unsigned at this stage; signing, publisher provenance and automatic desktop updates are not configured.
+- HTTPS remote access requires user-provided certificates and additional real-device/device-trust testing. Non-loopback plaintext is an explicit insecure opt-in, not a recommended deployment.
+- The current evaluator does not establish head-to-head model parity, speed, accuracy, or guaranteed token savings.
+
+These are current engineering boundaries, not statements that the corresponding work is impossible. Future proposals are tracked separately in [research notes](research/README.md) and must not be read as shipped architecture.
+
+## Source map
+
+| Concern | Primary implementation |
+|---|---|
+| CLI and headless runtime | `src/cli.mjs`, `src/headless.mjs` |
+| Agent loop, sessions and verification | `src/agent.mjs`, `src/sessions.mjs`, `src/checkpoints.mjs` |
+| Provider configuration and adapters | `src/config.mjs`, `src/cloud-providers.mjs` |
+| Tool execution and workspace checks | `src/tools.mjs`, `src/power-tools.mjs`, `src/process-tree.mjs` |
+| Permission policy and OS sandbox | `src/permissions.mjs`, `src/sandbox.mjs`, `src/settings.mjs` |
+| Subagents, teams and task board | `src/subagents.mjs`, `src/agent-tasks.mjs`, `src/shared-tasks.mjs`, `src/session-messaging.mjs` |
+| Dynamic workflows | `src/workflows.mjs`, `src/workflow-sandbox.mjs` |
+| Browser API, terminal and monitoring | `src/web.mjs`, `src/pty-sessions.mjs`, `src/cloud-task-store.mjs` |
+| MCP, hooks and extension ecosystem | `src/mcp.mjs`, `src/hooks.mjs`, `src/claude-plugins.mjs`, `src/native-plugins.mjs`, `src/extensions.mjs` |
+| SDK and GitHub Action | `src/sdk.mjs`, `src/github-action.mjs`, `action.yml` |
+| Electron desktop host | `desktop/main.mjs`, `desktop/secure-secrets.mjs` |
+| VS Code-family extension | `ide/vscode/`, `src/ide.mjs` |
+| Language-server integration | `src/lsp.mjs` |
+| Memory, backups and telemetry | `src/memory.mjs`, `src/backups.mjs`, `src/telemetry.mjs` |
+
+## Related references
+
+- [User guide](USER_GUIDE.md) — commands, configuration, integrations and common workflows.
+- [Project plan](PROJECT_PLAN.md) — implemented inventory, current Beta boundaries and release acceptance gates.
+- [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) — dated findings, mitigations and residual risks.
+- [Privacy notes](PRIVACY.md) — provider data flows, local storage, credentials and integrations.
+- [Workflows and skills](WORKFLOWS_AND_SKILLS.md) — reusable workflow and instruction model.
+- [Documentation index](README.md) — all canonical guides, release notes and research archives.

@@ -1,6 +1,6 @@
 # OASIS user guide
 
-For the project overview and quickest start, see the [main README](../README.md). For an audited implementation inventory and truthful statement of known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
+For the project overview and quickest start, see the [main README](../README.md). For the system map and component boundaries, see the [architecture guide](ARCHITECTURE.md). For the implementation inventory and known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
 ## Quick navigation
 
