@@ -1775,18 +1775,44 @@ document.addEventListener('click',function(e){var b=e.target.closest('[data-send
 new MutationObserver(function(){if(document.querySelector('[data-send-key-toggle]:empty'))renderSendKeyHints()}).observe(document.body,{childList:true,subtree:true});
 renderSendKeyHints();
 var prompt=$('agentPrompt'),form=$('agentForm'),send=$('agentSendBtn');
+/* ---------- Queue messages while a turn runs ---------- */
+var queued=[],queueBox=document.createElement('div');queueBox.className='agent-queue';queueBox.hidden=true;queueBox.setAttribute('role','status');
+function renderQueue(){
+  queueBox.replaceChildren();queueBox.hidden=!queued.length;
+  queued.forEach(function(text,i){
+    var row=document.createElement('div');row.className='agent-queue-item';
+    var label=document.createElement('span');label.className='agent-queue-text';label.textContent=text.length>140?text.slice(0,140)+'…':text;label.title=text;
+    var tag=document.createElement('span');tag.className='agent-queue-tag';tag.textContent=i===0?'Next':'Queued';
+    var edit=document.createElement('button');edit.type='button';edit.className='agent-queue-btn';edit.textContent='Edit';edit.addEventListener('click',function(){queued.splice(i,1);prompt.value=(prompt.value?prompt.value+'\n':'')+text;renderQueue();autosize();syncSend();prompt.focus()});
+    var drop=document.createElement('button');drop.type='button';drop.className='agent-queue-btn';drop.setAttribute('aria-label','Remove queued message');drop.textContent='×';drop.addEventListener('click',function(){queued.splice(i,1);renderQueue();syncSend()});
+    row.append(tag,label,edit,drop);queueBox.appendChild(row);
+  });
+}
+function queueMessage(){
+  var text=prompt.value.trim();if(!text||queued.length>=5)return;
+  queued.push(text);prompt.value='';renderQueue();autosize();syncSend();
+  if(typeof window.notify==='function')window.notify('Queued. It sends when the current turn ends.');
+}
+var composeEl=document.querySelector('.agent-compose');if(composeEl)composeEl.insertBefore(queueBox,composeEl.firstChild);
+C.hook('agentSetBusy',function(prev){return function(v){
+  prev(v);if(prompt){prompt.disabled=false;prompt.placeholder=v?'Type to queue a follow-up for when this turn ends…':'Ask Oasis to build, fix or explain anything…'}syncSend();
+  if(v||!queued.length)return;
+  var state=($('agentRuntimeState')||{}).textContent||'';
+  if(/Cancelled|error/i.test(state)){prompt.value=queued.join('\n\n')+(prompt.value?'\n\n'+prompt.value:'');queued=[];renderQueue();autosize();syncSend();if(typeof window.notify==='function')window.notify('The turn stopped, so your queued messages are back in the box.');return}
+  setTimeout(function(){if(C.busy||!queued.length)return;var next=queued.shift();renderQueue();var keep=prompt.value;prompt.value=next;form.requestSubmit();if(keep&&!prompt.value)prompt.value=keep;autosize();syncSend()},350);
+}});
 if(prompt){prompt.rows=1;prompt.placeholder='Ask Oasis to build, fix or explain anything…'}
 function autosize(){if(!prompt)return;prompt.style.height='auto';prompt.style.height=Math.min(prompt.scrollHeight,280)+'px';var c=document.querySelector('.agent-compose');if(c&&chatPanel)chatPanel.style.setProperty('--compose-h',c.offsetHeight+'px')}
-function syncSend(){if(send&&prompt)send.disabled=!!C.busy||!prompt.value.trim()}
+function syncSend(){if(!send||!prompt)return;send.disabled=!prompt.value.trim()||(!!C.busy&&queued.length>=5);var label=send.querySelector('span');if(label)label.textContent=C.busy?'Queue':'Send';send.setAttribute('aria-label',C.busy?'Queue message for when this turn ends':'Send')}
 if(prompt){
   prompt.addEventListener('input',function(){autosize();syncSend()});
   prompt.addEventListener('keydown',function(e){
     if(e.defaultPrevented||e.isComposing)return;
-    if(e.key==='Enter'&&!e.shiftKey&&!e.altKey){var mod=e.ctrlKey||e.metaKey;if(sendWithMod()&&!mod)return;e.preventDefault();if(prompt.value.trim()&&!C.busy)form.requestSubmit()}
-    if(e.key==='Escape'&&C.busy){var stop=$('agentStopBtn');if(stop&&!stop.hidden)stop.click()}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.altKey){var mod=e.ctrlKey||e.metaKey;if(sendWithMod()&&!mod)return;e.preventDefault();if(prompt.value.trim()){if(C.busy)queueMessage();else form.requestSubmit()}}
+    if(e.key==='Escape'&&C.busy&&!prompt.value.trim()){var stop=$('agentStopBtn');if(stop&&!stop.hidden)stop.click()}
     if(e.key==='ArrowUp'&&!prompt.value&&lastPrompt){e.preventDefault();prompt.value=lastPrompt;autosize();syncSend()}
   });
-  var lastPrompt='';form.addEventListener('submit',function(){lastPrompt=prompt.value;setTimeout(function(){autosize();syncSend()},0)},true);
+  var lastPrompt='';form.addEventListener('submit',function(e){if(C.busy){e.preventDefault();e.stopImmediatePropagation();queueMessage();return}lastPrompt=prompt.value;setTimeout(function(){autosize();syncSend()},0)},true);
   autosize();syncSend();
 }
 /* ---------- Global shortcuts ---------- */
