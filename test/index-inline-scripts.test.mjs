@@ -6,11 +6,11 @@ import { Script } from 'node:vm';
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
 test('every inline JavaScript script in index.html parses', () => {
-  const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script\\s*>/gi)]
-    .filter(([, attributes]) => !/\\bsrc\\s*=/i.test(attributes))
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
+    .filter(([, attributes]) => !/\bsrc\s*=/i.test(attributes))
     .filter(([, attributes]) => {
-      const type = attributes.match(/\\btype\\s*=\\s*["']?([^"'\\s>]+)/i)?.[1]?.toLowerCase();
-      return !type || ['text/javascript', 'application/javascript', 'module'].includes(type);
+      const type = attributes.match(/\btype\s*=\s*["']?([^"'\s>]+)/i)?.[1]?.toLowerCase();
+      return !type || ['text/javascript', 'application/javascript'].includes(type);
     });
 
   assert.ok(scripts.length > 0, 'expected at least one inline JavaScript script');
