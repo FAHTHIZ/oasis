@@ -31,8 +31,16 @@ test('browser runtime prevents two mutating jobs from running in one workspace a
   let app;
   t.after(async () => {
     if (providerRelease) providerRelease();
-    if (app) await app.close();
-    await new Promise((resolve) => providerServer.close(resolve));
+    if (app) {
+      const closing = app.close();
+      app.server.closeAllConnections?.();
+      await closing;
+    }
+    if (providerServer.listening) {
+      const closing = new Promise((resolve) => providerServer.close(resolve));
+      providerServer.closeAllConnections?.();
+      await closing;
+    }
     await rm(temp, { recursive: true, force: true });
   });
 
