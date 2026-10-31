@@ -151,14 +151,30 @@ function formatNumber(value) {
 }
 
 export function createUsageTracker() {
-  return { inputTokens: 0, outputTokens: 0, totalTokens: 0, requests: 0, turns: 0 };
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    requests: 0,
+    turns: 0,
+    costUSD: 0,
+    costKnown: true,
+    costRequests: 0,
+    routingTasks: 0,
+    routingSavingsUSD: 0
+  };
 }
 
 export function recordUsage(tracker, usage = {}) {
   tracker.inputTokens += Number(usage.inputTokens || 0);
   tracker.outputTokens += Number(usage.outputTokens || 0);
   tracker.totalTokens += Number(usage.totalTokens || 0);
-  if (usage.phase === undefined) tracker.requests += 1;
+  if (usage.phase === undefined) {
+    tracker.requests += 1;
+    tracker.costRequests = (tracker.costRequests || 0) + 1;
+    if (usage.costKnown === false) tracker.costKnown = false;
+    else tracker.costUSD = Number(tracker.costUSD || 0) + Number(usage.costUsd || 0);
+  }
 }
 
 export async function runBuiltinCommand(name, argument, state) {
@@ -480,12 +496,19 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'cost': {
       const u = usage || createUsageTracker();
-      const spent = session && typeof session.costUsd === 'number' ? session.costUsd : (u.costUsd || 0);
       const { formatUsd, priceFor } = await import('./pricing.mjs');
       const model = session && session.config && session.config.model || '';
       const priced = priceFor(model, { config: session && session.config || {}, overrides: session && session.pricing || {} });
-      const money = priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.' : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
-      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money };
+      const trackedCost = Number.isFinite(u.costUSD) && (u.costRequests || 0) > 0 && u.costKnown !== false;
+      const spent = trackedCost ? u.costUSD : (session && typeof session.costUsd === 'number' ? session.costUsd : 0);
+      const money = trackedCost
+        ? ' Estimated cost: ' + formatUsd(spent) + (priced && priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
+        : priced ? ' Estimated cost: ' + formatUsd(spent) + (priced.local ? ' (local model)' : '') + (session && session.maxBudgetUsd ? ' of a ' + formatUsd(session.maxBudgetUsd) + ' budget' : '') + '.'
+          : ' Cost: unknown for ' + (model || 'this model') + ' (add "pricing" in settings to estimate).';
+      const routingNote = Number(u.routingTasks || 0) > 0
+        ? ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); estimated net savings versus the strong model: ' + formatUsd(u.routingSavingsUSD || 0) + '.'
+        : '';
+      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money + routingNote };
     }
     case 'routing': {
       if (!session) return { output: 'Start a provider session before configuring model routing.' };
