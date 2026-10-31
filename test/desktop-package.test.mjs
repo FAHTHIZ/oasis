@@ -31,7 +31,9 @@ test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', (
 test('install instructions explain desktop release and current OS signing limitations', () => {
   assert.match(installGuide, /do not need to install Node\.js or Git/i);
   assert.match(installGuide, /unsigned/i);
-  assert.match(installGuide, /releases\/latest/i);
+  assert.match(installGuide, /github\.com\/FAHTHIZ\/oasis\/releases/i);
+  assert.match(installGuide, /no published GitHub Release or public desktop installer asset/i);
+  assert.match(installGuide, /Use the CLI installation path below/i);
 });
 
 const webRuntime = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
