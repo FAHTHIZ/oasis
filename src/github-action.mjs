@@ -107,19 +107,6 @@ function commentBody(status, details = []) {
 
 // Commits whatever the agent changed and pushes it. For pull requests from this
 // repository, it pushes to the PR branch. Otherwise it pushes a new branch and opens a PR.
-export function verificationIsComplete(verification) {
-  if (!verification || typeof verification !== 'object' || Array.isArray(verification)) return false;
-  const required = verification.required === true;
-  const diffReviewed = !required || verification.diffReviewed === true;
-  const check = verification.lastCheck && typeof verification.lastCheck === 'object'
-    ? verification.lastCheck
-    : null;
-  const projectCheckPassed = !required || verification.checkRequired !== true ||
-    Boolean(check && check.passed === true && check.exitCode === 0);
-  return verification.complete === true && diffReviewed && projectCheckPassed &&
-    (!Array.isArray(verification.issues) || verification.issues.length === 0);
-}
-
 function safeVerificationText(value, maximum = 240) {
   return String(value == null ? '' : value)
     .replace(/[^A-Za-z0-9 _./:,-]/g, ' ')
