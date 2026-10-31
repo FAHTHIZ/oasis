@@ -4,7 +4,7 @@ OASIS is Beta software. Use a project folder you trust, review permission prompt
 
 ## Desktop app — no terminal required
 
-The Electron app is packaged for Windows, macOS and Linux. Open the [latest published OASIS release](https://github.com/FAHTHIZ/oasis/releases/latest) and choose the matching asset.
+The Electron app is packaged for Windows, macOS and Linux. Open the [latest published OASIS release](https://github.com/FAHTHIZ/oasis/releases/latest) and choose the matching asset. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
 
 | Operating system | Download | First launch |
 |---|---|---|
@@ -45,8 +45,8 @@ Download and verify both the installer and resolver helper before running:
 $d=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Force -Path $d | Out-Null; $p=Join-Path $d 'install.ps1'; $h=Join-Path $d 'release-resolution.ps1'; try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.ps1' -OutFile $p; Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/release-resolution.ps1' -OutFile $h; $expected='46ac435b8c2d0f68504ac2bec8b8fa0f9786c073f670a6980e56315d50650a3e'; $actual=(Get-FileHash $p -Algorithm SHA256).Hash.ToLowerInvariant(); $helperExpected='a88ec877205ab792310c04179f702ceff13bfb3adb5d2d58345bb70fc459a19d'; $helperActual=(Get-FileHash $h -Algorithm SHA256).Hash.ToLowerInvariant(); if($actual -ne $expected -or $helperActual -ne $helperExpected){throw 'Installer checksum mismatch. Do not run either file.'}; & $p; $code=$LASTEXITCODE } finally { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }; if ($null -ne $code) { exit $code }
 ```
 
-**Installer SHA-256:** `46ac435b8c2d0f68504ac2bec8b8fa0f9786c073f670a6980e56315d50650a3e`  
-**Resolver helper SHA-256:** `a88ec877205ab792310c04179f702ceff13bfb3adb5d2d58345bb70fc459a19d`
+**Windows installer SHA-256:** `46ac435b8c2d0f68504ac2bec8b8fa0f9786c073f670a6980e56315d50650a3e`  
+**Windows resolver helper SHA-256:** `a88ec877205ab792310c04179f702ceff13bfb3adb5d2d58345bb70fc459a19d`
 
 If any checksum differs, do not run the downloaded file. The installer sets up the CLI, runs `oasis doctor` and opens guided provider setup. npm publishing is not enabled; the source-archive install path is used.
 
