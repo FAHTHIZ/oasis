@@ -1031,8 +1031,10 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   };
   const session = await createSession({ root, config });
   const compactions = [];
+  const usageEvents = [];
   const result = await runAgentTurn(session, 'Inspect large.txt repeatedly and report what you learned.', {
-    onCompaction: (event) => compactions.push(event)
+    onCompaction: (event) => compactions.push(event),
+    onUsage: (event) => usageEvents.push(event)
   });
 
   assert.equal(result.finished, true);
@@ -1056,6 +1058,15 @@ test('mid-turn compaction summarizes completed tool rounds without dropping the 
   assert.equal(compactions[0].midTurn, true);
   assert.equal(compactions[0].removedToolResults, 3);
   assert.equal(compactions[0].usedModelSummary, true);
+  assert.ok(compactions[0].savedTokens > 0);
+  assert.match(compactions[0].note, /^Saved about [\\d,]+ tokens/);
+  assert.equal(compactions[0].notesSaved, true);
+  assert.ok(usageEvents.length > 0);
+  assert.equal(usageEvents[0].costKnown, false, 'unknown model prices must not look like free usage');
+  assert.equal(usageEvents[0].model, 'fixture-model');
+  assert.equal(usageEvents[0].step, 1);
+  const continuity = await readFile(path.join(root, '.oasis', 'session-notes.md'), 'utf8');
+  assert.match(continuity, /The completed earlier rounds read large\\.txt repeatedly/);
   assert.ok(compactions[0].afterChars < compactions[0].beforeChars);
 });
 
