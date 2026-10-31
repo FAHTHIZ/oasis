@@ -209,6 +209,28 @@ async function stagedSecretHits(root, prefixes, env) {
 
 // For raw `git commit` through run_command/run_shell: scans the real index
 // (plus tracked changes with -a/--all) without modifying anything.
+// Project rules such as "never commit to main" (see rule-refresh.mjs), enforced for
+// git_commit / git_push and for raw `git commit` / `git push` command lines.
+async function branchRuleBlock(root, action, rules, env, pushArgs = null) {
+  if (!rules || !((rules.commit && rules.commit.length) || (rules.push && rules.push.length))) return '';
+  const { branchRuleViolation, pushTargetsFromArgs } = await import('./rule-refresh.mjs');
+  const branch = await currentBranch(root, await commandEnv(env || process.env, false)).catch(() => null);
+  const pushTargets = action === 'push' ? pushTargetsFromArgs(pushArgs || [], branch) : [];
+  return branchRuleViolation(rules, { action, branch, pushTargets });
+}
+
+export async function rawBranchRuleBlock(root, command, args, rules, env = process.env) {
+  if (!rules) return '';
+  const { gitCommitInvocation, gitPushInvocation } = await import('./git-safety.mjs');
+  if (gitCommitInvocation(command, args)) {
+    const blocked = await branchRuleBlock(root, 'commit', rules, env);
+    if (blocked) return blocked;
+  }
+  const pushArgs = gitPushInvocation(command, args);
+  if (pushArgs) return await branchRuleBlock(root, 'push', rules, env, pushArgs);
+  return '';
+}
+
 export async function rawCommitSecretHits(root, { all = false, env = process.env } = {}) {
   if (/^(0|off|false)$/i.test(String(env.OASIS_COMMIT_SECRET_SCAN ?? ''))) return [];
   const { findSecretsInDiff } = await import('./secret-shield.mjs');
@@ -230,6 +252,10 @@ async function gitCommit(root, args, options) {
   await ensureRepository(root, env);
   const message = String(args.message || '').replace(/\r\n/g, '\n').trim();
   if (!message) return fail('A commit message is required.');
+  {
+    const blocked = await branchRuleBlock(root, 'commit', options.branchRules, options.env);
+    if (blocked) return fail(blocked);
+  }
   if (message.length > 10000) return fail('The commit message is too long.');
   const prefixes = [];
   for (const item of Array.isArray(args.paths) ? args.paths.slice(0, 200) : []) {
@@ -290,6 +316,10 @@ async function gitBranch(root, args, options) {
 async function pushBranch(root, remote, env, options) {
   const branch = await currentBranch(root, env);
   if (!branch) return fail('HEAD is detached; create a branch first with git_branch.');
+  {
+    const blocked = await branchRuleBlock(root, 'push', options.branchRules, options.env, [remote]);
+    if (blocked) return fail(blocked);
+  }
   const remotes = await git(root, ['remote'], { env });
   if (!remotes.stdout.split('\n').includes(remote)) return fail('There is no Git remote named ' + remote + '.');
   const out = await git(root, ['push', '--set-upstream', remote, 'HEAD:refs/heads/' + branch], { env, timeout: 300000, signal: options.signal });

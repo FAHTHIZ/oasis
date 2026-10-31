@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
+import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
 import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
@@ -679,6 +680,9 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.restricted = true;
   }
   if (subagentSystemAppend) session.subagentSystemAppend = String(subagentSystemAppend);
+  session.hardRules = extractHardRules(projectContext);
+  session.branchRules = extractBranchRules(projectContext);
+  session.rulesRefreshedAtChars = historyTextSize(session.messages || []);
   if (['low', 'medium', 'high', 'max'].includes(String(loadedSettings && loadedSettings.subagentEffort || '').toLowerCase())) session.subagentEffort = String(loadedSettings.subagentEffort).toLowerCase();
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
@@ -2450,6 +2454,7 @@ async function runSubagent(parent, args, context, options) {
     root: worktree ? worktree.path : parent.root,
     config: subagentEffortConfig(parent, agent, options.env || process.env, args.model && modelAllowed(String(args.model), parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: String(args.model) } : agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: agent.model } : parent.config),
     sessionId: parent.sessionId,
+    branchRules: parent.branchRules,
     messages: [{ role: 'system', content: systemText + isolationNote }, ...(args.fork_context === true ? forkedConversation(parent) : [])],
     baseSystemPrompt: systemText + isolationNote,
     mcpClients: parent.mcpClients || new Map(),
@@ -3651,6 +3656,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     const reminder = correctionsReminder(session.standingCorrections);
     if (reminder) userContent += '\n\n' + reminder;
+    const rulesReminder = ruleRefreshReminder(session, { historyChars: historyTextSize(session.messages || []), compacted: Boolean(compaction && compaction.compacted), env: options.env || process.env });
+    if (rulesReminder) userContent += '\n\n' + rulesReminder;
   }
   if (session.autoMemory && !options.isSubagent && !options.planOnly) {
     try {
@@ -3757,6 +3764,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       else session.messages.push({ role: 'user', content: notice });
     }
     const midTurnCompaction = await compactMidTurnHistoryIfNeeded(session, activeRequestIndex, options);
+    if (!options.isSubagent && step > 0) {
+      const midTurnRules = ruleRefreshReminder(session, { historyChars: historyTextSize(session.messages || []), compacted: Boolean(midTurnCompaction.compacted), env: options.env || process.env });
+      if (midTurnRules) {
+        const tail = session.messages[session.messages.length - 1];
+        if (tail && tail.role === 'tool' && typeof tail.content === 'string') tail.content += '\n\n' + midTurnRules;
+        else session.messages.push({ role: 'user', content: midTurnRules });
+      }
+    }
     tokensUsed += Number(midTurnCompaction.tokensUsed || 0);
     if (midTurnCompaction.tokensUsed && options.onUsage) {
       options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: midTurnCompaction.tokensUsed, step: step + 1, phase: 'mid-turn-compaction' });

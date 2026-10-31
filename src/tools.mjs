@@ -1864,6 +1864,11 @@ export async function executeTool(name, args = {}, context = {}) {
       const env = context.env || process.env;
       const discard = gitSafety.gitSafetyEnabled(env) ? gitSafety.discardingGitCommand(args.command, args.args || []) : '';
       const commitCall = gitSafety.gitCommitInvocation(args.command, args.args || []);
+      {
+        const { rawBranchRuleBlock } = await import('./git-tools.mjs');
+        const blockedByRule = await rawBranchRuleBlock(root, args.command, args.args || [], context.session && context.session.branchRules, env).catch(() => '');
+        if (blockedByRule) return { command: args.command, approved: false, blocked: true, message: blockedByRule };
+      }
       if (commitCall) {
         const { rawCommitSecretHits, formatSecretHits } = await import('./git-tools.mjs');
         const hits = await rawCommitSecretHits(root, { all: commitCall.all, env }).catch(() => []);
@@ -1946,7 +1951,8 @@ export async function executeTool(name, args = {}, context = {}) {
         autoApprove: Boolean(context.autoApprove),
         ruleAllowed: Boolean(context.ruleAllowed),
         env: context.env || process.env,
-        signal: context.signal
+        signal: context.signal,
+        branchRules: context.session && context.session.branchRules
       });
     case 'memory_save':
     case 'memory_search':

@@ -862,6 +862,7 @@ These are on by default and each can be switched off.
 | --- | --- | --- |
 | Change guard | Rejects edits that replace code with placeholders like `// ... rest unchanged`; warns on large unexplained shrinkage; flags fix-circling back to an earlier broken state. | — |
 | Standing corrections | "Stop saying 'load-bearing'" (or `never say "..."`) bans that phrase: it is restated every turn so compaction cannot drop it, saved to user memory so new sessions inherit it, and a reply that still uses it is sent back once for a rewrite. Preset bans with `"avoidPhrases": ["..."]` in settings; remove one with `oasis memory forget`. | `OASIS_STANDING_CORRECTIONS=0` (no memory save) |
+| Rule refresh / branch rules | Hard rules from instruction files are re-sent after compaction or long growth; "never commit/push to <branch>" rules block commits and pushes on that branch from every git path. | `OASIS_RULE_REFRESH=0` |
 | Non-interactive commands | Agent commands run with pagers and editors disabled and credential prompts off, so `git log`, `git commit` without `-m`, and password-prompting clones fail fast instead of hanging. | `OASIS_NONINTERACTIVE_ENV=0` |
 | No-op edit check | A `sed -i` / `perl -pi` / inline-script replace that exits 0 without changing the files it names is flagged, so the agent cannot report a change that never happened. | `OASIS_NOOP_EDIT_CHECK=0` |
 | Retry guard | The same failing command run again with nothing changed is flagged on the 3rd failure and the turn stops on the 5th, instead of burning tokens on identical retries. | — |

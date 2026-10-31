@@ -460,6 +460,11 @@ async function runShell(root, args, context, flavor = 'sh') {
   assertSandboxAvailable(requestedSandbox);
   const sandbox = requestedSandbox;
   const commitCall = gitSafety.gitCommitInvocation(command);
+  {
+    const { rawBranchRuleBlock } = await import('./git-tools.mjs');
+    const blockedByRule = await rawBranchRuleBlock(root, command, null, context.session && context.session.branchRules, context.env || process.env).catch(() => '');
+    if (blockedByRule) return { command, approved: false, blocked: true, message: blockedByRule };
+  }
   if (commitCall) {
     const { rawCommitSecretHits, formatSecretHits } = await import('./git-tools.mjs');
     const hits = await rawCommitSecretHits(root, { all: commitCall.all, env: context.env || process.env }).catch(() => []);
