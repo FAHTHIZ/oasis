@@ -161,6 +161,38 @@ test('worktree merge refuses conflicting or unreviewed overlapping changes', asy
 });
 
 
+test('automatic isolated worktree completion blocks sensitive paths before committing', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-sensitive-path-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'README.md'), 'base\n');
+  run('add', '-A'); run('commit', '-qm', 'base');
+  const worktree = await (await import('../src/worktrees.mjs')).createWorktree(root, 'sensitive path scan');
+  await writeFile(path.join(worktree.path, '.env.local'), 'OASIS_API_KEY=fixture-secret\n');
+  await assert.rejects(
+    (await import('../src/worktrees.mjs')).finishWorktree(root, worktree, { blockSecrets: true, skipHooks: true }),
+    /sensitive file paths were changed/i
+  );
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree.path }).toString().trim(), worktree.base);
+  assert.match(execFileSync('git', ['status', '--porcelain'], { cwd: worktree.path }).toString(), /\.env\.local/);
+});
+
+test('automatic isolated worktree completion blocks credential patterns inside changed text', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-sensitive-content-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = gitRepo(root);
+  await writeFile(path.join(root, 'README.md'), 'base\n');
+  run('add', '-A'); run('commit', '-qm', 'base');
+  const worktree = await (await import('../src/worktrees.mjs')).createWorktree(root, 'credential scan');
+  await writeFile(path.join(worktree.path, 'config.txt'), 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345\n');
+  await assert.rejects(
+    (await import('../src/worktrees.mjs')).finishWorktree(root, worktree, { blockSecrets: true, skipHooks: true }),
+    /possible credentials were detected/i
+  );
+  assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree.path }).toString().trim(), worktree.base);
+  assert.match(execFileSync('git', ['status', '--porcelain'], { cwd: worktree.path }).toString(), /config\.txt/);
+});
+
 test('worktree completion runs hooks by default and only bypasses them when explicitly requested', async (t) => {
   if (process.platform === 'win32') { t.skip('Unix hook executable-bit behavior is platform-specific'); return; }
   const { createWorktree, finishWorktree } = await import('../src/worktrees.mjs');
