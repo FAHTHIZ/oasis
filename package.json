@@ -38,7 +38,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node --test && node src/cli.mjs eval --validate",
+    "check": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node --test && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control",
     "postinstall": "node scripts/vendor-terminal.mjs",
     "prepack": "node scripts/vendor-terminal.mjs",
     "desktop:dev": "electron desktop/main.mjs",
