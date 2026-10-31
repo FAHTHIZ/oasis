@@ -1,4 +1,5 @@
 import * as gitSafety from './git-safety.mjs';
+import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
@@ -423,12 +424,14 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   assertSandboxAvailable(sandbox);
   // An explicit allow rule is the user's own decision. Otherwise high-risk commands
   // (inline code, wrappers, find -exec, ...) always need an interactive answer.
-  const highRisk = analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null;
+  const configRisk = options.bypassPermissions || protectedEditsAllowed(options.env || process.env) ? null
+    : protectedShellWrite([command].concat(args).join(' '));
+  const highRisk = configRisk || (analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null);
   const sandboxAutoAllowed = sandbox && sandbox.available && sandbox.autoAllowCommands !== false && !highRisk;
   const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed);
   if (needsApproval) {
     const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') +
-      (highRisk ? '\nHIGH RISK: this command ' + highRisk + '. Auto-approval does not apply.' : '') +
+      (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
       '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.' +
       (sandbox && sandbox.available ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : ''), Boolean(highRisk));
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
@@ -1896,6 +1899,7 @@ export async function executeTool(name, args = {}, context = {}) {
         signal: context.signal,
         sandbox: context.sandbox,
         ruleAllowed: Boolean(context.ruleAllowed) && !install.forceAsk,
+        bypassPermissions: Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions'),
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),

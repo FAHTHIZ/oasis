@@ -5,6 +5,7 @@
 //   kill_command   stop a background process
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState } from './file-state.mjs';
 import { spawn, spawnSync } from 'node:child_process';
@@ -489,11 +490,11 @@ async function runShell(root, args, context, flavor = 'sh') {
   const { guardInstallCommand } = await import('./package-vetting.mjs');
   const install = await guardInstallCommand(command, null, { env: context.env || process.env, fetchImpl: context.fetchImpl || globalThis.fetch });
   if (install.blocked) return { command, ...install.blocked };
-  const appRisk = appControlRisk(command);
+  const appRisk = appControlRisk(command) || (protectedEditsAllowed(context.env || process.env) ? null : protectedShellWrite(command));
   const bypass = Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions');
   const autoAllowed = !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));
   if (!autoAllowed) {
-    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (appRisk ? 'Warning: ' + appRisk + '. Unsaved work in those apps could be lost.\n' : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk));
+    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk));
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };
   }
   if (context.signal && context.signal.aborted) {

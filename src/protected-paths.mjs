@@ -75,3 +75,17 @@ export function protectedEditMessage(toolName, hit) {
   return 'Warning: ' + toolName + ' wants to change ' + hit.path + ', a protected configuration file — ' + hit.reason +
     '. A prompt-injected model could use this to grant itself permissions that apply on the next run. Allow this edit?';
 }
+
+// Shell commands that write protected paths (`echo ... > .git/hooks/pre-commit`,
+// `cp x .oasis/settings.json`) or set git config keys that run commands.
+// Returns a reason string or null. Reading these files (cat, grep) is fine.
+const SHELL_PROTECTED_PATH = /(?:^|[\s'"=:/\\(])\.?(?:\.git[\\/](?:hooks[\\/]|config\b)|\.(?:oasis|claude)[\\/](?:settings(?:\.local)?\.json|hooks[\\/]|plugins[\\/])|\.mcp\.json|\.lsp\.json)/i;
+const SHELL_WRITE = /(?:>>?|\btee\b|\bcp\b|\bmv\b|\bln\b|\binstall\b|\bsed\s+(?:-[a-z]*i|--in-place)|\bperl\s+-[a-z]*i|\bchmod\b|\btruncate\b|\btouch\b|\bdd\b|\brsync\b|Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item|WriteAllText|writeFile)/i;
+const GIT_CONFIG_EXEC = /\bgit\s+(?:-c\s+\S+\s+)*config\b(?![^;&|]*\s--(?:get|list|unset)\b)[^;&|]*\b(?:core\.(?:hookspath|fsmonitor|sshcommand|pager|editor|askpass)|alias\.|filter\.|diff\.\S+\.textconv|credential\.helper|include\.path|includeif\.)/i;
+
+export function protectedShellWrite(command) {
+  const text = String(command || '');
+  if (GIT_CONFIG_EXEC.test(text)) return 'it sets a git config key that makes git run a command';
+  if (SHELL_PROTECTED_PATH.test(text) && SHELL_WRITE.test(text)) return 'it appears to write a protected configuration file (settings, hooks, plugins, MCP/LSP servers or git hooks/config), which could grant permissions or run commands on the next run';
+  return null;
+}
