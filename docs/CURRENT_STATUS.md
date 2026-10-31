@@ -1,3 +1,9 @@
+## Final Quality verification queue — 2026-10-31
+
+The active Quality concurrency group has been rotated from `oasis-quality-v11` to `oasis-quality-v12` so the final corrected main snapshot can be verified independently of an older Node test run. The `/permissions` report now places each first rule beside its category label, matching the documented output format. No tests or release gates were removed or relaxed.
+
+---
+
 ## Quality queue rotation — 2026-10-31
 
 The Quality concurrency group was rotated from `oasis-quality-v10` to `oasis-quality-v11` because an older run remained active while a newer main snapshot waited. This starts an independent full verification on current `main`. No tests, requirements, or release gates were removed or relaxed.

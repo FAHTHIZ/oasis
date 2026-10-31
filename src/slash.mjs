@@ -294,10 +294,10 @@ export async function runBuiltinCommand(name, argument, state) {
       for (const kind of ['allow', 'ask', 'deny', 'session']) {
         const rules = Array.isArray(description[kind]) ? description[kind] : [];
         if (rules.length) {
-          lines.push(kind + ':');
-          for (const rule of rules) lines.push('  ' + rule);
+          lines.push(kind + '  ' + rules[0]);
+          for (const rule of rules.slice(1)) lines.push('    ' + rule);
         } else {
-          lines.push(kind + ': (none)');
+          lines.push(kind + '  (none)');
         }
       }
       const permissions = session.settings && session.settings.permissions || {};
