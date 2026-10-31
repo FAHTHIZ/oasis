@@ -58,7 +58,7 @@ flowchart TB
 
   ACTION --> CI_SDK --> CI_CORE
   CI_CORE <--> MODEL
-  CI_CORE --> CI_WORKSPACE
+  CI_CORE <--> CI_WORKSPACE
   CI_CORE <--> EXT
 
   CORE <--> PROVIDER
