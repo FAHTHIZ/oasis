@@ -53,10 +53,14 @@ test('runWorkflow: schema, pipeline nulls failures, resume reuses completed agen
   assert.equal(first.status, 'completed');
   assert.deepEqual(first.result, ['ok AUDIT a', 'ok AUDIT c']);
   assert.equal(calls, 4);
+  assert.equal(first.failedAgents, 1, 'the failed agent is counted');
+  assert.match(first.warning, /1 of 4 agent\(s\) failed.*b \(boom\).*Do not report the workflow as fully successful/);
   assert.deepEqual(first.phases.map((p) => p.title), ['Find', 'Audit']);
   const second = await runWorkflow({ source: SCRIPT, cache: { calls: first.calls }, runAgent: async ({ prompt }) => { calls++; return 'again ' + prompt; } });
   assert.equal(calls, 5, 'only the failed agent reruns');
   assert.deepEqual(second.result, ['ok AUDIT a', 'again AUDIT b', 'ok AUDIT c']);
+  assert.equal(second.failedAgents, 0);
+  assert.equal(second.warning, undefined);
 });
 
 test('workflow scripts are sandboxed: no import, no Date.now', async () => {
