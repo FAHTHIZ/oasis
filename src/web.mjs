@@ -253,6 +253,12 @@ const STATIC_FILES = new Map([
   ['/assets/vendor/xterm-addon-fit.js', ['assets/vendor/xterm-addon-fit.js', 'text/javascript; charset=utf-8']]
 ]);
 
+const OPTIONAL_TERMINAL_ASSETS = new Map([
+  ['/assets/vendor/xterm.js', '/* Optional OASIS terminal renderer is not installed. */\\n;'],
+  ['/assets/vendor/xterm.css', '/* Optional OASIS terminal styles are not installed. */\\n'],
+  ['/assets/vendor/xterm-addon-fit.js', '/* Optional OASIS terminal fit addon is not installed. */\\n;']
+]);
+
 function json(res, status, value) {
   const body = Buffer.from(JSON.stringify(value));
   res.writeHead(status, {
@@ -360,6 +366,7 @@ function newJob() {
 
 export function createOasisWebServer(options = {}) {
   const root = path.resolve(options.root || process.cwd());
+  const assetRoot = path.resolve(options.assetRoot || APP_ROOT);
   const bindHost = options.host || '127.0.0.1';
   const tlsOptions = loadTlsOptions(options);
   if (!isLoopbackBindHost(bindHost) && !tlsOptions && options.allowInsecureLan !== true) {
@@ -997,11 +1004,20 @@ export function createOasisWebServer(options = {}) {
 
     if (req.method === 'GET' && STATIC_FILES.has(pathname)) {
       const [file, contentType] = STATIC_FILES.get(pathname);
-      const body = await readFile(path.join(APP_ROOT, file));
+      let body;
+      let usingFallback = false;
+      try {
+        body = await readFile(path.join(assetRoot, file));
+      } catch (error) {
+        const fallback = OPTIONAL_TERMINAL_ASSETS.get(pathname);
+        if (!error || error.code !== 'ENOENT' || fallback === undefined) throw error;
+        body = Buffer.from(fallback);
+        usingFallback = true;
+      }
       res.writeHead(200, {
         'content-type': contentType,
         'content-length': body.length,
-        'cache-control': file === 'index.html' ? 'no-cache' : 'public, max-age=300',
+        'cache-control': usingFallback ? 'no-store' : file === 'index.html' ? 'no-cache' : 'public, max-age=300',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
         'x-frame-options': 'DENY'
