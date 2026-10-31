@@ -16,6 +16,32 @@ The Quality concurrency group has been rotated from `oasis-quality-v9` to `oasis
 
 ---
 
+## October 31 implementation status — 2026-10-31
+
+The following work is implemented on `main`; this section describes implementation state, not a claim that the current release gates have passed.
+
+### Continuity and long command output
+
+- Conversation history compaction runs before the next user request when the history reaches its configured boundary. Mid-task compaction removes completed tool-result payloads while retaining the active request and the most recent tool-call/result pairing.
+- Generated continuity notes are stored in the workspace's `.oasis/session-notes.md` section, with bounded content, supported credential redaction, and protection against unsafe note paths. User-authored content outside the generated section is preserved.
+- Large non-interactive command output uses a bounded preview. When the output exceeds the in-memory threshold, the complete redacted stream can be retained in `.oasis/command-logs/` with restrictive file permissions. Saved logs are capped at 32 MiB; a single unbroken line over 1 MiB is omitted rather than risk splitting a secret across redaction boundaries. If secure log retention is unavailable, the command result reports that limitation.
+
+### Browser workspace and verification safeguards
+
+- Static integrity checks validate local UI and brand-asset routes; the browser E2E watches for uncaught page errors and console errors, including first-run setup. Missing terminal renderer assets receive a non-cacheable fallback response and a clear installation message instead of a broken script response.
+- Source edits are not considered verified on the basis of assistant prose or an unavailable language server. The runtime tracks changed paths, full-diff review, a repository test/check result, and LSP status separately. An unavailable or non-applicable LSP is reported as such; it is not converted into a passing diagnostic result.
+- Unattended GitHub Action runs keep language-server startup disabled for untrusted project code. The structured verification record is used for the Action's report and completion status; source changes still require a relevant repository check.
+
+### Release and benchmark boundaries
+
+- The product lifecycle remains **Beta**. These implementation updates do not promote the project to stable or production-ready status.
+- The 33-fixture evaluator remains a regression/smoke suite, not a representative repository-level coding benchmark. Cost-aware routing is opt-in and conservative; cost comparisons are price estimates based on observed token counts, not measured quality gains or guaranteed savings.
+- No release is declared by a queued or partially completed workflow. A release requires fresh same-commit Quality, public-site validation, installer checks, and desktop build evidence. Desktop signing, clean-machine update/uninstall validation, and real Android/Termux end-to-end coverage remain separate gaps.
+
+**Verification boundary:** current-main CI must complete the Node 22/24/26 integrity matrix, clean-environment suite, Linux PTY test, Ubuntu/macOS/Windows security jobs, browser E2E/axe checks, package validation, public-site validation, installer checks, and desktop packaging on the same source revision. Until then, these features are recorded as implemented, not as fully release-verified.
+
+---
+
 ## Cost-aware model routing — 2026-10-31
 
 - Added opt-in `/routing` configuration for user-selected easy and strong model IDs, loaded only from trusted user settings.
