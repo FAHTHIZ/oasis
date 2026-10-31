@@ -178,7 +178,7 @@ OASIS separates three things that are often all called “plugins”:
 
 Why plugins matter: they save repeated setup, make workflows consistent, connect the agent to tools it cannot access by itself, and let a team share tested procedures. They do not automatically make the model smarter, grant a service account, or provide a paid model/API subscription.
 
-The initial OASIS plugin catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The GitHub extension inspector detects Agent Skills and common compatible ecosystem, Codex, and Gemini CLI markers and reports commands, MCP declarations, hooks, and executable components that are not activated. For recognized portable Agent Skills, OASIS also preserves bounded text references/assets and exposes them through integrity-checked resource access. Scripts remain unimported and inactive. The mobile-friendly Agent page and authenticated local runtime bridge are included in main. Signed third-party bundles, broader connector lifecycle management, embedded GitHub OAuth, and a full interactive terminal are still future work—not features OASIS claims to have.
+The initial OASIS capability-bundle catalog is intentionally small and reviewed. Its bundles install workflow text only: they do not silently run setup scripts, install packages, start servers, or grant credentials. The GitHub extension inspector detects Agent Skills and common Claude Code, Codex, and Gemini CLI markers and reports commands, MCP declarations, hooks, and executable components that are not activated. For recognized portable Agent Skills, OASIS also preserves bounded text references/assets and exposes them through integrity-checked resource access. Scripts remain unimported and inactive. The mobile-friendly Agent page and authenticated local runtime bridge are included in `main`. The browser Terminal panel has a PTY-backed path when the optional native dependency is available, but its full cross-platform lifecycle is not yet verified; see [Interactive PTY terminal sessions](#interactive-pty-terminal-sessions). Signed publisher manifests, broader connector lifecycle management, and embedded GitHub OAuth remain unimplemented.
 
 The `main` installation contains both the terminal agent and the connected browser workspace. Opening `index.html` directly still provides only the static projects/tasks/notes dashboard; local agent execution requires the `oasis web` runtime to be running.
 
@@ -222,7 +222,7 @@ Delegation always asks for explicit approval, even with --yes. The conversation 
 
 ## Safety model
 
-OASIS is a local developer tool. By default commands run with your normal user permissions; turn on the optional OS sandbox (see [Command safety and OS sandbox](#command-safety-and-os-sandbox)) to confine them to the workspace.
+OASIS is a local developer tool. Commands normally run with your operating-system user permissions. On supported Linux and macOS systems, the optional OS sandbox can restrict command writes and network access; it is disabled by default and does not provide full filesystem-read isolation. See [Command safety and OS sandbox](#command-safety-and-os-sandbox).
 
 - File tools are confined to the selected workspace and reject paths that escape via traversal or symlinks.
 - Common secret files, private keys, and credential files are excluded from file tools.
@@ -233,7 +233,7 @@ OASIS is a local developer tool. By default commands run with your normal user p
 - Web fetching rejects localhost/private-network targets, does not follow redirects automatically, and caps response size.
 - Project instructions, skill files, repository contents, and web pages are untrusted input and cannot override OASIS's safety rules.
 
-These guards reduce risk but cannot guarantee that every third-party package or project script is safe. Code executed by the OS still runs with the user's operating-system permissions. Review the requested operation, keep backups, and use an isolated development environment for untrusted code.
+These guards reduce risk but cannot guarantee that every third-party package or project script is safe. Even with the optional sandbox enabled, filesystem reads are not fully isolated, and unsandboxed commands run with the user's operating-system permissions. Review each operation, keep backups, and use an isolated development environment for untrusted code.
 
 ## Permission rules and modes
 
@@ -845,7 +845,7 @@ The default per-task budget is now 60 model steps and 300 tool calls (it was 12 
 
 The general `run_command` tool runs one executable with an argument array and no shell. Beyond the executable denylist, OASIS now unwraps wrapper programs (`env`, `xargs`, `timeout`, `nice`, `nohup`, ...) and checks the program they launch, so `env rm` or `xargs rm` are blocked like `rm`. Commands that run inline code or arbitrary programs (`node -e`, `python -c`, `perl -e`, `find -exec/-delete`, `awk 'system()'`, `git -c`, `curl -o`, ...) are classified as **high risk**: they always need an interactive answer, even with `--yes`, unless an explicit permission rule allows them.
 
-Enable the OS sandbox to confine commands to the workspace:
+Enable the optional OS sandbox to restrict command writes and, by default, network access on supported Linux and macOS systems (this is not full filesystem-read isolation):
 
 ~~~json
 // ~/.config/oasis/settings.json
