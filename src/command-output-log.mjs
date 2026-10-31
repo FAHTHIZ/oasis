@@ -121,7 +121,7 @@ export async function createCommandOutputLog(root) {
       writeRedacted(state, '[OASIS omitted one output line longer than 1 MiB for safe log redaction.]\n');
       state.pending = '';
       state.discardUntilNewline = true;
-
+    }
   }
 
   function flushState(state) {
