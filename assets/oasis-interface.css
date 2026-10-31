@@ -236,7 +236,8 @@ body.light .btn-primary:hover{background:#287A0F}
 .note-sidebar{display:grid;gap:12px;align-content:start}
 .workspace-banner{display:flex;gap:12px;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--panel-2);margin-bottom:16px}
 .workspace-banner-icon{width:32px;height:32px;border-radius:var(--r-md);display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
-.workspace-banner-copy{font-size:var(--fs-sm);color:var(--muted)}
+.workspace-banner-copy{font-size:var(--fs-sm);color:var(--muted);display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.workspace-banner-copy strong{color:var(--text)}
 .search-wrap{display:flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--sunken);min-width:240px;color:var(--faint)}
 .search-wrap input{border:0!important;background:transparent!important;box-shadow:none!important;padding-left:0}
 .form-field{display:grid;gap:6px;margin-bottom:12px}
