@@ -337,6 +337,8 @@ Like compatible-format channels, an MCP server can push chat messages, webhooks 
 
 Every connected MCP server's `instructions` (from its `initialize` reply) are now added to the system prompt under "MCP server instructions", using the supported format.
 
+
+If a server fails to start, OASIS prints the reason once and keeps it in `/mcp`. `/mcp reconnect` retries every failed server with the configuration it was started with, `/mcp reconnect NAME` retries one, and `/mcp reconnect all` also restarts servers that are connected but misbehaving. Their tools become available in the same conversation, so you don't have to restart OASIS.
 ## Output styles
 
 `/output-style` changes how OASIS talks while it works:

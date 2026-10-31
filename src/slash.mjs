@@ -53,7 +53,7 @@ export const BUILTIN_COMMANDS = {
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
-  mcp: 'Show connected MCP servers and their tools',
+  mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers',
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
@@ -1402,6 +1402,14 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: 'Resuming saved session ' + selected.id + '.', resume: selected.id };
     }
     case 'mcp': {
+      const mcpWords = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      if (mcpWords[0] === 'reconnect' || mcpWords[0] === 'retry') {
+        if (!session) return { output: 'Start a session before reconnecting MCP servers.' };
+        const { reconnectMcpServers } = await import('./mcp.mjs');
+        const results = await reconnectMcpServers(session, mcpWords.slice(1), { root, env });
+        if (!results.length) return { output: 'No failed MCP servers to reconnect. Use /mcp reconnect NAME or /mcp reconnect all to restart a connected one.' };
+        return { output: results.map((item) => item.ok ? '[MCP] ' + item.name + ' reconnected · ' + item.tools + ' tool(s)' : '[MCP] ' + item.name + ' failed: ' + item.error).join('\n') };
+      }
       const clients = session && session.mcpClients instanceof Map ? session.mcpClients : new Map();
       const failures = session && Array.isArray(session.mcpFailures) ? session.mcpFailures : [];
       if (!clients.size) {
