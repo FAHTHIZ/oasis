@@ -747,3 +747,6 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 .turn-work>summary:hover{color:var(--text-2)}
 .turn-work-steps{display:flex;flex-direction:column;gap:2px;margin:6px 0 0 -34px}
 .turn-work-steps>.agent-message.activity{margin:0}
+.sidebar-chat-running{display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:var(--accent);vertical-align:1px;animation:chatPulse 1.4s ease-in-out infinite}
+@keyframes chatPulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.sidebar-chat-running{animation:none}}

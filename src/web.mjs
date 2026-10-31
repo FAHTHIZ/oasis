@@ -1414,7 +1414,8 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'GET' && pathname === '/api/sessions') {
-      json(res, 200, { sessions: await listSessions(activeRoot, { env }) });
+      const sessions = (await listSessions(activeRoot, { env })).map((item) => (busySessions.has(String(item.id).toLowerCase()) ? { ...item, running: true } : item));
+      json(res, 200, { sessions });
       return;
     }
 
