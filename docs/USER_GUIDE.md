@@ -132,6 +132,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Light/dark themes and an installable PWA shell with a service worker for offline static assets.
 - A connected Agent page when served by `oasis web`: authenticated chat, resumable saved chat history, visible tool activity, and browser-based approval for commands, installs, deletion, and capability-bundle installation.
 - OmniRoute provider preset for an already-running local gateway; provider keys remain restricted to the local browser session and are never echoed by the runtime.
+- Typing `/` in the agent composer lists every command the browser can run: built-in commands, your project, user and plugin custom commands, and skills, with substring search. Custom commands (`/ship 2.1.0`) and skills (`/skill-name request`) expand in the browser exactly as they do in the terminal.
 - An integrated argv-based command runner that captures command output and requires per-command approval.
 - GitHub CLI integration to check the host's existing authentication, list up to 30 repositories accessible to that account, clone a selected repo after approval, and switch the active agent workspace.
 
