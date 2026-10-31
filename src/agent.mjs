@@ -167,6 +167,17 @@ function findCompactionBoundary(messages) {
  * If the provider cannot summarize, a local deterministic digest prevents history
  * growth from making the next coding request unusable.
  */
+export function undoCompaction(session) {
+  const undo = session && session.compactionUndo;
+  if (!undo || !Array.isArray(undo.messages)) return { restored: false };
+  // History was rewound or cleared past the compaction point: undoing would resurrect it.
+  if (!Array.isArray(session.messages) || session.messages.length < undo.afterLength) { delete session.compactionUndo; return { restored: false }; }
+  const added = (session.messages || []).slice(undo.afterLength);
+  session.messages = [...undo.messages, ...added];
+  delete session.compactionUndo;
+  return { restored: true, messages: session.messages.length, carriedOver: added.length, trigger: undo.trigger };
+}
+
 export async function compactHistoryIfNeeded(session, options = {}) {
   const messages = session.messages || [];
   const thresholdChars = compactionThresholdChars(session.config || {}, options.env || process.env);
@@ -222,6 +233,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
   const restored = await runPostCompactHooks(session, trigger, summary, options);
 
+  const beforeCompaction = messages.slice();
   if (session.freshSystemText) { messages[0] = { ...messages[0], content: session.freshSystemText }; session.baseSystemPrompt = session.freshSystemText; session.freshSystemText = null; }
   session.messages = [
     messages[0],
@@ -235,6 +247,8 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     },
     ...messages.slice(boundary)
   ];
+  // Kept so /compact undo can bring the full history back (one level).
+  session.compactionUndo = { messages: beforeCompaction, afterLength: session.messages.length, trigger, at: new Date().toISOString() };
   await reportCompaction(session, summary, beforeTokens, options, {
     removedMessages: oldMessages.length,
     retainedMessages: session.messages.length - 1,
