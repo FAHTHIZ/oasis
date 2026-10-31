@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { loadSettings } from '../src/settings.mjs';
@@ -36,4 +36,20 @@ test('subagents can use their own auto-compact threshold', async (t) => {
   assert.ok(record, 'a subagent ran');
   assert.equal(record.child.config.autoCompactPercent, 35);
   assert.equal(session.config.autoCompactPercent, undefined);
+});
+
+test('untrusted project settings report skipped keys instead of dropping them silently', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-untrusted-keys-'));
+  const config = await mkdtemp(path.join(os.tmpdir(), 'oasis-untrusted-cfg-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(config, { recursive: true, force: true })]));
+  await mkdir(path.join(root, '.oasis'));
+  const env = { ...process.env, OASIS_CONFIG_DIR: config, OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ cleanupPeriodDays: 5, subagentEffort: 'low' }));
+  const skipped = await loadSettings(root, { env, skipPlugins: true });
+  assert.equal(skipped.cleanupPeriodDays, undefined);
+  assert.ok(skipped.ignoredUntrusted.some((file) => file.endsWith('settings.json')));
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ theme: 'dark', language: 'French', permissions: { deny: ['Bash(rm *)'] } }));
+  const safe = await loadSettings(root, { env, skipPlugins: true });
+  assert.deepEqual(safe.ignoredUntrusted, []);
+  assert.equal(safe.theme, 'dark');
 });

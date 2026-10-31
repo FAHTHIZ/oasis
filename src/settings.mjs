@@ -256,7 +256,10 @@ export async function loadSettings(root, options = {}) {
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
-      if (loosening) result.ignoredUntrusted.push(file);
+      // Any other key is also skipped until trust; say so instead of dropping it silently.
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory']);
+      const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
+      if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
     }
     // "disableBypassPermissionsMode": "disable" only tightens; honor it from any trusted scope.
