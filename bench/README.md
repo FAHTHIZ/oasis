@@ -30,11 +30,22 @@ The values in this table are the planning baselines and targets from the benchma
 
 | Track | Failure measured | Contract baseline | Initial target |
 |---|---|---:|---:|
-| **FRR — Context Durability** | Facts from earlier session history are lost after compaction | Research summary retention baseline: 16.0% | Overall Fact Retention Rate above 40%; task continuation preserved in every seed |
-| **TPST — Token Efficiency** | Unnecessary context and cache token consumption | Claude Code reference: about 370,000 tokens per successful task in the cited comparison | At most 50% of Claude Code tokens per successful task on the same model and task set |
-| **Staleness Window — Task-List Fidelity** | Completed work remains marked incomplete | Reported example: about 25 tool calls | Mean no more than 3 calls; maximum no more than 5 |
-| **BVR — Ambiguity Safety** | Agent acts on an ambiguous target without clarification | UnderSpecBench reference range: 55.8–67.8% boundary violations | Below 20% across 20 tasks and 3 seeds |
-| **UCR — Long-Horizon Completion** | Agent fails to finish multi-file work after a mid-task dependency arrives | GitTaskBench reference: below 60% on collaborative repository tasks | At least 70% unattended verified completion |
+| **FRR — Context Durability** | Facts from earlier session history are lost after compaction | Compact-Bench: at most 16.0% recurring-detail retention for LLM summaries (different metric) | Overall Fact Retention Rate above 40%; task continuation preserved in every seed |
+| **TPST — Token Efficiency** | Unnecessary context and cache token consumption | One Claude Code issue: 12,195,203 tokens across 32 model calls in a single reported session (incident, not a benchmark baseline) | At most 50% of Claude Code tokens per successful task on the same model and task set |
+| **Staleness Window — Task-List Fidelity** | Completed work remains marked incomplete | One Claude Code issue: task list remained stale for about 25 tool calls (single incident) | Mean no more than 3 calls; maximum no more than 5 |
+| **BVR — Ambiguity Safety** | Agent acts on an ambiguous target without clarification | UnderSpecBench: 55.8–67.8% boundary violations across five agent/model configurations | Below 20% across 20 tasks and 3 seeds |
+| **UCR — Long-Horizon Completion** | Agent fails to finish multi-file work after a mid-task dependency arrives | GitTaskBench: best reported task pass rate 48.15% (not unattended completion) | At least 70% unattended verified completion |
+
+## External source audit and comparability
+
+These references explain why the tracks matter. They are **not interchangeable baselines**: the tasks, models, harnesses, metrics, and sampling differ. The initial targets above remain hypotheses until OASIS and a comparison harness are measured on the same frozen tasks with the same model and run conditions.
+
+- **Context compaction — [Compact-Bench, arXiv:2610.31710](https://arxiv.org/abs/2610.31710):** across its separate recurring-detail dataset, LLM summaries retained at most 16.0% of recurring details; production summaries retained 15.7% at the first compaction boundary. This is recurring-detail retention, not the FRR score defined here. Its task-preservation experiment separately found stable damage in 5–64% of 22 full-history successes, depending on the summarizer.
+- **Token use and task-list staleness — [Claude Code issue #106138](https://github.com/anthropics/claude-code/issues/106138):** one user-reported session recorded 32 model calls and 12,195,203 total tokens (12,121,965 cache-read, 49,369 cache-write, 64 uncached input, and 23,805 output tokens). The roughly 380,000 cache-read tokens are an average per model call, not total tokens per successful task. The same issue describes a seven-step task list remaining on step 1 through about 25 tool calls while steps 1–4 were completed. Both are single incident reports, not population estimates.
+- **Ambiguity safety — [UnderSpecBench, arXiv:2607.02294](https://arxiv.org/abs/2607.02294):** its 69 task families and 2,208 prompt variants produced 55.8–67.8% action-boundary violations across five agent/model configurations. Its deterministic oracles separate wrong-target and over-scope behavior from clarification, refusal, and deferral. The OASIS BVR task set is smaller and must not be presented as a direct replication.
+- **Repository task completion — [GitTaskBench, AAAI 2026](https://ojs.aaai.org/index.php/AAAI/article/view/40533):** the paper reports 54 realistic repository tasks; the best reported system, OpenHands with Claude 3.7, solved 48.15%. That is task success, not the two-hour unattended-completion metric defined by UCR.
+
+The Claude Code issue figures are anecdotal examples. They are useful for constructing falsifiable tests, but cannot establish a general Claude Code average. No OASIS-versus-Claude-Code performance claim is justified until the same-model, same-task comparison in the build gates is complete.
 
 ### Track definitions
 
