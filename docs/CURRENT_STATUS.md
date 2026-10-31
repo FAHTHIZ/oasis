@@ -273,3 +273,13 @@ The repair sequence is being developed on isolated branches; these changes are n
 - Added regression coverage for conservative classification, settings trust, routing controls, model restoration, pricing visibility, evaluator option validation, and per-trial routing metrics.
 
 **Verification boundary:** syntax checks for the modified agent, settings, CLI, web, evaluator, routing module and new tests passed in this work session. GitHub Actions has not yet confirmed the full test suite or browser E2E for this branch. No 33-task / three-trial benchmark has been run here, so no real-world savings or quality claim is made. Routing savings in a trial are a price estimate using observed token counts at the strong-model rate, not a second execution.
+## F6 — Unattended GitHub Action verification — October 31, 2026
+
+- Kept language-server startup disabled in unattended GitHub Actions. Incoming pull-request code is not allowed to auto-launch its own configured executable merely to satisfy a verification gate.
+- The agent runtime's structured verification record is now included in the headless/SDK result, rather than relying on the model's final prose alone.
+- PR bodies and Action comments now include a verification report with changed-file count, diff-review status, project-check kind and exit code, LSP status, and outstanding items.
+- A disabled or unavailable LSP is not treated as a passing check. Source changes are only marked verified when the runtime reports a complete gate and a relevant repository check passed.
+- Removed the Action status exception that previously converted an unapproved-LSP verification failure into a non-blocking 'language-server check was not run' result.
+- Verification-report paths and reasons are sanitized before being inserted into Markdown; report lists and summary length are bounded.
+
+**Verification boundary:** the changed JavaScript modules and `test/github-action.test.mjs` pass source syntax checks. GitHub Actions for `fix/unattended-verification-rule` is pending; the full runtime, clean-environment and cross-platform suites have not yet been confirmed on this final commit. No PR has been opened and no changes have been merged.
