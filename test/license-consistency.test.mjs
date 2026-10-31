@@ -24,9 +24,9 @@ test('the canonical project license and package/README declarations agree on Apa
 
 test('published documentation describes the project as Apache-2.0, not MIT', async () => {
   const [launch, brand, guide] = await Promise.all([
-    read('docs/PUBLIC_LAUNCH.md'), read('docs/BRAND.md'), read('docs/USER_GUIDE.md')
+    read('docs/REPOSITORY_MAINTENANCE.md'), read('docs/BRAND.md'), read('docs/USER_GUIDE.md')
   ]);
-  assert.match(launch, /\*\*License:\*\* Apache-2\.0/);
+  assert.match(launch, /License: Apache-2\.0/);
   assert.doesNotMatch(launch, /MIT license/i);
   assert.match(brand, /Code\. Automate\. Flourish\./);
   assert.match(guide, /## License\s+\s+Apache License 2\.0\. See \[LICENSE\]\(\.\.\/LICENSE\)\./);
