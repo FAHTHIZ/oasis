@@ -85,3 +85,21 @@ test('/fix explicitly treats unavailable or new LSP diagnostics as a blocker', a
   assert.match(handled.prompt, /new or unclassified diagnostic error as a blocker/i);
   assert.match(handled.prompt, /Do not claim \/fix succeeded while the LSP gate is blocked/i);
 });
+
+test('a missing built-in language server is reported as non-blocking, not as an LSP issue', async () => {
+  const { verifyEditedFileWithLsp } = await import('../src/lsp.mjs');
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oasis-lsp-missing-'));
+  await fs.writeFile(path.join(root, 'a.js'), 'export const x = 1;\n');
+  const result = await verifyEditedFileWithLsp(root, 'a.js', { env: { PATH: '/nonexistent', HOME: root } });
+  if (result.status !== 'unavailable') return; // a server is installed in this environment
+  if (!/language server found/i.test(result.reason)) return;
+  assert.equal(result.blocking, false);
+  const issues = verificationIssues({
+    changedPaths: new Set(['a.js']), diffReviewedPaths: new Set(['a.js']), diffReviewedAll: false,
+    lastVerificationExitCode: 0, lspVerificationByPath: new Map([['a.js', result]])
+  });
+  assert.deepEqual(issues, []);
+});
