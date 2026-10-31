@@ -2093,7 +2093,8 @@ function verificationSummary(state) {
             ? 'warnings'
             : 'clean',
       newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0,
-      newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0
+      newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0,
+      ...(result && result.reason ? { reason: String(result.reason).replace(/[\r\n\0]/g, ' ').slice(0, 240) } : {})
     }));
   const issues = verificationIssues(state);
   return {
