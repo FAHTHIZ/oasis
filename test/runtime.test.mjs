@@ -1069,7 +1069,11 @@ test('large command output keeps its beginning, ending, exit code and truncation
   t.after(() => rm(root, { recursive: true, force: true }));
   const script = [
     "process.stdout.write('BEGIN-MARKER\\n');",
-    "for (let i = 0; i < 5000; i++) process.stdout.write('LINE-' + i + ' ' + 'x'.repeat(30) + '\\n');",
+    "for (let i = 0; i < 5000; i++) {",
+    "  if (i === 2500) process.stdout.write('ERROR: middle failure marker\\n');",
+    "  if (i === 2600) process.stdout.write('api_key=full-log-secret-value\\n');",
+    "  process.stdout.write('LINE-' + i + ' ' + 'x'.repeat(30) + '\\n');",
+    "}",
     "process.stdout.write('END-MARKER\\n');"
   ].join('\n');
   await writeFile(path.join(root, 'output-fixture.mjs'), script);
@@ -1081,6 +1085,20 @@ test('large command output keeps its beginning, ending, exit code and truncation
   assert.match(result.stdout, /END-MARKER/);
   assert.match(result.stdout, /OASIS omitted \d+ characters from the middle/);
   assert.doesNotMatch(result.stdout, /LINE-2000/);
+  assert.match(result.stdout, /ERROR: middle failure marker/);
+  assert.match(result.stdoutLogPath, /^\.oasis\/command-logs\/[a-f0-9-]+\.stdout\.log$/i);
+  const fullLogPath = path.join(root, result.stdoutLogPath);
+  const fullLog = await readFile(fullLogPath, 'utf8');
+  assert.match(fullLog, /BEGIN-MARKER/);
+  assert.match(fullLog, /LINE-2000/);
+  assert.match(fullLog, /ERROR: middle failure marker/);
+  assert.match(fullLog, /END-MARKER/);
+  assert.match(fullLog, /api_key=\[redacted\]/);
+  assert.doesNotMatch(fullLog, /full-log-secret-value/);
+  if (process.platform !== 'win32') {
+    const logStat = await stat(fullLogPath);
+    assert.equal(logStat.mode & 0o777, 0o600, 'retained command logs must be private to the current user');
+  }
 });
 
 test('agent stops after the same tool call returns the same result three times', async (t) => {
