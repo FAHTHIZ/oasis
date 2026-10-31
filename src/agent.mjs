@@ -2086,13 +2086,16 @@ function verificationSummary(state) {
       path: file,
       status: result && result.status === 'unavailable'
         ? 'unavailable'
-        : result && Array.isArray(result.newErrors) && result.newErrors.length
-          ? 'errors'
-          : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
-            ? 'warnings'
-            : 'clean',
+        : result && result.status === 'not_applicable'
+          ? 'not_applicable'
+          : result && Array.isArray(result.newErrors) && result.newErrors.length
+            ? 'errors'
+            : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
+              ? 'warnings'
+              : 'clean',
       newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0,
-      newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0
+      newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0,
+      ...(result && result.reason ? { reason: String(result.reason).replace(/[\r\n\0]/g, ' ').slice(0, 240) } : {})
     }));
   const issues = verificationIssues(state);
   return {
@@ -3600,9 +3603,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     throwIfCancelled(options.signal);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
-    const stepCost = estimateCostUsd(session.config && session.config.model, usage, { config: session.config, overrides: session.pricing || {}, env: options.env || process.env });
+    const pricedModel = resolveModelAlias(session.config && session.config.model, {
+      protocol: session.config && session.config.protocol,
+      env: options.env || process.env
+    });
+    const stepPricing = { config: session.config, overrides: session.pricing || {}, env: options.env || process.env };
+    const stepCost = estimateCostUsd(pricedModel, usage, stepPricing);
+    const costKnown = priceFor(pricedModel, stepPricing) !== null;
     session.costUsd = (session.costUsd || 0) + stepCost;
-    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, step: step + 1 });
+    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, costKnown, model: pricedModel, step: step + 1 });
     if (session.maxBudgetUsd > 0 && session.costUsd >= session.maxBudgetUsd) throw new BudgetExceededError(session.costUsd, session.maxBudgetUsd);
     let truncationNotice = '';
     if (assistant.truncated) {
