@@ -87,6 +87,8 @@ OASIS follows the familiar agent-harness design (tools, subagents, hooks, MCP, s
 | "It says the tests pass when it never ran them" | **`autoTest`** makes OASIS run your test command itself after edits and send failures back to the agent until they pass, up to a limit. |
 | "It made the tests pass by skipping or deleting them" | The **weakened-test check** compares the edited test files with `HEAD`. A new skip or `.only`, removed test cases or assertions, or a deleted test file blocks a "done" answer until the agent restores the tests or explains the change. |
 | "A prompt injection could edit my settings or git hooks" | **Protected config files**: edits to settings, hooks, plugins, `.mcp.json` and `.git/` always ask with a warning, even with `--yes` or broad allow rules. |
+| "It litters my repo with test scripts and temp files" | **Scratch space**: each session gets a git-ignored `.oasis/scratch/` folder for throwaway files, pruned after a week. |
+| "It suddenly started replying in another language" | **Pinned reply language**: `/language Bengali`, the `language` setting or `OASIS_LANGUAGE`. |
 | "It retries the same failing command forever" | **Retry guard** stops repeated identical failures and asks for a different approach. |
 
 The complete list is in the [changelog](CHANGELOG.md). These guards reduce common failure modes; they do not make any model infallible.
