@@ -244,9 +244,19 @@ const STATIC_FILES = new Map([
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/assets/oasis-icon.svg', ['assets/oasis-icon.svg', 'image/svg+xml']],
+  ['/assets/oasis-interface.css', ['assets/oasis-interface.css', 'text/css; charset=utf-8']],
+  ['/assets/oasis-mark.svg', ['assets/oasis-mark.svg', 'image/svg+xml']],
+  ['/assets/oasis-logo.svg', ['assets/oasis-logo.svg', 'image/svg+xml']],
+  ['/assets/oasis-readme-banner.svg', ['assets/oasis-readme-banner.svg', 'image/svg+xml']],
   ['/assets/vendor/xterm.js', ['assets/vendor/xterm.js', 'text/javascript; charset=utf-8']],
   ['/assets/vendor/xterm.css', ['assets/vendor/xterm.css', 'text/css; charset=utf-8']],
   ['/assets/vendor/xterm-addon-fit.js', ['assets/vendor/xterm-addon-fit.js', 'text/javascript; charset=utf-8']]
+]);
+
+const OPTIONAL_TERMINAL_ASSETS = new Map([
+  ['/assets/vendor/xterm.js', '/* Optional OASIS terminal renderer is not installed. */;'],
+  ['/assets/vendor/xterm.css', '/* Optional OASIS terminal styles are not installed. */'],
+  ['/assets/vendor/xterm-addon-fit.js', '/* Optional OASIS terminal fit addon is not installed. */;']
 ]);
 
 function json(res, status, value) {
@@ -356,6 +366,7 @@ function newJob() {
 
 export function createOasisWebServer(options = {}) {
   const root = path.resolve(options.root || process.cwd());
+  const assetRoot = path.resolve(options.assetRoot || APP_ROOT);
   const bindHost = options.host || '127.0.0.1';
   const tlsOptions = loadTlsOptions(options);
   if (!isLoopbackBindHost(bindHost) && !tlsOptions && options.allowInsecureLan !== true) {
@@ -993,11 +1004,20 @@ export function createOasisWebServer(options = {}) {
 
     if (req.method === 'GET' && STATIC_FILES.has(pathname)) {
       const [file, contentType] = STATIC_FILES.get(pathname);
-      const body = await readFile(path.join(APP_ROOT, file));
+      let body;
+      let usingFallback = false;
+      try {
+        body = await readFile(path.join(assetRoot, file));
+      } catch (error) {
+        const fallback = OPTIONAL_TERMINAL_ASSETS.get(pathname);
+        if (!error || error.code !== 'ENOENT' || fallback === undefined) throw error;
+        body = Buffer.from(fallback);
+        usingFallback = true;
+      }
       res.writeHead(200, {
         'content-type': contentType,
         'content-length': body.length,
-        'cache-control': file === 'index.html' ? 'no-cache' : 'public, max-age=300',
+        'cache-control': usingFallback ? 'no-store' : file === 'index.html' ? 'no-cache' : 'public, max-age=300',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
         'x-frame-options': 'DENY'
