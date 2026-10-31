@@ -18,6 +18,23 @@ const mainTree = new Map([
   ['test/approval-language.test.mjs', 'blob-approval'],
   ['docs/BENCHMARKS.md', 'blob-benchmarks'],
   ['docs/CURRENT_STATUS.md', 'blob-status-current'],
+  ['src/config.mjs', 'blob-config'],
+  ['src/cli.mjs', 'blob-cli'],
+  ['.github/workflows/pages.yml', 'blob-pages-workflow'],
+  ['src/workflow-sandbox.mjs', 'blob-workflow-sandbox'],
+  ['test/workflows.test.mjs', 'blob-workflows-test'],
+  ['test/ci-workflow.test.mjs', 'blob-ci-workflow-test'],
+  ['test/helpers/block-quickjs-loader.mjs', 'blob-quickjs-helper'],
+  ['.github/scripts/browser-e2e.mjs', 'blob-browser-e2e'],
+  ['.github/workflows/quality.yml', 'blob-quality-workflow'],
+  ['index.html', 'blob-index'],
+  ['scripts/vendor-terminal.mjs', 'blob-vendor-terminal'],
+  ['src/web.mjs', 'blob-web'],
+  ['sw.js', 'blob-sw'],
+  ['scripts/check-site.mjs', 'blob-check-site'],
+  ['test/index-inline-scripts.test.mjs', 'blob-inline-script-test'],
+  ['test/web-static-assets.test.mjs', 'blob-static-assets-test'],
+  ['test/web-terminal-optional.test.mjs', 'blob-optional-terminal-test']
   ['src/permissions.mjs', 'blob-permissions'],
   ['test/permissions.test.mjs', 'blob-permissions-test'],
   ['src/mcp-oauth.mjs', 'blob-mcp-oauth'],
@@ -86,7 +103,16 @@ test('audited superseded branch set uses exact heads and existing replacement pa
     ['fix/tool-output-preservation', 'e8381ca00f778d7944d037f850156e900f56a5e6'],
     ['feat/context-ordering-todo', '7032a34f8a8146b64eafb3e51521cc1ffbc8b2ac'],
     ['bench/infrastructure-gate-2026-10-31', 'b0098a8072ff837f46056e70a47a5153d701289d'],
-    ['docs/alpha-confidence-milestone-2026-10-29', 'd865e22e5eeb530a8caeab2370e08da519d05dbc']
+    ['docs/alpha-confidence-milestone-2026-10-29', 'd865e22e5eeb530a8caeab2370e08da519d05dbc'],
+    ['fix/omniroute-setup-default-20261027', '669463e59184a95419dfa1d6f51b78b2dbe0a915'],
+    ['fix/preserve-current-provider-on-setup-20261027', 'c11d8210d244d8e1121a85beb563e99458f79e71'],
+    ['fix/safety-part-1-completion', 'bebab129d0a1168b38c258ed7edbc05f146831c4'],
+    ['ci/gate1-branch-validation', '271c8a77e3db9b6170838e44a5c9867c7df990b7'],
+    ['ci/gate1-corrected-integrity-check', 'a949fff353370c4902234162a0a843397d45ba78'],
+    ['fix/gate1-optional-terminal', '133aa7d1c042aaca52387bba62feb7060bc92c4b'],
+    ['fix/gate1-site-mark-assertion', 'a949fff353370c4902234162a0a843397d45ba78'],
+    ['fix/gate1-static-asset-routes', 'fae5b813f8e5147e40de04970d6f45a246f60660'],
+    ['test/gate1-browser-and-asset-smoke', '73d6baecc843fa336c88366f3c57d549673bf2c1']
   ];
   for (const [name, sha] of reviewed) {
     const entry = AUDITED_SUPERSEDED_HEADS.get(name);
