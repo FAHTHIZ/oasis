@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +11,24 @@ const files = [
 ];
 
 await mkdir(destination, { recursive: true });
+const missing = [];
 for (const [source, target] of files) {
-  await copyFile(path.join(root, source), path.join(destination, target));
+  const output = path.join(destination, target);
+  try {
+    await copyFile(path.join(root, source), output);
+  } catch (error) {
+    if (!error || error.code !== 'ENOENT') throw error;
+    await rm(output, { force: true });
+    missing.push(target);
+  }
 }
-console.log('OASIS terminal renderer assets are ready.');
+
+if (missing.length) {
+  console.warn(
+    'OASIS terminal support is optional. Missing renderer files: ' +
+    missing.join(', ') +
+    '. The Terminal tab will show an installation message.'
+  );
+} else {
+  console.log('OASIS terminal renderer assets are ready.');
+}
