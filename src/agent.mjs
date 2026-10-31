@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { maskSecrets, unmaskSecrets, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
@@ -3141,6 +3142,8 @@ async function executeOneCallRaw(session, call, context, options) {
     if ((options.planOnly || permissionMode(session, options) === 'plan') && !READ_ONLY_TOOLS.has(name) && !readOnlyTask) {
       throw new Error('Plan mode blocks write, command, install, delete, and external tool calls.');
     }
+    const outOfScope = scopeViolation(session, name, args);
+    if (outOfScope) throw new Error(outOfScope);
     if (name === 'ask_user_question') {
       result = await askUserQuestion(session, args, options);
       if (options.onToolResult) options.onToolResult({ name, result, call });
@@ -3519,6 +3522,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   }
   const startNotice = drainInbox(session);
   if (startNotice) userContent += '\n\n' + startNotice;
+  editScopeFromEnv(session, options.env || process.env);
+  if (!options.isSubagent && session.editScope && !session.editScopeAnnounced) {
+    session.editScopeAnnounced = true;
+    userContent += '\n\n<system-reminder>Scope lock is active: only change files matching ' + session.editScope.patterns.join(', ') + '. Ask the user before touching anything else.</system-reminder>';
+  }
   if (!options.isSubagent && !options.planOnly && !session.followupsReminded && followupsEnabled(session, options.env || process.env)) {
     session.followupsReminded = true;
     try { const reminder = await followupReminder(session.root); if (reminder) userContent += '\n\n' + reminder; } catch {}

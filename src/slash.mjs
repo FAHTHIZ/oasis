@@ -60,6 +60,7 @@ export const BUILTIN_COMMANDS = {
   style: 'List or switch the active response style (/style [default|concise|explanatory|architect|reviewer])',
   'output-style': 'Legacy alias: list or switch response styles (/output-style NAME)',
   todos: 'Show the current todo list',
+  scope: 'Lock file edits to paths for this session: /scope src/** test/** | /scope off',
   followups: 'List or resolve loose ends captured from earlier turns: /followups [all|done ID|drop ID|clear]',
   memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
@@ -1459,6 +1460,16 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!todos.length) return { output: 'No todos yet.' };
       const mark = { completed: '[x]', in_progress: '[~]', pending: '[ ]' };
       return { output: todos.map((todo) => (mark[todo.status] || '[ ]') + ' ' + (todo.content || todo.text || todo.title || '')).join('\n') };
+    }
+    case 'scope': {
+      const lock = await import('./scope-lock.mjs');
+      if (!session) return { output: 'Start a session first.' };
+      const value = String(argument || '').trim();
+      if (!value) return { output: session.editScope ? 'Edits are locked to: ' + session.editScope.patterns.join(', ') + '\nClear with /scope off.' : 'No scope lock. Example: /scope src/parser/** test/parser/**' };
+      if (/^(off|clear|none|reset)$/i.test(value)) { lock.clearEditScope(session); session.editScopeAnnounced = false; return { output: 'Scope lock cleared. File tools may change any workspace file (subject to permissions).' }; }
+      const patterns = lock.setEditScope(session, value);
+      session.editScopeAnnounced = false;
+      return { output: 'Edits are now locked to: ' + patterns.join(', ') + '. Out-of-scope file changes will be refused and the agent will ask you first.' };
     }
     case 'followups': {
       const ledger = await import('./followups.mjs');
