@@ -146,6 +146,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   // A manual /compact summarizes the whole conversation so far.
   const boundary = options.force ? messages.length : findCompactionBoundary(messages);
   if (boundary <= 1) return { compacted: false, tokensUsed: 0 };
+  const beforeTokens = estimateTokens(messages);
   const trigger = options.force ? 'manual' : 'auto';
   const preCompact = await runPreCompactHooks(session, trigger, options);
   if (preCompact.blocked) return { compacted: false, tokensUsed: 0, blockedByHook: true, reason: preCompact.reason };

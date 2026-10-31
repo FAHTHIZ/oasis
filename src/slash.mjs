@@ -6,6 +6,7 @@ import { compactHistoryIfNeeded, hookOptions } from './agent.mjs';
 import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES, normalizePermissionMode } from './settings.mjs';
+import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
 import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
@@ -180,6 +181,7 @@ export function recordUsage(tracker, usage = {}) {
 
 
 export async function runBuiltinCommand(name, argument, state) {
+  if (name === 'ultrareview') { name = 'review'; argument = 'ultra ' + String(argument || '').trim(); }
   if (Object.hasOwn(COMMAND_ALIASES, name) && !Object.hasOwn(BUILTIN_COMMANDS, name)) name = COMMAND_ALIASES[name];
   const { root, session, env = process.env, usage, sessionOptions = {} } = state;
   if (!state.sessionOptions) state.sessionOptions = sessionOptions;
@@ -259,6 +261,48 @@ export async function runBuiltinCommand(name, argument, state) {
         output: 'Preview: analyze the supplied evidence, trace likely causes, and identify the next useful diagnostic step. This is read-only; it will not attempt a fix.' + (imageMentioned ? '\nImage input status: ' + capability.status + '. ' + capability.reason : ''),
         prompt: loadSkillInstruction('diagnose') + 'Diagnose the following evidence without modifying files. Separate observed facts, confirmed causes, likely explanations, and untested hypotheses. If information is missing, ask for the most useful next item. Never claim to have viewed a screenshot unless its image data was attached and the selected model can analyze images; if image support is unsupported or unknown, say so plainly and request text or a capable model. Redact secrets from logs. Do not edit files, install software, make network requests, or execute commands unless separately asked and permitted.\n\nEvidence supplied by the user: ' + String(argument).trim() + imageNote
       };
+    }
+    case 'model': {
+      if (!session) return { output: 'No active session. Choose a model when starting a conversation.' };
+      const available = session.availableModels || (session.settings && session.settings.availableModels) || [];
+      const current = session.config && session.config.model || '(provider default)';
+      if (!String(argument || '').trim()) {
+        return { output: 'Model: ' + current + (available.length ? '\nAvailable models: ' + available.join(', ') : '') };
+      }
+      const selected = String(argument).trim();
+      if (!modelAllowed(selected, available, { env, protocol: session.config && session.config.protocol })) {
+        return { output: modelRestrictionMessage(selected, available) };
+      }
+      if (!session.config) session.config = {};
+      session.config.model = selected;
+      sessionOptions.model = selected;
+      return { output: 'Model set to ' + selected + '.' };
+    }
+    case 'mode': {
+      const requested = String(argument || '').trim();
+      const current = session && session.permissions && session.permissions.mode || sessionOptions.permissionMode || 'default';
+      if (!requested) return { output: 'Permission mode: ' + current + '. Available: ' + PERMISSION_MODES.join(', ') + '. Aliases: manual, accept-edits.' };
+      const normalized = normalizePermissionMode(requested);
+      if (!normalized) return { output: 'Unknown mode "' + requested + '". Available: ' + PERMISSION_MODES.join(', ') + '. Aliases: manual, accept-edits.' };
+      const permissions = session && session.settings && session.settings.permissions || {};
+      const disableBypass = Boolean(sessionOptions.disableBypass || sessionOptions.disableBypassPermissions || permissions.disableBypassPermissionsMode);
+      if (normalized === 'bypassPermissions' && disableBypass) return { output: 'bypassPermissions mode is disabled by settings.' };
+      try {
+        if (session && session.permissions && typeof session.permissions.setMode === 'function') session.permissions.setMode(normalized);
+        else if (session && session.permissions) session.permissions.mode = normalized;
+        sessionOptions.permissionMode = normalized;
+      } catch (error) {
+        return { output: error.message || 'Could not change permission mode.' };
+      }
+      return { output: 'Permission mode set to ' + normalized + (requested !== normalized ? ' (alias for ' + normalized + ')' : '') + '.' };
+    }
+    case 'review': {
+      const custom = await loadCustomCommands(root, { env }).catch(() => new Map());
+      if (!String(argument || '').trim() && custom.has('review')) return null;
+      return { output: 'Review target: ' + describeReviewTarget(argument) + '.', prompt: reviewPrompt('code-review', argument) };
+    }
+    case 'security-review': {
+      return { output: 'Security review requested' + (argument ? ' for ' + argument : '') + '.', prompt: reviewPrompt('security-review', argument) };
     }
     case 'audit': {
       const workflows = await import('./workflows.mjs');
@@ -1211,6 +1255,102 @@ export async function runBuiltinCommand(name, argument, state) {
       session.sandbox = resolveSandbox({ sandbox: { enabled, network, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
       if (session.sandbox.enabled) session.sandbox.writable = writable;
       return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
+    }
+    case 'style':
+    case 'output-style': {
+      const styles = await loadOutputStyles(root, { env });
+      const requested = String(argument || '').trim();
+      if (!requested) {
+        const active = session && session.outputStyle || 'default';
+        const lines = ['Output styles:'];
+        for (const style of Object.values(styles)) {
+          lines.push((style.name === active ? '* ' : '  ') + style.name + ' — ' + style.description + ' [' + style.source + ']');
+        }
+        return { output: lines.join('\n') };
+      }
+      const style = styles[requested];
+      if (!style) return { output: 'Unknown output style "' + requested + '". Run /output-style to list available styles.' };
+      if (!session) return { output: 'Output style is available for the next session: ' + style.name + '.' };
+      applyOutputStyle(session, style);
+      sessionOptions.outputStyle = style.name;
+      return { output: 'Output style set to ' + style.name + '.' };
+    }
+    case 'export': {
+      if (!session || !Array.isArray(session.messages)) return { output: 'There is no active conversation to export.' };
+      const requested = String(argument || '').trim();
+      if (!requested) return { output: 'Usage: /export FILE.md' };
+      try {
+        const target = await resolveWorkspacePath(root, requested, { rejectSymlinks: true, workspaceOnly: true });
+        try { await lstat(target.absolute); const error = new Error('That file already exists: ' + target.relative); error.code = 'EEXIST'; throw error; }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        const markdown = conversationMarkdown(session);
+        await writeFile(target.absolute, markdown, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+        return { output: 'Exported ' + Math.max(0, session.messages.length - 1) + ' messages to ' + target.relative };
+      } catch (error) {
+        if (error.code === 'EEXIST') throw error;
+        if (/outside the workspace/i.test(error.message || '')) return { output: 'Export paths must be inside the workspace.' };
+        return { output: error.message || 'Could not export this conversation.' };
+      }
+    }
+    case 'resume': {
+      const saved = await listSessions(root, { env });
+      if (!saved.length) return { output: 'No saved sessions in this workspace.' };
+      const requested = String(argument || '').trim();
+      if (!requested) {
+        return { output: 'Saved sessions:\n' + saved.map((item, index) =>
+          '  ' + (index + 1) + '. ' + item.id + '  ' + (item.title || '(untitled)') + '  [' + (item.model || 'unknown model') + ']'
+        ).join('\n') };
+      }
+      const number = Number(requested);
+      const selected = Number.isInteger(number) && number >= 1 && number <= saved.length
+        ? saved[number - 1]
+        : saved.find((item) => item.id === requested) || saved.find((item) => item.id.startsWith(requested));
+      if (!selected) return { output: 'No saved session matches "' + requested + '".' };
+      return { output: 'Resuming saved session ' + selected.id + '.', resume: selected.id };
+    }
+    case 'mcp': {
+      const clients = session && session.mcpClients instanceof Map ? session.mcpClients : new Map();
+      const failures = session && Array.isArray(session.mcpFailures) ? session.mcpFailures : [];
+      if (!clients.size) {
+        return { output: failures.length
+          ? 'MCP servers:\n' + failures.map((item) => item.name + ' - not connected: ' + item.error).join('\n')
+          : 'No MCP servers are connected.' };
+      }
+      const lines = ['MCP servers:'];
+      for (const [name, client] of clients) {
+        const source = client.source || (client.config && client.config.source) || 'user';
+        const type = client.config && client.config.type || 'stdio';
+        const tools = Array.isArray(client.tools) ? client.tools.map((item) => item.name).filter(Boolean) : [];
+        lines.push('  ' + name + ' [' + source + ', ' + type + '] ' + tools.length + ' tool(s): ' + (tools.join(', ') || 'none'));
+        const resources = (client.resources || []).length + (client.resourceTemplates || []).length;
+        if (resources) lines.push('    resources: ' + resources);
+        for (const prompt of client.prompts || []) {
+          const args = (prompt.arguments || []).map((item) => item.required ? '<' + item.name + '>' : '[' + item.name + ']').join(' ');
+          lines.push('    /mcp__' + name + '__' + prompt.name + (args ? ' ' + args : ''));
+        }
+      }
+      for (const item of failures) lines.push('  ' + item.name + ' - not connected: ' + item.error);
+      return { output: lines.join('\n') };
+    }
+    case 'inbox': {
+      if (!session) return { output: 'Start a session before using the inbox.' };
+      const messaging = await import('./session-messaging.mjs');
+      const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      const action = (words[0] || 'list').toLowerCase();
+      if (action === 'read' || action === 'dismiss') {
+        const id = words[1];
+        if (!id) return { output: 'Usage: /inbox ' + action + ' MESSAGE_ID' };
+        try {
+          await messaging.updateInboxMessage(session, id, action, { env });
+          return { output: action === 'read' ? 'Inbox message marked as read.' : 'Inbox message dismissed.' };
+        } catch (error) { return { output: error.message }; }
+      }
+      if (action !== 'list') return { output: 'Usage: /inbox [list|read ID|dismiss ID]' };
+      const messages = await messaging.listSessionInbox(session, { env });
+      if (!messages.length) return { output: 'Inbox is empty.' };
+      return { output: 'Inbox:\n' + messages.map((item) =>
+        item.id + ' [' + (item.priority || 'info') + '] ' + (item.read ? 'read' : 'unread') + '\n' + messaging.formatSessionMessage(item)
+      ).join('\n\n') };
     }
     case 'workflows': {
       const wf = await import('./workflows.mjs');

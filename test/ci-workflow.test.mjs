@@ -19,7 +19,7 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
     const workflow = await readFile(new URL(item.path, import.meta.url), 'utf8');
     assert.ok(workflow.includes(item.group), item.path + ' must use a per-ref concurrency group');
     assert.ok(workflow.includes('cancel-in-progress: ' + String(item.cancel)), item.path + ' has the wrong cancellation policy');
-    const concurrencyGroup = workflow.match(/concurrency:\s*\n\s*group:\s*([^\r\n]+)/);
+    const concurrencyGroup = workflow.match(/concurrency:\s*(?:#[^\r\n]*\r?\n\s*)*group:\s*([^\r\n]+)/);
     assert.ok(concurrencyGroup, item.path + ' must declare a concurrency group');
     assert.ok(!concurrencyGroup[1].includes('${{ github.sha }}'), item.path + ' must not create a separate expensive run for every commit');
   }
