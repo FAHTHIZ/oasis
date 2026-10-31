@@ -11,7 +11,7 @@ import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL } from './config.mjs';
-import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer } from './agent.mjs';
+import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession } from './sessions.mjs';
@@ -204,10 +204,11 @@ function attachCron(session) {
   if (!session) return;
   const state = cronState(session);
   state.onFire = (prompt) => {
+    if (AUTO_HALT) { (state.pending ||= []).push(prompt); return; }
     if (IDLE_SUBMIT && IDLE_SUBMIT(prompt)) return;
     QUEUED_INPUT.push(prompt);
   };
-  if (state.pending && state.pending.length) QUEUED_INPUT.push(...state.pending.splice(0));
+  if (!AUTO_HALT && state.pending && state.pending.length) QUEUED_INPUT.push(...state.pending.splice(0));
 }
 // Monitor events and finished background commands wake an idle session, like
 // Claude Code interjecting when a Monitor event arrives.
@@ -216,7 +217,20 @@ const WAKE_PREFIX = '[background event] ';
 function pendingWake(session) {
   return session && Array.isArray(session.inbox) ? session.inbox.filter((entry) => WAKE_KINDS.has(entry.kind)) : [];
 }
+// After a non-recoverable account error (auth failure, billing, quota, account
+// on hold) automatic continuations would only fail again and, on some
+// providers, keep burning quota. Loops, cron prompts and background wake-ups
+// pause until the user sends a message.
+let AUTO_HALT = null;
+function haltAutoContinue(error) {
+  const kind = stopFailureType(error);
+  if (kind !== 'billing_error' && kind !== 'authentication_failed') return false;
+  if (!AUTO_HALT) stdout.write('[auto] Paused loops, scheduled prompts and background wake-ups after a ' + (kind === 'billing_error' ? 'billing/quota' : 'authentication') + ' error. They resume when you send the next message (fix the account or run /provider first).\n');
+  AUTO_HALT = { kind, at: Date.now() };
+  return true;
+}
 function wakeIfPending(session) {
+  if (AUTO_HALT) return false;
   const pending = pendingWake(session);
   if (!pending.length || !IDLE_SUBMIT) return false;
   const labels = [...new Set(pending.map((entry) => entry.label).filter(Boolean))];
@@ -1604,6 +1618,7 @@ async function waitForBackgroundRegistration() {
 }
 
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
+  if (AUTO_HALT && !String(prompt || '').startsWith(WAKE_PREFIX) && !modeOptions.selfPacedLoop) AUTO_HALT = null;
   // The parent starts this process before persisting its PID; wait so a fast
   // background task cannot finish and then be overwritten by the parent's stale
   // initial "running" record.
@@ -1780,7 +1795,10 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     if (controller.signal.aborted || error.name === 'AbortError') {
       repairInterruptedHistory(session);
       stdout.write('[interrupted] Task stopped. Changes made before the interruption remain; use /rewind 1 to undo them.\n');
-    } else stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
+    } else {
+      stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
+      haltAutoContinue(error);
+    }
   } finally {
     process.removeListener('SIGINT', onInterrupt);
     if (turnKeys) { turnKeys.stop(); turnKeys = null; }
@@ -2011,6 +2029,7 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
       }
       session = await runPrompt(prompt, root, autoApprove, session, persistence, loopOptions);
       persistence.resumeId = null;
+      if (AUTO_HALT) { stdout.write('[loop] Stopping: the last run hit a ' + (AUTO_HALT.kind === 'billing_error' ? 'billing/quota' : 'authentication') + ' error, so further runs would fail too.\n'); break; }
       const wakeup = loop.selfPaced && session ? session.loopWakeup : null;
       if (session && loop.selfPaced) session.loopWakeup = null;
       if (wakeup && wakeup.stop) { stdout.write('[loop] The model ended the loop' + (wakeup.reason ? ': ' + wakeup.reason : '.') + '\n'); break; }

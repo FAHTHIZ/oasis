@@ -1243,6 +1243,12 @@ async function readProviderStream(response, protocol, onDelta) {
 const MAX_PROVIDER_RETRIES = 2;
 const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+// A 429 that means "out of quota / billing / account on hold" will not clear by
+// retrying; retrying only burns time (and, on some providers, more quota).
+const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)|usage limit reached|weekly limit|monthly limit|spend(?:ing)? limit/i;
+export function isHardQuotaError(text) {
+  return HARD_QUOTA_PATTERN.test(String(text || ''));
+}
 
 function parseRetryAfterMs(raw) {
   const value = String(raw || '').trim();
@@ -1338,10 +1344,10 @@ export function hookOptions(session, env) {
 export function stopFailureType(error) {
   const status = Number(error && (error.status || error.statusCode));
   const text = String(error && error.message || '').toLowerCase();
+  if (status === 402 || isHardQuotaError(text)) return 'billing_error';
   if (status === 429 || /rate.?limit/.test(text)) return 'rate_limit';
   if (status === 529 || /overloaded/.test(text)) return 'overloaded';
   if (status === 401 || status === 403 || /unauthori[sz]ed|invalid api key|authentication/.test(text)) return 'authentication_failed';
-  if (status === 402 || /billing|credit balance|insufficient_quota/.test(text)) return 'billing_error';
   if (status === 404 || /model.*not.?found|unknown model/.test(text)) return 'model_not_found';
   if (/max.?(output|tokens)/.test(text)) return 'max_output_tokens';
   if (status === 400) return 'invalid_request';
@@ -1606,7 +1612,7 @@ async function requestCompletionRaw(session, options = {}) {
       const status = response.status;
       let errorBody = '';
       try { errorBody = await response.text(); } catch {}
-      if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status)) {
+      if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody)) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
         continue;
       }
