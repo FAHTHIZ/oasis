@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-<title id="title">OASIS beta — OASIS. Code. Automate. Flourish.</title><desc id="desc">The OASIS green portal mark and wordmark over a dark reflective grid, representing a focused local-first coding workspace.</desc>
+<title id="title">OASIS Beta — Code. Automate. Flourish.</title><desc id="desc">The OASIS green portal mark and wordmark over a dark reflective grid, representing a focused local-first coding workspace.</desc>
 <defs>
 <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#050907"/><stop offset=".55" stop-color="#0B0F0C"/><stop offset="1" stop-color="#1A1F1B"/></linearGradient>
 <radialGradient id="glow"><stop offset="0" stop-color="#7CFF5E" stop-opacity=".27"/><stop offset=".46" stop-color="#32E07A" stop-opacity=".12"/><stop offset="1" stop-color="#0B0F0C" stop-opacity="0"/></radialGradient>
