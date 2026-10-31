@@ -263,7 +263,16 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
     if (signal) signal.removeEventListener('abort', forwardAbort);
     workflowSignal.removeEventListener('abort', rejectForAbort);
   }
-  emit({ type: 'done', status: state.status });
+  // Failed agents inside pipeline()/parallel() resolve to null, so a run can
+  // finish "completed" with missing work. Count them and say so plainly.
+  const failedAgents = state.agents.filter((agent) => agent.status === 'failed');
+  state.failedAgents = failedAgents.length;
+  if (state.status === 'completed' && failedAgents.length) {
+    state.warning = failedAgents.length + ' of ' + state.agents.length + ' agent(s) failed; their results are null in the output. Failed: ' +
+      failedAgents.slice(0, 10).map((agent) => (agent.label || 'agent ' + agent.index) + (agent.error ? ' (' + String(agent.error).slice(0, 160) + ')' : '')).join('; ') +
+      (failedAgents.length > 10 ? '; …' : '') + '. Do not report the workflow as fully successful; rerun or resume the failed parts.';
+  }
+  emit({ type: 'done', status: state.status, failedAgents: state.failedAgents });
   return state;
 }
 
@@ -355,7 +364,7 @@ export function newRunId() { return 'wf_' + randomUUID().replace(/-/g, '').slice
 export function describeRun(run, { detail = false } = {}) {
   const agents = run.state ? run.state.agents : [];
   const count = (status) => agents.filter((agent) => agent.status === status).length;
-  const head = run.id + '  ' + String(run.status).padEnd(9) + ' ' + (run.name || 'workflow') + '  ' + count('completed') + '/' + agents.length + ' agents done' + (count('failed') ? ', ' + count('failed') + ' failed' : '') + (count('running') ? ', ' + count('running') + ' running' : '');
+  const head = run.id + '  ' + String(run.status === 'completed' && count('failed') ? 'partial' : run.status).padEnd(9) + ' ' + (run.name || 'workflow') + '  ' + count('completed') + '/' + agents.length + ' agents done' + (count('failed') ? ', ' + count('failed') + ' failed' : '') + (count('running') ? ', ' + count('running') + ' running' : '');
   if (!detail) return head;
   const lines = [head, '  script: ' + run.scriptPath];
   for (const message of (run.state && run.state.logs || []).slice(-10)) lines.push('  log: ' + message);

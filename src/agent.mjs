@@ -2325,10 +2325,10 @@ async function runWorkflowTool(session, args, context, options) {
     await persist(state);
     return state;
   });
-  const summary = (state) => ({ run_id: id, name, status: state.status, script_path: scriptPath, agents: state.agents.length, cached_agents: state.agents.filter((agent) => agent.cached).length, failed_agents: state.agents.filter((agent) => agent.status === 'failed').length, ...(state.error ? { error: state.error } : {}), ...(state.logs.length ? { logs: state.logs.slice(-20) } : {}), result: state.result });
+  const summary = (state) => ({ run_id: id, name, status: state.status, script_path: scriptPath, agents: state.agents.length, cached_agents: state.agents.filter((agent) => agent.cached).length, failed_agents: state.agents.filter((agent) => agent.status === 'failed').length, ...(state.error ? { error: state.error } : {}), ...(state.warning ? { warning: state.warning } : {}), ...(state.logs.length ? { logs: state.logs.slice(-20) } : {}), result: state.result });
   if (background) {
     run.promise = execute.then((state) => {
-      notifyParent(session, 'Workflow ' + id + ' (' + name + ') ' + state.status + '. Result:\n' + JSON.stringify(state.result ?? state.error ?? null).slice(0, 8000), { id, description: 'workflow ' + name, status: state.status });
+      notifyParent(session, 'Workflow ' + id + ' (' + name + ') ' + (state.status === 'completed' && state.failedAgents ? 'completed with ' + state.failedAgents + ' failed agent(s)' : state.status) + '.' + (state.warning ? ' WARNING: ' + state.warning : '') + ' Result:\n' + JSON.stringify(state.result ?? state.error ?? null).slice(0, 8000), { id, description: 'workflow ' + name, status: state.status });
       return state;
     }, (error) => { run.status = 'failed'; notifyParent(session, 'Workflow ' + id + ' failed: ' + error.message, { id, description: 'workflow ' + name, status: 'failed' }); });
     return { run_id: id, name, status: 'running', script_path: scriptPath, message: 'Workflow started in the background. You will be told when it finishes; /workflows shows progress. Use action "status" or "stop" with this run_id.' };

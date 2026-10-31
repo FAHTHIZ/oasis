@@ -8,6 +8,8 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
 - **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
+- **Honest workflow status** — workflows whose agents failed inside `pipeline`/`parallel` now report the failed count, names and errors (`failedAgents`, `warning`, `partial` in `/workflows`) instead of a plain "completed".
+- Fixed a FileChanged race: an unlink that happened while a hook ran could be dropped when the hook returned `watchPaths`.
 - **Question budget** — at most two `ask_user_question` prompts per turn by default; further questions are answered with "pick a sensible default, state the assumption, keep working" so long runs are not stalled. Configure with `maxQuestionsPerTurn` or `OASIS_MAX_QUESTIONS_PER_TURN` (`off` removes the cap).
 - **Claim check** — if the final reply says tests/build pass but the latest check in that turn failed, was piped (masked exit status) or is stale after later edits, the agent is sent back once to rerun and report the real outcome.
 - **Test-weakening check** — edits to test files that remove assertions, add `skip`/`xit`/`@pytest.mark.skip` markers or always-true asserts are reported back to the agent, which must fix the code instead or tell the user why the test changed.
