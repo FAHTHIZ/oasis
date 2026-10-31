@@ -9,6 +9,7 @@
 // 3. Fix circling: a write that restores a file to an earlier state from the
 //    same session (A -> B -> A), a strong signal of looping between fixes.
 
+import { isTestPath as sharedIsTestPath } from './test-tamper.mjs';
 import { createHash } from 'node:crypto';
 
 const ELISION_PATTERNS = [
@@ -102,8 +103,9 @@ const ASSERTION = /\b(?:assert(?:_\w+|[A-Z]\w*)?|expect|should|t\.(?:equal|deepE
 const SKIP = /\b(?:(?:it|test|describe|context)\.(?:skip|todo)|x(?:it|test|describe)|test\.fixme)\s*\(|@pytest\.mark\.(?:skip|xfail)\b|@unittest\.skip|\bt\.Skip(?:Now|f)?\(|@Disabled\b|@Ignore\b|\{\s*skip\s*:\s*true\s*\}|#\[ignore\]/g;
 const TRIVIAL = /expect\(\s*(?:true|1)\s*\)\.(?:toBe|toEqual)\(\s*(?:true|1)\s*\)|\bassert\s+True\b|assert\.ok\(\s*true\s*\)|assert\(\s*true\s*\)|assertTrue\(\s*true\s*\)/g;
 
+// One definition of "test file" for the per-edit warning and the end-of-turn gate (test-tamper.mjs).
 export function isTestPath(displayPath) {
-  return TEST_PATH.test(String(displayPath || ''));
+  return sharedIsTestPath(displayPath) || TEST_PATH.test(String(displayPath || ''));
 }
 
 function countMatches(text, pattern) {

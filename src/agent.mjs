@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { protectedConfigPath, protectedEditMessage, protectedEditsAllowed, ruleNamesProtectedPath } from './protected-paths.mjs';
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
@@ -2122,6 +2123,7 @@ const FILE_EDITING_TOOL_NAMES = new Set(['edit_file', 'write_file', 'multi_edit'
 const RETRY_TRACKED_COMMANDS = new Set(['run_command', 'run_shell', 'powershell']);
 const RETRY_WARN_AT = 3;
 const RETRY_HALT_AT = 5;
+const PROTECTED_EDIT_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 const AUTO_LSP_EDIT_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 
 function successfulMutation(name, result) {
@@ -3160,6 +3162,16 @@ async function authorizeCall(session, name, args, context, options) {
       const ok = await overlay.approval(message, true);
       if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve web access to ' + host + '.' };
       session.webAccessApprovals.add(key);
+      siteApprovalHandled = true;
+    }
+  }
+  // Protected config paths (settings, hooks, MCP, .git) always ask: writing them
+  // can grant permissions that apply later without approval.
+  if (PROTECTED_EDIT_TOOLS.has(name) && mode !== 'bypassPermissions' && !protectedEditsAllowed(context.env || process.env)) {
+    const hit = protectedConfigPath(session.root || context.root, args && (args.path || args.notebook_path || args.file_path));
+    if (hit && !(decision === 'allow' && ruleNamesProtectedPath(verdict.rule))) {
+      const ok = await overlay.approval(protectedEditMessage(name, hit), true);
+      if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve changing the protected configuration file ' + hit.path + '. Ask the user to make this change themselves.' };
       siteApprovalHandled = true;
     }
   }
