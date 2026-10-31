@@ -1528,6 +1528,7 @@ async function requestCompletionRaw(session, options = {}) {
   const timeoutMs = Math.min(120000, Math.max(1000, Number(options.timeoutMs) || 120000));
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : fetch;
   const abortFromCaller = () => controller.abort();
   if (options.signal) {
     if (options.signal.aborted) abortFromCaller();
@@ -1539,7 +1540,7 @@ async function requestCompletionRaw(session, options = {}) {
     const requestHeaders = cloudAnthropic ? await cloudHeaders(config, providerEnv, endpoint, bodyText, headers) : headers;
     for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
       try {
-        response = await fetch(endpoint, {
+        response = await fetchImpl(endpoint, {
           method: 'POST',
           headers: requestHeaders,
           signal: controller.signal,
@@ -3588,6 +3589,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     try {
       assistant = await requestCompletion(session, {
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
           options.onDelta(streamedText);
