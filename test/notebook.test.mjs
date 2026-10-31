@@ -83,3 +83,17 @@ test('NotebookEdit permission rules and rendering of old notebooks without ids',
   const rendered = renderNotebook({ cells: [{ cell_type: 'code', source: 'a = 1', outputs: [{ output_type: 'error', ename: 'NameError', evalue: 'b' }] }], nbformat: 4, nbformat_minor: 2 });
   assert.match(rendered.content, /<cell id="cell-0" type="code">\na = 1\n<outputs>\nNameError: b/);
 });
+
+test('notebook_edit refuses elision placeholders and warns when a cell is gutted', async (t) => {
+  const root = await setup(t);
+  await assert.rejects(
+    editNotebook(root, { path: 'a.ipynb', cell_id: 'load', new_source: 'import pandas as pd\n# ... rest of code unchanged ...' }),
+    /placeholder/
+  );
+  const big = Array.from({ length: 40 }, (_, i) => 'x' + i + ' = ' + i).join('\n');
+  await editNotebook(root, { path: 'a.ipynb', cell_id: 'load', new_source: big });
+  const shrunk = await editNotebook(root, { path: 'a.ipynb', cell_id: 'load', new_source: 'x0 = 0' });
+  assert.match(shrunk.warning, /shrank a\.ipynb cell load/);
+  const fine = await editNotebook(root, { path: 'a.ipynb', cell_id: 'load', new_source: big + '\ny = 1' });
+  assert.equal(fine.warning, undefined);
+});

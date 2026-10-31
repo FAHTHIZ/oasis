@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { resolveWorkspacePath } from './tools.mjs';
+import { assertNoNewElision, shrinkWarning, combineWarnings } from './change-guard.mjs';
 
 const MAX_NOTEBOOK_FILE = 8 * 1024 * 1024;
 const MAX_RENDERED = 256 * 1024;
@@ -111,9 +112,12 @@ export async function editNotebook(root, args = {}) {
   const hasId = args.cell_id !== undefined && args.cell_id !== null && args.cell_id !== '';
   if (mode !== 'delete' && typeof args.new_source !== 'string') throw new Error('Provide new_source for ' + mode + '.');
   if (args.cell_type && !['code', 'markdown', 'raw'].includes(args.cell_type)) throw new Error('cell_type must be code, markdown, or raw.');
+  const displayPath = target.relative.split(path.sep).join('/');
   let index;
   let cellId;
+  let warning = '';
   if (mode === 'insert') {
+    assertNoNewElision('', args.new_source, displayPath);
     if (!args.cell_type) throw new Error('cell_type is required when inserting a cell.');
     index = hasId ? findCell(notebook, args.cell_id) + 1 : 0;
     const cell = newCell(notebook, args.cell_type, args.new_source);
@@ -126,6 +130,9 @@ export async function editNotebook(root, args = {}) {
     if (mode === 'delete') notebook.cells.splice(index, 1);
     else {
       const cell = notebook.cells[index];
+      const previousSource = sourceText(cell.source);
+      assertNoNewElision(previousSource, args.new_source, displayPath + ' (cell ' + cellId + ')');
+      warning = combineWarnings(shrinkWarning(previousSource, args.new_source, displayPath + ' cell ' + cellId));
       const type = args.cell_type || cell.cell_type || 'code';
       if (type !== cell.cell_type) {
         const replacement = newCell(notebook, type, args.new_source);
@@ -142,5 +149,7 @@ export async function editNotebook(root, args = {}) {
   const next = JSON.stringify(notebook, null, indentMatch ? indentMatch[1].length : 1) + (text.endsWith('\n') ? '\n' : '');
   await snapshotFile(target.root, target.absolute, 'before-agent-notebook-edit');
   await writeFile(target.absolute, next, 'utf8');
-  return { path: target.relative.split(path.sep).join('/'), changed: true, edit_mode: mode, cell_id: cellId, cells: notebook.cells.length, backupCreated: true };
+  const result = { path: displayPath, changed: true, edit_mode: mode, cell_id: cellId, cells: notebook.cells.length, backupCreated: true };
+  if (warning) result.warning = warning;
+  return result;
 }
