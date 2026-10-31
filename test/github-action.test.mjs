@@ -198,7 +198,13 @@ test('an @oasis issue comment runs the agent, pushes a branch, opens a PR, and r
   const pr = calls[2].body;
   assert.equal(pr.base, 'main');
   assert.match(pr.body, /^Closes #7\n\nFixed login\(\) to return true\./);
-  assert.match(calls[3].body.body, /finished and pushed changes[\s\S]*Fixed login[\s\S]*Opened https:\/\/github\.com\/acme\/app\/pull\/8[\s\S]*actions\/runs\/42/);
+  assert.match(pr.body, /## Verification[\s\S]*Result: \*\*VERIFIED\*\*/);
+  assert.match(pr.body, /Repository check: \*\*test passed\*\* \(exit code 0\)/);
+  assert.match(pr.body, /Language server: not run for "login\.js"/);
+  assert.match(pr.body, /Acceptance basis: the repository test passed/);
+  assert.deepEqual(outcome.result.verification.lastCheck, { kind: 'test', exitCode: 0, passed: true });
+  assert.equal(outcome.result.verification.complete, true);
+  assert.match(calls[3].body.body, /verified and pushed changes[\s\S]*Fixed login[\s\S]*Result: \*\*VERIFIED\*\*[\s\S]*Opened https:\/\/github\.com\/acme\/app\/pull\/8[\s\S]*actions\/runs\/42/);
 });
 
 test('on a same-repo pull request, Oasis commits to the PR branch and opens no new PR', async (t) => {
@@ -210,7 +216,7 @@ test('on a same-repo pull request, Oasis commits to the PR branch and opens no n
   git(work, 'push', '-q', 'origin', 'feature');
   git(work, 'checkout', '-q', 'main');
   const { calls, request } = fakeGitHub();
-  const sdk = { run: async (prompt, options) => { await writeFile(path.join(options.cwd, 'feature.txt'), 'done\n'); return { is_error: false, subtype: 'success', result: 'Finished the feature.' }; } };
+  const sdk = { run: async (prompt, options) => { await writeFile(path.join(options.cwd, 'feature.txt'), 'done\n'); return { is_error: false, subtype: 'success', result: 'Finished the feature.', verification: { required: true, changedPaths: ['feature.txt'], diffReviewed: true, checkRequired: false, lastCheck: null, lsp: [], complete: true, issues: [] } }; } };
   const outcome = await runAction({ env: { ...gitEnv, GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app' }, root: work, event: comment('@oasis finish this', { pr: true }), request, sdk, log: () => {} });
   assert.equal(outcome.published.branch, 'feature');
   assert.equal(outcome.published.pullRequest, null);
@@ -226,7 +232,7 @@ test('GitHub Action passes the unattended LSP restriction into the agent runtime
   const sdk = {
     run: async (_prompt, options) => {
       capturedOptions = options;
-      return { is_error: false, subtype: 'success', result: 'login() is defined in login.js.' };
+      return { is_error: false, subtype: 'success', result: 'login() is defined in login.js.', verification: { required: false, changedPaths: [], diffReviewed: true, checkRequired: false, lastCheck: null, lsp: [], complete: true, issues: [] } };
     }
   };
   const env = {
@@ -258,7 +264,7 @@ test('GitHub Action passes the unattended LSP restriction into the agent runtime
 test('questions get an answer and no push', async (t) => {
   const { work } = await repoWithRemote(t);
   const { calls, request } = fakeGitHub();
-  const sdk = { run: async () => ({ is_error: false, subtype: 'success', result: 'login() lives in login.js.' }) };
+  const sdk = { run: async () => ({ is_error: false, subtype: 'success', result: 'login() lives in login.js.', verification: { required: false, changedPaths: [], diffReviewed: true, checkRequired: false, lastCheck: null, lsp: [], complete: true, issues: [] } }) };
   const outcome = await runAction({ env: { ...gitEnv, GITHUB_EVENT_NAME: 'issue_comment', GITHUB_REPOSITORY: 'acme/app' }, root: work, event: comment('@oasis where is login?'), request, sdk, log: () => {} });
   assert.equal(outcome.published.changed, false);
   assert.match(calls.at(-1).body.body, /\*\*Oasis\*\* finished\.\n\nlogin\(\) lives in login\.js\./);
