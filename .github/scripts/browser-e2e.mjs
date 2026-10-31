@@ -203,7 +203,11 @@ try {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   const page = await context.newPage();
   const pageErrors = [];
+  const consoleErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
 
   await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentWorkspaceGrid')?.dataset.terminalVisible === 'false',
@@ -451,6 +455,7 @@ try {
   console.log('PASS isolated-diff review: Run Monitor opened the committed branch diff and left the main checkout untouched.');
 
   assert.deepEqual(pageErrors, [], 'The browser page must not throw JavaScript errors.');
+  assert.deepEqual(consoleErrors, [], 'The browser page must not log console errors.');
   await page.locator('#agentSplitDivider').focus();
   const splitBefore = await page.locator('#agentSplitDivider').getAttribute('aria-valuenow');
   await page.keyboard.press('ArrowRight');
@@ -515,7 +520,11 @@ try {
   try {
     const firstRunPage = await context.newPage();
     const firstRunErrors = [];
+    const firstRunConsoleErrors = [];
     firstRunPage.on('pageerror', (error) => firstRunErrors.push(error.message));
+    firstRunPage.on('console', (message) => {
+      if (message.type() === 'error') firstRunConsoleErrors.push(message.text());
+    });
     await firstRunPage.setViewportSize({ width: 1280, height: 900 });
     await firstRunPage.goto('http://127.0.0.1:' + firstRunApp.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await firstRunPage.locator('#sidebarNewChatBtn').click();
@@ -553,6 +562,7 @@ try {
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-390px.png'), fullPage: true });
     assert.equal(await firstRunPage.locator('[data-first-run]').count(), 3, 'First run should present all three model choices.');
     assert.deepEqual(firstRunErrors, [], 'The first-run screen must not throw JavaScript errors.');
+    assert.deepEqual(firstRunConsoleErrors, [], 'The first-run screen must not log console errors.');
     await firstRunPage.close();
     console.log('PASS first-run E2E: unconfigured provider exposes all three setup paths at desktop and 390px.');
   } finally {
