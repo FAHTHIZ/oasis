@@ -255,7 +255,7 @@ export async function loadSettings(root, options = {}) {
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.autoTest;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       if (loosening) result.ignoredUntrusted.push(file);
       return;
     }
@@ -263,6 +263,8 @@ export async function loadSettings(root, options = {}) {
     if (permissions.disableBypassPermissionsMode === 'disable') result.permissions.disableBypassPermissionsMode = true;
     // "apiKeyHelper": a command that prints the model API key (runs a command, so trusted scopes only).
     if (typeof settings.apiKeyHelper === 'string' && settings.apiKeyHelper.trim()) result.apiKeyHelper = settings.apiKeyHelper.trim().slice(0, 4000);
+    // "customHeadersHelper": a command printing "Name: value" lines (or JSON) added to model requests.
+    if (typeof settings.customHeadersHelper === 'string' && settings.customHeadersHelper.trim()) result.customHeadersHelper = settings.customHeadersHelper.trim().slice(0, 4000);
     // "env": variables applied to every session (Claude Code settings key).
     if (settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env)) {
       result.env ||= {};
