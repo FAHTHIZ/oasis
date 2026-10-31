@@ -84,7 +84,7 @@ The first Phase 0 implementation slice has been applied directly to `main`.
 
 **Verification boundary:** direct-main commits trigger GitHub Actions validation. The full Node 22/24/26 integrity matrix, clean-environment suite, Linux PTY integration, cross-platform security checks, and repository publishing validation must pass on the latest main commit before Gate A is closed. Earlier partial results from superseded branches are not treated as proof for current main. Gate A remains open.
 
-The Quality run for the preceding release candidate remained active after its test commands stopped reporting progress, holding the `oasis-quality-v6` concurrency group and preventing the current-main run from starting. The workflow concurrency group has been rotated to `oasis-quality-v7` so the current `main` snapshot can receive an independent verification run. The previous run remains visible for diagnosis; this change does not cancel it, change any test requirement, or mark a gate passed.
+The Quality run for the preceding release candidate remained active after its test commands stopped reporting progress, holding the `oasis-quality-v6` concurrency group and preventing the current-main run from starting. The workflow concurrency group has been rotated to `oasis-quality-v8` so the current `main` snapshot can receive an independent verification run. The previous run remains visible for diagnosis; this change does not cancel it, change any test requirement, or mark a gate passed.
 ---
 
 
