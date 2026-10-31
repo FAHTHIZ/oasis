@@ -266,7 +266,7 @@ The repair sequence is being developed on isolated branches; these changes are n
 **Verification boundary:** source syntax checks have passed. The 5,000-line regression test checks first/last/error-line visibility, full-log retention, credential redaction, and file permissions. CI for this branch is pending; the runtime test has not yet been confirmed by GitHub Actions.
 ## Cost-aware model routing — October 31, 2026
 
-- Added a conservative easy/strong classifier. Only short, clearly read-only requests are eligible for the cheaper model; edits, tests, security-sensitive work, long tasks and ambiguous prompts stay on the strong model.
+- Added a conservative easy/strong classifier. Only short, clearly read-only requests are eligible for the cheaper model; edits, tests, security-sensitive work, long tasks and ambiguous prompts stay on the strong model. Security-sensitive language overrides even a benchmark small-task hint.
 - Added user-level /routing easy MODEL, /routing strong MODEL, /routing on|off|status|reset controls. Untrusted project settings cannot change the user's model-routing policy; configured model allow-lists are respected.
 - Each task reports the selected model, tier and reason, tokens, estimated actual cost, strong-model cost estimate, and the difference when both model prices are known. CLI usage totals and browser session state include the accumulated routed-task savings.
 - Extended the evaluator with --route-easy-model and --route-strong-model; fixture difficulty is passed as a routing hint and the chosen model and per-task cost fields are stored in each trial record.
