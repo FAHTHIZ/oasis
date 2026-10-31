@@ -51,7 +51,13 @@ const mainTree = new Map([
   ['test/eval-quarantine.test.mjs', 'blob-quarantine-test'],
   ['bench/README.md', 'blob-bench'],
   ['docs/NEXT_MILESTONE.md', 'blob-next-milestone'],
-  ['README.md', 'blob-readme']
+  ['README.md', 'blob-readme'],
+  ['src/ollama-discovery.mjs', 'blob-ollama-discovery'],
+  ['test/ollama-discovery.test.mjs', 'blob-ollama-test'],
+  ['test/slash-extra.test.mjs', 'blob-slash-extra-test'],
+  ['test/terminal-ui.test.mjs', 'blob-terminal-ui-test'],
+  ['docs/USER_GUIDE.md', 'blob-user-guide'],
+  ['test/web.test.mjs', 'blob-web-test']
 ]);
 const openPRs = new Set(['feat/open-review']);
 const mergedHeads = new Map([['feat/merged', new Set(['merged-head-sha'])]]);
@@ -112,7 +118,9 @@ test('audited superseded branch set uses exact heads and existing replacement pa
     ['fix/gate1-optional-terminal', '133aa7d1c042aaca52387bba62feb7060bc92c4b'],
     ['fix/gate1-site-mark-assertion', 'a949fff353370c4902234162a0a843397d45ba78'],
     ['fix/gate1-static-asset-routes', 'fae5b813f8e5147e40de04970d6f45a246f60660'],
-    ['test/gate1-browser-and-asset-smoke', '73d6baecc843fa336c88366f3c57d549673bf2c1']
+    ['test/gate1-browser-and-asset-smoke', '73d6baecc843fa336c88366f3c57d549673bf2c1'],
+    ['cli/getting-started', '0d77138168847f8c45dd392a3bc0a6c788a22a8c'],
+    ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6']
   ];
   for (const [name, sha] of reviewed) {
     const entry = AUDITED_SUPERSEDED_HEADS.get(name);
