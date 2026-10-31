@@ -516,7 +516,7 @@ function prepareAgentPrompt(prompt){
 }
 function commandPaletteScore(item,query){
   var haystack=(item.label+' '+item.description+' '+item.category+' '+(item.keywords||'')).toLowerCase();
-  var terms=String(query||'').trim().toLowerCase().split(/\\s+/).filter(Boolean);
+  var terms=String(query||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
   var score=0;
   for(var ti=0;ti<terms.length;ti++){
     var term=terms[ti],at=haystack.indexOf(term);

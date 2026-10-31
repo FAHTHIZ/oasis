@@ -312,6 +312,9 @@ export async function loadSettings(root, options = {}) {
       if (!result.modelRouting.easyModel) result.modelRouting.enabled = false;
     }
     if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();
+    // repoMap: true | false | { maxChars } — add a ranked repository outline to the first turn.
+    if (typeof settings.repoMap === 'boolean') result.repoMap = settings.repoMap;
+    else if (settings.repoMap && typeof settings.repoMap === 'object' && !Array.isArray(settings.repoMap)) result.repoMap = { maxChars: Math.max(1000, Math.min(30000, Number.parseInt(settings.repoMap.maxChars, 10) || 6000)) };
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
   };
 
