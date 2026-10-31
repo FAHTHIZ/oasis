@@ -2187,7 +2187,7 @@ export function appendLspUnavailableNotice(text, state) {
   const changed = new Set(state && state.changedPaths instanceof Set ? state.changedPaths : []);
   const unavailable = [...(state && state.lspVerificationByPath instanceof Map ? state.lspVerificationByPath.entries() : [])]
     .filter(([file, result]) => changed.has(file) && result && result.status === 'unavailable')
-    .map(([file, result]) => file + (result.reason ? ': ' + String(result.reason).slice(0, 240) : ''));
+    .map(([file, result]) => file + (result.reason ? ': ' + String(result.reason).replace(/\s*Meanwhile, use grep or the diagnostics tool\.?/i, '').slice(0, 240) : ''));
   if (!unavailable.length) return String(text || '');
   return String(text || '').trimEnd() +
     '\n\nLSP verification unavailable for ' + unavailable.join('; ') +
@@ -2249,6 +2249,7 @@ function verificationSummary(state) {
             : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
               ? 'warnings'
               : 'clean',
+      ...(result && result.status === 'unavailable' ? { blocking: result.blocking !== false } : {}),
       newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0,
       newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0,
       ...(result && result.reason ? { reason: String(result.reason).replace(/[\r\n\0]/g, ' ').slice(0, 240) } : {})
