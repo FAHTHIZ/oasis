@@ -611,7 +611,7 @@ Context controls:
 
 More session commands:
 
-- `/effort [low|medium|high|max|auto]` sets how hard the model thinks for the rest of the session (also `oasis --effort high`). Prompt words like "ultrathink" can still raise a single turn.
+- `/effort [low|medium|high|max|auto]` sets how hard the model thinks for the rest of the session (also `oasis --effort high`). Prompt words like "ultrathink" can still raise a single turn. To set effort for one prompt without changing the session, put `effort:low`, `effort:medium`, `effort:high` or `effort:max` anywhere in it (for example `rename this helper effort:low`); the token is removed before the prompt reaches the model.
 - `/copy [N]` copies the last reply (or the Nth most recent) to the clipboard using pbcopy, wl-copy, xclip, xsel or clip, and falls back to the OSC 52 terminal escape over SSH.
 - `/undo [N]` is shorthand for `/rewind N`. `/usage` is the same as `/cost`.
 - `/fork` (or `/branch`) saves the conversation so far and continues in a copy, so you can try another approach and `/resume` the original later.

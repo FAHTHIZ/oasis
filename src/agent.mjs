@@ -1076,6 +1076,14 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
 // (Anthropic) and a reasoning effort (OpenAI reasoning models); prompt keywords
 // such as "ultrathink" can still raise it for one turn. auto (null) restores base.
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max', 'auto'];
+const INLINE_EFFORT = /(^|\s)effort:(low|medium|high|max)(?=\s|$|[.,;!?])/i;
+export function inlineEffortLevel(prompt) {
+  const match = INLINE_EFFORT.exec(String(prompt || ''));
+  return match ? match[2].toLowerCase() : null;
+}
+export function stripInlineEffort(text) {
+  return typeof text === 'string' ? text.replace(INLINE_EFFORT, '$1').trim() : text;
+}
 // Subagent effort: agent frontmatter `effort:` wins, then OASIS_SUBAGENT_EFFORT /
 // CLAUDE_CODE_SUBAGENT_EFFORT, then settings `subagentEffort`. Lets a cheap low-effort
 // explorer run under a high-effort main session (or the reverse).
@@ -3779,9 +3787,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (!options.isSubagent) repairInterruptedHistory(session);
   // Non-enumerable so provider credentials in the env never end up in copies or logs.
   if (options.env) Object.defineProperty(session, 'providerEnv', { value: options.env, writable: true, configurable: true, enumerable: false });
-  session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, session.config, options.env || process.env) : 0;
+  // "effort:high" (or low/medium/max) anywhere in the prompt sets effort for this turn only.
+  const inlineEffort = options.isSubagent ? null : inlineEffortLevel(request);
+  if (inlineEffort) {
+    userContent = stripInlineEffort(userContent);
+    if (typeof options.onInlineEffort === 'function') options.onInlineEffort(inlineEffort);
+  }
+  const turnConfig = inlineEffort ? applyEffort(session.config, inlineEffort) : session.config;
+  session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, turnConfig, options.env || process.env) : 0;
   if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
-  session.reasoningEffort = isAnthropicFamily(session.config.protocol) ? '' : reasoningEffortFor(request, session.config, options.env || process.env);
+  session.reasoningEffort = isAnthropicFamily(session.config.protocol) ? '' : reasoningEffortFor(request, turnConfig, options.env || process.env);
   if (session.reasoningEffort && typeof options.onReasoningEffort === 'function') options.onReasoningEffort(session.reasoningEffort);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
