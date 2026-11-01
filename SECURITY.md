@@ -29,7 +29,7 @@ Please do not publish exploitable details in a public issue. Contact the reposit
 
 ## Supported versions
 
-Only the latest version on the default branch is currently maintained. The repository has a published `v0.4.0` Beta GitHub Release with downloadable desktop assets, while `main` contains newer unreleased changes. The presence of a release tag or binary does not establish a long-term support window: older tags are immutable historical snapshots and do not receive a promise of security fixes. Report vulnerabilities against the current default branch and include the affected release/tag when known. A formal multi-version support window has not been adopted.
+Only the latest version on the default branch is currently maintained. The current development package on `main` is `1.0.0-rc.1` (Release Candidate / Production Qualification). The latest published stable release remains `v0.4.0`; its desktop assets are historical downloads and do not represent the current source version. Report vulnerabilities against the current default branch and include the affected release/tag when known. Older tags are immutable historical snapshots and do not receive a promise of backported fixes. A formal multi-version support window has not been adopted.
 
 When OS sandboxing is explicitly enabled but unavailable, OASIS refuses to run commands without isolation. Make the configured OS sandbox available or deliberately disable the sandbox setting to use the separate approval-based execution mode.
 
