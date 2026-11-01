@@ -57,120 +57,86 @@ try {
     console.log('Browser E2E fixture provider request ' + completionCalls + ' (' +
       (Array.isArray(request.messages) ? request.messages.length : 0) + ' messages)');
 
-    // Keep the fixture deterministic: first create a file, then read it, then report.
+    // Exercise the visible activity story: create, read, edit, approve
+    // a protected edit, approve a failing command, then report.
     let assistantMessage;
     let finishReason = 'tool_calls';
     if (completionCalls === 1) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_write',
-          type: 'function',
-          function: {
-            name: 'write_file',
-            arguments: JSON.stringify({
-              path: 'browser-e2e-output.txt',
-              content: 'Created by the authenticated browser agent tool cycle.\n'
-            })
-          }
-        }]
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_write', type: 'function',
+        function: { name: 'write_file', arguments: JSON.stringify({
+          path: 'browser-e2e-output.txt',
+          content: 'Created by the authenticated browser agent tool cycle.\n'
+        }) }
+      }] };
     } else if (completionCalls === 2) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_read',
-          type: 'function',
-          function: {
-            name: 'read_file',
-            arguments: JSON.stringify({ path: 'browser-e2e-output.txt' })
-          }
-        }]
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_read', type: 'function',
+        function: { name: 'read_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt' }) }
+      }] };
     } else if (completionCalls === 3) {
-      finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'Browser end-to-end fixture completed successfully. The agent wrote and read back a workspace file.'
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_edit', type: 'function',
+        function: { name: 'edit_file', arguments: JSON.stringify({
+          path: 'browser-e2e-output.txt',
+          old_string: 'Created by the authenticated browser agent tool cycle.',
+          new_string: 'Edited by the authenticated browser agent tool cycle.'
+        }) }
+      }] };
     } else if (completionCalls === 4) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_delete',
-          type: 'function',
-          function: {
-            name: 'delete_file',
-            arguments: JSON.stringify({ path: 'browser-e2e-output.txt' })
-          }
-        }]
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_protected_edit', type: 'function',
+        function: { name: 'edit_file', arguments: JSON.stringify({
+          path: '.oasis/settings.json',
+          old_string: '"theme":"dark"',
+          new_string: '"theme":"light"'
+        }) }
+      }] };
     } else if (completionCalls === 5) {
-      finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'The delete request was denied; the file remains unchanged.'
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_failing_command', type: 'function',
+        function: { name: 'run_command', arguments: JSON.stringify({
+          command: 'node', args: ['-e', 'process.exit(7)']
+        }) }
+      }] };
     } else if (completionCalls === 6) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_cancel',
-          type: 'function',
-          function: {
-            name: 'run_command',
-            arguments: JSON.stringify({
-              command: 'node',
-              args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
-            })
-          }
-        }]
-      };
-    } else if (completionCalls === 7) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_worktree_write',
-          type: 'function',
-          function: {
-            name: 'write_file',
-            arguments: JSON.stringify({
-              path: 'review-e2e-output.txt',
-              content: 'Created in the isolated worktree for diff review.\n'
-            })
-          }
-        }]
-      };
-    } else if (completionCalls === 8) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_worktree_read',
-          type: 'function',
-          function: {
-            name: 'read_file',
-            arguments: JSON.stringify({ path: 'review-e2e-output.txt' })
-          }
-        }]
-      };
-    } else if (completionCalls === 9) {
       finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.'
-      };
+      assistantMessage = { role: 'assistant', content: 'Browser end-to-end fixture completed successfully. The agent wrote, read and edited a file, showed both approvals, and kept the failed command visible.' };
+    } else if (completionCalls === 7) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_delete', type: 'function',
+        function: { name: 'delete_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt' }) }
+      }] };
+    } else if (completionCalls === 8) {
+      finishReason = 'stop';
+      assistantMessage = { role: 'assistant', content: 'The delete request was denied; the file remains unchanged.' };
+    } else if (completionCalls === 9) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_cancel', type: 'function',
+        function: { name: 'run_command', arguments: JSON.stringify({
+          command: 'node',
+          args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
+        }) }
+      }] };
+    } else if (completionCalls === 10) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_worktree_write', type: 'function',
+        function: { name: 'write_file', arguments: JSON.stringify({
+          path: 'review-e2e-output.txt',
+          content: 'Created in the isolated worktree for diff review.\n'
+        }) }
+      }] };
+    } else if (completionCalls === 11) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_worktree_read', type: 'function',
+        function: { name: 'read_file', arguments: JSON.stringify({ path: 'review-e2e-output.txt' }) }
+      }] };
+    } else if (completionCalls === 12) {
+      finishReason = 'stop';
+      assistantMessage = { role: 'assistant', content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.' };
     } else {
       finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'Unexpected extra browser E2E model request.'
-      };
+      assistantMessage = { role: 'assistant', content: 'Unexpected extra browser E2E model request.' };
     }
 
     res.writeHead(200, { 'content-type': 'application/json' });
