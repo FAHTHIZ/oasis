@@ -32,8 +32,11 @@ test('install instructions explain desktop release and current OS signing limita
   assert.match(installGuide, /do not need to install Node\.js or Git/i);
   assert.match(installGuide, /unsigned/i);
   assert.match(installGuide, /github\.com\/FAHTHIZ\/oasis\/releases/i);
-  assert.match(installGuide, /no published GitHub Release or public desktop installer asset/i);
-  assert.match(installGuide, /Use the CLI installation path below/i);
+  assert.match(installGuide, /Desktop installers are published/i);
+  assert.match(installGuide, /releases\/tag\/v0\.4\.0/i);
+  assert.match(installGuide, /Windows x64.*\.exe/i);
+  assert.match(installGuide, /macOS Apple Silicon.*\.dmg/i);
+  assert.match(installGuide, /Linux x86_64.*\.AppImage.*\.deb/i);
 });
 
 const webRuntime = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
