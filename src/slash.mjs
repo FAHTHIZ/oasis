@@ -1483,7 +1483,7 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!requested) {
         return { output: 'Saved sessions:\n' + saved.map((item, index) =>
           '  ' + (index + 1) + '. ' + item.id + '  ' + (item.title || '(untitled)') + '  [' + (item.model || 'unknown model') + ']'
-        ).join('\n') };
+        ).join('\n') + '\nType /resume NUMBER (or an ID prefix) to continue one.' };
       }
       const number = Number(requested);
       const selected = Number.isInteger(number) && number >= 1 && number <= saved.length

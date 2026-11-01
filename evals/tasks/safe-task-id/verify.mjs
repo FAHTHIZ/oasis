@@ -10,4 +10,6 @@ for (const args of [['scripts/check-site.mjs'], ['--test']]) {
 const m = await import(pathToFileURL(path.join(workspace, 'src', 'lib.mjs')).href);
 assert.equal(m.isSafeTaskId('config-change-2'), true);
 assert.equal(m.isSafeTaskId('a'), true);
-for (const value of ['', '../secret', 'UPPER', 'has space', 'a/b', '.hidden', 'x'.repeat(65), null]) assert.equal(m.isSafeTaskId(value), false);
+assert.equal(m.isSafeTaskId('0-a'), true);
+assert.equal(m.isSafeTaskId('a'.repeat(64)), true, 'a first character plus 63 more is allowed');
+for (const value of ['', '../secret', 'UPPER', 'has space', 'a/b', '.hidden', 'x'.repeat(65), null, 'aBc', 'a.b', 'a_b', '-lead', 'tab\there', 'a\\b', 42]) assert.equal(m.isSafeTaskId(value), false);
