@@ -355,6 +355,8 @@ body.agent-busy .agent-runtime-state::before{background:var(--accent);animation:
 .agent-message.assistant.md{white-space:normal}
 .agent-message.assistant.failed{color:var(--danger)}
 .agent-message.assistant.failed::before{border-color:#FF8A8A55}
+.agent-message.shell{align-self:stretch;font:12.5px/1.5 var(--font-mono);background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:340px;overflow:auto;color:var(--text)}
+.agent-message.shell.failed{border-left:3px solid var(--danger)}
 .agent-message.activity{align-self:stretch;font:12.5px/1.5 var(--font-mono);color:var(--muted);padding:6px 10px 6px 34px;margin:-10px 0 -10px 0;position:relative;white-space:pre-wrap;max-height:220px;overflow:auto;border-radius:var(--r-sm)}
 .agent-message.activity.agent-context-notice{display:grid;gap:3px;max-width:min(100%,760px);padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-md);background:var(--panel);font:12.5px/1.5 var(--font-sans);white-space:normal}
 .agent-context-notice strong{font-weight:650;color:var(--text)}
