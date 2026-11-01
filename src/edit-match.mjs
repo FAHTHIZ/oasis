@@ -120,8 +120,20 @@ function restoreLine(replacementLine, actualLine) {
   return actualLine.slice(0, prefix) + replacementLine.slice(prefix, replacementLine.length - suffix) + actualLine.slice(actualLine.length - suffix);
 }
 
+// The opposite drift: the model typed curly quotes for code that uses straight
+// ones (common when code was copied through a chat UI). Writing those curly
+// quotes into source code breaks it, so map quote characters in the
+// replacement back to ASCII. Dashes and other new typography are kept.
+const CURLY_QUOTES = /[\u2018\u2019\u201A\u201B\u201C\u201D\u201E\u201F]/;
+function asciiQuotes(line) {
+  return line.replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+}
+
 function keepTypography(replacement, needleLines, actual) {
-  if (!actual.some((line) => TYPOGRAPHIC.test(line))) return replacement;
+  if (!actual.some((line) => TYPOGRAPHIC.test(line))) {
+    if (needleLines.some((line) => CURLY_QUOTES.test(line))) return replacement.map(asciiQuotes);
+    return replacement;
+  }
   const byNormalized = new Map();
   actual.forEach((line) => { const key = normalizeQuotes(line); if (!byNormalized.has(key)) byNormalized.set(key, line); });
   return replacement.map((line, index) => {

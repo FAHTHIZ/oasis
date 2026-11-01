@@ -14,6 +14,7 @@ const TOKEN_PATTERNS = [
   /\bsk-ant-[A-Za-z0-9_-]{20,}/g,
   /\bsk-proj-[A-Za-z0-9_-]{20,}/g,
   /\bsk-(?:live|test)_[A-Za-z0-9]{16,}/g,
+  /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}/g,
   /\b(?:rk|pk)_live_[A-Za-z0-9]{16,}/g,
   /\bsk-[A-Za-z0-9]{32,}\b/g,
   /\bgh[pousr]_[A-Za-z0-9]{30,}\b/g,
@@ -30,7 +31,7 @@ const TOKEN_PATTERNS = [
 ];
 
 // KEY=value lines (dotenv, shell exports, ini, yaml) whose key names a secret.
-const ASSIGNMENT = /^(\s*(?:export\s+)?["']?[A-Za-z][A-Za-z0-9_.-]*(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|AUTH|CREDENTIALS?|DSN|DATABASE_URL|CONNECTION_STRING)[A-Za-z0-9_.-]*["']?\s*[:=]\s*["']?)([^"'\s#][^"'\s]{7,})(["']?\s*(?:#.*)?)$/gim;
+const ASSIGNMENT = /^(\s*(?:export\s+)?["']?(?:[A-Za-z][A-Za-z0-9_.-]*)?(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|AUTH|CREDENTIALS?|DSN|DATABASE_URL|CONNECTION_STRING)[A-Za-z0-9_.-]*["']?[ \t]*[:=][ \t]*["']?)([^"'\s#][^"'\s]{7,})(["']?[ \t]*(?:#.*)?)$/gim;
 // URLs with embedded credentials: scheme://user:password@host
 const URL_CREDENTIAL = /\b([a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)([^\s@/]{4,})(@)/gi;
 const PLACEHOLDER = /«secret:([0-9a-f]{8})»/g;

@@ -16,6 +16,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
+import { analyzeShellLine } from './shell-risk.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { commentWarning } from './style-rules.mjs';
@@ -444,13 +445,22 @@ function describeBackground(entry) {
 const SHELL_BLOCK_PATTERNS = [
   /\bsudo\b/, /\bdoas\b/, /\bsu\s+-?\s*\w*\s*-c\b/, /\bmkfs(\.\w+)?\b/, /\bdd\s+[^|;&]*of=\/dev\//, /\brm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(\/|~|\$HOME)(\s|$|\/\*)/i,
   /\bRemove-Item\b[^;|]*-Recurse[^;|]*\s(['"]?)([A-Za-z]:\\?|\/|~|\$HOME|\$env:USERPROFILE)\1(\s|$)/i, /\b(Format-Volume|Clear-Disk|Stop-Computer|Restart-Computer|Initialize-Disk)\b/i,
-  /:\(\)\s*\{\s*:\|:&\s*\};:/, /\bshutdown\b|\breboot\b|\bpoweroff\b/, /\bchmod\s+-R\s+777\s+\//, /\bgit\s+push\b[^;&|]*(--force|-f\b)/
+  /:\(\)\s*\{\s*:\|:&\s*\};:/, /\bchmod\s+-R\s+777\s+\//, /\bgit\s+push\b[^;&|]*(--force|-f\b)/
 ];
 
 export function shellCommandBlocked(command) {
   const text = String(command || '');
   for (const pattern of SHELL_BLOCK_PATTERNS) if (pattern.test(text)) return 'This shell command matches a blocked destructive pattern (' + pattern.source + ').';
+  const analysis = analyzeShellLine(text);
+  if (analysis.blocked) return 'This shell command is blocked by OASIS safety policy: it ' + analysis.blocked + '. Nothing ran. Use a narrower command, or run it yourself outside OASIS if it is really intended.';
   return null;
+}
+
+// High-risk shell commands always need a person to approve them in the
+// moment; auto-approve, allow rules, sandbox auto-allow and bypass mode do
+// not cover them.
+export function shellHighRisk(command) {
+  return analyzeShellLine(String(command || '')).highRisk || null;
 }
 
 // Commands that attach to or control applications the user already has open.
@@ -495,11 +505,12 @@ async function runShell(root, args, context, flavor = 'sh') {
   const { guardInstallCommand } = await import('./package-vetting.mjs');
   const install = await guardInstallCommand(command, null, { env: context.env || process.env, fetchImpl: context.fetchImpl || globalThis.fetch });
   if (install.blocked) return { command, ...install.blocked };
+  const hardRisk = shellHighRisk(command);
   const appRisk = appControlRisk(command) || (protectedEditsAllowed(context.env || process.env) ? null : protectedShellWrite(command));
   const bypass = Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions');
-  const autoAllowed = !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));
+  const autoAllowed = !hardRisk && !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));
   if (!autoAllowed) {
-    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk));
+    const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk) || Boolean(hardRisk));
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };
   }
   if (context.signal && context.signal.aborted) {

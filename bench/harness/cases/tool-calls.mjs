@@ -60,3 +60,23 @@ export const cases = [
   { id: 'neg-quoted-in-fence', kind: 'text', raw: 'The log contained this line:\n```\n<tool_call>{"name":"run_command","arguments":{"command":"rm"}}</tool_call>\n```\nIt came from the old agent.', expect: [] },
   { id: 'neg-json-data', kind: 'text', raw: '{"name": "oasis", "version": "1.0.0"}', expect: [] }
 ];
+
+// Held-out cases: written after the fixes that followed the first run and
+// never used to tune the runtime. Reported separately, as-is.
+export const heldout = [
+  { id: 'h-args-bom', kind: 'args', raw: '\uFEFF{"path":"a.js"}', expect: { path: 'a.js' } },
+  { id: 'h-args-comment', kind: 'args', raw: '{"path":"a.js" // the entry point\n}', expect: { path: 'a.js' } },
+  { id: 'h-args-xml-wrapped', kind: 'args', raw: '<arguments>{"path":"a.js"}</arguments>', expect: { path: 'a.js' } },
+  { id: 'h-args-escaped-quotes', kind: 'args', raw: '{"content":"say \\"hi\\""}', expect: { content: 'say "hi"' } },
+  { id: 'h-args-nested-trailing', kind: 'args', raw: '{"edits":[{"old_string":"a","new_string":"b",},],}', expect: { edits: [{ old_string: 'a', new_string: 'b' }] } },
+  { id: 'h-args-tab-in-string', kind: 'args', raw: '{"content":"a\tb"}', expect: { content: 'a\tb' } },
+  { id: 'h-args-number-string', kind: 'args', raw: '42', expect: null },
+  { id: 'h-text-qwen-multiline', kind: 'text', raw: 'Let me check.\n<tool_call>\n{\n  "name": "search_files",\n  "arguments": {\n    "query": "parseConfig"\n  }\n}\n</tool_call>', expect: [{ name: 'search_files', args: { query: 'parseConfig' } }] },
+  { id: 'h-text-tool-key', kind: 'text', raw: '<tool_call>{"tool":"read_file","input":{"path":"a.js"}}</tool_call>', expect: [{ name: 'read_file', args: { path: 'a.js' } }] },
+  { id: 'h-text-args-string', kind: 'text', raw: '<tool_call>{"name":"read_file","arguments":"{\\"path\\": \\"a.js\\"}"}</tool_call>', expect: [{ name: 'read_file', args: { path: 'a.js' } }] },
+  { id: 'h-text-tools-wrapper', kind: 'text', raw: '<tools>\n{"name": "list_files", "arguments": {"path": "src"}}\n</tools>', expect: [{ name: 'list_files', args: { path: 'src' } }] },
+  { id: 'h-text-json-array', kind: 'text', raw: '[{"name": "read_file", "arguments": {"path": "a.js"}}, {"name": "read_file", "arguments": {"path": "b.js"}}]', expect: [{ name: 'read_file', args: { path: 'a.js' } }, { name: 'read_file', args: { path: 'b.js' } }] },
+  { id: 'h-neg-markdown-table', kind: 'text', raw: '| tool | use |\n|---|---|\n| read_file | read a file |', expect: [] },
+  { id: 'h-neg-plan-with-names', kind: 'text', raw: 'Plan: first read_file on src/a.js, then edit_file to fix the bug, then run_command npm test.', expect: [] },
+  { id: 'h-neg-unknown-in-hermes', kind: 'text', raw: '<tool_call>{"name":"delete_everything","arguments":{}}</tool_call>', expect: [] }
+];

@@ -13,6 +13,10 @@ import { isTestPath as sharedIsTestPath } from './test-tamper.mjs';
 import { createHash } from 'node:crypto';
 
 const ELISION_PATTERNS = [
+  // JSX comment form: {/* ... rest of the JSX unchanged */}
+  /^\s*\{\s*\/\*+\s*\.{3}\s*(?:the\s+)?(?:rest|remaining|existing|other|previous|unchanged|same|original)\b[^\n]*$/im,
+  // "implementation omitted for brevity", "rest of the logic elided"
+  /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*|\{\s*\/\*+)\s*(?:\.{3}\s*)?(?:the\s+)?(?:rest of (?:the )?)?(?:implementation|code|logic|body|details|function body|method body)\s+(?:is\s+)?(?:omitted|elided|truncated|skipped|left out|not shown)\b[^\n]*$/im,
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*\.{3}\s*(?:the\s+)?(?:rest|remaining|existing|other|previous|unchanged|same|original)\b[^\n]*$/im,
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*(?:the\s+)?(?:rest of (?:the )?(?:file|code|function|class|implementation|component|module)|existing code|previous code|remaining code|other (?:methods|functions|code))\b[^\n]*(?:unchanged|here|remains?|stays?|same|omitted|as before|\.{3})[^\n]*$/im,
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*\.{3}\s*(?:code|implementation)?\s*(?:unchanged|omitted|truncated|elided)\b[^\n]*$/im,

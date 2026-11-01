@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { maskSecrets, unmaskSecrets } from '../src/secret-shield.mjs';
+import { maskSecrets, unmaskSecrets, findSecretsInText } from '../src/secret-shield.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 
 const GH = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8';
@@ -78,4 +78,17 @@ test('secrets never reach the model, yet the agent can still edit the file', asy
   for (const body of bodies) assert.ok(!body.includes(GH), 'real token must never be sent to the provider');
   assert.equal(await readFile(path.join(root, 'deploy.ini'), 'utf8'), 'GITHUB_TOKEN=' + GH + '\nPORT=8080\n');
   assert.ok(!JSON.stringify(session.messages).includes(GH), 'transcript holds placeholders only');
+});
+
+test('Stripe-style sk_live_ and rk_live_ keys are detected', () => {
+  const key = ['sk', 'live', 'Q7hT2mPz9XvB4nK8wR3sLd6F'].join('_');
+  assert.equal(findSecretsInText('stripe.key = "' + key + '"').length, 1);
+  assert.equal(findSecretsInText(['rk', 'test', 'Q7hT2mPz9XvB4nK8wR3sLd6F'].join('_')).length, 1);
+});
+
+test('bare secret keys are detected, and a key never borrows the next line as its value', () => {
+  assert.equal(findSecretsInText('password: ' + 'Zq8vL2m' + 'Wp4x').length, 1);
+  assert.equal(findSecretsInText('token=' + 'Q7hT2mPz9X').length, 1);
+  assert.deepEqual(findSecretsInText('password:\n  valueFrom:\n    secretKeyRef: { name: db, key: password }'), []);
+  assert.deepEqual(findSecretsInText('DB_PASSWORD:\n  from_env: DB_PASSWORD'), []);
 });

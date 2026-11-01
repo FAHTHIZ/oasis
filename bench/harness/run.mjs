@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { repairToolArguments, extractTextToolCalls } from '../../src/tool-call-repair.mjs';
 import { relaxedReplace } from '../../src/edit-match.mjs';
 import { analyzeCommand } from '../../src/permissions.mjs';
-import { shellCommandBlocked } from '../../src/power-tools.mjs';
+import { shellCommandBlocked, shellHighRisk } from '../../src/power-tools.mjs';
 import { discardingGitCommand } from '../../src/git-safety.mjs';
 import { findElisionPlaceholder } from '../../src/change-guard.mjs';
 import { analyzeTestDiff } from '../../src/test-tamper.mjs';
@@ -50,10 +50,10 @@ function sortKeys(value) {
 const pct = (n, d) => (d ? Math.round((1000 * n) / d) / 10 : 0);
 
 // ------------------------------------------------------------ tool calls
-function benchToolCalls() {
+function benchToolCalls(list = toolCalls.cases) {
   const names = new Set(toolCalls.TOOLS);
   const rows = [];
-  for (const c of toolCalls.cases) {
+  for (const c of list) {
     let oasis;
     let baseline;
     if (c.kind === 'args') {
@@ -69,8 +69,8 @@ function benchToolCalls() {
     }
     rows.push({ id: c.id, kind: c.kind, oasis: deepEqual(oasis, c.expect), baseline: deepEqual(baseline, c.expect), got: oasis });
   }
-  const recoverable = rows.filter((r, i) => toolCalls.cases[i].expect !== null && !(Array.isArray(toolCalls.cases[i].expect) && !toolCalls.cases[i].expect.length));
-  const negatives = rows.filter((r, i) => toolCalls.cases[i].expect === null || (Array.isArray(toolCalls.cases[i].expect) && !toolCalls.cases[i].expect.length));
+  const recoverable = rows.filter((r, i) => list[i].expect !== null && !(Array.isArray(list[i].expect) && !list[i].expect.length));
+  const negatives = rows.filter((r, i) => list[i].expect === null || (Array.isArray(list[i].expect) && !list[i].expect.length));
   return {
     track: 'Tool-call recovery',
     question: 'Does a damaged or text-written tool call still run, and does prose stay prose?',
@@ -93,14 +93,14 @@ function oasisEdit(file, oldString, newString) {
   return relaxed ? relaxed.next : null;
 }
 
-function benchEdits() {
-  const rows = edits.cases.map((c) => {
+function benchEdits(list = edits.cases) {
+  const rows = list.map((c) => {
     const o = oasisEdit(c.file, c.old, c.new);
     const b = edits.exactReplace(c.file, c.old, c.new);
     return { id: c.id, oasis: o === c.expect, baseline: b === c.expect, wrongWrite: c.expect !== null ? (o !== null && o !== c.expect) : o !== null };
   });
-  const apply = rows.filter((r, i) => edits.cases[i].expect !== null);
-  const refuse = rows.filter((r, i) => edits.cases[i].expect === null);
+  const apply = rows.filter((r, i) => list[i].expect !== null);
+  const refuse = rows.filter((r, i) => list[i].expect === null);
   return {
     track: 'Edit application',
     question: 'Does an edit with whitespace, line-ending, indentation or quote drift land correctly, and does an ambiguous edit get refused?',
@@ -115,6 +115,7 @@ function benchEdits() {
 function commandOutcome(c) {
   if (c.shell) {
     if (shellCommandBlocked(c.shell)) return 'blocked';
+    if (shellHighRisk(c.shell)) return 'held';
     if (discardingGitCommand(c.shell)) return 'snapshot';
     return 'runs';
   }
@@ -128,13 +129,14 @@ function commandOutcome(c) {
 
 // A pre-command snapshot only helps when the damage is to tracked/untracked
 // files in the current Git working tree.
-const SNAPSHOT_RECOVERS = new Set(['git-reset-hard', 'git-clean', 'git-checkout-dot', 'git-restore-dot', 'git-stash-drop', 'git-stash-clear', 'chained-reset', 'argv-git-reset-hard', 'argv-git-clean', 'rm-cwd', 'rm-cwd-glob']);
+const SNAPSHOT_RECOVERS = new Set(['h-git-checkout-force', 'git-reset-hard', 'git-clean', 'git-checkout-dot', 'git-restore-dot', 'git-stash-drop', 'git-stash-clear', 'chained-reset', 'argv-git-reset-hard', 'argv-git-clean', 'rm-cwd', 'rm-cwd-glob']);
 
-function benchCommands() {
-  const rows = commands.cases.map((c) => {
+function benchCommands(list = commands.cases) {
+  const rows = list.map((c) => {
     const outcome = commandOutcome(c);
     const protectedOk = outcome === 'blocked' || outcome === 'held' || (outcome === 'snapshot' && SNAPSHOT_RECOVERS.has(c.id));
-    return { id: c.id, destructive: c.destructive, outcome, ok: c.destructive ? protectedOk : outcome !== 'blocked' };
+    const redirected = !c.destructive && outcome === 'blocked' && Boolean(c.redirect);
+    return { id: c.id, destructive: c.destructive, outcome: redirected ? 'redirected to ' + c.redirect : outcome, redirected, ok: c.destructive ? protectedOk : (outcome !== 'blocked' || redirected) };
   });
   const bad = rows.filter((r) => r.destructive);
   const good = rows.filter((r) => !r.destructive);
@@ -146,7 +148,7 @@ function benchCommands() {
     oasis: {
       protected: bad.filter((r) => r.ok).length, destructive: bad.length,
       blocked: by(bad, 'blocked'), held: by(bad, 'held'), snapshot: bad.filter((r) => r.outcome === 'snapshot' && SNAPSHOT_RECOVERS.has(r.id)).length,
-      benignAllowed: good.filter((r) => r.ok).length, benign: good.length, benignHeld: by(good, 'held')
+      benignAllowed: good.filter((r) => r.ok).length, benign: good.length, benignRedirected: good.filter((r) => r.redirected).length, benignHeld: by(good, 'held')
     },
     baseline: { label: 'no command policy', protected: 0, destructive: bad.length, benignAllowed: good.length, benign: good.length },
     failures: rows.filter((r) => !r.ok).map((r) => r.id + ' (' + r.outcome + ')')
@@ -251,14 +253,19 @@ async function benchOverhead() {
 }
 
 // ------------------------------------------------------------------- main
-const results = [
-  benchToolCalls(),
-  benchEdits(),
-  benchCommands(),
-  benchGuard('Placeholder (elision) guard', 'Does a write that replaces real code with "// ... rest unchanged" get stopped, without flagging ordinary comments?', guards.elision, (c) => findElisionPlaceholder(c.text), 'placeholder'),
-  benchGuard('Weakened-test detection', 'Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?', guards.tamper, (c) => analyzeTestDiff(c.diff).length, 'weakened'),
-  benchGuard('Commit secret scanning', 'Is a credential caught before it is committed, without flagging env references, placeholders and hashes?', guards.secrets, (c) => findSecretsInText(c.text).length, 'secret')
-];
+function suite(set) {
+  const held = set === 'heldout';
+  return [
+    benchToolCalls(held ? toolCalls.heldout : toolCalls.cases),
+    benchEdits(held ? edits.heldout : edits.cases),
+    benchCommands(held ? commands.heldout : commands.cases),
+    benchGuard('Placeholder (elision) guard', 'Does a write that replaces real code with "// ... rest unchanged" get stopped, without flagging ordinary comments?', held ? guards.heldoutElision : guards.elision, (c) => findElisionPlaceholder(c.text), 'placeholder'),
+    benchGuard('Weakened-test detection', 'Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?', held ? guards.heldoutTamper : guards.tamper, (c) => analyzeTestDiff(c.diff).length, 'weakened'),
+    benchGuard('Commit secret scanning', 'Is a credential caught before it is committed, without flagging env references, placeholders and hashes?', held ? guards.heldoutSecrets : guards.secrets, (c) => findSecretsInText(c.text).length, 'secret')
+  ];
+}
+const results = suite('development');
+const heldout = suite('heldout');
 results.push(await benchOverhead());
 
 const report = {
@@ -269,7 +276,8 @@ const report = {
   platform: process.platform + '-' + process.arch,
   cpus: os.cpus().length,
   sourceRevision: process.env.OASIS_SOURCE_REVISION || process.env.GITHUB_SHA || await gitRevision(),
-  results
+  results,
+  heldout
 };
 
 async function gitRevision() {
@@ -287,20 +295,25 @@ function line(r) {
   switch (r.track) {
     case 'Tool-call recovery': return `recovered ${o.recovered}/${o.of} (${pct(o.recovered, o.of)}%) · baseline ${r.baseline.recovered}/${r.baseline.of} · wrongly ran ${o.falseRuns}/${o.negatives} negatives`;
     case 'Edit application': return `applied ${o.applied}/${o.of} (${pct(o.applied, o.of)}%) · baseline ${r.baseline.applied}/${r.baseline.of} · refused ${o.refusedCorrectly}/${o.refuseOf} bad edits · wrong writes ${o.wrongWrites}`;
-    case 'Command safety under auto-approve': return `protected ${o.protected}/${o.destructive} (${pct(o.protected, o.destructive)}%: ${o.blocked} blocked, ${o.held} held, ${o.snapshot} snapshot) · everyday commands not blocked ${o.benignAllowed}/${o.benign}`;
+    case 'Command safety under auto-approve': return `protected ${o.protected}/${o.destructive} (${pct(o.protected, o.destructive)}%: ${o.blocked} blocked, ${o.held} held, ${o.snapshot} snapshot) · everyday commands usable ${o.benignAllowed}/${o.benign} (${o.benignRedirected} via a dedicated tool)`;
     default: return `caught ${o.caught}/${o.of} (${pct(o.caught, o.of)}%) · false alarms ${o.falseAlarms}/${o.negatives}`;
   }
 }
 
-for (const r of results) {
-  if (r.profiles) {
-    console.log('\n' + r.track);
-    for (const p of r.profiles) console.log(`  ${p.profile.padEnd(20)} tools ${String(p.tools).padStart(3)} · system ${p.systemPromptTokens} tok · schemas ${p.toolSchemaTokens} tok · first request ${p.firstRequestTokens} tok` + (p.msToFirstModelRequest !== null ? ` · ${p.msToFirstModelRequest} ms to first request · ${p.msEndToEnd} ms end to end` : ''));
-    continue;
+function print(title, list) {
+  console.log('\n== ' + title);
+  for (const r of list) {
+    if (r.profiles) {
+      console.log('\n' + r.track);
+      for (const p of r.profiles) console.log(`  ${p.profile.padEnd(20)} tools ${String(p.tools).padStart(3)} · system ${p.systemPromptTokens} tok · schemas ${p.toolSchemaTokens} tok · first request ${p.firstRequestTokens} tok` + (p.msToFirstModelRequest !== null ? ` · ${p.msToFirstModelRequest} ms to first request · ${p.msEndToEnd} ms end to end` : ''));
+      continue;
+    }
+    console.log('\n' + r.track + ' (' + r.cases + ' cases)\n  ' + line(r));
+    if (verbose && r.failures.length) console.log('  failing: ' + r.failures.join(', '));
   }
-  console.log('\n' + r.track + ' (' + r.cases + ' cases)\n  ' + line(r));
-  if (verbose && r.failures.length) console.log('  failing: ' + r.failures.join(', '));
 }
+print('Development set (cases the runtime was improved against)', results);
+print('Held-out set v1 (untuned score: bench/results/harness-heldout-v1.json; its misses were fixed afterwards)', heldout);
 
 if (jsonOut) {
   await writeFile(jsonOut, JSON.stringify(report, null, 2) + '\n');

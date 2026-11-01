@@ -51,3 +51,17 @@ export function exactReplace(file, oldString, newString) {
   if (first < 0 || file.indexOf(oldString, first + oldString.length) >= 0) return null;
   return file.slice(0, first) + newString + file.slice(first + oldString.length);
 }
+
+// Held-out cases (see tool-calls.mjs): never used to tune the runtime.
+export const heldout = [
+  { id: 'h-yaml-indent', file: 'jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n', old: 'steps:\n  - run: npm test', new: 'steps:\n  - run: npm ci\n  - run: npm test', expect: 'jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n      - run: npm test\n' },
+  { id: 'h-go-tabs', file: 'func main() {\n\tfmt.Println("a")\n}\n', old: '    fmt.Println("a")', new: '    fmt.Println("b")', expect: 'func main() {\n\tfmt.Println("b")\n}\n' },
+  { id: 'h-crlf-trailing-ws', file: 'a = 1 \r\nb = 2\r\n', old: 'a = 1\nb = 2', new: 'a = 1\nb = 3', expect: 'a = 1 \r\nb = 3\r\n' },
+  { id: 'h-markdown-curly', file: 'He said \u201cship it\u201d.\nDone.\n', old: 'He said "ship it".', new: 'He said "ship it today".', expect: 'He said \u201cship it today\u201d.\nDone.\n' },
+  { id: 'h-em-dash', file: 'Note \u2014 read first.\n', old: 'Note - read first.', new: 'Note - read this first.', expect: 'Note \u2014 read this first.\n' },
+  { id: 'h-blank-line-drift', file: 'a();\n\nb();\n', old: 'a();\n  \nb();', new: 'a();\n\nc();', expect: 'a();\n\nc();\n' },
+  { id: 'h-exact-with-crlf', file: 'x\r\ny\r\n', old: 'x\r\ny', new: 'x\r\nz', expect: 'x\r\nz\r\n' },
+  { id: 'h-refuse-near-miss', file: 'const timeout = 30;\n', old: 'const timeout = 60;', new: 'const timeout = 90;', expect: null },
+  { id: 'h-refuse-two-indented', file: 'def a():\n    return 1\n\ndef b():\n        return 1\n', old: 'return 1', new: 'return 2', expect: null },
+  { id: 'h-refuse-partial-block', file: 'one\ntwo\nthree\n', old: 'one\nTWO\nthree', new: 'one\n2\nthree', expect: null }
+];

@@ -71,12 +71,6 @@ Use **OASIS** as the product name and **Code. Automate. Flourish.** as the prima
 
 ## Release-state identity
 
-The current product lifecycle is **1.0, stable**. Use the `1.0.0` status mark in current product material. The `oasis-beta-*` files are historical assets from the v0.4.0 period, and the `oasis-rc-*` files are historical assets from the 1.0 release-candidate period.
-
-Historical release-candidate assets:
-
-- `assets/oasis-rc-sticker.svg` — wide release-candidate sticker.
-- `assets/oasis-rc-seal.svg` — round RC1 seal.
-- `assets/oasis-rc-mark.svg` — compact RC1 mark.
+The current product lifecycle is **1.0, stable**. Use the `1.0.0` status mark in current product material. Earlier Beta and release-candidate badge files were removed from the tree; they remain available in Git history and in the immutable `v0.4.0` tag.
 
 A stable label is not a certification mark. Do not describe the product as production-certified or defect-free.

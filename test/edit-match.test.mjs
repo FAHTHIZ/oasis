@@ -126,3 +126,9 @@ test('relaxed edits copy untouched lines from the file verbatim', () => {
   const result = relaxedReplace('const a = 1;   \nconst b = 2;\n', 'const a = 1;\nconst b = 2;', 'const a = 1;\nconst b = 3;');
   assert.equal(result.next, 'const a = 1;   \nconst b = 3;\n');
 });
+
+test('curly quotes typed for straight-quoted code are written back as straight quotes', () => {
+  const file = 'const msg = "don\'t panic";\n';
+  const result = relaxedReplace(file, 'const msg = \u201cdon\u2019t panic\u201d;', 'const msg = \u201cdon\u2019t worry\u201d;');
+  assert.equal(result.next, 'const msg = "don\'t worry";\n');
+});
