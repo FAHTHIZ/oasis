@@ -81,6 +81,10 @@ A task can include its own complete `repo/` directory, or a small `repo/BASE_SNA
 
 The evaluator fingerprints the snapshot contents alongside the task prompt, reference patch, verifier, and classification metadata. Changing snapshot contents changes the task fingerprint, so results from different repository states must not be blended as if they used the same task. Keep each snapshot immutable for a comparison and record its upstream repository URL and exact commit in adjacent benchmark documentation.
 
+### Task statements name the exact signature (2026-11-02)
+
+The 20 "Create `src/lib.mjs` exporting `name(...)`" tasks used to hide the parameter list, so a multi-argument helper such as `clampInteger` could be correct and still fail because the model chose a different argument order. Each statement now gives the signature from its reference patch, for example `clampInteger(value, fallback, min, max)`. Verifiers, reference patches and snapshots are unchanged and `oasis eval --validate` still passes all 50 tasks, but the task fingerprints changed, so the comparator will not pair results recorded before and after this change. The field runs below that predate it are marked.
+
 ## Run the suite validator first
 
 From a clean checkout with Node.js 22 or newer:
