@@ -141,11 +141,6 @@ try {
       }] };
     } else if (completionCalls === 6) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
-        id: 'call_browser_e2e_diff', type: 'function',
-        function: { name: 'git_diff', arguments: JSON.stringify({ scope: 'all' }) }
-      }] };
-    } else if (completionCalls === 7) {
-      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_test_write', type: 'function',
         function: { name: 'write_file', arguments: JSON.stringify({
           path: 'browser-e2e-verification.test.mjs',
@@ -159,15 +154,15 @@ try {
             "  assert.equal(content, 'Edited by the authenticated browser agent tool cycle.\\n');",
             "});",
             ""
-          ].join('\\n')
+          ].join('\n')
         }) }
       }] };
-    } else if (completionCalls === 8) {
+    } else if (completionCalls === 7) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_diff', type: 'function',
         function: { name: 'git_diff', arguments: JSON.stringify({ scope: 'all' }) }
       }] };
-    } else if (completionCalls === 9) {
+    } else if (completionCalls === 8) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_content_check', type: 'function',
         function: { name: 'run_command', arguments: JSON.stringify({
