@@ -79,23 +79,28 @@ export function waitLabel(info = {}, elapsedMs = 0) {
 // llama.cpp prompt_progress ({ total, cache, processed, time_ms }) as
 // "54% of 7.7k tokens · about 2m 40s left". Cached tokens count as read; the
 // estimate uses the rate for tokens actually processed so far.
-export function promptProgressText(progress) {
+// llama-server reports once per batch (2,048 tokens by default, over a minute
+// on a slow CPU), so between reports the line moves on at the measured rate;
+// ageMs is the time since the last report. It never claims the read is done.
+export function promptProgressText(progress, ageMs = 0) {
   if (!progress) return '';
   const total = Number(progress.total) || 0;
-  const processed = Math.min(total, Number(progress.processed) || 0);
+  let processed = Math.min(total, Number(progress.processed) || 0);
   if (total <= 0 || processed >= total) return '';
   const cache = Math.min(processed, Number(progress.cache) || 0);
-  const parts = [Math.floor(processed / total * 100) + '% of ' + formatTokens(total) + ' tokens'];
   const timeMs = Number(progress.time_ms ?? progress.timeMs) || 0;
   const done = processed - cache;
-  if (timeMs >= 2000 && done > 0) parts.push('about ' + formatElapsed((total - processed) / (done / timeMs)) + ' left');
+  const rate = timeMs >= 2000 && done > 0 ? done / timeMs : 0;
+  if (rate > 0 && ageMs > 0) processed = Math.min(total - 1, processed + rate * ageMs);
+  const parts = [Math.floor(processed / total * 100) + '% of ' + formatTokens(total) + ' tokens'];
+  if (rate > 0) parts.push('about ' + formatElapsed(Math.max(1000, (total - processed) / rate)) + ' left');
   return parts.join(' · ');
 }
 
 // The status text without escape codes. Exported so it can be tested.
 export function describeWait(info = {}, elapsedMs = 0) {
   const parts = [waitLabel(info, elapsedMs) + '…', formatElapsed(elapsedMs)];
-  const reading = promptProgressText(info.promptProgress);
+  const reading = promptProgressText(info.promptProgress, Number(info.promptProgressAgeMs) || 0);
   if (reading) parts.push(reading);
   else if (Number(info.inputTokens) > 0) parts.push(formatTokens(info.inputTokens) + ' tokens sent');
   if (info.step && Number(info.step) > 1) parts.push('step ' + info.step);
@@ -127,6 +132,7 @@ export function createActivityIndicator({ stream = process.stdout, env = process
   let frame = 0;
   let visible = false;
   let lastWidth = 0;
+  let progressAt = 0;
 
   const columns = () => Math.max(20, Number(stream.columns) || 80);
   const clip = (text) => {
@@ -137,8 +143,9 @@ export function createActivityIndicator({ stream = process.stdout, env = process
 
   function render() {
     const elapsed = now() - startedAt;
-    const plain = describeWait(info, elapsed);
-    const label = waitLabel(info, elapsed) + '…';
+    const shown = progressAt ? { ...info, promptProgressAgeMs: now() - progressAt } : info;
+    const plain = describeWait(shown, elapsed);
+    const label = waitLabel(shown, elapsed) + '…';
     const rest = clip(plain).slice(label.length);
     let line;
     if (level === 'full') {
@@ -158,6 +165,7 @@ export function createActivityIndicator({ stream = process.stdout, env = process
     start(next = {}) {
       if (level === 'off') return false;
       info = { ...next };
+      progressAt = 0;
       startedAt = now();
       frame = 0;
       if (handle) return true;
@@ -166,7 +174,10 @@ export function createActivityIndicator({ stream = process.stdout, env = process
       if (handle && typeof handle.unref === 'function') handle.unref();
       return true;
     },
-    update(next = {}) { info = { ...info, ...next }; },
+    update(next = {}) {
+      if (next.promptProgress) progressAt = now();
+      info = { ...info, ...next };
+    },
     stop() {
       if (handle) { timers.clearInterval(handle); handle = null; }
       if (visible) {
