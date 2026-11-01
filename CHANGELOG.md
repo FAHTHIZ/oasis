@@ -4,9 +4,11 @@ This file records notable user-facing product changes. It does not imply that an
 
 ## Unreleased
 
-Future changes after the current 1.0.0 release candidate belong here.
+Changes after 1.0.0 belong here.
 
-## 1.0.0 — Release Candidate 1 (not yet published)
+## 1.0.0 — stable (November 1, 2026)
+
+First stable release. Release notes: [docs/releases/v1.0.0.md](docs/releases/v1.0.0.md). Installers are unsigned and ship with `SHA256SUMS`.
 
 Reliability and token-efficiency work driven by common coding-agent complaints:
 

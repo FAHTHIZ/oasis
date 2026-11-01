@@ -44,8 +44,8 @@ test('install instructions explain desktop release and current OS signing limita
   assert.match(installGuide, /do not need to install Node\.js or Git/i);
   assert.match(installGuide, /unsigned/i);
   assert.match(installGuide, /github\.com\/FAHTHIZ\/oasis\/releases/i);
-  assert.match(installGuide, /Stable downloads:.*v0\.4\.0/is);
-  assert.match(installGuide, /releases\/tag\/v0\.4\.0/i);
+  assert.match(installGuide, /Downloads:.*releases\/latest/is);
+  assert.match(installGuide, /SHA256SUMS/);
   assert.match(installGuide, /Windows x64.*\.exe/i);
   assert.match(installGuide, /macOS Apple Silicon.*\.dmg/i);
   assert.match(installGuide, /Linux x86_64.*\.AppImage.*\.deb/i);

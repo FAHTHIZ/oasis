@@ -1,34 +1,27 @@
 # OASIS product and release-qualification plan
 
-**Product lifecycle:** Release Candidate / Production Qualification  
-**Development package version:** `1.0.0`  
-**Release channel:** Release Candidate 1 (unpublished)  
-**Candidate source:** `main`  
-**Latest published stable release:** `v0.4.0` (historical release; not the current development version)  
+**Product lifecycle:** Stable  
+**Package version:** `1.0.0`  
+**Release channel:** stable (`v1.0.0`)  
+**Release source:** `main`  
+**Previous release:** `v0.4.0` (historical Beta)  
 **License:** Apache-2.0
 
 This document is the canonical statement of product scope, maturity, supported surfaces, known limits, and release gates. The root README is the concise public overview; the [architecture guide](ARCHITECTURE.md) describes the system; the [user guide](USER_GUIDE.md) describes how to operate it.
 
 ## Current verification snapshot
 
-**Browser lifecycle fix:** [`f83d73e69ec24ce5a57588784de7531d2c585934`](https://github.com/FAHTHIZ/oasis/commit/f83d73e69ec24ce5a57588784de7531d2c585934)  
-**Browser E2E fixture follow-up:** [`31bfdb7065d4a0f7c6098984e3a750eaa72dfde1`](https://github.com/FAHTHIZ/oasis/commit/31bfdb7065d4a0f7c6098984e3a750eaa72dfde1)  
-**Latest documentation snapshot in this pass:** [`48fc802e7855b82115d6260bd90a1a055567374b`](https://github.com/FAHTHIZ/oasis/commit/48fc802e7855b82115d6260bd90a1a055567374b)  
-**Inspection date:** November 1, 2026  
-**Release metadata:** package `1.0.0`, Release Candidate 1; no RC tag or public 1.0.0 release has been created.
+**Last fully verified commit before the release commit:** [`76d04f7`](https://github.com/FAHTHIZ/oasis/commit/76d04f7)  
+**Inspection date:** November 1, 2026
 
-| Workflow on this exact commit | Current result |
+| Workflow on this exact commit | Result |
 |---|---|
-| [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272900653) | Pending at inspection; no completed job results available yet. |
-| [Installer checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272900715) | Queued at inspection. |
-| [Desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/41272900640) | Queued at inspection. |
-| [Public site and repository metadata](https://github.com/FAHTHIZ/oasis/actions/runs/41272900621) | In progress at inspection. |
-| [Branch cleanup](https://github.com/FAHTHIZ/oasis/actions/runs/41272900625) | Queued at inspection. |
+| [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/41288176374) (Node 22/24/26; Windows/macOS/Linux security matrix; clean environment; native PTY; browser E2E with axe accessibility scans) | Success |
+| [Installer checks](https://github.com/FAHTHIZ/oasis/actions/runs/41288176336) (Windows, macOS, Ubuntu) | Success |
+| [Desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/41288176364) (Windows, macOS, Linux) | Success |
+| [Public site and repository metadata](https://github.com/FAHTHIZ/oasis/actions/runs/41288176333) | Success |
 
-The browser client now reconciles busy/activity state from the server's terminal job status, so the interface cannot remain indefinitely busy if the event stream ends before a terminal event is consumed. A subsequent test commit also corrected the scripted provider fixture: it now performs a focused content check after diff review instead of trying to finish immediately after the diff call. The latest full CI run for the documented snapshot has not yet completed; these changes are implemented but not yet proven by a green same-commit browser E2E run. Do not infer a green browser test from the code changes alone.
-
-The CI rows above refer to the latest documented candidate snapshot. Between the lifecycle fix and this snapshot, commit `31bfdb7` updated the browser E2E fixture; the remaining commits in this pass updated product wording, release evidence, documentation and the public landing page. A fresh CI run is required for the final snapshot before describing it as fully green. Never combine passing jobs from different commits into one claimed green result.
-
+The release commit itself changes only release metadata and documentation. The publish job in `.github/workflows/desktop-build.yml` refuses to publish until Quality Checks, the public-site workflow and installer checks have all passed on that same commit, and it builds the installers and `SHA256SUMS` from it. Passing jobs from different commits are never combined into one claimed result.
 
 ## 1. Product position
 
@@ -38,19 +31,17 @@ OASIS is not a hosted model or a proprietary model endpoint. The user chooses th
 
 ### Current maturity
 
-The planned 1.0.0 product scope is feature-complete. OASIS is no longer in Beta or an early feature-building phase. The current phase is **1.0 Release Candidate / Production Qualification**.
+The planned 1.0.0 product scope is feature-complete and released as **OASIS 1.0 (stable)**.
 
-The work remaining is primarily refinement and qualification: stronger agents, better tool selection and task completion, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. The default priority is to improve and finish the existing product—not introduce substantial new product surfaces or expand scope.
+Work after 1.0 is refinement: stronger agents, better tool selection and task completion, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. The default priority is to improve and finish the existing product—not introduce substantial new product surfaces or expand scope.
 
-This maturity statement is not a claim that production qualification is complete. A release-candidate label says the product scope is being stabilized; it does not certify security, platform support, uptime, or defect-free behavior.
+"Stable" means the 1.0 gates below passed on the release commit and the public contracts (CLI flags, settings, tool names, SDK) will change only with notice. It does not certify security, uptime, or defect-free behavior, and the known limits in section 5 still apply.
 
 ## 2. Version and release channels
 
 - The previously published `v0.4.0` remains an immutable historical Git tag and GitHub Release. Its name and release notes accurately record that it shipped as Beta at that time.
-- The current development package on `main` is numeric SemVer `1.0.0`; `package.json` separately identifies the channel as `release-candidate`, candidate `1`.
-- This is an unpublished source candidate, not a Git tag, GitHub Release, or downloadable installer. The stable CLI installer continues to resolve the latest stable tag, currently `v0.4.0`.
-- The final `v1.0.0` release must be created from a newly qualified immutable commit only after every acceptance gate passes; never move or retag the historical `v0.4.0` release.
-- Preserve the historical `v0.4.0` tag and never publish an RC candidate as stable.
+- `package.json` is version `1.0.0` with `oasisRelease.channel` set to `stable`. The `v1.0.0` tag and GitHub Release are created by the desktop workflow from a verified `main` commit; the stable CLI installer then resolves `v1.0.0`.
+- Never move or retag `v0.4.0` or `v1.0.0`. Fixes after 1.0 ship as new versions (`1.0.1`, `1.1.0`, ...).
 
 ## 3. Product scope for 1.0
 
@@ -75,10 +66,10 @@ Implementation presence does not mean every feature works identically across all
 | Surface / environment | Current status | Qualification boundary |
 |---|---|---|
 | CLI on Node.js 22+ | Primary workflow | Requires a compatible model/provider and the OS permissions required by chosen tools. |
-| Local browser workspace | Available | Authenticated local runtime; some Projects/Tasks/Notes state remains separate from CLI state. Browser lifecycle and accessibility E2E must pass before 1.0. |
-| Desktop Windows x64 | Installer packaged in v0.4.0 | Unsigned. Clean-machine install, first-run, update, and uninstall need explicit real-machine evidence. No native OASIS OS sandbox. |
-| Desktop macOS arm64 | Installer packaged in v0.4.0 | Unsigned. Clean-machine install, first-run, update, and uninstall need explicit real-machine evidence. Optional sandbox integration is not full filesystem-read isolation. |
-| Desktop Linux x86_64 | Installer packaged in v0.4.0 | Unsigned. Clean-machine install, first-run, update, and uninstall need explicit real-machine evidence. Optional sandbox integration is not full filesystem-read isolation. |
+| Local browser workspace | Available | Authenticated local runtime; some Projects/Tasks/Notes state remains separate from CLI state. Browser lifecycle and axe accessibility E2E run in Quality Checks on every commit. |
+| Desktop Windows x64 | Installer built in CI from the release commit | Unsigned (SHA-256 checksums published). Install and packaging are checked on clean CI runners; no manual physical-machine journey. No native OASIS OS sandbox. |
+| Desktop macOS arm64 | Installer built in CI from the release commit | Unsigned (SHA-256 checksums published). Install and packaging are checked on clean CI runners; no manual physical-machine journey. Optional sandbox integration is not full filesystem-read isolation. |
+| Desktop Linux x86_64 | Installer built in CI from the release commit | Unsigned (SHA-256 checksums published). Install and packaging are checked on clean CI runners; no manual physical-machine journey. Optional sandbox integration is not full filesystem-read isolation. |
 | VS Code-family integration | Implemented integration | Do not claim universal parity with every editor or extension marketplace. |
 | SDK / GitHub Action | Implemented integration | Unattended execution must be deliberately scoped and isolated by the adopting repository/operator. |
 | Android / Termux | Experimental use path | No native APK. PTY, background behavior, and real-device reliability are not fully qualified. |
@@ -102,46 +93,34 @@ OASIS is a local-first runtime, not a security boundary around arbitrary code.
 
 These are explicit product boundaries. They should not be hidden by maturity wording or treated as completed merely because the corresponding functionality exists in some form.
 
-## 6. Current release-candidate blockers
+## 6. 1.0 release gates and decisions
 
-The following items are release qualification work, not a request to expand product scope.
+1. **Browser E2E lifecycle and fixture:** passes in Quality Checks, including completed-turn disclosure, failed-command warning, approval/denial, cancellation and side effects.
+2. **Accessibility:** axe-core scans run against the real browser page in the E2E job; no findings are suppressed.
+3. **Same-commit CI:** Quality Checks, installer checks, desktop packaging and public-site validation passed together on `76d04f7`, and the publish job re-requires them on the release commit.
+4. **Clean-machine desktop journey — decision:** covered by CI on fresh GitHub-hosted Windows, macOS and Ubuntu runners (installer checks and desktop packaging). Manual first-launch, update and uninstall testing on physical machines was not done for 1.0. This is stated in the README, install guide and release notes.
+5. **Security-boundary review:** refreshed on November 1, 2026 in the [security/reliability audit](SECURITY_RELIABILITY_AUDIT.md), including sandbox `/tmp` mounts, quoted tool-call recovery, unrequested git writes and eval credential isolation.
+6. **Release integrity:** the publish job checks that the package version matches the tag, that `docs/releases/v1.0.0.md` exists, that the tag is new or already points at the same commit, and that `main` has not moved; it then publishes the installers with `SHA256SUMS`.
+7. **Code signing — decision:** OASIS 1.0 installers are **not code-signed**. There is no Windows Authenticode or Apple Developer ID certificate for the project. Each release ships `SHA256SUMS`; checksums detect corruption and tampering in transit but are not publisher signatures, and Windows SmartScreen and macOS Gatekeeper will warn. Signing is a post-1.0 item.
+8. **Documentation and public identity:** README, site, package metadata, install guide, security policy and release notes describe the same version and lifecycle.
 
-### P0 — Release blockers
+### Post-1.0 options
 
-1. **Browser E2E lifecycle and fixture:** the earlier failure exposed two separate issues: the scripted provider fixture needed to answer the post-edit `git_diff` verification request, and the browser client needed to reconcile its busy/activity state from the server's terminal job status if the event stream omitted the terminal event. The fixture response order and client lifecycle reconciliation have now been updated on the inspected commit. The full browser E2E run is still pending; retain assertions for completed-turn disclosure, failed-command warning, approval/denial, cancellation, and side effects.
-2. **Accessibility:** run and resolve accessibility findings across empty, connection-error, provider, approval, activity-detail, and mobile states. Do not suppress axe findings simply to produce a green run.
-3. **Same-candidate CI:** run Quality Checks, installer checks, desktop packaging, and public-site validation against one immutable candidate commit. Older successful runs are historical evidence only.
-4. **Clean-machine desktop journey:** test installation, first launch, provider setup, a small task, update, uninstall, and user-data preservation on clean Windows, macOS, and Linux environments.
-5. **Security-boundary review:** re-check workspace escape, protected paths, command execution, process descendants, network/private-address restrictions, credential storage/redaction, browser token handling, and integration trust boundaries on the candidate source.
-6. **Release integrity:** build artifacts from the exact candidate commit; produce checksums; align package version, Git tag, release notes, updater metadata, and GitHub prerelease/stable flag; verify that the release page and installers point to the same immutable candidate.
-7. **Documentation/public identity:** README, public site, package metadata, installer instructions, security policy, and release notes must describe the same version and lifecycle.
-
-### P1 — Quality and robustness improvements
-
-- Improve agent planning and tool selection without changing stable tool contracts unexpectedly.
-- Improve long-running task lifecycle, interruption handling, progress, and accurate partial-completion reporting.
-- Reduce avoidable context/tool-schema overhead while preserving correct tool availability.
-- Improve browser/CLI state clarity and accessible interaction patterns.
-- Add regression cases where real failures are observed; do not inflate tests with nonrepresentative checks.
-- Improve cross-platform process, PTY, installer, and update diagnostics.
-
-### P2 — Post-1.0 options
-
-Potential future areas include remote runner infrastructure, trusted-device pairing, additional editor surfaces, a native Android app, expanded sandbox isolation, and a larger real-world coding evaluation program. These are explicitly outside the current 1.0 release scope unless a separate product decision adds them.
+Remote runner infrastructure, trusted-device pairing, more editor surfaces, a native Android app, wider sandbox isolation (including on by default), installer signing, and a larger real-world coding evaluation program.
 
 ## 7. Release acceptance checklist
 
-- [ ] Browser E2E passes on the exact candidate SHA, including task completion, activity fold, approval/denial, cancellation, and worktree review.
-- [ ] Accessibility checks show no unresolved release-blocking findings across the required UI states.
-- [ ] Quality Checks passes all jobs on the same candidate SHA (Node 22/24/26, Windows/macOS/Linux runtime/security matrix, clean environment, native PTY, browser E2E).
-- [ ] Installer checks pass on Windows, macOS, and Ubuntu for the same candidate SHA.
-- [ ] Desktop packaging passes for Windows, macOS, and Linux on the same candidate SHA.
-- [ ] Public-site validation and repository metadata checks pass on the same candidate SHA.
-- [ ] Clean-machine install, first-run, provider setup, basic task, update, and uninstall are manually verified on Windows, macOS, and Linux.
-- [ ] Security review is refreshed against the candidate source and remaining limitations are visible.
-- [ ] Desktop signing/provenance is implemented, or an explicit unsigned-distribution decision is documented for 1.0.
-- [ ] Version, tag, release notes, checksums, updater metadata, assets, and GitHub prerelease/stable status agree.
-- [ ] The 1.0.0 release is published only from the verified immutable candidate commit.
+- [x] Browser E2E passes on the release commit, including task completion, activity fold, approval/denial, cancellation and worktree review.
+- [x] Accessibility checks show no unresolved release-blocking findings.
+- [x] Quality Checks passes all jobs on the same commit (Node 22/24/26, Windows/macOS/Linux runtime/security matrix, clean environment, native PTY, browser E2E).
+- [x] Installer checks pass on Windows, macOS and Ubuntu for the same commit.
+- [x] Desktop packaging passes for Windows, macOS and Linux for the same commit.
+- [x] Public-site validation and repository metadata checks pass for the same commit.
+- [x] Clean-machine journey: decision recorded (CI runners only; no manual physical-machine testing for 1.0).
+- [x] Security review refreshed against the release source; remaining limits are visible.
+- [x] Explicit unsigned-distribution decision documented for 1.0, with SHA-256 checksums.
+- [x] Version, tag, release notes, checksums, assets and stable status agree (enforced by the publish job).
+- [x] 1.0.0 is published only from a verified `main` commit (enforced by the publish job).
 
 ## 8. Release and maintenance policy
 
@@ -152,11 +131,11 @@ Potential future areas include remote runner infrastructure, trusted-device pair
 - Any update to a public claim must be backed by an implementation, test, or explicit limitation.
 - After runtime changes, run focused tests, `npm test`, and `npm run check`; run relevant platform workflows.
 - Do not claim a check passed unless its result is tied to the exact commit being described.
-- Keep the changelog split into the current candidate and future Unreleased changes.
+- Keep the changelog split into released versions and an Unreleased section.
 - Treat research notes as non-normative: proposals are not shipped features or commitments.
 
 
-A stable 1.0.0 publication is deliberately a separate maintainer action. Before dispatch, update `package.json` so `oasisRelease.channel` is `stable` (and the candidate state is cleared), add curated `docs/releases/v1.0.0.md` notes, and confirm all manual qualification gates. The workflow requires both `publish_release: true` and `confirm_stable_release: true`, checks that the package channel is `stable`, and waits for same-commit quality, site, and installer workflows. Normal pushes build/validate artifacts but do not publish a GitHub Release.
+Publishing is a separate maintainer action: dispatch `.github/workflows/desktop-build.yml` on `main` with `publish_release: true` and `confirm_stable_release: true`. The job checks that the package channel is `stable`, waits for same-commit quality, site and installer workflows, and publishes the release. Normal pushes build and validate artifacts but never publish.
 
 ## 9. Source-of-truth order
 

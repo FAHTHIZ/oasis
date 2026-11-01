@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0 Release Candidate 1" />
-  <img src="https://img.shields.io/badge/stage-release%20candidate-5B8DEF.svg?style=flat" alt="Release candidate" />
+  <img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/stage-stable-2EA44F.svg?style=flat" alt="Stable" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
 </p>
 
@@ -19,16 +19,16 @@
 
 OASIS is not a model, hosted inference service, or vendor-locked IDE. You choose the model/provider—including a local endpoint—and OASIS supplies the agent runtime, workspace tools, policy controls, memory, automation, and developer surfaces.
 
-> **Current lifecycle — Feature-complete 1.0 Release Candidate.** The planned product scope is established; OASIS is no longer in Beta or an early feature-building phase. Work on `main` is focused on making the existing agents and product surfaces more capable, robust, consistent, accessible, and production-ready. Remaining qualification covers reliability, lifecycle correctness, security boundaries, platform verification, accessibility, packaging, and documentation. The development package on `main` is `1.0.0`, with `oasisRelease` metadata marking it as Release Candidate 1; it is not a published stable release. The last published stable desktop/CLI release remains [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0) until the 1.0.0 release gates are satisfied.
+> **Current lifecycle — OASIS 1.0, stable.** The 1.0 release gates in the [project plan](docs/PROJECT_PLAN.md) are met on one commit: full Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. Two limits are stated openly: desktop installers are **unsigned** (each release ships `SHA256SUMS`), and install/update/uninstall is verified on clean CI runners rather than by hand on physical machines.
 
 <p align="center">
   <a href="#quick-start"><strong>Get started</strong></a>
   &nbsp;·&nbsp;
   <a href="docs/USER_GUIDE_MAP.md">User guide</a>
   &nbsp;·&nbsp;
-  <a href="docs/PROJECT_PLAN.md">Release qualification</a>
+  <a href="docs/PROJECT_PLAN.md">Project plan</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/FAHTHIZ/oasis/releases">Downloads</a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Downloads</a>
 </p>
 
 ---
@@ -42,7 +42,7 @@ OASIS is not a model, hosted inference service, or vendor-locked IDE. You choose
 
 **Requirements:** Node.js 22 or newer and Git.
 
-### Run the current release-candidate source
+### Install from source
 
 ```bash
 git clone https://github.com/FAHTHIZ/oasis.git
@@ -55,15 +55,15 @@ cd ~/your-project
 oasis
 ```
 
-This installs the current `main` source package (`1.0.0`, Release Candidate 1). It is the release-candidate development build, not the stable desktop download channel.
+This installs the current `main` source. For a pinned, checksum-verified install of the latest stable release, use the installer below.
 
 ### Install the latest stable CLI release
 
-Use the [checksum-verified installer](docs/INSTALL.md#command-line-installation). It resolves the latest stable semantic-version tag to an immutable commit and does not install the moving `main` branch. At this snapshot, that stable tag is `v0.4.0`.
+Use the [checksum-verified installer](docs/INSTALL.md#command-line-installation). It resolves the latest stable semantic-version tag (`v1.0.0` once published) to an immutable commit and does not install the moving `main` branch.
 
 ### Download the desktop app
 
-The [published v0.4.0 release](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0) contains Windows x64, macOS arm64, and Linux x86_64 installers. These artifacts are unsigned. The 1.0.0 release-candidate source has not yet been published as a desktop installer.
+The [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) has Windows x64, macOS arm64, and Linux x86_64 installers plus a `SHA256SUMS` file. The installers are not code-signed, so Windows SmartScreen and macOS Gatekeeper will warn on first launch; check the file against `SHA256SUMS` before opening it ([how](docs/INSTALL.md)).
 
 After connecting a provider, start with a repository you understand and ask OASIS to explain the project before approving changes.
 
@@ -142,7 +142,7 @@ See [Architecture](docs/ARCHITECTURE.md) and the [runtime source map](src/README
 |---|---|
 | **CLI** | Primary supported developer workflow; Node.js 22+. |
 | **Local browser workspace** | Local authenticated interface backed by the shared runtime. It is not a hosted cloud service. Some browser-side project/task/note state remains separate from CLI state. |
-| **Desktop** | Published v0.4.0 installers for Windows x64, macOS arm64, and Linux x86_64. Packages are unsigned; clean-machine install/update/uninstall qualification remains open. |
+| **Desktop** | Installers for Windows x64, macOS arm64, and Linux x86_64, built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums; install/update/uninstall is checked on clean CI runners, not by hand on physical machines. |
 | **VS Code-family integration** | Supported integration path; compatibility is not universal across every editor extension ecosystem. |
 | **SDK and GitHub Action** | Programmatic and repository-automation surfaces; unattended use still requires deliberate permissions and isolation. |
 | **Android / Termux** | CLI can be tried in Termux, but Android is not a fully qualified platform. There is no native Android APK and native PTY/background behavior is not guaranteed. |
@@ -160,13 +160,11 @@ OASIS provides layered controls, not a guarantee that arbitrary model output, re
 
 Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md), and the dated [security/reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md).
 
-## Release-candidate qualification
+## Release status
 
-The product is in the 1.0 release-candidate phase—not a feature-preview phase. The central scope is established; remaining work is concentrated on proving and refining the complete product journey.
+OASIS 1.0 is the first stable release. Its gates (same-commit CI across all platforms, browser E2E with accessibility checks, installer and packaging checks, public-site validation, a refreshed security review, and matching version, tag, notes and checksums) are listed in the [project plan](docs/PROJECT_PLAN.md), with the evidence for each.
 
-Open release gates include same-candidate full CI (including the corrected browser verification fixture), clean-machine desktop journeys, an explicit unsigned-package distribution decision, and security-boundary review. The 33-task evaluator is a regression/smoke suite, not a representative repository-scale benchmark. No broad model-parity, speed, accuracy, or token-savings claim is made.
-
-The [release-qualification plan](docs/PROJECT_PLAN.md) is the authoritative status and evidence record. A release candidate must not be described as stable or production-ready until its acceptance gates have been demonstrated on the same immutable candidate.
+What 1.0 does not claim: the installers are unsigned (a documented decision for 1.0; SHA-256 checksums are provided), clean-machine journeys are covered by CI runners rather than manual testing on physical machines, and the 33-task evaluator is a regression suite, not a broad benchmark. See [Benchmarks](docs/BENCHMARKS.md) for what has and has not been measured, including live runs with small local models.
 
 ## Documentation
 
@@ -183,7 +181,7 @@ The [release-qualification plan](docs/PROJECT_PLAN.md) is the authoritative stat
 | Runtime module map and extraction policy | [src/README.md](src/README.md) |
 | Test domains and runner conventions | [test/README.md](test/README.md) |
 | Repository ownership and maintenance | [Maintenance guide](docs/REPOSITORY_MAINTENANCE.md) |
-| Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 notes](docs/releases/v0.4.0.md) · [current 1.0.0 candidate notes](docs/releases/v1.0.0-candidate.md) |
+| Release history | [Changelog](CHANGELOG.md) · [1.0.0 release notes](docs/releases/v1.0.0.md) · [v0.4.0 notes](docs/releases/v0.4.0.md) |
 
 ## Development
 

@@ -4,11 +4,11 @@ This is the canonical navigation hub for OASIS. The root [README](../README.md) 
 
 ## Current product status
 
-OASIS is a **feature-complete 1.0 Release Candidate in Production Qualification**. It is beyond Beta and early feature development. Current work focuses on strengthening existing agents and workflows, reliability, security-boundary validation, accessibility, platform qualification, and operational refinement—not substantial scope expansion.
+OASIS **1.0 is the current stable release.** Work after 1.0 focuses on strengthening existing agents and workflows, reliability, security boundaries, accessibility and platform coverage.
 
-- Development package on `main`: `1.0.0` (Release Candidate 1 metadata)
-- Latest published stable release: `v0.4.0`
-- RC1 has not been tagged or published. The stable installer continues to resolve `v0.4.0` until stable 1.0.0 is accepted.
+- Current release: `1.0.0` (stable)
+- Previous release: `v0.4.0` (historical Beta)
+- Installers are unsigned (SHA-256 checksums are published); see the [project plan](PROJECT_PLAN.md) for the 1.0 gates and decisions.
 
 The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for release gates and known limits.
 
@@ -50,9 +50,9 @@ The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for
 |---|---|
 | [GitHub Action guide](github-action.md) | Repository automation, configuration, and safety boundaries. |
 | [GitHub Action example](examples/oasis-github.yml) | Copyable workflow example. |
-| [Changelog](../CHANGELOG.md) | Current 1.0.0 candidate changes and historical release history. |
-| [1.0.0 Release Candidate 1 notes](releases/v1.0.0-candidate.md) | Candidate scope, unpublished status, and qualification gates. |
-| [Published v0.4.0 notes](releases/v0.4.0.md) | Historical Beta release notes and its downloadable assets. |
+| [Changelog](../CHANGELOG.md) | 1.0.0 changes and release history. |
+| [1.0.0 release notes](releases/v1.0.0.md) | What is in 1.0, how it was verified, and known limits. |
+| [v0.4.0 notes](releases/v0.4.0.md) | Historical Beta release notes and its downloadable assets. |
 | [Contributing guide](../CONTRIBUTING.md) | Development setup, test expectations, and change policy. |
 | [License](../LICENSE) | Apache License 2.0. |
 

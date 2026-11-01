@@ -142,8 +142,7 @@
     "email": "noreply@github.com"
   },
   "oasisRelease": {
-    "channel": "release-candidate",
-    "candidate": 1,
+    "channel": "stable",
     "stableTag": "v1.0.0",
     "published": false
   }

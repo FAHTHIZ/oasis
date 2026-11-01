@@ -123,7 +123,7 @@ jobs:
           expected="v$(node -p "require('./package.json').version")"
           release_channel="$(node -p "require('./package.json').oasisRelease?.channel || ''")"
           if [ "$release_channel" != "stable" ]; then
-            echo "::error::Refusing to publish: package.json oasisRelease.channel must be stable, not '$release_channel'. Keep the current RC1 source unpublished."
+            echo "::error::Refusing to publish: package.json oasisRelease.channel must be stable, not '$release_channel'. Set it to stable only after the release gates pass."
             exit 1
           fi
           if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$REF" = "refs/heads/main" ]; then

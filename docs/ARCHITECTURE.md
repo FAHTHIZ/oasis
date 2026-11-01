@@ -333,7 +333,7 @@ CI passing is evidence for the exact commit and jobs that ran. A green older run
 
 ## Current architectural limits
 
-- OASIS is in 1.0 Release Candidate / Production Qualification. The feature scope is established, but this does not imply production security certification or universal platform qualification.
+- OASIS 1.0 is a stable release. That does not imply security certification or that every platform configuration has been qualified.
 - The optional OS sandbox is Linux/macOS only, disabled by default, and not full filesystem-read isolation. There is no native Windows OS sandbox.
 - Android has no native APK release. The CLI can be tried through Termux; native PTY and background behavior are not guaranteed.
 - Browser Projects/Tasks/Notes data does not synchronize with CLI task/session state. There is no hosted account or cloud synchronization layer.
