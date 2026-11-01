@@ -35,18 +35,69 @@ function findLineBlockMatches(fileLines, needleLines, normalize) {
   return matches;
 }
 
+const leadOf = (line) => (line.match(/^[ \t]*/) || [''])[0];
+
+// Smallest indentation step in a block, e.g. '\t', '  ' or '    '.
+function indentUnit(lines) {
+  const leads = lines.filter((line) => line.trim()).map(leadOf);
+  if (leads.some((lead) => lead.includes('\t'))) return '\t';
+  let unit = 0;
+  const widths = [...new Set(leads.map((lead) => lead.length))].sort((a, b) => a - b);
+  for (let i = 0; i < widths.length; i++) {
+    const step = i === 0 ? widths[0] : widths[i] - widths[i - 1];
+    if (step > 0 && (!unit || step < unit)) unit = step;
+  }
+  return unit ? ' '.repeat(unit) : '';
+}
+
+// The model's old_string matched the file only after ignoring indentation, so its
+// new_string is indented the way the model imagined the file. Translate each
+// replacement line into the file's real indentation: reuse the file's exact
+// leading whitespace for indentation levels seen in the matched block, and
+// convert levels the block never used between the model's indent unit and the
+// file's (for example four spaces to a tab).
 function reindent(newLines, oldNeedleLines, actualLines) {
-  const lead = (line) => (line.match(/^[ \t]*/) || [''])[0];
+  const map = new Map();
+  oldNeedleLines.forEach((line, index) => {
+    const actual = actualLines[index];
+    if (!line.trim() || actual === undefined || !actual.trim()) return;
+    const from = leadOf(line);
+    if (!map.has(from)) map.set(from, leadOf(actual));
+  });
+  const fromUnit = indentUnit(oldNeedleLines);
+  const toUnit = indentUnit(actualLines);
   const firstOld = oldNeedleLines.find((line) => line.trim());
   const firstActual = actualLines.find((line) => line.trim());
-  if (firstOld === undefined || firstActual === undefined) return newLines;
-  const from = lead(firstOld);
-  const to = lead(firstActual);
-  if (from === to) return newLines;
+  const base = { from: firstOld === undefined ? '' : leadOf(firstOld), to: firstActual === undefined ? '' : leadOf(firstActual) };
   return newLines.map((line) => {
     if (!line.trim()) return line;
-    if (line.startsWith(from)) return to + line.slice(from.length);
+    const lead = leadOf(line);
+    const body = line.slice(lead.length);
+    if (map.has(lead)) return map.get(lead) + body;
+    if (fromUnit && toUnit && fromUnit !== toUnit && !lead.includes('\t') === (fromUnit !== '\t')) {
+      const levels = fromUnit === '\t' ? lead.split('\t').length - 1 : Math.round(lead.length / fromUnit.length);
+      if ((fromUnit === '\t' ? '\t'.repeat(levels) : fromUnit.repeat(levels)) === lead) return toUnit.repeat(levels) + body;
+    }
+    if (lead.startsWith(base.from) && base.from !== base.to) return base.to + lead.slice(base.from.length) + body;
     return line;
+  });
+}
+
+// Lines the model reproduced unchanged from old_string are copied from the file
+// verbatim, so relaxed matches never rewrite trailing whitespace, indentation or
+// typography on lines the edit did not touch.
+function keepUntouchedLines(replacement, rawReplacement, needleLines, actual) {
+  const strip = (line) => line.replace(/\r$/, '').replace(/[ \t]+$/, '');
+  const byNeedle = new Map();
+  needleLines.forEach((line, index) => {
+    const key = strip(line);
+    if (!key.trim() || actual[index] === undefined) return;
+    if (!byNeedle.has(key)) byNeedle.set(key, actual[index]);
+    else if (byNeedle.get(key) !== actual[index]) byNeedle.set(key, null);
+  });
+  return replacement.map((line, index) => {
+    const original = byNeedle.get(strip(rawReplacement[index]));
+    return original === undefined || original === null ? line : original;
   });
 }
 
@@ -97,9 +148,11 @@ export function relaxedReplace(current, oldString, newString) {
     }
     const start = matches[0];
     const actual = fileLines.slice(start, start + needleLines.length).map((line) => line.replace(/\r$/, ''));
-    let replacement = newString.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+    const rawReplacement = newString.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+    let replacement = rawReplacement;
     if (strategy.name === 'indentation') replacement = reindent(replacement, needleLines, actual);
     if (strategy.name !== 'line endings and trailing whitespace') replacement = keepTypography(replacement, needleLines, actual);
+    replacement = keepUntouchedLines(replacement, rawReplacement, needleLines, actual);
     const hadCr = /\r$/.test(fileLines[start + needleLines.length - 1] || '');
     const replacedLines = replacement.map((line, index) => (eol === '\r\n' && (index < replacement.length - 1 || hadCr) ? line + '\r' : line));
     const nextLines = [...fileLines.slice(0, start), ...replacedLines, ...fileLines.slice(start + needleLines.length)];
