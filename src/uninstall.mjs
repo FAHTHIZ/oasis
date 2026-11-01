@@ -10,12 +10,15 @@ const PACKAGE_NAME = 'oasis-oss';
 export function resolveUninstallPlan(appRoot, installedPackage) {
   const applicationRoot = path.resolve(String(appRoot || ''));
   const nodeModules = path.dirname(applicationRoot);
-  if (path.basename(nodeModules) !== 'node_modules' || path.basename(applicationRoot) !== PACKAGE_NAME) {
+  if (path.basename(nodeModules) !== 'node_modules') {
     throw new Error('This OASIS copy does not look like a global npm installation. I will not delete project files. Remove it with the package manager used to install it.');
   }
   const packageName = String(installedPackage && installedPackage.name || '');
   if (packageName !== PACKAGE_NAME) {
     throw new Error('The installed package name was not oasis-oss. Nothing was removed.');
+  }
+  if (path.basename(applicationRoot) !== PACKAGE_NAME) {
+    throw new Error('The OASIS package directory does not match its installed package name. Nothing was removed.');
   }
   const libOrPrefix = path.dirname(nodeModules);
   const prefix = path.resolve(path.basename(libOrPrefix) === 'lib' ? path.dirname(libOrPrefix) : libOrPrefix);
