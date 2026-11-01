@@ -333,7 +333,7 @@ CI passing is evidence for the exact commit and jobs that ran. A green older run
 
 ## Current architectural limits
 
-- OASIS is Beta software; no production security certification or universal platform qualification is claimed.
+- OASIS is in 1.0 Release Candidate / Production Qualification. The feature scope is established, but this does not imply production security certification or universal platform qualification.
 - The optional OS sandbox is Linux/macOS only, disabled by default, and not full filesystem-read isolation. There is no native Windows OS sandbox.
 - Android has no native APK release. The CLI can be tried through Termux; native PTY and background behavior are not guaranteed.
 - Browser Projects/Tasks/Notes data does not synchronize with CLI task/session state. There is no hosted account or cloud synchronization layer.
@@ -375,7 +375,7 @@ The table below identifies primary implementations. For a domain-grouped file ca
 ## Related references
 
 - [User guide](USER_GUIDE.md) — commands, configuration, integrations and common workflows.
-- [Project plan](PROJECT_PLAN.md) — implemented inventory, current Beta boundaries and release acceptance gates.
+- [Project plan](PROJECT_PLAN.md) — 1.0 product scope, support matrix, operational boundaries, and release acceptance gates.
 - [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) — dated findings, mitigations and residual risks.
 - [Privacy notes](PRIVACY.md) — provider data flows, local storage, credentials and integrations.
 - [Workflows and skills](WORKFLOWS_AND_SKILLS.md) — reusable workflow and instruction model.
