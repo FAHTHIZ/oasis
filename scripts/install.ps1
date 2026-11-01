@@ -163,11 +163,12 @@ if (-not $SkipSetup) {
 
 $normalizePathEntry = { param([string]$Value) $Value.Trim().TrimEnd('\') }
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-$userPathEntries = @($userPath -split ';' | ForEach-Object { & $normalizePathEntry $_ } | Where-Object { $_ })
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+$persistentPathEntries = @(($userPath + ';' + $machinePath) -split ';' | ForEach-Object { & $normalizePathEntry $_ } | Where-Object { $_ })
 $normalizedInstallPrefix = & $normalizePathEntry $InstallPrefix
-$userHasInstallPrefix = $userPathEntries -contains $normalizedInstallPrefix
-if (-not $userHasInstallPrefix) {
-    Write-Host 'The OASIS command folder is not on your permanent user PATH yet.'
+$permanentPathHasInstallPrefix = $persistentPathEntries -contains $normalizedInstallPrefix
+if (-not $permanentPathHasInstallPrefix) {
+    Write-Host 'The OASIS command folder is not on your persistent user or machine PATH yet.'
     if (Confirm-Change "May I add $InstallPrefix to your user PATH? This affects only your Windows account.") {
         $parts = @($userPath -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         $parts += $InstallPrefix

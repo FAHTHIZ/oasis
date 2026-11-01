@@ -153,9 +153,10 @@ test('Windows installer has the same public-page and Atom-feed fallbacks for API
 test('Windows installer checks and updates only the persistent user PATH', async () => {
   const powershell = await read('scripts/install.ps1');
   assert.match(powershell, /GetEnvironmentVariable\('Path', 'User'\)/);
+  assert.match(powershell, /GetEnvironmentVariable\('Path', 'Machine'\)/);
   assert.match(powershell, /SetEnvironmentVariable\('Path',[\s\S]*?'User'\)/);
   assert.match(powershell, /normalizePathEntry/);
-  assert.match(powershell, /userPathEntries -contains \$normalizedInstallPrefix/);
+  assert.match(powershell, /permanentPathHasInstallPrefix/);
   assert.match(powershell, /Confirm-Change "May I add \$InstallPrefix to your user PATH\? This affects only your Windows account\."/);
   assert.doesNotMatch(powershell, /SetEnvironmentVariable\('Path',[^\n]*'Machine'/);
 });
