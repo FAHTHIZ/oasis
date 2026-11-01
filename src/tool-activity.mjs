@@ -39,7 +39,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'read_file' || tool === 'read_notebook' || tool === 'notebook_read') return path ? 'Read ' + path : 'Read a file';
   if (tool === 'edit_file' || tool === 'multi_edit' || tool === 'notebook_edit' || tool === 'apply_patch') return path ? 'Edited ' + path : 'Edited a file';
   if (tool === 'write_file') {
-    const created = result && typeof result === 'object' && result.created === true;
+    const created = result && typeof result === 'object' && (result.created === true || result.backedUpExistingFile === false);
     return (created ? 'Created ' : 'Wrote ') + (path || 'a file');
   }
   if (tool === 'delete_file') return path ? 'Deleted ' + path : 'Deleted a file';
@@ -71,6 +71,51 @@ export function safeToolActivityArgs(args) {
   catch { return {}; }
 }
 
+export function toolActivityStatus(result) {
+  let value = result;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { value = { output: value }; }
+  }
+  if (!value || typeof value !== 'object') return 'success';
+  if (value.error || value.isError === true || value.failed === true || value.passed === false ||
+      value.timedOut === true || value.success === false ||
+      (Number.isInteger(value.exitCode) && value.exitCode !== 0)) return 'error';
+  if (value.approved === false || value.blocked === true || value.warning ||
+      (Array.isArray(value.warnings) && value.warnings.length)) return 'warning';
+  return 'success';
+}
+
+// A preview is offered only after a file-changing tool reports an actual change.
+// Paths are workspace-relative; the browser revalidates them before reading.
+export function toolActivityArtifacts(name, args = {}, result = null) {
+  const tool = String(name || '').toLowerCase();
+  let value = result;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { value = null; }
+  }
+  if (!value || typeof value !== 'object' || toolActivityStatus(value) === 'error') return [];
+  let action = '';
+  if (tool === 'write_file' && Number.isFinite(value.writtenBytes)) {
+    action = value.backedUpExistingFile === true ? 'updated' : 'created';
+  } else if (tool === 'edit_file' && value.changed === true) {
+    action = 'updated';
+  } else if (tool === 'notebook_edit' && (value.changed === true || value.edited === true)) {
+    action = 'updated';
+  }
+  if (!action) return [];
+  const candidates = [value.path, args && (args.path || args.file_path || args.notebook_path)];
+  const seen = new Set();
+  const artifacts = [];
+  for (const candidate of candidates) {
+    const displayPath = text(candidate, 500).replace(/\\/g, '/');
+    if (!displayPath || displayPath === '.' || seen.has(displayPath)) continue;
+    seen.add(displayPath);
+    artifacts.push({ path: displayPath, action });
+    if (artifacts.length >= 4) break;
+  }
+  return artifacts;
+}
+
 export function toolActivityWarning(result) {
   let value = result;
   if (typeof value === 'string') {
@@ -79,6 +124,8 @@ export function toolActivityWarning(result) {
   if (!value || typeof value !== 'object') return '';
   const detail = text(value.error || value.warning || value.message || '', 700);
   if (value.error) return detail ? 'This step failed: ' + detail : 'This step failed.';
+  if (value.approved === false) return detail ? 'This action was not approved: ' + detail : 'This action was not approved; no changes were made.';
+  if (value.blocked === true) return detail ? 'This action was blocked: ' + detail : 'This action was blocked by a workspace rule.';
   if (typeof value.warning === 'string' && value.warning.trim()) return detail || 'This step returned a warning.';
   if (value.isError === true || value.failed === true || value.passed === false) return detail ? 'This step did not complete successfully: ' + detail : 'This step did not complete successfully.';
   if (value.timedOut === true) return 'The command timed out before it finished.';
