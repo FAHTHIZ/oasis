@@ -22,6 +22,8 @@ This directory contains the canonical product, user, engineering, security, and 
 | [Keyboard shortcuts](KEYS.md) | Terminal shortcuts, keybinding behavior, and mobile notes. |
 | [Brand guide](BRAND.md) | Official OASIS naming, visual identity, colors, and logo usage. |
 | [Repository maintenance](REPOSITORY_MAINTENANCE.md) | Canonical file ownership, intentional copies, cleanup history, and maintenance rules. |
+| [Runtime source map](../src/README.md) | Entry points, domain-oriented module catalog, known large modules, and safe extraction rules. |
+| [Test suite map](../test/README.md) | Test domains, focused commands, runner conventions, and fixture boundaries. |
 
 ## Trust, privacy, and evaluation
 
