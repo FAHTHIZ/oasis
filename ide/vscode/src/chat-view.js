@@ -15,6 +15,34 @@ class ChatController {
     this.process = null;
   }
 
+  // Images go to the model as @path mentions, so they must live in the workspace.
+  async attachImages(webview) {
+    const cwd = this.getCwd();
+    const picked = await vscode.window.showOpenDialog({
+      canSelectMany: true,
+      openLabel: 'Attach',
+      defaultUri: cwd ? vscode.Uri.file(cwd) : undefined,
+      filters: { Images: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+    });
+    if (!picked || !picked.length) return;
+    const path = require('node:path');
+    const mentions = [];
+    for (const uri of picked.slice(0, 4)) {
+      const relative = cwd ? path.relative(cwd, uri.fsPath) : '';
+      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+        vscode.window.showWarningMessage('OASIS can attach images from this workspace only: ' + path.basename(uri.fsPath));
+        continue;
+      }
+      const mention = relative.split(path.sep).join('/');
+      if (!/^[\w.\-/]+$/.test(mention)) {
+        vscode.window.showWarningMessage('Rename the image to letters, digits, dots, dashes or underscores to attach it: ' + path.basename(uri.fsPath));
+        continue;
+      }
+      mentions.push('@' + mention);
+    }
+    if (mentions.length && webview) webview.postMessage({ kind: 'insert', text: mentions.join(' ') });
+  }
+
   ensureProcess() {
     if (this.process) return this.process;
     const proc = new OasisChatProcess({ command: this.getCommand(), cwd: this.getCwd(), env: this.getEnv() });
@@ -61,6 +89,7 @@ class ChatController {
     if (message.type === 'permission' && this.process) { this.process.respond(message.requestId, message.behavior === 'allow' ? 'allow' : 'deny', { always: Boolean(message.always) }); return; }
     if (message.type === 'interrupt' && this.process) { this.process.interrupt(); return; }
     if (message.type === 'newChat') { this.reset(); return; }
+    if (message.type === 'attach') { this.attachImages(webview); return; }
   }
 
   reset() {
@@ -128,7 +157,7 @@ function chatHtml(webview) {
 <div id="log"><div id="empty">Ask OASIS to read, change or explain code in this workspace. Your editor selection is shared with each message. Edits open as diffs for you to accept or reject.</div></div>
 <div id="bar">
   <textarea id="input" placeholder="Message OASIS (Enter to send, Shift+Enter for a new line)"></textarea>
-  <div id="row"><span id="status">Ready</span><span><button id="stop" class="secondary" hidden>Stop</button><button id="new" class="secondary">New chat</button><button id="send">Send</button></span></div>
+  <div id="row"><span id="status">Ready</span><span><button id="stop" class="secondary" hidden>Stop</button><button id="attach" class="secondary" title="Attach images from this workspace">Attach</button><button id="new" class="secondary">New chat</button><button id="send">Send</button></span></div>
 </div>
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
@@ -190,6 +219,7 @@ window.addEventListener('message', (event) => render(event.data));
 function send() { const text = input.value.trim(); if (!text) return; vscode.postMessage({ type: 'send', text }); input.value = ''; }
 document.getElementById('send').addEventListener('click', send);
 document.getElementById('new').addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
+document.getElementById('attach').addEventListener('click', () => vscode.postMessage({ type: 'attach' }));
 stopBtn.addEventListener('click', () => vscode.postMessage({ type: 'interrupt' }));
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } if (e.key === 'Escape') vscode.postMessage({ type: 'interrupt' }); });
 vscode.postMessage({ type: 'ready' });
