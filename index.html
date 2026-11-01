@@ -978,7 +978,7 @@ async function agentAnswerQuestion(answer){if(!agentActiveJob||!agentQuestionId)
 async function agentResolveApproval(approved,always){if(!agentActiveJob||!agentApprovalId)return;var id=agentApprovalId;document.getElementById('agentApproveBtn').disabled=true;document.getElementById('agentDenyBtn').disabled=true;try{await agentApi('/api/jobs/'+agentActiveJob+'/approval',{method:'POST',body:JSON.stringify({approvalId:id,approved:!!approved,always:!!always})});document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null;agentSetStatus(always?'Allowed for this session':(approved?'Action approved once':'Action denied'),true)}catch(e){notify('Could not submit approval: '+e.message)}finally{document.getElementById('agentApproveBtn').disabled=false;document.getElementById('agentDenyBtn').disabled=false}}
 async function agentStopJob(){if(!agentActiveJob||!agentBusy)return;var id=agentActiveJob,button=document.getElementById('agentStopBtn');button.disabled=true;agentSetStatus('Stopping task…',true);terminalStatus('Stopping command…');try{await agentApi('/api/jobs/'+id+'/cancel',{method:'POST'});agentActivity('Cancellation requested. Completed changes are not automatically rolled back.')}catch(e){notify('Could not stop the task: '+e.message);button.disabled=false}}
 document.getElementById('agentStopBtn').addEventListener('click',function(){void agentStopJob()});
-function agentProcessEvent(jobId,event){var d=event.data||{};if(event.type==='started'){if(d.isolation==='worktree'){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId')}else if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}void agentLoadHistoryList()}else if(event.type==='worktree_ready'){if(d.branch)agentActivity('Isolated branch ready for review: '+d.branch+(d.commit?' · '+d.commit:'')+'. Nothing was merged.');void agentLoadCloudTasks(true)}else if(event.type==='assistant_text'){agentAssistantUpdate(jobId,d.text)}else if(event.type==='assistant_delta'){agentAppendAssistantDelta(jobId,d.text)}else if(event.type==='tool_start'){if(window.oasisActivityStart)window.oasisActivityStart(d);else agentActivity((d.subagent?'['+d.subagent+'] ':'')+'Working: '+d.name+(d.detail?' '+d.detail:''))}else if(event.type==='command_output'){agentAssistantUpdate(jobId,d.text||'')}else if(event.type==='thinking'){agentActivity(d.effort?'Reasoning effort '+d.effort+' for this task':'Extended thinking on for this task (budget '+d.budget+' tokens)')}else if(event.type==='context_files'){agentActivity('Included '+(d.files||[]).map(function(f){return '@'+f}).join(', '))}else if(event.type==='compaction_started'){agentSetStatus('Organizing conversation…',true);agentContextNotice('info','Protecting conversation context','Oasis is organizing older messages so the active task can continue. Your current request stays in place.')}else if(event.type==='compaction_completed'){var freed=Number(d.savedTokens||0);var compactDetail=freed>0?'About '+freed.toLocaleString()+' tokens freed. ':'';compactDetail+=d.notesSaved?'A continuity note was saved with the project.':'The condensed summary remains in this chat.';agentContextNotice('success','Earlier context was summarized',compactDetail)}else if(event.type==='context_overflow'){agentSetStatus('Retrying with protected context…',true);agentContextNotice('warning','The model needed a smaller context','Oasis shortened earlier history and is retrying your original request.')}else if(event.type==='context_pruned'){agentContextNotice('info','Older tool output shortened','Oasis reduced earlier output to make room. Recent work was kept; ask it to reopen a file or log if you need the full details.')}else if(event.type==='tool_result'){if(window.oasisActivityResult)window.oasisActivityResult(d);else agentActivity(d.name+' result: '+String(d.result||'').slice(0,1600))}else if(event.type==='cancel_requested'){agentSetStatus('Stopping task…',true)}else if(event.type==='cancelled'){agentActivity(d.message||'Task cancelled.');agentSetStatus('Cancelled',true);agentSetBusy(false);agentActiveJob=null;agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=(d.subagent?'['+d.subagent+'] ':'')+d.prompt;var approvalDiff=document.getElementById('agentApprovalDiff');if(approvalDiff){approvalDiff.textContent=String(d.diff||'');approvalDiff.hidden=!d.diff}var ab=document.getElementById('agentAlwaysBtn');ab.hidden=!d.suggestion;ab.textContent=d.suggestion?'Always allow '+d.suggestion+' for this session':'Always allow for this session';document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);agentScroll()}else if(event.type==='question'){agentShowQuestion(d)}else if(event.type==='question_answered'){if(agentQuestionId===d.questionId){agentQuestionId=null;document.getElementById('agentQuestionCard').hidden=true}}else if(event.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(event.type==='completed'||event.type==='failed'||event.type==='cancelled'){document.getElementById('agentQuestionCard').hidden=true;agentQuestionId=null}if(event.type==='completed'){if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}if(d.text)agentAssistantUpdate(jobId,d.text);if(d.verification&&d.verification.required){var v=d.verification;var check=v.checkRequired?(v.lastCheck?(v.lastCheck.kind+(v.lastCheck.passed?' passed':' failed')+(Number.isInteger(v.lastCheck.exitCode)?' (exit '+v.lastCheck.exitCode+')':'')):'not recorded'):'not required';var lsp=Array.isArray(v.lsp)?v.lsp:[];var lspIssues=lsp.filter(function(item){return item.status==='issues'||item.status==='errors'||(item.status==='unavailable'&&item.blocking!==false)}).length;var lspSkipped=lsp.filter(function(item){return item.status==='unavailable'&&item.blocking===false}).length;var lspStatus=lsp.length?'LSP '+lspIssues+' issue(s) across '+lsp.length+' changed file(s)'+(lspSkipped?' ('+lspSkipped+' skipped: no language server installed)':''):'LSP not reported';var autoTest=v.autoTest?' · auto-test '+(v.autoTest.passed?'passed':'failed')+' ('+v.autoTest.attempts+' run'+(v.autoTest.attempts===1?'':'s')+')':'';var tamper=Array.isArray(v.testTampering)&&v.testTampering.length?' · tests weakened in '+v.testTampering.length+' place(s)':'';agentActivity('Verification '+(v.complete?'complete':'incomplete')+' · diff '+(v.diffReviewed?'reviewed':'not reviewed')+' · check '+check+' · '+lspStatus+autoTest+tamper);if(!v.complete&&Array.isArray(v.issues)&&v.issues.length)agentActivity('Verification blockers: '+v.issues.join('; '))}else if(d.verificationIncomplete&&Array.isArray(d.verificationIssues)&&d.verificationIssues.length)agentActivity('Verification incomplete: '+d.verificationIssues.join('; '));agentSetStatus(d.finished?'Completed':'Stopped · review result',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='failed'){agentAssistantUpdate(jobId,'Oasis could not finish this turn: '+(d.message||'Unknown error'));agentAssistantNodes[jobId].classList.add('failed');agentSetStatus('Agent error',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='session_state'){agentShowSessionState(d);void agentLoadHistoryList()}else if(event.type==='usage'){if(document.getElementById('agentRuntimeState').textContent!=='Waiting for your approval')agentSetStatus('Working · step '+(d.step||'…'),true)}}
+function agentProcessEvent(jobId,event){var d=event.data||{};if(event.type==='started'){if(d.isolation==='worktree'){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId')}else if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}void agentLoadHistoryList()}else if(event.type==='worktree_ready'){if(d.branch)agentActivity('Isolated branch ready for review: '+d.branch+(d.commit?' · '+d.commit:'')+'. Nothing was merged.');void agentLoadCloudTasks(true)}else if(event.type==='assistant_text'){agentAssistantUpdate(jobId,d.text)}else if(event.type==='assistant_delta'){agentAppendAssistantDelta(jobId,d.text)}else if(event.type==='tool_start'){if(window.oasisActivityStart)window.oasisActivityStart(d);else agentActivity((d.subagent?'['+d.subagent+'] ':'')+'Working: '+d.name+(d.detail?' '+d.detail:''))}else if(event.type==='command_output'){agentAssistantUpdate(jobId,d.text||'')}else if(event.type==='thinking'){agentActivity(d.effort?'Reasoning effort '+d.effort+' for this task':'Extended thinking on for this task (budget '+d.budget+' tokens)')}else if(event.type==='context_files'){agentActivity('Included '+(d.files||[]).map(function(f){return '@'+f}).join(', '))}else if(event.type==='compaction_started'){agentSetStatus('Organizing conversation…',true);agentContextNotice('info','Protecting conversation context','Oasis is organizing older messages so the active task can continue. Your current request stays in place.')}else if(event.type==='compaction_completed'){var freed=Number(d.savedTokens||0);var compactDetail=freed>0?'About '+freed.toLocaleString()+' tokens freed. ':'';compactDetail+=d.notesSaved?'A continuity note was saved with the project.':'The condensed summary remains in this chat.';agentContextNotice('success','Earlier context was summarized',compactDetail)}else if(event.type==='context_overflow'){agentSetStatus('Retrying with protected context…',true);agentContextNotice('warning','The model needed a smaller context','Oasis shortened earlier history and is retrying your original request.')}else if(event.type==='context_pruned'){agentContextNotice('info','Older tool output shortened','Oasis reduced earlier output to make room. Recent work was kept; ask it to reopen a file or log if you need the full details.')}else if(event.type==='tool_result'){if(window.oasisActivityResult)window.oasisActivityResult(Object.assign({previewJobId:jobId},d));else agentActivity(d.name+' result: '+String(d.result||'').slice(0,1600))}else if(event.type==='cancel_requested'){agentSetStatus('Stopping task…',true)}else if(event.type==='cancelled'){agentActivity(d.message||'Task cancelled.');agentSetStatus('Cancelled',true);agentSetBusy(false);agentActiveJob=null;agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='approval_required'){agentApprovalId=d.approvalId;document.getElementById('agentApprovalPrompt').textContent=(d.subagent?'['+d.subagent+'] ':'')+d.prompt;var approvalDiff=document.getElementById('agentApprovalDiff');if(approvalDiff){approvalDiff.textContent=String(d.diff||'');approvalDiff.hidden=!d.diff}var ab=document.getElementById('agentAlwaysBtn');ab.hidden=!d.suggestion;ab.textContent=d.suggestion?'Always allow '+d.suggestion+' for this session':'Always allow for this session';document.getElementById('agentApprovalCard').hidden=false;agentSetStatus('Waiting for your approval',true);agentScroll()}else if(event.type==='question'){agentShowQuestion(d)}else if(event.type==='question_answered'){if(agentQuestionId===d.questionId){agentQuestionId=null;document.getElementById('agentQuestionCard').hidden=true}}else if(event.type==='approval_resolved'){if(agentApprovalId===d.approvalId){agentApprovalId=null;document.getElementById('agentApprovalCard').hidden=true}}else if(event.type==='completed'||event.type==='failed'||event.type==='cancelled'){document.getElementById('agentQuestionCard').hidden=true;agentQuestionId=null}if(event.type==='completed'){if(d.sessionId){agentSessionId=d.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}if(d.text)agentAssistantUpdate(jobId,d.text);if(d.verification&&d.verification.required){var v=d.verification;var check=v.checkRequired?(v.lastCheck?(v.lastCheck.kind+(v.lastCheck.passed?' passed':' failed')+(Number.isInteger(v.lastCheck.exitCode)?' (exit '+v.lastCheck.exitCode+')':'')):'not recorded'):'not required';var lsp=Array.isArray(v.lsp)?v.lsp:[];var lspIssues=lsp.filter(function(item){return item.status==='issues'||item.status==='errors'||(item.status==='unavailable'&&item.blocking!==false)}).length;var lspSkipped=lsp.filter(function(item){return item.status==='unavailable'&&item.blocking===false}).length;var lspStatus=lsp.length?'LSP '+lspIssues+' issue(s) across '+lsp.length+' changed file(s)'+(lspSkipped?' ('+lspSkipped+' skipped: no language server installed)':''):'LSP not reported';var autoTest=v.autoTest?' · auto-test '+(v.autoTest.passed?'passed':'failed')+' ('+v.autoTest.attempts+' run'+(v.autoTest.attempts===1?'':'s')+')':'';var tamper=Array.isArray(v.testTampering)&&v.testTampering.length?' · tests weakened in '+v.testTampering.length+' place(s)':'';agentActivity('Verification '+(v.complete?'complete':'incomplete')+' · diff '+(v.diffReviewed?'reviewed':'not reviewed')+' · check '+check+' · '+lspStatus+autoTest+tamper);if(!v.complete&&Array.isArray(v.issues)&&v.issues.length)agentActivity('Verification blockers: '+v.issues.join('; '))}else if(d.verificationIncomplete&&Array.isArray(d.verificationIssues)&&d.verificationIssues.length)agentActivity('Verification incomplete: '+d.verificationIssues.join('; '));agentSetStatus(d.finished?'Completed':'Stopped · review result',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='failed'){agentAssistantUpdate(jobId,'Oasis could not finish this turn: '+(d.message||'Unknown error'));agentAssistantNodes[jobId].classList.add('failed');agentSetStatus('Agent error',true);agentSetBusy(false);agentActiveJob=null;document.getElementById('agentApprovalCard').hidden=true}else if(event.type==='session_state'){agentShowSessionState(d);void agentLoadHistoryList()}else if(event.type==='usage'){if(document.getElementById('agentRuntimeState').textContent!=='Waiting for your approval')agentSetStatus('Working · step '+(d.step||'…'),true)}}
 async function agentPoll(jobId){var cursor=0;try{while(agentActiveJob===jobId){var s=await agentApi('/api/jobs/'+jobId+'?after='+cursor);(s.events||[]).forEach(function(e){cursor=Math.max(cursor,e.id);agentProcessEvent(jobId,e)});if(s.status==='completed'||s.status==='error'||s.status==='cancelled'){if(s.status==='error'&&s.error){agentAssistantUpdate(jobId,'Oasis stopped: '+s.error);agentSetBusy(false);agentActiveJob=null;agentSetStatus('Agent error',true)}if(s.result&&s.result.isolatedWorktree){var wt=s.result.isolatedWorktree;agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';document.getElementById('agentIsolateWorktree').checked=false;if(wt&&wt.changed===false)agentActivity('The isolated run made no changes; its temporary worktree was removed.');else if(wt&&wt.branch&&!wt.committed)agentActivity('Review branch '+wt.branch+' is retained. Check Task history for its diff; nothing is merged automatically.');void agentLoadCloudTasks(true)}else if(s.result&&s.result.sessionId){agentSessionId=s.result.sessionId;sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}return}await new Promise(function(resolve){setTimeout(resolve,650)})}}catch(e){if(agentActiveJob===jobId){agentActivity('Connection interrupted: '+e.message+' Reconnect to check whether the task finished.');agentSetStatus('Connection interrupted',false);agentSetBusy(false);agentActiveJob=null}}}
 document.getElementById('agentConnectBtn').addEventListener('click',function(){void agentConnect(false)});
 document.getElementById('agentDisconnectBtn').addEventListener('click',agentDisconnect);
@@ -1740,13 +1740,96 @@ function updateLiveStatus(value){
   target.classList.remove('is-changing');target.textContent=value;
   void target.offsetWidth;target.classList.add('is-changing');
 }
-function makeToolDetails(name,args,result){
+function formatActivityValue(value){
+  if(value===undefined||value===null)return '(No output was returned.)';
+  if(typeof value==='string'){
+    try{return JSON.stringify(JSON.parse(value),null,2)}catch(e){return value||'(No output was returned.)'}
+  }
+  try{return JSON.stringify(value,null,2)}catch(e){return String(value)}
+}
+function formatActivityDuration(ms){
+  ms=Number(ms);
+  if(!Number.isFinite(ms)||ms<0)return '';
+  if(ms<1000)return Math.round(ms)+' ms';
+  if(ms<60000)return (ms/1000).toFixed(ms<10000?2:1)+' s';
+  return Math.floor(ms/60000)+'m '+String(Math.floor(ms/1000)%60).padStart(2,'0')+'s';
+}
+function activityStatusName(status){
+  if(status==='error')return 'Failed';
+  if(status==='warning')return 'Needs attention';
+  if(status==='success')return 'Complete';
+  return 'Running';
+}
+function addToolDetailBlock(parent,label,value){
+  var section=document.createElement('section');section.className='activity-tool-block';
+  var heading=document.createElement('div');heading.className='activity-tool-block-label';heading.textContent=label;
+  var pre=document.createElement('pre');pre.className='activity-tool-output';pre.setAttribute('tabindex','0');pre.textContent=value;
+  section.appendChild(heading);section.appendChild(pre);parent.appendChild(section);return pre;
+}
+function makeToolDetails(data){
+  data=data&&typeof data==='object'?data:{};
   var details=document.createElement('details');details.className='activity-tool-details';
-  var summary=document.createElement('summary');summary.textContent='Show details';
-  var pre=document.createElement('pre');pre.setAttribute('tabindex','0');
-  var argsText='{}';try{argsText=JSON.stringify(args&&typeof args==='object'?args:{},null,2)}catch(e){}
-  pre.textContent='Tool: '+String(name||'tool')+'\nArguments:\n'+argsText+'\n\nOutput:\n'+String(result==null?'Waiting for the result…':result);
-  details.appendChild(summary);details.appendChild(pre);return {details:details,pre:pre};
+  var summary=document.createElement('summary');summary.textContent='Execution details';
+  var body=document.createElement('div');body.className='activity-tool-inspector';
+  var meta=document.createElement('div');meta.className='activity-tool-meta';
+  var tool=document.createElement('span');tool.className='activity-tool-chip';tool.textContent='Tool · '+String(data.name||'unknown');
+  meta.appendChild(tool);
+  if(data.subagent){var worker=document.createElement('span');worker.className='activity-tool-chip';worker.textContent='Agent · '+String(data.subagent);meta.appendChild(worker)}
+  var duration=document.createElement('span');duration.className='activity-tool-duration';meta.appendChild(duration);
+  body.appendChild(meta);
+  if(data.detail){
+    var kind=data.category==='command'?'Command':'Target';
+    var target=document.createElement('div');target.className='activity-tool-target';
+    var targetLabel=document.createElement('span');targetLabel.className='activity-tool-block-label';targetLabel.textContent=kind;
+    var targetValue=document.createElement('code');targetValue.textContent=String(data.detail);
+    target.appendChild(targetLabel);target.appendChild(targetValue);body.appendChild(target);
+  }
+  addToolDetailBlock(body,'Arguments',formatActivityValue(data.args&&typeof data.args==='object'?data.args:{}));
+  var output=addToolDetailBlock(body,'Result','Waiting for the tool to finish…');
+  var warning=document.createElement('p');warning.className='activity-tool-warning';warning.hidden=true;body.appendChild(warning);
+  details.appendChild(summary);details.appendChild(body);
+  return {details:details,update:function(next){
+    next=next&&typeof next==='object'?next:{};
+    output.textContent=formatActivityValue(next.result);
+    duration.textContent=formatActivityDuration(next.durationMs);
+    if(next.warning){warning.textContent=String(next.warning);warning.hidden=false}else{warning.textContent='';warning.hidden=true}
+  }};
+}
+function addActivityArtifactCard(step,artifact,previewJobId){
+  if(!artifact||typeof artifact.path!=='string'||!artifact.path.trim())return;
+  var filePath=String(artifact.path).trim();
+  var card=document.createElement('section');card.className='activity-artifact';
+  var trigger=document.createElement('button');trigger.type='button';trigger.className='activity-artifact-trigger';trigger.setAttribute('aria-expanded','false');
+  var icon=document.createElement('span');icon.className='activity-artifact-icon';icon.setAttribute('aria-hidden','true');icon.textContent='▤';
+  var copy=document.createElement('span');copy.className='activity-artifact-copy';
+  var title=document.createElement('strong');title.textContent=(artifact.action==='created'?'Created file':'Updated file')+' · '+filePath;
+  var hint=document.createElement('small');hint.textContent='Preview the complete file';
+  copy.appendChild(title);copy.appendChild(hint);var arrow=document.createElement('span');arrow.className='activity-artifact-arrow';arrow.textContent='›';
+  trigger.appendChild(icon);trigger.appendChild(copy);trigger.appendChild(arrow);
+  var preview=document.createElement('div');preview.className='activity-file-preview';preview.hidden=true;
+  var meta=document.createElement('div');meta.className='activity-file-meta';meta.textContent='The latest saved version will appear here.';
+  var pre=document.createElement('pre');pre.className='activity-file-content';pre.setAttribute('tabindex','0');
+  preview.appendChild(meta);preview.appendChild(pre);
+  var loaded=false,loading=false;
+  trigger.addEventListener('click',function(){
+    if(!preview.hidden){preview.hidden=true;trigger.setAttribute('aria-expanded','false');return}
+    preview.hidden=false;trigger.setAttribute('aria-expanded','true');
+    if(loaded||loading)return;
+    loading=true;meta.textContent='Loading the latest saved version…';pre.textContent='';
+    var url='/api/workspace/file?path='+encodeURIComponent(filePath);
+    if(previewJobId)url+='&jobId='+encodeURIComponent(previewJobId);
+    agentApi(url).then(function(file){
+      var lines=String(file.content||'').split(/\r?\n/);
+      var width=String(Math.max(1,lines.length)).length;
+      pre.textContent=lines.map(function(line,index){return String(index+1).padStart(width,' ')+'  '+line}).join('\n');
+      meta.textContent=Number(file.lineCount||lines.length).toLocaleString()+' lines · '+Number(file.bytes||0).toLocaleString()+' bytes · '+String(file.path||filePath);
+      loaded=true;
+    }).catch(function(error){
+      meta.textContent='Preview unavailable: '+String(error&&error.message||error);
+      pre.textContent='The file was not changed by opening this preview.';
+    }).finally(function(){loading=false});
+  });
+  card.appendChild(trigger);card.appendChild(preview);step.appendChild(card);
 }
 function addActivityStep(data){
   data=data&&typeof data==='object'?data:{};
@@ -1755,11 +1838,14 @@ function addActivityStep(data){
   if(!group||group.category!==category)group=createActivityGroup(category,label);
   currentActivityGroup=group;group.count++;refreshGroupSummary(group);
   var step=document.createElement('article');step.className='activity-step';
+  var heading=document.createElement('div');heading.className='activity-step-heading';
   var title=document.createElement('div');title.className='activity-step-label';title.textContent=label;
-  var detail=makeToolDetails(data.name,data.args&&typeof data.args==='object'?data.args:{},null);
-  step.appendChild(title);step.appendChild(detail.details);group.steps.appendChild(step);
+  var state=document.createElement('span');state.className='activity-step-state';state.dataset.status='running';state.textContent=activityStatusName('running');
+  heading.appendChild(title);heading.appendChild(state);
+  var detail=makeToolDetails(data);
+  step.appendChild(heading);step.appendChild(detail.details);group.steps.appendChild(step);
   var id=String(data.callId||'');
-  if(id)activityStepsById.set(id,{group:group,detail:detail,step:step});
+  if(id)activityStepsById.set(id,{group:group,detail:detail,step:step,title:title,state:state});
   group.lastStep={group:group,detail:detail,step:step};
   updateLiveStatus(liveStatusFor(category,label));agentScroll();return group.lastStep;
 }
@@ -1767,11 +1853,19 @@ window.oasisActivityStart=addActivityStep;
 window.oasisActivityResult=function(data){
   data=data&&typeof data==='object'?data:{};
   var id=String(data.callId||''),entry=id&&activityStepsById.get(id);
-  if(!entry)entry=addActivityStep({name:data.name,args:data.args,label:data.label||'Completed a project step',category:data.category||'other',callId:id});
-  if(entry&&entry.detail){
-    var argsText='{}';try{argsText=JSON.stringify(data.args&&typeof data.args==='object'?data.args:{},null,2)}catch(e){}
-    entry.detail.pre.textContent='Tool: '+String(data.name||'tool')+'\nArguments:\n'+argsText+'\n\nOutput:\n'+String(data.result||'(No output was returned.)');
-    entry.step.classList.add('is-complete');
+  if(!entry)entry=addActivityStep({name:data.name,args:data.args,label:data.label||'Completed a project step',category:data.category||'other',callId:id,detail:data.detail});
+  if(entry){
+    if(data.label)entry.title.textContent=String(data.label);
+    if(entry.detail)entry.detail.update(data);
+    var status=data.status|| (data.warning?'warning':'success');
+    entry.step.classList.remove('is-complete','is-warning','is-failed');
+    if(status==='success')entry.step.classList.add('is-complete');
+    else if(status==='warning')entry.step.classList.add('is-warning');
+    else if(status==='error')entry.step.classList.add('is-failed');
+    entry.state.dataset.status=status;entry.state.textContent=activityStatusName(status);
+    (Array.isArray(data.artifacts)?data.artifacts:[]).slice(0,4).forEach(function(artifact){
+      addActivityArtifactCard(entry.step,artifact,data.previewJobId||'');
+    });
   }
   if(id)activityStepsById.delete(id);
   if(data.warning&&typeof window.oasisAgentActivity==='function')window.oasisAgentActivity(String(data.warning));
@@ -1803,7 +1897,7 @@ function collapseWork(){
   for(;node;node=node.nextElementSibling)if(node.classList.contains('activity-group'))steps.push(node);
   var calls=steps.reduce(function(total,group){return total+Number(group.querySelectorAll('.activity-step').length||0)},0);
   if(!calls)return;
-  var box=document.createElement('details');box.className='turn-work';
+  var box=document.createElement('details');box.className='turn-work';box.open=true;
   var sum=document.createElement('summary');sum.textContent='Worked for '+fmtWork(Date.now()-workStart)+' · '+calls+' tool call'+(calls===1?'':'s');
   var inner=document.createElement('div');inner.className='turn-work-steps';
   var innerContent=document.createElement('div');innerContent.className='turn-work-steps-inner';
