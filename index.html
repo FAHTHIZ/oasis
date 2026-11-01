@@ -1717,7 +1717,7 @@ function createActivityGroup(category,label){
   var wrapper=document.createElement('section');wrapper.className='activity-group';wrapper.dataset.category=category;
   var intro=document.createElement('p');intro.className='activity-group-intro';intro.textContent=modelActivitySentence()||fallbackActivitySentence(category,label);
   var details=document.createElement('details');details.className='activity-group-fold';
-  var summary=document.createElement('summary');summary.setAttribute('aria-label','Show activity details');
+  var summary=document.createElement('summary');
   var summaryText=document.createElement('span');summaryText.className='activity-group-summary';summary.appendChild(summaryText);
   var content=document.createElement('div');content.className='activity-group-content';
   var steps=document.createElement('div');steps.className='activity-group-steps';
@@ -1894,8 +1894,16 @@ function fmtWork(ms){var sec=Math.max(1,Math.round(ms/1000));return sec<60?sec+'
 function collapseWork(){
   var pref='on';try{pref=localStorage.getItem('oasis.web.collapseWork')||'on'}catch(e){}
   if(pref==='off')return;
-  var node=workMark&&workMark.parentNode===messages?workMark.nextElementSibling:messages.firstElementChild,steps=[];
-  for(;node;node=node.nextElementSibling)if(node.classList.contains('activity-group'))steps.push(node);
+  // activityGroups is the turn-scoped source of truth. Walking siblings from
+  // workMark is only a fallback because message rendering can insert or move
+  // nodes while a streamed turn is completing.
+  var steps=activityGroups.map(function(group){return group&&group.wrapper}).filter(function(node){
+    return node&&node.parentNode===messages&&node.classList.contains('activity-group');
+  });
+  if(!steps.length){
+    var node=workMark&&workMark.parentNode===messages?workMark.nextElementSibling:messages.firstElementChild;
+    for(;node;node=node.nextElementSibling)if(node.classList.contains('activity-group'))steps.push(node);
+  }
   var calls=steps.reduce(function(total,group){return total+Number(group.querySelectorAll('.activity-step').length||0)},0);
   if(!calls)return;
   var box=document.createElement('details');box.className='turn-work';
@@ -1970,7 +1978,7 @@ function copy(text,btn){var done=function(){var o=btn.textContent;btn.textConten
 /* ---------- Composer: Enter (or Ctrl/Cmd+Enter) to send, autosize, live send state ---------- */
 function sendWithMod(){try{return localStorage.getItem('oasis.web.sendKey')==='mod-enter'}catch(e){return false}}
 var modName=/Mac|iPhone|iPad/.test(navigator.platform||'')?'⌘':'Ctrl';
-function renderSendKeyHints(){document.querySelectorAll('[data-send-key-toggle]').forEach(function(b){b.innerHTML=sendWithMod()?'<span><kbd>'+modName+'</kbd><kbd>Enter</kbd> send</span><span><kbd>Enter</kbd> new line</span>':'<span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd><kbd>Enter</kbd> new line</span>';b.setAttribute('aria-label',(sendWithMod()?modName+'+Enter sends, Enter adds a line':'Enter sends, Shift+Enter adds a line')+'. Click to switch.')})}
+function renderSendKeyHints(){document.querySelectorAll('[data-send-key-toggle]').forEach(function(b){b.innerHTML=sendWithMod()?'<span><kbd>'+modName+'</kbd> <kbd>Enter</kbd> send</span><span><kbd>Enter</kbd> new line</span>':'<span><kbd>Enter</kbd> send</span><span><kbd>Shift</kbd> <kbd>Enter</kbd> new line</span>';b.removeAttribute('aria-label')})}
 document.addEventListener('click',function(e){var b=e.target.closest('[data-send-key-toggle]');if(!b)return;try{localStorage.setItem('oasis.web.sendKey',sendWithMod()?'enter':'mod-enter')}catch(err){}renderSendKeyHints();var ks=document.getElementById('sendKeySelect');if(ks)ks.value=sendWithMod()?'mod-enter':'enter';if(typeof window.notify==='function')window.notify(sendWithMod()?modName+'+Enter now sends; Enter adds a new line.':'Enter now sends; Shift+Enter adds a new line.')});
 new MutationObserver(function(){if(document.querySelector('[data-send-key-toggle]:empty'))renderSendKeyHints()}).observe(document.body,{childList:true,subtree:true});
 renderSendKeyHints();
