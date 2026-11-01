@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { saveMemory, listMemories, rankMemories, redactSecrets, memoryIndexPrompt, recallForPrompt, deleteMemory, memoryRoots, runMemoryTool } from '../src/auto-memory.mjs';
+import { saveMemory, listMemories, rankMemories, redactSecrets, memoryIndexPrompt, recallForPrompt, deleteMemory, memoryRoots, runMemoryTool, memoryFreshness, findMemory, verifyMemory } from '../src/auto-memory.mjs';
 import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
@@ -46,6 +46,59 @@ test('saving creates Markdown files and an index, and merges duplicates', async 
   await deleteMemory(root, 'prefers-tabs', { env });
   assert.equal((await listMemories(root, { env })).length, 1);
   await assert.rejects(saveMemory(root, { name: '', content: 'x' }, { env }), /short name/);
+});
+
+
+test('memory verification records evidence, freshness, and content-change invalidation', async (t) => {
+  const { root, env } = await setup(t);
+  const saved = await saveMemory(root, {
+    name: 'Runtime command',
+    description: 'How to run the project checks',
+    content: 'Run npm run check before shipping.',
+    category: 'project'
+  }, { env, source: 'session-123' });
+  let [memory] = await listMemories(root, { env });
+  assert.equal(memory.verificationStatus, 'unverified');
+  assert.equal(memoryFreshness(memory), 'unverified');
+  const verified = await verifyMemory(root, saved.id, {
+    status: 'current',
+    evidence: 'package.json: scripts.check; npm run check passed',
+    env
+  });
+  assert.equal(verified.status, 'current');
+  assert.equal(verified.freshness, 'current');
+  memory = await findMemory(root, saved.id, { env });
+  assert.match(memory.verificationNote, /package.json/);
+  assert.equal(memoryFreshness(memory), 'current');
+
+  const changed = await saveMemory(root, {
+    name: 'Runtime command',
+    content: 'Run npm run check and inspect the report.',
+    replace: true,
+    category: 'project'
+  }, { env });
+  assert.equal(changed.action, 'updated');
+  memory = await findMemory(root, saved.id, { env });
+  assert.equal(memory.verificationStatus, 'unverified');
+  assert.equal(memory.verifiedAt, null);
+
+  const outdated = await verifyMemory(root, saved.id, {
+    status: 'outdated',
+    evidence: 'Current package.json no longer defines the previous command',
+    env
+  });
+  assert.equal(outdated.status, 'outdated');
+  memory = await findMemory(root, saved.id, { env });
+  assert.equal(memoryFreshness(memory), 'outdated');
+});
+
+test('old project memories are marked stale until verified again', async (t) => {
+  const { root, env } = await setup(t);
+  const saved = await saveMemory(root, { name: 'Old build setup', content: 'Use the former build command.', category: 'project' }, { env });
+  const memory = await findMemory(root, saved.id, { env });
+  const old = { ...memory, updated: new Date(Date.now() - 100 * 86400000).toISOString() };
+  assert.equal(memoryFreshness(old), 'stale');
+  assert.equal(memoryFreshness({ ...old, category: 'preferences' }), 'personal');
 });
 
 test('BM25 ranking finds the relevant memory', async (t) => {
