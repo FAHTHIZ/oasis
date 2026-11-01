@@ -27,9 +27,9 @@ This document is the canonical record for repository layout, intentional copies,
 
 ## Release-candidate handling
 
-The current package version is `1.0.0-rc.1`. It identifies the source candidate on `main`; it is not a Git tag, GitHub Release, or stable installer channel. The stable installer intentionally ignores prerelease tags and continues to resolve the latest stable semantic-version tag.
+The current package version is `1.0.0` with Release Candidate 1 metadata. Its `oasisRelease` metadata identifies Release Candidate 1 on `main`; it is not a Git tag, GitHub Release, or stable installer channel. The stable installer intentionally ignores prerelease tags and continues to resolve the latest stable semantic-version tag.
 
-The desktop workflow builds artifacts on normal pushes, but publishing now requires an explicit workflow dispatch with `publish_release: true`. Tags containing a prerelease suffix (for example `v1.0.0-rc.1`) must be published with GitHub's prerelease flag and must not be marked latest. The final `v1.0.0` release may be marked latest only after the full same-commit qualification checklist passes.
+The desktop workflow builds artifacts on normal pushes, but publishing now requires an explicit workflow dispatch with `publish_release: true`. Tags containing a prerelease suffix (for example `v1.0.0`) must be published with GitHub's prerelease flag and must not be marked latest. The final `v1.0.0` release may be marked latest only after the full same-commit qualification checklist passes.
 
 ## Source and test organization
 
@@ -135,7 +135,7 @@ The intended public identity is:
 - Product name: **OASIS**
 - Primary tagline: **Code. Automate. Flourish.**
 - Description: Open-source, local-first agentic development workspace for coding, automation, agent orchestration, and verification.
-- Current development version: `1.0.0-rc.1`.
+- Current development package version: `1.0.0` (Release Candidate 1).
 - Lifecycle: Release Candidate / Production Qualification.
 - Latest published stable release: `v0.4.0` (historical; do not confuse it with the current source package).
 - License: Apache-2.0.
@@ -155,4 +155,4 @@ Run [Publish OASIS homepage and repository metadata](https://github.com/FAHTHIZ/
 
 Search metadata, Open Graph tags, `robots.txt`, and a sitemap help crawlers understand the site; they do not guarantee indexing, ranking, or traffic. Use Google Search Console to inspect indexing and request a crawl when appropriate; a request is not a guarantee of inclusion.
 
-The canonical public identity is maintained in [Brand](BRAND.md). The README, project plan, release notes, package version, desktop release workflow, and public site must distinguish the unpublished `1.0.0-rc.1` candidate from the historical stable `v0.4.0` release. Add release/download/benchmark badges only when the relevant release or result actually exists.
+The canonical public identity is maintained in [Brand](BRAND.md). The README, project plan, release notes, package version, desktop release workflow, and public site must distinguish the unpublished `1.0.0` candidate from the historical stable `v0.4.0` release. Add release/download/benchmark badges only when the relevant release or result actually exists.
