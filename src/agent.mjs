@@ -43,7 +43,7 @@ import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
-import { estimateTokens, microcompact, contextWindowSize, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
+import { estimateTokens, microcompact, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
@@ -66,7 +66,7 @@ import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 import { repairToolArguments, extractTextToolCalls } from './tool-call-repair.mjs';
-import { isLocalModelEndpoint, probeLocalContext, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
+import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -3432,7 +3432,14 @@ function applyFailureHookResult(result, hook) {
 // compaction from that instead.
 async function detectLocalContextWindow(session, { env = process.env, fetchImpl } = {}) {
   const config = session.config || {};
-  if (!isLocalModelEndpoint(config, env) || config.contextWindow || (env && env.OASIS_CONTEXT_WINDOW)) return null;
+  if (config.contextWindow || (env && env.OASIS_CONTEXT_WINDOW)) return null;
+  if (!isLocalModelEndpoint(config, env)) {
+    // Unknown hosted or self-hosted model: ask the provider's /models listing.
+    if (modelContextWindow(config.model)) return null;
+    const window = await probeProviderModelWindow(config, { fetchImpl: fetchImpl || globalThis.fetch, env });
+    if (window) session.config = { ...config, contextWindow: window };
+    return null;
+  }
   if (/^(?:0|false|off|no)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''))) return null;
   const probe = await probeLocalContext(config, { fetchImpl: fetchImpl || globalThis.fetch, env });
   session.localContext = probe;
