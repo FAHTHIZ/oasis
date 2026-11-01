@@ -1736,6 +1736,7 @@ async function requestCompletionRaw(session, options = {}) {
     bodyObject = {
       model: config.model,
       ...(explicitChatLimit ? { max_tokens: explicitChatLimit } : {}),
+      ...samplingTemperature(config, providerEnv),
       messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
@@ -2276,6 +2277,47 @@ function isCompleteFileRead(args, result) {
 
 const FILE_EDITING_TOOL_NAMES = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file', 'apply_patch']);
 const RETRY_TRACKED_COMMANDS = new Set(['run_command', 'run_shell', 'powershell']);
+// "Create src/lib.mjs ...", "fix the failing test", "add a flag": a request to
+// change something, not a question about how to.
+export function asksForAction(request) {
+  const text = String(request || '').trim().replace(/^(?:please|pls|can you|could you|would you|go ahead and|now)[\s,]+/i, '');
+  if (/^(?:how|what|why|which|when|where|who|explain|describe|summari[sz]e|review|compare|list|show me how|tell me)\b/i.test(text)) return false;
+  return /^(?:create|add|implement|fix|write|make|update|change|modify|refactor|remove|delete|rename|move|build|set up|setup|install|run|edit|replace|convert|migrate|bump|upgrade|generate|scaffold|wire|hook up|port|patch|repair|resolve|finish|complete)\b/i.test(text);
+}
+
+// Numbered steps, "you can"/"we can" instructions, or a code block handed to the user.
+export function readsLikeInstructions(text) {
+  const reply = String(text || '');
+  if (!reply.trim()) return false;
+  const steps = (reply.match(/^\s*(?:\d+[.)]|step \d+)/gim) || []).length;
+  return steps >= 2 || /```/.test(reply) || /\b(?:you can|we can|you(?:'|’)ll need to|you should|follow these steps|here(?:'|’)s how|to do this|save (?:it|this) (?:as|to|in))\b/i.test(reply);
+}
+
+// "I need to create this function", "Next, I'll run the tests", "Let me fix that:".
+export function announcesNextStep(text) {
+  const reply = String(text || '').trim();
+  if (!reply || reply.length > 1500) return false;
+  if (/\b(?:done|completed|finished|all set|passes|passed|is now|has been|have been)\b/i.test(reply.slice(-300)) && !/\b(?:i need to|next)\b/i.test(reply.slice(-300))) return false;
+  return /(?:^|[.!\n]\s*)(?:i need to|i will|i'll|i’ll|let me|next,? i|now i|i should|i am going to|i'm going to|i’m going to|i must)\b[^.!?\n]*[.:]?\s*$/i.test(reply) || /:\s*$/.test(reply);
+}
+
+const CONTINUE_NUDGE = '<system-reminder>You said what you will do next but ended your turn without doing it, and nothing has changed yet. Do that step now with a tool call. If a tool failed, read its error and fix the call (for example, use write_file to create a file that does not exist yet).</system-reminder>';
+
+const ACTION_NUDGE = '<system-reminder>You described the work instead of doing it. The user asked you to make this change, and you have tools to do it. Do it now: read what you need, then use write_file or edit_file to make the change and run_command to check it. Do not explain the steps again or ask the user to do them.</system-reminder>';
+
+// Local servers default to creative sampling (llama-server 0.8, Ollama 0.7-0.8),
+// which makes small models drift between tool-call formats and invent
+// arguments. Agent work wants near-greedy decoding. Hosted APIs keep their own
+// defaults unless a temperature is configured.
+export function samplingTemperature(config = {}, env = process.env) {
+  const configured = config.temperature !== undefined ? config.temperature : env.OASIS_TEMPERATURE;
+  if (configured !== undefined && configured !== '') {
+    const value = Number(configured);
+    return Number.isFinite(value) && value >= 0 && value <= 2 ? { temperature: value } : {};
+  }
+  return isLocalModelEndpoint(config, env) ? { temperature: 0.2 } : {};
+}
+
 const RETRY_WARN_AT = 3;
 const RETRY_HALT_AT = 5;
 // Edit -> same failure -> edit -> same failure: the fixes are not reaching the
@@ -4022,6 +4064,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
   const claimState = newClaimState();
   let correctionNudged = false;
+  let actionNudges = 0;
   const failedCommandRuns = new Map();
   // command key -> { signature, count, editEpoch } for failures that persist across edits.
   const persistentFailures = new Map();
@@ -4200,6 +4243,17 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.tamperCheckPending = false;
         const { detectTestTampering } = await import('./test-tamper.mjs');
         verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
+      }
+      // Smaller models often answer "create X" with a tutorial instead of doing it.
+      // They also announce the next step ("I need to create the file") and stop.
+      if (actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
+        const kind = !totalToolCalls && readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : '';
+        if (kind) {
+          actionNudges++;
+          if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind }); } catch {} }
+          session.messages.push({ role: 'user', content: kind === 'described' ? ACTION_NUDGE : CONTINUE_NUDGE });
+          continue;
+        }
       }
       const issues = verificationIssues(verification);
       const blockedText = verification.nudgeUsed ? formatLspVerificationBlocker(issues) : null;

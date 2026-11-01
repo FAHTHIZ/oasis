@@ -133,3 +133,35 @@ test('call syntax that is shown or quoted is never executed', () => {
   const lead = extractTextToolCalls('Reading it.\n```json\n{"name": "read_file", "arguments": {"path": "a.js"}}\n```', names);
   assert.equal(lead.calls[0].name, 'read_file');
 });
+
+test('a reply that opens with bare call objects runs them and keeps the comment', () => {
+  const names = new Set(['write_file', 'read_file']);
+  const reply = '{"name": "write_file", "arguments": {"path": "src/lib.mjs", "content": "export const x = 1;\\n"}}\n\nThis function will create the file.';
+  const found = extractTextToolCalls(reply, names);
+  assert.equal(found.calls.length, 1);
+  assert.equal(found.calls[0].name, 'write_file');
+  assert.equal(found.calls[0].args.path, 'src/lib.mjs');
+  assert.equal(found.text, 'This function will create the file.');
+  // Prose before the object, or an object that is not a call, is left alone.
+  assert.equal(extractTextToolCalls('The config looks like {"name": "write_file", "arguments": {}} here.', names), null);
+  assert.equal(extractTextToolCalls('{"debug": true}\n\nThat is the config.', names), null);
+});
+
+test('XML-attribute tool calls are recovered', () => {
+  const names = new Set(['write_file']);
+  const reply = "<tools>\n    <function name=\"write_file\" arguments='{\"path\": \"src/lib.mjs\", \"content\": \"export const x = 1;\\n\"}'>\n</tools>";
+  const found = extractTextToolCalls(reply, names);
+  assert.equal(found.calls.length, 1);
+  assert.equal(found.calls[0].args.path, 'src/lib.mjs');
+  assert.equal(found.text, '');
+  assert.equal(extractTextToolCalls('```\n<function name="write_file" arguments=\'{}\'>\n```', names), null);
+});
+
+test('local servers get near-greedy sampling; hosted APIs keep their defaults', async () => {
+  const { samplingTemperature } = await import('../src/agent.mjs');
+  assert.deepEqual(samplingTemperature({ baseURL: 'http://127.0.0.1:8080/v1' }, {}), { temperature: 0.2 });
+  assert.deepEqual(samplingTemperature({ baseURL: 'https://api.openai.com/v1' }, {}), {});
+  assert.deepEqual(samplingTemperature({ baseURL: 'https://api.openai.com/v1', temperature: 0.7 }, {}), { temperature: 0.7 });
+  assert.deepEqual(samplingTemperature({ baseURL: 'http://127.0.0.1:8080/v1' }, { OASIS_TEMPERATURE: '0' }), { temperature: 0 });
+  assert.deepEqual(samplingTemperature({ baseURL: 'http://127.0.0.1:8080/v1' }, { OASIS_TEMPERATURE: 'hot' }), {});
+});
