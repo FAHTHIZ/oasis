@@ -87,7 +87,7 @@ export function sanitizeAgentHistory(agentTasks) {
   return source.slice(-SESSION_AGENT_LIMIT).flatMap((record) => {
     if (!record || typeof record !== 'object') return [];
     const id = String(record.id || '');
-    if (!/^agent_[1-9]\\d{0,8}$/.test(id)) return [];
+    if (!/^agent_[1-9]\d{0,8}$/.test(id)) return [];
     const status = SESSION_AGENT_STATUSES.has(record.status) ? record.status : 'interrupted';
     const worktree = record.worktree && typeof record.worktree === 'object' ? record.worktree : {};
     const worktreeInfo = record.worktreeInfo && typeof record.worktreeInfo === 'object' ? record.worktreeInfo : {};
@@ -113,8 +113,8 @@ export function sanitizeAgentHistory(agentTasks) {
       error: safePersistedText(record.error || '', 1500),
       readOnly: Boolean(record.readOnly),
       workspaceIsolation: (record.worktreeInfo || record.worktree || record.workspaceIsolation === 'worktree') ? 'worktree' : 'shared',
-      ...(record.teamId && /^team_[1-9]\\d{0,5}$/.test(String(record.teamId)) ? { teamId: String(record.teamId) } : {}),
-      ...(record.sharedTaskId && /^task_[1-9]\\d{0,8}$/.test(String(record.sharedTaskId)) ? { sharedTaskId: String(record.sharedTaskId) } : {}),
+      ...(record.teamId && /^team_[1-9]\d{0,5}$/.test(String(record.teamId)) ? { teamId: String(record.teamId) } : {}),
+      ...(record.sharedTaskId && /^task_[1-9]\d{0,8}$/.test(String(record.sharedTaskId)) ? { sharedTaskId: String(record.sharedTaskId) } : {}),
       ...(branch ? { worktreeBranch: branch } : {}),
       ...(relative ? { worktreePath: relative } : {}),
       ...(worktree.changed === true ? { worktreeChanged: true } : {}),
