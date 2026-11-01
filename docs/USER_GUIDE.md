@@ -562,6 +562,8 @@ Every shortcut can be rebound in compatible-format `keybindings.json` format. OA
 
 Replies render as Markdown with syntax-highlighted code, and edits show as colored diffs. While Oasis waits for the model's first token it shows a one-line status (`⠋ Thinking… · 12s · 15.4k tokens sent · esc to stop`); with a local model that is still reading a long prompt it says so. Motion adapts to the machine: a smooth spinner with a shimmer on capable machines, a slow dot pulse and a short logo reveal on low-power machines (2 or fewer CPUs, under 4 GB RAM, a busy CPU), over SSH and on the Linux console, and no animation in CI, on dumb terminals, in screen-reader mode or with `OASIS_REDUCED_MOTION=1` / `NO_MOTION=1`. `OASIS_MOTION=full|lite|off` overrides detection. Settings: `OASIS_NO_ANIMATION=1` skips the startup animation, `OASIS_SIMPLE_INPUT=1` uses a plain line reader, `OASIS_PLAIN_OUTPUT=1` prints raw text, and `NO_COLOR` turns off colors.
 
+**Notifications.** When a turn that ran at least 15 seconds finishes or waits for your approval, OASIS sends a desktop notification in terminals that support it (iTerm2, WezTerm, Ghostty, Windows Terminal, kitty) and rings the terminal bell elsewhere. Short turns, CI and piped output stay quiet. Set `OASIS_NOTIFY=off` to disable it, `bell` or `osc` to force a style, and `OASIS_NOTIFY_AFTER_SECONDS` to change the threshold. In the browser workspace a background tab gets a `●` title badge, and a desktop notification if you allowed it when first prompted.
+
 ### Workflow commands
 
 - `/goal CONDITION` keeps working across turns until a separate check says the condition is met and verified, up to 20 turns (`OASIS_GOAL_MAX_TURNS`). `/goal` shows the status, and `/goal clear` stops it.
