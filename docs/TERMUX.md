@@ -1,6 +1,6 @@
 # OASIS on Android with Termux
 
-This is the phone-first path for people using Android. The Electron desktop app does not run inside Termux, and Android is not yet a fully verified support target. The command-line path is the one to try.
+This is the phone-first CLI path for Android. The Electron desktop app does not run inside Termux, and Android remains an experimental platform target rather than a fully qualified 1.0 surface. The command-line path is the one to try.
 
 ## 1. Install Termux
 
@@ -16,7 +16,7 @@ Paste this single command into Termux and press **Enter**:
 sh -c 'f=$(mktemp) || exit; url=https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh; if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$f"; elif command -v wget >/dev/null 2>&1; then wget -qO "$f" "$url"; else echo "Install curl or wget first, then retry." >&2; rm -f "$f"; exit 1; fi && sh "$f"; r=$?; rm -f "$f"; exit "$r"'
 ```
 
-The installer checks for Node.js 22 or newer. If it is missing, it offers to install Node.js with Termux's package manager. It resolves the latest stable semantic-version Git tag to an exact commit SHA, installs that release in your user folder, checks the environment, and starts guided provider setup. The latest tagged release is currently `v0.4.0`. The `main` branch has newer unreleased changes but still reports package version `0.4.0`; use the source-install path only when you intentionally want development code. You do not need to clone the repository, install Git, or type separate npm commands.
+The installer checks for Node.js 22 or newer. If it is missing, it offers to install Node.js with Termux's package manager. It resolves the latest stable semantic-version Git tag to an exact commit SHA, installs that release in your user folder, checks the environment, and starts guided provider setup. The latest published stable tag is `v0.4.0`; the moving `main` source package is `1.0.0-rc.1` and is not selected by the installer. To try the candidate, follow the source-install steps in [Install OASIS](INSTALL.md#run-the-current-release-candidate-from-source). You do not need to clone the repository, install Git, or type separate npm commands for the stable installer path.
 
 The easy command runs the installer from the official repository over HTTPS. For the checksum-verified copyable command and current installer hash, use [Install OASIS](INSTALL.md#command-line-installation).
 
@@ -60,7 +60,7 @@ termux-reload-settings
 
 This keyboard layout is optional. Use the layout you prefer.
 
-## What works, and what is not verified
+## Supported path and platform limits
 
 - **CLI setup and coding tasks:** intended path to try on Android, subject to Node.js and provider requirements.
 - **Browser workspace:** can start with `oasis web`; use the local address it prints.
@@ -79,7 +79,7 @@ bash scripts/termux-smoke.sh
 
 The script is deliberately local to that checkout. It installs the production dependencies there, checks the CLI, runs `oasis doctor`, verifies the QuickJS workflow runtime, and reports whether the optional native PTY module can load. It does not install or remove a global OASIS package, modify your Termux PATH, call a model provider, or change your project files outside the checkout.
 
-This is a reproducible smoke test, not a substitute for recording results from a real device. Android background-process behaviour and native PTY support still need to be verified on each supported Termux/device combination.
+This is a reproducible smoke test, not a substitute for recording results from a real device. Android background-process behaviour and native PTY support still need to be verified on each Termux/device combination. Passing the smoke test does not make Android a qualified 1.0 support target.
 
 ## If you get stuck
 
