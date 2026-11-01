@@ -42,7 +42,7 @@ import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
 import { createActivityIndicator } from './activity-indicator.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput } from './terminal-ui.mjs';
+import { formatTurnSummary, showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
@@ -1742,6 +1742,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     controller.abort();
   };
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
+  const turnStartedAt = Date.now();
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
   try {
     const fork = modeOptions.fork;
@@ -1842,6 +1843,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     } else if (!result.finished) {
       stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
     }
+    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }) + '\x1b[22m\n');
   } catch (error) {
     endStream();
     if (controller.signal.aborted || error.name === 'AbortError') {

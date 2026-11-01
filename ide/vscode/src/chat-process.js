@@ -108,9 +108,11 @@ class OasisChatProcess extends EventEmitter {
     const value = String(text || '').trim();
     if (!value) return false;
     this.start();
+    // While a turn runs the message steers it (read at the agent's next step).
+    const steer = this.busy === true;
     this.busy = true;
     this.emit('ui', { kind: 'busy', busy: true });
-    return this._write({ type: 'user', message: { role: 'user', content: value } });
+    return this._write({ type: 'user', ...(steer ? { steer: true } : {}), message: { role: 'user', content: value } });
   }
 
   respond(requestId, behavior, { always = false, message = '' } = {}) {
@@ -145,6 +147,7 @@ function translateEvent(event, state = {}) {
       if (event.subtype === 'init') { state.sessionId = event.session_id || null; out.push({ kind: 'init', model: event.model, cwd: event.cwd, permissionMode: event.permission_mode }); }
       else if (event.subtype === 'ide_selection') out.push({ kind: 'note', text: event.label });
       else if (event.subtype === 'interrupted') out.push({ kind: 'note', text: 'Interrupted.' });
+      else if (event.subtype === 'steer_queued') out.push({ kind: 'note', text: 'Sent while working. Oasis reads it at its next step.' });
       else if (event.subtype === 'background_event') out.push({ kind: 'note', text: 'Background event (' + (event.kinds || []).join(', ') + ')' + (event.ids && event.ids.length ? ': ' + event.ids.slice(0, 3).join(', ') : '') + ' — Oasis is responding.' });
       else if (event.subtype === 'plugin_monitors') out.push({ kind: 'note', text: event.started + ' plugin monitor(s) running.' });
       else if (event.subtype === 'permission' && event.via === 'ide_diff') out.push({ kind: 'note', text: (event.allowed ? 'Accepted' : 'Rejected') + ' ' + (event.tool || 'edit') + ' in the diff view.' });

@@ -261,3 +261,11 @@ test('tool results get a one-line summary under the call', async () => {
   assert.equal(describeToolResult('edit_file', { ok: true }, { color: false }), '');
   assert.equal(describeToolResult('todo_write', { ok: true }, { color: false }), '');
 });
+
+test('turn summary line reports time, tool calls and tokens', async () => {
+  const { formatTurnSummary } = await import('../src/terminal-ui.mjs');
+  assert.equal(formatTurnSummary({ ms: 55_000, toolCalls: 4, tokens: 12_345 }), 'Done · 55s · 4 tool calls · 12.3k tokens');
+  assert.equal(formatTurnSummary({ ms: 185_000, toolCalls: 1, tokens: 900 }), 'Done · 3m 05s · 1 tool call · 900 tokens');
+  assert.equal(formatTurnSummary({ ms: 2000, finished: false }), 'Paused · 2s');
+  assert.equal(formatTurnSummary({ ms: 0, stopped: true }), 'Stopped · 0s');
+});
