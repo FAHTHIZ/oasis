@@ -27,7 +27,7 @@ const required = [
   'Get OASIS', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
   'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
-  'property="og:image"', 'summary_large_image', '<span class="stage-badge">RC1</span>', 'Release Candidate · Open source · Apache-2.0', '1.0.0-rc.1', 'docs/PROJECT_PLAN.md'
+  'property="og:image"', 'summary_large_image', '<span class="stage-badge">RC1</span>', 'Release Candidate · Open source · Apache-2.0', '1.0.0', 'docs/PROJECT_PLAN.md'
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
 assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the Pages URL.');
@@ -44,7 +44,7 @@ for (const [name, sticker, marker] of [['wide RC sticker', rcSticker, 'RELEASE C
 assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
 assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/USER_GUIDE.md'), 'Homepage must link directly to Install and the detailed User Guide.');
-assert.ok(html.includes('latest published stable desktop installers remain v0.4.0') && html.includes('unsigned') && html.includes('clean-machine install, update, and uninstall') && html.includes('1.0.0-rc.1'), 'Homepage must distinguish the stable v0.4.0 downloads from the unpublished 1.0.0-rc.1 candidate.');
+assert.ok(html.includes('latest published stable desktop installers remain v0.4.0') && html.includes('unsigned') && html.includes('clean-machine install, update, and uninstall') && html.includes('1.0.0 Release Candidate 1'), 'Homepage must distinguish the stable v0.4.0 downloads from the unpublished 1.0.0-rc.1 candidate.');
 assert.ok(/The packaged app does not require a separate Node\.js or Git installation/i.test(html), 'Homepage must explain that the packaged desktop app includes its own runtime.');
 assert.ok(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))') && html.includes('@media(max-width:850px){.install-choices{grid-template-columns:repeat(2,minmax(0,1fr))}') && html.includes('@media(max-width:560px){.install-choices{grid-template-columns:1fr}'), 'Platform choices must fit desktop, tablet, and mobile layouts.');
 assert.ok(!html.includes('Just for fun'), 'Homepage must not contain the old repository description.');
@@ -71,6 +71,9 @@ assert.ok(
   'LICENSE must contain the full Apache License 2.0 text, including its terms and appendix.'
 );
 assert.ok(expectedDescription.length <= 160, 'Search description should fit a typical snippet length.');
-assert.equal(pkg.version, '1.0.0-rc.1', 'The public candidate page and package version must identify the same release candidate.');
-assert.ok(readme.includes('1.0.0-rc.1') && readme.includes('Release Candidate'), 'README must describe the current candidate lifecycle.');
+assert.equal(pkg.version, '1.0.0', 'The desktop package must retain numeric stable SemVer.');
+assert.equal(pkg.oasisRelease?.channel, 'release-candidate', 'The package must carry the RC channel separately from SemVer.');
+assert.equal(pkg.oasisRelease?.candidate, 1, 'The package must identify Release Candidate 1.');
+assert.equal(pkg.oasisRelease?.stableTag, 'v1.0.0', 'The package must identify the intended stable tag.');
+assert.ok(readme.includes('1.0.0') && readme.includes('Release Candidate'), 'README must describe the current candidate lifecycle.');
 console.log('OASIS public-site checks passed: metadata, links, 1.0 release-candidate branding, canonical repo, and Apache-2.0 license consistency.');
