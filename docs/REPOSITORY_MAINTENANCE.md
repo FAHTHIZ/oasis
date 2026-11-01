@@ -12,7 +12,6 @@ This document is the canonical record for repository layout, intentional copies,
 | `site/` | Separate static public landing page deployed through GitHub Pages. |
 | `desktop/` | Electron host, secure-secret bridge and desktop failure surfaces. |
 | `ide/vscode/` | VS Code-compatible extension and chat bridge. |
-| `test/` | Focused subsystem and integration regression tests. Keep tests near their behavior boundary; similar filenames do not prove duplicate coverage. |
 | `evals/tasks/` | Frozen task prompts, snapshots, reference patches and independent verifiers. |
 | `evals/snapshots/` | Immutable evaluation repository snapshots. Never silently replace with live source. |
 | `bench/` | Focused performance and subsystem benchmark scripts; benchmark outputs are evidence, not product claims by themselves. |
@@ -44,9 +43,9 @@ Before removing any same-content file, check its deployment root, task snapshot,
 
 ## Branch state and cleanup receipt
 
-At the inspected `main` snapshot `ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615`, the GitHub branches endpoint returned exactly one branch: `main`. This confirms that the former development refs listed in older audit notes are no longer present. Do not use those historical names as active branches or assume they remain recoverable.
+At the inspected runtime snapshot `7927275a0edefd4e6c791a5774fd82eb13e7ec62`, and again at the documentation snapshot `4e48392f38748f4ade4c21ef023ae9a063245670`, the GitHub branches endpoint returned exactly one branch: `main`. This confirms that the former development refs listed in older audit notes are no longer present. Do not use those historical names as active branches or assume they remain recoverable.
 
-The guarded cleanup workflow completed successfully in the latest inspected pass: [run 41265370788](https://github.com/FAHTHIZ/oasis/actions/runs/41265370788). Earlier cleanup receipts are retained as history:
+The guarded cleanup workflow completed successfully for the runtime audit snapshot: [run 41267442561](https://github.com/FAHTHIZ/oasis/actions/runs/41267442561). The documentation snapshot also passed cleanup: [run 41267932303](https://github.com/FAHTHIZ/oasis/actions/runs/41267932303). Earlier cleanup receipts are retained as history:
 
 - [run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215) retired 9 exact audited/superseded refs.
 - [run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382) found no further safe deletions and preserved 11 divergent refs at that time.
