@@ -1770,10 +1770,10 @@ function addToolDetailBlock(parent,label,value){
 function makeToolDetails(data){
   data=data&&typeof data==='object'?data:{};
   var details=document.createElement('details');details.className='activity-tool-details';
-  var summary=document.createElement('summary');summary.textContent='Execution details';
+  var summary=document.createElement('summary');summary.textContent='Show details';
   var body=document.createElement('div');body.className='activity-tool-inspector';
   var meta=document.createElement('div');meta.className='activity-tool-meta';
-  var tool=document.createElement('span');tool.className='activity-tool-chip';tool.textContent='Tool · '+String(data.name||'unknown');
+  var tool=document.createElement('span');tool.className='activity-tool-chip';tool.textContent='Tool: '+String(data.name||'unknown');
   meta.appendChild(tool);
   if(data.subagent){var worker=document.createElement('span');worker.className='activity-tool-chip';worker.textContent='Agent · '+String(data.subagent);meta.appendChild(worker)}
   var duration=document.createElement('span');duration.className='activity-tool-duration';meta.appendChild(duration);
