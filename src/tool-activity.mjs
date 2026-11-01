@@ -60,8 +60,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'task') return 'Asked a helper to investigate';
   if (tool === 'diagnostics' || tool === 'ide_get_diagnostics') return 'Checked for code issues';
   if (tool === 'install_package') return 'Prepared a package installation';
-  const friendly = text(tool.replace(/[_-]+/g, ' '), 100);
-  return friendly ? friendly[0].toUpperCase() + friendly.slice(1) : 'Completed a project step';
+  return 'Completed a project step';
 }
 
 export function safeToolActivityArgs(args) {
