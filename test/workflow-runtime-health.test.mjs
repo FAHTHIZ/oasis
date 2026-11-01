@@ -24,4 +24,5 @@ test('workspace doctor includes workflow runtime availability', async (t) => {
   t.after(() => rm(root, { recursive: true, force: true }));
   const report = await workspaceDoctor(root, { env: { ...process.env, OASIS_CONFIG_DIR: path.join(root, '.config') } });
   assert.match(report, /Workflow runtime: available \(QuickJS\)/);
+  assert.match(report, /Command isolation: not active; approval controls are not OS isolation/);
 });
