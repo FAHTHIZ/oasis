@@ -3,7 +3,8 @@
 **Updated:** November 1, 2026  
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
-**Current main snapshot inspected:** [`ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615`](https://github.com/FAHTHIZ/oasis/commit/ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615)  
+**Documentation snapshot after this pass:** [`4e48392f38748f4ade4c21ef023ae9a063245670`](https://github.com/FAHTHIZ/oasis/commit/4e48392f38748f4ade4c21ef023ae9a063245670)  
+**Runtime/CI audit baseline:** [`7927275a0edefd4e6c791a5774fd82eb13e7ec62`](https://github.com/FAHTHIZ/oasis/commit/7927275a0edefd4e6c791a5774fd82eb13e7ec62) (source snapshot inspected November 1, 2026; documentation-only commits followed).  
 **Latest published release:** [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), published October 31, 2026.  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
 **Historical CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
@@ -43,7 +44,7 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Inspected source commit:** `ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615` on `main` (November 1, 2026). This is the audit baseline for the findings below; later commits require their own verification.
+**Inspected runtime source commit:** `7927275a0edefd4e6c791a5774fd82eb13e7ec62` on `main` (November 1, 2026). The documentation changes in this pass followed it; the code/CI findings below refer to this unchanged runtime snapshot.
 
 ### Published release
 
@@ -55,19 +56,23 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ### Development branch after v0.4.0
 
-- `main` is 101 commits ahead of the `v0.4.0` tag in the inspected comparison.
+- At the end of this documentation pass, `main` is 126 commits ahead of the `v0.4.0` tag. This includes later documentation and audit updates; the runtime/CI baseline above was 120 commits ahead.
 - `package.json` on `main` still reports `0.4.0`. This version string must not be mistaken for a new `v0.4.0` release: current `main` includes later, unreleased changes.
 - Do not move, replace, or retag `v0.4.0` to absorb subsequent work. The next versioned release should use a new version, immutable tag, release notes, checksums, and artifacts. `0.5.0` is a candidate next version, not a declared or published release.
 
-### CI evidence for the inspected main commit
+### CI evidence for the inspected runtime commit
 
-- **Quality Checks:** [run 41265370702](https://github.com/FAHTHIZ/oasis/actions/runs/41265370702) — **8 of 9 jobs passed; Browser end-to-end smoke test failed**. Node 22/24/26 package checks, Windows/macOS/Linux runtime-security tests, clean-environment tests, and native PTY integration passed. The browser job timed out after 15 seconds waiting for `#agentMessages .turn-work` to become visible at `.github/scripts/browser-e2e.mjs:320`. The run also reported accessible-name mismatches on `.send-key-toggle` and activity disclosure summaries; these findings need review.
-- **Installer checks:** [run 41265370731](https://github.com/FAHTHIZ/oasis/actions/runs/41265370731) — Windows, macOS, and Ubuntu installer jobs passed.
-- **Desktop packaging:** [run 41265370753](https://github.com/FAHTHIZ/oasis/actions/runs/41265370753) — Linux, macOS, and Windows package jobs and the workflow publish step passed.
-- **Public site and repository metadata:** [run 41265370712](https://github.com/FAHTHIZ/oasis/actions/runs/41265370712) — validation and deployment jobs passed.
-- **Branch cleanup:** [run 41265370788](https://github.com/FAHTHIZ/oasis/actions/runs/41265370788) passed; the GitHub branches endpoint at this snapshot returned only `main`.
+The following workflows were triggered for the exact runtime commit `7927275a0edefd4e6c791a5774fd82eb13e7ec62`:
 
-The previous all-green run on October 31 belongs to an older commit and is historical evidence only. It must not be used to describe the inspected November 1 commit as fully green. Any new candidate needs fresh same-commit checks.
+- **Quality Checks:** [run 41267442597](https://github.com/FAHTHIZ/oasis/actions/runs/41267442597) — **8 of 9 jobs passed; Browser end-to-end smoke test failed**. Node 22/24/26 package checks, Windows/macOS/Linux runtime-security tests, clean-environment tests, and native PTY integration passed. The browser job timed out waiting for `#agentMessages .turn-work`. Its diagnostic trace showed the expected write/read/edit/command activity groups rendered, but the completed-turn disclosure was absent while a delete action remained pending. This is an unresolved browser-turn lifecycle issue; do not weaken the assertion or hide the pending action.
+- **Installer checks:** [run 41267442660](https://github.com/FAHTHIZ/oasis/actions/runs/41267442660) — Windows, macOS, and Ubuntu installer jobs passed.
+- **Desktop packaging:** [run 41267442696](https://github.com/FAHTHIZ/oasis/actions/runs/41267442696) — Linux, macOS, and Windows package jobs and the publish step passed.
+- **Public site and repository metadata:** [run 41267442674](https://github.com/FAHTHIZ/oasis/actions/runs/41267442674) — validation and deployment jobs passed.
+- **Branch cleanup:** [run 41267442561](https://github.com/FAHTHIZ/oasis/actions/runs/41267442561) passed; the branch listing at that snapshot contained only `main`.
+
+The separate CI workflows on the later documentation snapshot `4e48392` were still running when checked. Their final outcomes must be read from their own same-SHA run links before making a green-build claim.
+
+The previous all-green run on October 31 belongs to an older commit and is historical evidence only. It must not be used to describe the inspected November 1 runtime snapshot as fully green. Any new candidate needs fresh same-commit checks.
 
 ## Production-readiness outlook
 
@@ -115,15 +120,15 @@ Prioritize high-value user journeys: provider setup, project onboarding, CLI/bro
 
 ## Release acceptance checklist
 
-- [ ] Quality Checks pass on the exact candidate SHA. The inspected `main` snapshot passed 8/9 jobs; browser E2E remains failing at the `.turn-work` visibility wait. Resolve the behavior and accessibility findings, then rerun the full workflow.
-- [x] Windows, macOS, and Ubuntu installer workflow passed on the inspected `main` SHA: [run 41265370731](https://github.com/FAHTHIZ/oasis/actions/runs/41265370731).
-- [x] Windows, macOS, and Linux desktop packaging workflow passed on the inspected `main` SHA: [run 41265370753](https://github.com/FAHTHIZ/oasis/actions/runs/41265370753). Packages remain unsigned.
-- [x] Public-site validation and deployment passed on the inspected `main` SHA: [run 41265370712](https://github.com/FAHTHIZ/oasis/actions/runs/41265370712).
+- [ ] Quality Checks pass on the exact candidate SHA. The runtime audit baseline passed 8/9 jobs; browser E2E still fails at the `.turn-work` visibility wait while a delete action remains pending. Resolve the lifecycle issue and rerun the full workflow.
+- [x] Windows, macOS, and Ubuntu installer workflow passed on the runtime audit SHA: [run 41267442660](https://github.com/FAHTHIZ/oasis/actions/runs/41267442660).
+- [x] Windows, macOS, and Linux desktop packaging workflow passed on the runtime audit SHA: [run 41267442696](https://github.com/FAHTHIZ/oasis/actions/runs/41267442696). Packages remain unsigned.
+- [x] Public-site validation and deployment passed on the runtime audit SHA: [run 41267442674](https://github.com/FAHTHIZ/oasis/actions/runs/41267442674).
 - [x] The `v0.4.0` tag, GitHub Release object, release notes, checksums, and downloadable desktop assets exist.
 - [ ] GitHub release lifecycle metadata aligns with the Beta label. The published `v0.4.0` release is currently marked `prerelease: false`; set the correct metadata policy for the next release.
 - [ ] Clean-machine install, first launch, provider setup, update, and uninstall are exercised on each advertised desktop OS. CI package success is not a substitute for real clean-machine checks.
 - [ ] Desktop signing, publisher identity, and provenance are configured or their absence is explicitly accepted for the target audience.
-- [ ] Documentation is verified against the exact candidate commit after the current consistency repair; then rerun applicable site and repository checks.
+- [ ] Documentation is verified against the exact candidate commit after this consistency and navigation pass; the new documentation-only snapshot has its own CI runs in progress.
 - [ ] Representative repository-scale evaluation is published. The current 33-task evaluator remains a smoke/regression suite, not a defensible coding-quality benchmark.
 
 A green CI matrix is necessary, not sufficient. It does not replace security review, real-user journeys, clean-machine installation checks or representative coding evaluation.
