@@ -18,7 +18,7 @@
 
 OASIS is not a model of its own or a hosted AI service. **You bring the model; OASIS provides the agent runtime, workspace, tools, controls, integrations, and interfaces.**
 
-> **Release status:** OASIS remains Beta. The latest published release is [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), tagged and published on October 31, 2026, with Windows, macOS and Linux desktop assets. The `main` branch contains newer unreleased changes; its package version has not yet been advanced beyond `0.4.0`. See [current limits](#beta-status).
+> **Release status:** OASIS is in Beta. The latest published release is [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), tagged and published on October 31, 2026, with Windows, macOS and Linux desktop assets. The `main` branch contains newer unreleased changes; its package version has not yet been advanced beyond `0.4.0`. See [current limits](#beta-status).
 
 <p align="center">
   <a href="#getting-started"><strong>Get started</strong></a>
