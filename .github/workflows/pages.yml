@@ -1,0 +1,51 @@
+name: Deploy Oasis to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: oasis-pages
+  cancel-in-progress: true
+jobs:
+  validate:
+    name: Validate Oasis before deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate browser app and PWA assets
+        run: node scripts/check-site.mjs
+      - name: Run CLI runtime tests
+        run: npm test
+      - name: Verify installable CLI package contents
+        run: npm pack --dry-run
+  deploy:
+    if: ${{ vars.OASIS_ENABLE_PAGES == 'true' }}
+    needs: validate
+    environment:
+      name: github-pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload static website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Publish website
+        id: deployment
+        uses: actions/deploy-pages@v4
