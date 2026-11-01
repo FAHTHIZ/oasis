@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
-import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, summarizeAgent, stopAgent } from '../src/agent-tasks.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, restoreAgentHistory, summarizeAgent, stopAgent } from '../src/agent-tasks.mjs';
 import { runSharedTaskTool } from '../src/shared-tasks.mjs';
 import { isCommitIntegrated } from '../src/worktrees.mjs';
 

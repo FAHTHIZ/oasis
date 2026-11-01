@@ -69,7 +69,7 @@ export function restoreAgentHistory(session, snapshots = []) {
   for (const snapshot of snapshots.slice(-32)) {
     if (!snapshot || typeof snapshot !== 'object') continue;
     const id = String(snapshot.id || '');
-    const match = id.match(/^agent_([1-9]\\d{0,8})$/);
+    const match = id.match(/^agent_([1-9]\d{0,8})$/);
     if (!match || registry.agents.has(id)) continue;
     const wasRunning = snapshot.status === 'running';
     const status = wasRunning ? 'interrupted' : ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status) ? snapshot.status : 'interrupted';

@@ -62,7 +62,7 @@ test('saved agent history is bounded, redacted and excludes live execution state
   assert.equal(agents.length, 1);
   assert.equal(agents[0].id, 'agent_1');
   assert.equal(agents[0].status, 'running');
-  assert.match(agents[0].report, /\\[redacted\\]/i);
+  assert.match(agents[0].report, /\[redacted\]/i);
   assert.doesNotMatch(JSON.stringify(agents), /PRIVATE CHILD PROMPT|secret-process|sk-ant-abcdefghijklmnop123456/);
   assert.equal(Object.hasOwn(agents[0], 'child'), false);
   assert.equal(Object.hasOwn(agents[0], 'controller'), false);
