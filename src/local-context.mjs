@@ -26,12 +26,31 @@ export const SMALL_CONTEXT_TOOLS = Object.freeze([
   'run_command', 'command_output', 'git_status', 'git_diff', 'todo_write', 'tool_search'
 ]);
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', 'host.docker.internal']);
+
 export function isOllamaEndpoint(config = {}, env = process.env) {
   if (/^(?:1|true|yes|on)$/i.test(String(env.OASIS_OLLAMA || ''))) return true;
   if (String(config.protocol || 'openai-compatible').toLowerCase() !== 'openai-compatible') return false;
   try {
     const url = new URL(String(config.baseURL || ''));
     return url.port === '11434' || /(^|\.)ollama(\.|$)/i.test(url.hostname);
+  } catch { return false; }
+}
+
+// Default ports: LM Studio 1234, llama-server 8080.
+const LOCAL_SERVER_PORTS = new Set(['1234', '8080']);
+
+// Local OpenAI-compatible servers whose loaded window can be probed: Ollama,
+// LM Studio and llama.cpp's llama-server. Other loopback ports are probed only
+// with OASIS_LOCAL_CONTEXT_PROBE=1, so unrelated local services never receive
+// unexpected requests.
+export function isLocalModelEndpoint(config = {}, env = process.env) {
+  if (isOllamaEndpoint(config, env)) return true;
+  if (String(config.protocol || 'openai-compatible').toLowerCase() !== 'openai-compatible') return false;
+  try {
+    const url = new URL(String(config.baseURL || ''));
+    if (!LOCAL_HOSTS.has(url.hostname.toLowerCase())) return false;
+    return LOCAL_SERVER_PORTS.has(url.port) || /^(?:1|true|yes|on)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''));
   } catch { return false; }
 }
 
@@ -71,12 +90,12 @@ export async function probeOllamaContext(config = {}, { fetchImpl = globalThis.f
   const key = origin + '\n' + config.model;
   const cached = cache && probeCache.get(key);
   if (cached && Date.now() - cached.at < PROBE_CACHE_MS) return cached.value;
-  const value = await probeUncached(origin, config.model, fetchImpl);
+  const value = await probeOllama(origin, config.model, fetchImpl);
   if (cache) probeCache.set(key, { at: Date.now(), value });
   return value;
 }
 
-async function probeUncached(origin, model, fetchImpl) {
+async function probeOllama(origin, model, fetchImpl) {
   const config = { model };
   const [ps, show] = await Promise.all([
     getJson(fetchImpl, origin + '/api/ps'),
@@ -104,11 +123,17 @@ async function probeUncached(origin, model, fetchImpl) {
   return { contextLength: 0, source: 'unknown', loaded: Boolean(running), nativeContext };
 }
 
-export function localContextAdvice(model, contextLength) {
+export function localContextAdvice(model, contextLength, server = 'ollama') {
   const size = Number(contextLength).toLocaleString('en-US');
-  return 'Ollama loaded ' + model + ' with a ' + size + '-token context window, which is too small for reliable agent work (' +
-    RECOMMENDED_LOCAL_CONTEXT.toLocaleString('en-US') + '+ recommended). Restart Ollama with OLLAMA_CONTEXT_LENGTH=' + RECOMMENDED_LOCAL_CONTEXT +
-    ' (or add "PARAMETER num_ctx ' + RECOMMENDED_LOCAL_CONTEXT + '" to a Modelfile). OASIS will compact early and send a smaller tool set until then.';
+  const want = RECOMMENDED_LOCAL_CONTEXT;
+  const fix = server === 'lmstudio'
+    ? 'Reload it with a larger context length (lms load ' + model + ' --context-length ' + want + ', or the Context Length slider in LM Studio).'
+    : server === 'llama.cpp'
+      ? 'Restart llama-server with --ctx-size ' + want + ' (with --parallel N, each slot gets ctx-size / N).'
+      : 'Restart Ollama with OLLAMA_CONTEXT_LENGTH=' + want + ' (or add "PARAMETER num_ctx ' + want + '" to a Modelfile).';
+  const name = server === 'lmstudio' ? 'LM Studio' : server === 'llama.cpp' ? 'llama-server' : 'Ollama';
+  return name + ' is serving ' + model + ' with a ' + size + '-token context window, which is too small for reliable agent work (' +
+    want.toLocaleString('en-US') + '+ recommended). ' + fix + ' OASIS will compact early and send a smaller tool set until then.';
 }
 
 // Keeps the essential tools in the request and defers the rest behind
@@ -122,4 +147,57 @@ export function applySmallContextProfile(session, toolSearchDefinition) {
   session.toolDefinitions = session.toolDefinitions.filter((tool) => keep.has(tool.function.name));
   if (toolSearchDefinition && !session.toolDefinitions.some((tool) => tool.function.name === 'tool_search')) session.toolDefinitions.push(toolSearchDefinition);
   return deferred.length;
+}
+
+// LM Studio: /api/v0/models reports loaded_context_length for loaded models;
+// /api/v1/models lists loaded_instances[].config.context_length.
+async function probeLmStudio(origin, model, fetchImpl) {
+  const v0 = await getJson(fetchImpl, origin + '/api/v0/models');
+  if (v0 && Array.isArray(v0.data)) {
+    const row = v0.data.find((item) => sameModel(item.id, model));
+    if (row && row.state === 'loaded' && Number(row.loaded_context_length) > 0) {
+      return { contextLength: Number(row.loaded_context_length), source: 'loaded', loaded: true, nativeContext: Number(row.max_context_length) || 0, server: 'lmstudio' };
+    }
+    if (row) return { contextLength: 0, source: 'unknown', loaded: false, nativeContext: Number(row.max_context_length) || 0, server: 'lmstudio' };
+  }
+  const v1 = await getJson(fetchImpl, origin + '/api/v1/models');
+  const rows = v1 && (Array.isArray(v1.models) ? v1.models : Array.isArray(v1.data) ? v1.data : null);
+  if (rows) {
+    const row = rows.find((item) => sameModel(item.key, model) || sameModel(item.id, model));
+    const sizes = row && Array.isArray(row.loaded_instances) ? row.loaded_instances.map((instance) => Number(instance && instance.config && instance.config.context_length)).filter((n) => n > 0) : [];
+    if (sizes.length) return { contextLength: Math.min(...sizes), source: 'loaded', loaded: true, nativeContext: Number(row.max_context_length) || 0, server: 'lmstudio' };
+    if (row) return { contextLength: 0, source: 'unknown', loaded: false, nativeContext: Number(row.max_context_length) || 0, server: 'lmstudio' };
+  }
+  return null;
+}
+
+// llama.cpp llama-server: /props reports the per-slot n_ctx it serves.
+async function probeLlamaCpp(origin, fetchImpl) {
+  const props = await getJson(fetchImpl, origin + '/props');
+  const settings = props && props.default_generation_settings;
+  const nCtx = Number(settings && (settings.n_ctx ?? (settings.params && settings.params.n_ctx)));
+  if (nCtx > 0) return { contextLength: nCtx, source: 'loaded', loaded: true, nativeContext: 0, server: 'llama.cpp' };
+  return null;
+}
+
+// Probes whichever local server answers. Ollama endpoints only try Ollama.
+export async function probeLocalContext(config = {}, { fetchImpl = globalThis.fetch, env = process.env, cache = true } = {}) {
+  if (isOllamaEndpoint(config, env)) {
+    const probe = await probeOllamaContext(config, { fetchImpl, cache });
+    return probe && { ...probe, server: 'ollama' };
+  }
+  if (typeof fetchImpl !== 'function' || !config.model || !isLocalModelEndpoint(config, env)) return null;
+  let origin;
+  try { origin = ollamaOrigin(config.baseURL); } catch { return null; }
+  const key = 'local\n' + origin + '\n' + config.model;
+  const cached = cache && probeCache.get(key);
+  if (cached && Date.now() - cached.at < PROBE_CACHE_MS) return cached.value;
+  const [lmstudio, llamacpp, ollama] = await Promise.all([
+    probeLmStudio(origin, config.model, fetchImpl),
+    probeLlamaCpp(origin, fetchImpl),
+    probeOllama(origin, config.model, fetchImpl).then((probe) => probe && probe.contextLength ? { ...probe, server: 'ollama' } : null)
+  ]);
+  const value = [lmstudio, llamacpp, ollama].find((probe) => probe && probe.contextLength) || lmstudio || null;
+  if (cache) probeCache.set(key, { at: Date.now(), value });
+  return value;
 }

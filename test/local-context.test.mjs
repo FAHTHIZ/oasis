@@ -100,3 +100,42 @@ test('long tool results are shortened to fit a small window, keeping head and ta
   assert.match(tool, /shortened this .*8,192-token context window/);
   assert.match(tool, /line 0/);
 });
+
+async function jsonServer(t, routes) {
+  const seen = [];
+  const server = createServer((req, res) => {
+    seen.push(req.method + ' ' + req.url);
+    res.setHeader('content-type', 'application/json');
+    if (routes[req.url]) return res.end(JSON.stringify(routes[req.url]));
+    res.statusCode = 404;
+    res.end('{}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  return { baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', seen };
+}
+
+test('LM Studio and llama-server report their loaded windows', async (t) => {
+  const { probeLocalContext } = await import('../src/local-context.mjs');
+  const env = { OASIS_LOCAL_CONTEXT_PROBE: '1' };
+  const lmstudio = await jsonServer(t, { '/api/v0/models': { data: [{ id: 'qwen/qwen3-8b', state: 'loaded', loaded_context_length: 8192, max_context_length: 131072 }] } });
+  const lm = await probeLocalContext({ baseURL: lmstudio.baseURL, model: 'qwen/qwen3-8b' }, { env, cache: false });
+  assert.deepEqual(lm, { contextLength: 8192, source: 'loaded', loaded: true, nativeContext: 131072, server: 'lmstudio' });
+  const v1 = await jsonServer(t, { '/api/v1/models': { models: [{ key: 'qwen/qwen3-8b', max_context_length: 131072, loaded_instances: [{ config: { context_length: 16384 } }, { config: { context_length: 12000 } }] }] } });
+  assert.equal((await probeLocalContext({ baseURL: v1.baseURL, model: 'qwen/qwen3-8b' }, { env, cache: false })).contextLength, 12000);
+  const llama = await jsonServer(t, { '/props': { default_generation_settings: { n_ctx: 4096 } } });
+  const ll = await probeLocalContext({ baseURL: llama.baseURL, model: 'model.gguf' }, { env, cache: false });
+  assert.equal(ll.contextLength, 4096);
+  assert.equal(ll.server, 'llama.cpp');
+});
+
+test('unrelated loopback ports are never probed without opt-in', async (t) => {
+  const { probeLocalContext, isLocalModelEndpoint } = await import('../src/local-context.mjs');
+  const other = await jsonServer(t, {});
+  assert.equal(isLocalModelEndpoint({ baseURL: other.baseURL }, {}), false);
+  assert.equal(isLocalModelEndpoint({ baseURL: 'http://localhost:1234/v1' }, {}), true);
+  assert.equal(isLocalModelEndpoint({ baseURL: 'http://localhost:8080/v1' }, {}), true);
+  assert.equal(isLocalModelEndpoint({ baseURL: 'https://example.com:1234/v1' }, {}), false);
+  assert.equal(await probeLocalContext({ baseURL: other.baseURL, model: 'm' }, { env: {}, cache: false }), null);
+  assert.deepEqual(other.seen, []);
+});

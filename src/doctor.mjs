@@ -49,7 +49,7 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     const windowSize = contextWindowSize(session.config || {});
     lines.push('  Context: about ' + used.toLocaleString('en-US') + ' of ' + windowSize.toLocaleString('en-US') + ' tokens (' + Math.round(used / windowSize * 100) + '%)');
     if (used / windowSize > 0.8) problems.push('Context is over 80% full; run /compact.');
-    if (session.localContext && session.localContext.contextLength) lines.push('  Local model window: ' + session.localContext.contextLength.toLocaleString('en-US') + ' tokens (' + session.localContext.source + ' in Ollama)');
+    if (session.localContext && session.localContext.contextLength) lines.push('  Local model window: ' + session.localContext.contextLength.toLocaleString('en-US') + ' tokens (' + session.localContext.source + ' in ' + (session.localContext.server || 'ollama') + ')');
     for (const note of session.localContextNotices || []) problems.push(note);
     const mcp = session.mcpClients ? session.mcpClients.size : 0;
     lines.push('  MCP servers connected: ' + mcp + '; background agents: ' + (session.agentTasks ? [...session.agentTasks.agents.values()].filter((task) => task.status === 'running').length : 0) + ' running');
