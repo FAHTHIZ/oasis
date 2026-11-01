@@ -120,6 +120,7 @@ export const BUILTIN_COMMANDS = {
   ultrareview: 'Deep multi-agent code review with independent verification of every finding; alias for /code-review ultra',
   simplify: 'Review changed code for reuse, simplicity, efficiency and abstraction, then apply fixes (/simplify [target])',
   verify: 'Build and run the app to confirm a change really works (/verify [what to check])',
+  test: 'Run the tests and hand any failure to Oasis to fix (/test [COMMAND]; defaults to the autoTest setting or npm test)',
   batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
   schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID)',
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
@@ -209,7 +210,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const groups = [
         { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'diagnostics', 'audit', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
+        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
@@ -1144,6 +1145,37 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'simplify':
       return { output: '[simplify] Reviewing changed code.', prompt: 'Review the code changed in this workspace' + (argument ? ' (focus: ' + argument + ')' : ' (use git diff against HEAD; include untracked files)') + ' and simplify it. Run four read-only review subagents in parallel with the task tool, one each for: (1) reuse: code that duplicates existing helpers or libraries in this repo; (2) simplification: needless branches, indirection, dead code, over-long functions; (3) efficiency: wasted work, repeated I/O, quadratic loops; (4) abstraction: whether the change sits at the right layer and matches local patterns. Then apply the fixes that keep behavior identical, run the relevant tests, and summarize what changed. Do not change behavior or public interfaces, and do not look for bugs; that is /review.' };
+    case 'test': {
+      // Aider's /test: the user runs the suite; a failure becomes the next task.
+      if (sessionOptions.restricted || env.OASIS_RESTRICTED === '1') return { output: '[restricted] /test runs a shell command, which is disabled in --restricted mode.' };
+      let command = String(argument || '').trim();
+      let source = 'argument';
+      let timeoutMs = 600000;
+      if (!command) {
+        const { resolveAutoTest } = await import('./auto-test.mjs');
+        const configured = resolveAutoTest(await loadSettings(root, { env }).catch(() => ({})), env);
+        if (configured) { command = configured.command; timeoutMs = configured.timeoutMs; source = 'autoTest setting'; }
+      }
+      if (!command) {
+        const pkg = await readFile(path.join(root, 'package.json'), 'utf8').then(JSON.parse).catch(() => null);
+        if (pkg && pkg.scripts && typeof pkg.scripts.test === 'string' && !/no test specified/i.test(pkg.scripts.test)) { command = 'npm test'; source = 'package.json'; }
+      }
+      if (!command) {
+        return { output: '[test] No test command is configured, so Oasis will find and run the tests (commands still ask for approval). Set one with /test COMMAND, or "autoTest" in settings.', prompt: 'Find how this project runs its tests (package scripts, Makefile, pyproject, CI config, README), run them, and report the exact command and result. If any fail, fix the cause with minimal changes and rerun them. Do not weaken, skip, or delete tests.' };
+      }
+      const { runAutoTest } = await import('./auto-test.mjs');
+      if (typeof state.print === 'function') state.print('[test] Running ' + command + (source === 'argument' ? '' : ' (from ' + source + ')') + '…');
+      const result = await runAutoTest(root, command, { timeoutMs, env, signal: state.signal });
+      const seconds = (result.durationMs / 1000).toFixed(1) + 's';
+      if (result.passed) return { output: '[test] Passed: ' + command + ' (' + seconds + ').' };
+      if (result.cancelled) return { output: '[test] Cancelled: ' + command + '.' };
+      const lines = result.output.trim().split('\n');
+      const status = result.timedOut ? 'timed out' : 'failed with exit code ' + result.exitCode;
+      return {
+        output: '[test] ' + command + ' ' + status + ' (' + seconds + '). Last lines:\n' + lines.slice(-12).join('\n') + '\n[test] Handing the failure to Oasis.',
+        prompt: ['I ran the tests myself and they ' + status + '.', 'Command: ' + command, 'Output (tail):', '```', result.output.trim() || '(no output)', '```', 'Find the cause and fix it with minimal changes, then rerun the same command to confirm. Do not weaken, skip, or delete tests unless I asked for that. If the failure is unrelated to recent changes, say so plainly.'].join('\n')
+      };
+    }
     case 'verify':
       return { output: '[verify] Verifying the change by running it.', prompt: 'Verify that the recent change actually works by running it, not just by reading code or relying on type checks. ' + (argument ? 'Check specifically: ' + argument + '. ' : '') + 'Find how this project builds and runs (package scripts, Makefile, README). Build it, start the app or CLI (use run_command with background=true and monitor_command for servers), exercise the changed behavior with real inputs or requests, and observe the output. Run the relevant tests too. Report exactly what you ran, what you observed, and whether it works. If you cannot run it, say why instead of guessing.' };
     case 'batch': {
