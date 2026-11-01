@@ -65,6 +65,7 @@ import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentR
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
+import { repairToolArguments, extractTextToolCalls } from './tool-call-repair.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -1944,11 +1945,52 @@ function pruneHistory(session) {
 }
 
 function safeToolArguments(raw) {
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
-  if (typeof raw !== 'string') throw new Error('Tool arguments must be a JSON object.');
-  const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Tool arguments must be a JSON object.');
-  return parsed;
+  return repairToolArguments(raw).args;
+}
+
+// Calls whose arguments could not be repaired. They are answered with a tool
+// error the model can correct instead of failing the whole turn.
+const toolArgumentErrors = new WeakMap();
+
+// Repairs near-miss tool calls in place: recovers calls written as text, and
+// rewrites sloppy-but-recoverable arguments to canonical JSON so the history
+// replayed to strict providers is valid.
+function normalizeAssistantToolCalls(session, assistant, step) {
+  const repairs = { textCalls: 0, repairedArguments: 0, invalidArguments: 0 };
+  const native = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
+  if (!native.length && !assistant.truncated && !Array.isArray(assistant.responseItems)
+    && !(session.settings && session.settings.textToolCalls === false)) {
+    const extracted = extractTextToolCalls(assistant.content, availableToolNames(session));
+    if (extracted && extracted.calls.length) {
+      assistant.tool_calls = extracted.calls.map((call, index) => ({
+        id: 'oasis_text_call_' + (step + 1) + '_' + (index + 1),
+        type: 'function',
+        function: { name: call.name, arguments: JSON.stringify(call.args) }
+      }));
+      assistant.content = extracted.text || null;
+      repairs.textCalls = extracted.calls.length;
+    }
+  }
+  for (const call of Array.isArray(assistant.tool_calls) ? assistant.tool_calls : []) {
+    if (!call || !call.function) continue;
+    const raw = call.function.arguments;
+    try {
+      const { args, repaired } = repairToolArguments(raw);
+      if (repaired || typeof raw !== 'string') {
+        call.function.arguments = JSON.stringify(args);
+        if (repaired) repairs.repairedArguments++;
+        for (const item of Array.isArray(assistant.responseItems) ? assistant.responseItems : []) {
+          if (item && item.type === 'function_call' && (item.call_id || item.id) === call.id) item.arguments = call.function.arguments;
+        }
+      }
+    } catch (error) {
+      call.function.arguments = '{}';
+      repairs.invalidArguments++;
+      // Carried to the history copy below without being serialized to providers.
+      Object.defineProperty(call, '__oasisArgumentError', { value: error.message, enumerable: false, configurable: true });
+    }
+  }
+  return repairs;
 }
 
 function serializableResult(value) {
@@ -3333,6 +3375,12 @@ function availableToolNames(session) {
 }
 
 async function executeOneCall(session, call, context, options) {
+  const argumentError = call && toolArgumentErrors.get(call);
+  if (argumentError) {
+    const name = call.function && call.function.name;
+    const result = { error: argumentError, tool: name };
+    return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
+  }
   // Map Claude Code style names (Read, Bash, Edit …) onto OASIS tools in place,
   // so the assistant history and the tool result stay consistent.
   if (call && call.function && call.function.name) {
@@ -3978,15 +4026,21 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (typeof options.onOutputTruncated === 'function') options.onOutputTruncated({ limit: assistant.outputLimit || 0, droppedTool: dropped && dropped.function && dropped.function.name || null, attempt: outputRecoveries });
       }
     }
+    const toolCallRepairs = normalizeAssistantToolCalls(session, assistant, step);
+    if ((toolCallRepairs.textCalls || toolCallRepairs.repairedArguments || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
     if (Array.isArray(assistant.thinkingBlocks) && assistant.thinkingBlocks.length) assistantMessage.thinkingBlocks = assistant.thinkingBlocks;
     if (Array.isArray(assistant.tool_calls) && assistant.tool_calls.length) {
-      assistantMessage.tool_calls = assistant.tool_calls.map((call) => ({
-        id: call.id,
-        type: 'function',
-        function: { name: call.function && call.function.name, arguments: call.function && call.function.arguments }
-      }));
+      assistantMessage.tool_calls = assistant.tool_calls.map((call) => {
+        const copy = {
+          id: call.id,
+          type: 'function',
+          function: { name: call.function && call.function.name, arguments: call.function && call.function.arguments }
+        };
+        if (call.__oasisArgumentError) toolArgumentErrors.set(copy, call.__oasisArgumentError);
+        return copy;
+      });
     }
     session.messages.push(assistantMessage);
 
