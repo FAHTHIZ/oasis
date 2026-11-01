@@ -74,7 +74,7 @@ export function formatApprovalMessage(prompt, meta = {}) {
   const tool = String(meta && meta.tool || '').toLowerCase();
   const input = meta && meta.input && typeof meta.input === 'object' ? meta.input : {};
   const path = inputValue(input, 'path');
-  const command = [inputValue(input, 'command'), ...(Array.isArray(input.args) ? input.args.filter((arg) => typeof arg === 'string') : [])].filter(Boolean).join(' ');
+  const command = [inputValue(input, 'command'), ...(Array.isArray(input.args) ? input.args.filter((arg) => typeof arg === 'string').map((arg) => JSON.stringify(arg)) : [])].filter(Boolean).join(' ');
   let message = '';
   let risky = false;
 
