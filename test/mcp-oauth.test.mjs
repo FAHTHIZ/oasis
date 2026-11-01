@@ -306,7 +306,7 @@ test('login rejects stdio servers and unknown names', async (t) => {
   const { root, env } = await workspace(t, 'http://127.0.0.1:9');
   await writeFile(path.join(root, '.mcp.json'), JSON.stringify({ mcpServers: { local: { command: 'node' } } }));
   await assert.rejects(mcpLogin(root, 'local', { env }), /stdio server/);
-  await assert.rejects(mcpLogin(root, 'nope', { env }), /No HTTP MCP server named nope/);
+  await assert.rejects(mcpLogin(root, 'nope', { env }), /No HTTP or SSE MCP server named nope/);
 });
 
 test('signing in from a running session connects the server right away', async (t) => {
