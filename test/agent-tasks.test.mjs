@@ -695,6 +695,36 @@ test('cancelling a dispatched worker immediately releases its shared task lease'
   assert.equal(task.claimExpiresAt, null);
 });
 
+
+test('restored worker history marks live workers interrupted and refuses to fake-resume them', () => {
+  const session = { agentTasks: { next: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 } };
+  const restored = restoreAgentHistory(session, [
+    {
+      id: 'agent_4', type: 'general-purpose', description: 'Finish API migration',
+      status: 'running', background: true, startedAt: 100, runs: 1, toolCalls: 5,
+      tokensUsed: 900, recentTools: ['edit_file'], report: '',
+      workspaceIsolation: 'worktree', worktreeBranch: 'oasis/api-migration'
+    },
+    {
+      id: 'agent_2', type: 'explore', description: 'Completed dependency review',
+      status: 'completed', background: true, startedAt: 50, finishedAt: 80,
+      runs: 1, toolCalls: 2, report: 'No changes needed.'
+    }
+  ]);
+  assert.equal(restored.length, 2);
+  const interrupted = session.agentTasks.agents.get('agent_4');
+  assert.equal(interrupted.status, 'interrupted');
+  assert.equal(interrupted.child, null);
+  assert.equal(interrupted.resumable, false);
+  assert.match(interrupted.error, /runtime restarted/i);
+  assert.equal(summarizeAgent(interrupted).workspaceIsolation, 'worktree');
+  assert.equal(session.agentTasks.next, 5);
+  assert.ok(session.agentTasks.events.some((event) => event.type === 'agent.interrupted'));
+  const completed = session.agentTasks.agents.get('agent_2');
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.report, 'No changes needed.');
+});
+
 test('agent lifecycle observers receive structured events without affecting orchestration', () => {
   const observed = [];
   const session = { agentRunId: 'monitor-run-1', agentTasks: { next: 1, nextTeam: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 }, onAgentEvent: (event) => observed.push(event) };
