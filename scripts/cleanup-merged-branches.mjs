@@ -35,6 +35,23 @@ export const AUDITED_SUPERSEDED_HEADS = new Map([
   ['fix/gate1-site-mark-assertion', { sha: 'a949fff353370c4902234162a0a843397d45ba78', paths: ['.github/scripts/browser-e2e.mjs', '.github/workflows/quality.yml', 'index.html', 'scripts/check-site.mjs', 'scripts/vendor-terminal.mjs', 'src/web.mjs', 'sw.js', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs', 'test/web-terminal-optional.test.mjs'] }],
   ['fix/gate1-static-asset-routes', { sha: 'fae5b813f8e5147e40de04970d6f45a246f60660', paths: ['index.html', 'src/web.mjs', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs'] }],
   ['test/gate1-browser-and-asset-smoke', { sha: '73d6baecc843fa336c88366f3c57d549673bf2c1', paths: ['.github/scripts/browser-e2e.mjs', 'index.html', 'src/web.mjs', 'test/index-inline-scripts.test.mjs', 'test/web-static-assets.test.mjs'] }],
+ ]);
+
+// Exact branch heads the repository owner explicitly authorized for retirement on 2026-11-01.
+// This is a one-time approval: a branch that moves to a different commit is preserved.
+export const USER_APPROVED_BRANCH_HEADS = new Map([
+  ['app/alpha-readiness-gaps', 'e9548e4924cea21d16c21a707e584cf3216d83a8'],
+  ['app/empty-chat', '7e8e827a9d4a17fd7a3ebc9a9eaac34df4a9cada'],
+  ['app/first-run', '6d821ad3331d1ccaca62995f907505021b1faaa6'],
+  ['app/status-activity', 'e5922434686dc2e0af33a4dfb530d6fa68985609'],
+  ['app/workspace-layout', '0d55bbabf518bca12e887cb7bce57b444f1a7350'],
+  ['cli/getting-started', '0d77138168847f8c45dd392a3bc0a6c788a22a8c'],
+  ['cloud-engine/maturity-foundation', 'b943703f4e7c1e785f3bb7f8a7e7fc8fccd18586'],
+  ['feat/plain-language-activity-artifacts', 'fa3547bec8bc272fed6681a8dcd4c67daee2caed'],
+  ['fix/phase-0-finish-plan-20261030-sync', 'c31c38037c59a7f11dec1d7e382ef29996e47333'],
+  ['fix/phase-0-finish-plan-20261030', '7862c21ea72db14b2a801b0c7684578cfae05d3c'],
+  ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6'],
+  ['ux/chat-first-step-1', '747d8ea21dfb3854e74c2fd6c51e2cafd10318ec']
 ]);
 
 export function classifyRetirement(branch, comparison, defaultBranch, openPrBranches, mainTree, mergedPrHeads = new Map()) {
@@ -43,6 +60,10 @@ export function classifyRetirement(branch, comparison, defaultBranch, openPrBran
   if (branch.protected) return { retire: false, reason: 'protected branch' };
   if (openPrBranches.has(branch.name)) return { retire: false, reason: 'branch has an open pull request' };
 
+  const approvedHead = USER_APPROVED_BRANCH_HEADS.get(branch.name);
+  if (approvedHead && branch.commit?.sha === approvedHead) {
+    return { retire: true, reason: 'exact branch head explicitly approved for retirement by the repository owner' };
+  }
   const audited = AUDITED_SUPERSEDED_HEADS.get(branch.name);
   if (audited && branch.commit?.sha === audited.sha && audited.paths.every((file) => mainTree.has(file))) {
     return { retire: true, reason: 'exact audited branch head is superseded by canonical files on main' };
@@ -193,7 +214,7 @@ async function runCleanup() {
   }
   console.log('Branch cleanup summary: ' + (apply ? retired + ' retired' : eligible + ' eligible in dry run') +
     ', ' + kept + ' preserved. Default branch: ' + defaultBranch +
-    '. Open-PR branches and branches with non-equivalent changes are never removed.');
+    '. The default, protected, open-PR, and non-approved changed branches are preserved.');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
