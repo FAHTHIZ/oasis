@@ -1779,19 +1779,20 @@ function collapseWork(){
   var pref='on';try{pref=localStorage.getItem('oasis.web.collapseWork')||'on'}catch(e){}
   if(pref==='off')return;
   var node=workMark&&workMark.parentNode===messages?workMark.nextElementSibling:messages.firstElementChild,steps=[];
-  for(;node;node=node.nextElementSibling)if(node.classList.contains('activity')&&(node.classList.contains('tool-call')||node.classList.contains('tool-result')))steps.push(node);
-  var calls=steps.filter(function(n){return n.classList.contains('tool-call')}).length;
-  if(calls<2)return;
+  for(;node;node=node.nextElementSibling)if(node.classList.contains('activity-group'))steps.push(node);
+  var calls=steps.reduce(function(total,group){return total+Number(group.querySelectorAll('.activity-step').length||0)},0);
+  if(!calls)return;
   var box=document.createElement('details');box.className='turn-work';
   var sum=document.createElement('summary');sum.textContent='Worked for '+fmtWork(Date.now()-workStart)+' · '+calls+' tool call'+(calls===1?'':'s');
   var inner=document.createElement('div');inner.className='turn-work-steps';
-  box.appendChild(sum);box.appendChild(inner);messages.insertBefore(box,steps[0]);
-  steps.forEach(function(n){inner.appendChild(n)});
+  var innerContent=document.createElement('div');innerContent.className='turn-work-steps-inner';
+  inner.appendChild(innerContent);box.appendChild(sum);box.appendChild(inner);messages.insertBefore(box,steps[0]);
+  steps.forEach(function(n){innerContent.appendChild(n)});
 }
 C.hook('agentSetBusy',function(prev){return function(v){
-  if(v&&!workStart){workStart=Date.now();workMark=messages.lastElementChild;if(workMark===typing)workMark=workMark.previousElementSibling}
+  if(v&&!workStart){workStart=Date.now();workMark=messages.lastElementChild;if(workMark===typing)workMark=workMark.previousElementSibling;currentActivityGroup=null;activityStepsById.clear();activityGroups=[];updateLiveStatus('Working…')}
   prev(v);
-  if(!v&&workStart){try{collapseWork()}catch(e){}workStart=0;workMark=null}
+  if(!v&&workStart){try{collapseWork()}catch(e){}workStart=0;workMark=null;currentActivityGroup=null;activityStepsById.clear();updateLiveStatus('Working…')}
 }});
 /* ---------- Empty state survives "New chat" ---------- */
 var emptyTemplate=$('agentEmptyState');
