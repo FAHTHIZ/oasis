@@ -187,6 +187,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .content-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
 .empty-state{color:var(--muted);text-align:center;padding:28px 16px;font-size:13px}
 .agent-help,.github-help,.modal-help{font-size:var(--fs-sm);color:var(--muted);line-height:1.55}
+.agent-help a,.github-help a,.modal-help a{text-decoration:underline;text-underline-offset:2px}
 
 /* Home */
 .hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:var(--r-xl);padding:28px;background:radial-gradient(120% 140% at 100% 0%,#9BFF5512 0,transparent 45%),var(--panel)}
