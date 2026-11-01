@@ -32,7 +32,8 @@ export function toolActivityCategory(name) {
 export function labelToolActivity(name, args = {}, result = null) {
   const tool = String(name || '').toLowerCase();
   const path = fileName(args && (args.path || args.file_path || args.notebook_path));
-  const query = text(args && (args.query || args.pattern || args.focus && args.focus.join(', ')), 100);
+  const focus = Array.isArray(args && args.focus) ? args.focus.join(', ') : '';
+  const query = text(args && (args.query || args.pattern || focus), 100);
   if (tool === 'read_file' || tool === 'read_notebook' || tool === 'notebook_read') return path ? 'Read ' + path : 'Read a file';
   if (tool === 'edit_file' || tool === 'multi_edit' || tool === 'notebook_edit' || tool === 'apply_patch') return path ? 'Edited ' + path : 'Edited a file';
   if (tool === 'write_file') {
