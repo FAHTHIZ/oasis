@@ -11,7 +11,8 @@ This document is the canonical statement of product scope, maturity, supported s
 
 ## Current verification snapshot
 
-**Inspected `main` commit:** [`f83d73e69ec24ce5a57588784de7531d2c585934`](https://github.com/FAHTHIZ/oasis/commit/f83d73e69ec24ce5a57588784de7531d2c585934)  
+**Runtime and CI audit baseline:** [`f83d73e69ec24ce5a57588784de7531d2c585934`](https://github.com/FAHTHIZ/oasis/commit/f83d73e69ec24ce5a57588784de7531d2c585934)  
+**Latest documentation snapshot in this pass:** [`3c93154b371586053f6691fe223686496528b2e8`](https://github.com/FAHTHIZ/oasis/commit/3c93154b371586053f6691fe223686496528b2e8)  
 **Inspection date:** November 1, 2026  
 **Release metadata:** package `1.0.0`, Release Candidate 1; no RC tag or public 1.0.0 release has been created.
 
@@ -25,7 +26,7 @@ This document is the canonical statement of product scope, maturity, supported s
 
 The latest runtime change reconciles the browser UI's busy/activity state from the terminal job status, so the interface cannot remain indefinitely busy if the event stream ends before a terminal event is consumed. The browser E2E workflow for this exact commit has not yet completed; this fix is therefore implemented but not yet CI-verified. Do not infer a green browser test from the code change alone.
 
-This snapshot supersedes older run IDs and source commits recorded in prior maintenance notes. Refresh this table whenever a new candidate commit is selected; never combine passing jobs from different commits into one claimed green result.
+The CI rows above refer to the runtime audit baseline, not the later documentation-only commits. The documentation-only pass through `3c93154` changed product wording, release qualification evidence and navigation; it did not change runtime code. A fresh CI run is required for the final documentation snapshot before describing that snapshot as fully green. Never combine passing jobs from different commits into one claimed green result.
 
 
 ## 1. Product position
