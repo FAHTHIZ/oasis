@@ -833,6 +833,19 @@ test('read-only Git tools inspect diffs while protecting sensitive paths', async
   assert.match(diff.output, /\+after line/);
   assert.doesNotMatch(diff.output, /super-secret-fixture/);
 
+  // New untracked files are part of the change set; untracked secrets are not.
+  await mkdir(path.join(tmp, 'src'), { recursive: true });
+  await writeFile(path.join(tmp, 'src', 'new.mjs'), 'export const fresh = 1;\n');
+  await writeFile(path.join(tmp, 'deploy.pem'), 'PRIVATE-KEY-FIXTURE\n');
+  const withNew = await executeTool('git_diff', { scope: 'all' }, { root: tmp });
+  assert.equal(withNew.exitCode, 0, JSON.stringify(withNew));
+  assert.match(withNew.output, /new file mode[\s\S]*\+export const fresh = 1;/);
+  assert.match(withNew.output, /\+after line/);
+  assert.doesNotMatch(withNew.output, /PRIVATE-KEY-FIXTURE|super-secret-fixture/);
+  assert.deepEqual(withNew.untracked, ['src/new.mjs']);
+  const staged = await executeTool('git_diff', { scope: 'staged' }, { root: tmp });
+  assert.doesNotMatch(staged.output, /fresh/);
+
   const scoped = await executeTool('git_diff', { scope: 'all', path: 'README.md' }, { root: tmp });
   assert.equal(scoped.exitCode, 0, JSON.stringify(scoped));
   assert.match(scoped.output, /after line/);

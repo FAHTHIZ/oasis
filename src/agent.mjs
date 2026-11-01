@@ -56,7 +56,7 @@ import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, searchBackends, searchBackend } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
@@ -2010,6 +2010,14 @@ const toolArgumentErrors = new WeakMap();
 function normalizeAssistantToolCalls(session, assistant, step) {
   const repairs = { textCalls: 0, repairedArguments: 0, invalidArguments: 0 };
   const native = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
+  // Small models sometimes continue their chat template and write a fake tool
+  // result (<tool_response>…</tool_response>). That text is never real output.
+  if (typeof assistant.content === 'string' && /<tool_response>/i.test(assistant.content)) {
+    const stripped = assistant.content.replace(/<tool_response>[\s\S]*?(?:<\/tool_response>|$)/gi, '').trim();
+    repairs.echoedToolResponse = true;
+    Object.defineProperty(assistant, "echoedToolResponse", { value: true, enumerable: false, configurable: true });
+    assistant.content = stripped || null;
+  }
   if (!native.length && !assistant.truncated && !Array.isArray(assistant.responseItems)
     && !(session.settings && session.settings.textToolCalls === false)) {
     const extracted = extractTextToolCalls(assistant.content, availableToolNames(session));
@@ -2048,6 +2056,21 @@ function normalizeAssistantToolCalls(session, assistant, step) {
 // A single tool result can be 24,000 characters (about 6K tokens), more than a
 // whole 4K local-model window. On small windows, keep the head and tail of long
 // results and tell the model how to fetch the rest.
+// In small windows, drop non-blocking diagnostics that only say a language
+// server is missing; small models read them as errors to act on. The gate
+// still sees the full result object.
+export function leanToolContent(session, content, env = process.env) {
+  if (contextWindowSize((session && session.config) || {}, env) > 32_768 || !content.includes('"lspVerification"')) return content;
+  try {
+    const value = JSON.parse(content);
+    if (value && value.lspVerification && value.lspVerification.status === 'unavailable' && value.lspVerification.blocking === false) {
+      delete value.lspVerification;
+      return JSON.stringify(value);
+    }
+  } catch { /* not JSON */ }
+  return content;
+}
+
 function fitToolResultToWindow(session, content, env = process.env) {
   const windowTokens = contextWindowSize(session.config || {}, env);
   const limit = Math.max(2_000, Math.floor(windowTokens * 4 * 0.2));
@@ -2301,6 +2324,23 @@ export function announcesNextStep(text) {
   return /(?:^|[.!\n]\s*)(?:i need to|i will|i'll|i’ll|let me|next,? i|now i|i should|i am going to|i'm going to|i’m going to|i must)\b[^.!?\n]*[.:]?\s*$/i.test(reply) || /:\s*$/.test(reply);
 }
 
+// "I cannot proceed", "I'm unable to", "I apologize, but ..." after a tool error.
+export function givesUpEarly(text) {
+  const reply = String(text || '').trim();
+  if (!reply || reply.length > 1500) return false;
+  return /\b(?:i (?:cannot|can't|can’t|am unable to|'m unable to|’m unable to) (?:proceed|continue|complete|do (?:this|that)|make (?:this|the) change)|unable to (?:proceed|complete)|i apologi[sz]e, but)\b/i.test(reply);
+}
+
+const GIVE_UP_NUDGE = '<system-reminder>Do not give up yet: nothing has been changed and the user asked for this change. A tool error is information, not a dead end. Read the error, change your approach (for example, use write_file to create a new file, or read_file first to copy the exact text for edit_file), and try again. Only stop if the task is truly impossible, and then explain exactly why.</system-reminder>';
+
+// "I have created clampInteger in src/lib.mjs" when no file changed this turn.
+export function claimsUnmadeChange(text) {
+  return /\b(?:i(?:'ve|’ve| have)?|i've)\s+(?:now\s+|successfully\s+|already\s+)?(?:created|added|updated|modified|written|wrote|implemented|fixed|changed|edited|refactored|removed|deleted|renamed)\b/i.test(String(text || ''))
+    || /\b(?:has|have) been (?:created|added|updated|modified|written|implemented|fixed)\b/i.test(String(text || ''));
+}
+
+const FALSE_CLAIM_NUDGE = '<system-reminder>Your reply says you made a change, but no file has been changed in this turn: no write_file or edit_file call succeeded. Do not report work that did not happen. Make the change now with write_file or edit_file, then check it.</system-reminder>';
+
 const CONTINUE_NUDGE = '<system-reminder>You said what you will do next but ended your turn without doing it, and nothing has changed yet. Do that step now with a tool call. If a tool failed, read its error and fix the call (for example, use write_file to create a file that does not exist yet).</system-reminder>';
 
 const ACTION_NUDGE = '<system-reminder>You described the work instead of doing it. The user asked you to make this change, and you have tools to do it. Do it now: read what you need, then use write_file or edit_file to make the change and run_command to check it. Do not explain the steps again or ask the user to do them.</system-reminder>';
@@ -2316,6 +2356,68 @@ export function samplingTemperature(config = {}, env = process.env) {
     return Number.isFinite(value) && value >= 0 && value <= 2 ? { temperature: value } : {};
   }
   return isLocalModelEndpoint(config, env) ? { temperature: 0.2 } : {};
+}
+
+// Assisted verification is on for local endpoints and windows of 32K or less;
+// settings.assistedVerification or OASIS_ASSISTED_VERIFICATION force it on/off.
+export function assistedVerificationEnabled(session, env = process.env) {
+  const flag = String(env.OASIS_ASSISTED_VERIFICATION || '').trim();
+  if (/^(?:0|false|off|no)$/i.test(flag)) return false;
+  if (/^(?:1|true|on|yes)$/i.test(flag)) return true;
+  const setting = session && session.settings && session.settings.assistedVerification;
+  if (typeof setting === 'boolean') return setting;
+  const config = (session && session.config) || {};
+  // A detected local server, or a window known (configured or probed) to be
+  // small. The 32K fallback for unknown models does not count.
+  if (session && session.localContext && session.localContext.contextLength > 0) return true;
+  const known = Number(config.contextWindow) || Number(env.OASIS_CONTEXT_WINDOW) || 0;
+  return known > 0 && known <= 32_768;
+}
+
+const NPM_PLACEHOLDER_TEST = /no test specified/i;
+
+// The project's own test command, detected from its manifest.
+export async function detectProjectTestCommand(root) {
+  const exists = async (name) => { try { await stat(path.join(root, name)); return true; } catch { return false; } };
+  try {
+    const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+    const script = pkg && pkg.scripts && typeof pkg.scripts.test === 'string' ? pkg.scripts.test : '';
+    if (script && !NPM_PLACEHOLDER_TEST.test(script)) {
+      const runner = await exists('pnpm-lock.yaml') ? 'pnpm' : await exists('yarn.lock') ? 'yarn' : await exists('bun.lockb') || await exists('bun.lock') ? 'bun' : 'npm';
+      return { command: runner, args: ['test'] };
+    }
+  } catch { /* no usable package.json */ }
+  if (await exists('Cargo.toml')) return { command: 'cargo', args: ['test', '--quiet'] };
+  if (await exists('go.mod')) return { command: 'go', args: ['test', './...'] };
+  if (await exists('pytest.ini') || await exists('pyproject.toml') || await exists('setup.cfg') || await exists('tox.ini')) {
+    if (await exists('tests') || await exists('test') || await exists('pytest.ini')) return { command: 'python3', args: ['-m', 'pytest', '-q'] };
+  }
+  return null;
+}
+
+async function assistedVerificationCalls(root, verification) {
+  const calls = [];
+  const changed = [...verification.changedPaths];
+  if (!verification.diffReviewedAll && !changed.every((item) => verification.diffReviewedPaths.has(item))) {
+    let git = false;
+    try { await stat(path.join(root, '.git')); git = true; } catch { /* not a Git checkout */ }
+    if (git) calls.push({ name: 'git_diff', args: {} });
+    else for (const file of changed.slice(0, 3)) calls.push({ name: 'read_file', args: { path: file } });
+  }
+  if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && verification.lastVerificationExitCode !== 0) {
+    const test = await detectProjectTestCommand(root);
+    if (test) calls.push({ name: 'run_command', args: test });
+    else {
+      // No test suite: a syntax check is the best the harness can do. Only
+      // these harness-run checks may satisfy the gate this way.
+      for (const file of changed.slice(0, 5)) {
+        const ext = path.extname(file).toLowerCase();
+        if (['.js', '.mjs', '.cjs'].includes(ext)) calls.push({ name: 'run_command', args: { command: 'node', args: ['--check', file] }, syntax: true });
+        else if (ext === '.py') calls.push({ name: 'run_command', args: { command: 'python3', args: ['-m', 'py_compile', file] }, syntax: true });
+      }
+    }
+  }
+  return calls;
 }
 
 const RETRY_WARN_AT = 3;
@@ -4065,6 +4167,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const claimState = newClaimState();
   let correctionNudged = false;
   let actionNudges = 0;
+  let echoNudges = 0;
   const failedCommandRuns = new Map();
   // command key -> { signature, count, editEpoch } for failures that persist across edits.
   const persistentFailures = new Map();
@@ -4209,14 +4312,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     session.messages.push(assistantMessage);
 
     const text = typeof assistant.content === 'string' ? assistant.content.trim() : '';
-    const calls = assistantMessage.tool_calls || [];
+    let calls = assistantMessage.tool_calls || [];
+    let assistedBatch = false;
     if (truncationNotice && !calls.length) {
       if (text && options.onText) await emitDisplayText(session, options, text);
       session.messages.push({ role: 'user', content: truncationNotice });
       continue;
     }
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
-    if (!calls.length) {
+    finalize: if (!calls.length) {
       if (verification.autoTestPending && verification.changedPaths.size && !options.isSubagent) {
         verification.autoTestPending = false;
         const { resolveAutoTest, runAutoTest, autoTestFailurePrompt } = await import('./auto-test.mjs');
@@ -4244,14 +4348,19 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const { detectTestTampering } = await import('./test-tamper.mjs');
         verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
       }
+      if (!text && assistant.echoedToolResponse && echoNudges < 2) {
+        echoNudges++;
+        session.messages.push({ role: 'user', content: '<system-reminder>You wrote a tool result yourself instead of replying. Tool results come only from OASIS. Continue the task: call a tool, or give your final answer to the user in plain text.</system-reminder>' });
+        continue;
+      }
       // Smaller models often answer "create X" with a tutorial instead of doing it.
       // They also announce the next step ("I need to create the file") and stop.
       if (actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
-        const kind = !totalToolCalls && readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : '';
+        const kind = claimsUnmadeChange(text) ? 'false-claim' : readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
         if (kind) {
           actionNudges++;
           if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind }); } catch {} }
-          session.messages.push({ role: 'user', content: kind === 'described' ? ACTION_NUDGE : CONTINUE_NUDGE });
+          session.messages.push({ role: 'user', content: kind === 'false-claim' ? FALSE_CLAIM_NUDGE : kind === 'described' ? ACTION_NUDGE : kind === 'gave-up' ? GIVE_UP_NUDGE : CONTINUE_NUDGE });
           continue;
         }
       }
@@ -4272,6 +4381,22 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           verification: verificationSummary(verification),
           budgetExceeded: tokensUsed > tokenBudget
         };
+      }
+      // Small and local models often fumble the mechanical part of the gate
+      // (they tell the user to run git diff). The harness runs the review and
+      // the project's own test command for them, through the normal tool path
+      // and permissions, and hands back the results.
+      if (issues.length && (verification.assistedRuns || 0) < 2 && assistedVerificationEnabled(session, options.env || process.env)) {
+        const checks = await assistedVerificationCalls(session.root, verification);
+        if (checks.length) {
+          verification.assistedRuns = (verification.assistedRuns || 0) + 1;
+          calls = checks.map((check, index) => ({ id: 'oasis_check_' + verification.assistedRuns + '_' + index, type: 'function', function: { name: check.name, arguments: JSON.stringify(check.args) } }));
+          verification.syntaxCheckIds = new Set(checks.map((check, index) => check.syntax ? 'oasis_check_' + verification.assistedRuns + '_' + index : null).filter(Boolean));
+          assistantMessage.tool_calls = calls;
+          assistedBatch = true;
+          if (text && options.onText) await emitDisplayText(session, options, text);
+          break finalize;
+        }
       }
       if (issues.length && !verification.nudgeUsed) {
         verification.nudgeUsed = true;
@@ -4488,6 +4613,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const args = safeToolArguments(call.function && call.function.arguments);
         if (isCompleteFileRead(args, result)) verification.diffReviewedPaths.add(normalizeReviewPath(result.path));
       }
+      if (name === 'run_command' && result && verification.syntaxCheckIds && verification.syntaxCheckIds.has(call.id)) {
+        (verification.syntaxResults ||= new Map()).set(call.id, result.approved !== false ? result.exitCode : null);
+      }
       if (name === 'run_command' && result) {
         const args = safeToolArguments(call.function && call.function.arguments);
         if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
@@ -4534,7 +4662,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           session.secretsShielded = (session.secretsShielded || 0) + shielded.count;
         }
       }
-      if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, item.content, options.env || process.env);
+      if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
       session.messages.push({
         role: 'tool',
         tool_call_id: item.tool_call_id,
@@ -4545,6 +4673,20 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (name === 'read_file' && item.result && !item.result.error) {
         await recordDedupedRead(session, safeToolArguments(call.function && call.function.arguments), item.tool_call_id, item, options.env || process.env).catch(() => {});
       }
+    }
+
+    if (assistedBatch) {
+      const syntaxIds = verification.syntaxCheckIds || new Set();
+      if (syntaxIds.size) {
+        const outcomes = [...syntaxIds].map((id) => verification.syntaxResults && verification.syntaxResults.get(id));
+        if (outcomes.every((code) => code !== undefined)) {
+          const passed = outcomes.every((code) => code === 0);
+          verification.lastVerificationExitCode = passed ? 0 : 1;
+          verification.lastVerificationKind = 'syntax';
+        }
+      }
+      const lastTool = session.messages[session.messages.length - 1];
+      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>OASIS ran these checks for you: the diff of your changes and the project tests. Read the results. If a test failed, fix the code (not the test) and the checks will run again. If everything passed, give your final answer and report the test result.</system-reminder>';
     }
 
     // Tool output is usually English; restate the reply language so answers don't drift (Claude Code #96326).
