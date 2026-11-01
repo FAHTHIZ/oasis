@@ -1,6 +1,6 @@
 # OASIS user guide
 
-**Version channel:** the current `main` source package is `1.0.0` with Release Candidate 1 channel metadata (Production Qualification). The stable installer still resolves the latest published stable tag, currently `v0.4.0`. The candidate package is not yet a published stable release. See [the project plan](PROJECT_PLAN.md) for qualification gates.
+**Version channel:** OASIS `1.0.0`, stable. The installer resolves the latest stable tag. See [the project plan](PROJECT_PLAN.md) for the release gates and known limits.
 
 Need a topic-first overview? Start with the [user-guide map](USER_GUIDE_MAP.md). For the project overview and quickest start, see the [main README](../README.md). For the system map and component boundaries, see the [architecture guide](ARCHITECTURE.md). For the implementation inventory and known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
@@ -22,7 +22,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 ## Install the terminal agent
 
-Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch. The current `main` source reports package version `1.0.0` with Release Candidate 1 metadata; the stable installer still resolves `v0.4.0` until the final 1.0.0 release is published.
+Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch.
 
 When you launch `oasis` for the first time without a configured model, OASIS shows three routes: use an API key, use the OmniRoute gateway, or use a local Ollama model. Press Enter to take the default OmniRoute route, choose `1`, `2`, or `3` explicitly, or choose `4` to set it up later. The first-run screen is designed for a person who does not yet know provider names. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation, gateway startup, and provider changes are confirmed and verified; free/keyless model routes depend on upstream availability and limits. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
 

@@ -1,12 +1,12 @@
 # Installing and starting OASIS
 
-The current `main` source is OASIS `1.0.0`, with Release Candidate 1 channel metadata, in Production Qualification. The 1.0 feature scope is established; final reliability, platform, and security-boundary checks remain in progress. Use a project folder you trust, review permission prompts, and back up important work before testing unfamiliar code.
+OASIS `1.0.0` is the current stable release. Use a project folder you trust, review permission prompts, and keep important work in version control before running an agent on it.
 
 ## Desktop app — no terminal required
 
-> **Stable downloads:** The latest published desktop installers are from [OASIS v0.4.0](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0). They are unsigned. The `1.0.0` source candidate is not yet published as a desktop installer; clean-machine first-run, update, and uninstall qualification is still required before stable 1.0.0.
+> **Downloads:** desktop installers are on the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) page. They are **not code-signed**, so Windows SmartScreen and macOS Gatekeeper will warn on first launch; verify the file against `SHA256SUMS` first (below). Installation and packaging are tested on clean CI runners for Windows, macOS and Linux, not by hand on physical machines.
 
-The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [v0.4.0 release](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. The packaged app includes its own runtime: you do not need to install Node.js or Git separately. First-launch steps below describe the intended flow; verify it on a clean machine before relying on it.
+The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
 
 | Operating system | Download | First launch |
 |---|---|---|
@@ -14,7 +14,17 @@ The Electron app is configured for Windows, macOS and Linux. Choose the matching
 | macOS, Apple Silicon (arm64) | `.dmg` disk image | Open the image and drag OASIS into Applications. |
 | Linux, x86_64 | `.AppImage` or `.deb` | Run the AppImage or open the package with your software installer. |
 
-Desktop builds are currently unsigned. Verify downloads against the official GitHub release and the release `SHA256SUMS` file. Checksums detect transfer corruption; they are not a publisher signature. Automatic desktop updates are not configured.
+Desktop builds are unsigned. Verify downloads against the release `SHA256SUMS` file, downloaded from the same release page. Checksums detect corruption and tampering in transit; they are not a publisher signature. Automatic desktop updates are not configured.
+
+```sh
+# macOS / Linux, in the folder with both files
+sha256sum -c SHA256SUMS --ignore-missing   # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
+```
+
+```powershell
+# Windows PowerShell: compare with the matching line in SHA256SUMS
+(Get-FileHash .\OASIS-1.0.0-x64.exe -Algorithm SHA256).Hash.ToLower()
+```
 
 On first launch:
 1. Choose a project folder, not your entire home directory.
@@ -27,7 +37,7 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 
 ## Command-line installation
 
-The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. The latest published stable tag is currently `v0.4.0`, so that remains the CLI install/update target. The `main` branch reports `1.0.0` with Release Candidate 1 channel metadata; install from source only when you deliberately want the release-candidate build. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
+The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. Once `v1.0.0` is published it is the install and update target. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
 ### macOS, Linux and Android/Termux
 
@@ -55,9 +65,9 @@ If any checksum differs, do not run the downloaded file. The installer sets up t
 After installation, `oasis update` checks the latest stable release, resolves it to an immutable commit and asks before replacing the CLI. `oasis uninstall` asks before removing the CLI and retains projects, settings, saved sessions, memory and API keys.
 
 
-### Run the current release candidate from source
+### Run from source
 
-To use the 1.0.0 Release Candidate 1 development snapshot instead of the stable v0.4.0 installer target:
+To run the latest `main` instead of the pinned stable release:
 
 ```sh
 git clone https://github.com/FAHTHIZ/oasis.git
@@ -67,7 +77,7 @@ npm install -g .
 oasis --version
 ```
 
-This installs the package version currently recorded on `main`. It does not publish an installer or change the stable release channel. RC builds may change before the final 1.0.0 tag.
+This installs whatever is on `main`, which can include changes not yet in a tagged release.
 
 ## First useful session
 

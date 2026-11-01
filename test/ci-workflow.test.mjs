@@ -27,18 +27,23 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
   assert.ok(publishing.includes('group: oasis-public-launch-${{ github.ref }}'));
 });
 
-test('public product lifecycle is 1.0 Release Candidate 1, not Beta', async () => {
+test('public product lifecycle is stable 1.0, not a candidate or Beta', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const status = await readFile(new URL('../docs/PROJECT_PLAN.md', import.meta.url), 'utf8');
+  const notes = await readFile(new URL('../docs/releases/v1.0.0.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.match(readme, /stage-release%20candidate/);
-  assert.match(readme, /Current lifecycle.*Release Candidate/i);
-  assert.doesNotMatch(readme, /OASIS is in beta|status-alpha|OASIS is in alpha/i);
-  assert.match(status, /\*\*Product lifecycle:\*\* Release Candidate \/ Production Qualification/);
-  assert.match(status, /\*\*Release channel:\*\* Release Candidate 1/);
+  assert.match(readme, /stage-stable/);
+  assert.match(readme, /Current lifecycle.*OASIS 1\.0, stable/i);
+  assert.doesNotMatch(readme, /OASIS is in beta|status-alpha|OASIS is in alpha|Release Candidate 1/i);
+  assert.match(status, /\*\*Product lifecycle:\*\* Stable/);
+  assert.match(status, /\*\*Release channel:\*\* stable/);
+  assert.match(status, /not code-signed/);
+  assert.match(notes, /^# OASIS 1\.0\.0/);
+  assert.match(notes, /not code-signed/);
+  assert.match(notes, /CI-only/);
   assert.equal(pkg.version, '1.0.0');
-  assert.equal(pkg.oasisRelease?.channel, 'release-candidate');
-  assert.equal(pkg.oasisRelease?.candidate, 1);
+  assert.equal(pkg.oasisRelease?.channel, 'stable');
+  assert.equal(pkg.oasisRelease?.candidate, undefined);
 });
 
 test('desktop release requires an explicit stable publication dispatch and same-commit gates', async () => {

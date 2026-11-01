@@ -1,6 +1,6 @@
 # Contributing to OASIS
 
-Thanks for helping with OASIS. The project is a feature-complete 1.0 Release Candidate in Production Qualification, beyond Beta and early feature development. Prioritize careful improvements to existing agents and workflows, reliability, security boundaries, accessibility, and platform consistency; do not expand product scope without an explicit maintainer decision. Read [the project and qualification plan](docs/PROJECT_PLAN.md) before changing a product contract or making a support claim.
+Thanks for helping with OASIS. OASIS 1.0 is released and stable. Prioritize careful improvements to existing agents and workflows, reliability, security boundaries, accessibility, and platform consistency; do not expand product scope without an explicit maintainer decision. Read [the project and qualification plan](docs/PROJECT_PLAN.md) before changing a product contract or making a support claim.
 
 ## Before you begin
 

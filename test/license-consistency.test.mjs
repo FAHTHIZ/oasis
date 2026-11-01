@@ -19,11 +19,10 @@ test('the canonical project license and package/README declarations agree on Apa
   assert.equal(pkg.license, 'Apache-2.0');
   assert.match(readme, /license-Apache--2\.0/);
   assert.match(readme, /Apache License 2\.0 — see \[LICENSE\]\(LICENSE\)/);
-  assert.match(projectPlan, /\*\*Product lifecycle:\*\* Release Candidate \/ Production Qualification/);
-  assert.match(projectPlan, /\*\*Development package version:\*\* `1\.0\.0`/);
+  assert.match(projectPlan, /\*\*Product lifecycle:\*\* Stable/);
+  assert.match(projectPlan, /\*\*Package version:\*\* `1\.0\.0`/);
   assert.equal(pkg.version, '1.0.0');
-  assert.equal(pkg.oasisRelease?.channel, 'release-candidate');
-  assert.equal(pkg.oasisRelease?.candidate, 1);
+  assert.equal(pkg.oasisRelease?.channel, 'stable');
   assert.equal(pkg.oasisRelease?.stableTag, 'v1.0.0');
 });
 
