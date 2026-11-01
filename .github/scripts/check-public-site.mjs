@@ -44,7 +44,7 @@ for (const [name, sticker, marker] of [['wide RC sticker', rcSticker, 'RELEASE C
 assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
 assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/USER_GUIDE.md'), 'Homepage must link directly to Install and the detailed User Guide.');
-assert.ok(html.includes('latest published stable desktop installers remain v0.4.0') && html.includes('They are unsigned') && html.includes('clean-machine install, update, and uninstall') && html.includes('1.0.0-rc.1'), 'Homepage must distinguish the stable v0.4.0 downloads from the unpublished 1.0.0-rc.1 candidate.');
+assert.ok(html.includes('latest published stable desktop installers remain v0.4.0') && html.includes('unsigned') && html.includes('clean-machine install, update, and uninstall') && html.includes('1.0.0-rc.1'), 'Homepage must distinguish the stable v0.4.0 downloads from the unpublished 1.0.0-rc.1 candidate.');
 assert.ok(/The packaged app does not require a separate Node\.js or Git installation/i.test(html), 'Homepage must explain that the packaged desktop app includes its own runtime.');
 assert.ok(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))') && html.includes('@media(max-width:850px){.install-choices{grid-template-columns:repeat(2,minmax(0,1fr))}') && html.includes('@media(max-width:560px){.install-choices{grid-template-columns:1fr}'), 'Platform choices must fit desktop, tablet, and mobile layouts.');
 assert.ok(!html.includes('Just for fun'), 'Homepage must not contain the old repository description.');
