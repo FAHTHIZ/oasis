@@ -54,7 +54,9 @@ const MODEL_WINDOWS = [
   [/qwen3/, 128_000],
   [/codestral|devstral/, 128_000],
   [/mistral-(large|medium)/, 128_000],
-  [/deepseek/, 64_000],
+  // DeepSeek V4 (deepseek-v4-pro, deepseek-flash) serves 1M by default; V3.x was 128K.
+  [/deepseek-(?:v4|flash)/, 1_048_576],
+  [/deepseek/, 128_000],
   [/kimi|moonshot/, 128_000],
   [/glm-4\.[5-9]|glm-[5-9]/, 128_000],
   [/llama-?3\.[1-3]|llama-?4/, 128_000]

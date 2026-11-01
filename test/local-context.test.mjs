@@ -139,3 +139,27 @@ test('unrelated loopback ports are never probed without opt-in', async (t) => {
   assert.equal(await probeLocalContext({ baseURL: other.baseURL, model: 'm' }, { env: {}, cache: false }), null);
   assert.deepEqual(other.seen, []);
 });
+
+test('unknown hosted models take their window from the provider /models listing', async () => {
+  const { modelWindowFromListing, probeProviderModelWindow } = await import('../src/local-context.mjs');
+  assert.equal(modelWindowFromListing({ data: [{ id: 'deepseek-flash', context_window: 1048576 }] }, 'deepseek-flash'), 1048576);
+  assert.equal(modelWindowFromListing({ data: [{ id: 'acme/coder-9', context_length: 262144 }] }, 'acme/coder-9'), 262144);
+  assert.equal(modelWindowFromListing({ data: [{ id: 'Qwen/Qwen3-32B', max_model_len: 40960 }] }, 'qwen/qwen3-32b'), 40960);
+  assert.equal(modelWindowFromListing({ data: [{ id: 'other', context_window: 9999 }] }, 'missing'), 0);
+  const seen = [];
+  const fetchImpl = async (url, init) => { seen.push({ url, auth: init.headers.authorization }); return { ok: true, json: async () => ({ data: [{ id: 'mystery-model', context_length: 65536 }] }) }; };
+  const window = await probeProviderModelWindow({ protocol: 'openai-compatible', baseURL: 'https://api.example.test/v1/', model: 'mystery-model', apiKey: 'k1' }, { fetchImpl, env: {}, cache: false });
+  assert.equal(window, 65536);
+  assert.deepEqual(seen, [{ url: 'https://api.example.test/v1/models', auth: 'Bearer k1' }]);
+  // Loopback servers are not probed by default, and the probe can be turned off.
+  assert.equal(await probeProviderModelWindow({ baseURL: 'http://127.0.0.1:8000/v1', model: 'm' }, { fetchImpl, env: {}, cache: false }), 0);
+  assert.equal(await probeProviderModelWindow({ baseURL: 'https://api.example.test/v1', model: 'm' }, { fetchImpl, env: { OASIS_MODEL_INFO_PROBE: '0' }, cache: false }), 0);
+  assert.equal(seen.length, 1);
+});
+
+test('DeepSeek V4 models get the 1M window', async () => {
+  const { modelContextWindow } = await import('../src/context.mjs');
+  assert.equal(modelContextWindow('deepseek-v4-pro'), 1_048_576);
+  assert.equal(modelContextWindow('deepseek-flash'), 1_048_576);
+  assert.equal(modelContextWindow('deepseek-chat'), 128_000);
+});

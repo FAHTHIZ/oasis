@@ -891,7 +891,7 @@ Runs can go to the background (`run_in_background`); you get a notice when they 
 
 ## Longer tasks
 
-OASIS knows the context window of common models (Claude 200K, GPT-4.1 and Gemini 1M, GPT-5 400K, o-series 200K, GPT-4o 128K, and others) and compacts history at about 60% full. Unknown or local models use a conservative 32K. Set `"contextWindow"` in the provider config or `OASIS_CONTEXT_WINDOW` to override it, and `OASIS_COMPACT_THRESHOLD_CHARS` to change when compaction starts.
+OASIS knows the context window of common models (Claude 200K, GPT-4.1 and Gemini 1M, GPT-5 400K, o-series 200K, GPT-4o 128K, DeepSeek V4 1M, and others) and compacts history at about 60% full. For a model it does not know, OASIS reads the provider's `GET /models` listing once per session (DeepSeek `context_window`, OpenRouter `context_length`, vLLM `max_model_len`). Loopback servers are only asked with `OASIS_LOCAL_CONTEXT_PROBE=1`, and `OASIS_MODEL_INFO_PROBE=0` turns the lookup off. Models that still cannot be matched use a conservative 32K. Set `"contextWindow"` in the provider config or `OASIS_CONTEXT_WINDOW` to override it, and `OASIS_COMPACT_THRESHOLD_CHARS` to change when compaction starts.
 
 ### Local models and small context windows
 

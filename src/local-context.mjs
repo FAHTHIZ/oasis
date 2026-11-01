@@ -201,3 +201,38 @@ export async function probeLocalContext(config = {}, { fetchImpl = globalThis.fe
   if (cache) probeCache.set(key, { at: Date.now(), value });
   return value;
 }
+
+// Hosted and self-hosted OpenAI-compatible providers often publish each model's
+// window on GET /models: DeepSeek `context_window`, OpenRouter `context_length`
+// (or top_provider.context_length), vLLM `max_model_len`. Used only for models
+// the built-in table does not know. Loopback servers are skipped unless
+// OASIS_LOCAL_CONTEXT_PROBE=1, matching the local probe policy.
+export function modelWindowFromListing(listing, model) {
+  const rows = listing && Array.isArray(listing.data) ? listing.data : Array.isArray(listing) ? listing : [];
+  const wanted = String(model || '').trim().toLowerCase();
+  if (!wanted) return 0;
+  const row = rows.find((item) => item && String(item.id || '').toLowerCase() === wanted) ||
+    rows.find((item) => item && String(item.id || '').toLowerCase().split('/').pop() === wanted.split('/').pop());
+  if (!row) return 0;
+  const sizes = [row.context_window, row.context_length, row.max_model_len, row.max_context_length, row.top_provider && row.top_provider.context_length]
+    .map(Number).filter((n) => Number.isFinite(n) && n >= 1024);
+  return sizes.length ? sizes[0] : 0;
+}
+
+export async function probeProviderModelWindow(config = {}, { fetchImpl = globalThis.fetch, env = process.env, cache = true } = {}) {
+  if (typeof fetchImpl !== 'function' || !config.model) return 0;
+  if (String(config.protocol || 'openai-compatible').toLowerCase() !== 'openai-compatible') return 0;
+  if (/^(?:0|false|off|no)$/i.test(String(env.OASIS_MODEL_INFO_PROBE || ''))) return 0;
+  let url;
+  try { url = new URL(String(config.baseURL || '')); } catch { return 0; }
+  if (LOCAL_HOSTS.has(url.hostname.toLowerCase()) && !/^(?:1|true|yes|on)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''))) return 0;
+  const endpoint = url.origin + url.pathname.replace(/\/+$/, '') + '/models';
+  const key = 'models\n' + endpoint + '\n' + config.model;
+  const cached = cache && probeCache.get(key);
+  if (cached && Date.now() - cached.at < PROBE_CACHE_MS * 20) return cached.value;
+  const headers = { accept: 'application/json' };
+  if (typeof config.apiKey === 'string' && config.apiKey) headers.authorization = 'Bearer ' + config.apiKey;
+  const value = modelWindowFromListing(await getJson(fetchImpl, endpoint, { headers }), config.model);
+  if (cache) probeCache.set(key, { at: Date.now(), value });
+  return value;
+}
