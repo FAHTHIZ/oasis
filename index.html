@@ -1422,6 +1422,7 @@ window.oasisCore={
 };
 window.navigate=window.navigate||function(v){return navigate(v)};
 window.oasisAgentApi=function(url,options){return agentApi(url,options)};
+window.oasisAgentActivity=function(text){agentActivity(text)};
 
 })();
 </script>
@@ -1772,7 +1773,7 @@ window.oasisActivityResult=function(data){
     entry.step.classList.add('is-complete');
   }
   if(id)activityStepsById.delete(id);
-  if(data.warning)agentActivity(String(data.warning));
+  if(data.warning&&typeof window.oasisAgentActivity==='function')window.oasisAgentActivity(String(data.warning));
   agentScroll();
 };
 C.hook('agentActivity',function(){return function(text){
