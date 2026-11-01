@@ -23,26 +23,26 @@ The groups below describe primary responsibility. A module may be used across mo
 | Agent runtime and context | `agent.mjs`, `context.mjs`, `memory.mjs`, `auto-memory.mjs`, `rule-refresh.mjs`, `standing-corrections.mjs`, `reply-language.mjs`, `style-rules.mjs` |
 | Sessions and recovery | `sessions.mjs`, `session-tools.mjs`, `session-messaging.mjs`, `session-notes.mjs`, `checkpoints.mjs`, `backups.mjs`, `followups.mjs`, `read-dedup.mjs`, `purge.mjs` |
 | Tools and workspace operations | `tools.mjs`, `power-tools.mjs`, `shell-risk.mjs`, `power-tool-definitions.mjs`, `file-state.mjs`, `edit-match.mjs`, `inplace-edit-check.mjs`, `change-guard.mjs`, `repo-map.mjs`, `file-watch.mjs`, `scratch.mjs`, `notebook.mjs`, `pdf.mjs`, `artifacts.mjs` |
-| Git and isolation | `git-tools.mjs`, `git-safety.mjs`, `worktrees.mjs`, `branch-names.mjs`, `protected-paths.mjs`, `scope-lock.mjs` |
-| Providers and model selection | `config.mjs`, `cloud-providers.mjs`, `cloud-setup.mjs`, `model-aliases.mjs`, `model-routing.mjs`, `pricing.mjs`, `ollama-discovery.mjs` |
+| Git and isolation | `git-tools.mjs`, `git-safety.mjs`, `auto-commit.mjs`, `worktrees.mjs`, `branch-names.mjs`, `protected-paths.mjs`, `scope-lock.mjs` |
+| Providers and model selection | `config.mjs`, `cloud-providers.mjs`, `cloud-setup.mjs`, `model-aliases.mjs`, `model-routing.mjs`, `pricing.mjs`, `ollama-discovery.mjs`, `local-context.mjs`, `loopback-fetch.mjs`, `tool-call-repair.mjs` |
 | Permissions and host safety | `permissions.mjs`, `permission-modes.mjs`, `approval-language.mjs`, `sandbox.mjs`, `process-tree.mjs`, `network-safety.mjs`, `public-fetch.mjs`, `safe-regex.mjs`, `safe-storage.mjs`, `secure-store.mjs`, `secret-shield.mjs`, `package-vetting.mjs` |
 | Agent coordination and automation | `agent-tasks.mjs`, `subagents.mjs`, `shared-tasks.mjs`, `background-sessions.mjs`, `monitors.mjs`, `workflows.mjs`, `workflow-sandbox.mjs`, `auto-mode.mjs`, `auto-test.mjs`, `ai-comments.mjs` |
-| Integration ecosystem | `mcp.mjs`, `mcp-project.mjs`, `mcp-oauth.mjs`, `mcp-client-features.mjs`, `hooks.mjs`, `plugins.mjs`, `native-plugins.mjs`, `claude-plugins.mjs`, `extensions.mjs`, `importers.mjs`, `zip.mjs` |
-| User interfaces | `slash.mjs`, `commands.mjs`, `terminal-ui.mjs`, `line-editor.mjs`, `keybindings.mjs`, `vim-mode.mjs`, `themes.mjs`, `markdown.mjs`, `completion.mjs`, `select-dialog.mjs`, `status-line.mjs` |
+| Integration ecosystem | `mcp.mjs`, `mcp-project.mjs`, `mcp-remote-add.mjs`, `mcp-serve.mjs`, `mcp-oauth.mjs`, `mcp-client-features.mjs`, `hooks.mjs`, `plugins.mjs`, `native-plugins.mjs`, `claude-plugins.mjs`, `extensions.mjs`, `frontmatter.mjs`, `importers.mjs`, `zip.mjs` |
+| User interfaces | `slash.mjs`, `commands.mjs`, `terminal-ui.mjs`, `line-editor.mjs`, `keybindings.mjs`, `vim-mode.mjs`, `themes.mjs`, `markdown.mjs`, `completion.mjs`, `select-dialog.mjs`, `status-line.mjs`, `activity-indicator.mjs` |
 | Browser and device surfaces | `web.mjs`, `browser-tool.mjs`, `cdp.mjs`, `pty-sessions.mjs`, `tool-activity.mjs`, `terminal-ui.mjs`, `ide.mjs`, `github-action.mjs` |
 | Verification and diagnostics | `diagnostics.mjs`, `doctor.mjs`, `lsp.mjs`, `eval.mjs`, `eval-report.mjs`, `claim-check.mjs`, `test-tamper.mjs`, `auto-test.mjs` |
 
 ## Current modularity debt
 
-Several source files have become large orchestration modules. The inspected source snapshot showed approximate sizes of:
+Several source files have become large orchestration modules. Approximate sizes on 2026-11-01:
 
 | File | Approximate size |
 |---|---:|
-| `agent.mjs` | 286 KB |
-| `cli.mjs` | 208 KB |
-| `slash.mjs` | 147 KB |
-| `tools.mjs` | 128 KB |
-| `web.mjs` | 109 KB |
+| `agent.mjs` | 327 KB |
+| `cli.mjs` | 213 KB |
+| `slash.mjs` | 146 KB |
+| `tools.mjs` | 127 KB |
+| `web.mjs` | 113 KB |
 
 These figures are a navigation signal, not a mandate to split by line count. A safe extraction needs a stable responsibility, a narrow interface, tests for the extracted behavior, and proof that the import graph and runtime behavior are unchanged.
 
