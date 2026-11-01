@@ -491,3 +491,15 @@ export function verboseToolOutput(name, result, { color = false, maxLines = 400 
   const body = shown.join('\n');
   return color ? '\x1b[2m' + body + '\x1b[22m' : body;
 }
+
+// One dim line after each interactive turn: how long it took and what it did.
+export function formatTurnSummary({ ms = 0, toolCalls = 0, tokens = 0, finished = true, stopped = false } = {}) {
+  const seconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
+  const time = seconds < 60 ? seconds + 's' : Math.floor(seconds / 60) + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
+  const parts = [(stopped ? 'Stopped' : finished ? 'Done' : 'Paused') + ' · ' + time];
+  const calls = Number(toolCalls || 0);
+  if (calls) parts.push(calls + ' tool call' + (calls === 1 ? '' : 's'));
+  const used = Number(tokens || 0);
+  if (used) parts.push((used >= 1000 ? (used / 1000).toFixed(used >= 100000 ? 0 : 1) + 'k' : String(used)) + ' tokens');
+  return parts.join(' · ');
+}

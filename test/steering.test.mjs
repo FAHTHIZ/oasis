@@ -93,3 +93,27 @@ test('subagent turns never consume the parent conversation steering', async (t) 
   assert.equal(pendingSteering(session), 1, 'left for the interface to send next');
   assert.deepEqual(takeSteering(session), ['for the parent']);
 });
+
+test('stream-json: a user line with steer:true goes to the running turn, others queue', async () => {
+  const { createStreamJsonChannel } = await import('../src/headless.mjs');
+  const { PassThrough } = await import('node:stream');
+  const readline = await import('node:readline');
+  const input = new PassThrough();
+  const lines = readline.createInterface({ input });
+  const written = [];
+  const channel = createStreamJsonChannel(lines, (event) => written.push(event));
+  const steered = [];
+  let busy = true;
+  channel.onSteer((text) => busy && (steered.push(text), true));
+  const iterator = channel[Symbol.asyncIterator]();
+  input.write(JSON.stringify({ type: 'user', steer: true, message: { role: 'user', content: 'use pnpm' } }) + '\n');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(steered, ['use pnpm']);
+  assert.equal(written.at(-1).subtype, 'steer_queued');
+  busy = false;
+  input.write(JSON.stringify({ type: 'user', steer: true, message: { role: 'user', content: 'later' } }) + '\n');
+  assert.deepEqual(await iterator.next(), { value: 'later', done: false }, 'not running: becomes the next turn');
+  channel.unshift('first');
+  assert.deepEqual(await iterator.next(), { value: 'first', done: false });
+  input.end();
+});

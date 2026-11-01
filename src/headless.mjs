@@ -11,7 +11,7 @@ import { activeAgentMonitors, startPluginMonitorsFor } from './monitors.mjs';
 
 const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'background-stuck', 'agent-notice', 'channel']);
 const WAKE_PREFIX = '[background event] ';
-import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt, steerSession, takeSteering } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
@@ -61,6 +61,7 @@ export function createStreamJsonChannel(lines, write) {
   let ended = false;
   let nextId = 1;
   let interruptHandler = null;
+  let steerHandler = null;
   const push = (value) => { const waiter = waiters.shift(); if (waiter) waiter({ value, done: false }); else queue.push(value); };
   const handleLine = (line) => {
     const text = String(line || '').trim();
@@ -81,7 +82,14 @@ export function createStreamJsonChannel(lines, write) {
       return;
     }
     const prompt = parseStreamInputLine(text);
-    if (prompt !== null && prompt.trim()) push(prompt);
+    if (prompt === null || !prompt.trim()) return;
+    // {"type":"user","steer":true,...} while a turn runs: deliver it to the
+    // running agent at its next step instead of queuing a new turn.
+    if (event && event.steer === true && steerHandler && steerHandler(prompt)) {
+      write({ type: 'system', subtype: 'steer_queued' });
+      return;
+    }
+    push(prompt);
   };
   const finish = () => {
     ended = true;
@@ -94,6 +102,8 @@ export function createStreamJsonChannel(lines, write) {
     [Symbol.asyncIterator]() {
       return { next: () => queue.length ? Promise.resolve({ value: queue.shift(), done: false }) : ended ? Promise.resolve({ value: undefined, done: true }) : new Promise((resolve) => waiters.push(resolve)) };
     },
+    unshift(value) { const waiter = waiters.shift(); if (waiter) waiter({ value, done: false }); else queue.unshift(value); },
+    onSteer(handler) { steerHandler = typeof handler === 'function' ? handler : null; },
     request(request) {
       if (ended) return Promise.resolve({ subtype: 'error', error: 'input closed' });
       const id = 'oasis-' + (nextId++);
@@ -287,6 +297,7 @@ export async function runHeadless(options) {
       // Monitors, channels, background commands and background agents wake an idle
       // session: their events queue a synthetic turn, like the interactive CLI.
       let busy = false;
+      if (typeof inputStream.onSteer === 'function') inputStream.onSteer((text) => busy && steerSession(session, text));
       let wakeQueued = false;
       let wakeTimer = null;
       const pendingWake = () => (session.inbox || []).filter((entry) => WAKE_KINDS.has(entry.kind));
@@ -322,7 +333,11 @@ export async function runHeadless(options) {
           text = WAKE_PREFIX + (labels.join(', ') || events.length + ' new event(s)').slice(0, 160);
         }
         busy = true;
-        try { result = await runOne(String(text)); } finally { busy = false; }
+        try { result = await runOne(String(text)); } finally {
+          busy = false;
+          // Steering that missed the turn runs next, in order.
+          for (const late of takeSteering(session).reverse()) inputStream.unshift?.(late);
+        }
         turns += 1;
         emit({ type: 'result', subtype: 'turn', result: String(result.text || ''), num_turns: turns, total_cost_usd: Number(costUsd.toFixed(6)) });
         if (pendingWake().length) scheduleWake();
