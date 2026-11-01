@@ -4,6 +4,10 @@ This file records notable user-facing product changes. It does not imply that an
 
 ## Unreleased
 
+Future changes after the current 1.0.0 release candidate belong here.
+
+## 1.0.0-rc.1 — Release Candidate (not yet published)
+
 Reliability and token-efficiency work driven by common coding-agent complaints:
 
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
@@ -97,7 +101,7 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 - **Tool aliases** — Claude Code style tool names (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `TodoWrite`, …) and argument shapes map onto OASIS tools; unknown names get did-you-mean suggestions.
 - Fixed `oasis skills install` (missing `installSkill`) and the plugin-URL error path in `zip.mjs`.
 
-## 0.4.0 — published Beta release (October 31, 2026)
+## 0.4.0 — historical published Beta release (October 31, 2026)
 
 - Expanded the local-first coding workspace across CLI, browser, editor integration and desktop packaging.
 - Added or extended multi-provider setup, optional cost-aware model routing, local Ollama/gateway paths and explicit provider verification.
@@ -107,8 +111,8 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 - Improved installer resolution so supported installers select an immutable stable versioned commit rather than a moving branch.
 - Added evaluation report comparison and strengthened fixture validation/quarantine controls.
 
-**Release boundaries:** this version remains Beta. Desktop installers are unsigned; automatic desktop updates and publisher provenance are not configured. There is no native Android APK. The 33-fixture evaluator is not a representative repository-scale coding benchmark. See [the v0.4.0 Beta notes](docs/releases/v0.4.0.md) and [project plan](docs/PROJECT_PLAN.md).
+**Historical release boundaries:** v0.4.0 shipped as Beta. Its boundaries are documented here for historical accuracy; see [the current 1.0.0 release-candidate plan](docs/PROJECT_PLAN.md) for present product status. Desktop installers are unsigned; automatic desktop updates and publisher provenance are not configured. There is no native Android APK. The 33-fixture evaluator is not a representative repository-scale coding benchmark. See [the v0.4.0 Beta notes](docs/releases/v0.4.0.md) and [project plan](docs/PROJECT_PLAN.md).
 
-## 0.3.0
+## 0.3.0 — historical release
 
 The `v0.3.0` Git tag is retained as historical version history. The latest published release is `v0.4.0`; use the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases) for current downloads.
