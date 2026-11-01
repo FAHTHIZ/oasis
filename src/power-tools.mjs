@@ -60,8 +60,11 @@ export function findPowerShell(env = process.env, platform = process.platform) {
 export function powerShellLaunch(exe, command, env = process.env, platform = process.platform) {
   const args = ['-NoProfile', '-NonInteractive'];
   if (platform === 'win32' && env.CLAUDE_CODE_POWERSHELL_RESPECT_EXECUTION_POLICY !== '1') args.push('-ExecutionPolicy', 'Bypass');
-  // UTF-8 output on Windows PowerShell 5.1 as well.
-  const prefix = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference = \'SilentlyContinue\'; ';
+  // UTF-8 output on Windows PowerShell 5.1 as well. Its file cmdlets (and the
+  // > redirect, which is Out-File) default to UTF-16LE or the ANSI code page,
+  // which corrupts non-English text in files the agent writes; default them to
+  // UTF-8 (with BOM on 5.1, without on PowerShell 7).
+  const prefix = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $PSDefaultParameterValues[\'Out-File:Encoding\'] = \'utf8\'; $PSDefaultParameterValues[\'Set-Content:Encoding\'] = \'utf8\'; $PSDefaultParameterValues[\'Add-Content:Encoding\'] = \'utf8\'; $PSDefaultParameterValues[\'Export-Csv:Encoding\'] = \'utf8\'; $ProgressPreference = \'SilentlyContinue\'; ';
   args.push('-Command', prefix + command);
   return { command: exe, args };
 }
