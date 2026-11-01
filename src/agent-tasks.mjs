@@ -316,6 +316,11 @@ function elapsed(record) {
 export function summarizeAgent(record, { full = false } = {}) {
   const child = record.child || {};
   const backgroundProcesses = child.background && Number.isSafeInteger(child.background.size) ? child.background.size : 0;
+  let interactiveTerminals = 0;
+  try {
+    const sessions = child.ptyManager && child.ptyManager.list && child.ptyManager.list().sessions;
+    if (Array.isArray(sessions)) interactiveTerminals = sessions.filter((item) => item && (item.state === 'running' || item.state === 'stopping')).length;
+  } catch {}
   const out = {
     id: record.id,
     agent: record.type,
@@ -327,7 +332,8 @@ export function summarizeAgent(record, { full = false } = {}) {
     toolCalls: record.toolCalls,
     workspaceIsolation: record.worktreeInfo || record.worktree ? 'worktree' : 'shared',
     access: record.readOnly ? 'read-only' : 'write-capable',
-    backgroundProcesses
+    backgroundProcesses,
+    interactiveTerminals
   };
   const model = child.config && child.config.model;
   if (typeof model === 'string' && model.trim()) out.model = model.slice(0, 200);
