@@ -112,6 +112,8 @@ test('BM25 ranking finds the relevant memory', async (t) => {
   const recalled = await recallForPrompt(root, 'how do we deploy this?', { env });
   assert.equal(recalled.ids[0], 'project:decisions/deploy');
   assert.match(recalled.text, /fly deploy/);
+  assert.match(recalled.text, /freshness="unverified"/);
+  assert.match(recalled.text, /Freshness: unverified/);
   assert.equal((await listMemories(root, { env })).find((m) => m.name === 'Deploy').recalls, 1);
   assert.equal((await recallForPrompt(root, 'unrelated question about bananas', { env })).ids.length, 0);
   const prompt = await memoryIndexPrompt(root, { env });

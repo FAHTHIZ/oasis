@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
-import { getSessionDirectory, loadSession, listSessions, sanitizeAgentHistory } from '../src/sessions.mjs';
+import { getSessionDirectory, loadSession, listSessions, saveSession, sanitizeAgentHistory } from '../src/sessions.mjs';
 
 async function fixture(t) {
   const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-session-bounds-'));
@@ -66,4 +66,28 @@ test('saved agent history is bounded, redacted and excludes live execution state
   assert.doesNotMatch(JSON.stringify(agents), /PRIVATE CHILD PROMPT|secret-process|sk-ant-abcdefghijklmnop123456/);
   assert.equal(Object.hasOwn(agents[0], 'child'), false);
   assert.equal(Object.hasOwn(agents[0], 'controller'), false);
+});
+
+test('session save/load preserves bounded agent reports without persisting child conversations', async (t) => {
+  const { root, env } = await fixture(t);
+  const id = '0123456789abcdef0123456789abcdef';
+  const session = {
+    root, sessionId: id,
+    config: { protocol: 'openai-compatible', baseURL: 'http://localhost', model: 'fixture-model' },
+    messages: [{ role: 'system', content: 'system' }, { role: 'user', content: 'Inspect the API.' }],
+    todos: [], mustPreserve: [], sharedTasks: null,
+    agentTasks: { agents: new Map([
+      ['agent_1', { id: 'agent_1', type: 'general-purpose', description: 'Inspect API contracts', status: 'running', startedAt: 100, runs: 1, toolCalls: 4, report: 'Observed API shape.', child: { messages: [{ role: 'user', content: 'CHILD-ONLY PRIVATE PROMPT' }], background: new Map([['private-process', {}]]) } }],
+      ['agent_2', { id: 'agent_2', type: 'explore', description: 'Completed review', status: 'completed', startedAt: 80, finishedAt: 90, runs: 1, toolCalls: 2, report: 'No API mismatch found.' }]
+    ]) }
+  };
+  await saveSession(session, { env });
+  const raw = await readFile(path.join(getSessionDirectory(root, env), id + '.json'), 'utf8');
+  assert.doesNotMatch(raw, /CHILD-ONLY PRIVATE PROMPT|private-process/);
+  const restored = await loadSession(root, id, { env });
+  assert.equal(restored.agents.length, 2);
+  assert.equal(restored.agents[0].status, 'running');
+  assert.equal(restored.agents[0].report, 'Observed API shape.');
+  assert.equal(restored.agents[1].status, 'completed');
+  assert.equal(Object.hasOwn(restored.agents[0], 'child'), false);
 });
