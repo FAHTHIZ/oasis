@@ -44,7 +44,7 @@ assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-license
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
 assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/USER_GUIDE.md'), 'Homepage must link directly to Install and the detailed User Guide.');
 assert.ok(html.includes('Desktop installers are available in the published v0.4.0 release.') && html.includes('They are unsigned') && html.includes('clean-machine install, update, and uninstall checks remain outstanding.'), 'Homepage must identify the published desktop release and keep its unsigned and clean-machine verification limits visible.');
-assert.ok(html.includes('The packaged app does not require a separate Node.js or Git installation.'), 'Homepage must explain that the packaged desktop app includes its own runtime.');
+assert.ok(/The packaged app does not require a separate Node\.js or Git installation/i.test(html), 'Homepage must explain that the packaged desktop app includes its own runtime.');
 assert.ok(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))') && html.includes('@media(max-width:850px){.install-choices{grid-template-columns:repeat(2,minmax(0,1fr))}') && html.includes('@media(max-width:560px){.install-choices{grid-template-columns:1fr}'), 'Platform choices must fit desktop, tablet, and mobile layouts.');
 assert.ok(!html.includes('Just for fun'), 'Homepage must not contain the old repository description.');
 assert.ok(!html.includes('award-winning') && !html.includes('100% success'), 'Homepage must not make unsupported credibility claims.');
