@@ -98,6 +98,7 @@ test('old project memories are marked stale until verified again', async (t) => 
   const memory = await findMemory(root, saved.id, { env });
   const old = { ...memory, updated: new Date(Date.now() - 100 * 86400000).toISOString() };
   assert.equal(memoryFreshness(old), 'stale');
+  assert.equal(memoryFreshness({ ...old, verificationStatus: 'current', verifiedAt: old.updated }), 'stale', 'old verification also expires after the freshness window');
   assert.equal(memoryFreshness({ ...old, category: 'preferences' }), 'personal');
 });
 

@@ -232,7 +232,9 @@ export function memoryFreshness(memory, now = Date.now()) {
   if (status === 'uncertain') return 'uncertain';
   const updated = Date.parse(memory && memory.updated || '');
   const verified = Date.parse(memory && memory.verifiedAt || '');
-  if (status === 'current' && Number.isFinite(verified) && Number.isFinite(updated) && verified >= updated) return 'current';
+  if (status === 'current' && Number.isFinite(verified) && Number.isFinite(updated) && verified >= updated) {
+    return now - verified > MEMORY_STALE_AFTER_MS ? 'stale' : 'current';
+  }
   if (Number.isFinite(updated) && now - updated > MEMORY_STALE_AFTER_MS) return 'stale';
   return 'unverified';
 }
@@ -361,13 +363,13 @@ export async function recallForPrompt(root, prompt, { env = process.env, limit =
   const blocks = chosen.map(({ memory }) => {
     const freshness = memoryFreshness(memory);
     const verification = memory.verifiedAt ? ' verified="' + String(memory.verifiedAt).slice(0, 10) + '"' : '';
-    const note = memory.verificationNote ? '\\nVerification evidence: ' + memory.verificationNote : '';
+    const note = memory.verificationNote ? '\nVerification evidence: ' + memory.verificationNote : '';
     const staleWarning = ['stale', 'outdated', 'uncertain', 'unverified'].includes(freshness)
-      ? '\\nFreshness: ' + freshness + '. Verify against current evidence before relying on this note.'
+      ? '\nFreshness: ' + freshness + '. Verify against current evidence before relying on this note.'
       : '';
-    return '<memory id="' + memory.id + '" updated="' + String(memory.updated || '').slice(0, 10) + '" freshness="' + freshness + '"' + verification + '>\\n' +
-      memory.name + ': ' + (memory.content.length > per ? memory.content.slice(0, per) + '\\n[truncated; memory_read ' + memory.id + ' for the rest]' : memory.content) +
-      note + staleWarning + '\\n</memory>';
+    return '<memory id="' + memory.id + '" updated="' + String(memory.updated || '').slice(0, 10) + '" freshness="' + freshness + '"' + verification + '>\n' +
+      memory.name + ': ' + (memory.content.length > per ? memory.content.slice(0, per) + '\n[truncated; memory_read ' + memory.id + ' for the rest]' : memory.content) +
+      note + staleWarning + '\n</memory>';
   });
   await markRecalled(chosen.map((item) => item.memory));
   return { text: '<recalled-memories note="Saved notes that may be relevant. They can be outdated; check against the code.">\n' + blocks.join('\n') + '\n</recalled-memories>', ids: chosen.map((item) => item.memory.id) };
