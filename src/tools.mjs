@@ -1697,8 +1697,25 @@ async function readGitDiff(root, args = {}) {
       ':(exclude)**/id_rsa', ':(exclude)**/id_ed25519', ':(exclude)**/id_ecdsa'
     );
   }
-  return await runReadOnlyGit(root, commandArgs);
+  const result = await runReadOnlyGit(root, commandArgs);
+  if (scope === 'staged' || !result || result.exitCode !== 0) return result;
+  // git diff never shows new, untracked files, so reviewing a freshly created
+  // file looked like "no changes". Append them as new-file diffs.
+  const listed = await runReadOnlyGit(root, ['ls-files', '--others', '--exclude-standard', '-z', '--', ...(relativePath ? [relativePath] : [])]);
+  const untracked = String(listed && listed.stdout || '').split('\0').filter(Boolean)
+    .filter((file) => !SECRET_DIFF_PATH.test(file)).slice(0, 20);
+  if (!untracked.length) return result;
+  let extra = '';
+  for (const file of untracked) {
+    const shown = await runReadOnlyGit(root, ['diff', '--no-index', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=3', '--', '/dev/null', file]);
+    extra += String(shown && shown.stdout || '');
+    if (extra.length > MAX_TOOL_OUTPUT) break;
+  }
+  const stdout = (String(result.stdout || '') + extra).slice(0, MAX_TOOL_OUTPUT);
+  return { ...result, stdout, output: stdout + (result.stderr ? String(result.stderr) : ''), untracked, truncated: Boolean(result.truncated || (String(result.stdout || '') + extra).length > MAX_TOOL_OUTPUT) };
 }
+
+const SECRET_DIFF_PATH = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|credentials\.json|secrets\.json|id_rsa|id_ed25519|id_ecdsa)$|\.(?:pem|key|p12|pfx|keystore)$|(?:^|\/)\.(?:ssh|aws|gnupg|azure|kube|docker)\//i;
 
 export function updateTodos(store, rawTodos) {
   if (!Array.isArray(store)) throw new Error('A checklist store is required.');
