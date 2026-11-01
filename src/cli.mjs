@@ -16,6 +16,7 @@ import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConf
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession, staleSessions, pruneSessions } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
+import { resolveUninstallPlan } from './uninstall.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
 import { runEvalCommand } from './eval.mjs';
@@ -657,19 +658,11 @@ async function uninstallOasis(args = []) {
   if (args.some((arg) => !['--yes', '-y'].includes(arg))) {
     throw new Error('Usage: oasis uninstall [--yes]');
   }
-  const nodeModules = path.dirname(APP_ROOT);
-  if (path.basename(nodeModules) !== 'node_modules') {
-    throw new Error('This OASIS copy does not look like a global npm installation. I will not delete project files. Remove it with the package manager used to install it.');
-  }
-  const libOrPrefix = path.dirname(nodeModules);
-  const prefix = path.basename(libOrPrefix) === 'lib' ? path.dirname(libOrPrefix) : libOrPrefix;
   const packageFile = path.join(APP_ROOT, 'package.json');
   const { readFile } = await import('node:fs/promises');
   const installedPackage = JSON.parse(await readFile(packageFile, 'utf8'));
-  const packageName = installedPackage.name;
-  if (packageName !== 'oasis-oss') {
-    throw new Error('The installed package name was not oasis-oss. Nothing was removed.');
-  }
+  const uninstall = resolveUninstallPlan(APP_ROOT, installedPackage);
+  const { packageName, prefix } = uninstall;
   stdout.write('OASIS uninstall plan\n');
   stdout.write('  Package: ' + packageName + '\n');
   stdout.write('  Install prefix: ' + prefix + '\n');
@@ -686,7 +679,7 @@ async function uninstallOasis(args = []) {
   }
   if (!commandAvailable('npm')) throw new Error('npm was not found. Nothing was removed.');
   const { spawnSync } = await import('node:child_process');
-  const result = spawnSync('npm', ['uninstall', '--global', '--prefix', prefix, packageName], { stdio: 'inherit', shell: process.platform === 'win32' });
+  const result = spawnSync('npm', uninstall.args, { stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.status !== 0) {
     stderr.write('npm could not complete the uninstall. Your project and OASIS user data were not targeted.\n');
     process.exitCode = result.status || 1;
