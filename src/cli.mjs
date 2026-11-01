@@ -1692,6 +1692,7 @@ async function waitForBackgroundRegistration() {
 }
 
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
+  const requestText = String(prompt || '');
   if (AUTO_HALT && !String(prompt || '').startsWith(WAKE_PREFIX) && !modeOptions.selfPacedLoop) AUTO_HALT = null;
   // The parent starts this process before persisting its PID; wait so a fast
   // background task cannot finish and then be overwritten by the parent's stale
@@ -1885,6 +1886,14 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('[verification] Incomplete: ' + result.verificationIssues.join('; ') + '. Do not treat the task as fully verified yet.\n');
     } else if (!result.finished) {
       stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
+    }
+    const changedThisTurn = result.verification && Array.isArray(result.verification.changedPaths) ? result.verification.changedPaths : [];
+    if (changedThisTurn.length) {
+      const { autoCommitEnabled, autoCommitTurn, describeAutoCommit } = await import('./auto-commit.mjs');
+      if (autoCommitEnabled(session, process.env)) {
+        const line = describeAutoCommit(await autoCommitTurn({ root: session.root || root, paths: changedThisTurn, prompt: requestText }).catch((error) => ({ error: error.message })));
+        if (line) stdout.write((richOutput() ? '\x1b[2m  ' + line + '\x1b[22m' : '[auto-commit] ' + line) + '\n');
+      }
     }
     if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }) + '\x1b[22m\n');
     notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }), { elapsedMs: Date.now() - turnStartedAt, stream: stdout });

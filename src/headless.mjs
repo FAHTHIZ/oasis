@@ -264,7 +264,7 @@ export async function runHeadless(options) {
     let partialSoFar = '';
     let currentTurn = null;
     if (inputStream && typeof inputStream.onInterrupt === 'function') inputStream.onInterrupt(() => { if (currentTurn) currentTurn.abort(); });
-    const runOne = async (text) => {
+    const runOneTurn = async (text) => {
       partialSoFar = '';
       if (inputStream && typeof inputStream.onInterrupt === 'function') {
         currentTurn = new AbortController();
@@ -289,6 +289,19 @@ export async function runHeadless(options) {
       if (replayUser && !text.startsWith(WAKE_PREFIX)) emit({ type: 'user', message: { role: 'user', content: text } });
       const prepared = text === rawPrompt ? expanded : await expandFileMentions(root, text, { images: visionEnabled(config, env) }).catch(() => ({ text, files: [] }));
       return runner(session, prepared.text + schemaInstruction, { ...turnOptions, ...(prepared.images && prepared.images.length ? { images: prepared.images } : {}) });
+    };
+    // Opt-in auto-commit (OASIS_AUTO_COMMIT=1 or "autoCommit": true) commits each turn's changed files.
+    const runOne = async (text) => {
+      const turn = await runOneTurn(text);
+      const changed = turn && turn.verification && Array.isArray(turn.verification.changedPaths) ? turn.verification.changedPaths : [];
+      if (changed.length && !turn.interrupted) {
+        const { autoCommitEnabled, autoCommitTurn } = await import('./auto-commit.mjs');
+        if (autoCommitEnabled(session, env)) {
+          const commit = await autoCommitTurn({ root: session.root || root, paths: changed, prompt: text }).catch((error) => ({ error: error.message }));
+          if (commit.committed || commit.error) emit({ type: 'system', subtype: 'auto_commit', ...(commit.committed ? { commit: commit.committed, message: commit.subject, files: commit.files } : { error: commit.error }) });
+        }
+      }
+      return turn;
     };
     if (inputStream) {
       // --input-format stream-json: each user message is one turn in the same session.

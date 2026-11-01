@@ -44,6 +44,7 @@ export const BUILTIN_COMMANDS = {
   usage: 'Show token usage for this session (same as /cost)',
   effort: 'Show or set reasoning effort for this session (/effort [low|medium|high|max|auto])',
   'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
+  'auto-commit': 'Commit each turn\'s file changes to Git automatically, Aider-style (/auto-commit [on|off])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id])',
   routing: 'Route clearly easy read-only tasks to a cheaper model (/routing easy MODEL, strong MODEL, on|off|status|reset)',
@@ -804,6 +805,14 @@ export async function runBuiltinCommand(name, argument, state) {
       const confirmed = words.includes('save') || words.includes('force') || (typeof state.confirm === 'function' && await state.confirm(text + '\nWrite the workflow file?'));
       if (!confirmed) return { output: text + '\nNothing written. Run /install-github-app save to write it.' };
       return { output: text + '\n' + await install.writeInstallPlan(plan) };
+    }
+    case 'auto-commit': {
+      const { autoCommitEnabled } = await import('./auto-commit.mjs');
+      const current = autoCommitEnabled(session || {}, env || process.env);
+      const want = !argument ? !current : /^(on|true|1|yes)$/i.test(argument) ? true : /^(off|false|0|no)$/i.test(argument) ? false : null;
+      if (want === null) return { output: 'Usage: /auto-commit [on|off]' };
+      if (session) session.autoCommit = want;
+      return { output: want ? 'Auto-commit on for this session: after each turn that changes files, OASIS commits exactly those files ("oasis: <your request>"). Other work in the tree is left alone. Set OASIS_AUTO_COMMIT=1 or "autoCommit": true in settings to keep it on.' : 'Auto-commit off for this session.' };
     }
     case 'fast': {
       const { fastModeRequest } = await import('./model-aliases.mjs');

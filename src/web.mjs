@@ -874,6 +874,15 @@ export function createOasisWebServer(options = {}) {
             job.result.isolatedWorktree = await finalizeTaskWorktree();
             emit(job, 'worktree_ready', job.result.isolatedWorktree);
           }
+          const changed = !taskWorktree && result.verification && Array.isArray(result.verification.changedPaths) ? result.verification.changedPaths : [];
+          if (changed.length) {
+            const { autoCommitEnabled, autoCommitTurn } = await import('./auto-commit.mjs');
+            if (autoCommitEnabled(session, env)) {
+              const commit = await autoCommitTurn({ root: session.root || root, paths: changed, prompt: String(prompt || '') }).catch((error) => ({ error: error.message }));
+              if (commit.committed) { job.result.autoCommit = { commit: commit.committed, message: commit.subject, files: commit.files }; emit(job, 'auto_commit', job.result.autoCommit); }
+              else if (commit.error) emit(job, 'auto_commit', { error: commit.error });
+            }
+          }
           job.status = 'completed';
           emit(job, 'completed', job.result);
         }
