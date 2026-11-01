@@ -25,6 +25,8 @@ test('tool activity labels cover tools without a model-authored narration', () =
 test('tool activity categories group common actions without exposing tool names', () => {
   assert.equal(toolActivityCategory('read_file'), 'read');
   assert.equal(toolActivityCategory('edit_file'), 'edit');
+  assert.equal(toolActivityCategory('write_file'), 'write');
+  assert.equal(toolActivityCategory('delete_file'), 'delete');
   assert.equal(toolActivityCategory('run_command'), 'command');
   assert.equal(toolActivityCategory('search_files'), 'search');
   assert.equal(toolActivityCategory('an_unknown_tool'), 'other');
