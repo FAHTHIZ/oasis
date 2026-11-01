@@ -1,6 +1,7 @@
 // Minimal, dependency-free ZIP reader for plugin archives (--plugin-url). Supports stored and
 // deflated entries (what `zip`, GitHub archive downloads and most tools produce). Paths that
 // would escape the destination, symlinks and absurdly large archives are rejected.
+import { oasisVersion } from './version.mjs';
 import { lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { request as httpRequest } from 'node:http';
@@ -232,7 +233,7 @@ async function fetchPinnedArchiveBytes(parsed, addresses, maxBytes, signal) {
       port: parsed.port || undefined,
       method: 'GET',
       path: parsed.pathname + parsed.search,
-      headers: { 'user-agent': 'OasisOSS/0.3 (+https://github.com/FAHTHIZ/oasis)', accept: 'application/zip, application/octet-stream, */*;q=0.1' },
+      headers: { 'user-agent': 'OasisOSS/' + oasisVersion() + ' (+https://github.com/FAHTHIZ/oasis)', accept: 'application/zip, application/octet-stream, */*;q=0.1' },
       signal
     };
     if (addresses && addresses.length && !isIP(hostname)) {
