@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { providerFetch } from './loopback-fetch.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
 import { protectedConfigPath, protectedEditMessage, protectedEditsAllowed, ruleNamesProtectedPath } from './protected-paths.mjs';
@@ -1855,7 +1856,7 @@ async function requestCompletionRaw(session, options = {}) {
   let stalled = false;
   let responseStarted = false;
   let timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : fetch;
+  const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : providerFetch(isLoopbackProvider(config));
   const abortFromCaller = () => controller.abort();
   if (options.signal) {
     if (options.signal.aborted) abortFromCaller();

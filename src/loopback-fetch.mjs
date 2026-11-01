@@ -1,0 +1,78 @@
+// fetch() for model servers on this machine (llama.cpp, Ollama, LM Studio, vLLM).
+//
+// Node's built-in fetch (undici) aborts when response headers take longer than
+// 300 seconds (headersTimeout) or the body goes quiet for 300 seconds
+// (bodyTimeout). llama-server sends no headers until it has read the whole
+// prompt, which on a laptop CPU can take longer than that, so every long request
+// failed at the five-minute mark regardless of OASIS_REQUEST_TIMEOUT_SECONDS.
+// This uses node:http with no hidden timeouts; the caller's AbortSignal and
+// OASIS's own first-byte and stream-idle timers stay in charge.
+import http from 'node:http';
+import https from 'node:https';
+
+const NATIVE_FETCH = globalThis.fetch;
+
+/** The fetch to use for a model request: loopbackFetch for local servers, unless fetch was replaced (tests, proxies). */
+export function providerFetch(local) {
+  return local && globalThis.fetch === NATIVE_FETCH && process.env.OASIS_LOOPBACK_FETCH !== '0' ? loopbackFetch : globalThis.fetch;
+}
+
+export function loopbackFetch(input, init = {}) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try { url = new URL(String(input)); } catch (error) { reject(new TypeError('Invalid URL: ' + input)); return; }
+    const signal = init.signal;
+    if (signal && signal.aborted) { reject(abortError(signal)); return; }
+    const transport = url.protocol === 'https:' ? https : http;
+    const headers = {};
+    const source = init.headers || {};
+    if (typeof source.forEach === 'function' && !Array.isArray(source)) source.forEach((value, key) => { headers[key] = value; });
+    else for (const [key, value] of Object.entries(source)) headers[key] = value;
+    const body = init.body == null ? null : Buffer.from(typeof init.body === 'string' ? init.body : init.body);
+    if (body && !Object.keys(headers).some((key) => key.toLowerCase() === 'content-length')) headers['content-length'] = String(body.length);
+    const request = transport.request(url, { method: init.method || 'GET', headers, timeout: 0 }, (response) => {
+      const responseHeaders = new Headers();
+      for (const [key, value] of Object.entries(response.headers)) {
+        if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(key, item));
+        else if (value != null) responseHeaders.set(key, String(value));
+      }
+      const status = response.statusCode || 502;
+      const nullBody = status === 204 || status === 304 || (init.method || 'GET').toUpperCase() === 'HEAD';
+      if (nullBody) response.resume();
+      resolve(new Response(nullBody ? null : bodyStream(response, signal), { status, statusText: response.statusMessage || '', headers: responseHeaders }));
+    });
+    const onAbort = () => request.destroy(abortError(signal));
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    request.on('error', (error) => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+      // Match fetch: network failures are TypeErrors (callers retry those), aborts are AbortErrors.
+      reject(error && error.name === 'AbortError' ? error : Object.assign(new TypeError('fetch failed'), { cause: error }));
+    });
+    request.on('close', () => { if (signal) signal.removeEventListener('abort', onAbort); });
+    if (body) request.end(body); else request.end();
+  });
+}
+
+// Like undici: a connection that drops mid-body errors the stream with
+// TypeError('terminated'), which the agent treats as a restartable interruption.
+function bodyStream(response, signal) {
+  const chunks = response[Symbol.asyncIterator]();
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { done, value } = await chunks.next();
+        if (done) controller.close();
+        else controller.enqueue(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+      } catch (error) {
+        controller.error(signal && signal.aborted ? abortError(signal) : Object.assign(new TypeError('terminated'), { cause: error }));
+      }
+    },
+    cancel() { response.destroy(); },
+  });
+}
+
+function abortError(signal) {
+  const reason = signal && signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') return reason;
+  return Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+}
