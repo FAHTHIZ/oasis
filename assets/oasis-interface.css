@@ -696,9 +696,10 @@ body.agent-busy .agent-send{display:none}
 .ws-file-status{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:10.5px;font-weight:700;background:var(--accent-soft);color:var(--accent)}
 .ws-file-status.untracked{background:var(--success-soft);color:var(--success)}
 .ws-file-stat b{font-weight:600}.ws-file-stat .add{color:var(--success)}.ws-file-stat .del{color:var(--danger)}
-.ws-diff{border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);max-height:min(56vh,620px);overflow:auto;font:12px/1.55 var(--font-mono)}
+.ws-diff{max-width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);max-height:min(56vh,620px);overflow:auto;font:12px/1.55 var(--font-mono)}
 .ws-diff-file{position:sticky;top:0;padding:6px 12px;background:var(--panel-2);border-bottom:1px solid var(--line);color:var(--text);font-weight:600;z-index:1}
-.ws-line{padding:0 12px;white-space:pre;color:var(--text-2)}
+.ws-line{padding:0 12px 0 22px;text-indent:-10px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-2)}
+.ws-line.hunk,.ws-line.note{padding-left:12px;text-indent:0}
 .ws-line.add{background:#32E07A14;color:#9FF0B8}
 .ws-line.del{background:#FF8A8A14;color:#FFB4B4}
 .ws-line.hunk{color:var(--info,#7FB2FF);background:#7FB2FF0d}
@@ -837,3 +838,10 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 /* Mid-turn steering message */
 .agent-message.user.agent-steer{position:relative;border-style:dashed}
 .agent-message.user.agent-steer::after{content:"sent while working";display:block;margin-top:4px;font:600 10.5px/1 var(--font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
+/* Lite motion (low-power devices, Data Saver): no blur, slower and fewer pulses. */
+html[data-motion="lite"] .topbar,html[data-motion="lite"] dialog.modal::backdrop,html[data-motion="lite"] body.sidebar-open::after{backdrop-filter:none!important}
+html[data-motion="lite"] body.agent-busy .agent-runtime-state::before{animation-duration:2.4s;animation-timing-function:steps(2,end)}
+html[data-motion="lite"] .agent-typing i{animation-duration:2.4s}
+html[data-motion="lite"] .sidebar-chat-running{animation:none}
+html[data-motion="lite"] *{transition-duration:.08s!important}
+html[data-motion="off"] *,html[data-motion="off"] *::before,html[data-motion="off"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}

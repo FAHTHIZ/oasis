@@ -107,5 +107,7 @@ test('command approval metadata preserves the exact executable argument boundari
     tool: 'run_command',
     input: { command: 'node', args: ['-e', 'process.exit(7)'] }
   });
-  assert.match(result.message, /node "-e" "process\.exit\(7\)"/);
+  assert.match(result.message, /node -e "process\.exit\(7\)"/);
+  const spaced = formatApprovalMessage('Run this command in the workspace?', { tool: 'run_command', input: { command: 'git', args: ['commit', '-m', 'two words', ''] } });
+  assert.match(spaced.message, /git commit -m "two words" ""/, 'arguments with spaces or empty arguments stay quoted');
 });

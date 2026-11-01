@@ -1,0 +1,36 @@
+{
+  "cpuThrottleRate": 4,
+  "interactions": [
+    {
+      "interaction": "approval card opening",
+      "frames": 98,
+      "worstFrameMs": 50,
+      "over50ms": 0,
+      "near16ms": 92
+    },
+    {
+      "interaction": "opening Worked for activity fold",
+      "frames": 40,
+      "worstFrameMs": 16.7,
+      "over50ms": 0,
+      "near16ms": 39
+    },
+    {
+      "interaction": "streaming a long assistant reply",
+      "frames": 24,
+      "worstFrameMs": 33.3,
+      "over50ms": 0,
+      "near16ms": 22
+    },
+    {
+      "interaction": "switching between saved chats",
+      "frames": 25,
+      "worstFrameMs": 33.3,
+      "over50ms": 0,
+      "near16ms": 21
+    }
+  ],
+  "worstFrameMs": 50,
+  "targetWorstFrameMs": 50,
+  "metTarget": true
+}

@@ -32,7 +32,9 @@ During setup, choose a provider preset or a custom endpoint: **OmniRoute**, Open
 
 ## Connected browser workspace and runtime
 
-<p align="center"><a href="../assets/demo/oasis-demo.mp4"><img src="../assets/demo/oasis-demo.gif" alt="The OASIS browser workspace working through a coding task, with the approval flow, verification gate and Changes panel" width="100%" /></a><br/><sub>Browser workspace demo. The model reply is a scripted local fixture; the workspace, tools, approvals, verification gate and Changes panel are the real runtime.</sub></p>
+<p align="center"><a href="../assets/demo/oasis-web-demo.mp4"><img src="../assets/demo/oasis-web-demo.gif" alt="The OASIS browser workspace: a bug-fix request, a steering message sent mid-turn, approval cards for two edits and a test run, and the Changes panel" width="100%" /></a><br/><sub>Real OASIS web server, browser UI and tools; scripted model replies, reproducible with <code>node scripts/demo/record-web-demo.mjs</code>.</sub></p>
+
+**Steering and motion.** Press Enter while a turn runs to steer it (the agent reads the message at its next step); Alt+Enter queues for after the turn. Each step gets its own message bubble and replies render as Markdown while they stream. Motion follows the device: full by default, lite (no blur, slower pulses, fewer re-renders) on 2-core or 2 GB devices and with Data Saver, off with reduced motion. Add `?motion=full`, `?motion=lite` or `?motion=off` to the URL to override; the choice is remembered.
 
 The authenticated browser runtime and extension hub are included in the default `main` installation. From the project you want OASIS to operate on:
 

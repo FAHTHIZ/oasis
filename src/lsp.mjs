@@ -49,7 +49,7 @@ export const LSP_TOOL_DEFINITION = { type: 'function', function: { name: 'lsp', 
 
 const C_EXT = ['.c', '.h', '.cc', '.cpp', '.cxx', '.hpp', '.hh', '.hxx', '.m', '.mm'];
 export const BUILTIN_SERVERS = [
-  { name: 'typescript', extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'], candidates: [{ command: 'typescript-language-server', args: ['--stdio'], node: true }], install: 'npm install -g typescript (7+ includes a server) or typescript typescript-language-server for TypeScript 5/6' },
+  { name: 'typescript', extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'], candidates: [{ command: 'typescript-language-server', args: ['--stdio'], node: true }], install: 'npm install -g typescript-language-server typescript' },
   { name: 'python', extensions: ['.py', '.pyi'], candidates: [{ command: 'pyright-langserver', args: ['--stdio'], node: true, python: true }, { command: 'basedpyright-langserver', args: ['--stdio'], python: true }, { command: 'pylsp', args: [], python: true }], install: 'npm install -g pyright (or pip install python-lsp-server)' },
   { name: 'go', extensions: ['.go'], candidates: [{ command: 'gopls', args: [] }], install: 'go install golang.org/x/tools/gopls@latest' },
   { name: 'rust', extensions: ['.rs'], candidates: [{ command: 'rust-analyzer', args: [] }], install: 'rustup component add rust-analyzer' },

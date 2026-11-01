@@ -2663,12 +2663,19 @@ export function verificationIssues(state) {
 export function appendLspUnavailableNotice(text, state) {
   const changed = new Set(state && state.changedPaths instanceof Set ? state.changedPaths : []);
   const unavailable = [...(state && state.lspVerificationByPath instanceof Map ? state.lspVerificationByPath.entries() : [])]
-    .filter(([file, result]) => changed.has(file) && result && result.status === 'unavailable')
-    .map(([file, result]) => file + (result.reason ? ': ' + String(result.reason).replace(/\s*Meanwhile, use grep or the diagnostics tool\.?/i, '').slice(0, 240).replace(/[.\s]+$/, '') : ''));
+    .filter(([file, result]) => changed.has(file) && result && result.status === 'unavailable');
   if (!unavailable.length) return String(text || '');
-  return String(text || '').trimEnd() +
-    '\n\nLSP verification unavailable for ' + unavailable.join('; ') +
-    '. Any separate project checks are reported independently; this change was not verified by a language server.';
+  // Group files that share the same reason so one missing server is one short line.
+  const groups = new Map();
+  for (const [file, result] of unavailable) {
+    const reason = String(result.reason || '').replace(/\s*Meanwhile, use grep or the diagnostics tool\.?/i, '').trim();
+    const missing = reason.match(/^No (\S+) language server found\. Install one with: (.+?)\.?$/i);
+    const key = missing ? 'no ' + missing[1] + ' language server installed (' + missing[2].replace(/[.\s]+$/, '') + ')' : reason.slice(0, 240).replace(/[.\s]+$/, '') || 'no language server available';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(file);
+  }
+  const lines = [...groups.entries()].map(([reason, files]) => (files.length > 3 ? files.slice(0, 3).join(', ') + ' and ' + (files.length - 3) + ' more' : files.join(', ')) + ': ' + reason);
+  return String(text || '').trimEnd() + '\n\nLSP verification unavailable for ' + lines.join('; ') + '. Project checks are reported separately; this change was not verified by a language server.';
 }
 
 export function formatLspVerificationBlocker(issues) {
