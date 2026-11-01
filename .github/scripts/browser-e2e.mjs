@@ -297,7 +297,7 @@ try {
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
   await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
   const commandApproval = await page.locator('#agentApprovalPrompt').innerText();
-  assert.match(commandApproval, /node -e process\\.exit\\(7\\)/);
+  assert.match(commandApproval, /node -e process\.exit\(7\)/);
   assert.equal(await page.locator('#agentApprovalDiff').isHidden(), true,
     'A command approval should not display a file-edit diff.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-command-approval-desktop.png'), fullPage: true });
@@ -349,7 +349,7 @@ try {
   await readDetails.locator('summary').click();
   const readDetailText = await readDetails.innerText();
   assert.match(readDetailText, /Tool: read_file/);
-  assert.match(readDetailText, /browser-e2e-output\\.txt/);
+  assert.match(readDetailText, /browser-e2e-output\.txt/);
   assert.doesNotMatch(readDetailText, /super-secret-value/,
     'Secrets must remain masked in the expanded details view.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-details-desktop.png'), fullPage: true });
