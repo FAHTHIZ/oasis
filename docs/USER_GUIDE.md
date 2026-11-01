@@ -22,7 +22,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 ## Install the terminal agent
 
-Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch.
+Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch. The current `main` source reports `1.0.0-rc.1`; the stable installer still resolves `v0.4.0` until the final 1.0.0 release is published.
 
 When you launch `oasis` for the first time without a configured model, OASIS shows three routes: use an API key, use the OmniRoute gateway, or use a local Ollama model. Press Enter to take the default OmniRoute route, choose `1`, `2`, or `3` explicitly, or choose `4` to set it up later. The first-run screen is designed for a person who does not yet know provider names. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation, gateway startup, and provider changes are confirmed and verified; free/keyless model routes depend on upstream availability and limits. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
 
