@@ -92,3 +92,14 @@ test('local providers are recognised for the longer first-token wait', () => {
   assert.equal(isLoopbackProvider({ baseURL: 'https://api.anthropic.com' }), false);
   assert.equal(isLoopbackProvider({}), false);
 });
+
+test('request timeouts: local default, cloud defaults and explicit values', async () => {
+  const { requestTimeoutMs } = await import('../src/agent.mjs');
+  assert.equal(requestTimeoutMs({ streaming: true }), 120000);
+  assert.equal(requestTimeoutMs({}), 600000);
+  assert.equal(requestTimeoutMs({ local: true, streaming: true }), 900000);
+  assert.equal(requestTimeoutMs({ configuredSeconds: 2400, local: true }), 2400000, 'explicit setting is not capped at 15 minutes');
+  assert.equal(requestTimeoutMs({ configuredSeconds: 99999 }), 7200000);
+  assert.equal(requestTimeoutMs({ timeoutMs: 5000, configuredSeconds: 2400 }), 5000);
+  assert.equal(requestTimeoutMs({ timeoutMs: 5000000 }), 900000);
+});
