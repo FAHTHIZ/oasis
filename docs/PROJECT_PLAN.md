@@ -9,6 +9,25 @@
 
 This document is the canonical statement of product scope, maturity, supported surfaces, known limits, and release gates. The root README is the concise public overview; the [architecture guide](ARCHITECTURE.md) describes the system; the [user guide](USER_GUIDE.md) describes how to operate it.
 
+## Current verification snapshot
+
+**Inspected `main` commit:** [`f83d73e69ec24ce5a57588784de7531d2c585934`](https://github.com/FAHTHIZ/oasis/commit/f83d73e69ec24ce5a57588784de7531d2c585934)  
+**Inspection date:** November 1, 2026  
+**Release metadata:** package `1.0.0`, Release Candidate 1; no RC tag or public 1.0.0 release has been created.
+
+| Workflow on this exact commit | Current result |
+|---|---|
+| [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272634369) | Queued/pending at inspection; no job result available yet. |
+| [Installer checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272634233) | Passed. |
+| [Desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/41272634253) | In progress at inspection. |
+| [Public site and repository metadata](https://github.com/FAHTHIZ/oasis/actions/runs/41272634248) | In progress at inspection. |
+| [Branch cleanup](https://github.com/FAHTHIZ/oasis/actions/runs/41272634284) | Passed. |
+
+The latest runtime change reconciles the browser UI's busy/activity state from the terminal job status, so the interface cannot remain indefinitely busy if the event stream ends before a terminal event is consumed. The browser E2E workflow for this exact commit has not yet completed; this fix is therefore implemented but not yet CI-verified. Do not infer a green browser test from the code change alone.
+
+This snapshot supersedes older run IDs and source commits recorded in prior maintenance notes. Refresh this table whenever a new candidate commit is selected; never combine passing jobs from different commits into one claimed green result.
+
+
 ## 1. Product position
 
 OASIS is an open-source, local-first agentic development workspace. It connects a model selected by the user to a real project and coordinates codebase exploration, planning, file operations, controlled command execution, integrations, agent coordination, and verification.
@@ -87,7 +106,7 @@ The following items are release qualification work, not a request to expand prod
 
 ### P0 — Release blockers
 
-1. **Browser E2E verification fixture:** the prior failure was caused by an out-of-sequence fake-provider response. The fixture requested a final answer immediately after file edits, while the real runtime correctly requested `git_diff` to satisfy the post-edit verification gate; the fixture then misread a later delete request as that diff call and left it pending. The fixture now supplies a full diff-review response before finalizing. Re-run and retain the completed-turn disclosure, failed-command warning, approval/denial, cancellation, and side-effect assertions.
+1. **Browser E2E lifecycle and fixture:** the earlier failure exposed two separate issues: the scripted provider fixture needed to answer the post-edit `git_diff` verification request, and the browser client needed to reconcile its busy/activity state from the server's terminal job status if the event stream omitted the terminal event. The fixture response order and client lifecycle reconciliation have now been updated on the inspected commit. The full browser E2E run is still pending; retain assertions for completed-turn disclosure, failed-command warning, approval/denial, cancellation, and side effects.
 2. **Accessibility:** run and resolve accessibility findings across empty, connection-error, provider, approval, activity-detail, and mobile states. Do not suppress axe findings simply to produce a green run.
 3. **Same-candidate CI:** run Quality Checks, installer checks, desktop packaging, and public-site validation against one immutable candidate commit. Older successful runs are historical evidence only.
 4. **Clean-machine desktop journey:** test installation, first launch, provider setup, a small task, update, uninstall, and user-data preservation on clean Windows, macOS, and Linux environments.
