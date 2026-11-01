@@ -1580,6 +1580,18 @@ async function runPostCompactHooks(session, trigger, summary, options) {
 
 const LOCAL_FIRST_TOKEN_TIMEOUT_MS = 900000;
 
+// How long to wait for response headers. Defaults: 120 s for streamed cloud
+// requests, 600 s otherwise, 900 s for providers on localhost (a laptop can
+// spend minutes reading a long prompt). Defaults never exceed 15 minutes; an
+// explicit OASIS_REQUEST_TIMEOUT_SECONDS is honored up to 2 hours.
+export function requestTimeoutMs({ timeoutMs = 0, configuredSeconds = 0, local = false, streaming = false } = {}) {
+  const explicit = Number(timeoutMs) || 0;
+  const configured = (Number(configuredSeconds) || 0) * 1000;
+  const fallback = local ? LOCAL_FIRST_TOKEN_TIMEOUT_MS : streaming ? 120000 : 600000;
+  const cap = !explicit && configured ? 7200000 : 900000;
+  return Math.min(cap, Math.max(1000, explicit || configured || fallback));
+}
+
 // True when the provider runs on this machine (llama.cpp, Ollama, LM Studio, vLLM on localhost).
 export function isLoopbackProvider(config = {}) {
   try {
@@ -1798,7 +1810,7 @@ async function requestCompletionRaw(session, options = {}) {
   // idle watchdog (reset on every chunk) replaces it, so long generations are
   // never cut off while tokens are still arriving, but a silent hang is.
   const configuredTimeoutSeconds = Number(providerEnv.OASIS_REQUEST_TIMEOUT_SECONDS) || 0;
-  const timeoutMs = Math.min(900000, Math.max(1000, Number(options.timeoutMs) || configuredTimeoutSeconds * 1000 || (isLoopbackProvider(config) ? LOCAL_FIRST_TOKEN_TIMEOUT_MS : typeof options.onDelta === 'function' ? 120000 : 600000)));
+  const timeoutMs = requestTimeoutMs({ timeoutMs: options.timeoutMs, configuredSeconds: configuredTimeoutSeconds, local: isLoopbackProvider(config), streaming: typeof options.onDelta === 'function' });
   const streamIdleMs = Math.min(900000, Math.max(1000, Number(options.streamIdleMs) || Number(providerEnv.OASIS_STREAM_IDLE_SECONDS) * 1000 || 120000));
   let timedOut = false;
   let stalled = false;

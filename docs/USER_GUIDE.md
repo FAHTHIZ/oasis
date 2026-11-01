@@ -978,7 +978,7 @@ These are on by default and each can be switched off.
 | Pipe warning | Commands like `npm test \| tail` that hide a failing exit status are flagged. | — |
 | Background watchdog | Background commands accept `max_seconds`; a stuck notice fires after `OASIS_BACKGROUND_STUCK_SECONDS` (default 300) with no output. | — |
 | Scope lock | `/scope src/api/**` (or `OASIS_EDIT_SCOPE`) blocks edits outside the given paths. `/scope off` clears it. | — |
-| Stream watchdog | Idle streams are detected after `OASIS_STREAM_IDLE_SECONDS` (default 120) and retried or sent to the fallback model. `OASIS_REQUEST_TIMEOUT_SECONDS` sets the request timeout (default 120 s for streamed cloud requests, 600 s otherwise, and 900 s for providers on localhost, which can spend minutes reading a long prompt). | — |
+| Stream watchdog | Idle streams are detected after `OASIS_STREAM_IDLE_SECONDS` (default 120) and retried or sent to the fallback model. `OASIS_REQUEST_TIMEOUT_SECONDS` sets the request timeout (default 120 s for streamed cloud requests, 600 s otherwise, and 900 s for providers on localhost, which can spend minutes reading a long prompt). Defaults never exceed 15 minutes; a value you set explicitly is honored up to 2 hours. | — |
 | Tool aliases | Claude Code style tool names (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `TodoWrite`, `Task` …) work and are mapped to OASIS tools. | — |
 
 ## Extra agent tools
