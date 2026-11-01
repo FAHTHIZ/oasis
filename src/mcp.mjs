@@ -4,7 +4,7 @@ import { debugLog } from './debug-log.mjs';
 import { mkdir, readFile, writeFile, chmod, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
-import { McpHttpClient } from './mcp-project.mjs';
+import { McpHttpClient, McpSseClient } from './mcp-project.mjs';
 import { loadMcpExtras, RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
 import { clientCapabilities, routeServerMessage, MCP_CLIENT_PROTOCOL_VERSION } from './mcp-client-features.mjs';
 
@@ -362,7 +362,7 @@ export async function connectMcpServers(options = {}) {
   await Promise.all(all.map(async ({ config, source }) => {
     let client;
     try {
-      client = config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
+      client = config.type === 'sse' ? new McpSseClient(config, options) : config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
       client.source = source;
       await client.start();
       clients.set(config.name, client);
@@ -438,7 +438,8 @@ export function attachToolServer(session, server) {
 // Starts (or restarts) one server inside a running session and refreshes the
 // session's tool list, e.g. right after oasis mcp login.
 export async function reconnectMcpServer(session, config, options = {}) {
-  const client = config.type === 'http' ? new McpHttpClient(config, { host: session.mcpHost, ...options }) : new McpServerClient(config, { host: session.mcpHost, ...options });
+  const clientOptions = { host: session.mcpHost, ...options };
+  const client = config.type === 'sse' ? new McpSseClient(config, clientOptions) : config.type === 'http' ? new McpHttpClient(config, clientOptions) : new McpServerClient(config, clientOptions);
   client.source = config.source || 'project';
   await client.start();
   session.mcpClients ||= new Map();

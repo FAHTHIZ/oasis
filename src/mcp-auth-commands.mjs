@@ -6,7 +6,7 @@ import { reconnectMcpServer } from './mcp.mjs';
 export async function findHttpServer(root, name, { env = process.env } = {}) {
   const project = await loadProjectMcpServers(root, { env });
   const server = project.servers.find((item) => item.name === name);
-  if (server && server.type === 'http') return server;
+  if (server && (server.type === 'http' || server.type === 'sse')) return server;
   if (server) throw new Error(name + ' is a stdio server; it gets credentials from environment variables, not sign-in.');
   const failure = project.failures.find((item) => item.name === name);
   throw new Error(failure ? name + ' is not usable: ' + failure.error : 'No HTTP MCP server named ' + name + ' in .mcp.json.');

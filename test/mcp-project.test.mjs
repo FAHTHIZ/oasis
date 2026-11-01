@@ -102,7 +102,7 @@ test('.mcp.json stdio servers start with expanded env; bad entries are reported'
   const home = await tmp(t);
   await writeFile(path.join(root, '.mcp.json'), JSON.stringify({ mcpServers: {
     'My-Server': { command: process.execPath, args: ['-e', STDIO_SERVER], env: { PROJECT_TOKEN: '${SECRET_FOR_TEST}' } },
-    broken: { type: 'sse', url: 'https://x.example/sse' },
+    broken: { type: 'websocket', url: 'wss://x.example/ws' },
     missing: { type: 'http', url: 'https://x.example/${UNSET_VAR}' },
     off: { command: 'nothing', disabled: true }
   } }));
