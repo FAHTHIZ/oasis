@@ -40,7 +40,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 <tr>
 <td width="50%" valign="top">
 
-**Any model, really.** Claude, GPT, Gemini, DeepSeek, OpenRouter, Bedrock, Vertex, Azure Foundry, or a local Ollama, LM Studio, llama.cpp or vLLM server. Small models get a compact prompt, a 13-tool profile and tool-call repair, so a 4B model on a laptop can do real work.
+**Any model, really.** Claude, GPT, Gemini, DeepSeek, OpenRouter, Bedrock, Vertex, Azure Foundry, or a local Ollama, LM Studio, llama.cpp or vLLM server. Small models get a compact prompt, a 13-tool profile and tool-call repair, so even a 4B local model drives the tools; whether its code is right is still up to the model ([live runs](docs/BENCHMARKS.md#small-local-model-field-runs-2026-11-01)).
 
 </td>
 <td width="50%" valign="top">
