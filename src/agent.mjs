@@ -1299,7 +1299,7 @@ function parseProviderEvent(raw) {
   catch { throw new Error('The model provider sent an invalid server-sent event payload.'); }
 }
 
-async function readProviderStream(response, protocol, onDelta) {
+async function readProviderStream(response, protocol, onDelta, onProgress) {
   if (isAnthropicFamily(protocol)) {
     const blocks = new Map();
     const usage = { input_tokens: 0, output_tokens: 0 };
@@ -1387,6 +1387,7 @@ async function readProviderStream(response, protocol, onDelta) {
     if (data === '[DONE]') return;
     const event = parseProviderEvent(data);
     if (event.error) throw new Error(String(event.error.message || 'The chat-completions stream failed.'));
+    if (event.prompt_progress && typeof onProgress === 'function') { try { onProgress(event.prompt_progress); } catch {} }
     if (event.usage) usage = event.usage;
     for (const choice of Array.isArray(event.choices) ? event.choices : []) {
       const delta = choice.delta || {};
@@ -1839,7 +1840,9 @@ async function requestCompletionRaw(session, options = {}) {
       messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
-      ...(typeof options.onDelta === 'function' ? { stream: true } : {})
+      ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
+      // llama-server can report how far it has read a long prompt; only asked of a server identified as llama.cpp.
+      ...(typeof options.onDelta === 'function' && typeof options.onPromptProgress === 'function' && session.localContext && session.localContext.server === 'llama.cpp' ? { return_progress: true } : {})
     };
   }
 
@@ -1912,7 +1915,7 @@ async function requestCompletionRaw(session, options = {}) {
       const watched = response.body && typeof response.body.pipeThrough === 'function'
         ? new Response(response.body.pipeThrough(new TransformStream({ transform(chunk, sink) { armIdle(); sink.enqueue(chunk); } })), { status: response.status, headers: response.headers })
         : response;
-      data = await readProviderStream(watched, config.protocol, options.onDelta);
+      data = await readProviderStream(watched, config.protocol, options.onDelta, options.onPromptProgress);
     } else {
       const body = await response.text();
       try { data = JSON.parse(body); } catch {
@@ -4416,6 +4419,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         } } : {}),
         // Deltas are cumulative, so a restarted stream replaces the partial text
         // instead of appending a second copy.
+        ...(waitHook ? { onPromptProgress: (progress) => {
+          try { waitHook({ phase: 'progress', step: step + 1, promptProgress: { total: Number(progress.total) || 0, cache: Number(progress.cache) || 0, processed: Number(progress.processed) || 0, time_ms: Number(progress.time_ms) || 0 } }); } catch {}
+        } } : {}),
         onStreamRestart: (event) => {
           streamedText = '';
           if (typeof options.onDelta === 'function') options.onDelta('');

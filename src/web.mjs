@@ -764,6 +764,11 @@ export function createOasisWebServer(options = {}) {
           approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
           askUser: (question) => questionFor(job, question),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
+          onModelWait: (event) => {
+            if (!event || event.phase !== 'progress' || !event.promptProgress) return;
+            const p = event.promptProgress;
+            emit(job, 'model_wait', { phase: 'progress', step: Number(event.step) || 1, promptProgress: { total: Number(p.total) || 0, cache: Number(p.cache) || 0, processed: Number(p.processed) || 0, time_ms: Number(p.time_ms) || 0 } });
+          },
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),

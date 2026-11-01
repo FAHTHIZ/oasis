@@ -1769,6 +1769,7 @@ function updateLiveStatus(value){
   target.classList.remove('is-changing');target.textContent=value;
   void target.offsetWidth;target.classList.add('is-changing');
 }
+window.oasisLiveStatus=updateLiveStatus;
 function formatActivityValue(value){
   if(value===undefined||value===null)return '(No output was returned.)';
   if(typeof value==='string'){
@@ -2109,6 +2110,17 @@ C.hook('agentProcessEvent',function(prev){return function(jobId,event){
   }
   if(event&&event.type==='steered'){window.oasisAgentActivity('Oasis read your '+(d.delivered>1?d.delivered+' messages':'message')+' and is adjusting');return}
   if(event&&event.type==='steer_queued')return;
+  if(event&&event.type==='model_wait'){
+    var pp=d.promptProgress,tot=pp&&Number(pp.total)||0,done=pp?Math.min(tot,Number(pp.processed)||0):0;
+    if(tot>0&&typeof window.oasisLiveStatus==='function'){
+      if(done>=tot){window.oasisLiveStatus('Thinking…');return}
+      var fmt=function(n){return n<1000?String(n):(n/1000).toFixed(1).replace(/\.0$/,'')+'k'},msg='Local model is reading the prompt · '+Math.floor(done/tot*100)+'% of '+fmt(tot)+' tokens';
+      var rate=(done-Math.min(done,Number(pp.cache)||0))/(Number(pp.time_ms)||0),left=rate>0&&Number(pp.time_ms)>=2000?Math.round((tot-done)/rate/1000):-1;
+      if(left>=0)msg+=' · about '+(left<60?left+'s':Math.floor(left/60)+'m '+String(left%60).padStart(2,'0')+'s')+' left';
+      window.oasisLiveStatus(msg);
+    }
+    return;
+  }
   if(event&&(event.type==='completed'||event.type==='cancelled')&&Array.isArray(d.undeliveredSteering)&&d.undeliveredSteering.length){
     d.undeliveredSteering.slice().reverse().forEach(function(t){if(queued.length<5)queued.unshift(String(t))});renderQueue();
   }
