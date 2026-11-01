@@ -349,6 +349,8 @@ These are current engineering boundaries, not statements that the corresponding 
 
 ## Source map
 
+The table below identifies primary implementations. For a domain-grouped file catalog and safe module-extraction rules, see the [runtime source map](../src/README.md). Test ownership and runner conventions are indexed in the [test map](../test/README.md).
+
 | Concern | Primary implementation |
 |---|---|
 | CLI and headless runtime | `src/cli.mjs`, `src/headless.mjs` |
