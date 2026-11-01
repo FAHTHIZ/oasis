@@ -18,6 +18,12 @@ This document is the canonical record for repository layout, intentional copies,
 | `evals/snapshots/` | Immutable evaluation repository snapshots. Never silently replace with live source. |
 | `docs/` | Canonical product, architecture, release, security, benchmark and user documentation; supporting research lives under `docs/research/`. |
 | `.github/workflows/`, `.github/scripts/` | CI, release, public-site and guarded branch-maintenance automation. |
+| `assets/` | Shared app artwork, fonts, styles, and demo media. Keep public-site deployment copies under `site/assets/` when the deployed site needs a self-contained asset tree. |
+| `bench/` | Focused performance and subsystem benchmark scripts; benchmark outputs are evidence, not product claims by themselves. |
+| `scripts/` | Installers, environment checks, packaging helpers, local maintenance scripts, and developer utilities. |
+| `index.html`, `manifest.webmanifest`, `sw.js` | Root browser-workspace shell, PWA metadata, and service-worker entry. |
+| `package.json`, lockfile | Package identity, Node engine floor, dependencies, export surface, scripts, and desktop build configuration. Keep these in sync with the release process. |
+| Root `README.md`, `CHANGELOG.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md` | Public entry point, user-facing history, legal terms, vulnerability reporting, and contribution contract. Keep the root concise; detailed guidance belongs under `docs/`. |
 
 ## Intentional exact-content copies
 
@@ -30,37 +36,17 @@ The repository-wide blob scan found only a small set of byte-identical groups. T
 
 Before removing any same-content file, check its deployment root, task snapshot, importer, package manifest and tests. Do not consolidate copies merely because their bytes match.
 
-## Branch cleanup receipt
+## Branch state and cleanup receipt
 
-The guarded cleanup workflow retired **9 exact audited/superseded branch refs** in its successful October 31 cleanup pass ([run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215)). A subsequent pass on [run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382) found no further safe deletions and preserved 11 divergent branches. The latest check on audited main snapshot `51590f2f27e9378724e8325dc954ff1ac3a0f313` also passed cleanup and preserved all 11 remaining refs ([run 41175743360](https://github.com/FAHTHIZ/oasis/actions/runs/41175743360)).
+At the inspected `main` snapshot `ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615`, the GitHub branches endpoint returned exactly one branch: `main`. This confirms that the former development refs listed in older audit notes are no longer present. Do not use those historical names as active branches or assume they remain recoverable.
 
-**Exact retired refs:**
+The guarded cleanup workflow completed successfully in the latest inspected pass: [run 41265370788](https://github.com/FAHTHIZ/oasis/actions/runs/41265370788). Earlier cleanup receipts are retained as history:
 
-- `fix/omniroute-setup-default-20261027`
-- `fix/preserve-current-provider-on-setup-20261027`
-- `fix/safety-part-1-completion`
-- `ci/gate1-branch-validation`
-- `ci/gate1-corrected-integrity-check`
-- `fix/gate1-optional-terminal`
-- `fix/gate1-site-mark-assertion`
-- `fix/gate1-static-asset-routes`
-- `test/gate1-browser-and-asset-smoke`
+- [run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215) retired 9 exact audited/superseded refs.
+- [run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382) found no further safe deletions and preserved 11 divergent refs at that time.
+- [run 41175743360](https://github.com/FAHTHIZ/oasis/actions/runs/41175743360) also preserved those 11 refs at its older snapshot. They have since been removed; the current branch listing is authoritative.
 
-**Remaining refs preserved because their content is non-equivalent or not fully verified:**
-
-- `app/alpha-readiness-gaps`
-- `app/empty-chat`
-- `app/first-run`
-- `app/status-activity`
-- `app/workspace-layout`
-- `cli/getting-started`
-- `cloud-engine/maturity-foundation`
-- `fix/phase-0-finish-plan-20261030-sync`
-- `fix/phase-0-finish-plan-20261030`
-- `ux/chat-first-step-0`
-- `ux/chat-first-step-1`
-
-No preserved branch was merged wholesale into `main`. These refs remain available for deliberate source review and selective porting.
+The current working policy is main-only for direct maintenance unless the repository owner deliberately changes that policy. The cleanup workflow is not permission to remove unreviewed work: it must prove exact-head safety and fail closed.
 
 ## Retirement rules
 
@@ -118,4 +104,4 @@ Run [Publish OASIS homepage and repository metadata](https://github.com/FAHTHIZ/
 
 Search metadata, Open Graph tags, `robots.txt`, and a sitemap help crawlers understand the site; they do not guarantee indexing, ranking, or traffic. Use Google Search Console to inspect indexing and request a crawl when appropriate; a request is not a guarantee of inclusion.
 
-The canonical public identity is maintained in [Brand](BRAND.md). The README, project plan, release notes, and public site must describe the same shipped product. Add release/download/benchmark badges only when the relevant release or result actually exists.
+The canonical public identity is maintained in [Brand](BRAND.md). The README, project plan, release notes, and public site must distinguish the latest published release from newer unreleased changes on `main`. Add release/download/benchmark badges only when the relevant release or result actually exists.
