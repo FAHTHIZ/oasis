@@ -181,3 +181,16 @@ test('replies made of calls to tools that do not exist are reported by name', as
   assert.deepEqual(unknownTextToolCalls('The config is {"name": "x", "arguments": 1}.', names), []);
   assert.deepEqual(unknownTextToolCalls('{"name": "my-package", "version": "1.0.0"}', names), []);
 });
+
+test('fenced calls with raw newlines in strings or a stray brace are repaired, and an unreadable call stops later calls', async () => {
+  const { extractTextToolCalls } = await import('../src/tool-call-repair.mjs');
+  const names = new Set(['write_file', 'read_file', 'edit_file', 'run_command']);
+  const raw = '```json\n{\n  "name": "write_file",\n  "arguments": {\n    "path": "a.mjs",\n    "content": "/**\n * doc\n */\nexport const a = 1;\\n"\n  }\n}\n```\n```json\n{\n  "name": "edit_file",\n  "arguments": {"path": "a.mjs", "old_string": "a = 1", "new_string": "a = 2"}}\n}\n```\n```json\n{"name": "run_command", "arguments": {"command": "node", "args": ["a.mjs"]}}\n```';
+  const out = extractTextToolCalls(raw, names);
+  assert.deepEqual(out.calls.map((c) => c.name), ['write_file', 'edit_file', 'run_command']);
+  assert.match(out.calls[0].args.content, /^\/\*\*\n \* doc/);
+  const broken = '```json\n{"name": "write_file", "arguments": {"path": "a.mjs", "content": "x\\q" "oops"}}\n```\n```json\n{"name": "run_command", "arguments": {"command": "node", "args": ["a.mjs"]}}\n```';
+  const stopped = extractTextToolCalls(broken, names);
+  assert.deepEqual(stopped.calls, []);
+  assert.deepEqual(stopped.failed, ['write_file']);
+});

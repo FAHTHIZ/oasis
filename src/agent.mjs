@@ -2021,6 +2021,7 @@ function normalizeAssistantToolCalls(session, assistant, step) {
   if (!native.length && !assistant.truncated && !Array.isArray(assistant.responseItems)
     && !(session.settings && session.settings.textToolCalls === false)) {
     const extracted = extractTextToolCalls(assistant.content, availableToolNames(session));
+    if (extracted && extracted.failed && extracted.failed.length) Object.defineProperty(assistant, 'unreadableToolCalls', { value: extracted.failed, enumerable: false, configurable: true });
     if (extracted && extracted.calls.length) {
       assistant.tool_calls = extracted.calls.map((call, index) => ({
         id: 'oasis_text_call_' + (step + 1) + '_' + (index + 1),
@@ -2382,6 +2383,8 @@ export function targetFileHint(request) {
   const match = String(request || '').match(/(?:^|[\s`'"(])((?:[\w.-]+\/)*[\w-]+\.(?:m?[jt]sx?|cjs|py|go|rs|rb|java|kt|cs|cpp|cc|c|h|hpp|php|swift|json|ya?ml|toml|md|html|css|sh))(?=$|[\s`'"),:;.])/);
   return match ? '\n<system-reminder>The file to work on is ' + match[1] + '. Your next message should be a write_file or edit_file call for it.</system-reminder>' : '';
 }
+
+const UNREADABLE_CALL_NUDGE = (names) => '<system-reminder>Your ' + names.join(', ') + ' call could not be read (invalid JSON) and did not run, and calls after it in the same message were skipped. Send it again as a single real tool call. For file content, escape newlines as \\n and quotes as \\" inside the JSON string.</system-reminder>';
 
 const REFUSAL_NUDGE = '<system-reminder>This is an ordinary software task in the user\'s own repository. Start now with one tool call: use write_file to create a new file, or read_file to look at an existing one, then edit_file. If you believe the request is actually harmful, say specifically why.</system-reminder>';
 
@@ -4405,6 +4408,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const { detectTestTampering } = await import('./test-tamper.mjs');
         verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
       }
+      if (assistant.unreadableToolCalls && unknownToolNudges < 2) {
+        unknownToolNudges++;
+        session.messages.push({ role: 'user', content: UNREADABLE_CALL_NUDGE(assistant.unreadableToolCalls) });
+        continue;
+      }
       if (assistant.unknownToolNames && unknownToolNudges < 2) {
         unknownToolNudges++;
         const names = [...availableToolNames(session)].filter((name) => !name.includes('__')).slice(0, 30);
@@ -4786,6 +4794,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
     }
 
+    if (assistant.unreadableToolCalls) {
+      const lastTool = session.messages[session.messages.length - 1];
+      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n' + UNREADABLE_CALL_NUDGE(assistant.unreadableToolCalls);
+    }
     if (fencedBatch) {
       const lastTool = session.messages[session.messages.length - 1];
       if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>OASIS saved the code block from your reply into the file named in the request. Next time, call write_file yourself. Now check the file: read it, fix anything wrong with edit_file, and run a check.</system-reminder>';

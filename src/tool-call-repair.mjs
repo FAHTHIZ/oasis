@@ -130,6 +130,23 @@ export function repairToolArguments(raw) {
 }
 
 // Pulls balanced {...} objects out of free text, respecting strings.
+// Strict JSON first, then the argument repairs (raw newlines in strings,
+// trailing commas, missing closers), then a stray extra closing brace.
+function lenientParse(text) {
+  const strict = tryParse(text);
+  if (strict.ok) return strict;
+  // Only a lone object: never pull a call out of surrounding text or tags, and
+  // leave several objects in a row to the JSON Lines path.
+  if (!/^\s*\{/.test(text) || balancedObjects(text).length > 1) return { ok: false };
+  let candidate = text;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return { ok: true, value: repairToolArguments(candidate).args }; } catch {}
+    if (!/\}\s*$/.test(candidate)) break;
+    candidate = candidate.replace(/\}\s*$/, '');
+  }
+  return { ok: false };
+}
+
 function balancedObjects(text) {
   const found = [];
   for (let i = 0; i < text.length; i++) {
@@ -180,6 +197,7 @@ export function extractTextToolCalls(content, availableNames) {
   if (!toolNames.size) return null;
   const calls = [];
   const spans = [];
+  const failed = [];
   // Call syntax inside a code fence is being shown or quoted (for example from
   // a file the model read), not invoked.
   const fences = [];
@@ -224,14 +242,14 @@ export function extractTextToolCalls(content, availableNames) {
     const prose = fencedBlocks.reduce((rest, block) => rest.replace(block[0], ''), content).trim();
     for (let match; prose.length <= 160 && !/\n\s*\S[\s\S]*\n\s*\S/.test(prose) && (match = fenced.exec(content));) {
       const body = match[1].trim();
-      const parsed = tryParse(body);
+      const parsed = lenientParse(body);
       let values = parsed.ok ? (Array.isArray(parsed.value) ? parsed.value : [parsed.value]) : [];
       if (!parsed.ok) {
         // Several call objects one after another (JSON Lines) in one fence.
         const objects = balancedObjects(body);
         const rest = objects.reduceRight((text, object) => text.slice(0, object.start) + text.slice(object.end), body);
         if (objects.length > 1 && !rest.trim()) {
-          const each = objects.map((object) => tryParse(object.text));
+          const each = objects.map((object) => lenientParse(object.text));
           if (each.every((item) => item.ok)) values = each.map((item) => item.value);
         }
       }
@@ -239,6 +257,11 @@ export function extractTextToolCalls(content, availableNames) {
       if (found.length && found.length === values.length) {
         calls.push(...found);
         spans.push([match.index, match.index + match[0].length]);
+      } else if (!values.length) {
+        // A call we could not read. Later calls in the same reply usually depend
+        // on it (write, then run), so stop here instead of running them out of order.
+        const named = /^\s*\{\s*"(?:name|tool)"\s*:\s*"([\w.-]+)"/.exec(body);
+        if (named && toolNames.has(named[1])) { failed.push(named[1]); break; }
       }
     }
   }
@@ -269,11 +292,11 @@ export function extractTextToolCalls(content, availableNames) {
       }
     }
   }
-  if (!calls.length) return null;
+  if (!calls.length) return failed.length ? { calls: [], text: content, failed } : null;
   spans.sort((a, b) => b[0] - a[0]);
   let text = content;
   for (const [from, to] of spans) text = text.slice(0, from) + text.slice(to);
-  return { calls, text: text.replace(/\n{3,}/g, '\n\n').trim() };
+  return { calls, text: text.replace(/\n{3,}/g, '\n\n').trim(), ...(failed.length ? { failed } : {}) };
 }
 
 // A reply made only of call-shaped JSON objects naming tools that do not exist
