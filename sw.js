@@ -1,4 +1,4 @@
-const CACHE_NAME = 'oasis-shell-v11';
+const CACHE_NAME = 'oasis-shell-v12';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './assets/oasis-icon.svg', './assets/oasis-mark.svg', './assets/oasis-logo.svg', './assets/oasis-interface.css', './assets/oasis-readme-banner.svg'];
 
 self.addEventListener('install', (event) => {

@@ -864,6 +864,7 @@ let markdownStream = null;
 const richOutput = () => colorEnabled(stdout) && process.env.OASIS_PLAIN_OUTPUT !== '1';
 let waitIndicator = null;
 function onModelWait(event = {}) {
+  if (event.phase === 'progress') { if (waitIndicator) waitIndicator.update({ promptProgress: event.promptProgress }); return; }
   if (event.phase !== 'start') { stopWaitIndicator(); return; }
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
   waitIndicator.start(event);

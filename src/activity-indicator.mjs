@@ -68,16 +68,36 @@ export function formatTokens(count) {
 // Words for the label; chosen by what the agent is waiting for, not at random.
 export function waitLabel(info = {}, elapsedMs = 0) {
   if (info.label) return String(info.label);
+  const progress = info.promptProgress;
+  if (progress && Number(progress.total) > 0) return Number(progress.processed) < Number(progress.total) ? 'Local model is reading the prompt' : 'Thinking';
   if (info.local && elapsedMs >= 15000 && Number(info.inputTokens || 0) > 2000) return 'Local model is reading the prompt';
   if (elapsedMs >= 45000) return 'Still waiting for the model';
   if (Number(info.step || 1) > 1) return 'Working';
   return 'Thinking';
 }
 
+// llama.cpp prompt_progress ({ total, cache, processed, time_ms }) as
+// "54% of 7.7k tokens · about 2m 40s left". Cached tokens count as read; the
+// estimate uses the rate for tokens actually processed so far.
+export function promptProgressText(progress) {
+  if (!progress) return '';
+  const total = Number(progress.total) || 0;
+  const processed = Math.min(total, Number(progress.processed) || 0);
+  if (total <= 0 || processed >= total) return '';
+  const cache = Math.min(processed, Number(progress.cache) || 0);
+  const parts = [Math.floor(processed / total * 100) + '% of ' + formatTokens(total) + ' tokens'];
+  const timeMs = Number(progress.time_ms ?? progress.timeMs) || 0;
+  const done = processed - cache;
+  if (timeMs >= 2000 && done > 0) parts.push('about ' + formatElapsed((total - processed) / (done / timeMs)) + ' left');
+  return parts.join(' · ');
+}
+
 // The status text without escape codes. Exported so it can be tested.
 export function describeWait(info = {}, elapsedMs = 0) {
   const parts = [waitLabel(info, elapsedMs) + '…', formatElapsed(elapsedMs)];
-  if (Number(info.inputTokens) > 0) parts.push(formatTokens(info.inputTokens) + ' tokens sent');
+  const reading = promptProgressText(info.promptProgress);
+  if (reading) parts.push(reading);
+  else if (Number(info.inputTokens) > 0) parts.push(formatTokens(info.inputTokens) + ' tokens sent');
   if (info.step && Number(info.step) > 1) parts.push('step ' + info.step);
   parts.push('esc to stop');
   return parts.join(' · ');
