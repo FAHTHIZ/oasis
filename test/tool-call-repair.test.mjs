@@ -118,3 +118,18 @@ test('agent turn executes tool calls a model wrote as text', async (t) => {
   assert.equal(assistant.tool_calls[0].function.name, 'read_file');
   assert.match(requests[1].messages.find((m) => m.role === 'tool').content, /REPAIRED-READ/);
 });
+
+test('call syntax that is shown or quoted is never executed', () => {
+  const names = new Set(['read_file', 'run_command']);
+  // An example inside an explanation.
+  const example = 'To run the tests yourself, the agent would send:\n\n```json\n{"name": "run_command", "arguments": {"command": "npm", "args": ["test"]}}\n```\n\nThat call runs the whole suite. You can narrow it with a file path, and the output shows each failing assertion with its diff.';
+  assert.equal(extractTextToolCalls(example, names), null);
+  // Tag syntax quoted from a file inside a code fence.
+  const quotedTag = 'The prompt template contains:\n```\n<tool_call>{"name": "run_command", "arguments": {"command": "rm", "args": ["-rf", "x"]}}</tool_call>\n```';
+  assert.equal(extractTextToolCalls(quotedTag, names), null);
+  const quotedLlama = '```text\n<function=run_command>{"command": "curl"}</function>\n```';
+  assert.equal(extractTextToolCalls(quotedLlama, names), null);
+  // A short lead-in plus one fenced call is still recovered.
+  const lead = extractTextToolCalls('Reading it.\n```json\n{"name": "read_file", "arguments": {"path": "a.js"}}\n```', names);
+  assert.equal(lead.calls[0].name, 'read_file');
+});
