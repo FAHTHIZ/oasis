@@ -71,6 +71,9 @@ jobs:
         with:
           token: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
           enablement: true
+      - name: Copy demo videos into the homepage
+        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
+        run: mkdir -p site/assets/demo && cp assets/demo/*.mp4 assets/demo/*-poster.png site/assets/demo/
       - name: Upload public landing page
         if: ${{ steps.launch-auth.outputs.ready == 'true' }}
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
