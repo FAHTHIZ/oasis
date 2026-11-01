@@ -1,60 +1,73 @@
 # OASIS documentation
 
-This directory contains the canonical product, user, engineering, security, and release documentation behind the root [README](../README.md). Use this page as the navigation hub; the [repository maintenance guide](REPOSITORY_MAINTENANCE.md) defines file ownership and layout rules.
+This is the canonical navigation hub for OASIS. The root [README](../README.md) introduces the product. This index directs readers to the correct product, operations, engineering, trust, and release references.
+
+## Current product status
+
+OASIS is in **1.0 Release Candidate / Production Qualification**. The 1.0 feature scope is established; the current work is reliability, agent quality, security-boundary validation, accessibility, platform qualification, and operational refinement.
+
+- Development package on `main`: `1.0.0-rc.1`
+- Latest published stable release: `v0.4.0`
+- RC1 has not been tagged or published. The stable installer continues to resolve `v0.4.0` until stable 1.0.0 is accepted.
+
+The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for release gates and known limits.
 
 ## Start here
 
 | I need to… | Read this |
 |---|---|
-| Understand what OASIS is and its current Beta scope | [Root README](../README.md) |
-| Check what is implemented, what remains limited, and what blocks release | [Project plan and release status](PROJECT_PLAN.md) |
-| Install the CLI or understand desktop availability | [Installation guide](INSTALL.md) |
-| Try OASIS on Android | [Android / Termux guide](TERMUX.md) |
-| Find the right section of the full user manual | [User-guide map](USER_GUIDE_MAP.md) |
-| Learn commands, configuration, tools, sessions, and workflows | [Full user guide](USER_GUIDE.md) |
+| Understand product scope and maturity | [Root README](../README.md) |
+| Check release blockers and supported platforms | [Project and qualification plan](PROJECT_PLAN.md) |
+| Install stable downloads or build the RC from source | [Installation guide](INSTALL.md) |
+| Use OASIS on Android / Termux | [Termux guide](TERMUX.md) |
+| Find a topic in the full manual | [User-guide map](USER_GUIDE_MAP.md) |
+| Learn every command, setting, tool, and integration | [Full user guide](USER_GUIDE.md) |
 
 ## Product and engineering
 
 | Document | Purpose |
 |---|---|
-| [Architecture](ARCHITECTURE.md) | System map, shared runtime, provider adapters, execution/policy boundaries, agent coordination, browser/desktop/editor surfaces, data ownership, and integration trust boundaries. |
-| [Workflows and skills](WORKFLOWS_AND_SKILLS.md) | Workflow interaction model, reusable skills, and plugin behavior. |
-| [Keyboard shortcuts](KEYS.md) | Terminal shortcuts, keybinding behavior, and mobile notes. |
-| [Brand guide](BRAND.md) | Official OASIS naming, visual identity, colors, and logo usage. |
-| [Repository maintenance](REPOSITORY_MAINTENANCE.md) | Canonical file ownership, intentional copies, cleanup history, and maintenance rules. |
-| [Runtime source map](../src/README.md) | Entry points, domain-oriented module catalog, known large modules, and safe extraction rules. |
-| [Test suite map](../test/README.md) | Test domains, focused commands, runner conventions, and fixture boundaries. |
+| [Architecture](ARCHITECTURE.md) | Shared runtime, entry points, execution policy, data ownership, integrations, and trust boundaries. |
+| [Runtime source map](../src/README.md) | Runtime entry points, module domains, large orchestration modules, and safe extraction rules. |
+| [Test suite map](../test/README.md) | Test domains, exact runner commands, fixtures, and discovery conventions. |
+| [Repository maintenance](REPOSITORY_MAINTENANCE.md) | Canonical file ownership, intentional copies, main-only maintainer workflow, and modularization discipline. |
+| [Workflows and skills](WORKFLOWS_AND_SKILLS.md) | Reusable workflows, command surface, skills, and plugin behavior. |
+| [Keyboard shortcuts](KEYS.md) | Terminal and editor shortcuts. |
+| [Brand guide](BRAND.md) | OASIS name, portal mark, color tokens, and interface identity. |
 
 ## Trust, privacy, and evaluation
 
 | Document | Purpose |
 |---|---|
-| [Security policy](../SECURITY.md) | Supported versions and private vulnerability reporting guidance. |
-| [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) | Dated source-review findings, mitigations, remaining risks, and evidence boundaries. |
-| [Privacy notes](PRIVACY.md) | What may be sent to providers, where local data is stored, and integration data flows. |
-| [Benchmarks](BENCHMARKS.md) | Regression fixtures, fair-comparison rules, future evaluation tracks, and limits on claims. |
+| [Security policy](../SECURITY.md) | Vulnerability reporting and maintained-version policy. |
+| [Security and reliability audit](SECURITY_RELIABILITY_AUDIT.md) | Dated source-review findings and evidence boundaries; not a current certification. |
+| [Privacy notes](PRIVACY.md) | Provider data flow, local storage, credentials, and integrations. |
+| [Benchmarks](BENCHMARKS.md) | Evaluation methodology, frozen fixtures, and limits on claims. |
 
-## Integrations and release material
+## Integrations and release history
 
 | Document | Purpose |
 |---|---|
-| [GitHub Action guide](github-action.md) | Mention-triggered repository automation, setup, inputs, and safety boundaries. |
-| [GitHub Action workflow example](examples/oasis-github.yml) | Copyable example workflow for a repository. |
-| [Changelog](../CHANGELOG.md) | User-facing changes, with a distinct Unreleased section and published version history. |
-| [OASIS 0.4.0 Beta notes](releases/v0.4.0.md) | Notes for the published `v0.4.0` GitHub release, including assets and release boundaries. |
-| [Contributing guide](../CONTRIBUTING.md) | Development setup, test expectations, dependency policy, and contribution workflow. |
-| [License](../LICENSE) | Apache License 2.0 terms. |
+| [GitHub Action guide](github-action.md) | Repository automation, configuration, and safety boundaries. |
+| [GitHub Action example](examples/oasis-github.yml) | Copyable workflow example. |
+| [Changelog](../CHANGELOG.md) | Current 1.0.0-rc.1 candidate changes and historical release history. |
+| [1.0.0-rc.1 candidate notes](releases/v1.0.0-rc.1.md) | Candidate scope, unpublished status, and qualification gates. |
+| [Published v0.4.0 notes](releases/v0.4.0.md) | Historical Beta release notes and its downloadable assets. |
+| [Contributing guide](../CONTRIBUTING.md) | Development setup, test expectations, and change policy. |
+| [License](../LICENSE) | Apache License 2.0. |
 
-## Supporting research and proposals
+## Supporting research
 
-The [research index](research/README.md) groups time-sensitive comparisons, prior-art reviews, and design proposals. These documents are supporting material—not product specifications, release promises, or proof that a proposed feature has shipped. For current behavior, defer to the root README, project plan, architecture, and user guide.
+The [research index](research/README.md) groups prior-art reviews, comparisons, and design proposals. Research documents are non-normative: a proposal is not a shipped feature, a support promise, or a release commitment.
 
-## Documentation rules
+## Documentation ownership
 
-- The root README is the concise public product overview.
-- [Project plan](PROJECT_PLAN.md) is the canonical source for current maturity, known limits, priorities, and release gates.
-- [Architecture](ARCHITECTURE.md) describes system boundaries and how runtime components fit together.
-- [User guide](USER_GUIDE.md) remains the complete behavior and command reference; [its map](USER_GUIDE_MAP.md) provides task-oriented navigation.
-- [Repository maintenance](REPOSITORY_MAINTENANCE.md) owns repository layout, file ownership, and cleanup rules.
-- Release notes describe a specific immutable release. They must never be used as a substitute for current `main` status.
-- Research files are non-normative. A proposal in `docs/research/` is not a shipped feature or a release commitment.
+- Root README: concise product overview and first-entry navigation.
+- Project plan: canonical scope, lifecycle, support matrix, known boundaries, and release gates.
+- Architecture: system boundaries and component relationships.
+- User guide: complete operational and command reference.
+- Security and privacy: trust boundaries and data handling.
+- Release notes: immutable, version-specific release content only.
+- Research: supporting analysis and proposals, never current product specifications.
+
+When claims conflict, prefer executable code and tests for actual behavior, then use the project plan to understand current support and qualification status. Never use historical v0.4.0 notes as the current product specification.
