@@ -30,7 +30,14 @@ test('inline file previews are authenticated and cannot read outside or secret p
   const file = await response.json();
   assert.equal(file.path, 'src/preview.mjs');
   assert.equal(file.content, 'export const answer = 42;\n');
-  assert.equal(file.lineCount, 2);
+  assert.equal(file.lineCount, 1, 'a final newline terminates the last line; it does not create a second line');
+
+  await writeFile(path.join(root, 'src', 'single-line.txt'), 'one line without a final newline');
+  const noFinalNewline = await fetch(base + '/api/workspace/file?path=' + encodeURIComponent('src/single-line.txt'), { headers });
+  assert.equal(noFinalNewline.status, 200);
+  const noFinalNewlineBody = await noFinalNewline.json();
+  assert.equal(noFinalNewlineBody.content, 'one line without a final newline');
+  assert.equal(noFinalNewlineBody.lineCount, 1);
 
   const secret = await fetch(base + '/api/workspace/file?path=' + encodeURIComponent('.env'), { headers });
   assert.equal(secret.status, 403);
