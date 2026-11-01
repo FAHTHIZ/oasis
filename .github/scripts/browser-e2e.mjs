@@ -658,6 +658,19 @@ try {
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
 
+  // "!command" in the chat runs through the approval-gated terminal job, shows its
+  // output in the conversation, and is queued as context for the next message.
+  await page.locator('#agentPrompt').fill('!node -e "console.log(\'shell-pass-ok\')"');
+  await page.locator('#agentSendBtn').click();
+  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  await page.locator('#agentApproveBtn').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.shell')]
+    .some((element) => element.textContent.split('\n').includes('shell-pass-ok')), null, { timeout: timeoutMs });
+  assert.equal(completionCalls, 11, 'A ! shell command must not call the model.');
+  const pendingShell = await page.evaluate(() => window.oasisTakePendingShell().map((entry) => entry.code + ':' + entry.output.trim()));
+  assert.deepEqual(pendingShell, ['0:shell-pass-ok'], 'The shell output should be queued for the next message.');
+  await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
+
   // Top-bar buttons open/close the three dedicated utility views.
   await page.locator('#topbarTasksBtn').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-terminal-visible'), 'true',

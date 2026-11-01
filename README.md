@@ -190,7 +190,7 @@ See [local models and small context windows](docs/USER_GUIDE.md#local-models-and
 | **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, memory, compaction with must-keep context, rule refresh. |
 | **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows. |
 | **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, GitHub Action, VS Code / Cursor / Windsurf bridge. |
-| **Surfaces** | Terminal CLI, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, steering, live diffs), Electron desktop app, SDK. |
+| **Surfaces** | Terminal CLI, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. |
 | **Accessibility** | Screen-reader mode (`--ax-screen-reader`), reduced motion, `NO_COLOR`, colorblind-friendly and light themes, `--calm` output. |
 
 Capabilities are shared across surfaces but not identical on every OS, provider or editor; check the [support matrix](docs/PROJECT_PLAN.md#support-and-qualification-matrix) before relying on a platform-specific path.
