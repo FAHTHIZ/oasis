@@ -91,6 +91,59 @@ export function renderMarkdown(text, options = {}) {
   return String(text || '').split('\n').map((line) => renderMarkdownLine(line, state, options)).filter((line) => line !== null).join('\n');
 }
 
+// Word-wrap a rendered (possibly colored) line so words never split at the
+// terminal edge. `offset` is the width already used on the first row (the
+// reply bullet); continuation rows are indented to line up with the text.
+const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/y;
+export function wrapRendered(text, columns, { offset = 0, indent = null } = {}) {
+  const width = Math.max(20, Number(columns) || 80) - 1;
+  const plain = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  if (offset + stringWidth(plain) <= width) return text;
+  const lead = /^(\s*(?:[•*+-]\s+|\d+[.)]\s+|>\s*)?)/.exec(plain)[1];
+  const pad = ' '.repeat(indent === null ? Math.min(Math.floor(width / 2), offset + stringWidth(lead)) : indent);
+  const tokens = [];
+  for (let i = 0; i < text.length;) {
+    ANSI_RE.lastIndex = i;
+    const esc = ANSI_RE.exec(text);
+    if (esc) { tokens.push({ esc: esc[0] }); i += esc[0].length; continue; }
+    const ch = text[i];
+    const space = ch === ' ';
+    const last = tokens[tokens.length - 1];
+    if (last && !last.esc && last.space === space) last.text += ch;
+    else tokens.push({ text: ch, space });
+    i += 1;
+  }
+  let out = '';
+  let col = offset;
+  let pendingSpace = '';
+  for (const token of tokens) {
+    if (token.esc) { out += token.esc; continue; }
+    if (token.space) { pendingSpace += token.text; continue; }
+    let word = token.text;
+    const wordWidth = stringWidth(word);
+    if (col > stringWidth(pad) && col + stringWidth(pendingSpace) + wordWidth > width) {
+      out += '\n' + pad;
+      col = stringWidth(pad);
+      pendingSpace = '';
+    }
+    out += pendingSpace;
+    col += stringWidth(pendingSpace);
+    pendingSpace = '';
+    // A single word longer than the row (a URL, a path) is split as a last resort.
+    while (col + stringWidth(word) > width && word.length > 1) {
+      let take = 0, used = 0;
+      for (const c of word) { const w = stringWidth(c); if (col + used + w > width) break; used += w; take += c.length; }
+      if (!take) { out += '\n' + pad; col = stringWidth(pad); continue; }
+      out += word.slice(0, take) + '\n' + pad;
+      word = word.slice(take);
+      col = stringWidth(pad);
+    }
+    out += word;
+    col += stringWidth(word);
+  }
+  return out;
+}
+
 // Streaming renderer. push() receives new text; end() flushes.
 export class MarkdownStream {
   constructor({ write, color = true, columns = () => 80, prefix = '' }) {
@@ -130,8 +183,9 @@ export class MarkdownStream {
       const line = this.partial.slice(0, newline);
       this.partial = this.partial.slice(newline + 1);
       this.erasePartial();
+      const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(line);
       const rendered = renderMarkdownLine(line, this.state, { color: this.color, columns: this.columns() });
-      if (rendered !== null) this.write(rendered + '\n');
+      if (rendered !== null) this.write((prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered) + '\n');
       else if (this.lineStartWidth) this.write('\n');
       this.lineStartWidth = 0;
     }
@@ -145,8 +199,9 @@ export class MarkdownStream {
     if (!this.started) return false;
     if (this.partial) {
       this.erasePartial();
+      const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(this.partial);
       const rendered = renderMarkdownLine(this.partial, this.state, { color: this.color, columns: this.columns() });
-      if (rendered !== null) this.write(rendered);
+      if (rendered !== null) this.write(prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered);
     }
     this.write('\n');
     this.partial = '';
@@ -195,8 +250,11 @@ export function renderDiff(before, after, { color = true, context = 2, maxLines 
     skipped = false;
     const text = op.op + ' ' + op.line;
     if (!color) lines.push('    ' + text);
-    else if (op.op === '+') lines.push('    ' + C.bgGreen + C.green + text + C.fg + C.bg);
-    else if (op.op === '-') lines.push('    ' + C.bgRed + C.red + text + C.fg + C.bg);
+    // On a tinted background the code stays in the normal text color so it is
+    // readable; only the +/- sign carries the color. Themes without diff
+    // backgrounds (ANSI, colorblind) color the whole line instead.
+    else if (op.op === '+') lines.push('    ' + (C.bgGreen ? C.bgGreen + C.green + C.bold + '+' + C.noBold + C.fg + ' ' + op.line : C.green + text) + C.fg + C.bg);
+    else if (op.op === '-') lines.push('    ' + (C.bgRed ? C.bgRed + C.red + C.bold + '-' + C.noBold + C.fg + ' ' + op.line : C.red + text) + C.fg + C.bg);
     else lines.push('    ' + C.dim + text + C.noBold);
   });
   const stats = diffStats(ops);

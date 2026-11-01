@@ -129,7 +129,7 @@ export function createActivityIndicator({ stream = process.stdout, env = process
       line = color ? '\x1b[36m' + label + '\x1b[0m\x1b[2m' + rest + ' ' + dots + '\x1b[0m' : clip(plain) + ' ' + dots;
     }
     frame += 1;
-    try { stream.write('\r\x1b[2K' + line); visible = true; lastWidth = plain.length; } catch {}
+    try { stream.write('\r\x1b[2K' + line + '\x1b[?25l'); visible = true; lastWidth = plain.length; } catch {}
   }
 
   return {
@@ -150,7 +150,7 @@ export function createActivityIndicator({ stream = process.stdout, env = process
     stop() {
       if (handle) { timers.clearInterval(handle); handle = null; }
       if (visible) {
-        try { stream.write('\r\x1b[2K'); } catch {}
+        try { stream.write('\r\x1b[2K\x1b[?25h'); } catch {}
         visible = false;
       }
       return lastWidth;

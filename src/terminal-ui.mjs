@@ -42,6 +42,16 @@ function gradientAt(t) {
 // 16-color themes have no RGB accent: fall back to the theme's ANSI accent.
 const rgb = (tone) => (tone ? '\x1b[38;2;' + tone[0] + ';' + tone[1] + ';' + tone[2] + 'm' : themeFg('claude') || '\x1b[36m');
 
+// Show paths under the home directory as ~/… (shorter, and it doesn't put a
+// username on screen when you share a recording).
+export function tildePath(target, env = process.env) {
+  const home = String(env.HOME || env.USERPROFILE || '');
+  const value = String(target || '');
+  if (!home || home === '/' || !value) return value;
+  if (value === home) return '~';
+  return value.startsWith(home + path.sep) ? '~' + value.slice(home.length) : value;
+}
+
 export function animationEnabled(stream = process.stdout, env = process.env) {
   if (!colorEnabled(stream, env)) return false;
   if (env.OASIS_NO_ANIMATION === '1' || env.CI || env.TERM === 'dumb') return false;
@@ -123,7 +133,7 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   const tagline = 'CODE. AUTOMATE. FLOURISH.';
   output.write('  ' + accent('✦') + ' ' + (color ? ANSI.bold : '') + 'OASIS' + (version ? ' v' + version : '') + (color ? ANSI.noBold : '') + '  ' + dim(tagline) + '\n');
   const rows = [
-    ['workspace', root || process.cwd()],
+    ['workspace', tildePath(root || process.cwd(), env)],
     ...(model ? [['model', model + (provider ? dim('  via ' + provider) : '')]] : []),
     ['mode', mode]
   ];
@@ -332,8 +342,8 @@ export function shellContextBlock(entries) {
 const TOOL_LABELS = {
   read_file: 'Read', write_file: 'Write', edit_file: 'Update', multi_edit: 'Update', delete_file: 'Delete',
   list_files: 'List', glob_files: 'Search', grep: 'Search', search_files: 'Search', run_command: 'Bash', run_shell: 'Bash',
-  fetch_url: 'Fetch', web_search: 'Web Search', task: 'Agent', todo_write: 'Update Todos', git_status: 'Git', git_diff: 'Git',
-  git_log: 'Git', git_commit: 'Git Commit', git_push: 'Git Push', git_branch: 'Git', create_pull_request: 'Pull Request',
+  fetch_url: 'Fetch', web_search: 'Web Search', task: 'Agent', todo_write: 'Update Todos', git_status: 'Git Status', git_diff: 'Review Diff',
+  git_log: 'Git Log', git_commit: 'Git Commit', git_push: 'Git Push', git_branch: 'Git', create_pull_request: 'Pull Request',
   diagnostics: 'Diagnostics', lsp: 'LSP', notebook_edit: 'Notebook', load_skill: 'Skill', install_package: 'Install', monitor: 'Monitor'
 };
 
@@ -349,12 +359,79 @@ export function describeTool({ name, args = {}, subagent }, { color = true } = {
   else if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
   else if (name === 'run_shell' || name === 'auto_test') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
+  else if (['search_files', 'grep', 'glob_files'].includes(name) && (args.query || args.pattern)) detail = String(args.query || args.pattern) + (args.path && args.path !== '.' ? ' in ' + args.path : '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
   if (detail.length > 140) detail = detail.slice(0, 137) + '...';
   const indent = subagent ? '  ' : '';
   if (!color) return indent + (subagent ? '[' + subagent + '] ' : '[tool] ') + name + (detail ? ' ' + detail : '');
   const dot = (themeFg('claude') || '\x1b[36m') + '⏺\x1b[39m ';
   return indent + dot + (subagent ? ANSI.dim + subagent + ' › ' + ANSI.noBold : '') + ANSI.bold + toolLabel(name) + ANSI.noBold + (detail ? '(' + detail + ')' : '');
+}
+
+// Test-runner summaries recognised in command output: node --test / TAP,
+// Jest/Vitest, pytest, Go, Cargo, Mocha. Returns e.g. "20 passed, 0 failed".
+export function summarizeTestOutput(text) {
+  const out = String(text || '');
+  const tap = /^# pass (\d+)\s*$/m.exec(out);
+  if (tap) {
+    const fail = /^# fail (\d+)\s*$/m.exec(out);
+    return tap[1] + ' passed, ' + (fail ? fail[1] : '0') + ' failed';
+  }
+  const jest = /^Tests:\s+(.+)$/m.exec(out);
+  if (jest) return jest[1].trim();
+  const pytest = /=+\s*((?:\d+ (?:passed|failed|skipped|errors?|xfailed|xpassed)(?:, )?)+)(?: in [\d.]+s)?\s*=+/.exec(out);
+  if (pytest) return pytest[1].trim();
+  const cargo = /test result: (\w+)\. (\d+) passed; (\d+) failed/.exec(out);
+  if (cargo) return cargo[2] + ' passed, ' + cargo[3] + ' failed';
+  const mocha = /^\s*(\d+) passing\b.*$(?:\n\s*(\d+) failing)?/m.exec(out);
+  if (mocha) return mocha[1] + ' passed, ' + (mocha[2] || '0') + ' failed';
+  if (/^ok\s+\S+\s+[\d.]+s$/m.test(out) && !/^(FAIL|---\s*FAIL)/m.test(out)) return 'go test ok';
+  return '';
+}
+
+function lastLine(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines.length ? lines[lines.length - 1] : '';
+}
+
+// One dim line under a tool call saying what happened, like "⎿ exit 0 · 20
+// passed, 0 failed". Failures and policy blocks are red. '' means nothing
+// worth showing (edits have their own diff summary).
+export function describeToolResult(name, result, { color = true } = {}) {
+  if (result === undefined || result === null || typeof result !== 'object') return '';
+  const dim = color ? ANSI.dim : '';
+  const red = color ? '\x1b[31m' : '';
+  const green = color ? '\x1b[32m' : '';
+  const off = color ? '\x1b[0m' : '';
+  const clip = (text, max = 160) => { const t = String(text).replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 1) + '…' : t; };
+  if (result.error) return '  ⎿ ' + red + '✗ ' + clip(result.error, 300) + off;
+  if (['edit_file', 'multi_edit', 'write_file'].includes(name)) return '';
+  if (['run_command', 'run_shell', 'auto_test'].includes(name) && result.exitCode !== undefined) {
+    const combined = String(result.stdout || '') + '\n' + String(result.stderr || '');
+    const tests = summarizeTestOutput(combined);
+    const ok = result.exitCode === 0;
+    const detail = tests || (result.timedOut ? 'timed out' : clip(lastLine(ok ? result.stdout || result.stderr : result.stderr || result.stdout), 110));
+    const mark = ok ? green + '✓' + off + dim : red + '✗';
+    return '  ⎿ ' + dim + mark + ' exit ' + result.exitCode + (detail ? ' · ' + detail : '') + off;
+  }
+  if (name === 'read_file' && typeof result.content === 'string') {
+    const lines = result.content.replace(/\n$/, '').split('\n').length;
+    return '  ⎿ ' + dim + 'Read ' + lines + ' line' + (lines === 1 ? '' : 's') + (result.truncated ? ' (truncated)' : '') + off;
+  }
+  if ((name === 'search_files' || name === 'grep') && Array.isArray(result.matches)) {
+    const files = new Set(result.matches.map((m) => m.path)).size;
+    return '  ⎿ ' + dim + result.matches.length + ' match' + (result.matches.length === 1 ? '' : 'es') + ' in ' + files + ' file' + (files === 1 ? '' : 's') + (result.truncated ? ' (more not shown)' : '') + off;
+  }
+  if ((name === 'list_files' || name === 'glob_files') && Array.isArray(result.files)) {
+    return '  ⎿ ' + dim + result.files.length + ' file' + (result.files.length === 1 ? '' : 's') + (result.truncated ? ' (more not shown)' : '') + off;
+  }
+  if (name === 'git_diff' && typeof result.stdout === 'string') {
+    const files = (result.stdout.match(/^diff --git /gm) || []).length;
+    const added = (result.stdout.match(/^\+(?!\+\+)/gm) || []).length;
+    const removed = (result.stdout.match(/^-(?!--)/gm) || []).length;
+    return '  ⎿ ' + dim + (files ? files + ' file' + (files === 1 ? '' : 's') + ' changed, ' + green + '+' + added + off + dim + ' ' + red + '-' + removed + off : 'No changes') + off;
+  }
+  return '';
 }
 
 // Returns a colored diff summary for a successful edit, or '' when not applicable.

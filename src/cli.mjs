@@ -39,10 +39,10 @@ import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
-import { MarkdownStream, colorEnabled } from './markdown.mjs';
+import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
 import { createActivityIndicator } from './activity-indicator.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
+import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
@@ -1772,7 +1772,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
           const shown = describeEdit({ name, args, result }, { color: true });
           if (shown) stdout.write(shown + '\n');
         }
-        if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
+        const summary = richOutput() && !verboseEnabled(session) ? describeToolResult(name, result, { color: true }) : '';
+        if (summary) stdout.write(summary + '\n');
+        else if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
         if (name === 'auto_test' && result && result.passed) stdout.write('[auto-test] passed in ' + (Math.round(result.durationMs / 100) / 10) + 's\n');
@@ -1812,13 +1814,19 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       const lsp = Array.isArray(evidence.lsp) ? evidence.lsp : [];
       const lspIssues = lsp.filter((item) => item.status === 'issues' || item.status === 'errors' || (item.status === 'unavailable' && item.blocking !== false)).length;
       const lspSkipped = lsp.filter((item) => item.status === 'unavailable' && item.blocking === false).length;
-      const lspStatus = lsp.length
+      const lspStatus = lsp.length && lspSkipped === lsp.length
+        ? 'LSP skipped (no language server installed for ' + (lsp.length === 1 ? 'this file' : 'these ' + lsp.length + ' files') + ')'
+        : lsp.length
         ? 'LSP ' + lspIssues + ' issue(s) across ' + lsp.length + ' changed file(s)' + (lspSkipped ? ' (' + lspSkipped + ' skipped: no language server installed)' : '')
         : 'LSP not reported';
-      stdout.write('[verification] ' + (evidence.complete ? 'Complete' : 'Incomplete') +
+      const verificationLine = (evidence.complete ? 'Complete' : 'Incomplete') +
         ' · diff ' + (evidence.diffReviewed ? 'reviewed' : 'not reviewed') +
         ' · check ' + check + ' · ' + lspStatus +
-        (evidence.autoTest ? ' · auto-test ' + (evidence.autoTest.passed ? 'passed' : 'failed') + ' (' + evidence.autoTest.attempts + ' run' + (evidence.autoTest.attempts === 1 ? '' : 's') + ')' : '') + '\n');
+        (evidence.autoTest ? ' · auto-test ' + (evidence.autoTest.passed ? 'passed' : 'failed') + ' (' + evidence.autoTest.attempts + ' run' + (evidence.autoTest.attempts === 1 ? '' : 's') + ')' : '');
+      if (richOutput()) {
+        const mark = evidence.complete ? '\x1b[32m✓ Verified\x1b[39m' : '\x1b[33m! Not fully verified\x1b[39m';
+        stdout.write('\n' + wrapRendered('  ' + mark + '\x1b[2m' + verificationLine.replace(/^(Complete|Incomplete)/, '') + '\x1b[22m', stdout.columns || 80, { indent: 4 }) + '\n');
+      } else stdout.write('[verification] ' + verificationLine + '\n');
       if (!evidence.complete && Array.isArray(evidence.issues) && evidence.issues.length) {
         stdout.write('[verification] Blockers: ' + evidence.issues.join('; ') + '. Do not treat the task as fully verified yet.\n');
       }

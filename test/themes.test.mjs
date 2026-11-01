@@ -51,7 +51,7 @@ test('custom and plugin themes override tokens on top of a base preset', async (
   try {
     applyTheme(dracula);
     assert.equal(ANSI.red, '\x1b[38;2;255;85;85m');
-    assert.match(renderDiff('a\n', 'b\n').text, /\x1b\[38;2;80;250;123m\+ b/);
+    assert.match(renderDiff('a\n', 'b\n').text, /\x1b\[38;2;80;250;123m\x1b\[1m\+\x1b\[22m\x1b\[39m b/);
     assert.match(describeTool({ name: 'read_file', args: { path: 'x' } }), /^\x1b\[38;2;189;147;249m⏺/);
     applyTheme(resolveTheme('dark-ansi', { env }));
     assert.ok(!renderDiff('a\n', 'b\n').text.includes('\x1b[48;'), 'ANSI themes paint no 256/truecolor backgrounds');
