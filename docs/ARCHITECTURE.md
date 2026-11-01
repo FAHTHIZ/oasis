@@ -1,7 +1,7 @@
 # OASIS architecture
 
-**Last audited:** October 31, 2026  
-**Implementation reference:** the current `main` source tree. This document explains the architecture that exists in code; it is not a promise that every platform or integration is release-certified.
+**Document updated:** November 1, 2026  
+**Implementation reference:** the current `main` source tree. This is an architecture map for component ownership and runtime boundaries, not a fresh security audit or platform certification. A source-level review and the release qualification evidence are tracked separately in [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md) and [the project plan](PROJECT_PLAN.md).
 
 OASIS is a local-first coding-agent runtime with several ways to interact with it. The CLI, connected browser workspace, Electron desktop app, VS Code-family extension, SDK, and GitHub Action are different entry points around shared agent and tool-execution code. OASIS is not itself a model or a hosted inference service. You choose the model/provider, and provider traffic follows that provider's data-handling terms.
 

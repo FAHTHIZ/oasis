@@ -24,12 +24,23 @@ const required = [
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
   'id="features"', 'id="providers"', 'id="safety"', 'id="docs"',
   'https://github.com/FAHTHIZ/oasis/releases', 'https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md', 'no terminal required',
-  'Get OASIS', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0',
+  'Download stable v0.4.0', 'Try 1.0 RC1 from source', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0', 'docs/INSTALL.md#run-the-current-release-candidate-from-source',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
   'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
-  'property="og:image"', 'summary_large_image', '<span class="stage-badge">RC1</span>', 'Release Candidate · Open source · Apache-2.0', '1.0.0', 'docs/PROJECT_PLAN.md'
+  'property="og:image"', 'summary_large_image', 'Release Candidate · Open source · Apache-2.0', '1.0.0', 'docs/PROJECT_PLAN.md'
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
+const heroActions = html.match(/<div class="hero-actions">([\\s\\S]*?)<\\/div>/)?.[1] || '';
+assert.ok(
+  heroActions.includes('href="https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0"') &&
+  heroActions.includes('Download stable v0.4.0'),
+  'The primary homepage action must lead to the actual published stable desktop/CLI release.'
+);
+assert.ok(
+  heroActions.includes('href="https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md#run-the-current-release-candidate-from-source"') &&
+  heroActions.includes('Try 1.0 RC1 from source'),
+  'The RC action must lead to the documented source-install path, not the stable releases page.'
+);
 assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the Pages URL.');
 assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta description must match the approved concise description.');
 assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.svg"'), 'Homepage must point Open Graph at the social preview image.');

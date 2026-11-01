@@ -50,15 +50,15 @@ Before removing any same-content file, check its deployment root, task snapshot,
 
 ## Branch state and cleanup receipt
 
-At the inspected runtime snapshot `7927275a0edefd4e6c791a5774fd82eb13e7ec62`, and again at the documentation snapshot `4e48392f38748f4ade4c21ef023ae9a063245670`, the GitHub branches endpoint returned exactly one branch: `main`. This confirms that the former development refs listed in older audit notes are no longer present. Do not use those historical names as active branches or assume they remain recoverable.
+At the inspected main snapshot `3e54447abc8bd6c90a8e6415cd340edc9aeb7759` (November 1, 2026), the GitHub branches endpoint returned exactly one branch: `main`. The guarded cleanup workflow passed on that same snapshot: [run 41272068560](https://github.com/FAHTHIZ/oasis/actions/runs/41272068560). The current direct-maintainer workflow remains main-only; no additional branch was created for this qualification work.
 
-The guarded cleanup workflow completed successfully for the runtime audit snapshot: [run 41267442561](https://github.com/FAHTHIZ/oasis/actions/runs/41267442561). The documentation snapshot also passed cleanup: [run 41267932303](https://github.com/FAHTHIZ/oasis/actions/runs/41267932303). Earlier cleanup receipts are retained as history:
+Older cleanup receipts below are history, not evidence of current branch state:
 
 - [run 41174518215](https://github.com/FAHTHIZ/oasis/actions/runs/41174518215) retired 9 exact audited/superseded refs.
 - [run 41174604382](https://github.com/FAHTHIZ/oasis/actions/runs/41174604382) found no further safe deletions and preserved 11 divergent refs at that time.
-- [run 41175743360](https://github.com/FAHTHIZ/oasis/actions/runs/41175743360) also preserved those 11 refs at its older snapshot. They have since been removed; the current branch listing is authoritative.
+- [run 41175743360](https://github.com/FAHTHIZ/oasis/actions/runs/41175743360) also preserved those refs at its older snapshot. They have since been removed; the current branch listing above is authoritative.
 
-The current working policy is main-only for direct maintenance unless the repository owner deliberately changes that policy. The cleanup workflow is not permission to remove unreviewed work: it must prove exact-head safety and fail closed.
+The cleanup workflow is not permission to remove unreviewed work: it must prove exact-head safety and fail closed.
 
 ## Retirement rules
 
