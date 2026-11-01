@@ -1,0 +1,30 @@
+diff --git a/src/format.mjs b/src/format.mjs
+index 5f4ac52..87286b2 100644
+--- a/src/format.mjs
++++ b/src/format.mjs
+@@ -1,9 +1,11 @@
+ import { daysUntil, isOverdue } from './dates.mjs';
+ 
+ // Truncates to at most `max` user-visible characters, adding an ellipsis.
++// Works on code points so emoji and other astral characters are never split.
+ export function truncate(text, max) {
+-  if (text.length <= max) return text;
+-  return text.slice(0, Math.max(0, max - 1)) + '…';
++  const chars = Array.from(text);
++  if (chars.length <= max) return text;
++  return chars.slice(0, Math.max(0, max - 1)).join('') + '…';
+ }
+ 
+ export function relativeDue(task, now = new Date()) {
+diff --git a/test/format.test.mjs b/test/format.test.mjs
+index eedbba0..62faa8e 100644
+--- a/test/format.test.mjs
++++ b/test/format.test.mjs
+@@ -18,3 +18,7 @@ test('describes due dates relative to now', () => {
+ test('formats a task line', () => {
+   assert.equal(formatTask({ id: 7, title: 'Ship', priority: 'high', status: 'open', due: '2026-11-02', tags: ['rel'] }, { now: NOW }), '  7 [ ] ! Ship #rel (tomorrow)');
+ });
++
++test('truncation never splits an emoji', () => {
++  assert.equal(truncate('ab😀cdef', 4), 'ab😀…');
++});

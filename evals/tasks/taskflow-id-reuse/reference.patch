@@ -1,0 +1,29 @@
+diff --git a/src/ids.mjs b/src/ids.mjs
+index 0ce33f5..86117e8 100644
+--- a/src/ids.mjs
++++ b/src/ids.mjs
+@@ -1,4 +1,7 @@
+-// Task IDs are positive integers starting at 1.
++// Task IDs are positive integers. A new ID is one more than the largest ID
++// in use, so it never collides with an existing task.
+ export function nextId(tasks) {
+-  return tasks.length + 1;
++  let max = 0;
++  for (const task of tasks) if (task.id > max) max = task.id;
++  return max + 1;
+ }
+diff --git a/test/store.test.mjs b/test/store.test.mjs
+index 5428276..30280ab 100644
+--- a/test/store.test.mjs
++++ b/test/store.test.mjs
+@@ -34,3 +34,10 @@ test('returned tasks are copies', async (t) => {
+   store.all()[0].tags.push('mutated');
+   assert.deepEqual(store.get(1).tags, ['a']);
+ });
++
++test('IDs stay unique after a delete', async (t) => {
++  const store = await openStore(await tempFile(t), { now: () => NOW });
++  for (const title of ['a', 'b', 'c']) await store.add({ title });
++  await store.remove(1);
++  assert.equal((await store.add({ title: 'd' })).id, 4);
++});

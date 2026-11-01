@@ -1,0 +1,60 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..ed5d5ec 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -6,7 +6,7 @@ import { openStore } from './store.mjs';
+ import { filterTasks, sortTasks, paginate } from './query.mjs';
+ import { formatList } from './format.mjs';
+ 
+-const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file']);
++const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file', 'search']);
+ const BOOLEAN_FLAGS = new Set(['overdue', 'help']);
+ 
+ // Supports --flag value, --flag=value, and boolean --flag. "--" ends options.
+@@ -57,7 +57,7 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       return 0;
+     }
+     case 'list': {
+-      const filtered = filterTasks(store.all(), { status: flags.status || 'open', tag: flags.tags && flags.tags[0], priority: flags.priority, overdue: flags.overdue, now: clock });
++      const filtered = filterTasks(store.all(), { status: flags.status || 'open', tag: flags.tags && flags.tags[0], priority: flags.priority, overdue: flags.overdue, search: flags.search, now: clock });
+       const sorted = sortTasks(filtered, flags.sort || 'id');
+       const page = paginate(sorted, flags.page ? Number(flags.page) : 1, flags.size ? Number(flags.size) : 20);
+       print(formatList(page.items, { now: clock }));
+diff --git a/src/query.mjs b/src/query.mjs
+index a5ab571..3c6c1fb 100644
+--- a/src/query.mjs
++++ b/src/query.mjs
+@@ -1,13 +1,15 @@
+ import { isOverdue } from './dates.mjs';
+ import { PRIORITIES, normalizeTag } from './task.mjs';
+ 
+-export function filterTasks(tasks, { status, tag, priority, overdue, now = new Date() } = {}) {
++export function filterTasks(tasks, { status, tag, priority, overdue, search, now = new Date() } = {}) {
+   const wanted = tag ? normalizeTag(tag) : null;
++  const needle = search ? String(search).trim().toLowerCase() : '';
+   return tasks.filter((task) => {
+     if (status && status !== 'all' && task.status !== status) return false;
+     if (wanted && !task.tags.includes(wanted)) return false;
+     if (priority && task.priority !== priority) return false;
+     if (overdue && !isOverdue(task, now)) return false;
++    if (needle && !`${task.title}\n${task.notes || ''}`.toLowerCase().includes(needle)) return false;
+     return true;
+   });
+ }
+diff --git a/test/query.test.mjs b/test/query.test.mjs
+index 7c5c148..d8504d5 100644
+--- a/test/query.test.mjs
++++ b/test/query.test.mjs
+@@ -23,6 +23,12 @@ test('sorts by due date with undated tasks last, and by priority', () => {
+   assert.throws(() => sortTasks(tasks, 'color'), /Unknown sort key/);
+ });
+ 
++test('searches title and notes case-insensitively', () => {
++  const list = [{ id: 1, title: 'Buy MILK', notes: '', status: 'open', tags: [] }, { id: 2, title: 'x', notes: 'call about milk', status: 'open', tags: [] }, { id: 3, title: 'y', notes: '', status: 'open', tags: [] }];
++  assert.deepEqual(filterTasks(list, { search: 'milk' }).map((t) => t.id), [1, 2]);
++  assert.deepEqual(filterTasks(list, { search: '  ' }).map((t) => t.id), [1, 2, 3]);
++});
++
+ test('paginates from page 1', () => {
+   const items = Array.from({ length: 5 }, (_, i) => i);
+   assert.deepEqual(paginate(items, 1, 2), { items: [0, 1], page: 1, pages: 3, total: 5 });

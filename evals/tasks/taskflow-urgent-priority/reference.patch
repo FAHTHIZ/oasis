@@ -1,0 +1,40 @@
+diff --git a/src/format.mjs b/src/format.mjs
+index 87286b2..085a1e8 100644
+--- a/src/format.mjs
++++ b/src/format.mjs
+@@ -17,7 +17,7 @@ export function relativeDue(task, now = new Date()) {
+   return `in ${days} days`;
+ }
+ 
+-const MARK = { low: ' ', normal: '·', high: '!' };
++const MARK = { low: ' ', normal: '·', high: '!', urgent: '‼' };
+ 
+ export function formatTask(task, { now = new Date(), width = 40 } = {}) {
+   const box = task.status === 'done' ? '[x]' : '[ ]';
+diff --git a/src/task.mjs b/src/task.mjs
+index 443e2d1..eefb243 100644
+--- a/src/task.mjs
++++ b/src/task.mjs
+@@ -1,6 +1,6 @@
+ import { parseDue } from './dates.mjs';
+ 
+-export const PRIORITIES = ['low', 'normal', 'high'];
++export const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+ export const STATUSES = ['open', 'done'];
+ 
+ export function normalizeTag(tag) {
+diff --git a/test/format.test.mjs b/test/format.test.mjs
+index eedbba0..23c5083 100644
+--- a/test/format.test.mjs
++++ b/test/format.test.mjs
+@@ -15,6 +15,10 @@ test('describes due dates relative to now', () => {
+   assert.equal(relativeDue({ due: '2026-10-01', status: 'open' }, NOW), 'overdue');
+ });
+ 
++test('marks urgent tasks', () => {
++  assert.match(formatTask({ id: 1, title: 'Fire', priority: 'urgent', status: 'open', due: null, tags: [] }, { now: NOW }), /\[ \] ‼ Fire/);
++});
++
+ test('formats a task line', () => {
+   assert.equal(formatTask({ id: 7, title: 'Ship', priority: 'high', status: 'open', due: '2026-11-02', tags: ['rel'] }, { now: NOW }), '  7 [ ] ! Ship #rel (tomorrow)');
+ });

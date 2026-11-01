@@ -1,0 +1,1 @@
+Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.

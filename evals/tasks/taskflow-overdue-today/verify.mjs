@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+
+const workspace = process.argv[2];
+const testFiles = readdirSync(path.join(workspace, 'test')).filter((f) => f.endsWith('.test.mjs')).sort().map((f) => path.join('test', f));
+const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...testFiles], { cwd: workspace, encoding: 'utf8', timeout: 120000 });
+if (result.error || result.status !== 0) throw new Error('Project tests failed:\n' + String(result.stdout || '').slice(-4000) + String(result.stderr || '').slice(-2000));
+const passed = Number((/^# pass (\d+)/m.exec(result.stdout) || [])[1] || 0);
+assert.ok(passed >= 20, 'expected at least 20 passing project tests (existing tests kept, plus new ones), found ' + passed);
+const load = (rel) => import(pathToFileURL(path.join(workspace, rel)).href);
+const NOW = new Date(2026, 10, 1, 15, 30);
+const sink = () => { const out = { text: '', write(chunk) { out.text += chunk; } }; return out; };
+const { mkdtemp } = await import('node:fs/promises');
+const os = await import('node:os');
+const tempFile = async () => path.join(await mkdtemp(path.join(os.tmpdir(), 'taskflow-verify-')), 'tasks.json');
+const { isOverdue } = await load('src/dates.mjs');
+const { relativeDue } = await load('src/format.mjs');
+const { filterTasks } = await load('src/query.mjs');
+const t = { due: '2026-11-01', status: 'open', tags: [] };
+assert.equal(isOverdue(t, new Date(2026, 10, 1, 0, 1)), false);
+assert.equal(isOverdue(t, new Date(2026, 10, 1, 23, 59)), false);
+assert.equal(isOverdue(t, new Date(2026, 10, 2, 0, 1)), true);
+assert.equal(relativeDue(t, new Date(2026, 10, 1, 23, 59)), 'today');
+assert.deepEqual(filterTasks([{ id: 1, ...t }], { overdue: true, now: new Date(2026, 10, 1, 23, 59) }), []);
+assert.equal(isOverdue({ due: '2026-10-31', status: 'open' }, new Date(2026, 10, 1, 0, 1)), true);

@@ -1,0 +1,23 @@
+diff --git a/src/query.mjs b/src/query.mjs
+index 412a40b..a5ab571 100644
+--- a/src/query.mjs
++++ b/src/query.mjs
+@@ -31,5 +31,5 @@ export function paginate(items, page = 1, size = 20) {
+   if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');
+   if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');
+   const start = (page - 1) * size;
+-  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.floor(items.length / size)), total: items.length };
++  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };
+ }
+diff --git a/test/query.test.mjs b/test/query.test.mjs
+index 7c5c148..8c015da 100644
+--- a/test/query.test.mjs
++++ b/test/query.test.mjs
+@@ -29,3 +29,7 @@ test('paginates from page 1', () => {
+   assert.deepEqual(paginate(items, 3, 2).items, [4]);
+   assert.throws(() => paginate(items, 0, 2), /positive integer/);
+ });
++
++test('a partial last page is counted', () => {
++  assert.equal(paginate(Array.from({ length: 45 }, (_, i) => i), 1, 20).pages, 3);
++});

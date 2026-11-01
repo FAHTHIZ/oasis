@@ -1,0 +1,10 @@
+{
+  "name": "taskflow",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "A small task tracker: library plus command-line interface.",
+  "bin": { "taskflow": "src/cli.mjs" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=20" }
+}

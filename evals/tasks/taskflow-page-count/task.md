@@ -1,0 +1,1 @@
+Bug report for the taskflow project: with 45 open tasks, `taskflow list` says "Page 1 of 2", and the last 5 tasks are never counted as a page. Page counts must cover every task, and an empty list is still one page. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.

@@ -1,0 +1,41 @@
+diff --git a/src/dates.mjs b/src/dates.mjs
+index 54677d1..c2be47f 100644
+--- a/src/dates.mjs
++++ b/src/dates.mjs
+@@ -13,14 +13,18 @@ export function addDays(date, days) {
+   return next;
+ }
+ 
+-// Accepts YYYY-MM-DD, "today", "tomorrow" or "+Nd". Returns YYYY-MM-DD or
+-// throws for anything else.
++const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
++
++// Accepts YYYY-MM-DD, "today", "tomorrow", "+Nd" or a weekday name (its next
++// occurrence strictly after today). Returns YYYY-MM-DD or throws.
+ export function parseDue(input, now = new Date()) {
+   const text = String(input).trim().toLowerCase();
+   if (text === 'today') return toDay(now);
+   if (text === 'tomorrow') return toDay(addDays(now, 1));
+   const rel = /^\+(\d{1,3})d$/.exec(text);
+   if (rel) return toDay(addDays(now, Number(rel[1])));
++  const weekday = WEEKDAYS.findIndex((day) => text === day || text === day.slice(0, 3));
++  if (weekday !== -1) return toDay(addDays(now, ((weekday - now.getDay() + 6) % 7) + 1));
+   const abs = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+   if (abs) {
+     const [y, m, d] = abs.slice(1).map(Number);
+diff --git a/test/dates.test.mjs b/test/dates.test.mjs
+index 84be208..83b7855 100644
+--- a/test/dates.test.mjs
++++ b/test/dates.test.mjs
+@@ -10,6 +10,11 @@ test('parses absolute and relative due dates', () => {
+   assert.equal(parseDue('+30d', NOW), '2026-12-01');
+ });
+ 
++test('weekday names mean the next occurrence after today', () => {
++  assert.equal(parseDue('mon', NOW), '2026-11-02');
++  assert.equal(parseDue('Sunday', NOW), '2026-11-08');
++});
++
+ test('rejects impossible dates', () => {
+   for (const bad of ['2026-02-30', '2026-13-01', 'next week', '+d', '']) assert.throws(() => parseDue(bad, NOW), /Invalid due date/, bad);
+ });

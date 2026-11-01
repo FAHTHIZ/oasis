@@ -89,7 +89,7 @@ OASIS is a local-first runtime, not a security boundary around arbitrary code.
 - Browser-side project/task/note state is not fully synchronized with CLI state.
 - Restarting the runtime does not resurrect killed worker processes, in-memory team state, PTY sessions, or pending approvals. Persisted history is not a live resumed worker.
 - Desktop installers are unsigned; checksum manifests detect transfer corruption but are not publisher signatures.
-- The 33-task evaluation harness is a regression/smoke suite, not a representative repository-scale coding benchmark. No parity, speed, accuracy, or token-savings claims are justified by it.
+- The 50-task evaluation harness (17 repository-level tasks) is a regression suite, not a representative repository-scale coding benchmark. No parity, speed, accuracy, or token-savings claims are justified by it.
 
 These are explicit product boundaries. They should not be hidden by maturity wording or treated as completed merely because the corresponding functionality exists in some form.
 

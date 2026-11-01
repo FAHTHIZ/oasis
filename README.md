@@ -196,7 +196,7 @@ Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md), and the dated [secu
 
 OASIS 1.0 is the first stable release, published as [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0). Its gates (same-commit CI across all platforms, browser E2E with accessibility checks, installer and packaging checks, public-site validation, a refreshed security review, and matching version, tag, notes and checksums) are listed in the [project plan](docs/PROJECT_PLAN.md), with the evidence for each.
 
-What 1.0 does not claim: the installers are unsigned (a documented decision for 1.0; SHA-256 checksums are provided), clean-machine journeys are covered by CI runners rather than manual testing on physical machines, and the 33-task evaluator is a regression suite, not a broad benchmark. See [Benchmarks](docs/BENCHMARKS.md) for what has and has not been measured, including live runs with small local models.
+What 1.0 does not claim: the installers are unsigned (a documented decision for 1.0; SHA-256 checksums are provided), clean-machine journeys are covered by CI runners rather than manual testing on physical machines, and the 50-task evaluator (33 focused fixtures plus 17 repository-level bug-fix and feature tasks) is a regression suite on small projects, not a broad benchmark. See [Benchmarks](docs/BENCHMARKS.md) for what has and has not been measured, including live runs with small local models.
 
 ## Documentation
 

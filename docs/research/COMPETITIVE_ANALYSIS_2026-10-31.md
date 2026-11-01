@@ -7,6 +7,12 @@
 **Claude Code stable release:** [2.1.314](https://github.com/anthropics/claude-code/releases/tag/v2.1.314), published October 30, 2026; 2.1.315 was listed on the `next` tag and is not treated as stable here.  
 **Method:** inspect OASIS source, registered tools, tests, fixtures, product-readiness records and CI configuration; compare them with Claude Code's official release notes and documentation. Claude Code's private runtime remains unavailable for a line-by-line source audit. This is a source-and-documentation comparison, not a measured head-to-head benchmark or a claim of parity.
 
+## Update — November 1, 2026
+
+Since this report was written, OASIS added a [model-free harness benchmark](../BENCHMARKS.md#model-free-harness-benchmark-2026-11-01) that measures the runtime layer this report could only describe: tool-call recovery, edit application under drift, command safety with approvals off, placeholder and weakened-test guards, and secret scanning. On held-out cases it had not been tuned on, OASIS recovered 18 of 20 malformed tool calls (baseline without repair: 1), applied 11 of 12 drifted edits (baseline: 2) with no wrong writes, and stopped 22 of 31 destructive commands with approvals off (baseline: 0). Each miss then became a fix and a regression test, including a parsing shell-risk analyzer whose high-risk class always asks even in bypass mode, and recovery from a first request that overflows a small local window.
+
+This narrows the evidence gap for harness behavior. It does not change the verdict below on task success: no same-model head-to-head against Claude Code has been published, so parity or superiority on coding outcomes is still unmeasured.
+
 ## Executive verdict: OASIS on its own merits
 
 OASIS is an independent product with its own roadmap and engineering identity. This report uses Claude Code only as an external reference for the requested source-backed comparison; it is a diagnostic instrument, not OASIS's definition of success. OASIS is a substantial, implemented coding-agent product. Its source contains a multi-step model/tool loop, repository operations, command execution, permission evaluation, optional OS sandboxing, context compaction, persistent sessions, memory, MCP, hooks, skills, subagents, worktrees, workflows, diagnostics and language-server support. These are present in code, not just a roadmap.

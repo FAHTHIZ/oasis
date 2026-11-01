@@ -43,7 +43,7 @@ The repository-wide blob scan found only a small set of byte-identical groups. T
 
 - `assets/oasis-icon.svg`, `assets/oasis-mark.svg` and `assets/oasis-social-preview.svg` have matching copies under `site/assets/`. The static site is deployed as a self-contained directory, so its asset paths must exist at that root.
 - A few shared skill files match their copies under `evals/snapshots/oasis-main/skills/`. Snapshot copies are frozen baselines; source-skill improvements must not rewrite historical benchmark inputs.
-- The 33 `evals/tasks/*/repo/BASE_SNAPSHOT` pointer files intentionally share one tiny blob. Each pointer is task metadata referring to a reusable named snapshot, not duplicate source code.
+- The `evals/tasks/*/repo/BASE_SNAPSHOT` pointer files intentionally share one tiny blob. Each pointer is task metadata referring to a reusable named snapshot, not duplicate source code.
 - Root `index.html` and `site/index.html` are not duplicates: one is the app workspace, the other the public landing page.
 
 Before removing any same-content file, check its deployment root, task snapshot, importer, package manifest and tests. Do not consolidate copies merely because their bytes match.

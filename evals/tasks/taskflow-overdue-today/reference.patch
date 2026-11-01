@@ -1,0 +1,25 @@
+diff --git a/src/dates.mjs b/src/dates.mjs
+index f3707f7..54677d1 100644
+--- a/src/dates.mjs
++++ b/src/dates.mjs
+@@ -33,7 +33,7 @@ export function parseDue(input, now = new Date()) {
+ // A task is overdue only after its due day has ended.
+ export function isOverdue(task, now = new Date()) {
+   if (!task.due || task.status === 'done') return false;
+-  return new Date(task.due) < now;
++  return task.due < toDay(now);
+ }
+ 
+ export function daysUntil(due, now = new Date()) {
+diff --git a/test/dates.test.mjs b/test/dates.test.mjs
+index 84be208..b7fd5a8 100644
+--- a/test/dates.test.mjs
++++ b/test/dates.test.mjs
+@@ -25,3 +25,7 @@ test('counts days until a due date', () => {
+   assert.equal(daysUntil('2026-11-01', NOW), 0);
+   assert.equal(daysUntil('2026-11-08', NOW), 7);
+ });
++
++test('a task due today is not overdue late in the day', () => {
++  assert.equal(isOverdue({ due: '2026-11-01', status: 'open' }, new Date(2026, 10, 1, 23, 59)), false);
++});
