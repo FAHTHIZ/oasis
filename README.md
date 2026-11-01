@@ -67,6 +67,38 @@ The [published v0.4.0 release](https://github.com/FAHTHIZ/oasis/releases/tag/v0.
 
 After connecting a provider, start with a repository you understand and ask OASIS to explain the project before approving changes.
 
+## Why OASIS
+
+Most coding-agent frustration is not about raw model intelligence. It is about the harness: agents that loop, give up, claim success without running anything, mangle files, lose work, or ignore the rules you set. OASIS puts guardrails for each of those in the runtime, so they hold no matter which model you connect.
+
+| Common frustration with coding agents | What OASIS does |
+|---|---|
+| "It said it was done, but never ran the tests." | A post-edit verification gate. The agent must review its diff and run a relevant check before it can finish, and any later edit resets that state. |
+| "Ten patches, and the same error every time." | Fix-thrash detection. The agent is told to step back and diagnose on the 3rd identical failure after edits, and to summarize and change approach (or ask you) on the 5th. Unchanged retries stop after 5. |
+| "It changed the test to match the broken code." | Weakened-test detection, plus reminders never to weaken or delete a test to make it pass. |
+| "It replaced my function with `// ... rest unchanged`." | A change guard blocks placeholder edits and flags large, unexplained deletions. |
+| "It ran a destructive git command." | Force-push, `reset --hard` and `clean -f` are blocked by default. Other commands that throw away work (`checkout .`, `restore`, `stash drop`, `rm`) need your explicit approval, and the working tree is saved under `refs/oasis/safety/` before they run. |
+| "It edited files in plan mode." | Plan mode is enforced in the runtime: only read-only tools run. |
+| "It committed my API key." | Commit secret scanning, including raw `git commit` typed through the shell. |
+| "The connection dropped and it ran my tool twice." | Dropped streams restart the reply. Tools run only after a reply completes, so a restart can never run a tool twice. |
+| "Cancelling erased the conversation." | Cancelling keeps your request and the partial reply in history. |
+| "CI killed the job, but the command kept running and the job passed." | Headless mode stops running commands on SIGTERM, SIGINT or SIGHUP and exits with `128 + signal`. |
+| "Tool definitions eat my context." | Lean tool loading defers rarely used tool schemas and MCP tools until they are needed. |
+| "It switched to English halfway through." | When you set a reply language, a short reminder follows each tool batch to keep replies in that language. |
+
+Each row describes implemented, tested runtime behavior. It is not a benchmark claim; see [Benchmarks](docs/BENCHMARKS.md) for what has and has not been measured.
+
+## Built for small and local models
+
+OASIS assumes the model might be small, quantized, or running on your laptop:
+
+- **Real context windows.** OASIS reads the window that is actually loaded from Ollama, LM Studio and llama.cpp `llama-server`. For unknown hosted or self-hosted models, it reads the provider's `/models` listing (DeepSeek, OpenRouter, vLLM). If the window is too small, OASIS prints the exact command to fix it.
+- **Small-context profile.** At 16K or less, only 13 essential tools are sent, compaction starts earlier, and long tool results are trimmed to fit.
+- **Tool-call repair.** Almost-valid JSON (code fences, trailing commas, Python literals, missing braces) is repaired, and tool calls written as text (Hermes, Qwen and Llama formats) are executed. Unrepairable calls return an error that explains how to resend them, instead of ending the turn.
+- **Forgiving edits.** Edit matching tolerates whitespace and indentation drift while preserving CRLF line endings, BOMs, curly quotes and your indentation style.
+
+See [local context windows](docs/USER_GUIDE.md#local-models-and-small-context-windows) and [tool-call repair](docs/USER_GUIDE.md#tool-call-repair-for-smaller-models) in the user guide.
+
 ## What OASIS provides
 
 | Capability area | What is included |
