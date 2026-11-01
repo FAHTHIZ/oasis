@@ -763,7 +763,11 @@ test('agent lifecycle observers receive structured events without affecting orch
       config: { model: 'fixture-model' },
       allowedToolNames: new Set(['read_file', 'grep']),
       background: new Map([['cmd_1', {}]]),
-      stopBackgroundProcesses: () => { cleaned++; return 1; }
+      stopBackgroundProcesses: () => { cleaned++; return 1; },
+      ptyManager: {
+        closeAll: () => ({ stopped: 2 }),
+        list: () => ({ sessions: [] })
+      }
     }
   });
   const view = summarizeAgent(record);
@@ -785,6 +789,8 @@ test('agent lifecycle observers receive structured events without affecting orch
   const stopped = stopAgent(session, { id: record.id });
   assert.equal(cleaned, 1, 'stopping a worker cleans up its private background processes');
   assert.equal(stopped.backgroundProcessesStopped, 1);
+  assert.equal(stopped.terminalsStopped, 2, 'stopping a worker closes its private interactive PTY sessions');
+  assert.equal(record.child.ptyManager, undefined, 'a resumed worker receives a fresh PTY manager');
   assert.doesNotThrow(() => recordAgentEvent(session, 'agent.completed', { agentId: record.id, description: record.description }));
   assert.equal(agentEvents(session).events.length, 3);
 });

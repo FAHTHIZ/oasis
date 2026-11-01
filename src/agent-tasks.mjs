@@ -402,24 +402,45 @@ export function sendTeamMessage(session, args = {}) {
   return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
 }
 
-function stopAgentBackgroundProcesses(record) {
-  if (!record || !record.child || typeof record.child.stopBackgroundProcesses !== 'function') return 0;
-  try {
-    const stopped = Number(record.child.stopBackgroundProcesses());
-    return Number.isFinite(stopped) && stopped > 0 ? Math.floor(stopped) : 0;
-  } catch { return 0; }
+function stopAgentProcesses(record) {
+  const result = { background: 0, terminals: 0 };
+  const child = record && record.child;
+  if (!child) return result;
+  if (typeof child.stopBackgroundProcesses === 'function') {
+    try {
+      const stopped = Number(child.stopBackgroundProcesses());
+      result.background = Number.isFinite(stopped) && stopped > 0 ? Math.floor(stopped) : 0;
+    } catch {}
+  }
+  // Every child session lazily owns its own PTY manager. Close it as well as
+  // piped background commands, otherwise an interactive REPL can outlive
+  // agent_stop or the parent session that created it.
+  if (child.ptyManager && typeof child.ptyManager.closeAll === 'function') {
+    const manager = child.ptyManager;
+    try {
+      const closed = manager.closeAll();
+      const stopped = Number(closed && closed.stopped);
+      result.terminals = Number.isFinite(stopped) && stopped > 0 ? Math.floor(stopped) : 0;
+    } catch {}
+    // A completed worker can be resumed by send_message. Let the new turn
+    // lazily create a fresh manager rather than reusing a permanently closed one.
+    if (child.ptyManager === manager) delete child.ptyManager;
+  }
+  return result;
 }
 
 export function stopAgent(session, args = {}) {
   const record = getAgent(session, args.id);
-  const processesStopped = stopAgentBackgroundProcesses(record);
+  const cleaned = stopAgentProcesses(record);
+  const processesStopped = cleaned.background + cleaned.terminals;
   if (record.status !== 'running') {
     return {
       id: record.id,
       status: record.status,
-      backgroundProcessesStopped: processesStopped,
+      backgroundProcessesStopped: cleaned.background,
+      terminalsStopped: cleaned.terminals,
       message: processesStopped
-        ? 'The agent is not running; stopped ' + processesStopped + ' background process(es) it left in its private environment.'
+        ? 'The agent is not running; stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s) it left in its private environment.'
         : 'The agent is not running.'
     };
   }
@@ -434,8 +455,9 @@ export function stopAgent(session, args = {}) {
   return {
     id: record.id,
     status: 'stopping',
-    backgroundProcessesStopped: processesStopped,
-    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + processesStopped + ' agent-owned background process(es).' : '')
+    backgroundProcessesStopped: cleaned.background,
+    terminalsStopped: cleaned.terminals,
+    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s).' : '')
   };
 }
 
@@ -450,7 +472,7 @@ export async function stopAllAgents(session) {
   for (const record of session.agentTasks.agents.values()) {
     // Completed workers can leave explicitly backgrounded processes for a later
     // resume. Session shutdown owns those processes too, not just live model loops.
-    stopAgentBackgroundProcesses(record);
+    stopAgentProcesses(record);
     if (record.status !== 'running') continue;
     record.cancelRequested = true;
     if (record.controller) record.controller.abort();
