@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { notifyAttention } from './attention.mjs';
 import { cronState, formatFindings } from './session-tools.mjs';
 import { hasHooks as hasConfiguredHooks } from './hooks.mjs';
@@ -600,6 +601,7 @@ async function doctor(args = [], root = process.cwd()) {
     stdout.write('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
     stdout.write('  Authentication: ' + summary.authentication + '\n');
     stdout.write('  Config: ' + summary.configPath + '\n');
+    if (modelConfigured && isLoopbackUrl(config.baseURL)) await doctorLocalServer(config);
     if (args.includes('--test-provider')) {
       stdout.write('  Live model/tool-call verification: testing (the inert probe will not be executed)…\n');
       try {
@@ -694,6 +696,29 @@ async function uninstallOasis(args = []) {
     return;
   }
   stdout.write('OASIS CLI has been uninstalled. Your projects and user data were kept.\n');
+}
+
+// Local servers: which one, its loaded window, and the tool profile OASIS will use.
+// doctor is user-invoked, so it may probe any loopback port.
+async function doctorLocalServer(config) {
+  try {
+    const probe = await probeLocalContext(config, { env: { ...process.env, OASIS_LOCAL_CONTEXT_PROBE: '1' }, cache: false });
+    const names = { ollama: 'Ollama', lmstudio: 'LM Studio', 'llama.cpp': 'llama-server' };
+    if (!probe || !probe.contextLength) {
+      stdout.write('  Local model server: no context window reported (the server is not running, or it does not publish one; set contextWindow in config if replies get cut off)\n');
+      return;
+    }
+    const window = Number(probe.contextLength);
+    const server = names[probe.server] || 'local server';
+    stdout.write('  Local model server: ' + server + ', ' + window.toLocaleString('en-US') + '-token context window\n');
+    stdout.write('  Tool profile for this window: ' + (window <= SMALL_CONTEXT_TOKENS
+      ? 'small (essential tools up front, the rest behind tool_search) because the window is ' + SMALL_CONTEXT_TOKENS.toLocaleString('en-US') + ' tokens or less'
+      : 'full') + '\n');
+    if (!isLocalModelEndpoint(config, process.env)) stdout.write('  Note: OASIS reads this window during work only on default ports (Ollama 11434, LM Studio 1234, llama-server 8080). Set OASIS_LOCAL_CONTEXT_PROBE=1 for this server; otherwise the first request may overflow once and then resize itself.\n');
+    if (window < RECOMMENDED_LOCAL_CONTEXT) stdout.write('  Advice: ' + localContextAdvice(config.model, window, probe.server) + '\n');
+  } catch (error) {
+    stdout.write('  Local model server: not reachable (' + String(error && error.message || error).slice(0, 160) + ')\n');
+  }
 }
 
 async function doctorWorkspaceReport(root) {
