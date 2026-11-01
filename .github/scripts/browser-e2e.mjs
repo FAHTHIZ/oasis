@@ -318,7 +318,7 @@ try {
   const activitySummary = page.locator('#agentMessages .turn-work');
   await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
   const defaultActivityText = await page.locator('#agentMessages').innerText();
-  assert.match(defaultActivityText, /The command failed|failed \\(exit code 7\\)|exit code 7/i,
+  assert.match(defaultActivityText, /The command failed|failed \(exit code 7\)|exit code 7/i,
     'The failed command warning must remain visible outside the fold.');
   assert.equal(await page.locator('#agentMessages .notice-warn').count() > 0, true,
     'A failed command must use the visible warning treatment.');
