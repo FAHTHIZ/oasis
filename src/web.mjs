@@ -16,7 +16,7 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCustomCommands } from './commands.mjs';
-import { visionEnabled, imageInputCapability } from './images.mjs';
+import { visionEnabled, imageInputCapability, MAX_IMAGE_BYTES } from './images.mjs';
 import { loadSettings } from './settings.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
@@ -261,6 +261,38 @@ export function toolDetail(name, args = {}) {
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
+// Chat requests may carry pasted or dropped images (base64), so they get a
+// larger, still bounded body.
+export const MAX_WEB_IMAGES = 4;
+const MAX_CHAT_BODY_BYTES = 64 * 1024 + MAX_WEB_IMAGES * Math.ceil(MAX_IMAGE_BYTES * 4 / 3 + 1024);
+const WEB_IMAGE_SIGNATURES = {
+  'image/png': (b) => b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/gif': (b) => b.length > 6 && b.toString('latin1', 0, 4) === 'GIF8',
+  'image/webp': (b) => b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP',
+};
+
+/** Validates images attached in the browser: type, real file signature, size and count. */
+export function validateWebImages(value, { config = {}, env = process.env } = {}) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw Object.assign(new Error('images must be a list.'), { statusCode: 400 });
+  if (!value.length) return [];
+  if (value.length > MAX_WEB_IMAGES) throw Object.assign(new Error('Attach up to ' + MAX_WEB_IMAGES + ' images per message.'), { statusCode: 413 });
+  const capability = imageInputCapability(config, env);
+  if (capability.status === 'unsupported') throw Object.assign(new Error('The current model does not accept images. ' + capability.reason), { statusCode: 400 });
+  return value.map((item, index) => {
+    const mediaType = String(item && item.mediaType || '').toLowerCase();
+    const check = WEB_IMAGE_SIGNATURES[mediaType];
+    if (!check) throw Object.assign(new Error('Image ' + (index + 1) + ' must be PNG, JPEG, GIF or WebP.'), { statusCode: 415 });
+    const data = String(item.data || '');
+    if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw Object.assign(new Error('Image ' + (index + 1) + ' is not valid base64.'), { statusCode: 400 });
+    const bytes = Buffer.from(data, 'base64');
+    if (bytes.length > MAX_IMAGE_BYTES) throw Object.assign(new Error('Image ' + (index + 1) + ' is larger than ' + Math.round(MAX_IMAGE_BYTES / 1e6 * 10) / 10 + ' MB.'), { statusCode: 413 });
+    if (!check(bytes)) throw Object.assign(new Error('Image ' + (index + 1) + ' does not look like a ' + mediaType.slice(6).toUpperCase() + ' file.'), { statusCode: 415 });
+    const name = String(item.name || 'pasted-image-' + (index + 1)).replace(/[^\w. -]+/g, '_').slice(0, 80);
+    return { mediaType, data, path: name };
+  });
+}
 const MAX_FILE_PREVIEW_BYTES = 256 * 1024;
 const MAX_JOBS = 20;
 const MAX_EVENTS_PER_JOB = 120;
@@ -363,12 +395,12 @@ function hasValidToken(req, token) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, limit = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw Object.assign(new Error('Request body is too large.'), { statusCode: 413 });
+    if (size > limit) throw Object.assign(new Error('Request body is too large.'), { statusCode: 413 });
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
@@ -526,6 +558,7 @@ export function createOasisWebServer(options = {}) {
     const incomingMessage = String(input.message || '').trim();
     if (!incomingMessage) throw Object.assign(new Error('Enter a task or question.'), { statusCode: 400 });
     if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
+    const attachedImages = validateWebImages(input.images, { config: await loadConfig({ env }).catch(() => ({})), env });
     let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId).toLowerCase();
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
     const isolation = input.isolation == null || input.isolation === '' ? 'workspace' : String(input.isolation);
@@ -667,6 +700,8 @@ export function createOasisWebServer(options = {}) {
         let prompt = message;
         let images = [];
         let planOnly = false;
+        const withAttached = (list) => [...attachedImages, ...(list || [])].slice(0, MAX_WEB_IMAGES);
+        if (attachedImages.length) emit(job, 'context_files', { files: attachedImages.map((image) => image.path) });
         session.webUsage = session.webUsage || createUsageTracker();
         const slash = message.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
         if (!importedCommand && !expandedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
@@ -725,7 +760,7 @@ export function createOasisWebServer(options = {}) {
           ...(planOnly ? { planOnly: true } : {}),
           env,
           signal: job.controller.signal,
-          ...(images.length ? { images } : {}),
+          ...(withAttached(images).length ? { images: withAttached(images) } : {}),
           approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
           askUser: (question) => questionFor(job, question),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
@@ -1659,7 +1694,7 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'POST' && pathname === '/api/chat') {
-      const body = await readJsonBody(req);
+      const body = await readJsonBody(req, MAX_CHAT_BODY_BYTES);
       const result = await startAgentJob(body);
       json(res, 202, result);
       return;
