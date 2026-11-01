@@ -97,7 +97,7 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 - **Tool aliases** — Claude Code style tool names (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `TodoWrite`, …) and argument shapes map onto OASIS tools; unknown names get did-you-mean suggestions.
 - Fixed `oasis skills install` (missing `installSkill`) and the plugin-URL error path in `zip.mjs`.
 
-## 0.4.0 — prepared Beta version (not yet published)
+## 0.4.0 — published Beta release (October 31, 2026)
 
 - Expanded the local-first coding workspace across CLI, browser, editor integration and desktop packaging.
 - Added or extended multi-provider setup, optional cost-aware model routing, local Ollama/gateway paths and explicit provider verification.
@@ -111,4 +111,4 @@ Reliability and token-efficiency work driven by common coding-agent complaints:
 
 ## 0.3.0
 
-The repository retains the `v0.3.0` Git tag, but no corresponding GitHub Release object or downloadable assets are currently published. The tag is the latest stable versioned install target at this snapshot; check the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases) for actual published releases.
+The `v0.3.0` Git tag is retained as historical version history. The latest published release is `v0.4.0`; use the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases) for current downloads.
