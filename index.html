@@ -1419,7 +1419,7 @@ document.getElementById('agentTokenInput').value=agentToken;
 if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
 /* Bridge: lets later UI layers read state and wrap rendering hooks inside this closure. */
 window.oasisCore={
-  get token(){return agentToken},get busy(){return agentBusy},get nodes(){return agentAssistantNodes},
+  get token(){return agentToken},get busy(){return agentBusy},get nodes(){return agentAssistantNodes},get activeJob(){return agentActiveJob},
   navigate:function(v){return navigate(v)},
   processEvent:function(jobId,event){return agentProcessEvent(jobId,event)},
   appendMessage:function(role,text,id){return agentAppendMessage(role,text,id)},
@@ -1431,6 +1431,7 @@ window.oasisCore={
       case 'agentAppendMessage':agentAppendMessage=factory(agentAppendMessage);break;
       case 'agentActivity':agentActivity=factory(agentActivity);break;
       case 'agentSetBusy':agentSetBusy=factory(agentSetBusy);break;
+      case 'agentProcessEvent':agentProcessEvent=factory(agentProcessEvent);break;
       case 'agentClearMessages':agentClearMessages=factory(agentClearMessages);break;
       default:throw new Error('Unknown hook '+name);
     }
@@ -2058,6 +2059,35 @@ function renderQueue(){
     row.append(tag,label,edit,drop);queueBox.appendChild(row);
   });
 }
+/* Mid-turn steering: Enter while Oasis works sends the message now; the agent
+   reads it at its next step without stopping. Alt+Enter queues it for after
+   the turn instead. Anything the agent did not get to is sent next. */
+var steering=false;
+async function steerMessage(){
+  var text=prompt.value.trim(),job=C.activeJob;if(!text||steering)return;
+  if(!job){queueMessage();return}
+  steering=true;
+  try{
+    await window.oasisAgentApi('/api/jobs/'+encodeURIComponent(job)+'/steer',{method:'POST',body:JSON.stringify({message:text})});
+    prompt.value='';autosize();syncSend();
+    /* Replies after this point render below the steering message. */
+    var nodes=C.nodes,old=nodes&&nodes[job];
+    if(old){if(!String(old.dataset.raw||'').trim()&&/working/i.test(old.textContent||''))old.remove();delete nodes[job]}
+    var bubble=C.appendMessage('user',text);
+    if(bubble){bubble.classList.add('agent-steer');bubble.setAttribute('aria-label','Message sent while Oasis was working')}
+    window.oasisAgentActivity('Sent while working · Oasis reads it at its next step');
+  }catch(err){queueMessage()}
+  finally{steering=false}
+}
+C.hook('agentProcessEvent',function(prev){return function(jobId,event){
+  var d=(event&&event.data)||{};
+  if(event&&event.type==='steered'){window.oasisAgentActivity('Oasis read your '+(d.delivered>1?d.delivered+' messages':'message')+' and is adjusting');return}
+  if(event&&event.type==='steer_queued')return;
+  if(event&&(event.type==='completed'||event.type==='cancelled')&&Array.isArray(d.undeliveredSteering)&&d.undeliveredSteering.length){
+    d.undeliveredSteering.slice().reverse().forEach(function(t){if(queued.length<5)queued.unshift(String(t))});renderQueue();
+  }
+  return prev(jobId,event);
+}});
 function queueMessage(){
   var text=prompt.value.trim();if(!text||queued.length>=5)return;
   queued.push(text);prompt.value='';renderQueue();autosize();syncSend();
@@ -2065,7 +2095,7 @@ function queueMessage(){
 }
 var composeEl=document.querySelector('.agent-compose');if(composeEl)composeEl.insertBefore(queueBox,composeEl.firstChild);
 C.hook('agentSetBusy',function(prev){return function(v){
-  prev(v);if(prompt){prompt.disabled=false;prompt.placeholder=v?'Type to queue a follow-up for when this turn ends…':'Ask Oasis to build, fix or explain anything…'}syncSend();
+  prev(v);if(prompt){prompt.disabled=false;prompt.placeholder=v?'Steer Oasis while it works · Enter sends now · Alt+Enter queues for after…':'Ask Oasis to build, fix or explain anything…'}syncSend();
   if(v||!queued.length)return;
   var state=($('agentRuntimeState')||{}).textContent||'';
   if(/Cancelled|error/i.test(state)){prompt.value=queued.join('\n\n')+(prompt.value?'\n\n'+prompt.value:'');queued=[];renderQueue();autosize();syncSend();if(typeof window.notify==='function')window.notify('The turn stopped, so your queued messages are back in the box.');return}
@@ -2073,16 +2103,17 @@ C.hook('agentSetBusy',function(prev){return function(v){
 }});
 if(prompt){prompt.rows=1;prompt.placeholder='Ask Oasis to build, fix or explain anything…'}
 function autosize(){if(!prompt)return;prompt.style.height='auto';prompt.style.height=Math.min(prompt.scrollHeight,280)+'px';var c=document.querySelector('.agent-compose');if(c&&chatPanel)chatPanel.style.setProperty('--compose-h',c.offsetHeight+'px')}
-function syncSend(){if(!send||!prompt)return;send.disabled=!prompt.value.trim()||(!!C.busy&&queued.length>=5);var label=send.querySelector('span');if(label)label.textContent=C.busy?'Queue':'Send';send.setAttribute('aria-label',C.busy?'Queue message for when this turn ends':'Send')}
+function syncSend(){if(!send||!prompt)return;send.disabled=!prompt.value.trim()||(!!C.busy&&queued.length>=5);var label=send.querySelector('span');if(label)label.textContent='Send';send.setAttribute('aria-label',C.busy?'Send to Oasis while it works (Alt+Enter queues for after this turn)':'Send')}
 if(prompt){
   prompt.addEventListener('input',function(){autosize();syncSend()});
   prompt.addEventListener('keydown',function(e){
     if(e.defaultPrevented||e.isComposing)return;
-    if(e.key==='Enter'&&!e.shiftKey&&!e.altKey){var mod=e.ctrlKey||e.metaKey;if(sendWithMod()&&!mod)return;e.preventDefault();if(prompt.value.trim()){if(C.busy)queueMessage();else form.requestSubmit()}}
+    if(e.key==='Enter'&&!e.shiftKey&&!e.altKey){var mod=e.ctrlKey||e.metaKey;if(sendWithMod()&&!mod)return;e.preventDefault();if(prompt.value.trim()){if(C.busy)void steerMessage();else form.requestSubmit()}}
+    if(e.key==='Enter'&&e.altKey&&!e.shiftKey&&C.busy&&prompt.value.trim()){e.preventDefault();queueMessage()}
     if(e.key==='Escape'&&C.busy&&!prompt.value.trim()){var stop=$('agentStopBtn');if(stop&&!stop.hidden)stop.click()}
     if(e.key==='ArrowUp'&&!prompt.value&&lastPrompt){e.preventDefault();prompt.value=lastPrompt;autosize();syncSend()}
   });
-  var lastPrompt='';form.addEventListener('submit',function(e){if(C.busy){e.preventDefault();e.stopImmediatePropagation();queueMessage();return}lastPrompt=prompt.value;setTimeout(function(){autosize();syncSend()},0)},true);
+  var lastPrompt='';form.addEventListener('submit',function(e){if(C.busy){e.preventDefault();e.stopImmediatePropagation();void steerMessage();return}lastPrompt=prompt.value;setTimeout(function(){autosize();syncSend()},0)},true);
   autosize();syncSend();
 }
 /* ---------- Global shortcuts ---------- */

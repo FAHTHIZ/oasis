@@ -11,7 +11,7 @@ import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL } from './config.mjs';
-import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType } from './agent.mjs';
+import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, steerSession, takeSteering } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession, staleSessions, pruneSessions } from './sessions.mjs';
@@ -201,8 +201,9 @@ function printHelp() {
   ].join('\n'));
 }
 
-// While a turn runs, keystrokes are captured: Esc or Ctrl+C interrupts, and
-// typed lines are queued as the next messages (type-ahead, like Claude Code).
+// While a turn runs, keystrokes are captured: Esc or Ctrl+C interrupts, Enter
+// steers (the agent reads the line at its next step without stopping), and Tab
+// queues the line as the next message after the turn ends.
 const QUEUED_INPUT = [];
 let IDLE_SUBMIT = null;
 
@@ -264,7 +265,7 @@ function attachMonitors(session) {
 }
 let queuedDraft = '';
 let turnKeys = null;
-function startTurnKeys(onInterrupt) {
+function startTurnKeys(onInterrupt, onSteer = null) {
   if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function' || process.env.OASIS_SIMPLE_INPUT === '1') return null;
   const decoder = new KeyDecoder();
   let buffer = '';
@@ -276,9 +277,14 @@ function startTurnKeys(onInterrupt) {
       else if (key.name === 'ctrlC') onInterrupt('ctrlC');
       else if (key.name === 'char' || key.name === 'paste') buffer += key.text;
       else if (key.name === 'backspace') buffer = buffer.slice(0, -1);
-      else if (key.name === 'enter' && buffer.trim()) {
-        QUEUED_INPUT.push(buffer);
-        stdout.write('\n' + dim('  ↳ queued: ' + buffer.replace(/\s+/g, ' ').slice(0, 90)) + '\n');
+      else if ((key.name === 'enter' || key.name === 'tab') && buffer.trim()) {
+        const preview = buffer.replace(/\s+/g, ' ').slice(0, 90);
+        if (key.name === 'enter' && onSteer && onSteer(buffer)) {
+          stdout.write('\n' + dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn)') + '\n');
+        } else {
+          QUEUED_INPUT.push(buffer);
+          stdout.write('\n' + dim('  ↳ queued for after this turn: ' + preview) + '\n');
+        }
         buffer = '';
       }
     }
@@ -1736,7 +1742,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     controller.abort();
   };
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
-  turnKeys = startTurnKeys(onInterrupt);
+  turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
   try {
     const fork = modeOptions.fork;
     const runner = fork ? (s, p, o) => runForkedTurn(s, p, { ...o, agent: fork.agent, label: fork.label, env: process.env }) : modeOptions.planOnly ? runAgentPlan : runAgentTurn;
@@ -1752,6 +1758,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
+      onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
@@ -1848,6 +1855,13 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     stopWaitIndicator();
     process.removeListener('SIGINT', onInterrupt);
     if (turnKeys) { turnKeys.stop(); turnKeys = null; }
+    // Steering that arrived too late for this turn (or after Esc) is never lost:
+    // it becomes the next message.
+    const undelivered = takeSteering(session);
+    if (undelivered.length) {
+      QUEUED_INPUT.unshift(...undelivered);
+      stdout.write('[queued] ' + undelivered.length + ' message' + (undelivered.length === 1 ? '' : 's') + ' sent during the turn will run next.\n');
+    }
   }
   reportSessionNotices(session);
   if (persistence.enabled) {

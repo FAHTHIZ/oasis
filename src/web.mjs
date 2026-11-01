@@ -8,7 +8,7 @@ import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/pr
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
-import { createSession, runAgentTurn, closeSession, testProviderConnection } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, takeSteering } from './agent.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
@@ -57,7 +57,7 @@ export function summarizeAgentRun(job) {
   const visibleRunTypes = new Set([
     'started', 'approval_required', 'approval_resolved', 'cancel_requested',
     'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'worktree_merged', 'usage',
-    'compaction_started', 'compaction_completed', 'context_overflow', 'context_pruned', 'stream_restarted'
+    'compaction_started', 'compaction_completed', 'context_overflow', 'context_pruned', 'stream_restarted', 'steered'
   ]);
   const agentEvents = rawEvents
     .filter((event) => event && event.data && typeof event.data === 'object' &&
@@ -718,8 +718,10 @@ export function createOasisWebServer(options = {}) {
         }
         const toolActivityArgsByCallId = new Map();
         let assistantDeltaBuffer = '';
+        job.steerTarget = session;
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
+          onSteer: (info) => emit(job, 'steered', { delivered: Math.max(0, Math.min(20, Number(info && info.delivered) || 0)) }),
           ...(planOnly ? { planOnly: true } : {}),
           env,
           signal: job.controller.signal,
@@ -814,7 +816,9 @@ export function createOasisWebServer(options = {}) {
           activeSessions.delete(activeId);
           activeSessions.set(saved.id, session);
         }
-        job.result = { ...result, sessionId: saved.id };
+        job.steerTarget = null;
+        const undeliveredSteering = takeSteering(session);
+        job.result = { ...result, sessionId: saved.id, ...(undeliveredSteering.length ? { undeliveredSteering } : {}) };
         if (session.webUsage) session.webUsage.turns += 1;
         emit(job, 'session_state', webSessionState(session, env));
         if (job.cancelRequested || result.cancelled) {
@@ -849,9 +853,12 @@ export function createOasisWebServer(options = {}) {
             job.result.isolatedWorktree = await finalizeTaskWorktree();
             emit(job, 'worktree_ready', job.result.isolatedWorktree);
           }
+          job.steerTarget = null;
+          const leftover = takeSteering(session);
+          if (leftover.length) job.result.undeliveredSteering = leftover;
           job.status = 'cancelled';
           job.error = null;
-          emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId });
+          emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId, ...(leftover.length ? { undeliveredSteering: leftover } : {}) });
         } else {
           job.error = String(error && error.message || error || 'Agent request failed').slice(0, 4000);
           if (taskWorktree) {
@@ -862,6 +869,7 @@ export function createOasisWebServer(options = {}) {
           emit(job, 'failed', { message: job.error });
         }
       } finally {
+        job.steerTarget = null;
         busySessions.delete(activeId);
         if (taskWorktree) {
           for (const [sessionKey, activeSession] of activeSessions) if (activeSession === session) activeSessions.delete(sessionKey);
@@ -1916,6 +1924,25 @@ export function createOasisWebServer(options = {}) {
         for (const pending of [...job.pendingApprovals.values()]) pending.resolve(false);
       }
       json(res, 202, { cancelRequested: true, status: job.status });
+      return;
+    }
+
+    // Mid-turn steering: the running agent reads this message at its next step.
+    const steerMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/steer$/i);
+    if (req.method === 'POST' && steerMatch) {
+      const job = jobs.get(steerMatch[1]);
+      if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
+      const body = await readJsonBody(req);
+      const message = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!message) { json(res, 400, { error: 'Enter a message.' }); return; }
+      if (message.length > 12000) { json(res, 413, { error: 'Message is too long (12,000 characters maximum).' }); return; }
+      if (!['running', 'waiting_approval'].includes(job.status) || job.cancelRequested || !job.steerTarget) {
+        json(res, 409, { error: 'That task is no longer running. Send this as a new message.', status: job.status });
+        return;
+      }
+      if (!steerSession(job.steerTarget, message)) { json(res, 429, { error: 'Too many messages are waiting for the agent. Wait for it to read them.' }); return; }
+      emit(job, 'steer_queued', { length: message.length });
+      json(res, 202, { queued: true });
       return;
     }
 

@@ -834,3 +834,6 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
   .agent-approval .agent-buttons button,.agent-compose button,.msg-actions button{transition:none!important}
   .agent-approval .agent-buttons button:hover,.agent-approval .agent-buttons button:focus-visible,.agent-compose button:hover,.agent-compose button:focus-visible,.msg-actions button:hover,.msg-actions button:focus-visible{transform:none!important}
 }
+/* Mid-turn steering message */
+.agent-message.user.agent-steer{position:relative;border-style:dashed}
+.agent-message.user.agent-steer::after{content:"sent while working";display:block;margin-top:4px;font:600 10.5px/1 var(--font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
