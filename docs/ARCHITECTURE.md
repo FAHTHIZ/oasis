@@ -211,6 +211,7 @@ OASIS has multiple coordination mechanisms. They share concepts such as task rec
 `src/subagents.mjs` and `src/agent-tasks.mjs` define child agents, the bounded parallel launch pool, background-worker records, named team rosters, and lifecycle events.
 
 - A subagent receives its own context window and a bounded task description. Its final report is returned to the parent.
+- Each child now owns a separate registry for its background commands; the parent does not accidentally share that process list. `agent_status` exposes the worker's model, read/write capability, workspace isolation mode, available-tool count and agent-owned background-process count. Stopping a worker or closing the parent session terminates processes registered to that worker.
 - Several subagent calls can run in parallel (the regular subagent pool is bounded at six). The separate background-agent registry has its own limit.
 - Agents in the same workspace can share session-local task state and, when placed in a named team, can send coordination messages to teammates.
 - By default, agents may share the same workspace. Parallel editing in a shared checkout can conflict; use read-only work, explicitly separated files, or `isolation: "worktree"`.

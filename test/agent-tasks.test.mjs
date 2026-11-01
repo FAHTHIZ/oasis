@@ -78,6 +78,10 @@ test('background task returns at once, reports back on the next turn, and can be
   const first = await runAgentTurn(session, 'start the audit');
   assert.equal(first.text, 'parent reply 1');
   const launched = parentRequests[1].messages.find((m) => m.role === 'tool');
+  const worker = session.agentTasks.agents.get('agent_1');
+  assert.ok(worker);
+  assert.notEqual(worker.child.background, session.background, 'each child owns a separate background-process registry');
+  assert.equal(typeof worker.child.stopBackgroundProcesses, 'function');
   assert.match(launched.content, /"id":"agent_1"/);
   assert.match(launched.content, /"status":"running"/);
   const listing = await runBuiltinCommand('tasks', '', { root, session });
@@ -694,7 +698,25 @@ test('cancelling a dispatched worker immediately releases its shared task lease'
 test('agent lifecycle observers receive structured events without affecting orchestration', () => {
   const observed = [];
   const session = { agentRunId: 'monitor-run-1', agentTasks: { next: 1, nextTeam: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 }, onAgentEvent: (event) => observed.push(event) };
-  const record = registerAgent(session, { type: 'explore', description: 'Inspect package graph', background: true });
+  let cleaned = 0;
+  const record = registerAgent(session, {
+    type: 'explore',
+    description: 'Inspect package graph',
+    background: true,
+    readOnly: true,
+    child: {
+      config: { model: 'fixture-model' },
+      allowedToolNames: new Set(['read_file', 'grep']),
+      background: new Map([['cmd_1', {}]]),
+      stopBackgroundProcesses: () => { cleaned++; return 1; }
+    }
+  });
+  const view = summarizeAgent(record);
+  assert.equal(view.workspaceIsolation, 'shared');
+  assert.equal(view.access, 'read-only');
+  assert.equal(view.model, 'fixture-model');
+  assert.equal(view.availableToolCount, 2);
+  assert.equal(view.backgroundProcesses, 1);
   assert.equal(observed.length, 1);
   assert.equal(observed[0].type, 'agent.started');
   assert.equal(observed[0].run_id, 'monitor-run-1');
@@ -703,6 +725,9 @@ test('agent lifecycle observers receive structured events without affecting orch
   assert.equal(observed[0].description, 'Inspect package graph');
 
   session.onAgentEvent = () => { throw new Error('UI observer unavailable'); };
+  const stopped = stopAgent(session, { id: record.id });
+  assert.equal(cleaned, 1, 'stopping a worker cleans up its private background processes');
+  assert.equal(stopped.backgroundProcessesStopped, 1);
   assert.doesNotThrow(() => recordAgentEvent(session, 'agent.completed', { agentId: record.id, description: record.description }));
-  assert.equal(agentEvents(session).events.length, 2);
+  assert.equal(agentEvents(session).events.length, 3);
 });
