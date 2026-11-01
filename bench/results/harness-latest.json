@@ -1,11 +1,11 @@
 {
   "suite": "oasis-harness-bench",
   "version": 1,
-  "date": "2026-11-01T11:50:02.881Z",
+  "date": "2026-11-01T12:07:12.693Z",
   "node": "v20.20.2",
   "platform": "linux-x64",
   "cpus": 2,
-  "sourceRevision": "87363cdac9c00ce66e1bd7cecf9460ce6c344976",
+  "sourceRevision": "4541f1d76e0e88d13b1eb6f2b7949b58ff03b73e",
   "results": [
     {
       "track": "Tool-call recovery",
@@ -54,8 +54,8 @@
         "protected": 49,
         "destructive": 49,
         "blocked": 32,
-        "held": 8,
-        "snapshot": 9,
+        "held": 9,
+        "snapshot": 8,
         "benignAllowed": 32,
         "benign": 32,
         "benignRedirected": 1,
@@ -137,8 +137,8 @@
           "systemPromptTokens": 4232,
           "toolSchemaTokens": 11198,
           "firstRequestTokens": 15430,
-          "msToFirstModelRequest": 243,
-          "msEndToEnd": 330
+          "msToFirstModelRequest": 266,
+          "msEndToEnd": 348
         },
         {
           "profile": "small-context (16K)",
@@ -146,8 +146,8 @@
           "systemPromptTokens": 1576,
           "toolSchemaTokens": 2161,
           "firstRequestTokens": 3737,
-          "msToFirstModelRequest": 246,
-          "msEndToEnd": 326
+          "msToFirstModelRequest": 264,
+          "msEndToEnd": 344
         }
       ],
       "note": "Tokens are estimated as characters / 4. Times are medians of 5 cold `oasis -p` runs against a local scripted endpoint."
@@ -273,6 +273,130 @@
         "negatives": 3
       },
       "failures": []
+    }
+  ],
+  "heldoutV2": [
+    {
+      "track": "Tool-call recovery",
+      "question": "Does a damaged or text-written tool call still run, and does prose stay prose?",
+      "cases": 12,
+      "oasis": {
+        "correct": 12,
+        "recovered": 9,
+        "of": 9,
+        "falseRuns": 0,
+        "negatives": 3
+      },
+      "baseline": {
+        "label": "strict JSON.parse, native calls only",
+        "correct": 3,
+        "recovered": 0,
+        "of": 9
+      },
+      "failures": []
+    },
+    {
+      "track": "Edit application",
+      "question": "Does an edit with whitespace, line-ending, indentation or quote drift land correctly, and does an ambiguous edit get refused?",
+      "cases": 7,
+      "oasis": {
+        "correct": 7,
+        "applied": 5,
+        "of": 5,
+        "refusedCorrectly": 2,
+        "refuseOf": 2,
+        "wrongWrites": 0
+      },
+      "baseline": {
+        "label": "exact unique match",
+        "correct": 3,
+        "applied": 1,
+        "of": 5
+      },
+      "failures": []
+    },
+    {
+      "track": "Command safety under auto-approve",
+      "question": "With approvals switched off, which destructive commands are still stopped or made recoverable, and which everyday commands still run?",
+      "cases": 25,
+      "oasis": {
+        "protected": 16,
+        "destructive": 16,
+        "blocked": 9,
+        "held": 6,
+        "snapshot": 1,
+        "benignAllowed": 9,
+        "benign": 9,
+        "benignRedirected": 0,
+        "benignHeld": 0
+      },
+      "baseline": {
+        "label": "no command policy",
+        "protected": 0,
+        "destructive": 16,
+        "benignAllowed": 9,
+        "benign": 9
+      },
+      "failures": []
+    },
+    {
+      "track": "Placeholder (elision) guard",
+      "question": "Does a write that replaces real code with \"// ... rest unchanged\" get stopped, without flagging ordinary comments?",
+      "cases": 5,
+      "oasis": {
+        "caught": 3,
+        "of": 3,
+        "falseAlarms": 0,
+        "negatives": 2
+      },
+      "baseline": {
+        "label": "no guard",
+        "caught": 0,
+        "of": 3,
+        "falseAlarms": 0,
+        "negatives": 2
+      },
+      "failures": []
+    },
+    {
+      "track": "Weakened-test detection",
+      "question": "Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?",
+      "cases": 4,
+      "oasis": {
+        "caught": 3,
+        "of": 3,
+        "falseAlarms": 0,
+        "negatives": 1
+      },
+      "baseline": {
+        "label": "no guard",
+        "caught": 0,
+        "of": 3,
+        "falseAlarms": 0,
+        "negatives": 1
+      },
+      "failures": []
+    },
+    {
+      "track": "Commit secret scanning",
+      "question": "Is a credential caught before it is committed, without flagging env references, placeholders and hashes?",
+      "cases": 8,
+      "oasis": {
+        "caught": 4,
+        "of": 5,
+        "falseAlarms": 0,
+        "negatives": 3
+      },
+      "baseline": {
+        "label": "no guard",
+        "caught": 0,
+        "of": 5,
+        "falseAlarms": 0,
+        "negatives": 3
+      },
+      "failures": [
+        "v2-slack"
+      ]
     }
   ]
 }

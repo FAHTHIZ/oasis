@@ -132,3 +132,15 @@ test('curly quotes typed for straight-quoted code are written back as straight q
   const result = relaxedReplace(file, 'const msg = \u201cdon\u2019t panic\u201d;', 'const msg = \u201cdon\u2019t worry\u201d;');
   assert.equal(result.next, 'const msg = "don\'t worry";\n');
 });
+
+test('spacing drift inside a line matches and keeps the file spacing', () => {
+  const json = relaxedReplace('{\n  "a": 1,\n  "b": 2\n}\n', '"a":1,', '"a":10,');
+  assert.equal(json.next, '{\n  "a": 10,\n  "b": 2\n}\n');
+  assert.equal(json.strategy, 'inner whitespace');
+  assert.equal(relaxedReplace('foo(x, y);\n', 'foo(x,y);', 'foo(x,y,z);').next, 'foo(x, y,z);\n');
+});
+
+test('spacing relaxation never joins two words', () => {
+  assert.equal(relaxedReplace('return x;\n', 'returnx;', 'returnx + 1;'), null);
+  assert.equal(relaxedReplace('const s = "a b";\n', 'const s = "ab";', 'const s = "abc";'), null);
+});

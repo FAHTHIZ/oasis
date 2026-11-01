@@ -128,7 +128,7 @@ const operands = (args) => {
 const INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'python', 'python3', 'node', 'perl', 'ruby', 'php', 'iex', 'invoke-expression', 'pwsh', 'powershell']);
 const DOWNLOADERS = new Set(['curl', 'wget', 'iwr', 'invoke-webrequest', 'irm', 'invoke-restmethod', 'fetch']);
 
-function analyzeSimple(cmd) {
+function analyzeSimple(cmd, ctx = {}) {
   const { tokens } = cmd;
   const { name, args } = programOf(tokens);
   if (!name) return null;
@@ -148,6 +148,9 @@ function analyzeSimple(cmd) {
     const target = ops.find(isCriticalPath);
     if (recursive && target) return { blocked: 'recursively deletes ' + target };
     if (target && (name === 'remove-item' || name === 'ri')) return { blocked: 'deletes ' + target };
+    // `cd ~ && rm -rf *`: a relative target after cd into a critical directory.
+    const relative = ops.find((a) => !/^[\/~$]|^[A-Za-z]:/.test(a));
+    if (recursive && ctx.cwdCritical && relative) return { blocked: 'recursively deletes ' + relative + ' inside ' + ctx.cwdCritical };
   }
   if (name === 'rm' && cmd.tokens.some((t) => base(t) === 'xargs') && (f.short.has('r') || f.short.has('R') || f.long.has('--recursive'))) {
     return { highRisk: 'deletes every path fed to it through xargs, recursively' };
@@ -201,6 +204,7 @@ function analyzeGit(args, f, ops) {
     if (sub === 'gc' && lower.some((a) => /^--prune(=now)?$/.test(a))) return { highRisk: 'permanently prunes unreachable commits' };
     if (sub === 'branch' && (f.short.has('D') || (f.short.has('d') && f.short.has('f')))) return { highRisk: 'force-deletes a branch' };
     if (sub === 'update-ref' && f.short.has('d')) return { highRisk: 'deletes a Git ref' };
+    if (sub === 'clean' && (f.short.has('x') || f.short.has('X'))) return { highRisk: 'git clean -x deletes ignored files (.env, local config, caches) that the safety snapshot does not keep' };
   }
   return null;
 }
@@ -242,8 +246,15 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
 // Returns { blocked?: string, highRisk?: string } for the whole shell line.
 export function analyzeShellLine(line) {
   let highRisk = '';
+  const ctx = { cwdCritical: '' };
   for (const cmd of splitShell(line)) {
-    const result = analyzeSimple(cmd);
+    const { name, args } = programOf(cmd.tokens);
+    if (name === 'cd' || name === 'pushd' || name === 'set-location' || name === 'sl' || name === 'chdir') {
+      const dir = operands(args)[0];
+      ctx.cwdCritical = dir === undefined || dir === '~' ? '~' : (isCriticalPath(dir) && !/^\.\./.test(dir) ? dir : '');
+      continue;
+    }
+    const result = analyzeSimple(cmd, ctx);
     if (!result) continue;
     if (result.blocked) return { blocked: result.blocked };
     if (result.highRisk && !highRisk) highRisk = result.highRisk;

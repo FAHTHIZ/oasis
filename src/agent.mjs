@@ -275,8 +275,44 @@ export async function compactHistoryIfNeeded(session, options = {}) {
  */
 // Reactive compaction after the provider rejected a request as too long: fold earlier
 // turns, then in-turn history, then (second attempt) shrink old tool outputs hard.
-async function recoverFromContextOverflow(session, requestIndex, options, attempt) {
+// Window size stated in a provider's overflow error, e.g. llama.cpp "exceeds the
+// available context size (16384 tokens)", OpenAI "maximum context length is 8192
+// tokens", vLLM "maximum model length is 4096".
+export function contextWindowFromError(error) {
+  const text = String(error && error.message || '');
+  const match = text.match(/context size \((\d{3,7}) tokens\)|maximum context length is (\d{3,7})|maximum model length is (\d{3,7})|context (?:window|length) (?:of|is) (\d{3,7}) tokens|n_ctx(?:_slot)?\s*[=:]\s*(\d{3,7})/i);
+  const value = match ? Number(match.slice(1).find(Boolean)) : 0;
+  return value >= 512 ? value : 0;
+}
+
+// The first request itself can overflow a small local window: system prompt and
+// tool schemas alone exceed it, so there is no history to compact. Learn the
+// real window from the error and drop to the small-context tool set (rare tools
+// stay reachable through tool_search).
+function adoptReportedContextWindow(session, error, env) {
+  const window = contextWindowFromError(error);
+  if (!window) return false;
+  const current = Number(session.config && session.config.contextWindow) || 0;
+  let changed = false;
+  if (!current || window < current) { session.config = { ...(session.config || {}), contextWindow: window }; changed = true; }
+  if (window <= SMALL_CONTEXT_TOKENS && !/^(?:0|false|off|no)$/i.test(String((env || process.env).OASIS_SMALL_CONTEXT_TOOLS || '')) && Array.isArray(session.toolDefinitions)) {
+    const deferred = applySmallContextProfile(session, TOOL_SEARCH_DEFINITION);
+    if (deferred) {
+      changed = true;
+      const system = (session.messages || []).find((message) => message && message.role === 'system');
+      if (system && typeof system.content === 'string' && !system.content.includes('tool_search')) system.content += '\n\n' + deferredToolsPrompt(session);
+    }
+  }
+  return changed;
+}
+
+async function recoverFromContextOverflow(session, requestIndex, options, attempt, error) {
   const before = historyTextSize(session.messages || []);
+  const toolsBefore = (session.toolDefinitions || []).length;
+  const adopted = adoptReportedContextWindow(session, error, options.env || process.env);
+  if (adopted && (session.toolDefinitions || []).length < toolsBefore) {
+    return { changed: true, beforeChars: before, afterChars: historyTextSize(session.messages || []), tokensUsed: 0, smallContextTools: true, contextWindow: session.config.contextWindow };
+  }
   let tokensUsed = 0;
   try {
     const earlier = await compactHistoryIfNeeded(session, { ...options, force: true });
@@ -1481,7 +1517,7 @@ export function isContextOverflowError(error) {
   const status = Number(error.status || error.statusCode);
   const text = String(error.message || '');
   if (/max_tokens|max_output|output tokens/i.test(text) && !/prompt|input|context/i.test(text)) return false;
-  return status === 413 || /prompt is too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum )?context/i.test(text);
+  return status === 413 || /prompt is too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum |available )?context|available context size/i.test(text);
 }
 
 export function stopFailureType(error) {
@@ -4313,7 +4349,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     } catch (error) {
       if (isContextOverflowError(error) && overflowRecoveries < 2 && !(options.signal && options.signal.aborted)) {
         overflowRecoveries++;
-        const recovered = await recoverFromContextOverflow(session, activeRequestIndex, options, overflowRecoveries);
+        const recovered = await recoverFromContextOverflow(session, activeRequestIndex, options, overflowRecoveries, error);
         tokensUsed += Number(recovered.tokensUsed || 0);
         if (recovered.changed) {
           if (typeof options.onContextOverflow === 'function') { try { options.onContextOverflow({ attempt: overflowRecoveries, ...recovered }); } catch {} }

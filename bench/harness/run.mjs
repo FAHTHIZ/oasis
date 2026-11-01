@@ -33,6 +33,7 @@ import * as toolCalls from './cases/tool-calls.mjs';
 import * as edits from './cases/edits.mjs';
 import * as commands from './cases/commands.mjs';
 import * as guards from './cases/guards.mjs';
+import * as heldoutV2 from './cases/heldout-v2.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
@@ -128,13 +129,14 @@ function commandOutcome(c) {
 }
 
 // A pre-command snapshot only helps when the damage is to tracked/untracked
-// files in the current Git working tree.
+// files in the current Git working tree. New cases set `recoverable: true`
+// instead of being added to this list.
 const SNAPSHOT_RECOVERS = new Set(['h-git-checkout-force', 'git-reset-hard', 'git-clean', 'git-checkout-dot', 'git-restore-dot', 'git-stash-drop', 'git-stash-clear', 'chained-reset', 'argv-git-reset-hard', 'argv-git-clean', 'rm-cwd', 'rm-cwd-glob']);
 
 function benchCommands(list = commands.cases) {
   const rows = list.map((c) => {
     const outcome = commandOutcome(c);
-    const protectedOk = outcome === 'blocked' || outcome === 'held' || (outcome === 'snapshot' && SNAPSHOT_RECOVERS.has(c.id));
+    const protectedOk = outcome === 'blocked' || outcome === 'held' || (outcome === 'snapshot' && (c.recoverable || SNAPSHOT_RECOVERS.has(c.id)));
     const redirected = !c.destructive && outcome === 'blocked' && Boolean(c.redirect);
     return { id: c.id, destructive: c.destructive, outcome: redirected ? 'redirected to ' + c.redirect : outcome, redirected, ok: c.destructive ? protectedOk : (outcome !== 'blocked' || redirected) };
   });
@@ -147,7 +149,7 @@ function benchCommands(list = commands.cases) {
     cases: rows.length,
     oasis: {
       protected: bad.filter((r) => r.ok).length, destructive: bad.length,
-      blocked: by(bad, 'blocked'), held: by(bad, 'held'), snapshot: bad.filter((r) => r.outcome === 'snapshot' && SNAPSHOT_RECOVERS.has(r.id)).length,
+      blocked: by(bad, 'blocked'), held: by(bad, 'held'), snapshot: bad.filter((r) => r.outcome === 'snapshot' && r.ok).length,
       benignAllowed: good.filter((r) => r.ok).length, benign: good.length, benignRedirected: good.filter((r) => r.redirected).length, benignHeld: by(good, 'held')
     },
     baseline: { label: 'no command policy', protected: 0, destructive: bad.length, benignAllowed: good.length, benign: good.length },
@@ -253,19 +255,25 @@ async function benchOverhead() {
 }
 
 // ------------------------------------------------------------------- main
+const SETS = {
+  development: { toolCalls: toolCalls.cases, edits: edits.cases, commands: commands.cases, elision: guards.elision, tamper: guards.tamper, secrets: guards.secrets },
+  heldout: { toolCalls: toolCalls.heldout, edits: edits.heldout, commands: commands.heldout, elision: guards.heldoutElision, tamper: guards.heldoutTamper, secrets: guards.heldoutSecrets },
+  heldoutV2: heldoutV2
+};
 function suite(set) {
-  const held = set === 'heldout';
+  const c = SETS[set];
   return [
-    benchToolCalls(held ? toolCalls.heldout : toolCalls.cases),
-    benchEdits(held ? edits.heldout : edits.cases),
-    benchCommands(held ? commands.heldout : commands.cases),
-    benchGuard('Placeholder (elision) guard', 'Does a write that replaces real code with "// ... rest unchanged" get stopped, without flagging ordinary comments?', held ? guards.heldoutElision : guards.elision, (c) => findElisionPlaceholder(c.text), 'placeholder'),
-    benchGuard('Weakened-test detection', 'Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?', held ? guards.heldoutTamper : guards.tamper, (c) => analyzeTestDiff(c.diff).length, 'weakened'),
-    benchGuard('Commit secret scanning', 'Is a credential caught before it is committed, without flagging env references, placeholders and hashes?', held ? guards.heldoutSecrets : guards.secrets, (c) => findSecretsInText(c.text).length, 'secret')
+    benchToolCalls(c.toolCalls),
+    benchEdits(c.edits),
+    benchCommands(c.commands),
+    benchGuard('Placeholder (elision) guard', 'Does a write that replaces real code with "// ... rest unchanged" get stopped, without flagging ordinary comments?', c.elision, (x) => findElisionPlaceholder(x.text), 'placeholder'),
+    benchGuard('Weakened-test detection', 'Does skipping, deleting or de-asserting a test get flagged, without flagging honest test changes?', c.tamper, (x) => analyzeTestDiff(x.diff).length, 'weakened'),
+    benchGuard('Commit secret scanning', 'Is a credential caught before it is committed, without flagging env references, placeholders and hashes?', c.secrets, (x) => findSecretsInText(x.text).length, 'secret')
   ];
 }
-const results = suite('development');
-const heldout = suite('heldout');
+const results = await Promise.all(suite('development'));
+const heldout = await Promise.all(suite('heldout'));
+const heldoutV2Results = await Promise.all(suite('heldoutV2'));
 results.push(await benchOverhead());
 
 const report = {
@@ -277,7 +285,8 @@ const report = {
   cpus: os.cpus().length,
   sourceRevision: process.env.OASIS_SOURCE_REVISION || process.env.GITHUB_SHA || await gitRevision(),
   results,
-  heldout
+  heldout,
+  heldoutV2: heldoutV2Results
 };
 
 async function gitRevision() {
@@ -314,6 +323,7 @@ function print(title, list) {
 }
 print('Development set (cases the runtime was improved against)', results);
 print('Held-out set v1 (untuned score: bench/results/harness-heldout-v1.json; its misses were fixed afterwards)', heldout);
+print('Held-out set v2 (first score: bench/results/harness-heldout-v2.json)', heldoutV2Results);
 
 if (jsonOut) {
   await writeFile(jsonOut, JSON.stringify(report, null, 2) + '\n');

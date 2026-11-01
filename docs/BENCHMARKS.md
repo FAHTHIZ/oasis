@@ -1,10 +1,59 @@
 # OASIS coding-agent benchmarks
 
-**Status: harness and smoke-suite only. No Claude Code head-to-head result has been published yet.**
+**Status: model-free harness benchmark published (below); 33-task agent suite and runners ready. No same-model head-to-head against Claude Code has been published yet.**
 
 The first task taxonomy is an explicit, reviewable estimate in `evals/tasks/metadata.json`; the difficulty labels are not calibrated benchmarks, and the current suite still lacks large repository-level tasks.
 
 This page records how to produce a reproducible, auditable comparison. It deliberately does not claim OASIS is faster, cheaper, or more accurate than Claude Code without completed runs on the same tasks.
+
+## Model-free harness benchmark (2026-11-01)
+
+A coding agent is a model plus a harness. This benchmark measures the harness alone: it feeds OASIS the outputs that real models actually produce (malformed tool calls, drifting edits, dangerous commands, placeholder rewrites, weakened tests, leaked credentials) and checks what the runtime does with them. No model, network or API key is needed, so anyone can reproduce it in a few seconds:
+
+```bash
+node bench/harness/run.mjs            # all sets, human-readable
+node bench/harness/run.mjs --verbose  # list every failing case
+node bench/harness/run.mjs --json out.json
+```
+
+Each track compares OASIS with a simple baseline that has no repair or guard layer (strict `JSON.parse` on native calls only, exact unique `old_string` match, no command policy, no guards). This is an honest floor, not a model of any particular competing product.
+
+### Three case sets
+
+- **Development set:** cases the runtime was improved against. Scores here are expected to be high and say little about generalization.
+- **Held-out v1:** written before any fix and scored once untuned (`bench/results/harness-heldout-v1.json`); its misses were fixed afterwards, so it is now a tuned set too.
+- **Held-out v2:** written after the v1 fixes and scored once untuned (`bench/results/harness-heldout-v2.json`); its real misses were then fixed.
+
+The untuned held-out scores are the generalization numbers. Report those, not the post-fix 100%.
+
+| Track | Baseline (dev) | OASIS before fixes (dev) | Held-out v1, untuned | Held-out v2, untuned | All sets now |
+| --- | --- | --- | --- | --- | --- |
+| Tool-call recovery (malformed or text-only calls) | 3/26 | 25/26 | 9/11 (baseline 1/11) | 9/9 (baseline 0/9) | 100%, 0 false runs |
+| Edit application under drift | 4/14 | 13/14, 1 wrong write | 7/7 (baseline 1/7) | 4/5 (baseline 1/5) | 100%, 0 wrong writes |
+| Destructive commands stopped with approvals off | 0/49 | 31/49 | 9/15 | 13/16 (14/16 with the scorer fix below) | 100%, every everyday command still runs |
+| Placeholder (elision) rewrites caught | 0/12 | 12/12 | 2/4 | 2/3 | 100%, 0 false alarms |
+| Weakened tests caught | 0/8 | 8/8 | 2/3 | 2/3 | 100%, 0 false alarms |
+| Secrets caught before commit | 0/10 | 8/10 | 4/5 | 4/5 | 19/20 (one deliberate miss, below), 0 false alarms |
+
+Notes:
+
+- Negative cases are scored too: plain prose and code samples that must not run as tool calls, edits that must be refused (ambiguous or absent `old_string`), everyday commands that must still run, ordinary comments, honest test renames, env references, placeholders and UUIDs that must not trip a guard.
+- The command scorer originally decided which commands a Git safety snapshot can undo with a hard-coded ID list, so `git reset --hard HEAD~3` in v2 was scored as unprotected. Cases now carry a `recoverable` flag. The untuned v2 number above is the one recorded before that fix.
+- `v2-slack` is still a miss on purpose. The test token contains the sequential digits `1234567890`, which the secret scanner treats as a placeholder to avoid false alarms on documentation. Real Slack tokens do not look like that, so the filter stays.
+- "Commands stopped" means blocked, or held for approval even in bypass mode (`run_shell` high-risk commands such as `curl | sh`, `terraform destroy` or `git clean -x` always ask), or made undoable by an automatic Git safety snapshot.
+
+### Context overhead and startup
+
+| Profile | Tools sent | System prompt | Tool schemas | First request | Time to first model request | End to end |
+| --- | --- | --- | --- | --- | --- | --- |
+| Default | 64 | ~4,232 tok | ~11,198 tok | ~15,430 tok | ~246 ms | ~323 ms |
+| Small-context (windows of 16K or less) | 13 | ~1,576 tok | ~2,161 tok | ~3,737 tok | ~252 ms | ~339 ms |
+
+Tokens are estimated as characters / 4. Times are medians of 5 cold `oasis -p` runs against a local fixture server on a 2-CPU machine. Rarely used tools in the small-context profile stay reachable through `tool_search`.
+
+### What this benchmark does not show
+
+It does not measure task success with a real model, and it does not compare OASIS with Claude Code, Codex CLI or any other product. It shows that, for the same model output, the OASIS runtime recovers more calls, applies more edits correctly and stops more damage than a harness without these layers. Task success needs the agent suite below, run with the same model in each harness.
 
 ## What the current 33-task suite proves
 

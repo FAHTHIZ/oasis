@@ -140,6 +140,16 @@ test('unrelated loopback ports are never probed without opt-in', async (t) => {
   assert.deepEqual(other.seen, []);
 });
 
+test('provider overflow errors are recognised and their stated window is read', async () => {
+  const { isContextOverflowError, contextWindowFromError } = await import('../src/agent.mjs');
+  const llama = Object.assign(new Error('HTTP 400: request (16695 tokens) exceeds the available context size (16384 tokens), try increasing it'), { status: 400 });
+  assert.equal(isContextOverflowError(llama), true);
+  assert.equal(contextWindowFromError(llama), 16384);
+  assert.equal(contextWindowFromError(new Error("This model's maximum context length is 8192 tokens. However, you requested 9000")), 8192);
+  assert.equal(contextWindowFromError(new Error('maximum model length is 4096')), 4096);
+  assert.equal(contextWindowFromError(new Error('rate limited')), 0);
+});
+
 test('unknown hosted models take their window from the provider /models listing', async () => {
   const { modelWindowFromListing, probeProviderModelWindow } = await import('../src/local-context.mjs');
   assert.equal(modelWindowFromListing({ data: [{ id: 'deepseek-flash', context_window: 1048576 }] }, 'deepseek-flash'), 1048576);

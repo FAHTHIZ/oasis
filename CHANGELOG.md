@@ -4,7 +4,17 @@ This file records notable user-facing product changes. It does not imply that an
 
 ## Unreleased
 
-Changes after 1.0.0 belong here.
+Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
+
+- **Harness benchmark** — `node bench/harness/run.mjs` scores tool-call recovery, edit application, command safety, placeholder and weakened-test guards, secret scanning and context overhead against a no-harness baseline, with a development set and two held-out sets. Results are under `bench/results/`.
+- **Shell risk analyzer** (`src/shell-risk.mjs`) — `run_shell` now parses each command line (pipes, `&&`, `;`, subshells, `sudo`/`env` prefixes) instead of matching patterns. Blocked outright: recursive deletes of `/`, `~`, `$HOME`, `..`, home and system directories (including `cd ~ && rm -rf *`), `find … -delete` and `chmod`/`chown -R` on them, raw disk writes, `mkfs`, writes to system files, `shutdown`/`reboot`, package publishing (`npm`, `pnpm`, `yarn`, `bun`, `cargo`, `gem`, `twine`), `gh repo delete`, and force pushes (`--force`, `+ref`, `--mirror`).
+- **High-risk commands always ask** — `curl`/`wget` piped to a shell, `git branch -D`, `git clean -x` (ignored files such as `.env` are not in the safety snapshot), `filter-branch`, `reflog expire`, `push --delete`, `docker … prune`, `kubectl delete`, `helm uninstall`, `terraform destroy`, cloud deletes, SQL `DROP`/`TRUNCATE`, `FLUSHALL`, `xargs rm -r`, `shred` and `crontab -r` now need approval even in bypass mode, with allow rules, or inside the sandbox.
+- **Tool-call repair** — unquoted JavaScript-style keys, `//` and `/* */` comments in arguments, and calls wrapped in `<tools>`, `<tool_calls>` or `<function_calls>` are recovered.
+- **Edit matching** — curly quotes in `old_string` match a straight-quoted file (the replacement keeps ASCII quotes), and spacing drift inside a line (`"a":1` vs `"a": 1`) matches while keeping the file's spacing. Spaces between two words still count, so `return x` never matches `returnx`.
+- **Secret scanning** — Stripe-style `sk_`/`rk_` live and test keys and bare `password:` values are caught; an assignment value can no longer run across lines.
+- **Guards** — JSX `{/* … */}` and "implementation omitted" placeholders, any short "rest of the styles/props/routes unchanged" comment, Rust `_test.rs` files and `#[ignore]`, and an exact assertion swapped for an existence check (`== 1` → `is not None`, `toBe(1)` → `toBeDefined()`) are flagged.
+- **Small local windows** — when the very first request overflows the server's window (llama.cpp: "exceeds the available context size (16384 tokens)"), OASIS reads the size from the error, switches to the small-context tool set and retries, instead of failing. Overflow messages from llama.cpp are now recognised.
+- **Repository cleanup** — Beta and release-candidate badge files and the RC1 notes were removed (they remain in Git history and the `v0.4.0` tag); the social preview now says OASIS 1.0.
 
 ## 1.0.0 — stable (November 1, 2026)
 

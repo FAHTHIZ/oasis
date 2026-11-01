@@ -51,3 +51,32 @@ test('a too-long request is compacted and retried instead of ending the turn', a
   assert.ok(rejected >= 1);
   assert.ok(events.length >= 1 && events[0].afterChars < events[0].beforeChars);
 });
+
+test('a first request that overflows a small local window drops to the small-context tool set', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-overflow-first-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const toolCounts = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const tools = (JSON.parse(body).tools || []).length;
+    toolCounts.push(tools);
+    if (tools > 20) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 400, type: 'exceed_context_size_error', message: 'request (16695 tokens) exceeds the available context size (16384 tokens), try increasing it' } }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Ready.' } }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'local.gguf', apiKey: '', maxSteps: 3 } });
+  const events = [];
+  const result = await runAgentTurn(session, 'hello', { autoApprove: true, onContextOverflow: (info) => events.push(info) });
+  assert.equal(result.text, 'Ready.');
+  assert.ok(toolCounts[0] > 20 && toolCounts.at(-1) <= 20, toolCounts.join(','));
+  assert.equal(session.config.contextWindow, 16384);
+  assert.equal(events[0].smallContextTools, true);
+  assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'tool_search'));
+});

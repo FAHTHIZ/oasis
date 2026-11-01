@@ -29,6 +29,11 @@ const SKIP_PATTERNS = [
   [/^\s*(?:skip|pending)(?:\s+['"]|\s*\(\s*['"]|\s*$)/, 'skipped a test']
 ];
 const TEST_DECL = /^\s*(?:(?:it|test|specify)\s*\(|def\s+test_\w*\s*\(|func\s+Test\w*\s*\(|#\[test\]|@Test\b|fn\s+test_\w*\s*\()/;
+// An exact check (equality, deep equality, match) versus one that only checks
+// that a value exists or is truthy. Swapping the first for the second makes a
+// failing test pass without fixing anything.
+const STRICT_CHECK = /===?|!==?|\b(?:toBe|toEqual|toStrictEqual|toMatch\w*|toHaveLength|toThrow\w*|equal|equals|deepEqual|strictEqual|deepStrictEqual|assertEqual|assertEquals|assertIn|assertRaises|Equal|assert_eq|match)\b/;
+const WEAK_CHECK = /\bis not None\b|\bis not null\b|\b(?:toBeDefined|toBeTruthy|not\.toBeNull|not\.toBeUndefined|assertIsNotNone|assertTrue|NotNil|NotEmpty|ok)\s*\(|!= nil\b|^\s*assert\s+\w+\s*$|assert\.ok\s*\(|\bassert\s*\(\s*\w+\s*\)/;
 const ASSERTION = /\b(?:assert\w*|expect|should|t\.(?:Error|Fatal)f?|require\.\w+)\s*[(.]|^\s*assert\b/;
 
 /** Analyze unified diff text (from `git diff -U0`). Returns [{ file, reason, line? }]. */
@@ -72,6 +77,12 @@ export function analyzeTestDiff(diffText) {
     if (declDelta > 0) findings.push({ file: entry.file, reason: 'removed ' + declDelta + ' test case(s)' });
     const assertDelta = entry.removed.filter((line) => ASSERTION.test(line)).length - entry.added.filter((line) => ASSERTION.test(line)).length;
     if (assertDelta > 0 && declDelta <= 0) findings.push({ file: entry.file, reason: 'removed ' + assertDelta + ' assertion(s)' });
+    if (assertDelta <= 0 && declDelta <= 0) {
+      const strict = (lines) => lines.filter((line) => ASSERTION.test(line) && STRICT_CHECK.test(line) && !WEAK_CHECK.test(line)).length;
+      const weak = (lines) => lines.filter((line) => ASSERTION.test(line) && WEAK_CHECK.test(line)).length;
+      const loosened = strict(entry.removed) - strict(entry.added);
+      if (loosened > 0 && weak(entry.added) > weak(entry.removed)) findings.push({ file: entry.file, reason: 'replaced ' + loosened + ' exact assertion(s) with existence or truthiness checks' });
+    }
   }
   return findings;
 }

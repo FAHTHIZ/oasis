@@ -54,3 +54,18 @@ test('user homes, xargs deletion, shred, crontab -r and yarn npm publish are cau
   assert.equal(shellHighRisk('crontab -l'), null);
   assert.equal(shellHighRisk('find . -name "*.o" | xargs rm -f'), null);
 });
+
+test('cd into a critical directory makes a later relative recursive delete blocked', () => {
+  for (const line of ['cd ~ && rm -rf *', 'cd / ; rm -rf .', 'cd && rm -rf ./*', '(cd ~ && rm -rf *)', 'cd /etc && rm -rf *']) {
+    assert.match(analyzeShellLine(line).blocked || '', /recursively deletes/, line);
+  }
+  for (const line of ['cd src && rm -rf *', 'cd ~/proj && rm -rf node_modules', 'cd .. && rm -rf build', 'cd ~ && ls']) {
+    assert.equal(analyzeShellLine(line).blocked, undefined, line);
+  }
+});
+
+test('git clean -x is high risk because ignored files are not in the safety snapshot', () => {
+  assert.match(analyzeShellLine('git clean -fdx').highRisk || '', /ignored files/);
+  assert.match(analyzeShellLine('git clean -fX').highRisk || '', /ignored files/);
+  assert.deepEqual(analyzeShellLine('git clean -fd'), {});
+});

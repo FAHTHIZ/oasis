@@ -73,3 +73,11 @@ test('an #[ignore] added to an inline Rust test module is flagged', async () => 
   const plain = ['diff --git a/src/lib.rs b/src/lib.rs', '--- a/src/lib.rs', '+++ b/src/lib.rs', '@@ -1 +1 @@', '-fn a() {}', '+fn b() {}'].join('\n');
   assert.equal(analyzeTestDiff(plain).length, 0);
 });
+
+test('replacing an exact assertion with an existence check is flagged', () => {
+  const d = (f, r, a) => ['diff --git a/' + f + ' b/' + f, '--- a/' + f, '+++ b/' + f, '@@ -1 +1 @@', ...r.map((l) => '-' + l), ...a.map((l) => '+' + l)].join('\n');
+  assert.match(analyzeTestDiff(d('tests/test_parse.py', ['    assert parse("1") == 1'], ['    assert parse("1") is not None']))[0]?.reason || '', /existence or truthiness/);
+  assert.match(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBeDefined();']))[0]?.reason || '', /existence or truthiness/);
+  assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBe(2);'])), []);
+  assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  assert.ok(x);'], ['  assert.equal(x, 1);'])), []);
+});
