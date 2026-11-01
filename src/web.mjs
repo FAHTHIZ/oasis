@@ -692,6 +692,7 @@ export function createOasisWebServer(options = {}) {
             emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
           }
         }
+        const toolActivityArgsByCallId = new Map();
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
           ...(planOnly ? { planOnly: true } : {}),
@@ -708,7 +709,7 @@ export function createOasisWebServer(options = {}) {
           onToolStart: ({ name, args, call, subagent }) => {
             const safeArgs = safeToolActivityArgs(args);
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
-            if (callId) job.toolActivityArgs ||= new Map(), job.toolActivityArgs.set(callId, safeArgs);
+            if (callId) toolActivityArgsByCallId.set(callId, safeArgs);
             emit(job, 'tool_start', {
               name: String(name || 'tool').slice(0, 100),
               callId,
@@ -721,8 +722,8 @@ export function createOasisWebServer(options = {}) {
           },
           onToolResult: ({ name, result: value, call }) => {
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
-            const args = callId && job.toolActivityArgs instanceof Map ? job.toolActivityArgs.get(callId) || {} : {};
-            if (callId && job.toolActivityArgs instanceof Map) job.toolActivityArgs.delete(callId);
+            const args = callId ? toolActivityArgsByCallId.get(callId) || {} : {};
+            if (callId) toolActivityArgsByCallId.delete(callId);
             emit(job, 'tool_result', {
               name: String(name || 'tool').slice(0, 100),
               callId,
