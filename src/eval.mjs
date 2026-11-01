@@ -244,6 +244,43 @@ async function listTaskDirectories(tasksDir = DEFAULT_TASKS_DIR) {
     .sort();
 }
 
+// What the agent changed, so a failed trial can be diagnosed afterwards: files
+// added, modified or deleted relative to the snapshot, with bounded contents.
+const CHANGE_SKIP = new Set(['.git', 'node_modules', '.oasis', '.claude']);
+export async function workspaceChanges(snapshotDir, workspace, { maxFiles = 20, maxCharsPerFile = 6000, maxTotalChars = 24000 } = {}) {
+  const list = async (root) => {
+    const files = new Map();
+    const walk = async (dir, relative) => {
+      let entries;
+      try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries) {
+        if (CHANGE_SKIP.has(entry.name)) continue;
+        const rel = relative ? relative + '/' + entry.name : entry.name;
+        if (entry.isDirectory()) await walk(path.join(dir, entry.name), rel);
+        else if (entry.isFile()) files.set(rel, path.join(dir, entry.name));
+      }
+    };
+    await walk(root, '');
+    return files;
+  };
+  const [before, after] = await Promise.all([list(snapshotDir), list(workspace)]);
+  const changes = [];
+  let total = 0;
+  for (const [rel, file] of [...after].sort(([a], [b]) => a.localeCompare(b))) {
+    const current = await readFile(file).catch(() => null);
+    if (!current) continue;
+    const original = before.has(rel) ? await readFile(before.get(rel)).catch(() => null) : null;
+    if (original && original.equals(current)) continue;
+    const binary = current.includes(0);
+    const text = binary ? '' : current.toString('utf8');
+    const content = binary ? '(binary, ' + current.length + ' bytes)' : text.length > maxCharsPerFile ? text.slice(0, maxCharsPerFile) + '\n[... ' + (text.length - maxCharsPerFile) + ' more characters]' : text;
+    changes.push({ path: rel, status: original ? 'modified' : 'added', content: total + content.length > maxTotalChars ? '(omitted: change log size limit)' : content });
+    total += content.length;
+  }
+  for (const rel of before.keys()) if (!after.has(rel)) changes.push({ path: rel, status: 'deleted' });
+  return changes.length > maxFiles ? [...changes.slice(0, maxFiles), { path: '…', status: (changes.length - maxFiles) + ' more changed files not recorded' }] : changes;
+}
+
 async function copySnapshot(source, destination) {
   const rootInfo = await lstat(source);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw new Error('Task repository snapshot must be a regular directory.');
@@ -997,6 +1034,7 @@ async function runClaudeCodeEval(config, options = {}) {
       }
 
       const elapsedMs = Date.now() - trialStarted;
+      const changes = await workspaceChanges(task.repoDir, workspace).catch(() => null);
       const passed = !errorText && verification.exitCode === 0;
       trials.push({
         taskId: task.id,
@@ -1016,6 +1054,7 @@ async function runClaudeCodeEval(config, options = {}) {
         finished: !errorText,
         toolCalls: parsed ? parsed.numTurns : null,
         verification: { exitCode: verification.exitCode, output: verification.output },
+        changes,
         error: errorText
       });
       output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
@@ -1217,6 +1256,7 @@ export async function runEvalCommand(args = [], options = {}) {
 
         if (!errorText && agentResult) verification = await runVerifier(task, workspace, env);
         const elapsedMs = Date.now() - trialStarted;
+        const changes = await workspaceChanges(task.repoDir, workspace).catch(() => null);
         const totalTokens = usage.inputTokens + usage.outputTokens;
         const taskUsage = agentResult && agentResult.taskUsage && typeof agentResult.taskUsage === 'object'
           ? agentResult.taskUsage
@@ -1255,6 +1295,7 @@ export async function runEvalCommand(args = [], options = {}) {
           wallTimeMs: elapsedMs, finished: Boolean(agentResult && agentResult.finished),
           toolCalls: agentResult ? agentResult.toolCalls : 0,
           verification: { exitCode: verification.exitCode, output: verification.output },
+          changes,
           error: errorText
         });
         output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +

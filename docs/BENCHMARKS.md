@@ -85,6 +85,8 @@ The evaluator fingerprints the snapshot contents alongside the task prompt, refe
 
 The 20 "Create `src/lib.mjs` exporting `name(...)`" tasks used to hide the parameter list, so a multi-argument helper such as `clampInteger` could be correct and still fail because the model chose a different argument order. Each statement now gives the signature from its reference patch, for example `clampInteger(value, fallback, min, max)`. Verifiers, reference patches and snapshots are unchanged and `oasis eval --validate` still passes all 50 tasks, but the task fingerprints changed, so the comparator will not pair results recorded before and after this change. The field runs below that predate it are marked.
 
+Each trial row in a result file also has `changes`: the files the agent added, modified or deleted relative to the snapshot, with contents capped at 6,000 characters per file and 24,000 per trial, so a failure can be traced to the code that caused it.
+
 ## Run the suite validator first
 
 From a clean checkout with Node.js 22 or newer:
