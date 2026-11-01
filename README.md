@@ -162,6 +162,7 @@ oasis doctor --test-provider            # check the setup, including live tool c
 | `Enter` · `Tab` while it works | Steer: the agent reads your message at its next step and keeps going · queue it for after the turn |
 | `Ctrl+K` · `Ctrl+R` · `Ctrl+G` | Command palette · search prompt history · write a long prompt in your editor |
 | `/undo` · `/rewind` · `/diff` | Undo the last turn · pick a checkpoint · review changes |
+| `/test` · `/verify` · `/review` | Run the tests and hand failures to the agent · run the app to confirm a change · review the diff |
 | `/model` · `/context` · `/cost` | Switch model · see context use · see spend |
 | `/init` · `/memory` · `/keys` | Create `OASIS.md` project instructions · manage memory · all shortcuts |
 
