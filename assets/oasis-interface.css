@@ -847,6 +847,9 @@ html[data-motion="lite"] *{transition-duration:.08s!important}
 html[data-motion="off"] *,html[data-motion="off"] *::before,html[data-motion="off"] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 /* Image attachments */
 .agent-attach{padding:0 10px;min-width:36px}
+.agent-dictate.is-listening{color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+html[data-motion=full] .agent-dictate.is-listening{animation:oasis-dictate-pulse 1.6s ease-in-out infinite}
+@keyframes oasis-dictate-pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 8%,transparent)}}
 .agent-attachments{display:flex;flex-wrap:wrap;gap:8px;padding:2px 0 4px}
 .agent-attachment{position:relative;margin:0;width:76px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--sunken);overflow:hidden}
 .agent-attachment img{display:block;width:76px;height:56px;object-fit:cover}

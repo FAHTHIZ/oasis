@@ -36,6 +36,8 @@ During setup, choose a provider preset or a custom endpoint: **OmniRoute**, Open
 
 **Images.** Paste a screenshot into the chat box, drop image files onto it, or use the paperclip button. Up to 4 PNG, JPEG, GIF or WebP images (3.75 MB each) go with the message; remove any with ×. If the current model is text-only, OASIS says so instead of sending them. `@path/to/image.png` mentions still work too.
 
+**Dictation.** In browsers with built-in speech recognition (Chrome, Edge, Safari), a microphone button sits next to the paperclip. Press it and speak: words appear in the chat box as you talk, anything you had typed stays, and pressing it again or sending the message stops listening. The browser does the recognition (Chrome and Edge send the audio to their speech service), so OASIS never receives audio; the button is hidden where the browser has no recognizer.
+
 **Steering and motion.** Press Enter while a turn runs to steer it (the agent reads the message at its next step); Alt+Enter queues for after the turn. Each step gets its own message bubble and replies render as Markdown while they stream. Motion follows the device: full by default, lite (no blur, slower pulses, fewer re-renders) on 2-core or 2 GB devices and with Data Saver, off with reduced motion. Add `?motion=full`, `?motion=lite` or `?motion=off` to the URL to override; the choice is remembered.
 
 The authenticated browser runtime and extension hub are included in the default `main` installation. From the project you want OASIS to operate on:
