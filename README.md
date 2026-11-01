@@ -132,7 +132,7 @@ Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md), and the dated [secu
 
 The product is in the 1.0 release-candidate phase—not a feature-preview phase. The central scope is established; remaining work is concentrated on proving and refining the complete product journey.
 
-Open release gates include the browser turn-completion/activity-fold E2E regression, same-candidate full CI, clean-machine desktop journeys, unsigned-package policy, and security-boundary review. The 33-task evaluator is a regression/smoke suite, not a representative repository-scale benchmark. No broad model-parity, speed, accuracy, or token-savings claim is made.
+Open release gates include same-candidate full CI (including the corrected browser verification fixture), clean-machine desktop journeys, an explicit unsigned-package distribution decision, and security-boundary review. The 33-task evaluator is a regression/smoke suite, not a representative repository-scale benchmark. No broad model-parity, speed, accuracy, or token-savings claim is made.
 
 The [release-qualification plan](docs/PROJECT_PLAN.md) is the authoritative status and evidence record. A release candidate must not be described as stable or production-ready until its acceptance gates have been demonstrated on the same immutable candidate.
 
