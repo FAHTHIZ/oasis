@@ -19,7 +19,7 @@
 
 OASIS is not a model, hosted inference service, or vendor-locked IDE. You choose the model/provider—including a local endpoint—and OASIS supplies the agent runtime, workspace tools, policy controls, memory, automation, and developer surfaces.
 
-> **Current lifecycle — Release Candidate.** The 1.0 feature scope is established. Current work is production qualification: reliability, lifecycle correctness, security-boundary validation, platform verification, accessibility, and documentation. The development package on `main` is `1.0.0-rc.1`; it is not a published stable release. The last published stable desktop/CLI release remains [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0) until the 1.0.0 release gates are satisfied.
+> **Current lifecycle — Release Candidate.** The 1.0 feature scope is established. Current work is production qualification: reliability, lifecycle correctness, security-boundary validation, platform verification, accessibility, and documentation. The development package on `main` is `1.0.0`, with `oasisRelease` metadata marking it as Release Candidate 1; it is not a published stable release. The last published stable desktop/CLI release remains [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0) until the 1.0.0 release gates are satisfied.
 
 <p align="center">
   <a href="#quick-start"><strong>Get started</strong></a>
@@ -55,7 +55,7 @@ cd ~/your-project
 oasis
 ```
 
-This installs the current `main` source package (`1.0.0-rc.1`). It is the release-candidate development build, not the stable desktop download channel.
+This installs the current `main` source package (`1.0.0`, Release Candidate 1). It is the release-candidate development build, not the stable desktop download channel.
 
 ### Install the latest stable CLI release
 
@@ -151,7 +151,7 @@ The [release-qualification plan](docs/PROJECT_PLAN.md) is the authoritative stat
 | Runtime module map and extraction policy | [src/README.md](src/README.md) |
 | Test domains and runner conventions | [test/README.md](test/README.md) |
 | Repository ownership and maintenance | [Maintenance guide](docs/REPOSITORY_MAINTENANCE.md) |
-| Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 notes](docs/releases/v0.4.0.md) · [current 1.0.0-rc.1 candidate notes](docs/releases/v1.0.0-rc.1.md) |
+| Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 notes](docs/releases/v0.4.0.md) · [current 1.0.0 candidate notes](docs/releases/v1.0.0-candidate.md) |
 
 ## Development
 
