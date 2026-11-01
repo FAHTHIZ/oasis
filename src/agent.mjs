@@ -1578,6 +1578,16 @@ async function runPostCompactHooks(session, trigger, summary, options) {
   return started.additionalContext.join('\n').slice(0, 10000);
 }
 
+const LOCAL_FIRST_TOKEN_TIMEOUT_MS = 900000;
+
+// True when the provider runs on this machine (llama.cpp, Ollama, LM Studio, vLLM on localhost).
+export function isLoopbackProvider(config = {}) {
+  try {
+    const host = new URL(String(config && config.baseURL || '')).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return host === 'localhost' || host === '::1' || /^127\./.test(host) || host === '0.0.0.0' || host.endsWith('.localhost');
+  } catch { return false; }
+}
+
 const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed|stream stalled|timed out after \d+ seconds waiting/i;
 
 // --prompt-suggestions: one short guess at the user's next message, from the recent conversation.
@@ -1782,11 +1792,13 @@ async function requestCompletionRaw(session, options = {}) {
   }
 
   const controller = new AbortController();
+  // A local model on a laptop can spend minutes reading a long prompt before the
+  // first byte, so loopback providers get the longest wait by default.
   // timeoutMs bounds the wait for response headers. Once a stream starts, an
   // idle watchdog (reset on every chunk) replaces it, so long generations are
   // never cut off while tokens are still arriving, but a silent hang is.
   const configuredTimeoutSeconds = Number(providerEnv.OASIS_REQUEST_TIMEOUT_SECONDS) || 0;
-  const timeoutMs = Math.min(900000, Math.max(1000, Number(options.timeoutMs) || configuredTimeoutSeconds * 1000 || (typeof options.onDelta === 'function' ? 120000 : 600000)));
+  const timeoutMs = Math.min(900000, Math.max(1000, Number(options.timeoutMs) || configuredTimeoutSeconds * 1000 || (isLoopbackProvider(config) ? LOCAL_FIRST_TOKEN_TIMEOUT_MS : typeof options.onDelta === 'function' ? 120000 : 600000)));
   const streamIdleMs = Math.min(900000, Math.max(1000, Number(options.streamIdleMs) || Number(providerEnv.OASIS_STREAM_IDLE_SECONDS) * 1000 || 120000));
   let timedOut = false;
   let stalled = false;
@@ -4330,6 +4342,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     let streamedText = '';
     flushAsyncHookFeedback(session);
     let assistant;
+    const waitHook = typeof options.onModelWait === 'function' ? options.onModelWait : null;
+    if (waitHook) {
+      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []), model: session.config && session.config.model, local: isLoopbackProvider(session.config) }); } catch {}
+    }
     try {
       assistant = await requestCompletion(session, {
         ...(options.signal ? { signal: options.signal } : {}),
@@ -4346,7 +4362,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           if (typeof options.onStreamRestart === 'function') options.onStreamRestart(event);
         }
       });
+      if (waitHook) { try { waitHook({ phase: 'end', step: step + 1 }); } catch {} }
     } catch (error) {
+      if (waitHook) { try { waitHook({ phase: 'end', step: step + 1, error: true }); } catch {} }
       if (isContextOverflowError(error) && overflowRecoveries < 2 && !(options.signal && options.signal.aborted)) {
         overflowRecoveries++;
         const recovered = await recoverFromContextOverflow(session, activeRequestIndex, options, overflowRecoveries, error);

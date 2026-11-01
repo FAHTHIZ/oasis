@@ -6,6 +6,8 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- **Live wait indicator with adaptive motion.** While waiting for the model, the terminal shows what Oasis is waiting on, elapsed time, context sent, the step and `esc to stop`, so a slow model no longer looks like a hang. Motion follows the machine: full on capable hardware, lite on low-power machines, SSH and the Linux console, off for CI, screen readers and `OASIS_REDUCED_MOTION=1`. `OASIS_MOTION` overrides it. The startup logo uses the same rules.
+- **Local models get time to read the prompt.** Providers on localhost now wait up to 900 s for the first byte (was 120 s when streaming). On a 2-CPU machine llama.cpp reads about 22 prompt tokens per second, so a 15k-token first request took about 11 minutes and always timed out before.
 - **Evaluator grows to 50 tasks.** Seventeen repository-level `taskflow-*` tasks on a multi-module CLI project: eight symptom-only bug reports that require a regression test, and nine multi-file features. Verifiers run the full project suite and then hidden assertions. All 50 pass `oasis eval --validate`.
 
 - **Harness benchmark** — `node bench/harness/run.mjs` scores tool-call recovery, edit application, command safety, placeholder and weakened-test guards, secret scanning and context overhead against a no-harness baseline, with a development set and two held-out sets. Results are under `bench/results/`.
