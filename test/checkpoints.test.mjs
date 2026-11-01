@@ -12,11 +12,21 @@ const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'de
 
 async function setup(t, script) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-ckpt-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(path.join(root, 'app.js'), 'const version = 1;\n');
-  const { config } = await scriptedModel(t, script);
-  const session = await createSession({ root, config, settings });
-  t.after(() => closeSession(session));
+  const model = await scriptedModel(t, script, { registerTeardown: false });
+  let session = null;
+  t.after(async () => {
+    try {
+      if (session) await closeSession(session);
+    } finally {
+      try {
+        await model.close();
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
+  session = await createSession({ root, config: model.config, settings });
   return { root, session };
 }
 
