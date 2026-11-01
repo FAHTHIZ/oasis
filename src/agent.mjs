@@ -2540,7 +2540,7 @@ async function runSubagent(parent, args, context, options) {
     permissions: parent.permissions,
     sandbox: parent.sandbox,
     hooks: parent.hooks || {},
-    background: parent.background,
+    background: new Map(),
     hookMessages: parent.hookMessages || [],
     // Auto mode judges a subagent's actions against what the user asked the parent.
     autoModeSettings: parent.autoModeSettings || null,
@@ -2550,6 +2550,7 @@ async function runSubagent(parent, args, context, options) {
     checkpoints: worktree ? null : parent.checkpoints,
     agents: {}
   };
+  child.stopBackgroundProcesses = () => killAllBackground(child.background);
   const background = args.run_in_background === true || args.run_in_background === 'true';
   if (background && runningBackgroundCount(parent) >= MAX_BACKGROUND_AGENTS) {
     if (worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});

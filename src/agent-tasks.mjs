@@ -244,11 +244,29 @@ function elapsed(record) {
 }
 
 export function summarizeAgent(record, { full = false } = {}) {
-  const out = { id: record.id, agent: record.type, description: record.description, status: record.status, background: Boolean(record.background), elapsed: elapsed(record), runs: record.runs, toolCalls: record.toolCalls };
+  const child = record.child || {};
+  const backgroundProcesses = child.background && Number.isSafeInteger(child.background.size) ? child.background.size : 0;
+  const out = {
+    id: record.id,
+    agent: record.type,
+    description: record.description,
+    status: record.status,
+    background: Boolean(record.background),
+    elapsed: elapsed(record),
+    runs: record.runs,
+    toolCalls: record.toolCalls,
+    workspaceIsolation: record.worktreeInfo || record.worktree ? 'worktree' : 'shared',
+    access: record.readOnly ? 'read-only' : 'write-capable',
+    backgroundProcesses
+  };
+  const model = child.config && child.config.model;
+  if (typeof model === 'string' && model.trim()) out.model = model.slice(0, 200);
+  const toolCount = child.allowedToolNames instanceof Set ? child.allowedToolNames.size : 0;
+  if (toolCount) out.availableToolCount = toolCount;
   if (record.teamId) out.team_id = record.teamId;
   if (record.sharedTaskId) out.task_id = record.sharedTaskId;
   if (record.status === 'running' && record.recentTools.length) out.recentTools = record.recentTools.slice(-5);
-  const queuedMessages = Array.isArray(record.child && record.child.inbox) ? record.child.inbox.length : 0;
+  const queuedMessages = Array.isArray(child.inbox) ? child.inbox.length : 0;
   if (queuedMessages) out.queuedMessages = queuedMessages;
   if (record.worktree) out.worktree = record.worktree;
   if (record.error) out.error = record.error;
@@ -314,13 +332,41 @@ export function sendTeamMessage(session, args = {}) {
   return { delivered: 'queued', from: senderId, to: targetId, status: record.status, message: 'Message queued for ' + targetId + '; it will be delivered at the recipient\'s next model step.' };
 }
 
+function stopAgentBackgroundProcesses(record) {
+  if (!record || !record.child || typeof record.child.stopBackgroundProcesses !== 'function') return 0;
+  try {
+    const stopped = Number(record.child.stopBackgroundProcesses());
+    return Number.isFinite(stopped) && stopped > 0 ? Math.floor(stopped) : 0;
+  } catch { return 0; }
+}
+
 export function stopAgent(session, args = {}) {
   const record = getAgent(session, args.id);
-  if (record.status !== 'running') return { id: record.id, status: record.status, message: 'The agent is not running.' };
+  const processesStopped = stopAgentBackgroundProcesses(record);
+  if (record.status !== 'running') {
+    return {
+      id: record.id,
+      status: record.status,
+      backgroundProcessesStopped: processesStopped,
+      message: processesStopped
+        ? 'The agent is not running; stopped ' + processesStopped + ' background process(es) it left in its private environment.'
+        : 'The agent is not running.'
+    };
+  }
   record.cancelRequested = true;
   if (record.controller) record.controller.abort();
-  recordAgentEvent(session, 'agent.stop_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description });
-  return { id: record.id, status: 'stopping', message: 'Stop requested; the agent will end at its next step.' };
+  recordAgentEvent(session, 'agent.stop_requested', {
+    agentId: record.id,
+    teamId: record.teamId || undefined,
+    description: record.description,
+    detail: processesStopped ? 'Stopped ' + processesStopped + ' agent-owned background process(es).' : ''
+  });
+  return {
+    id: record.id,
+    status: 'stopping',
+    backgroundProcessesStopped: processesStopped,
+    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + processesStopped + ' agent-owned background process(es).' : '')
+  };
 }
 
 export async function stopAllAgents(session) {
@@ -332,6 +378,9 @@ export async function stopAllAgents(session) {
   }
   const pending = [];
   for (const record of session.agentTasks.agents.values()) {
+    // Completed workers can leave explicitly backgrounded processes for a later
+    // resume. Session shutdown owns those processes too, not just live model loops.
+    stopAgentBackgroundProcesses(record);
     if (record.status !== 'running') continue;
     record.cancelRequested = true;
     if (record.controller) record.controller.abort();
