@@ -251,6 +251,22 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Verification boundary:** the regression must pass on the current main SHA. This is a safer default, not a complete shell parser or a guarantee that all destructive shell behavior can be recognized.
 
+## Follow-up hardening: sandbox /tmp toolchain mounts and socket directories (November 1, 2026)
+
+**Finding:** to keep toolchains installed under `/tmp` usable inside the bubblewrap sandbox (which mounts a private `/tmp`), OASIS re-exposed the top-level `/tmp` entry of the command path and of each `PATH` directory, read-only. The command path is chosen by the model. A command such as `/tmp/ssh-XXXX/agent.N` would therefore re-expose that ssh-agent directory, and a read-only bind still allows `connect()` to a Unix socket, so a sandboxed process could use the user's SSH agent. Mounting the whole top-level entry also exposed unrelated files next to the toolchain.
+
+**Fix committed:** only the toolchain prefix is mounted (the parent of a `bin/` directory, otherwise the directory itself). The command must be a regular file and `PATH` entries must be directories. Per-user socket and session directories (`ssh-*`, `.X11-unix`, `.ICE-unix`, `tmux-*`, `systemd-private-*`, `dbus-*`, GnuPG and keyring directories, and similar) are never mounted.
+
+**Regression coverage:** `test/power.test.mjs` checks that an `ssh-*` agent directory is not mounted through either the command or `PATH`, that a directory passed as the command is ignored, and that a nested toolchain mounts only its prefix.
+
+## Follow-up hardening: text tool-call recovery ignores quoted and example calls (November 1, 2026)
+
+**Finding:** tool-call recovery for smaller models turned call syntax in plain reply text into real tool calls. A JSON example inside an explanation, or `<tool_call>` text quoted from a file inside a code fence, could be executed. Permission checks still applied, but under `--yes` or a permissive mode the call would have run without the user intending it.
+
+**Fix committed:** call syntax inside a code fence is never recovered. A fenced JSON call is recovered only when the reply is essentially just that call (at most one short lead-in line). Calls are still limited to tools the session exposes, and every recovered call goes through the normal permission policy.
+
+**Regression coverage:** `test/tool-call-repair.test.mjs` checks that an explained example, fenced `<tool_call>` tags and fenced Llama `<function=...>` syntax are not executed, and that a short lead-in plus one fenced call is still recovered.
+
 ## Cross-platform regression: canonical paths on macOS
 
 **Finding:** portable global skills and global-extension skills compared a canonicalized root (`realpath`, often `/private/var/...` on macOS) with an uncanonicalized target path (often `/var/...`). Legitimate files under a temporary or home directory could be rejected on macOS. Two credential-masking tests also compared canonical result paths with noncanonical temporary paths, causing false failures.
