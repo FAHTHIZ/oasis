@@ -964,7 +964,8 @@ document.getElementById('cloudRunTasksBackBtn').addEventListener('click',functio
 function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
 function agentAppendMessage(role,text,jobId){var empty=document.getElementById('agentEmptyState');if(empty)empty.remove();var el=document.createElement('div');el.className='agent-message '+role;el.textContent=text||'';if(jobId)el.dataset.jobId=jobId;document.getElementById('agentMessages').appendChild(el);agentScroll();return el}
 function agentAssistantUpdate(jobId,text){var node=agentAssistantNodes[jobId];if(!node){node=agentAppendMessage('assistant','',jobId);agentAssistantNodes[jobId]=node}node.textContent=String(text||'');agentScroll()}
-function agentAppendAssistantDelta(jobId,delta){var node=agentAssistantNodes[jobId];if(!node){node=agentAppendMessage('assistant','',jobId);agentAssistantNodes[jobId]=node}var chunk=String(delta||'');if(!chunk)return;var last=node.lastChild;if(last&&last.nodeType===3)last.appendData(chunk);else node.appendChild(document.createTextNode(chunk));agentScroll()}
+var agentStreamScrollRaf=0;
+function agentAppendAssistantDelta(jobId,delta){var node=agentAssistantNodes[jobId];if(!node){node=agentAppendMessage('assistant','',jobId);agentAssistantNodes[jobId]=node}var chunk=String(delta||'');if(!chunk)return;var last=node.lastChild;if(last&&last.nodeType===3)last.appendData(chunk);else node.appendChild(document.createTextNode(chunk));if(!agentStreamScrollRaf)agentStreamScrollRaf=requestAnimationFrame(function(){agentStreamScrollRaf=0;agentScroll()})}
 function agentActivity(text){agentAppendMessage('activity',text)}
 function agentClearMessages(){document.getElementById('agentMessages').replaceChildren();agentAssistantNodes=Object.create(null);document.getElementById('agentApprovalCard').hidden=true;agentApprovalId=null}
 function agentSetBusy(v){agentBusy=!!v;document.getElementById('agentSendBtn').disabled=agentBusy;document.getElementById('agentStopBtn').hidden=!agentBusy;document.getElementById('agentStopBtn').disabled=!agentBusy;document.getElementById('agentPrompt').disabled=agentBusy;document.getElementById('agentIsolateWorktree').disabled=agentBusy;document.getElementById('agentConnectBtn').disabled=agentBusy;document.getElementById('terminalRunBtn').disabled=agentBusy;document.getElementById('githubCloneBtn').disabled=agentBusy;if(!agentBusy&&agentToken){void agentLoadCloudTasks(true);void agentLoadHistoryList()}}
@@ -1656,6 +1657,7 @@ var pending=new Map(),raf=0;
 function paint(){raf=0;pending.forEach(function(text,node){node.classList.add('md');node.dataset.raw=text;node.innerHTML=renderMarkdown(text)+(document.body.classList.contains('agent-busy')&&node===lastAssistant()?'':'<div class="msg-actions"><button type="button" class="msg-action" data-copy-message>Copy</button></div>')});pending.clear();agentScroll()}
 function lastAssistant(){var all=messages.querySelectorAll('.agent-message.assistant');return all[all.length-1]}
 C.hook('agentAssistantUpdate',function(coreUpdate){return function(jobId,text){
+  currentActivityGroup=null;
   coreUpdate(jobId,text);
   var node=C.nodes[jobId];if(!node)return;
   node.dataset.raw=String(text||'');node.classList.toggle('is-placeholder',/^Oasis is working…?$/.test(node.dataset.raw.trim()));
@@ -1759,6 +1761,7 @@ window.oasisActivityResult=function(data){
   agentScroll();
 };
 C.hook('agentActivity',function(){return function(text){
+  currentActivityGroup=null;
   text=String(text||'');
   var empty=$('agentEmptyState');
   if(empty&&!/^(\[[^\]]+\]\s+)?Working:|^[\w.:-]+ result: /.test(text)){
