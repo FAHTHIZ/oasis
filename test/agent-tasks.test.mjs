@@ -66,7 +66,7 @@ test('built-in independent reviewers are read-only and the task schema exposes s
   assert.ok(Object.hasOwn(schema.properties, 'model'));
   assert.ok(Object.hasOwn(schema.properties, 'fork_context'));
   assert.deepEqual(schema.required, ['description', 'prompt']);
-  assert.ok(Object.hasOwn(schema.properties.subagent_type.enum ? { subagent_type: schema.properties.subagent_type } : {}, 'subagent_type') === false || schema.properties.subagent_type.enum.includes('security-review'));
+  assert.ok(schema.properties.subagent_type.enum.includes('security-review'));
   assert.ok(schema.properties.subagent_type.enum.includes('code-review'));
   assert.ok(schema.properties.subagent_type.enum.includes('security-review'));
 });
@@ -766,6 +766,8 @@ test('agent lifecycle observers receive structured events without affecting orch
   assert.equal(view.model, 'fixture-model');
   assert.equal(view.availableToolCount, 2);
   assert.equal(view.backgroundProcesses, 1);
+  const startedEvent = agentEvents(session).events.find((event) => event.type === 'agent.started');
+  assert.match(startedEvent.detail, /read-only access/);
   assert.equal(observed.length, 1);
   assert.equal(observed[0].type, 'agent.started');
   assert.equal(observed[0].run_id, 'monitor-run-1');

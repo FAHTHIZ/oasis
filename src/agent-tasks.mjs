@@ -262,7 +262,21 @@ export function registerAgent(session, fields) {
   const record = { id, status: 'running', startedAt: Date.now(), finishedAt: null, runs: 1, toolCalls: 0, tokensUsed: 0, recentTools: [], report: '', error: null, ...fields, teamId: teamId || null, runId: session.agentRunId || fields.runId || null };
   registry.agents.set(id, record);
   if (team) team.members.push(id);
-  recordAgentEvent(session, 'agent.started', { agentId: id, teamId: teamId || undefined, description: record.description || record.type || id });
+  const child = record.child || {};
+  const model = String(child.config && child.config.model || '').replace(/[\\r\\n\\0]+/g, ' ').slice(0, 120);
+  const toolCount = child.allowedToolNames instanceof Set ? child.allowedToolNames.size : 0;
+  const details = [
+    record.worktreeInfo || record.worktree ? 'isolated worktree' : 'shared workspace',
+    record.readOnly ? 'read-only access' : 'write-capable access',
+    model ? 'model ' + model : '',
+    toolCount ? toolCount + ' tools available' : ''
+  ].filter(Boolean).join(' · ').slice(0, 450);
+  recordAgentEvent(session, 'agent.started', {
+    agentId: id,
+    teamId: teamId || undefined,
+    description: record.description || record.type || id,
+    detail: details
+  });
   if (record.sharedTaskId) recordAgentEvent(session, 'task.dispatched', { agentId: id, teamId: teamId || undefined, description: record.sharedTaskId, detail: record.description || '' });
   return record;
 }
