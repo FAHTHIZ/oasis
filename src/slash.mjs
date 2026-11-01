@@ -24,7 +24,7 @@ import { killBackgroundEntry } from './power-tools.mjs';
 import path from 'node:path';
 
 // Claude Code aliases for built-in commands.
-export const COMMAND_ALIASES = { keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'bug', 'install-github-action': 'install-github-app' };
+export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'bug', 'install-github-action': 'install-github-app' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
