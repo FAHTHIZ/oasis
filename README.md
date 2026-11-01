@@ -194,7 +194,7 @@ The [documentation index](docs/README.md) maps every canonical guide, integratio
 | Topic | Reference |
 |---|---|
 | Product status and architecture | [Project plan](docs/PROJECT_PLAN.md) · [Architecture](docs/ARCHITECTURE.md) |
-| Setup and daily use | [Installation](docs/INSTALL.md) · [User guide](docs/USER_GUIDE.md) · [Termux](docs/TERMUX.md) |
+| Setup and daily use | [Installation](docs/INSTALL.md) · [User-guide map](docs/USER_GUIDE_MAP.md) · [Full user guide](docs/USER_GUIDE.md) · [Termux](docs/TERMUX.md) |
 | Trust and evaluation | [Security audit](docs/SECURITY_RELIABILITY_AUDIT.md) · [Security policy](SECURITY.md) · [Privacy](docs/PRIVACY.md) · [Benchmarks](docs/BENCHMARKS.md) |
 | Extensibility and experience | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) · [Shortcuts](docs/KEYS.md) · [Brand guide](docs/BRAND.md) |
 | Project upkeep and research | [Repository maintenance](docs/REPOSITORY_MAINTENANCE.md) · [Research notes](docs/research/README.md) |
