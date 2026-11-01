@@ -10,6 +10,7 @@ Future changes after the current 1.0.0 release candidate belong here.
 
 Reliability and token-efficiency work driven by common coding-agent complaints:
 
+- **Fix-thrash detection** — when edits keep failing a command in exactly the same way (signature ignores timings, numbers and temp paths), the model is told on the 3rd identical failure to stop patching and diagnose, and on the 5th to summarize and change approach or ask; the CLI shows `[stuck?]`.
 - **Lean tool loading** — rarely used setup/install/terminal/cron tool schemas are deferred (about 2.7k fewer tokens per request) and load automatically on first call or via `tool_search`. Opt out with `leanTools: false` or `OASIS_LEAN_TOOLS=0`.
 - **Change guard** — blocks edits that replace real code with placeholders such as `// ... rest of the code unchanged`, warns on large unexplained shrinkage, and detects fix-circling (reverting to an earlier broken state).
 - **Commit secret scan** — `git_commit` builds the commit in a throwaway index and scans added lines for real credentials (API tokens, private keys, `PASSWORD=` style assignments, `user:pass@` URLs). Hits are refused with `file:line` and a masked preview; samples like `AKIA…EXAMPLE` and `process.env` references pass. The same scan runs when the agent types a raw `git commit` (including `-a`/`-am`) through `run_command` or `run_shell`, so the check cannot be sidestepped. Disable with `OASIS_COMMIT_SECRET_SCAN=0`.
