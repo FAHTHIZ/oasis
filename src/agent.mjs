@@ -4686,7 +4686,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         }
       }
       const lastTool = session.messages[session.messages.length - 1];
-      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>OASIS ran these checks for you: the diff of your changes and the project tests. Read the results. If a test failed, fix the code (not the test) and the checks will run again. If everything passed, give your final answer and report the test result.</system-reminder>';
+      const ranDiff = calls.some((c) => c.function && (c.function.name === 'git_diff' || c.function.name === 'read_file'));
+      const ranSyntax = syntaxIds.size > 0;
+      const ranTests = calls.some((c) => c.function && c.function.name === 'run_command') && !ranSyntax;
+      const what = [ranDiff ? 'the diff of your changes' : '', ranTests ? 'the project tests' : '', ranSyntax ? 'a syntax check (no test suite found)' : ''].filter(Boolean).join(' and ') || 'checks';
+      const word = ranTests ? 'test' : 'check';
+      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>OASIS ran these checks for you: ' + what + '. Read the results. If a ' + word + ' failed, fix the code (not the test) and the checks will run again. If everything passed, give your final answer and report the ' + word + ' result.</system-reminder>';
     }
 
     // Tool output is usually English; restate the reply language so answers don't drift (Claude Code #96326).

@@ -1670,11 +1670,23 @@ async function readGitStatus(root) {
   return await runReadOnlyGit(root, ['status', '--short', '--branch', '--untracked-files=normal', '--no-ahead-behind']);
 }
 
+const EMPTY_TREE_SHA1 = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+const EMPTY_TREE_SHA256 = '6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321';
+
 async function readGitDiff(root, args = {}) {
   const scope = ['unstaged', 'staged', 'all'].includes(args.scope) ? args.scope : 'all';
   const commandArgs = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=3'];
   if (scope === 'staged') commandArgs.push('--cached');
-  else if (scope === 'all') commandArgs.push('HEAD');
+  else if (scope === 'all') {
+    // A fresh repository has no HEAD yet; diff against the empty tree so the
+    // first change can still be reviewed instead of failing.
+    const head = await runReadOnlyGit(root, ['rev-parse', '--verify', '-q', 'HEAD']);
+    if (head && head.exitCode === 0) commandArgs.push('HEAD');
+    else {
+      const format = await runReadOnlyGit(root, ['rev-parse', '--show-object-format']);
+      commandArgs.push(/sha256/.test(String(format && format.stdout || '')) ? EMPTY_TREE_SHA256 : EMPTY_TREE_SHA1);
+    }
+  }
   let relativePath = '';
   if (args.path !== undefined && args.path !== null && String(args.path).trim()) {
     const resolved = await resolveWorkspacePath(root, String(args.path), { rejectSymlinks: true });
