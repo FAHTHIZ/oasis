@@ -65,7 +65,7 @@ import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentR
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
-import { repairToolArguments, extractTextToolCalls } from './tool-call-repair.mjs';
+import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 
 const MAX_REPLY_CHARS = 24000;
@@ -2029,6 +2029,11 @@ function normalizeAssistantToolCalls(session, assistant, step) {
       }));
       assistant.content = extracted.text || null;
       repairs.textCalls = extracted.calls.length;
+    } else {
+      // Calls to tools that do not exist ({"name": "git_init", ...}) must not
+      // pass as a final answer; the model is told which tools exist.
+      const unknown = unknownTextToolCalls(assistant.content, availableToolNames(session));
+      if (unknown.length) Object.defineProperty(assistant, 'unknownToolNames', { value: unknown, enumerable: false, configurable: true });
     }
   }
   for (const call of Array.isArray(assistant.tool_calls) ? assistant.tool_calls : []) {
@@ -4215,6 +4220,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let correctionNudged = false;
   let actionNudges = 0;
   let refusalNudged = false;
+  let unknownToolNudges = 0;
   let fencedApplied = false;
   let echoNudges = 0;
   const failedCommandRuns = new Map();
@@ -4398,6 +4404,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.tamperCheckPending = false;
         const { detectTestTampering } = await import('./test-tamper.mjs');
         verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
+      }
+      if (assistant.unknownToolNames && unknownToolNudges < 2) {
+        unknownToolNudges++;
+        const names = [...availableToolNames(session)].filter((name) => !name.includes('__')).slice(0, 30);
+        session.messages.push({ role: 'user', content: '<system-reminder>' + assistant.unknownToolNames.join(', ') + (assistant.unknownToolNames.length === 1 ? ' is not a tool' : ' are not tools') + ', so nothing ran. Available tools: ' + names.join(', ') + '. Use run_command for anything else (for example git commands). Call a real tool now, or give your final answer.</system-reminder>' });
+        continue;
       }
       if (!text && assistant.echoedToolResponse && echoNudges < 2) {
         echoNudges++;
