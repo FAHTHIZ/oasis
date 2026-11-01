@@ -4,9 +4,9 @@ OASIS is Beta software. Use a project folder you trust, review permission prompt
 
 ## Desktop app — no terminal required
 
-> **Availability:** Desktop packages are built by CI, but there is currently no published GitHub Release or public desktop installer asset to download. The source package is version 0.4.0 and its notes are prepared, but `v0.4.0` has not been tagged or published. Use the CLI installation path below until a release with desktop assets is published.
+> **Availability:** Desktop installers are published in [OASIS v0.4.0](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0). The packages are unsigned. Clean-machine first-run, update, and uninstall behavior still needs real-platform verification; do not treat a successful CI package build as that verification.
 
-The Electron app is configured for Windows, macOS and Linux. When public release assets are available, choose the matching file from the [GitHub releases page](https://github.com/FAHTHIZ/oasis/releases). The packaged app includes its own runtime: you do not need to install Node.js or Git separately. The first-launch guidance below describes the intended packaged-app flow.
+The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [v0.4.0 release](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. The packaged app includes its own runtime: you do not need to install Node.js or Git separately. First-launch steps below describe the intended flow; verify it on a clean machine before relying on it.
 
 | Operating system | Download | First launch |
 |---|---|---|
@@ -27,7 +27,7 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 
 ## Command-line installation
 
-The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. At this snapshot, `v0.3.0` is the only version tag, so the installer currently installs that version; source package `0.4.0` on `main` is prepared but is not yet a tagged install target. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
+The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. The latest tagged release is currently `v0.4.0`, so that is the CLI install/update target. The `main` branch contains newer unreleased changes but still reports package version `0.4.0`; use the source-install path only when you deliberately want development code. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
 ### macOS, Linux and Android/Termux
 
