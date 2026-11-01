@@ -785,6 +785,8 @@ Other session flags:
 
 `--json-schema` takes a JSON Schema (inline or `@file.json`). OASIS asks the model for JSON that matches it, validates the reply and retries up to twice. With `--output-format json` the result is in `structured_output`; in text mode only the JSON is printed. If it still fails, the result has subtype `error_max_structured_output_retries`.
 
+Codex users can keep their scripts: `oasis exec` accepts `--output-schema schema.json` (a plain path, same as `--json-schema @schema.json`) and `-o FILE` / `--output-last-message FILE`, which writes the final reply (or the structured JSON) to a file as well as printing it.
+
 `-w/--worktree [NAME]` runs the session (interactive or `-p`) in a new git worktree under `.oasis/worktrees/` on its own `oasis/NAME-*` branch, so your checkout is untouched. When the session ends, a worktree with no changes is removed along with its branch. Otherwise OASIS keeps it and prints how to review, merge or remove it.
 
 - `--output-format text` (default) prints the final answer. `json` prints one object with `result`, `subtype` (`success`, `error_max_turns`, `error_during_execution`), `is_error`, `num_turns`, `usage`, `tool_calls`, `session_id`, and `permission_denials`. `stream-json` prints one JSON event per line (`system`, `tool_use`, `tool_result`, `assistant`, then `result`).
