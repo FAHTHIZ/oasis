@@ -422,6 +422,37 @@ test('agent activity timeline records lifecycle and messages, filters safely, an
 });
 
 
+test('a task that fails to launch is reported to the coordinator and recorded as an agent event', async (t) => {
+  // No git repository, so the isolated worktree cannot be created.
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-fail-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-fail-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const { config } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user') {
+        return { content: null, tool_calls: [
+          call('create-task', 'task_create', { subject: 'Inspect target', description: 'Read target.txt.' }),
+          call('dispatch', 'dispatch_ready_tasks', { max_parallel: 1 })
+        ] };
+      }
+      return { content: 'dispatch reported' };
+    }
+  });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'Create a task and dispatch it.', { autoApprove: true, env, approval: async () => true });
+  const reply = session.messages.find((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks');
+  assert.ok(reply, 'the dispatcher replied');
+  assert.match(String(reply.content), /No worker started successfully/);
+  assert.match(String(reply.content), /git repository/);
+  const failure = agentEvents(session, { limit: 30 }).events.find((event) => event.type === 'task.dispatch_failed');
+  assert.ok(failure, 'a dispatch failure is visible in agent_events');
+  assert.match(failure.detail, /^task_1: .*git repository/);
+  assert.equal(session.sharedTasks.tasks[0].status, 'pending', 'the task stays available for a retry');
+});
+
 test('dispatch_ready_tasks rejects overlapping dispatch attempts without claiming tasks', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-lock-'));
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-dispatch-lock-home-'));
@@ -537,7 +568,10 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
   await until(() => {
     const tasks = session.sharedTasks.tasks;
     return ['task_1', 'task_3'].every((id) => tasks.find((task) => task.id === id)?.status === 'completed');
-  }, 15000, () => 'first wave did not complete; tasks=' + JSON.stringify(session.sharedTasks.tasks) +
+  }, 15000, () => 'first wave did not complete; dispatch=' + JSON.stringify(session.messages
+    .filter((message) => message.role === 'tool' && message.name === 'dispatch_ready_tasks')
+    .map((message) => String(message.content).slice(0, 1500))) +
+    '; tasks=' + JSON.stringify(session.sharedTasks.tasks) +
     '; agents=' + JSON.stringify([...session.agentTasks.agents.values()].map(summarizeAgent)) +
     '; events=' + JSON.stringify(agentEvents(session, { limit: 30 }).events));
   await until(() => [...session.agentTasks.agents.values()].length === 2 &&
