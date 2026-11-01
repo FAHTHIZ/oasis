@@ -107,6 +107,7 @@ function printHelp() {
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis ide [install|package]   Connect VS Code/Cursor/Windsurf: selection context, diff review, diagnostics',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
+    '  oasis mcp add --transport http|sse NAME URL  Configure a remote MCP server',
     '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
@@ -1536,7 +1537,7 @@ async function manageMcp(rest, root = process.cwd()) {
   const config = await loadMcpServers();
   if (action === 'list') {
     stdout.write('MCP server configuration: ' + config.configPath + '\n');
-    if (!config.servers.length) stdout.write('No user-level MCP servers configured. See README.md for setup syntax.\n');
+    if (!config.servers.length) stdout.write('No servers in this file. Add one with oasis mcp add NAME -- COMMAND, or a remote one with oasis mcp add --transport http|sse NAME URL.\n');
     for (const server of config.servers) {
       stdout.write('  ' + server.name + ' — ' + (server.enabled ? 'enabled' : 'disabled') + '\n');
       stdout.write('    executable: ' + server.command + '\n');
@@ -1585,11 +1586,17 @@ async function manageMcp(rest, root = process.cwd()) {
       : await commands.mcpLogout(root, rest[1], { env: process.env })) + '\n');
     return;
   }
+  if (action === 'add' && rest.some((arg, i) => arg === '--transport' && /^(?:http|sse|streamable-http)$/i.test(String(rest[i + 1] || '')) || /^--transport=(?:http|sse|streamable-http)$/i.test(arg))) {
+    const { addRemoteMcpServer } = await import('./mcp-remote-add.mjs');
+    const result = await addRemoteMcpServer(rest.slice(1), { root, env: process.env, approve: (text) => approve(text, true, false) });
+    stdout.write(result + '\n');
+    return;
+  }
   if (action === 'add') {
     const name = rest[1];
     const separator = rest.indexOf('--');
     if (!name || separator < 2 || separator === rest.length - 1) {
-      throw new Error('Usage: oasis mcp add NAME [--env VAR1,VAR2] -- EXECUTABLE [ARG ...]');
+      throw new Error('Usage: oasis mcp add NAME [--env VAR1,VAR2] -- EXECUTABLE [ARG ...]\n       oasis mcp add --transport http|sse NAME URL [--header "Name: value"] [--scope user|project]');
     }
     let passEnv = [];
     for (let i = 2; i < separator; i++) {
