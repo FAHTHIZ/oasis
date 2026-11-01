@@ -19,7 +19,7 @@ test('uninstall refuses project checkouts and local source directories', () => {
     path.join(os.tmpdir(), 'oasis'),
     path.join(os.tmpdir(), 'project', 'node_modules', 'not-oasis')
   ]) {
-    assert.throws(() => resolveUninstallPlan(root, { name: 'oasis-oss' }), /global npm installation.*will not delete project files/i);
+    assert.throws(() => resolveUninstallPlan(root, { name: 'oasis-oss' }), /global npm installation.*will not delete project files|package directory does not match its installed package name/i);
   }
 });
 
