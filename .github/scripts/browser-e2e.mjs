@@ -281,8 +281,27 @@ try {
   await page.waitForFunction(() => window.scrollY > 0, null, { timeout: timeoutMs });
   await assertAgentContrast(page, 'Agent provider settings · desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-provider-settings-desktop.png'), fullPage: true });
+  const perfCdp = await context.newCDPSession(page);
+  await perfCdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
-  await page.locator('#agentSendBtn').click();
+  await measureFrames(page, 'approval card opening', async () => {
+    await page.locator('#agentSendBtn').click();
+    await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  });
+  await assertAgentContrast(page, 'Agent edit approval card');
+  const editApprovalDiff = await page.locator('#agentApprovalDiff').innerText();
+  assert.match(editApprovalDiff, /-\"theme\":\"dark\"/);
+  assert.match(editApprovalDiff, /\\+\"theme\":\"light\"/);
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-edit-approval-desktop.png'), fullPage: true });
+  await page.locator('#agentApproveBtn').click();
+  await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
+  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  const commandApproval = await page.locator('#agentApprovalPrompt').innerText();
+  assert.match(commandApproval, /node -e process\\.exit\\(7\\)/);
+  assert.equal(await page.locator('#agentApprovalDiff').isHidden(), true,
+    'A command approval should not display a file-edit diff.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-command-approval-desktop.png'), fullPage: true });
+  await page.locator('#agentApproveBtn').click();
   try {
     await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
       .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
@@ -296,19 +315,98 @@ try {
       '; page errors=' + JSON.stringify(pageErrors));
   }
 
+  const activitySummary = page.locator('#agentMessages .turn-work');
+  await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
+  const defaultActivityText = await page.locator('#agentMessages').innerText();
+  assert.match(defaultActivityText, /The command failed|failed \\(exit code 7\\)|exit code 7/i,
+    'The failed command warning must remain visible outside the fold.');
+  assert.equal(await page.locator('#agentMessages .notice-warn').count() > 0, true,
+    'A failed command must use the visible warning treatment.');
+  assert.equal(await activitySummary.locator('.notice-warn').count(), 0,
+    'The warning must not be hidden inside the Worked for disclosure.');
+  assert.doesNotMatch(defaultActivityText, /Tool: (?:read_file|edit_file|run_command)|\"path\"\\s*:/,
+    'The default chat view must not expose raw tool names or JSON arguments.');
+  assert.match(await activitySummary.locator('summary').innerText(), /Worked for .* · 5 tool calls/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-desktop.png'), fullPage: true });
+
+  await measureFrames(page, 'opening Worked for activity fold', async () => {
+    await activitySummary.locator('summary').click();
+  });
+  const groups = page.locator('#agentMessages .turn-work .activity-group');
+  assert.equal(await groups.count(), 4, 'File creation, reading, editing and the command should form readable groups.');
+  const groupText = await activitySummary.innerText();
+  assert.match(groupText, /Wrote 1 file/);
+  assert.match(groupText, /Read 1 file/);
+  assert.match(groupText, /Edited 2 files/);
+  assert.match(groupText, /Ran 1 command/);
+  assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|\"path\"\\s*:/,
+    'Raw tool detail should stay hidden until Show details is opened.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop.png'), fullPage: true });
+
+  const readGroup = groups.filter({ hasText: 'Read 1 file' }).first();
+  await readGroup.locator('.activity-group-fold > summary').click();
+  const readDetails = readGroup.locator('.activity-tool-details');
+  await readDetails.locator('summary').click();
+  const readDetailText = await readDetails.innerText();
+  assert.match(readDetailText, /Tool: read_file/);
+  assert.match(readDetailText, /browser-e2e-output\\.txt/);
+  assert.doesNotMatch(readDetailText, /super-secret-value/,
+    'Secrets must remain masked in the expanded details view.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-details-desktop.png'), fullPage: true });
+
+  await measureFrames(page, 'streaming a long assistant reply', async () => {
+    await page.evaluate(async () => {
+      const id = 'oasis-frame-stream-fixture';
+      const node = window.agentAppendMessage('assistant', '', id);
+      window.agentAssistantNodes[id] = node;
+      const chunk = 'A streamed sentence is appended without rebuilding the message. ';
+      for (let index = 0; index < 48; index++) {
+        window.agentAppendAssistantDelta(id, chunk);
+        if (index % 4 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      node.remove();
+      delete window.agentAssistantNodes[id];
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth) <= 390,
+    'The activity groups and approval details must fit a 390px phone viewport.');
+  await assertAgentContrast(page, 'Agent activity · 390px');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-390px.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await measureFrames(page, 'switching between saved chats', async () => {
+    await page.locator('#newAgentSessionBtn').click();
+    await page.locator('#sidebarChatList [data-sidebar-session-id]').first().click();
+    await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.user')]
+      .some((element) => element.textContent.includes('Run the browser end-to-end fixture and report its result.')),
+    null, { timeout: timeoutMs });
+  });
+  await perfCdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  const worstFrame = Math.max(0, ...frameMetrics.map((item) => item.worstFrameMs));
+  await writeFile(path.join(screenshotDir, 'frame-timings.json'), JSON.stringify({
+    cpuThrottleRate: 4,
+    interactions: frameMetrics,
+    worstFrameMs: Number(worstFrame.toFixed(1)),
+    targetWorstFrameMs: 50,
+    metTarget: frameMetrics.every((item) => item.worstFrameMs <= 50)
+  }, null, 2));
+  console.log('[frames 4x CPU] worst measured frame: ' + worstFrame.toFixed(1) + 'ms across ' + frameMetrics.length + ' interactions.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop-after-switch.png'), fullPage: true });
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
-  assert.equal(completionCalls, 3, 'The agent should write the file, read it back, and then produce a final answer.');
+  assert.equal(completionCalls, 6, 'The agent should create, read, edit, approve two actions, and report the results.');
   await page.waitForFunction(() => document.querySelectorAll('#sidebarChatList [data-sidebar-session-id]').length > 0,
     null, { timeout: timeoutMs });
   assert.ok(await page.locator('#sidebarChatList [data-sidebar-session-id]').count() > 0,
     'The sidebar should show saved conversations from the authenticated runtime.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
-    'Created by the authenticated browser agent tool cycle.\n',
-    'The browser request should result in a real workspace file write.'
+    'Edited by the authenticated browser agent tool cycle.\n',
+    'The browser request should result in a real workspace edit after the initial write and read.'
   );
 
   // Destructive actions should be explained in plain language and remain denyable.
@@ -326,7 +424,7 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
     .some((element) => element.textContent.includes('The delete request was denied; the file remains unchanged.')),
   null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 5, 'The denial should be reported to the model without running the delete operation.');
+  assert.equal(completionCalls, 8, 'The denial should be reported to the model without running the delete operation.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
     'Created by the authenticated browser agent tool cycle.\n',
@@ -406,7 +504,7 @@ try {
   assert.equal(await page.locator('#agentStopBtn').isEnabled(), true, 'Stop should be enabled while command approval is pending.');
   await page.locator('#agentStopBtn').click();
   await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''), null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 6, 'Cancellation must abort the task before another model request.');
+  assert.equal(completionCalls, 9, 'Cancellation must abort the task before another model request.');
   await assert.rejects(readFile(path.join(root, 'cancel-e2e-side-effect.txt')), { code: 'ENOENT' });
 
   // The isolated run should create a committed branch artifact without changing
@@ -421,7 +519,7 @@ try {
     .some((element) => element.textContent.includes('Isolated worktree fixture completed successfully.')),
   null, { timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 9, 'The isolated task should write the file, read it back for verification, and then finish.');
+  assert.equal(completionCalls, 12, 'The isolated task should write the file, read it back for verification, and then finish.');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Finishing isolated work must not advance the primary branch.');
   assert.ok(execFileSync('git', ['branch', '--list', 'oasis/*'], { cwd: root, encoding: 'utf8' }).trim(),
