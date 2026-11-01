@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { notifyAttention } from './attention.mjs';
 import { cronState, formatFindings } from './session-tools.mjs';
 import { hasHooks as hasConfiguredHooks } from './hooks.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -780,6 +781,8 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
   return next;
 }
 
+let CURRENT_TURN_STARTED_AT = 0;
+
 async function askApproval(prompt, forceInteractive, meta) {
   // Channels that opted in to permission relay get the request too; the first answer wins.
   let relay = null;
@@ -805,6 +808,7 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
   if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
   try {
     stdout.write('\n' + approval.message + '\n');
+    if (CURRENT_TURN_STARTED_AT) notifyAttention('OASIS needs your approval: ' + approval.message.split('\n').filter(Boolean)[0], { elapsedMs: Date.now() - CURRENT_TURN_STARTED_AT, stream: stdout });
     const offerAlways = meta && meta.suggestion && !forceInteractive;
     if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
@@ -1743,6 +1747,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   };
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
   const turnStartedAt = Date.now();
+  CURRENT_TURN_STARTED_AT = turnStartedAt;
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
   try {
     const fork = modeOptions.fork;
@@ -1844,6 +1849,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('Oasis reached a safety limit before the task was fully completed. Review the summary and continue in a new turn if appropriate.\n');
     }
     if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }) + '\x1b[22m\n');
+    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }), { elapsedMs: Date.now() - turnStartedAt, stream: stdout });
   } catch (error) {
     endStream();
     if (controller.signal.aborted || error.name === 'AbortError') {

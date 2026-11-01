@@ -2111,6 +2111,31 @@ C.hook('agentProcessEvent',function(prev){return function(jobId,event){
   }
   return prev(jobId,event);
 }});
+/* Attention: when a turn that ran 15s+ finishes or waits for approval while
+   this tab is in the background, badge the tab title and (if allowed) show a
+   desktop notification. Permission is asked once, on your first send. */
+var attentionBaseTitle=document.title,attentionTurnStart=0;
+function attentionClear(){if(document.title!==attentionBaseTitle)document.title=attentionBaseTitle}
+document.addEventListener('visibilitychange',function(){if(!document.hidden)attentionClear()});
+window.addEventListener('focus',attentionClear);
+function attentionNotify(title,body){
+  if(!document.hidden&&document.hasFocus())return;
+  if(attentionTurnStart&&Date.now()-attentionTurnStart<15000)return;
+  document.title='● '+title+' · '+attentionBaseTitle;
+  try{if(window.Notification&&Notification.permission==='granted'){var n=new Notification(title,{body:String(body||'').slice(0,180),tag:'oasis-turn',silent:false});n.onclick=function(){window.focus();n.close()}}}catch(e){}
+}
+if(form)form.addEventListener('submit',function(){
+  if(!C.busy)attentionTurnStart=Date.now();
+  try{if(window.Notification&&Notification.permission==='default'&&!localStorage.getItem('oasis.web.notifyAsked')){localStorage.setItem('oasis.web.notifyAsked','1');Notification.requestPermission().catch(function(){})}}catch(e){}
+},true);
+C.hook('agentProcessEvent',function(prev){return function(jobId,event){
+  var t=event&&event.type,d=(event&&event.data)||{};
+  if(t==='approval_required')attentionNotify('Oasis needs your approval',d.message||d.prompt||'');
+  else if(t==='question')attentionNotify('Oasis has a question',d.question||'');
+  else if(t==='completed')attentionNotify('Oasis finished',String(d.text||'').replace(/\s+/g,' ').trim());
+  else if(t==='failed')attentionNotify('Oasis stopped with an error',d.message||'');
+  return prev(jobId,event);
+}});
 function queueMessage(){
   var text=prompt.value.trim();if(!text||queued.length>=5)return;
   queued.push(text);prompt.value='';renderQueue();autosize();syncSend();
