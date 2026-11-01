@@ -1,7 +1,8 @@
 # OASIS product and release-qualification plan
 
 **Product lifecycle:** Release Candidate / Production Qualification  
-**Development version:** `1.0.0-rc.1`  
+**Development package version:** `1.0.0`  
+**Release channel:** Release Candidate 1 (unpublished)  
 **Candidate source:** `main`  
 **Latest published stable release:** `v0.4.0` (historical release; not the current development version)  
 **License:** Apache-2.0
@@ -16,7 +17,7 @@ OASIS is not a hosted model or a proprietary model endpoint. The user chooses th
 
 ### Current maturity
 
-The 1.0 feature scope is established. OASIS is no longer being managed as an early feature-preview or Beta project. The current phase is **Release Candidate / Production Qualification**.
+The 1.0.0 feature scope is established. OASIS is no longer being managed as an early feature-preview or Beta project. The current phase is **Release Candidate / Production Qualification**.
 
 The work remaining is primarily refinement and qualification: stronger agent behavior, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. New product-surface expansion is not the default priority for 1.0.
 
@@ -25,10 +26,10 @@ This maturity statement is not a claim that production qualification is complete
 ## 2. Version and release channels
 
 - The previously published `v0.4.0` remains an immutable historical Git tag and GitHub Release. Its name and release notes accurately record that it shipped as Beta at that time.
-- The current development package on `main` is `1.0.0-rc.1`.
-- `1.0.0-rc.1` is a development candidate, not yet a Git tag, GitHub Release, or downloadable installer.
+- The current development package on `main` is `1.0.0`; `package.json` separately identifies the channel as `release-candidate`, candidate `1`.
+- `1.0.0` is a development candidate, not yet a Git tag, GitHub Release, or downloadable installer.
 - The stable CLI installer intentionally resolves the latest stable tag and therefore continues to install `v0.4.0` until a stable 1.0.0 release is published.
-- The 1.0.0 release workflow must mark `1.0.0-rc.1` and later prerelease candidates as GitHub prereleases. The final `v1.0.0` release must be published only after all acceptance gates pass.
+- The 1.0.0 release workflow must mark `1.0.0` and later prerelease candidates as GitHub prereleases. The final `v1.0.0` release must be published only after all acceptance gates pass.
 - Never move, replace, or retag `v0.4.0`. Never publish an RC package as stable.
 
 ## 3. Product scope for 1.0
