@@ -1,4 +1,5 @@
 import { oasisVersion } from './version.mjs';
+import { frontMatterValue } from './frontmatter.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { access, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -531,11 +532,8 @@ export async function inspectGitHubExtension(rawUrl, options = {}) {
 function descriptionFromMarkdown(content, fallback) {
   const frontmatter = String(content).match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (frontmatter) {
-    const match = frontmatter[1].match(/^description:\s*(.+)$/mi);
-    if (match) {
-      const value = match[1].trim().replace(/^["']|["']$/g, '').slice(0, 240);
-      if (value) return value;
-    }
+    const value = frontMatterValue(frontmatter[1], 'description').replace(/\s+/g, ' ').slice(0, 240);
+    if (value) return value;
   }
   const body = String(content).replace(/^---\r?\n[\s\S]*?\r?\n---\s*/m, '').split(/\r?\n/)
     .map((line) => line.trim().replace(/^#+\s*/, '').replace(/^[-*]\s*/, ''))

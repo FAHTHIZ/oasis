@@ -475,7 +475,20 @@ async function describeEnvironment(root, env = process.env) {
 // For windows of 16K tokens or less the full prompt (~4K tokens) would take a
 // quarter of the context, and most of it covers tools the small-context profile
 // does not send. Keep the rules that matter most for correctness and safety.
+// Small windows: keep each skill to its first sentence (at most 110 characters);
+// load_skill still returns the full instructions.
+export function compactSkillLines(skillDescriptions) {
+  return String(skillDescriptions || '').split('\n').map((line) => {
+    const match = /^(- .+? \[[^\]]+\]: )(.*)$/.exec(line);
+    if (!match) return line;
+    let text = match[2].split(/(?<=[.!?])\s/)[0].trim();
+    if (text.length > 110) text = text.slice(0, 107).replace(/\s+\S*$/, '') + '…';
+    return match[1] + text;
+  }).join('\n');
+}
+
 function compactSystemPrompt(root, projectContext, skillDescriptions = '', environment = '') {
+  skillDescriptions = compactSkillLines(skillDescriptions);
   return [
     'You are Oasis OSS, a coding agent running in the user’s workspace. Do the work with tools; do not just describe steps.',
     'Loop: inspect the code, make the smallest correct change, run a relevant test or check, read the result, then report what actually happened.',
