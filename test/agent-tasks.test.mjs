@@ -92,6 +92,9 @@ test('background task returns at once, reports back on the next turn, and can be
   });
   const session = await createSession({ root, config, settings });
   t.after(() => closeSession(session));
+  assert.match(session.messages[0].content, /code-review/);
+  assert.match(session.messages[0].content, /security-review/);
+  assert.match(session.messages[0].content, /fork_context only when earlier parent discussion is genuinely required/);
   const notices = [];
   session.onAgentNotice = (notice) => notices.push(notice);
   const first = await runAgentTurn(session, 'start the audit');
