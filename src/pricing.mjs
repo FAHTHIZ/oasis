@@ -78,3 +78,20 @@ export class BudgetExceededError extends Error {
     this.limit = limit;
   }
 }
+
+/** Record estimated spend locally and against a shared parent/child budget ledger. */
+export function recordBudgetSpend(session, amount, options = {}) {
+  if (!session || typeof session !== 'object') throw new TypeError('A session is required to record model spend.');
+  const delta = Math.max(0, Number(amount) || 0);
+  const local = Math.max(0, Number(session.costUsd) || 0);
+  session.costUsd = local + delta;
+  const ledger = session.budgetLedger && typeof session.budgetLedger === 'object'
+    ? session.budgetLedger
+    : (session.budgetLedger = { spentUsd: local, unknownRequests: 0 });
+  ledger.spentUsd = Math.max(0, Number(ledger.spentUsd) || 0) + delta;
+  if (!Number.isSafeInteger(ledger.unknownRequests) || ledger.unknownRequests < 0) ledger.unknownRequests = 0;
+  if (options.costKnown === false) ledger.unknownRequests += 1;
+  const limit = Math.max(0, Number(session.maxBudgetUsd) || 0);
+  if (limit > 0 && ledger.spentUsd >= limit) throw new BudgetExceededError(ledger.spentUsd, limit);
+  return ledger.spentUsd;
+}
