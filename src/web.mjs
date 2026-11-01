@@ -26,7 +26,7 @@ import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readW
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
 // Built-ins that only make sense in the terminal; the browser explains instead of running them.
-const WEB_TERMINAL_ONLY_COMMANDS = new Set(['copy', 'sandbox', 'loop', 'cd', 'exit', 'vim', 'terminal-setup', 'keybindings']);
+const WEB_TERMINAL_ONLY_COMMANDS = new Set(['copy', 'sandbox', 'loop', 'cd', 'test', 'exit', 'vim', 'terminal-setup', 'keybindings']);
 
 // Compact session status for the browser: permission mode, context use, token totals.
 export function webSessionState(session, env = process.env) {
@@ -709,7 +709,7 @@ export function createOasisWebServer(options = {}) {
           session.webUsage = session.webUsage || createUsageTracker();
           const slashName = slash[1].toLowerCase();
           const blockedBypass = slashName === 'mode' && /^bypasspermissions$/i.test(String(slash[2] || '').trim());
-          const terminalOnly = ['copy', 'sandbox', 'loop', 'cd'].includes(slashName) || (slashName === 'mcp' && /^login\b/i.test(String(slash[2] || '').trim()));
+          const terminalOnly = ['copy', 'sandbox', 'loop', 'cd', 'test'].includes(slashName) || (slashName === 'mcp' && /^login\b/i.test(String(slash[2] || '').trim()));
           let commandArgument = String(slash[2] || '').trim();
           // Slash-command routing creates a new prompt, so expand explicit file
           // mentions from the arguments first; otherwise /diagnose @screenshot.png
@@ -723,7 +723,7 @@ export function createOasisWebServer(options = {}) {
               emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
             }
           }
-          const handled = terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
+          const handled = terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to Oasis with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {

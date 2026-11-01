@@ -597,6 +597,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 - `/batch INSTRUCTION` plans a large change as independent units. After you approve, it runs them in parallel subagents, each in its own git worktree.
 - `/simplify [target]` runs four parallel read-only reviewers (reuse, simplification, efficiency, abstraction), then applies fixes that don't change behavior.
 - `/verify [what]` builds and runs the app to confirm a change works, instead of relying only on tests.
+- `/test [command]` runs the tests yourself, like Aider's `/test`. With no argument it uses the `autoTest` setting, then the `package.json` test script. A pass is reported without calling the model; a failure is handed to Oasis with the output tail as the next task. With no test command found, Oasis looks for the tests itself under the normal approvals. Terminal only (in the browser, use `!npm test`), and off in `--restricted` mode.
 - `/schedule "*/30 * * * *" check CI and fix failures` schedules a prompt in this session. `/schedule list` and `/schedule delete ID` manage them. The agent can also schedule prompts itself with `cron_create`. Scheduled prompts run when the prompt is idle and stop when you exit.
 - `/rename NAME` names the session for `/resume`. `/stop` stops background agents and processes.
 - `/fewer-permission-prompts` finds read-only commands you approve often and proposes adding them to your allowlist.

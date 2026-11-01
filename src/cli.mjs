@@ -2509,7 +2509,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         } catch (error) { stdout.write('[picker] ' + error.message + '\n'); continue; }
       }
       try {
-        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}) });
+        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, print: (line) => stdout.write(line + '\n'), color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {
           if (handled.output) stdout.write(handled.output + '\n');
           if (handled.reload && session) {
