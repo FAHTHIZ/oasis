@@ -403,3 +403,22 @@ test('bubblewrap re-exposes toolchains installed under /tmp read-only', async (t
   assert.ok(bindAt > tmpfsAt, 'the toolchain mount must come after the private /tmp');
   assert.deepEqual(wrapped.args.slice(bindAt, bindAt + 3), ['--ro-bind', root, root]);
 });
+
+test('sandbox toolchain mounts never expose socket directories or whole /tmp entries', async (t) => {
+  if (process.platform !== 'linux') { t.skip('Linux-only mount layout'); return; }
+  const { tmpToolchainMounts } = await import('../src/sandbox.mjs');
+  const agentDir = await mkdtemp('/tmp/ssh-oasistest');
+  const nested = await mkdtemp('/tmp/oasis-nested-');
+  t.after(() => Promise.all([rm(agentDir, { recursive: true, force: true }), rm(nested, { recursive: true, force: true })]));
+  await writeFile(path.join(agentDir, 'agent.1'), '');
+  // An agent-chosen command inside an ssh-agent directory must not mount it.
+  assert.deepEqual(tmpToolchainMounts(path.join(agentDir, 'agent.1'), { PATH: '/usr/bin' }), []);
+  assert.deepEqual(tmpToolchainMounts('x', { PATH: agentDir }), []);
+  // A directory passed as the command is not a toolchain.
+  assert.deepEqual(tmpToolchainMounts(nested, { PATH: '/usr/bin' }), []);
+  // Only the toolchain prefix is mounted, not the whole top-level /tmp entry.
+  await mkdir(path.join(nested, 'tools', 'bin'), { recursive: true });
+  await mkdir(path.join(nested, 'private'), { recursive: true });
+  await writeFile(path.join(nested, 'tools', 'bin', 'cc'), '');
+  assert.deepEqual(tmpToolchainMounts(path.join(nested, 'tools', 'bin', 'cc'), { PATH: '/usr/bin' }), [path.join(nested, 'tools')]);
+});
