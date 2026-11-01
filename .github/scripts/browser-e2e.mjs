@@ -291,7 +291,7 @@ try {
   await assertAgentContrast(page, 'Agent edit approval card');
   const editApprovalDiff = await page.locator('#agentApprovalDiff').innerText();
   assert.match(editApprovalDiff, /-"theme":"dark"/);
-  assert.match(editApprovalDiff, /-"theme":"dark"/);
+  assert.match(editApprovalDiff, /\+"theme":"light"/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-edit-approval-desktop.png'), fullPage: true });
   await page.locator('#agentApproveBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
