@@ -166,7 +166,7 @@ This is a protocol distinction, not a claim that every model on every provider h
 
 Provider setup tests a small inert tool-call schema before saving supported configurations. The probe response is checked but the proposed tool is not executed. A failed verification should not replace the previously working provider configuration. Optional easy/strong model routing is separate from provider selection, is off by default, and estimates cost from configured rates and observed usage; it does not guarantee savings or equal answer quality.
 
-**Timeouts and transport.** Each request has a first-byte timeout (`requestTimeoutMs`: 120 s for streamed cloud requests, 600 s otherwise, 900 s for loopback providers; `OASIS_REQUEST_TIMEOUT_SECONDS` overrides up to 2 h), replaced by a stream-idle watchdog once data flows. Requests to loopback providers use `src/loopback-fetch.mjs` (`node:http`) instead of the built-in `fetch`, because undici's fixed 300 s header timeout would otherwise cancel any prompt that takes a local server longer than five minutes to read. It keeps fetch's error contract (network failures are `TypeError`, a mid-body drop is `TypeError('terminated')` and restarts the stream) and is skipped when `fetch` has been replaced or `OASIS_LOOPBACK_FETCH=0`. When the provider has been identified as llama.cpp, streamed requests also set `return_progress: true`; `prompt_progress` events (`total`, `cache`, `processed`, `time_ms`) go to the `onModelWait` hook as `phase: 'progress'`, which the terminal status line and the web `model_wait` event render.
+**Timeouts and transport.** Each request has a first-byte timeout (`requestTimeoutMs`: 120 s for streamed cloud requests, 600 s otherwise, 900 s for loopback providers; `OASIS_REQUEST_TIMEOUT_SECONDS` overrides up to 2 h), replaced by a stream-idle watchdog once data flows. Requests to loopback providers use `src/loopback-fetch.mjs` (`node:http`) instead of the built-in `fetch`, because undici's fixed 300 s header timeout would otherwise cancel any prompt that takes a local server longer than five minutes to read. It keeps fetch's error contract (network failures are `TypeError`, a mid-body drop is `TypeError('terminated')` and restarts the stream) and is skipped when `fetch` has been replaced or `OASIS_LOOPBACK_FETCH=0`. When the provider has been identified as llama.cpp, streamed requests also set `return_progress: true`; `prompt_progress` events (`total`, `cache`, `processed`, `time_ms`) go to the `onModelWait` hook as `phase: 'progress'`, which the terminal status line and the web `model_wait` event render. The server is identified by `src/local-context.mjs`, which probes Ollama, LM Studio and llama-server on their default ports (any loopback port with `OASIS_LOCAL_CONTEXT_PROBE=1`) for the loaded context window; on other ports a llama-server overflow error (`exceed_context_size_error`) identifies it and supplies the window.
 
 ### Credential ownership
 
@@ -253,7 +253,7 @@ For a non-loopback listener, HTTPS with a user-supplied certificate and private 
 
 ### Chat and approvals
 
-Browser chat jobs call the shared agent runtime and stream bounded events for assistant output, tool activity, usage, completion, and approval requests. Each model step renders as its own message bubble, and replies render as Markdown while they stream (throttled; slower on lite-motion devices). Motion level (`full`, `lite`, `off`) is chosen at page load from CPU cores, device memory, Data Saver and reduced-motion, and can be overridden with `?motion=`. Consequential operations can be approved or denied in the browser. Cancellation denies outstanding approvals, aborts supported model/command operations, and records a terminal state; it cannot undo changes that completed before cancellation.
+Browser chat jobs call the shared agent runtime and stream bounded events for assistant output, tool activity, usage, completion, and approval requests. Each model step renders as its own message bubble, and replies render as Markdown while they stream (throttled; slower on lite-motion devices). Motion level (`full`, `lite`, `off`) is chosen at page load from CPU cores, device memory, Data Saver and reduced-motion, and can be overridden with `?motion=`. Consequential operations can be approved or denied in the browser. A chat message that starts with `!` runs as an ordinary terminal job (below) instead of a model turn, behind the same approval card; its output is attached to the next chat message as `<bash-input>`/`<bash-output>` context. Cancellation denies outstanding approvals, aborts supported model/command operations, and records a terminal state; it cannot undo changes that completed before cancellation.
 
 ### Terminal
 
@@ -274,7 +274,7 @@ Integrations are separate trust domains. Enabling an integration makes its tool 
 
 | Integration | Implementation and behavior |
 |---|---|
-| MCP | `src/mcp.mjs` and related modules connect configured stdio and HTTP MCP servers, negotiate capabilities, discover tools, and map them into the agent session. Calls are permission-controlled; configuration and activation are explicit. |
+| MCP | `src/mcp.mjs` and related modules connect configured stdio, Streamable HTTP and legacy HTTP+SSE MCP servers (`src/mcp-project.mjs`; `oasis mcp add --transport http|sse` in `src/mcp-remote-add.mjs`), negotiate capabilities, discover tools, and map them into the agent session. Calls are permission-controlled; configuration and activation are explicit. |
 | Hooks | `src/hooks.mjs` implements lifecycle hooks, including command, HTTP, MCP-tool, prompt and agent hook types. Hooks can block, rewrite, or add context. Hooks may execute code or send data externally and are loaded from user settings or trusted project settings. |
 | Built-in capability bundles | `plugins/catalog.json` and `src/plugins.mjs` install reviewed bundles of workflow instructions. The bundle install itself does not silently run setup scripts, install dependencies, start servers, or grant credentials. |
 | Compatible plugin marketplaces | `src/claude-plugins.mjs` supports a substantial set of Claude Code-compatible marketplace/plugin components, including commands, skills, hooks, MCP, LSP, monitors and executable plugin bins. This is feature-specific compatibility, not a guarantee that every third-party plugin works identically. Plugin hooks, MCP servers and executables can run with the user's permissions. |
@@ -372,7 +372,10 @@ The table below identifies primary implementations. For a domain-grouped file ca
 | Electron desktop host | `desktop/main.mjs`, `desktop/secure-secrets.mjs` |
 | VS Code-family extension | `ide/vscode/`, `src/ide.mjs` |
 | Language-server integration | `src/lsp.mjs` |
-| Verification helpers | `src/auto-test.mjs`, `src/test-tamper.mjs`, `src/lsp.mjs` |
+| Verification helpers | `src/auto-test.mjs` (also `/test`), `src/test-tamper.mjs`, `src/lsp.mjs` |
+| Local model servers | `src/local-context.mjs` (context-window probes, small-context tool profile), `src/loopback-fetch.mjs` |
+| Git auto-commit | `src/auto-commit.mjs` (opt-in; commits only the turn's changed paths) |
+| Skill and agent front matter | `src/frontmatter.mjs` (plain, quoted, folded and literal block scalars) |
 | Repository map and watch mode | `src/repo-map.mjs`, `src/ai-comments.mjs` |
 | Public URL fetching and SSRF guards | `src/public-fetch.mjs`, `src/browser-tool.mjs` |
 | Slash commands and terminal rendering | `src/slash.mjs`, `src/terminal-ui.mjs`, `src/markdown.mjs` |
