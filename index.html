@@ -1671,6 +1671,8 @@ var activityGroups=[],currentActivityGroup=null,activityStepsById=new Map();
 function fallbackActivitySentence(category){
   return category==='read'?'I’m reading the files needed for this task.':
     category==='edit'?'I’m updating the requested files.':
+    category==='write'?'I’m saving the requested files.':
+    category==='delete'?'I’m removing the requested files.':
     category==='command'?'I’m running a project command to check the work.':
     category==='search'?'I’m searching the project for relevant information.':
     'I’m checking the project details.';
@@ -1692,6 +1694,8 @@ function groupSummary(group){
   var count=group.count;
   if(group.category==='read')return 'Read '+count+' file'+(count===1?'':'s');
   if(group.category==='edit')return 'Edited '+count+' file'+(count===1?'':'s');
+  if(group.category==='write')return 'Wrote '+count+' file'+(count===1?'':'s');
+  if(group.category==='delete')return 'Deleted '+count+' file'+(count===1?'':'s');
   if(group.category==='command')return 'Ran '+count+' command'+(count===1?'':'s');
   if(group.category==='search')return 'Searched '+count+' time'+(count===1?'':'s');
   return 'Completed '+count+' step'+(count===1?'':'s');
@@ -1714,6 +1718,8 @@ function createActivityGroup(category){
 function liveStatusFor(category,label){
   if(category==='read')return 'Reading files…';
   if(category==='edit')return 'Updating files…';
+  if(category==='write')return 'Saving files…';
+  if(category==='delete')return 'Deleting files…';
   if(category==='command')return /test|check/i.test(label||'')?'Running tests…':'Running a command…';
   if(category==='search')return 'Searching files…';
   return 'Working on the next step…';
