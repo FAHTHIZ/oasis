@@ -386,3 +386,20 @@ test('session rules for path commands keep the path; deny rules also catch path 
   assert.notEqual(policy.evaluate('run_command', { command: '/tmp/evil/node', args: ['--version'] }).decision, 'allow');
   assert.equal(policy.evaluate('run_command', { command: '/bin/rm', args: ['-rf', 'x'] }).decision, 'deny');
 });
+
+test('bubblewrap re-exposes toolchains installed under /tmp read-only', async (t) => {
+  if (process.platform !== 'linux') { t.skip('Linux-only mount layout'); return; }
+  const { tmpToolchainMounts } = await import('../src/sandbox.mjs');
+  const root = await mkdtemp('/tmp/oasis-toolchain-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'bin'), { recursive: true });
+  await writeFile(path.join(root, 'bin', 'tool'), '');
+  assert.deepEqual(tmpToolchainMounts(path.join(root, 'bin', 'tool'), { PATH: '/usr/bin' }), [root]);
+  assert.deepEqual(tmpToolchainMounts('tool', { PATH: path.join(root, 'bin') + ':/usr/bin' }), [root]);
+  assert.deepEqual(tmpToolchainMounts('/usr/bin/env', { PATH: '/usr/bin:/tmp' }), []);
+  const wrapped = wrapCommand(path.join(root, 'bin', 'tool'), [], { enabled: true, available: true, kind: 'bubblewrap', writable: [], network: false }, root);
+  const tmpfsAt = wrapped.args.indexOf('/tmp');
+  const bindAt = wrapped.args.indexOf(root) - 1;
+  assert.ok(bindAt > tmpfsAt, 'the toolchain mount must come after the private /tmp');
+  assert.deepEqual(wrapped.args.slice(bindAt, bindAt + 3), ['--ro-bind', root, root]);
+});

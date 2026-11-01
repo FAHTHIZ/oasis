@@ -129,12 +129,34 @@ export function macProfile(sandbox) {
   ].join('\n');
 }
 
+// Toolchains installed under /tmp (CI caches, portable Node/Python builds, nvm
+// mirrors) disappear behind the private /tmp tmpfs, which makes every sandboxed
+// command fail with "execvp: No such file or directory". Re-expose only the
+// top-level /tmp entries that hold the executable or a PATH directory, read-only.
+export function tmpToolchainMounts(command, env = process.env) {
+  const roots = new Set();
+  const consider = (candidate) => {
+    if (!candidate || !path.isAbsolute(candidate)) return;
+    let real = candidate;
+    try { real = realpathSync(candidate); } catch { /* keep the literal path */ }
+    for (const value of new Set([path.resolve(candidate), real])) {
+      if (!pathContains('/tmp', value) || path.resolve(value) === '/tmp') continue;
+      const top = path.join('/tmp', path.relative('/tmp', value).split(path.sep)[0]);
+      try { statSync(top); roots.add(top); } catch { /* missing entries are skipped */ }
+    }
+  };
+  consider(command);
+  for (const entry of String(env.PATH || '').split(path.delimiter)) consider(entry);
+  return [...roots];
+}
+
 // Returns { command, args } that runs the requested argv inside the sandbox.
 export function wrapCommand(command, args, sandbox, cwd) {
   assertSandboxAvailable(sandbox);
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
+    for (const dir of tmpToolchainMounts(command)) wrapped.push('--ro-bind', dir, dir);
     // Apply writable workspace mounts first, then overlay credential masks. If the
     // workspace is the user's home directory, the later masks must remain visible
     // instead of being hidden underneath the broad writable bind.
