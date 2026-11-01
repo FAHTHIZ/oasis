@@ -5,6 +5,7 @@ import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
+import { workflowRuntimeStatus } from './workflow-sandbox.mjs';
 
 export async function workspaceDoctor(root, { env = process.env, session = null } = {}) {
   const lines = [];
@@ -25,6 +26,9 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     lines.push('  Sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'off') + ' (' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable: ' + sandbox.reason) + ')');
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
   } catch (error) { problems.push('Settings are invalid: ' + error.message); }
+  const workflow = await workflowRuntimeStatus();
+  lines.push('  Workflow runtime: ' + (workflow.available ? 'available (QuickJS)' : 'unavailable' + (workflow.reason ? ': ' + workflow.reason : '')));
+  if (!workflow.available) problems.push('The workflow runtime could not initialize. Reinstall OASIS dependencies before using saved JavaScript workflows.');
   const checkers = await detectCheckers(root, { env }).catch(() => []);
   const external = checkers.filter((item) => !item.builtin);
   lines.push('  Checkers: ' + (external.length ? external.map((item) => item.name + (item.missing ? ' (missing)' : '')).join(', ') : 'built-in JS/JSON only'));
