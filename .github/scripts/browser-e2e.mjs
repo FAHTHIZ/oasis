@@ -109,7 +109,7 @@ try {
     } else if (completionCalls === 2) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_read', type: 'function',
-        function: { name: 'read_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt' }) }
+        function: { name: 'read_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt', token: 'super-secret-value' }) }
       }] };
     } else if (completionCalls === 3) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
@@ -427,7 +427,7 @@ try {
   assert.equal(completionCalls, 8, 'The denial should be reported to the model without running the delete operation.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
-    'Created by the authenticated browser agent tool cycle.\n',
+    'Edited by the authenticated browser agent tool cycle.\n',
     'Denying the delete approval must leave the file intact.'
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
@@ -467,7 +467,7 @@ try {
 
   // Commit the output from the preceding non-isolated file test so the real
   // worktree run begins from a clean user workspace, as required in production.
-  execFileSync('git', ['add', 'browser-e2e-output.txt'], { cwd: root });
+  execFileSync('git', ['add', 'browser-e2e-output.txt', '.oasis/settings.json'], { cwd: root });
   execFileSync('git', ['commit', '--quiet', '-m', 'Commit browser chat fixture output'], { cwd: root });
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '',
     'The primary checkout must be clean before creating an isolated worktree.');
