@@ -18,7 +18,7 @@
 
 OASIS is not a model of its own or a hosted AI service. **You bring the model; OASIS provides the agent runtime, workspace, tools, controls, integrations, and interfaces.**
 
-> **Beta status:** OASIS is in Beta. The source package is version `0.4.0`, but it has not been tagged or published. The only version tag currently present is `v0.3.0`; no public GitHub Release assets are available to download. See [current limits](#beta-status).
+> **Release status:** OASIS remains Beta. The latest published release is [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), tagged and published on October 31, 2026, with Windows, macOS and Linux desktop assets. The `main` branch contains newer unreleased changes; its package version has not yet been advanced beyond `0.4.0`. See [current limits](#beta-status).
 
 <p align="center">
   <a href="#getting-started"><strong>Get started</strong></a>
@@ -46,7 +46,7 @@ OASIS is not a model of its own or a hosted AI service. **You bring the model; O
 Requires **Node.js 22+** and Git.
 
 ```bash
-# Latest main (recommended while 0.4.0 is unreleased)
+# Development source (contains changes after the v0.4.0 release)
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis && npm install && npm install -g .
 
@@ -58,7 +58,7 @@ oasis -p "fix the failing tests" --output-format json   # one-shot, for scripts 
 oasis doctor --test-provider                           # check the environment and live tool calling
 ```
 
-The [checksum-verified installers](docs/INSTALL.md#command-line-installation) install the latest **tagged** release (`v0.3.0`), which predates most of the work below. Use the source install above to get current `main`.
+The [checksum-verified installers](docs/INSTALL.md#command-line-installation) install the latest tagged release, currently `v0.4.0`. That immutable release predates later changes on `main`; use the source install above only when you deliberately want the newer development snapshot.
 
 ## What is OASIS?
 
@@ -132,7 +132,7 @@ The model reasons and proposes tool calls. OASIS manages execution, tool contrac
 |---|---|
 | **Terminal CLI** | Interactive coding, one-shot tasks, setup, diagnostics, and automation. Requires Node.js 22+; native PTY support is optional and platform-dependent. |
 | **Local browser workspace** | Visual workspace with project tools, approvals, terminal, changes, and run monitoring. Connects to a local runtime; it is not a hosted cloud workspace, and browser state does not fully sync with CLI state. |
-| **Desktop app** | Electron app with a project-folder picker and local backend. Windows, macOS, and Linux packaging is configured, but builds are unsigned and public installers are not yet published. |
+| **Desktop app** | Electron app with a project-folder picker and local backend. Windows x64, macOS arm64, and Linux x86_64 installers are published in the `v0.4.0` release. Packages are unsigned; clean-machine install, update, and uninstall checks remain release gates. |
 | **VS Code integration** | Brings the OASIS runtime into a supported editor workflow; it is not a full IDE suite. |
 | **SDK and GitHub Action** | Use OASIS from scripts and repository automation. Unattended use still needs careful configuration and isolation. |
 
@@ -165,7 +165,7 @@ Read the [security policy](SECURITY.md), [security and reliability audit](docs/S
 | Check desktop availability | [Desktop app guide](docs/INSTALL.md#desktop-app--no-terminal-required) |
 | Learn commands, tools, and settings | [User guide](docs/USER_GUIDE.md) |
 
-**Desktop downloads:** CI builds packages, but public desktop installers are not available yet. Check the [Releases page](https://github.com/FAHTHIZ/oasis/releases); until assets are published, use the CLI installation path. The prepared 0.4.0 notes are not a downloadable release.
+**Desktop downloads:** Published installers are available from the [OASIS v0.4.0 release](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0): Windows x64 `.exe`, macOS arm64 `.dmg`, and Linux x86_64 `.AppImage` / `.deb`. Verify the download against that release's `SHA256SUMS` file. The packages are unsigned, and a successful CI build does not replace clean-machine installation testing.
 
 For a safe first task, open a project you understand and ask:
 
@@ -177,8 +177,8 @@ Review proposed file changes and commands before approving them.
 
 OASIS is in **Beta**, not production-certified. The main known limits are:
 
-- **Distribution:** 0.4.0 is prepared in source but not tagged or published; no public release assets are available.
-- **Desktop:** Builds are unsigned; automatic updates and publisher signing/provenance are not configured. Clean-machine install and first-run checks remain release gates.
+- **Distribution:** `v0.4.0` is tagged and published with desktop assets. The current `main` branch includes unreleased changes beyond that tag; `package.json` still reports `0.4.0`, so the next version bump and release must be handled deliberately.
+- **Desktop:** Published installers are unsigned; publisher signing/provenance and automatic desktop updates are not configured. Clean-machine first-run, update, and uninstall checks remain release gates.
 - **Isolation:** Linux/macOS sandboxing is optional, off by default, and not full filesystem-read isolation. Native Windows sandboxing is not implemented.
 - **Android:** No native Android APK is published. Termux is the CLI route; PTY and background execution are not guaranteed.
 - **State and recovery:** Browser state does not fully synchronize with CLI state. Restarting a process does not resurrect killed workers or pending approvals.
@@ -199,7 +199,7 @@ The [documentation index](docs/README.md) maps every canonical guide, integratio
 | Extensibility and experience | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) · [Shortcuts](docs/KEYS.md) · [Brand guide](docs/BRAND.md) |
 | Project upkeep and research | [Repository maintenance](docs/REPOSITORY_MAINTENANCE.md) · [Research notes](docs/research/README.md) |
 | Automation on GitHub | [GitHub Action guide](docs/github-action.md) · [workflow example](docs/examples/oasis-github.yml) |
-| Release history | [Changelog](CHANGELOG.md) · [prepared 0.4.0 notes](docs/releases/v0.4.0.md) |
+| Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 Beta notes](docs/releases/v0.4.0.md) |
 | Contributions | [Contributing guide](CONTRIBUTING.md) |
 
 ## Development
