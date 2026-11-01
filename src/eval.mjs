@@ -36,6 +36,27 @@ function scrubEnvironment(env = process.env) {
   return safe;
 }
 
+// The agent under test gets no credentials, and git pushes from its disposable
+// workspace are rewritten to a URL that cannot be reached, so a confused model
+// cannot publish anything (a live run once pushed a stray branch).
+export function evalAgentEnvironment(env = process.env) {
+  const safe = scrubEnvironment(env);
+  const blocked = ['https://', 'http://', 'ssh://', 'git://', 'git@'];
+  safe.GIT_TERMINAL_PROMPT = '0';
+  safe.GIT_ASKPASS = process.platform === 'win32' ? 'echo' : '/bin/false';
+  safe.SSH_ASKPASS = safe.GIT_ASKPASS;
+  safe.GIT_SSH_COMMAND = 'false';
+  safe.GIT_CONFIG_COUNT = String(blocked.length + 1);
+  blocked.forEach((prefix, index) => {
+    safe['GIT_CONFIG_KEY_' + index] = 'url.file:///oasis-eval-push-blocked/.pushInsteadOf';
+    safe['GIT_CONFIG_VALUE_' + index] = prefix;
+  });
+  safe['GIT_CONFIG_KEY_' + blocked.length] = 'credential.helper';
+  safe['GIT_CONFIG_VALUE_' + blocked.length] = '';
+  safe.OASIS_EVAL = '1';
+  return safe;
+}
+
 function capture(output, chunk, limit = OUTPUT_LIMIT) {
   return (output + chunk.toString('utf8')).slice(-limit);
 }
@@ -1173,7 +1194,7 @@ export async function runEvalCommand(args = [], options = {}) {
           const agentRunner = options.agentRunner || runAgentTurn;
           agentResult = await agentRunner(session, task.taskText, {
             autoApprove: true,
-            env: process.env,
+            env: evalAgentEnvironment(process.env),
             maxSteps: provider.maxSteps,
             signal: timeoutController.signal,
             ...(config.routeEasyModel ? { routingHint: task.difficulty } : {}),

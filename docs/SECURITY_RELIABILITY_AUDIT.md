@@ -267,6 +267,14 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 **Regression coverage:** `test/tool-call-repair.test.mjs` checks that an explained example, fenced `<tool_call>` tags and fenced Llama `<function=...>` syntax are not executed, and that a short lead-in plus one fenced call is still recovered.
 
+## Follow-up hardening: unrequested git writes and eval credential exposure (November 1, 2026)
+
+**Finding:** in a live `oasis eval` run with Qwen2.5-Coder-3B under `--yes`, the model left the task and ran `git commit`, `git config --global user.email`, `git remote add origin <URL from the snapshot README>` and `git_push`. The eval passed the full process environment to the agent, so the push authenticated with the sandbox's git credentials and created a stray `master` branch on the project repository. The global git config write did not persist in this environment, but on a normal machine it would have changed the user's identity.
+
+**Fix committed:** (1) `src/git-intent.mjs` refuses `git_commit`, `git_push`, `create_pull_request` and shell `git commit`, `git push`, `git remote add|set-url|remove|rename`, `git config --global|--system`, and `gh pr create|merge`, `gh release create`, `gh repo create|delete|fork` unless the current request asks for that action. The refusal tells the model to report the change and leave version control to the user. Opt out with `allowUnrequestedGitWrites` or `OASIS_ALLOW_UNREQUESTED_GIT_WRITES=1`. (2) `oasis eval` runs the agent with `evalAgentEnvironment`: secrets removed, no credential helper, no terminal or askpass prompts, and every push URL rewritten to an unreachable `file:///oasis-eval-push-blocked/` path. (3) The "not a tool" reminder no longer suggests running git through `run_command`.
+
+**Regression coverage:** `test/git-intent.test.mjs` covers each blocked action, allowed read-only and requested git use, both opt-outs, and the eval environment. A manual check confirmed that `git push` and `git ls-remote` against GitHub both fail under the eval environment.
+
 ## Cross-platform regression: canonical paths on macOS
 
 **Finding:** portable global skills and global-extension skills compared a canonicalized root (`realpath`, often `/private/var/...` on macOS) with an uncanonicalized target path (often `/var/...`). Legitimate files under a temporary or home directory could be rejected on macOS. Two credential-masking tests also compared canonical result paths with noncanonical temporary paths, causing false failures.
