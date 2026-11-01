@@ -35,6 +35,7 @@ import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -2539,6 +2540,23 @@ export function targetFileHint(request) {
   return match ? '\n<system-reminder>The file to work on is ' + match[1] + '. Your next message should be a write_file or edit_file call for it.</system-reminder>' : '';
 }
 
+// "Create src/lib.mjs exporting ..." names the one file the request wants.
+export function requestedNewFile(request) {
+  const text = String(request || '').trim().replace(/^(?:please|pls|now)[\s,]+/i, '');
+  const match = text.match(/^(?:create|write|add)\s+(?:a\s+)?(?:new\s+)?(?:file\s+)?(?:called\s+|named\s+|at\s+)?[`'"]?((?:[\w.-]+\/)*[\w-]+\.[A-Za-z][\w]{0,7})[`'"]?(?=$|[\s,:;.)])/i);
+  return match && !match[1].startsWith('.') && !/\.\./.test(match[1]) ? match[1] : '';
+}
+
+// The model created a different file than the one the request named (a 4B model
+// wrote src/utils.mjs for "Create src/lib.mjs ..."), so the caller cannot find it.
+export function wrongFileNudge(request, verification, exists) {
+  const target = requestedNewFile(request);
+  const created = [...(verification && verification.createdPaths || [])];
+  if (!target || !created.length || verification.changedPaths.has(target) || created.includes(target)) return '';
+  if (exists(target)) return '';
+  return '<system-reminder>The request asks for ' + target + ', but you created ' + created.join(', ') + ' and ' + target + ' does not exist yet. Create ' + target + ' with write_file now (move the code there, and delete ' + (created.length === 1 ? created[0] : 'the other files') + ' if nothing else needs ' + (created.length === 1 ? 'it' : 'them') + '), then check it and finish.</system-reminder>';
+}
+
 const UNREADABLE_CALL_NUDGE = (names) => '<system-reminder>Your ' + names.join(', ') + ' call could not be read (invalid JSON) and did not run, and calls after it in the same message were skipped. Send it again as a single real tool call. For file content, escape newlines as \\n and quotes as \\" inside the JSON string.</system-reminder>';
 
 const REFUSAL_NUDGE = '<system-reminder>This is an ordinary software task in the user\'s own repository. Start now with one tool call: use write_file to create a new file, or read_file to look at an existing one, then edit_file. If you believe the request is actually harmful, say specifically why.</system-reminder>';
@@ -4392,6 +4410,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const claimState = newClaimState();
   let correctionNudged = false;
   let actionNudges = 0;
+  let wrongFileNudged = false;
   let refusalNudged = false;
   let unknownToolNudges = 0;
   let fencedApplied = false;
@@ -4667,6 +4686,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           if (kind === 'false-claim' && assistedVerificationEnabled(session, options.env || process.env) && session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
           if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind }); } catch {} }
           session.messages.push({ role: 'user', content: kind === 'false-claim' ? FALSE_CLAIM_NUDGE + targetFileHint(request) : kind === 'described' ? ACTION_NUDGE : kind === 'gave-up' ? GIVE_UP_NUDGE : CONTINUE_NUDGE });
+          continue;
+        }
+      }
+      if (!wrongFileNudged && !options.planOnly && permissionMode(session, options) !== 'plan') {
+        const nudge = wrongFileNudge(request, verification, (relative) => { try { return existsSync(path.resolve(session.root || process.cwd(), relative)); } catch { return true; } });
+        if (nudge) {
+          wrongFileNudged = true;
+          if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'wrong-file' }); } catch {} }
+          session.messages.push({ role: 'user', content: nudge });
           continue;
         }
       }
