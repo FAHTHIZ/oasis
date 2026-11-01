@@ -1661,29 +1661,112 @@ C.hook('agentAssistantUpdate',function(coreUpdate){return function(jobId,text){
   if(node.parentNode===messages){var after=node.nextElementSibling;while(after&&after===typing)after=after.nextElementSibling;if(after)messages.appendChild(node)}
   pending.set(node,node.dataset.raw);if(!raf)raf=requestAnimationFrame(paint);
 }});
-/* ---------- Activity rows ---------- */
+/* ---------- Plain-language activity groups ---------- */
 var coreAppend=null;C.hook('agentAppendMessage',function(f){coreAppend=f;return f});
-/* Saved chats reopen through agentAppendMessage, not agentAssistantUpdate: render their markdown too. */
 C.hook('agentAppendMessage',function(f){return function(kind,text){var el=f.apply(null,arguments);if(kind==='assistant'&&el&&text&&!/^Oasis is working…?$/.test(String(text).trim())){pending.set(el,String(text));if(!raf)raf=requestAnimationFrame(paint)}return el}});
+var activityGroups=[],currentActivityGroup=null,activityStepsById=new Map();
+function fallbackActivitySentence(category){
+  return category==='read'?'I’m reading the files needed for this task.':
+    category==='edit'?'I’m updating the requested files.':
+    category==='command'?'I’m running a project command to check the work.':
+    category==='search'?'I’m searching the project for relevant information.':
+    'I’m checking the project details.';
+}
+function modelActivitySentence(){
+  var node=lastAssistant(),raw=node&&(node.dataset.raw||node.textContent)||'';
+  if(!raw||/^Oasis is working…?$/.test(raw.trim()))return '';
+  var blocks=String(raw).replace(/\r/g,'').split(/\n\s*\n/).filter(function(part){return part.trim()});
+  var candidate=(blocks[blocks.length-1]||'').trim();
+  candidate=candidate.replace(/^>\s*/gm,'').replace(/^[-*+]\s+/gm,'').replace(/^\d+[.)]\s+/gm,'').replace(/[*_#]/g,'').trim();
+  if(!candidate||/^\s*(?:\{|\[|<)/.test(candidate)||candidate.length>240)return '';
+  var sentences=candidate.match(/[^.!?]+[.!?]+/g);
+  if(sentences&&sentences.length)candidate=sentences[sentences.length-1].trim();
+  else if(candidate.length>160)return '';
+  if(candidate.length>180||/^(?:json|javascript|typescript|bash|diff)\b/i.test(candidate))return '';
+  return candidate.endsWith('.')||candidate.endsWith('!')||candidate.endsWith('?')?candidate:candidate+'.';
+}
+function groupSummary(group){
+  var count=group.count;
+  if(group.category==='read')return 'Read '+count+' file'+(count===1?'':'s');
+  if(group.category==='edit')return 'Edited '+count+' file'+(count===1?'':'s');
+  if(group.category==='command')return 'Ran '+count+' command'+(count===1?'':'s');
+  if(group.category==='search')return 'Searched '+count+' time'+(count===1?'':'s');
+  return 'Completed '+count+' step'+(count===1?'':'s');
+}
+function refreshGroupSummary(group){group.summaryText.textContent=group.summaryOverride||groupSummary(group)}
+function createActivityGroup(category){
+  var wrapper=document.createElement('section');wrapper.className='activity-group';wrapper.dataset.category=category;
+  var intro=document.createElement('p');intro.className='activity-group-intro';intro.textContent=modelActivitySentence()||fallbackActivitySentence(category);
+  var details=document.createElement('details');details.className='activity-group-fold';
+  var summary=document.createElement('summary');summary.setAttribute('aria-label','Show activity details');
+  var summaryText=document.createElement('span');summaryText.className='activity-group-summary';summary.appendChild(summaryText);
+  var content=document.createElement('div');content.className='activity-group-content';
+  var steps=document.createElement('div');steps.className='activity-group-steps';
+  content.appendChild(steps);details.appendChild(summary);details.appendChild(content);
+  wrapper.appendChild(intro);wrapper.appendChild(details);
+  messages.insertBefore(wrapper,typing.isConnected?typing:null);
+  var group={wrapper:wrapper,category:category,count:0,summaryText:summaryText,steps:steps,summaryOverride:'',lastStep:null};
+  refreshGroupSummary(group);activityGroups.push(group);return group;
+}
+function liveStatusFor(category,label){
+  if(category==='read')return 'Reading files…';
+  if(category==='edit')return 'Updating files…';
+  if(category==='command')return /test|check/i.test(label||'')?'Running tests…':'Running a command…';
+  if(category==='search')return 'Searching files…';
+  return 'Working on the next step…';
+}
+function updateLiveStatus(value){
+  var target=typing.querySelector('span');if(!target||target.textContent===value)return;
+  target.classList.remove('is-changing');target.textContent=value;
+  void target.offsetWidth;target.classList.add('is-changing');
+}
+function makeToolDetails(name,args,result){
+  var details=document.createElement('details');details.className='activity-tool-details';
+  var summary=document.createElement('summary');summary.textContent='Show details';
+  var pre=document.createElement('pre');pre.setAttribute('tabindex','0');
+  var argsText='{}';try{argsText=JSON.stringify(args&&typeof args==='object'?args:{},null,2)}catch(e){}
+  pre.textContent='Tool: '+String(name||'tool')+'\nArguments:\n'+argsText+'\n\nOutput:\n'+String(result==null?'Waiting for the result…':result);
+  details.appendChild(summary);details.appendChild(pre);return {details:details,pre:pre};
+}
+function addActivityStep(data){
+  data=data&&typeof data==='object'?data:{};
+  var category=String(data.category||'other'),label=String(data.label||'Completed a project step');
+  var group=currentActivityGroup;
+  if(!group||group.category!==category)group=createActivityGroup(category);
+  currentActivityGroup=group;group.count++;refreshGroupSummary(group);
+  var step=document.createElement('article');step.className='activity-step';
+  var title=document.createElement('div');title.className='activity-step-label';title.textContent=label;
+  var detail=makeToolDetails(data.name,data.args&&typeof data.args==='object'?data.args:{},null);
+  step.appendChild(title);step.appendChild(detail.details);group.steps.appendChild(step);
+  var id=String(data.callId||'');
+  if(id)activityStepsById.set(id,{group:group,detail:detail,step:step});
+  group.lastStep={group:group,detail:detail,step:step};
+  updateLiveStatus(liveStatusFor(category,label));agentScroll();return group.lastStep;
+}
+window.oasisActivityStart=addActivityStep;
+window.oasisActivityResult=function(data){
+  data=data&&typeof data==='object'?data:{};
+  var id=String(data.callId||''),entry=id&&activityStepsById.get(id);
+  if(!entry)entry=addActivityStep({name:data.name,args:data.args,label:data.label||'Completed a project step',category:data.category||'other',callId:id});
+  if(entry&&entry.detail){
+    var argsText='{}';try{argsText=JSON.stringify(data.args&&typeof data.args==='object'?data.args:{},null,2)}catch(e){}
+    entry.detail.pre.textContent='Tool: '+String(data.name||'tool')+'\nArguments:\n'+argsText+'\n\nOutput:\n'+String(data.result||'(No output was returned.)');
+    entry.step.classList.add('is-complete');
+  }
+  if(id)activityStepsById.delete(id);
+  if(data.warning)agentActivity(String(data.warning));
+  agentScroll();
+};
 C.hook('agentActivity',function(){return function(text){
-  text=String(text||'');var m;
+  text=String(text||'');
   var empty=$('agentEmptyState');
   if(empty&&!/^(\[[^\]]+\]\s+)?Working:|^[\w.:-]+ result: /.test(text)){
     var line=empty.querySelector('.empty-status');if(!line){line=document.createElement('div');line.className='empty-status';line.setAttribute('role','status');empty.appendChild(line)}
-    line.textContent=text;line.classList.toggle('notice-warn',/incomplete|blocker|failed|denied|not approved|error/i.test(text));return line;
+    line.textContent=text;line.classList.toggle('notice-warn',/incomplete|blocker|failed|denied|not approved|error|test.{0,24}weaken|weaken.{0,24}test/i.test(text));return line;
   }
   var el=coreAppend('activity','');
-  if((m=text.match(/^(\[[^\]]+\]\s+)?Working:\s+([\w.:-]+)\s*([\s\S]*)$/))){
-    el.classList.add('tool-call');el.innerHTML=(m[1]?'<span class="tool-chip">'+esc(m[1].trim())+'</span>':'')+'<span class="tool-chip">'+esc(m[2])+'</span>'+esc(m[3]||'');
-  }else if((m=text.match(/^([\w.:-]+) result: ([\s\S]*)$/))){
-    var body=m[2],linesN=body.split('\n').length;el.classList.add('tool-result');
-    if(body.length<=140&&linesN===1)el.innerHTML='<span class="tool-result-inline">↳ '+esc(body)+'</span>';
-    else el.innerHTML='<details class="tool-result-details"><summary>'+esc(m[1])+' output · '+linesN+' line'+(linesN===1?'':'s')+'</summary><pre tabindex="0">'+esc(body)+'</pre></details>';
-  }else{
-    if(/incomplete|blocker|failed|denied|not approved|error/i.test(text))el.classList.add('notice-warn');
-    el.textContent=text;
-  }
-  agentScroll();return el;
+  if(/incomplete|blocker|failed|denied|not approved|error|test.{0,24}weaken|weaken.{0,24}test/i.test(text))el.classList.add('notice-warn');
+  el.textContent=text;agentScroll();return el;
 }});
 /* ---------- Typing indicator ---------- */
 var typing=document.createElement('div');typing.className='agent-typing';typing.setAttribute('aria-hidden','true');typing.innerHTML='<i></i><i></i><i></i><span>Working…</span>';
