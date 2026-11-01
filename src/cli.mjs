@@ -86,6 +86,7 @@ function printHelp() {
     '  oasis init                    Create OASIS.md project instructions',
     '  oasis memory [list|search Q|show ID|forget ID|path]  View and manage auto memory',
     '  oasis -p PROMPT --json-schema SCHEMA  Return JSON that matches a schema (inline or @file.json)',
+    '  oasis exec PROMPT --output-schema FILE -o FILE  Codex-style flags: schema from a file, final message to a file',
     '  oasis -p PROMPT --bare        Skip project instructions, skills, hooks, MCP, and memory',
     '  oasis --calm                 No animations; use stable, finished-line output',
     '  oasis --plugin-url URL        Load a plugin .zip from a URL for this session (repeatable)',
@@ -2018,7 +2019,8 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   for (const [name, handler] of stopHandlers) process.on(name, handler);
   let exitCode;
   try {
-  ({ exitCode } = await runHeadless({
+  let summary;
+  ({ exitCode, summary } = await runHeadless({
     signal: stopController.signal,
     prompt, root, config, autoApprove,
     outputFormat: headless.outputFormat,
@@ -2037,6 +2039,11 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     forwardSubagentText: Boolean(headless.forwardSubagentText),
     promptSuggestions: Boolean(headless.promptSuggestions)
   }));
+  // Codex's -o/--output-last-message: also write the final reply to a file.
+  if (headless.outputLastMessage && summary) {
+    const text = summary.structured_output !== undefined ? JSON.stringify(summary.structured_output) : String(summary.result || '');
+    await writeFile(path.resolve(headless.outputLastMessage), text + (text.endsWith('\n') ? '' : '\n')).catch((error) => stderr.write('[oasis] Could not write ' + headless.outputLastMessage + ': ' + error.message + '\n'));
+  }
   } finally { for (const [name, handler] of stopHandlers) process.removeListener(name, handler); }
   if (stopSignal) exitCode = 128 + SIGNAL_CODES[stopSignal];
   process.exitCode = exitCode;
@@ -3057,10 +3064,17 @@ async function main() {
       SESSION_OPTIONS.effort = level === 'auto' ? null : level;
       continue;
     }
-    if (arg === '--json-schema') {
+    if (arg === '--json-schema' || arg === '--output-schema') {
       const value = rawArgs[++i];
-      if (!value) throw new Error('--json-schema needs a JSON Schema (inline JSON or @path/to/schema.json).');
-      headless.jsonSchemaSource = value;
+      if (!value) throw new Error(arg + ' needs a JSON Schema (inline JSON or @path/to/schema.json).');
+      // Codex's --output-schema takes a plain file path.
+      headless.jsonSchemaSource = arg === '--output-schema' && !/^\s*[{@]/.test(value) ? '@' + value : value;
+      continue;
+    }
+    if (arg === '-o' || arg === '--output-last-message') {
+      const value = rawArgs[++i];
+      if (!value || value.startsWith('-')) throw new Error(arg + ' needs a file path for the final message.');
+      headless.outputLastMessage = value;
       continue;
     }
     if (arg === '-w' || arg === '--worktree') {
