@@ -816,3 +816,11 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
   .activity-group-fold>summary:hover,.turn-work>summary:hover,.agent-approval .agent-buttons button:active,.agent-question-option:active,.activity-group-fold>summary:active,.msg-action:active{transform:none!important}
   .agent-typing i,.sidebar-chat-running{animation:none!important}
 }
+
+.agent-approval .agent-buttons button,.agent-compose button,.msg-actions button{transition:transform var(--motion-fast) var(--motion-ease)}
+.agent-approval .agent-buttons button:hover,.agent-approval .agent-buttons button:focus-visible,.agent-compose button:not(:disabled):hover,.agent-compose button:not(:disabled):focus-visible,.msg-actions button:hover,.msg-actions button:focus-visible{transform:translateY(-2px)}
+.agent-approval .agent-buttons button:active,.agent-compose button:not(:disabled):active,.msg-actions button:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){
+  .agent-approval .agent-buttons button,.agent-compose button,.msg-actions button{transition:none!important}
+  .agent-approval .agent-buttons button:hover,.agent-approval .agent-buttons button:focus-visible,.agent-compose button:hover,.agent-compose button:focus-visible,.msg-actions button:hover,.msg-actions button:focus-visible{transform:none!important}
+}
