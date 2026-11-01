@@ -140,7 +140,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Saved chats can be deleted from the sidebar (the × on hover, with a confirmation); a chat that is still running cannot be deleted. The API is `DELETE /api/sessions/:id`.
 - Settings → Appearance has Chat width (Comfortable, Wide or Full width; also "Cycle chat width" in the Ctrl+K palette) and Send key. Both are remembered in this browser.
 - When a turn finishes after two or more tool calls, its steps fold into one "Worked for 42s · 6 tool calls" line. Click it to see every step. Choose Settings → Appearance → Finished turns → "Keep every step visible" to turn this off.
-- While a turn runs you can keep typing. Press Enter to queue the message (up to 5); it sends on its own when the turn ends. Queued messages appear above the box with Edit and remove buttons. If the turn is stopped or fails, they move back into the box instead of sending. Esc only stops the turn when the box is empty.
+- While a turn runs you can keep typing. Press Enter to steer: the message is sent now, marked "sent while working", and the agent reads it at its next step, acknowledges it and adjusts without stopping. Press Alt+Enter to queue it instead (up to 5); it sends on its own when the turn ends. If the agent finishes before reading a steering message, that message is queued as the next one. Queued messages appear above the box with Edit and remove buttons. If the turn is stopped or fails, they move back into the box instead of sending. Esc only stops the turn when the box is empty.
 - Click the `Enter send` hint under the examples to switch the composer to Ctrl/⌘+Enter to send with Enter for a new line; the choice is remembered in this browser. Ctrl/⌘+Enter always sends.
 - An integrated argv-based command runner that captures command output and requires per-command approval.
 - GitHub CLI integration to check the host's existing authentication, list up to 30 repositories accessible to that account, clone a selected repo after approval, and switch the active agent workspace.
@@ -487,7 +487,9 @@ The native `node-pty` component is an optional dependency. The browser workspace
 | `!command` | Run a shell command yourself; its output goes into your next message as context |
 | `#note` | Save a memory note |
 | Ctrl+V | Paste an image from the clipboard |
-| Esc | While a turn runs: interrupt it. Anything you type meanwhile is queued as the next message |
+| Esc | While a turn runs: interrupt it |
+| Enter (during a turn) | Steer: the agent reads the line at its next step and keeps going |
+| Tab (during a turn) | Queue the line as the next message after the turn ends |
 | Esc Esc | Clear the input, or rewind when it is empty |
 | Ctrl+L, Ctrl+D | Clear the screen, exit |
 

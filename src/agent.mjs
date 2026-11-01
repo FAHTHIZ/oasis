@@ -1593,6 +1593,45 @@ export function requestTimeoutMs({ timeoutMs = 0, configuredSeconds = 0, local =
 }
 
 // True when the provider runs on this machine (llama.cpp, Ollama, LM Studio, vLLM on localhost).
+// Mid-turn steering. A message the user sends while a turn is running is
+// delivered to the model at its next step, as a real user message, instead of
+// waiting for the whole turn to finish. If the model was about to give its
+// final answer, the turn continues so the message is handled, not dropped.
+// Anything still undelivered when the turn ends is returned to the caller
+// (takeSteering) so the interface can send it as the next prompt.
+export const STEER_LIMIT = 20;
+export function steerSession(session, text) {
+  const value = String(text == null ? '' : text).trim();
+  if (!session || !value) return false;
+  const queue = Array.isArray(session.steering) ? session.steering : (session.steering = []);
+  if (queue.length >= STEER_LIMIT) return false;
+  queue.push({ text: value.slice(0, 20000), at: Date.now() });
+  return true;
+}
+export function pendingSteering(session) {
+  return session && Array.isArray(session.steering) ? session.steering.length : 0;
+}
+export function takeSteering(session) {
+  if (!session || !Array.isArray(session.steering) || !session.steering.length) return [];
+  return session.steering.splice(0).map((entry) => entry.text);
+}
+export function steeringMessage(texts) {
+  const list = (Array.isArray(texts) ? texts : [texts]).map((text) => String(text || '').trim()).filter(Boolean);
+  if (!list.length) return '';
+  const body = list.length === 1 ? list[0] : list.map((text, index) => (index + 1) + '. ' + text).join('\n');
+  return 'The user sent ' + (list.length === 1 ? 'this message' : 'these messages') + ' while you were working:\n\n' + body + '\n\n' +
+    'This is their latest instruction and takes priority over earlier plans. Acknowledge it in one short sentence, adjust your plan, and keep going. ' +
+    'Do not restart work that is already done, and stop only if they asked you to stop.';
+}
+function deliverSteering(session, options) {
+  if (options.isSubagent) return 0;
+  const texts = takeSteering(session);
+  if (!texts.length) return 0;
+  session.messages.push({ role: 'user', content: steeringMessage(texts) });
+  if (typeof options.onSteer === 'function') { try { options.onSteer({ delivered: texts.length, texts }); } catch {} }
+  return texts.length;
+}
+
 export function isLoopbackProvider(config = {}) {
   try {
     const host = new URL(String(config && config.baseURL || '')).hostname.replace(/^\[|\]$/g, '').toLowerCase();
@@ -4324,6 +4363,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (last && last.role === 'tool' && typeof last.content === 'string') last.content += '\n\n' + notice;
       else session.messages.push({ role: 'user', content: notice });
     }
+    if (step > 0) deliverSteering(session, options);
     const midTurnCompaction = await compactMidTurnHistoryIfNeeded(session, activeRequestIndex, options);
     if (!options.isSubagent && step > 0) {
       const midTurnRules = ruleRefreshReminder(session, { historyChars: historyTextSize(session.messages || []), compacted: Boolean(midTurnCompaction.compacted), env: options.env || process.env });
@@ -4456,6 +4496,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
     finalize: if (!calls.length) {
+      // The user steered while this reply was generating: show the reply, then
+      // hand the model their message instead of ending the turn.
+      if (!options.isSubagent && pendingSteering(session)) {
+        if (text && options.onText) await emitDisplayText(session, options, text);
+        deliverSteering(session, options);
+        continue;
+      }
       if (verification.autoTestPending && verification.changedPaths.size && !options.isSubagent) {
         verification.autoTestPending = false;
         const { resolveAutoTest, runAutoTest, autoTestFailurePrompt } = await import('./auto-test.mjs');

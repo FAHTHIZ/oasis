@@ -113,6 +113,7 @@ The agent evaluator has **50 tasks**: 33 focused fixtures plus 17 repository-lev
 | "I can't tell what that command did." | Every tool call gets a one-line outcome: `✓ exit 0 · 20 passed, 0 failed`, `10 matches in 4 files`, `2 files changed, +6 -1`. Blocks and failures show in red. |
 | "The connection dropped and it ran my tool twice." | Dropped streams restart the reply. Tools run only after a reply completes, so a restart can never run a tool twice. |
 | "Tool definitions eat my context." | Rarely used tool schemas and MCP tools load only when needed. `/context` shows where the window goes and `/cost` what it cost. |
+| "I have to wait for it to finish before I can correct it." | Type while it works and press Enter: the agent reads the message at its next step, adjusts and keeps going. Nothing you send is dropped. |
 | "I want to undo what it just did." | `/undo` reverts the last turn's file and conversation changes; `Esc Esc` or `/rewind` jumps to any checkpoint. |
 | "Animations stutter over SSH and on my old laptop." | Motion adapts: smooth on capable machines, a light pulse on low-power hardware, SSH and the Linux console, none in CI, for screen readers or with `OASIS_REDUCED_MOTION=1`. |
 
@@ -136,6 +137,7 @@ oasis doctor --test-provider            # check the setup, including live tool c
 | `@file` · `!cmd` · `#note` | Mention a file · run a shell command yourself · save a memory |
 | `Shift+Tab` | Cycle permission mode: default → accept edits → plan → auto |
 | `Esc` · `Esc Esc` · `Ctrl+C` | Stop the current step · rewind · interrupt (twice at an empty prompt to quit) |
+| `Enter` · `Tab` while it works | Steer: the agent reads your message at its next step and keeps going · queue it for after the turn |
 | `Ctrl+K` · `Ctrl+R` · `Ctrl+G` | Command palette · search prompt history · write a long prompt in your editor |
 | `/undo` · `/rewind` · `/diff` | Undo the last turn · pick a checkpoint · review changes |
 | `/model` · `/context` · `/cost` | Switch model · see context use · see spend |
