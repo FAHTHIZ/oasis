@@ -3143,6 +3143,12 @@ async function main() {
       continue;
     }
     if (arg === '--skip-git-repo-check') continue;
+    // Gemini CLI: start the interactive session with this first message.
+    if (arg === '-i' || arg === '--prompt-interactive' || arg.startsWith('--prompt-interactive=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!value) throw new Error('--prompt-interactive needs a message.');
+      SESSION_OPTIONS.initialPrompt = value; continue;
+    }
     // Aider flags. --test-cmd plus --auto-test uses Oasis auto-test; commits use auto-commit.
     if (arg === '--yes-always') { autoApprove = true; continue; }
     if (arg === '--message' || arg === '--msg' || arg.startsWith('--message=')) {
@@ -3236,6 +3242,10 @@ async function main() {
     return;
   }
   if (SESSION_OPTIONS.tmux && !worktreeName) throw new Error('--tmux requires --worktree.');
+  if (SESSION_OPTIONS.initialPrompt && !headless.enabled) {
+    if (command && command !== '--interactive') throw new Error('--prompt-interactive takes the whole first message; quote it, for example oasis -i "fix the tests".');
+    QUEUED_INPUT.push(SESSION_OPTIONS.initialPrompt);
+  }
   if (worktreeName && SESSION_OPTIONS.tmux && !headless.enabled && (!command || command === '--interactive')) return await tmuxWorktreeSession(workspace, worktreeName, rawArgs);
   if (worktreeName && (headless.enabled || !command || command === '--interactive')) {
     const session = await startSessionWorktree(workspace, worktreeName, headless.enabled ? stderr : stdout);
@@ -3329,6 +3339,12 @@ async function main() {
   if (!omniIntent) {
     const direct = parseInstallIntent(fullPrompt);
     if (direct) return await installRequest(direct, workspace, autoApprove);
+  }
+  // Like `claude "query"`: on a terminal, the task opens an interactive session so you
+  // can follow up. Scripts (no TTY) and OASIS_ONE_SHOT=1 keep the one-shot run; -p is headless.
+  if (stdin.isTTY && stdout.isTTY && !/^(?:1|true|yes|on)$/i.test(String(process.env.OASIS_ONE_SHOT || ''))) {
+    QUEUED_INPUT.push(fullPrompt);
+    return await interactive(workspace, autoApprove, persistence);
   }
   if (!providerReadyForCommand) await ensureModelProviderSetup(workspace);
   const session = await runPrompt(fullPrompt, workspace, autoApprove, null, persistence);

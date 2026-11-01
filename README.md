@@ -145,7 +145,7 @@ Each row describes implemented, tested runtime behavior.
 
 ```bash
 oasis                                   # interactive session in this folder
-oasis "fix the failing date tests"      # start with a task
+oasis "fix the failing date tests"      # start with a task, then keep talking
 oasis plan "add rate limiting"          # read-only plan, nothing is changed
 oasis -w feature-x                      # work in a new git worktree on its own branch
 oasis -p "summarize this diff" --output-format json < changes.diff   # scripts and CI

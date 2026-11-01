@@ -90,6 +90,8 @@ Verbose output (`--verbose`, `"verbose": true`, or `/config set verbose on`) pri
 
 ## Use it in plain English
 
+On a terminal, `oasis "task"` runs the task and then keeps the session open for follow-ups, like `claude "query"`. `-i "task"` / `--prompt-interactive "task"` (Gemini CLI) does the same. For a single run that exits, use `-p "task"` (headless) or set `OASIS_ONE_SHOT=1`; scripts without a terminal still get the one-shot run.
+
 ~~~bash
 oasis "Explain this repository and identify the next useful improvement"
 oasis "Find the bug in the task filter, fix it, and run the relevant tests"
