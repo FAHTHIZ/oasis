@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatApprovalMessage, redactApprovalSecrets } from '../src/approval-language.mjs';
+import { formatApprovalDiff, formatApprovalMessage, redactApprovalSecrets } from '../src/approval-language.mjs';
 
 test('delete approvals explain which file will be removed and that a backup is created', () => {
   const result = formatApprovalMessage('Delete the workspace file build/output.js? Its current contents will be backed up first.');
@@ -74,4 +74,30 @@ test('credential redaction keeps a stable placeholder without malformed secret f
   const result = redactApprovalSecrets('Provider key sk-ant-abcdefghijklmnop123456; token=super-secret-value');
   assert.equal(result, 'Provider key [redacted secret]; token=[redacted]');
   assert.doesNotMatch(result, /\[redacted\]\s*secret\]/i);
+});
+
+test('file-edit approvals include the exact redacted old and new lines', () => {
+  const diff = formatApprovalDiff('edit_file', {
+    path: 'src/math.mjs',
+    old_string: 'return total + 1;',
+    new_string: 'return total + 2;'
+  });
+  assert.match(diff, /--- a\/src\/math\.mjs/);
+  assert.match(diff, /-return total \+ 1;/);
+  assert.match(diff, /\+return total \+ 2;/);
+  const approval = formatApprovalMessage('Review this edit.', {
+    tool: 'edit_file',
+    input: { path: 'src/math.mjs', old_string: 'before();', new_string: 'after();' }
+  });
+  assert.match(approval.diff, /-before\(\);/);
+  assert.match(approval.diff, /\+after\(\);/);
+});
+
+test('approval diffs redact credentials in proposed file content', () => {
+  const diff = formatApprovalDiff('write_file', {
+    path: 'config.mjs',
+    content: 'const token = "sk-proj-12345678901234567890";'
+  });
+  assert.match(diff, /\[redacted secret\]/);
+  assert.doesNotMatch(diff, /sk-proj-12345678901234567890/);
 });
