@@ -74,8 +74,8 @@ export function contextWindowSize(config = {}, env = process.env) {
     DEFAULT_CONTEXT_WINDOW;
 }
 
-// History compaction threshold in characters. Small windows keep the original
-// 60,000-character trigger; larger windows compact at about 60% full.
+// History compaction threshold in characters. The default 32K window keeps the
+// original 60,000-character trigger; larger windows compact at about 60% full.
 export function compactionThresholdChars(config = {}, env = process.env) {
   const explicit = Number.parseInt(config.compactThresholdChars ?? (env && env.OASIS_COMPACT_THRESHOLD_CHARS), 10);
   if (Number.isInteger(explicit) && explicit >= 10_000 && explicit <= 8_000_000) return explicit;
@@ -84,6 +84,9 @@ export function compactionThresholdChars(config = {}, env = process.env) {
   const pct = Number(config.autoCompactPercent ?? (env && (env.OASIS_AUTOCOMPACT_PCT || env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE)));
   if (config.autoCompactPercent === 0 || (config.autoCompactPercent === undefined && env && String(env.OASIS_AUTOCOMPACT_PCT || '') === '0')) return 8_000_000;
   if (Number.isFinite(pct) && pct >= 1 && pct <= 100) return Math.max(10_000, Math.floor(windowTokens * 4 * pct / 100));
+  // Windows smaller than the default (typically local models) compact at about
+  // 45% full: tool schemas and the reply share the rest of the window.
+  if (windowTokens < DEFAULT_CONTEXT_WINDOW) return Math.max(10_000, Math.floor(windowTokens * 4 * 0.45));
   if (windowTokens <= DEFAULT_CONTEXT_WINDOW) return 60_000;
   return Math.floor(windowTokens * 4 * 0.6);
 }

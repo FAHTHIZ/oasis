@@ -14,7 +14,7 @@ import { extractFollowups, recordFollowups, followupReminder, followupsEnabled }
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
-import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, runSessionTool, stopCron } from './session-tools.mjs';
+import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
@@ -66,6 +66,7 @@ import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 import { repairToolArguments, extractTextToolCalls } from './tool-call-repair.mjs';
+import { isOllamaEndpoint, probeOllamaContext, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -721,7 +722,12 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoCompactPercent)) session.subagentAutoCompactPercent = loadedSettings.subagentAutoCompactPercent;
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
-  if (deferredMcp || deferredRare) systemText += '\n\n' + deferredToolsPrompt(session);
+  // Local model servers: use the context window that is actually loaded.
+  session.localContextNotices = [];
+  await detectLocalContextWindow(session, { env });
+  const smallContextDeferred = !bare && contextWindowSize(session.config, env) <= SMALL_CONTEXT_TOKENS && !/^(?:0|false|off|no)$/i.test(String(env.OASIS_SMALL_CONTEXT_TOOLS || ''))
+    ? applySmallContextProfile(session, TOOL_SEARCH_DEFINITION) : 0;
+  if (deferredMcp || deferredRare || smallContextDeferred) systemText += '\n\n' + deferredToolsPrompt(session);
   // Session scratch space for throwaway files (src/scratch.mjs). Created on the first turn.
   if (scratchEnabled(env) && !systemPromptOverride && !bare) {
     session.scratchDir = scratchRelative(scratchKey(session.sessionId));
@@ -2011,6 +2017,20 @@ function normalizeAssistantToolCalls(session, assistant, step) {
     }
   }
   return repairs;
+}
+
+// A single tool result can be 24,000 characters (about 6K tokens), more than a
+// whole 4K local-model window. On small windows, keep the head and tail of long
+// results and tell the model how to fetch the rest.
+function fitToolResultToWindow(session, content, env = process.env) {
+  const windowTokens = contextWindowSize(session.config || {}, env);
+  const limit = Math.max(2_000, Math.floor(windowTokens * 4 * 0.2));
+  if (limit >= MAX_REPLY_CHARS || content.length <= limit) return content;
+  const note = '\n[OASIS shortened this ' + content.length.toLocaleString('en-US') + '-character result to fit the model\'s ' +
+    windowTokens.toLocaleString('en-US') + '-token context window. Use read_file with offset/limit, grep, or a narrower command to see a specific part.]\n';
+  const room = Math.max(0, limit - note.length);
+  const head = Math.ceil(room * 0.7);
+  return content.slice(0, head) + note + content.slice(content.length - (room - head));
 }
 
 function serializableResult(value) {
@@ -3388,6 +3408,21 @@ function applyFailureHookResult(result, hook) {
   return next;
 }
 
+// Ollama's OpenAI-compatible API cannot change the loaded context window and
+// silently truncates longer prompts from the front. Ask the server what it
+// loaded and size compaction from that instead of the model's advertised max.
+async function detectLocalContextWindow(session, { env = process.env, fetchImpl } = {}) {
+  const config = session.config || {};
+  if (!isOllamaEndpoint(config, env) || config.contextWindow || (env && env.OASIS_CONTEXT_WINDOW)) return null;
+  if (/^(?:0|false|off|no)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''))) return null;
+  const probe = await probeOllamaContext(config, { fetchImpl: fetchImpl || globalThis.fetch });
+  session.localContext = probe;
+  if (!probe || !probe.contextLength) return probe;
+  session.config = { ...config, contextWindow: probe.contextLength };
+  if (probe.contextLength < RECOMMENDED_LOCAL_CONTEXT) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength));
+  return probe;
+}
+
 function availableToolNames(session) {
   const names = new Set((session.toolDefinitions || []).map((tool) => tool && tool.function && tool.function.name).filter(Boolean));
   if (session.deferredTools) for (const name of session.deferredTools.keys()) names.add(name);
@@ -4369,6 +4404,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           session.secretsShielded = (session.secretsShielded || 0) + shielded.count;
         }
       }
+      if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, item.content, options.env || process.env);
       session.messages.push({
         role: 'tool',
         tool_call_id: item.tool_call_id,
