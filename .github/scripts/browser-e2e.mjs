@@ -517,7 +517,15 @@ try {
         if (index % 4 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
       }
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      if (node.textContent !== chunk.repeat(48)) throw new Error('Streaming did not preserve every assistant text chunk.');
+      // Replies render as Markdown while streaming, so compare the raw stream
+      // exactly and the rendered text with whitespace normalized.
+      await new Promise((resolve) => setTimeout(resolve, 1200)); // let the throttled render settle
+      const expected = chunk.repeat(48);
+      const raw = node.dataset.raw != null ? node.dataset.raw : node.textContent;
+      const view = node.cloneNode(true);
+      view.querySelectorAll('button').forEach((button) => button.remove());
+      const shown = view.textContent.replace(/\s+/g, ' ').trim();
+      if (raw !== expected || shown !== expected.trim()) throw new Error('Streaming did not preserve every assistant text chunk. raw=' + raw.length + '/' + expected.length + ' shown=' + shown.length + ' head=' + JSON.stringify(shown.slice(0, 80)) + ' tail=' + JSON.stringify(shown.slice(-80)));
       node.remove();
       delete window.oasisCore.nodes[id];
     });
