@@ -1,6 +1,6 @@
-> **Evidence note:** This is a dated source-review record. Individual findings and CI references belong to the snapshots named in each section; they are not proof of the current release candidate. For the latest lifecycle, release status, and open gates, use [the project plan](PROJECT_PLAN.md).
+> **Evidence note:** This is a dated source-review record. Individual findings and CI references belong to the snapshots named in each section; they are not proof of the current release. For the latest lifecycle, release status, and open gates, use [the project plan](PROJECT_PLAN.md).
 >
-> **Current lifecycle:** `1.0.0` — Release Candidate 1 / Production Qualification. This document preserves historical findings and should not be read as the current candidate's completed security certification. New security evidence must identify the exact audited commit and be linked from [the project plan](PROJECT_PLAN.md).
+> **Current lifecycle:** `1.0.0` — stable. This document preserves historical findings and should not be read as a completed security certification of the current release. New security evidence must identify the exact audited commit and be linked from [the project plan](PROJECT_PLAN.md).
 
 # OASIS security and reliability audit
 

@@ -504,6 +504,7 @@ export function analyzeCommand(command, args = [], depth = 0) {
   if (!/^[a-zA-Z0-9_./:\\@+-]+$/.test(raw)) return { blocked: 'Command must be one executable path; shell syntax is not accepted.' };
   const base = executableBase(raw);
   if (BLOCKED_EXECUTABLES.has(base) || /^mkfs\./.test(base)) {
+    if (['rm', 'rmdir', 'del', 'erase', 'rd'].includes(base)) return { blocked: 'This executable is blocked by Oasis safety policy: ' + base + '. To remove a single file, use the delete_file tool (it snapshots the file first so /rewind can restore it).' };
     return { blocked: 'This executable is blocked by Oasis safety policy: ' + base + '. Use a narrow supported tool instead.' };
   }
   const lowered = args.map((a) => String(a).toLowerCase());

@@ -64,7 +64,7 @@ export const secrets = [
   { id: 'openai', text: join('OPENAI_API_KEY=', 's', 'k-proj-', rnd(48)), secret: true },
   { id: 'anthropic', text: join('key: "', 's', 'k-ant-api03-', rnd(90), '"'), secret: true },
   { id: 'aws-access', text: join('aws_access_key_id = ', 'AK', 'IA', rnd(16, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')), secret: true },
-  { id: 'slack', text: join('SLACK=', 'xo', 'xb-', '1234567890', '-', '9876543210', '-', rnd(24)), secret: true },
+  { id: 'slack', text: join('SLACK=', 'xo', 'xb-', rnd(11, '0123456789'), '-', rnd(13, '0123456789'), '-', rnd(24)), secret: true },
   { id: 'stripe', text: join('stripe.key = "', 's', 'k_live_', rnd(28), '"'), secret: true },
   { id: 'private-key', text: join('-----BEGIN ', 'RSA PRIVATE KEY-----\n', rnd(64), '\n-----END RSA PRIVATE KEY-----'), secret: true },
   { id: 'password-assignment', text: join('DB_PASSWORD=', 'Tr0ub4dor', '&3horse'), secret: true },
@@ -78,4 +78,30 @@ export const secrets = [
   { id: 'neg-uuid', text: 'id = "3f2b8c4e-1a7d-4e9b-9c2a-7d5e6f8a9b0c"', secret: false },
   { id: 'neg-word-token', text: 'const tokenizer = new Tokenizer();', secret: false },
   { id: 'neg-url-no-cred', text: 'https://registry.npmjs.org/oasis-oss', secret: false }
+];
+
+// Held-out cases (see tool-calls.mjs): never used to tune the runtime.
+export const heldoutElision = [
+  { id: 'h-jsx-comment', text: 'return (\n  <div>\n    {/* ... rest of the JSX unchanged */}\n  </div>\n);\n', placeholder: true },
+  { id: 'h-rust-existing', text: 'impl A {\n    // ... existing methods ...\n}\n', placeholder: true },
+  { id: 'h-yaml-hash', text: 'jobs:\n  # ... remaining jobs unchanged\n', placeholder: true },
+  { id: 'h-implementation-omitted', text: 'def run():\n    # implementation omitted for brevity\n', placeholder: true },
+  { id: 'h-neg-ellipsis-doc', text: '/** Accepts a, b, ... and returns the sum. */\nexport const sum = (...n) => n.reduce((a, b) => a + b, 0);\n', placeholder: false },
+  { id: 'h-neg-go-variadic', text: 'func f(args ...string) {}\n', placeholder: false }
+];
+export const heldoutTamper = [
+  { id: 'h-describe-skip', diff: diff('test/api.test.js', ["describe('api', () => {"], ["describe.skip('api', () => {"]), weakened: true },
+  { id: 'h-unittest-skip', diff: diff('tests/test_x.py', ['    def test_x(self):'], ['    @unittest.skip("wip")', '    def test_x(self):']), weakened: true },
+  { id: 'h-rust-ignore', diff: diff('src/lib_test.rs', ['#[test]'], ['#[test]', '#[ignore]']), weakened: true },
+  { id: 'h-neg-new-describe', diff: diff('test/b.test.js', [], ["describe('b', () => {", "  it('works', () => { expect(b()).toBe(1); });", '});']), weakened: false }
+];
+export const heldoutSecrets = [
+  { id: 'h-gitlab', text: join('TOKEN=', 'gl', 'pat-', rnd(20)), secret: true },
+  { id: 'h-google', text: join('key=', 'AI', 'za', rnd(35)), secret: true },
+  { id: 'h-hf', text: join('HF_TOKEN=', 'h', 'f_', rnd(34)), secret: true },
+  { id: 'h-npm', text: join('//registry.npmjs.org/:_authToken=', 'np', 'm_', rnd(36)), secret: true },
+  { id: 'h-yaml-password', text: join('password: ', 'Zq8', 'vL2m', 'Wp4x'), secret: true },
+  { id: 'h-neg-k8s-ref', text: 'password:\n  valueFrom:\n    secretKeyRef: { name: db, key: password }', secret: false },
+  { id: 'h-neg-commit-sha', text: 'fixed in 87363cd2f4b1e0a9c7d6e5f4a3b2c1d0e9f8a7b6', secret: false },
+  { id: 'h-neg-css-token', text: '--token-color-primary: #8a7cff;', secret: false }
 ];

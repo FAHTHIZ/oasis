@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 const TEST_PATH = [
   /(^|\/)(tests?|__tests__|specs?|testing)\//i,
   /\.(test|spec)\.[cm]?[jt]sx?$/i,
-  /(_test|_spec)\.(go|py|rb|exs?)$/i,
+  /(_test|_spec)\.(go|py|rb|exs?|rs)$/i,
   /(^|\/)test_[^/]+\.py$/i,
   /(Test|Tests|Spec)\.(java|kt|scala|cs|swift|php)$/
 ];
@@ -56,7 +56,9 @@ export function analyzeTestDiff(diffText) {
     else if (line.startsWith('-') && !line.startsWith('---')) current.removed.push(line.slice(1));
   }
   for (const entry of files.values()) {
-    if (!isTestPath(entry.file)) continue;
+    // Inline test modules (Rust #[cfg(test)], doctest-style files) live outside
+    // test paths; a hunk that touches a test declaration counts too.
+    if (!isTestPath(entry.file) && ![...entry.added, ...entry.removed].some((line) => TEST_DECL.test(line) || /#\[(?:test|ignore)\]/.test(line))) continue;
     if (entry.deleted && entry.removed.length && !entry.added.length && entry.removed.some((line) => TEST_DECL.test(line))) {
       findings.push({ file: entry.file, reason: 'deleted a test file with ' + entry.removed.filter((line) => TEST_DECL.test(line)).length + ' test(s)' });
       continue;

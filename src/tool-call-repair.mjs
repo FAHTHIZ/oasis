@@ -49,10 +49,26 @@ function repairStructure(text) {
       continue;
     }
     if (ch === '"' || ch === "'") { inString = true; quote = ch; out += '"'; continue; }
+    // JavaScript-style comments outside strings: // to end of line, /* ... */.
+    if (ch === '/' && text[i + 1] === '/') { while (i < text.length && text[i] !== '\n') i++; out += '\n'; continue; }
+    if (ch === '/' && text[i + 1] === '*') { const close = text.indexOf('*/', i + 2); i = close === -1 ? text.length : close + 1; continue; }
     if (ch === ',') {
       let j = i + 1;
       while (j < text.length && /\s/.test(text[j])) j++;
       if (text[j] === '}' || text[j] === ']') continue;
+    }
+    // JavaScript-style bare keys: {path: "a"} -> {"path": "a"}.
+    if (/[A-Za-z_$]/.test(ch)) {
+      let k = out.length - 1;
+      while (k >= 0 && /\s/.test(out[k])) k--;
+      if (out[k] === '{' || out[k] === ',') {
+        const key = /^([A-Za-z_$][\w$-]*)\s*:/.exec(text.slice(i));
+        if (key && !/^(True|False|None|true|false|null)$/.test(key[1])) {
+          out += '"' + key[1] + '"';
+          i += key[1].length - 1;
+          continue;
+        }
+      }
     }
     const word = /^(True|False|None)\b/.exec(text.slice(i));
     if (word && !/[\w$]/.test(text[i - 1] || '')) {
@@ -211,6 +227,19 @@ export function extractTextToolCalls(content, availableNames) {
       if (call) calls.push(call);
     }
     spans.push([match.index, match.index + match[0].length]);
+  }
+  // <tools>{...}</tools>, <tool_calls>[...]</tool_calls>, <function_calls>…: a
+  // wrapper holding one or more bare call objects (some fine-tunes emit this).
+  if (!calls.length) {
+    const wrapped = /<(tools|tool_calls|function_calls)>\s*([\s\S]*?)\s*(?:<\/\1>|$)/g;
+    for (let match; (match = wrapped.exec(content));) {
+      if (quoted(match.index) || /<(?:tool_call|invoke)\b/.test(match[2])) continue;
+      const found = balancedObjects(match[2]).map((object) => asCall(tryParse(object.text).ok ? JSON.parse(object.text) : (() => { try { return repairToolArguments(object.text).args; } catch { return null; } })(), toolNames));
+      if (found.length && found.every(Boolean)) {
+        calls.push(...found);
+        spans.push([match.index, match.index + match[0].length]);
+      }
+    }
   }
   const llama = /<function=([\w.-]+)>\s*([\s\S]*?)\s*<\/function>/g;
   for (let match; (match = llama.exec(content));) {

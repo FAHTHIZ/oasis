@@ -125,3 +125,11 @@ test('test-weakening check counts Python bare asserts', async () => {
   const { testTamperWarning } = await import('../src/change-guard.mjs');
   assert.match(testTamperWarning("def test_a():\n    assert f() == 2\n    assert g() == 3\n", "def test_a():\n    assert f() == 2\n", 'tests/test_a.py'), /removed 1 assertion/);
 });
+
+test('JSX and "implementation omitted" placeholders are caught; variadics and docs are not', async () => {
+  const { findElisionPlaceholder } = await import('../src/change-guard.mjs');
+  assert.ok(findElisionPlaceholder('return (\n  <div>\n    {/* ... rest of the JSX unchanged */}\n  </div>\n);'));
+  assert.ok(findElisionPlaceholder('def run():\n    # implementation omitted for brevity\n'));
+  assert.equal(findElisionPlaceholder('func f(args ...string) {}\n'), '');
+  assert.equal(findElisionPlaceholder('/** Accepts a, b, ... and returns the sum. */\n'), '');
+});

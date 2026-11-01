@@ -194,3 +194,19 @@ test('fenced calls with raw newlines in strings or a stray brace are repaired, a
   assert.deepEqual(stopped.calls, []);
   assert.deepEqual(stopped.failed, ['write_file']);
 });
+
+test('JavaScript-style bare keys are quoted', () => {
+  assert.deepEqual(repairToolArguments('{path: "src/a.js", limit: 20}').args, { path: 'src/a.js', limit: 20 });
+  assert.deepEqual(repairToolArguments('{command: "npm", args: ["test"], cwd_hint: null}').args, { command: 'npm', args: ['test'], cwd_hint: null });
+  // A colon inside a string value is not a key.
+  assert.deepEqual(repairToolArguments('{path: "a:b", note: "x, y: z"}').args, { path: 'a:b', note: 'x, y: z' });
+});
+
+test('comments inside arguments are dropped and <tools> wrappers are read', () => {
+  assert.deepEqual(repairToolArguments('{"path":"a.js" // the entry point\n}').args, { path: 'a.js' });
+  assert.deepEqual(repairToolArguments('{/* why */ "path":"a.js"}').args, { path: 'a.js' });
+  assert.deepEqual(repairToolArguments('{"url":"http://x.invalid/a"}').args, { url: 'http://x.invalid/a' });
+  const found = extractTextToolCalls('<tools>\n{"name": "list_files", "arguments": {"path": "src"}}\n</tools>', new Set(['list_files']));
+  assert.deepEqual(found.calls.map(({ name, args }) => ({ name, args })), [{ name: 'list_files', args: { path: 'src' } }]);
+  assert.equal(extractTextToolCalls('<tools>{"name": "nope", "arguments": {}}</tools>', new Set(['list_files'])), null);
+});

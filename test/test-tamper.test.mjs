@@ -65,3 +65,11 @@ test('weakened tests become a verification issue', () => {
   assert.equal(issues.length, 1);
   assert.match(issues[0], /^tests were weakened instead of the code being fixed \(a\.test\.js: skipped a test\)/);
 });
+
+test('an #[ignore] added to an inline Rust test module is flagged', async () => {
+  const { analyzeTestDiff } = await import('../src/test-tamper.mjs');
+  const diff = ['diff --git a/src/lib.rs b/src/lib.rs', '--- a/src/lib.rs', '+++ b/src/lib.rs', '@@ -1,2 +1,3 @@', '-#[test]', '+#[test]', '+#[ignore]'].join('\n');
+  assert.equal(analyzeTestDiff(diff).length, 1);
+  const plain = ['diff --git a/src/lib.rs b/src/lib.rs', '--- a/src/lib.rs', '+++ b/src/lib.rs', '@@ -1 +1 @@', '-fn a() {}', '+fn b() {}'].join('\n');
+  assert.equal(analyzeTestDiff(plain).length, 0);
+});
