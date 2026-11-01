@@ -29,7 +29,7 @@ This maturity statement is not a claim that production qualification is complete
 - The current development package on `main` is `1.0.0`; `package.json` separately identifies the channel as `release-candidate`, candidate `1`.
 - `1.0.0` is a development candidate, not yet a Git tag, GitHub Release, or downloadable installer.
 - The stable CLI installer intentionally resolves the latest stable tag and therefore continues to install `v0.4.0` until a stable 1.0.0 release is published.
-- The 1.0.0 release workflow must mark `1.0.0` and later prerelease candidates as GitHub prereleases. The final `v1.0.0` release must be published only after all acceptance gates pass.
+- The numeric `1.0.0` package on `main` carries `oasisRelease.channel: release-candidate` and `oasisRelease.candidate: 1`. This is an unpublished source candidate, not a prerelease tag or GitHub Release. The final `v1.0.0` release must be published only after all acceptance gates pass.
 - Never move, replace, or retag `v0.4.0`. Never publish an RC package as stable.
 
 ## 3. Product scope for 1.0
