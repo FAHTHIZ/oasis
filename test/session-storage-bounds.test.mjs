@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, symlink, rm } from 'node:fs/promises';
 import { getSessionDirectory, loadSession, listSessions, saveSession, sanitizeAgentHistory } from '../src/sessions.mjs';
 
 async function fixture(t) {
