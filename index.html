@@ -1898,7 +1898,7 @@ function collapseWork(){
   for(;node;node=node.nextElementSibling)if(node.classList.contains('activity-group'))steps.push(node);
   var calls=steps.reduce(function(total,group){return total+Number(group.querySelectorAll('.activity-step').length||0)},0);
   if(!calls)return;
-  var box=document.createElement('details');box.className='turn-work';box.open=true;
+  var box=document.createElement('details');box.className='turn-work';
   var sum=document.createElement('summary');sum.textContent='Worked for '+fmtWork(Date.now()-workStart)+' · '+calls+' tool call'+(calls===1?'':'s');
   var inner=document.createElement('div');inner.className='turn-work-steps';
   var innerContent=document.createElement('div');innerContent.className='turn-work-steps-inner';
