@@ -161,19 +161,25 @@ if (-not $SkipSetup) {
     & $OasisCommand doctor
 }
 
-$pathEntries = @($env:Path -split ';' | ForEach-Object { $_.TrimEnd('\') })
-if ($pathEntries -notcontains $InstallPrefix.TrimEnd('\')) {
+$normalizePathEntry = { param([string]$Value) $Value.Trim().TrimEnd('\') }
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$userPathEntries = @($userPath -split ';' | ForEach-Object { & $normalizePathEntry $_ } | Where-Object { $_ })
+$normalizedInstallPrefix = & $normalizePathEntry $InstallPrefix
+$userHasInstallPrefix = $userPathEntries -contains $normalizedInstallPrefix
+if (-not $userHasInstallPrefix) {
     Write-Host 'The OASIS command folder is not on your permanent user PATH yet.'
     if (Confirm-Change "May I add $InstallPrefix to your user PATH? This affects only your Windows account.") {
-        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        $parts = @($userPath -split ';' | Where-Object { $_ })
-        if ($parts -notcontains $InstallPrefix) { $parts += $InstallPrefix }
+        $parts = @($userPath -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $parts += $InstallPrefix
         [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
-        $env:Path = "$env:Path;$InstallPrefix"
         Write-Host 'The user PATH entry is saved. Open a new PowerShell window to use oasis by name.'
     } else {
         Write-Host ('For this session, add ' + $InstallPrefix + ' to the front of PATH or call the command by full path.')
         Write-Host 'OASIS was installed; no PATH setting was changed.'
     }
+}
+$sessionPathEntries = @($env:Path -split ';' | ForEach-Object { & $normalizePathEntry $_ } | Where-Object { $_ })
+if ($sessionPathEntries -notcontains $normalizedInstallPrefix) {
+    $env:Path = if ([string]::IsNullOrWhiteSpace($env:Path)) { $InstallPrefix } else { $env:Path + ';' + $InstallPrefix }
 }
 Write-Host 'OASIS installation steps are complete.'

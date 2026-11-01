@@ -149,3 +149,22 @@ test('Windows installer has the same public-page and Atom-feed fallbacks for API
   assert.ok(helper.includes('FAHTHIZ/oasis/releases/tag/(v[0-9]+'), 'Windows fallback must accept relative GitHub release links.');
   assert.ok(helper.includes('Resolve-OasisCommitFromAtom'), 'Windows fallback must keep the Atom commit resolver in its tested helper.');
 });
+
+test('Windows installer checks and updates only the persistent user PATH', async () => {
+  const powershell = await read('scripts/install.ps1');
+  assert.match(powershell, /GetEnvironmentVariable\('Path', 'User'\)/);
+  assert.match(powershell, /SetEnvironmentVariable\('Path',[\s\S]*?'User'\)/);
+  assert.match(powershell, /normalizePathEntry/);
+  assert.match(powershell, /userPathEntries -contains \$normalizedInstallPrefix/);
+  assert.match(powershell, /Confirm-Change "May I add \$InstallPrefix to your user PATH\? This affects only your Windows account\."/);
+  assert.doesNotMatch(powershell, /SetEnvironmentVariable\('Path',[^\n]*'Machine'/);
+});
+
+test('Termux smoke script checks the runtime without making global or user-data changes', async () => {
+  const smoke = await read('scripts/termux-smoke.sh');
+  assert.match(smoke, /TERMUX_VERSION|data\\/data\\/com\.termux/);
+  assert.match(smoke, /node src\\/cli\\.mjs --version/);
+  assert.match(smoke, /node src\\/cli\\.mjs doctor/);
+  assert.match(smoke, /quickjs-emscripten/);
+  assert.doesNotMatch(smoke, /npm install --global|npm uninstall --global|SetEnvironmentVariable/);
+});
