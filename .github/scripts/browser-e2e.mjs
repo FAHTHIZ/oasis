@@ -15,10 +15,12 @@ const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config') };
 // The isolated-diff E2E uses a real, clean Git repository. Runtime state lives
 // outside the tracked project files so the isolation precondition remains real.
 await writeFile(path.join(root, '.gitignore'), 'config/\nfirst-run-config/\n');
+await mkdir(path.join(root, '.oasis'), { recursive: true });
+await writeFile(path.join(root, '.oasis', 'settings.json'), '{"theme":"dark"}\n');
 execFileSync('git', ['init', '--quiet'], { cwd: root });
 execFileSync('git', ['config', 'user.name', 'OASIS Browser E2E'], { cwd: root });
 execFileSync('git', ['config', 'user.email', 'oasis-browser-e2e@example.test'], { cwd: root });
-execFileSync('git', ['add', '.gitignore'], { cwd: root });
+execFileSync('git', ['add', '.gitignore', '.oasis/settings.json'], { cwd: root });
 execFileSync('git', ['commit', '--quiet', '-m', 'Browser E2E workspace baseline'], { cwd: root });
 const token = 'oasis-browser-e2e-token-0123456789';
 const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(), 'artifacts', 'browser-e2e');
