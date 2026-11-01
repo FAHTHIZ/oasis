@@ -284,6 +284,46 @@ try {
   await page.screenshot({ path: path.join(screenshotDir, 'agent-provider-settings-desktop.png'), fullPage: true });
   const perfCdp = await context.newCDPSession(page);
   await perfCdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  // Preserve a turn-level trace so a missing activity summary is diagnosable
+  // from CI artifacts rather than only appearing as a generic visibility timeout.
+  await page.evaluate(() => {
+    const trace = window.__oasisE2EActivityTrace = [];
+    const wrap = (name, before, after) => {
+      const original = window[name];
+      if (typeof original !== 'function') return;
+      window[name] = function (...args) {
+        if (before) trace.push(before(args));
+        const result = original.apply(this, args);
+        if (after) trace.push(after(args));
+        return result;
+      };
+    };
+    const state = () => ({
+      busy: typeof window.agentBusy === 'boolean' ? window.agentBusy : null,
+      workStart: Number(window.workStart || 0),
+      groupCount: Array.isArray(window.activityGroups) ? window.activityGroups.length : null,
+      domGroups: document.querySelectorAll('#agentMessages .activity-group').length,
+      domSteps: document.querySelectorAll('#agentMessages .activity-step').length,
+      folded: document.querySelectorAll('#agentMessages .turn-work').length,
+      preference: localStorage.getItem('oasis.web.collapseWork') || 'on'
+    });
+    wrap('oasisActivityStart', (args) => ({
+      event: 'activity-start',
+      callId: args[0]?.callId || '',
+      category: args[0]?.category || '',
+      label: args[0]?.label || '',
+      before: state()
+    }), () => ({ event: 'activity-start-return', after: state() }));
+    wrap('oasisActivityResult', (args) => ({
+      event: 'activity-result',
+      callId: args[0]?.callId || '',
+      status: args[0]?.status || '',
+      label: args[0]?.label || '',
+      before: state()
+    }), () => ({ event: 'activity-result-return', after: state() }));
+    wrap('agentSetBusy', (args) => ({ event: 'set-busy-before', value: !!args[0], state: state() }),
+      (args) => ({ event: 'set-busy-after', value: !!args[0], state: state() }));
+  });
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await measureFrames(page, 'approval card opening', async () => {
     await page.locator('#agentSendBtn').click();
@@ -317,7 +357,29 @@ try {
   }
 
   const activitySummary = page.locator('#agentMessages .turn-work');
-  await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
+  try {
+    await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
+  } catch (error) {
+    const activityDebug = await page.evaluate(() => ({
+      preference: localStorage.getItem('oasis.web.collapseWork') || 'on',
+      runtimeBusy: typeof window.agentBusy === 'boolean' ? window.agentBusy : null,
+      workStart: Number(window.workStart || 0),
+      activityGroupArrayLength: Array.isArray(window.activityGroups) ? window.activityGroups.length : null,
+      groups: [...document.querySelectorAll('#agentMessages .activity-group')].map((node) => ({
+        category: node.dataset.category || '',
+        parent: node.parentElement?.id || node.parentElement?.className || '',
+        steps: node.querySelectorAll('.activity-step').length,
+        text: node.innerText.slice(0, 300)
+      })),
+      activitySteps: document.querySelectorAll('#agentMessages .activity-step').length,
+      foldedSummaries: document.querySelectorAll('#agentMessages .turn-work').length,
+      messages: document.querySelector('#agentMessages')?.innerText.slice(-5000) || '',
+      trace: window.__oasisE2EActivityTrace || []
+    }));
+    await page.screenshot({ path: path.join(screenshotDir, 'agent-activity-debug-desktop.png'), fullPage: true });
+    throw new Error(String(error && error.message || error) +
+      '; activity debug=' + JSON.stringify(activityDebug));
+  }
   const defaultActivityText = await page.locator('#agentMessages').innerText();
   assert.match(defaultActivityText, /The command failed|failed \(exit code 7\)|exit code 7/i,
     'The failed command warning must remain visible outside the fold.');
