@@ -133,21 +133,40 @@ export function macProfile(sandbox) {
 // mirrors) disappear behind the private /tmp tmpfs, which makes every sandboxed
 // command fail with "execvp: No such file or directory". Re-expose only the
 // top-level /tmp entries that hold the executable or a PATH directory, read-only.
+// Per-user agent and session directories under /tmp hold sockets (ssh-agent,
+// X11, tmux, D-Bus, GnuPG, keyrings). A read-only bind still lets a process
+// connect to a socket, so these are never re-exposed.
+const SENSITIVE_TMP_ENTRY = /^(?:ssh-|\.x11-unix$|\.ice-unix$|\.xim-unix$|\.font-unix$|\.test-unix$|tmux-|systemd-private-|gpg|keyring|pulse-|dbus-|\.com\.google\.chrome|krb5cc|vscode-|com\.apple\.launchd)/i;
+
+// The smallest directory that makes a /tmp toolchain usable: the prefix above
+// a bin/ directory (so ../lib is available), else the directory itself.
+function toolchainPrefix(dir) {
+  return path.basename(dir) === 'bin' ? path.dirname(dir) : dir;
+}
+
 export function tmpToolchainMounts(command, env = process.env) {
   const roots = new Set();
-  const consider = (candidate) => {
+  const consider = (candidate, { file = false } = {}) => {
     if (!candidate || !path.isAbsolute(candidate)) return;
     let real = candidate;
     try { real = realpathSync(candidate); } catch { /* keep the literal path */ }
     for (const value of new Set([path.resolve(candidate), real])) {
       if (!pathContains('/tmp', value) || path.resolve(value) === '/tmp') continue;
-      const top = path.join('/tmp', path.relative('/tmp', value).split(path.sep)[0]);
-      try { statSync(top); roots.add(top); } catch { /* missing entries are skipped */ }
+      const first = path.relative('/tmp', value).split(path.sep)[0];
+      if (SENSITIVE_TMP_ENTRY.test(first)) continue;
+      let stats;
+      try { stats = statSync(value); } catch { continue; }
+      // The command itself must be a regular file; directories come from PATH.
+      if (file ? !stats.isFile() : !stats.isDirectory()) continue;
+      const dir = toolchainPrefix(file ? path.dirname(value) : value);
+      if (path.resolve(dir) === '/tmp') continue;
+      roots.add(dir);
     }
   };
-  consider(command);
+  consider(command, { file: true });
   for (const entry of String(env.PATH || '').split(path.delimiter)) consider(entry);
-  return [...roots];
+  // Drop mounts already covered by a broader one.
+  return [...roots].filter((dir) => ![...roots].some((other) => other !== dir && pathContains(other, dir)));
 }
 
 // Returns { command, args } that runs the requested argv inside the sandbox.
