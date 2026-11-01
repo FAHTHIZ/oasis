@@ -123,3 +123,20 @@ test('a small model that keeps pasting the new file as a code block gets it writ
   assert.match(await readFile(path.join(root, 'src/twice.mjs'), 'utf8'), /return x \* 2/);
   assert.ok(ran.includes('write_file') && ran.includes('git_diff'), ran.join(','));
 });
+
+test('after a failed check, a corrected whole file pasted as a code block replaces the file the model created', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-av-fix-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const { port } = await scriptedModel(t, (messages, n) => {
+    if (n === 1) return write('w1', 'src/half.mjs', 'export function half(x) {\n  return x / 2;\n}}\n');
+    const toolText = messages.filter((m) => m.role === 'tool').map((m) => String(m.content)).join('\n');
+    if (/SyntaxError/.test(toolText) && !/saved the code block/.test(toolText)) return { role: 'assistant', content: "Here's the corrected code:\n```javascript\nexport function half(x) {\n  return x / 2;\n}\n```" };
+    return { role: 'assistant', content: 'Fixed; src/half.mjs passes node --check.' };
+  });
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + port + '/v1', model: 'fixture', apiKey: '', maxSteps: 12, contextWindow: 16384 } });
+  const result = await runAgentTurn(session, 'Create src/half.mjs exporting half(x)', { autoApprove: true, env: { ...process.env, OASIS_ASSISTED_VERIFICATION: '', OASIS_AUTO_TEST: '' } });
+  const { readFile } = await import('node:fs/promises');
+  assert.equal(await readFile(path.join(root, 'src/half.mjs'), 'utf8'), 'export function half(x) {\n  return x / 2;\n}\n');
+  assert.equal(result.verificationIncomplete, false, JSON.stringify(result.verificationIssues));
+});

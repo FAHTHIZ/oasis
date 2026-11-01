@@ -165,3 +165,10 @@ test('local servers get near-greedy sampling; hosted APIs keep their defaults', 
   assert.deepEqual(samplingTemperature({ baseURL: 'http://127.0.0.1:8080/v1' }, { OASIS_TEMPERATURE: '0' }), { temperature: 0 });
   assert.deepEqual(samplingTemperature({ baseURL: 'http://127.0.0.1:8080/v1' }, { OASIS_TEMPERATURE: 'hot' }), {});
 });
+
+test('several JSON call objects in one fence are all recovered', async () => {
+  const { extractTextToolCalls } = await import('../src/tool-call-repair.mjs');
+  const content = '```\n{"name": "read_file", "arguments": {"path": "a.mjs"}}\n{"name": "write_file", "arguments": {"path": "a.mjs", "content": "x"}}\n```';
+  const out = extractTextToolCalls(content, new Set(['read_file', 'write_file']));
+  assert.deepEqual(out.calls.map((c) => c.name), ['read_file', 'write_file']);
+});

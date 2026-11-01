@@ -2365,6 +2365,8 @@ export function fencedFileFromReply(request, reply) {
     if (body.trim().split('\n').length < 2) continue;
     // Tutorial pseudo-code that "calls" the agent's own tools is not file content.
     if (/\b(?:read_file|write_file|edit_file|run_command|git_diff)\s*\(/.test(body)) continue;
+    // Nor are tool calls written as JSON ({"name": "edit_file", "arguments": ...}).
+    if (/^\s*[\[{]\s*"(?:name|tool|function)"\s*:/.test(body) && /"(?:arguments|parameters|args|input)"\s*:/.test(body)) continue;
     if (body.length > best.length) best = body;
   }
   return best ? { path: file, content: best.endsWith('\n') ? best : best + '\n' } : null;
@@ -4417,6 +4419,25 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           break finalize; // the text is shown once below, with the calls
         }
       }
+      // The model created the file this turn, a check failed, and it answered
+      // with the corrected whole file in a code block instead of editing. Apply
+      // it (twice at most; whole-file replacements of its own new file only).
+      if ((verification.fencedFixes || 0) < 2 && verification.createdPaths && verification.createdPaths.size && verification.lastVerificationExitCode != null && verification.lastVerificationExitCode !== 0 && !options.planOnly && permissionMode(session, options) !== 'plan' && assistedVerificationEnabled(session, options.env || process.env)) {
+        const fenced = fencedFileFromReply(request, text);
+        if (fenced && verification.createdPaths.has(normalizeReviewPath(fenced.path))) {
+          let current = '';
+          try { current = await readFile(path.join(session.root, fenced.path), 'utf8'); } catch { current = ''; }
+          if (current && fenced.content.trim() !== current.trim() && fenced.content.length >= current.length * 0.6) {
+            verification.fencedFixes = (verification.fencedFixes || 0) + 1;
+            // Leave room for one more harness-run check of the replaced file.
+            verification.assistedRuns = Math.min(verification.assistedRuns || 0, 1);
+            calls = [{ id: 'oasis_apply_fix_' + verification.fencedFixes, type: 'function', function: { name: 'write_file', arguments: JSON.stringify(fenced) } }];
+            assistantMessage.tool_calls = calls;
+            fencedBatch = true;
+            break finalize;
+          }
+        }
+      }
       // A canned refusal stays in context and small models then repeat it, so
       // drop it (and a scolding nudge just before it) and retry with a plain,
       // neutral instruction. Once per turn, small or local models only.
@@ -4720,6 +4741,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const changedPath = normalizeReviewPath(result.path);
         recordClaimEdit(claimState);
         verification.changedPaths.add(changedPath);
+        if (name === 'write_file' && result.backedUpExistingFile === false) (verification.createdPaths ||= new Set()).add(changedPath);
         verification.lspVerificationByPath.delete(changedPath);
         verification.diffReviewedAll = false;
         verification.diffReviewedPaths.clear();
