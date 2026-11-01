@@ -73,7 +73,11 @@ test('auto mode runs safe commands, blocks risky ones, and never prompts for eit
   const tools = requests[4].messages.filter((m) => m.role === 'tool');
   assert.match(tools[0].content, /v\d+\.\d+/);
   assert.match(tools[1].content, /Auto mode blocked this: Force pushing rewrites shared history/);
-  assert.doesNotMatch(tools[1].content, /v\d+\.\d+\.\d+/);
+  // The blocked result echoes the command path, which can itself contain a
+  // version (for example /opt/node-v22.1.0/bin/node), so assert on the payload.
+  const blocked = JSON.parse(tools[1].content);
+  assert.equal(blocked.approved, false);
+  assert.equal(blocked.stdout, undefined);
   assert.deepEqual(events.map((event) => event.decision), ['allow', 'block']);
   assert.deepEqual(session.autoMode.log.map((item) => item.decision), ['allow', 'block']);
   closeSession(session);
