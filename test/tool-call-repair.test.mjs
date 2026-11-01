@@ -172,3 +172,12 @@ test('several JSON call objects in one fence are all recovered', async () => {
   const out = extractTextToolCalls(content, new Set(['read_file', 'write_file']));
   assert.deepEqual(out.calls.map((c) => c.name), ['read_file', 'write_file']);
 });
+
+test('replies made of calls to tools that do not exist are reported by name', async () => {
+  const { unknownTextToolCalls } = await import('../src/tool-call-repair.mjs');
+  const names = new Set(['read_file', 'git_commit']);
+  assert.deepEqual(unknownTextToolCalls('{"name": "git_init", "arguments": {}}\n{"name": "git_add", "arguments": {"paths": ["a"]}}', names), ['git_init', 'git_add']);
+  assert.deepEqual(unknownTextToolCalls('```json\n{"name": "git_init", "arguments": {}}\n```', names), ['git_init']);
+  assert.deepEqual(unknownTextToolCalls('The config is {"name": "x", "arguments": 1}.', names), []);
+  assert.deepEqual(unknownTextToolCalls('{"name": "my-package", "version": "1.0.0"}', names), []);
+});

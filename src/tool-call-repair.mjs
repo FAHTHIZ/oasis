@@ -275,3 +275,26 @@ export function extractTextToolCalls(content, availableNames) {
   for (const [from, to] of spans) text = text.slice(0, from) + text.slice(to);
   return { calls, text: text.replace(/\n{3,}/g, '\n\n').trim() };
 }
+
+// A reply made only of call-shaped JSON objects naming tools that do not exist
+// ({"name": "git_init", "arguments": {}}). Returns those names, or [].
+export function unknownTextToolCalls(content, availableNames) {
+  if (typeof content !== 'string' || !content.trim()) return [];
+  const toolNames = availableNames instanceof Set ? availableNames : new Set(availableNames || []);
+  const body = content.trim().replace(/^```[\w-]*\s*\n?/, '').replace(/\n?\s*```\s*$/, '').trim();
+  if (!body.startsWith('{') && !body.startsWith('[')) return [];
+  const objects = balancedObjects(body);
+  if (!objects.length) return [];
+  const rest = objects.reduceRight((text, object) => text.slice(0, object.start) + text.slice(object.end), body).replace(/[\[\],\s]/g, '');
+  if (rest) return [];
+  const names = [];
+  for (const object of objects) {
+    const parsed = tryParse(object.text);
+    if (!parsed.ok || !isPlainObject(parsed.value)) return [];
+    const fn = isPlainObject(parsed.value.function) ? parsed.value.function : parsed.value;
+    const name = typeof fn.name === 'string' ? fn.name.trim() : '';
+    if (!name || !('arguments' in fn || 'parameters' in fn || 'args' in fn || 'input' in parsed.value)) return [];
+    if (!toolNames.has(name)) names.push(name);
+  }
+  return [...new Set(names)];
+}

@@ -140,3 +140,19 @@ test('after a failed check, a corrected whole file pasted as a code block replac
   assert.equal(await readFile(path.join(root, 'src/half.mjs'), 'utf8'), 'export function half(x) {\n  return x / 2;\n}\n');
   assert.equal(result.verificationIncomplete, false, JSON.stringify(result.verificationIssues));
 });
+
+test('calls to made-up tools are answered with the real tool list', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-av-unknown-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let told = '';
+  const { port } = await scriptedModel(t, (messages, n) => {
+    const last = messages[messages.length - 1];
+    if (n === 1) return { role: 'assistant', content: '{"name": "git_init", "arguments": {}}' };
+    if (last.role === 'user' && /not a tool/.test(String(last.content))) told = String(last.content);
+    return { role: 'assistant', content: 'Nothing to change.' };
+  });
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + port + '/v1', model: 'fixture', apiKey: '', maxSteps: 6 } });
+  await runAgentTurn(session, 'init a repo', { autoApprove: true, env: { ...process.env, OASIS_AUTO_TEST: '' } });
+  assert.match(told, /git_init is not a tool/);
+  assert.match(told, /run_command/);
+});
