@@ -135,6 +135,18 @@ No authenticated live Claude Code head-to-head result is published. Do not claim
 
 No live Claude Code results are included yet. The CLI integration is testable with a fake runner, but this task-authoring session did not run an authenticated Claude Code CLI benchmark. Before publishing head-to-head numbers, run both agents against identical task fingerprints, use the same model when comparing harnesses, publish every trial and failure, and retain the complete machine-readable reports.
 
+## Small local model field runs (2026-11-01)
+
+These are diagnostic runs, not a benchmark result. They were run on a 2-CPU, 7 GB machine with llama.cpp `llama-server` b12024 (`--jinja -c 16384`) and Qwen2.5-Coder-1.5B and -3B Instruct (Q4_K_M), using `oasis -p` and `oasis eval --task clamp-integer --trials 1`.
+
+| Model | Run | Outcome | Main failure modes seen |
+| --- | --- | --- | --- |
+| Qwen2.5-Coder-1.5B | about 12 `oasis -p` runs | File created in later runs; logic still wrong | Described steps instead of acting; text and XML-attribute tool calls; announced a step then stopped; canned refusals; claimed changes it never made; echoed `<tool_response>`; tutorial pseudo-code in place of the file |
+| Qwen2.5-Coder-3B | 2 `oasis -p` runs | File created, harness ran diff and `node --check`, syntax error caught | Used `tool_search` as a code search; several JSON calls in one fence; pasted the corrected file as a code block instead of editing |
+| Qwen2.5-Coder-3B | 2 `oasis eval` trials on `clamp-integer` | 0/2 passed | Trial 1 stopped without creating the file. Trial 2 wrote the file and the harness ran the checks, but the code returned `'8'` instead of `8` and had the wrong signature; it also called made-up tools (`git_init`, `git_add`) |
+
+Each failure mode above has a matching harness change and a regression test (see the 1.0.0 entries in [CHANGELOG.md](../CHANGELOG.md)). The remaining 3B failures are about code correctness, which the harness can surface (verifier and syntax errors go back to the model) but cannot fix. To reproduce, start `llama-server` with `--jinja`, set `OASIS_BASE_URL=http://127.0.0.1:8080/v1`, and run `oasis eval --task clamp-integer --trials 3 --yes` with `OASIS_DEBUG=raw` to log every model reply before cleanup.
+
 ## Cost-aware model routing experiment
 
 OASIS can route clearly small, read-only tasks to a cheaper model while keeping implementation, security-sensitive, ambiguous, and larger tasks on a strong model. Routing is deliberately conservative; it is not a guarantee that every easy request can be recognized.
