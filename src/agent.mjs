@@ -66,7 +66,7 @@ import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 import { repairToolArguments, extractTextToolCalls } from './tool-call-repair.mjs';
-import { isOllamaEndpoint, probeOllamaContext, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
+import { isLocalModelEndpoint, probeLocalContext, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -3408,18 +3408,19 @@ function applyFailureHookResult(result, hook) {
   return next;
 }
 
-// Ollama's OpenAI-compatible API cannot change the loaded context window and
-// silently truncates longer prompts from the front. Ask the server what it
-// loaded and size compaction from that instead of the model's advertised max.
+// Local servers (Ollama, LM Studio, llama-server) serve a loaded context window
+// that is often far below the model's advertised maximum, and silently drop the
+// oldest tokens when a prompt is longer. Ask the server what it loaded and size
+// compaction from that instead.
 async function detectLocalContextWindow(session, { env = process.env, fetchImpl } = {}) {
   const config = session.config || {};
-  if (!isOllamaEndpoint(config, env) || config.contextWindow || (env && env.OASIS_CONTEXT_WINDOW)) return null;
+  if (!isLocalModelEndpoint(config, env) || config.contextWindow || (env && env.OASIS_CONTEXT_WINDOW)) return null;
   if (/^(?:0|false|off|no)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''))) return null;
-  const probe = await probeOllamaContext(config, { fetchImpl: fetchImpl || globalThis.fetch });
+  const probe = await probeLocalContext(config, { fetchImpl: fetchImpl || globalThis.fetch, env });
   session.localContext = probe;
   if (!probe || !probe.contextLength) return probe;
   session.config = { ...config, contextWindow: probe.contextLength };
-  if (probe.contextLength < RECOMMENDED_LOCAL_CONTEXT) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength));
+  if (probe.contextLength < RECOMMENDED_LOCAL_CONTEXT) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength, probe.server));
   return probe;
 }
 

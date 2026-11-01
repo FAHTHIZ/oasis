@@ -891,6 +891,30 @@ Runs can go to the background (`run_in_background`); you get a notice when they 
 
 OASIS knows the context window of common models (Claude 200K, GPT-4.1 and Gemini 1M, GPT-5 400K, o-series 200K, GPT-4o 128K, and others) and compacts history at about 60% full. Unknown or local models use a conservative 32K. Set `"contextWindow"` in the provider config or `OASIS_CONTEXT_WINDOW` to override it, and `OASIS_COMPACT_THRESHOLD_CHARS` to change when compaction starts.
 
+### Local models and small context windows
+
+Local servers often run a model with a much smaller context window than the model supports. Ollama, for example, defaults to 4,096 tokens on GPUs with less than 24 GB of VRAM, and its OpenAI-compatible API cannot change that per request. When a prompt is longer, the server silently drops the oldest tokens, which removes the system prompt and tool instructions first.
+
+OASIS asks the server what it actually loaded and works within that window:
+
+- **Detection.** Ollama (`/api/ps`, then the Modelfile `num_ctx`), LM Studio (`/api/v0/models` `loaded_context_length`) and llama.cpp `llama-server` (`/props` `n_ctx`) are probed at session start on their default ports (11434, 1234, 8080) or any Ollama host. Other loopback ports are probed only with `OASIS_LOCAL_CONTEXT_PROBE=1`; `OASIS_LOCAL_CONTEXT_PROBE=0` turns probing off. An explicit `contextWindow` or `OASIS_CONTEXT_WINDOW` always wins.
+- **Earlier compaction.** Windows smaller than 32K compact at about 45% full, leaving room for tool schemas and the reply.
+- **Small tool set.** At 16K or less, only 13 essential tools (read, list, glob, search, grep, edit, write, run, command output, git status, git diff, todos, tool search) are sent. The rest load on first use or through `tool_search`. `OASIS_SMALL_CONTEXT_TOOLS=0` turns this off.
+- **Shorter tool results.** On small windows, long results keep their head and tail, with a note telling the model to read a narrower range.
+- **A fix-it notice.** Below 32K, the CLI and `/doctor` print the exact fix for your server, such as `OLLAMA_CONTEXT_LENGTH=32768`, `lms load <model> --context-length 32768`, or `llama-server --ctx-size 32768`.
+
+### Tool-call repair for smaller models
+
+Smaller and local models often almost follow the tool-calling format. OASIS repairs these cases instead of failing the turn:
+
+- Arguments with code fences, trailing commas, single quotes, Python `True`/`False`/`None`, raw newlines inside strings, JSON encoded twice, surrounding prose, or missing closing braces are repaired. Strict JSON is always tried first, and string contents are never rewritten. Repaired arguments are stored as canonical JSON, so the history sent back to strict providers stays valid.
+- Arguments that cannot be repaired are answered with a tool error that tells the model how to resend the call, rather than ending the turn.
+- Tool calls written as text, such as `<tool_call>{...}</tool_call>` (Hermes, Qwen), `<function=name>{...}</function>` (Llama), or a fenced or bare JSON call, are executed when they name a tool the session offers. Set `"textToolCalls": false` in settings to turn this off.
+
+### Dropped connections
+
+If the model connection drops or stalls mid-response, OASIS restarts that response on the same model up to twice before falling back or failing. Tool calls are only returned once a response completes, so a restart can never run a tool twice. The partial reply is replaced, not duplicated, and the CLI, browser and `stream-json` output each show that the response was restarted.
+
 The default per-task budget is now 60 model steps and 300 tool calls (it was 12 and 30). Raise or lower them with `maxSteps`, `maxToolCalls`, and `maxTokens` in the provider config, or `OASIS_MAX_STEPS`, `OASIS_MAX_TOOL_CALLS`, and `OASIS_MAX_TOKENS`.
 
 ## Command safety and OS sandbox
