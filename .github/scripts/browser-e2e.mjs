@@ -332,7 +332,7 @@ try {
       };
     };
     const state = () => ({
-      busy: typeof window.agentBusy === 'boolean' ? window.agentBusy : null,
+      busy: typeof window.oasisCore?.busy === 'boolean' ? window.oasisCore.busy : null,
       workStart: Number(window.workStart || 0),
       groupCount: Array.isArray(window.activityGroups) ? window.activityGroups.length : null,
       domGroups: document.querySelectorAll('#agentMessages .activity-group').length,
@@ -378,18 +378,16 @@ try {
   assert.match(editApprovalDiff, /-"theme":"dark"/);
   assert.match(editApprovalDiff, /\+"theme":"light"/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-edit-approval-desktop.png'), fullPage: true });
-  await page.locator('#agentApproveBtn').click();
-  await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
-  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  const editApprovalPrompt = await page.locator('#agentApprovalPrompt').innerText();
+  await approveAndWaitForNextApproval(page, editApprovalPrompt);
   const commandApproval = await page.locator('#agentApprovalPrompt').innerText();
   assert.match(commandApproval, /node "-e" "process\.exit\(7\)"/);
   assert.equal(await page.locator('#agentApprovalDiff').isHidden(), true,
     'A command approval should not display a file-edit diff.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-command-approval-desktop.png'), fullPage: true });
-  await page.locator('#agentApproveBtn').click();
-  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  await approveAndWaitForNextApproval(page, commandApproval);
   const contentCheckApproval = await page.locator('#agentApprovalPrompt').innerText();
-  assert.match(contentCheckApproval, /node --test browser-e2e-verification\.test\.mjs/);
+  assert.match(contentCheckApproval, /node "?--test"? "?browser-e2e-verification\.test\.mjs"?/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-content-check-approval-desktop.png'), fullPage: true });
   await page.locator('#agentApproveBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
@@ -460,11 +458,11 @@ try {
     'The warning must not be hidden inside the Worked for disclosure.');
   assert.doesNotMatch(defaultActivityText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'The default chat view must not expose raw tool names or JSON arguments.');
-  assert.match(await activitySummary.locator('summary').innerText(), /Worked for .* · 8 tool calls/);
+  assert.match(await activitySummary.locator(':scope > summary').innerText(), /Worked for .* · 8 tool calls/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-desktop.png'), fullPage: true });
 
   await measureFrames(page, 'opening Worked for activity fold', async () => {
-    await activitySummary.locator('summary').click();
+    await activitySummary.locator(':scope > summary').click();
   });
   const groups = page.locator('#agentMessages .turn-work .activity-group');
   assert.equal(await groups.count(), 7, 'File creation, reading, editing, the commands, test creation, and diff review should form readable groups.');
@@ -491,11 +489,11 @@ try {
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-details-desktop.png'), fullPage: true });
 
   await page.evaluate(() => {
-    window.agentProcessEvent('context-ui-fixture', { type: 'compaction_started', data: { messages: 18, timeoutSeconds: 90 } });
-    window.agentProcessEvent('context-ui-fixture', { type: 'compaction_completed', data: { savedTokens: 1800, notesSaved: true } });
-    window.agentProcessEvent('context-ui-fixture', { type: 'context_overflow', data: { attempt: 1, changed: true } });
-    window.agentProcessEvent('context-ui-fixture', { type: 'context_pruned', data: { pruned: 2, before: 2200, after: 900 } });
-    window.agentProcessEvent('context-ui-fixture', { type: 'session_state', data: { contextPercent: 73, contextTokens: 73000, contextWindow: 100000, totalTokens: 84000, model: 'fixture' } });
+    window.oasisCore.processEvent('context-ui-fixture', { type: 'compaction_started', data: { messages: 18, timeoutSeconds: 90 } });
+    window.oasisCore.processEvent('context-ui-fixture', { type: 'compaction_completed', data: { savedTokens: 1800, notesSaved: true } });
+    window.oasisCore.processEvent('context-ui-fixture', { type: 'context_overflow', data: { attempt: 1, changed: true } });
+    window.oasisCore.processEvent('context-ui-fixture', { type: 'context_pruned', data: { pruned: 2, before: 2200, after: 900 } });
+    window.oasisCore.processEvent('context-ui-fixture', { type: 'session_state', data: { contextPercent: 73, contextTokens: 73000, contextWindow: 100000, totalTokens: 84000, model: 'fixture' } });
   });
   const contextNotices = page.locator('#agentMessages .agent-context-notice');
   assert.equal(await contextNotices.count(), 4, 'Context lifecycle changes should be explained in the chat.');
@@ -511,17 +509,17 @@ try {
   await measureFrames(page, 'streaming a long assistant reply', async () => {
     await page.evaluate(async () => {
       const id = 'oasis-frame-stream-fixture';
-      const node = window.agentAppendMessage('assistant', '', id);
-      window.agentAssistantNodes[id] = node;
+      const node = window.oasisCore.appendMessage('assistant', '', id);
+      window.oasisCore.nodes[id] = node;
       const chunk = 'A streamed sentence is appended without rebuilding the message. ';
       for (let index = 0; index < 48; index++) {
-        window.agentAppendAssistantDelta(id, chunk);
+        window.oasisCore.appendAssistantDelta(id, chunk);
         if (index % 4 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
       }
       await new Promise((resolve) => requestAnimationFrame(resolve));
       if (node.textContent !== chunk.repeat(48)) throw new Error('Streaming did not preserve every assistant text chunk.');
       node.remove();
-      delete window.agentAssistantNodes[id];
+      delete window.oasisCore.nodes[id];
     });
   });
 
@@ -622,7 +620,7 @@ try {
 
   // Commit the output from the preceding non-isolated file test so the real
   // worktree run begins from a clean user workspace, as required in production.
-  execFileSync('git', ['add', 'browser-e2e-output.txt', '.oasis/settings.json'], { cwd: root });
+  execFileSync('git', ['add', 'browser-e2e-output.txt', 'browser-e2e-verification.test.mjs', '.oasis/settings.json'], { cwd: root });
   execFileSync('git', ['commit', '--quiet', '-m', 'Commit browser chat fixture output'], { cwd: root });
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '',
     'The primary checkout must be clean before creating an isolated worktree.');
@@ -648,7 +646,7 @@ try {
     const assistants = [...document.querySelectorAll('#agentMessages .agent-message.assistant')];
     return agentView?.classList.contains('active') &&
       users.some((element) => element.textContent.includes('Run the browser end-to-end fixture and report its result.')) &&
-      assistants.some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.'));
+      assistants.some((element) => element.textContent.includes('A focused Node test passed for the edited file.'));
   }, null, { timeout: timeoutMs });
   console.log('PASS saved-chat recovery: the monitor reopened the saved parent conversation without restarting a worker.');
 
@@ -838,4 +836,16 @@ try {
   // The final cloud-task event can finish writing just after browser shutdown.
   // Retry transient ENOTEMPTY/EBUSY races rather than marking a clean E2E run failed.
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+}
+
+// Consecutive approvals can reuse the visible card without hiding it in between,
+// so a visibility wait alone can read the prompt that was just approved. Wait for
+// the prompt text itself to change instead.
+async function approveAndWaitForNextApproval(page, previousPrompt) {
+  await page.locator('#agentApproveBtn').click();
+  await page.waitForFunction((previous) => {
+    const card = document.querySelector('#agentApprovalCard');
+    const prompt = document.querySelector('#agentApprovalPrompt');
+    return Boolean(card && !card.hidden && card.offsetParent !== null && prompt && prompt.innerText !== previous);
+  }, previousPrompt, { timeout: timeoutMs });
 }
