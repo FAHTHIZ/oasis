@@ -56,7 +56,8 @@ export function summarizeAgentRun(job) {
   // return arbitrary assistant text, prompts, tool results, or command output.
   const visibleRunTypes = new Set([
     'started', 'approval_required', 'approval_resolved', 'cancel_requested',
-    'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'worktree_merged', 'usage'
+    'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'worktree_merged', 'usage',
+    'compaction_started', 'compaction_completed', 'context_overflow', 'context_pruned'
   ]);
   const agentEvents = rawEvents
     .filter((event) => event && event.data && typeof event.data === 'object' &&
@@ -122,6 +123,23 @@ export function summarizeAgentRun(job) {
         const branch = monitorText(data.branch, 120);
         const targetBranch = monitorText(data.targetBranch, 120);
         detail = branch && targetBranch ? branch + ' → ' + targetBranch : (branch || targetBranch);
+      } else if (event.type === 'compaction_started') {
+        description = 'Organizing conversation context';
+        const messages = Number(data.messages);
+        detail = Number.isFinite(messages) && messages > 0 ? 'Preparing a shorter history from ' + Math.floor(messages) + ' older messages' : 'Preparing a shorter conversation history';
+      } else if (event.type === 'compaction_completed') {
+        description = 'Conversation context protected';
+        const saved = Number(data.savedTokens);
+        detail = Number.isFinite(saved) && saved > 0 ? 'About ' + Math.floor(saved).toLocaleString() + ' tokens freed' : 'Earlier history summarized';
+        if (data.notesSaved) detail += '; continuity note saved';
+      } else if (event.type === 'context_overflow') {
+        description = 'Request recovered from context limit';
+        const attempt = Number(data.attempt);
+        detail = Number.isFinite(attempt) && attempt > 0 ? 'Retry ' + Math.floor(attempt) + ' with a smaller history' : 'Retrying with a smaller history';
+      } else if (event.type === 'context_pruned') {
+        description = 'Older tool output shortened';
+        const pruned = Number(data.pruned);
+        detail = Number.isFinite(pruned) && pruned > 0 ? Math.floor(pruned) + ' older results reduced to make room' : 'Older output reduced to make room';
       } else if (event.type === 'usage') {
         description = 'Model usage';
         const tokens = Number(data.totalTokens);
@@ -741,8 +759,40 @@ export function createOasisWebServer(options = {}) {
               warning: toolActivityWarning(value)
             });
           },
-          onContextOverflow: (info) => emit(job, 'context_overflow', info),
-          onContextPruned: (info) => emit(job, 'context_pruned', info)
+          onCompactionStart: (info) => emit(job, 'compaction_started', {
+            messages: Math.max(0, Math.min(10000, Math.floor(Number(info && info.messages) || 0))),
+            timeoutSeconds: Math.max(0, Math.min(600, Math.floor(Number(info && info.timeoutSeconds) || 0)))
+          }),
+          onCompaction: (info) => {
+            emit(job, 'compaction_completed', {
+              savedTokens: Math.max(0, Math.min(2_000_000, Math.floor(Number(info && info.savedTokens) || 0))),
+              beforeTokens: Math.max(0, Math.min(2_000_000, Math.floor(Number(info && info.beforeTokens) || 0))),
+              afterTokens: Math.max(0, Math.min(2_000_000, Math.floor(Number(info && info.afterTokens) || 0))),
+              removedMessages: Math.max(0, Math.min(10000, Math.floor(Number(info && info.removedMessages) || 0))),
+              notesSaved: Boolean(info && info.notesSaved),
+              usedModelSummary: Boolean(info && info.usedModelSummary),
+              midTurn: Boolean(info && info.midTurn)
+            });
+            emit(job, 'session_state', webSessionState(session, env));
+          },
+          onContextOverflow: (info) => {
+            emit(job, 'context_overflow', {
+              attempt: Math.max(0, Math.min(3, Math.floor(Number(info && info.attempt) || 0))),
+              changed: Boolean(info && info.changed),
+              beforeChars: Math.max(0, Math.min(8_000_000, Math.floor(Number(info && info.beforeChars) || 0))),
+              afterChars: Math.max(0, Math.min(8_000_000, Math.floor(Number(info && info.afterChars) || 0)))
+            });
+            emit(job, 'session_state', webSessionState(session, env));
+          },
+          onContextPruned: (info) => {
+            emit(job, 'context_pruned', {
+              pruned: Math.max(0, Math.min(10000, Math.floor(Number(info && info.pruned) || 0))),
+              before: Math.max(0, Math.min(2_000_000, Math.floor(Number(info && info.before) || 0))),
+              after: Math.max(0, Math.min(2_000_000, Math.floor(Number(info && info.after) || 0))),
+              midTurn: Boolean(info && info.midTurn)
+            });
+            emit(job, 'session_state', webSessionState(session, env));
+          }
         });
         const saved = await saveSession(session, { env });
         if (saved.id !== activeId) {

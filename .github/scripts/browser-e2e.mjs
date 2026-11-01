@@ -354,6 +354,24 @@ try {
     'Secrets must remain masked in the expanded details view.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-details-desktop.png'), fullPage: true });
 
+  await page.evaluate(() => {
+    window.agentProcessEvent('context-ui-fixture', { type: 'compaction_started', data: { messages: 18, timeoutSeconds: 90 } });
+    window.agentProcessEvent('context-ui-fixture', { type: 'compaction_completed', data: { savedTokens: 1800, notesSaved: true } });
+    window.agentProcessEvent('context-ui-fixture', { type: 'context_overflow', data: { attempt: 1, changed: true } });
+    window.agentProcessEvent('context-ui-fixture', { type: 'context_pruned', data: { pruned: 2, before: 2200, after: 900 } });
+    window.agentProcessEvent('context-ui-fixture', { type: 'session_state', data: { contextPercent: 73, contextTokens: 73000, contextWindow: 100000, totalTokens: 84000, model: 'fixture' } });
+  });
+  const contextNotices = page.locator('#agentMessages .agent-context-notice');
+  assert.equal(await contextNotices.count(), 4, 'Context lifecycle changes should be explained in the chat.');
+  assert.match(await contextNotices.nth(0).innerText(), /Protecting conversation context/);
+  assert.match(await contextNotices.nth(1).innerText(), /continuity note was saved/i);
+  assert.match(await contextNotices.nth(2).innerText(), /retrying your original request/i);
+  assert.match(await contextNotices.nth(3).innerText(), /Recent work was kept/i);
+  assert.equal(await contextNotices.nth(2).getAttribute('role'), 'alert');
+  assert.match(await page.locator('#agentContextMeter').innerText(), /Context ~73%/);
+  assert.match(await page.locator('#agentContextMeter').getAttribute('title'), /estimate/i);
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-context-feedback-desktop.png'), fullPage: true });
+
   await measureFrames(page, 'streaming a long assistant reply', async () => {
     await page.evaluate(async () => {
       const id = 'oasis-frame-stream-fixture';
@@ -680,5 +698,7 @@ try {
   if (providerServer && providerServer.listening) {
     await new Promise((resolve) => providerServer.close(resolve));
   }
-  await rm(root, { recursive: true, force: true });
+  // The final cloud-task event can finish writing just after browser shutdown.
+  // Retry transient ENOTEMPTY/EBUSY races rather than marking a clean E2E run failed.
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
 }

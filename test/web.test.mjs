@@ -81,7 +81,11 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
       { id: 5, type: 'approval_required', at: '2026-10-29T10:00:05.000Z', data: { prompt: 'Never expose private-prompt-text' } },
       { id: 6, type: 'approval_resolved', at: '2026-10-29T10:00:06.000Z', data: { approved: false } },
       { id: 7, type: 'usage', at: '2026-10-29T10:00:07.000Z', data: { totalTokens: 42 } },
-      { id: 8, type: 'worktree_ready', at: '2026-10-29T10:00:08.000Z', data: { branch: 'oasis/provider-setup', baseCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', changed: true } }
+      { id: 8, type: 'worktree_ready', at: '2026-10-29T10:00:08.000Z', data: { branch: 'oasis/provider-setup', baseCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', changed: true } },
+      { id: 9, type: 'compaction_started', at: '2026-10-29T10:00:09.000Z', data: { messages: 24, timeoutSeconds: 90 } },
+      { id: 10, type: 'compaction_completed', at: '2026-10-29T10:00:10.000Z', data: { savedTokens: 2400, beforeTokens: 3100, afterTokens: 700, notesSaved: true, privateSummary: 'apiKey=do-not-forward' } },
+      { id: 11, type: 'context_overflow', at: '2026-10-29T10:00:11.000Z', data: { attempt: 1, changed: true, beforeChars: 14000, afterChars: 4200 } },
+      { id: 12, type: 'context_pruned', at: '2026-10-29T10:00:12.000Z', data: { pruned: 3, before: 3100, after: 900, midTurn: true } }
     ]
   };
   const view = summarizeAgentRun(job);
@@ -101,7 +105,11 @@ test('agent run monitor derives worker lifecycle and redacts activity detail', (
   assert.equal(view.usage.totalTokens, 42);
   assert.ok(view.events.some((event) => event.type === 'run.approval_resolved' && event.description === 'Action denied'));
   assert.ok(view.events.some((event) => event.type === 'run.worktree_ready' && /oasis\/provider-setup/.test(event.detail)));
-  assert.doesNotMatch(JSON.stringify(view), /private-value|Never expose private-prompt-text/);
+  assert.ok(view.events.some((event) => event.type === 'run.compaction_started' && /24 older messages/.test(event.detail)));
+  assert.ok(view.events.some((event) => event.type === 'run.compaction_completed' && /2,400 tokens freed; continuity note saved/.test(event.detail)));
+  assert.ok(view.events.some((event) => event.type === 'run.context_overflow' && /Retry 1/.test(event.detail)));
+  assert.ok(view.events.some((event) => event.type === 'run.context_pruned' && /3 older results reduced/.test(event.detail)));
+  assert.doesNotMatch(JSON.stringify(view), /private-value|Never expose private-prompt-text|do-not-forward/);
   assert.equal(summarizeAgentRun(null), null);
 });
 
