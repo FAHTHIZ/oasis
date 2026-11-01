@@ -88,3 +88,38 @@ test('git_diff works in a repository with no commits yet', async (t) => {
   assert.equal(result.exitCode, 0, JSON.stringify(result).slice(0, 400));
   assert.match(String(result.stdout), /new\.mjs/);
 });
+
+test('a small model that refuses an ordinary coding task is nudged once to continue', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-av-refuse-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  let nudged = 0;
+  const { port, seen } = await scriptedModel(t, (messages) => {
+    const last = messages[messages.length - 1];
+    if (last.role === 'user' && /ordinary software task/.test(String(last.content))) { nudged++; return write('w1', 'b.mjs', 'export const b = 2;\n'); }
+    if (last.role === 'user') return { role: 'assistant', content: "I'm sorry, but I can't assist with that." };
+    return { role: 'assistant', content: 'Created b.mjs.' };
+  });
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + port + '/v1', model: 'fixture', apiKey: '', maxSteps: 10, contextWindow: 16384 } });
+  await runAgentTurn(session, 'create b.mjs exporting b = 2', { autoApprove: true, env: { ...process.env, OASIS_ASSISTED_VERIFICATION: '', OASIS_AUTO_TEST: '' } });
+  assert.equal(nudged, 1);
+  assert.ok(seen.length <= 5);
+});
+
+test('a small model that keeps pasting the new file as a code block gets it written and checked', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-av-fence-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const code = '```javascript\nexport function twice(x) {\n  return x * 2;\n}\n```';
+  const { port } = await scriptedModel(t, (messages) => {
+    const last = messages[messages.length - 1];
+    if (last.role === 'user') return { role: 'assistant', content: 'Here is the code for src/twice.mjs:\n' + code };
+    return { role: 'assistant', content: 'Done; src/twice.mjs exports twice.' };
+  });
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + port + '/v1', model: 'fixture', apiKey: '', maxSteps: 10, contextWindow: 16384 } });
+  const ran = [];
+  await runAgentTurn(session, 'Create src/twice.mjs exporting twice(x)', { autoApprove: true, env: { ...process.env, OASIS_ASSISTED_VERIFICATION: '', OASIS_AUTO_TEST: '' }, onToolResult: (event) => ran.push(event.name) });
+  const { readFile } = await import('node:fs/promises');
+  assert.match(await readFile(path.join(root, 'src/twice.mjs'), 'utf8'), /return x \* 2/);
+  assert.ok(ran.includes('write_file') && ran.includes('git_diff'), ran.join(','));
+});
