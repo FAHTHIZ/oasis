@@ -101,3 +101,11 @@ test('approval diffs redact credentials in proposed file content', () => {
   assert.match(diff, /\[redacted secret\]/);
   assert.doesNotMatch(diff, /sk-proj-12345678901234567890/);
 });
+
+test('command approval metadata preserves the exact executable argument boundaries', () => {
+  const result = formatApprovalMessage('Run this command in the workspace?', {
+    tool: 'run_command',
+    input: { command: 'node', args: ['-e', 'process.exit(7)'] }
+  });
+  assert.match(result.message, /node "-e" "process\.exit\(7\)"/);
+});
