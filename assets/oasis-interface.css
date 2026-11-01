@@ -27,7 +27,7 @@
   --shadow-md:0 1px 0 #ffffff08 inset,0 10px 30px -12px #000c;
   --shadow-lg:0 24px 60px -20px #000e,0 0 0 1px var(--line-strong);
   --ring:0 0 0 3px #9BFF5526;
-  --ease:cubic-bezier(.2,.7,.2,1);
+  --ease:cubic-bezier(.2,.7,.2,1);--motion-fast:140ms;--motion-base:180ms;--motion-panel:240ms;--motion-ease:var(--ease);
   --sidebar-w:268px;--topbar-h:56px;--chat-w:780px;
 }
 body.light{
@@ -756,3 +756,71 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
 .agent-queue-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .agent-queue-btn{flex:none;border:0;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;padding:2px 6px;border-radius:5px;cursor:pointer}
 .agent-queue-btn:hover,.agent-queue-btn:focus-visible{color:var(--text);background:var(--panel)}
+
+
+/* Plain-language chat activity */
+.agent-message{animation:chat-message-in var(--motion-base) var(--motion-ease) both}
+@keyframes chat-message-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.activity-group{align-self:stretch;min-width:0;display:grid;gap:5px;margin:-7px 0;padding:3px 0 3px 34px;position:relative;animation:activity-row-in var(--motion-base) var(--motion-ease) both}
+.activity-group::before{content:"";position:absolute;left:11px;top:12px;width:6px;height:6px;border-radius:50%;background:var(--accent-2)}
+@keyframes activity-row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.activity-group-intro{margin:0;color:var(--text-2);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.activity-group-fold{min-width:0;color:var(--muted);font:12.5px/1.5 var(--font-ui)}
+.activity-group-fold>summary{display:flex;align-items:center;gap:7px;width:fit-content;max-width:100%;min-height:28px;padding:2px 8px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);color:var(--text-2);cursor:pointer;list-style:none;transition:transform var(--motion-fast) var(--motion-ease),opacity var(--motion-fast) var(--motion-ease)}
+.activity-group-fold>summary::-webkit-details-marker{display:none}
+.activity-group-fold>summary::after{content:"›";color:var(--faint);font-size:16px;line-height:1;transition:transform var(--motion-fast) var(--motion-ease)}
+.activity-group-fold[open]>summary::after{transform:rotate(90deg)}
+.activity-group-fold>summary:hover{transform:translateY(-1px);color:var(--text);border-color:var(--accent-line)}
+.activity-group-content{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--motion-panel) var(--motion-ease)}
+.activity-group-fold[open] .activity-group-content{grid-template-rows:1fr}
+.activity-group-steps{min-height:0;overflow:hidden;display:grid;gap:5px;padding-top:0}
+.activity-group-fold[open] .activity-group-steps{padding-top:7px}
+.activity-step{min-width:0;display:grid;gap:3px;padding:7px 9px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel)}
+.activity-step-label{color:var(--text-2);font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.activity-step.is-complete .activity-step-label::before{content:"✓";color:var(--success);font-weight:700;margin-right:7px}
+.activity-tool-details{min-width:0;color:var(--faint);font-size:11.5px}
+.activity-tool-details>summary{width:fit-content;cursor:pointer;list-style:none}
+.activity-tool-details>summary::-webkit-details-marker{display:none}
+.activity-tool-details>summary::after{content:" ›";color:var(--faint)}
+.activity-tool-details[open]>summary::after{content:" ⌄"}
+.activity-tool-details pre{max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0 0;padding:8px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--sunken);color:var(--text-2);font:11px/1.5 var(--font-mono)}
+.agent-typing{min-width:0}
+.agent-typing span{display:inline-block;transition:opacity var(--motion-fast) var(--motion-ease),transform var(--motion-fast) var(--motion-ease)}
+.agent-typing span.is-changing{animation:activity-status-in var(--motion-fast) var(--motion-ease) both}
+@keyframes activity-status-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.agent-approval{animation:approval-card-in var(--motion-panel) var(--motion-ease) both}
+@keyframes approval-card-in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.agent-approval-diff{display:block;max-height:260px;overflow:auto;margin:8px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);color:var(--text-2);font:11.5px/1.55 var(--font-mono);white-space:pre;tab-size:2}
+.agent-approval-diff[hidden]{display:none}
+.turn-work{animation:activity-row-in var(--motion-base) var(--motion-ease) both}
+.turn-work>summary{min-height:28px;padding:3px 0;transition:transform var(--motion-fast) var(--motion-ease),opacity var(--motion-fast) var(--motion-ease)}
+.turn-work>summary:hover{transform:translateY(-1px)}
+.turn-work-steps{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--motion-panel) var(--motion-ease);margin:0 0 0 -34px}
+.turn-work[open] .turn-work-steps{grid-template-rows:1fr}
+.turn-work-steps-inner{min-height:0;overflow:hidden;display:grid;gap:7px;padding-top:7px}
+.turn-work-steps-inner>.activity-group{margin:0}
+.agent-approval .agent-buttons button:active,.agent-question-option:active,.activity-group-fold>summary:active,.msg-action:active{transform:scale(.97)}
+.activity-group-fold>summary:focus-visible,.activity-tool-details>summary:focus-visible,.turn-work>summary:focus-visible{outline:2px solid var(--accent-line);outline-offset:2px}
+@media(max-width:760px){
+  .activity-group{padding-left:27px}
+  .activity-group::before{left:8px}
+  .activity-group-fold>summary{max-width:100%;white-space:normal}
+  .activity-step{padding:7px}
+  .activity-tool-details pre{max-height:180px;font-size:10.5px}
+  .agent-approval-diff{max-height:210px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .turn-work-steps{margin-left:-27px}
+}
+@media(prefers-reduced-motion:reduce){
+  .agent-message,.activity-group,.turn-work,.agent-approval{animation:none!important}
+  .activity-group-fold>summary,.activity-group-content,.agent-typing span,.turn-work>summary,.turn-work-steps{transition:none!important}
+  .activity-group-fold>summary:hover,.turn-work>summary:hover,.agent-approval .agent-buttons button:active,.agent-question-option:active,.activity-group-fold>summary:active,.msg-action:active{transform:none!important}
+  .agent-typing i,.sidebar-chat-running{animation:none!important}
+}
+
+.agent-approval .agent-buttons button,.agent-compose button,.msg-actions button{transition:transform var(--motion-fast) var(--motion-ease)}
+.agent-approval .agent-buttons button:hover,.agent-approval .agent-buttons button:focus-visible,.agent-compose button:not(:disabled):hover,.agent-compose button:not(:disabled):focus-visible,.msg-actions button:hover,.msg-actions button:focus-visible{transform:translateY(-2px)}
+.agent-approval .agent-buttons button:active,.agent-compose button:not(:disabled):active,.msg-actions button:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){
+  .agent-approval .agent-buttons button,.agent-compose button,.msg-actions button{transition:none!important}
+  .agent-approval .agent-buttons button:hover,.agent-approval .agent-buttons button:focus-visible,.agent-compose button:hover,.agent-compose button:focus-visible,.msg-actions button:hover,.msg-actions button:focus-visible{transform:none!important}
+}

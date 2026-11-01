@@ -15,10 +15,12 @@ const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config') };
 // The isolated-diff E2E uses a real, clean Git repository. Runtime state lives
 // outside the tracked project files so the isolation precondition remains real.
 await writeFile(path.join(root, '.gitignore'), 'config/\nfirst-run-config/\n');
+await mkdir(path.join(root, '.oasis'), { recursive: true });
+await writeFile(path.join(root, '.oasis', 'settings.json'), '{"theme":"dark"}\n');
 execFileSync('git', ['init', '--quiet'], { cwd: root });
 execFileSync('git', ['config', 'user.name', 'OASIS Browser E2E'], { cwd: root });
 execFileSync('git', ['config', 'user.email', 'oasis-browser-e2e@example.test'], { cwd: root });
-execFileSync('git', ['add', '.gitignore'], { cwd: root });
+execFileSync('git', ['add', '.gitignore', '.oasis/settings.json'], { cwd: root });
 execFileSync('git', ['commit', '--quiet', '-m', 'Browser E2E workspace baseline'], { cwd: root });
 const token = 'oasis-browser-e2e-token-0123456789';
 const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(), 'artifacts', 'browser-e2e');
@@ -43,6 +45,41 @@ async function assertAgentContrast(page, label) {
   console.log('[axe] ' + label + ': no color-contrast violations (' + results.passes.length + ' passing rules).');
 }
 
+const frameMetrics = [];
+async function measureFrames(page, label, action) {
+  await page.evaluate(() => {
+    const probe = { active: true, last: performance.now(), samples: [] };
+    window.__oasisFrameProbe = probe;
+    const tick = (now) => {
+      if (!probe.active) return;
+      probe.samples.push(now - probe.last);
+      probe.last = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await action();
+  await page.waitForTimeout(180);
+  const result = await page.evaluate(() => {
+    const probe = window.__oasisFrameProbe;
+    if (!probe) return { frames: 0, worstFrameMs: 0, over50ms: 0, near16ms: 0 };
+    probe.active = false;
+    const frames = probe.samples;
+    return {
+      frames: frames.length,
+      worstFrameMs: Number(Math.max(0, ...frames).toFixed(1)),
+      over50ms: frames.filter((value) => value > 50).length,
+      near16ms: frames.filter((value) => value >= 12 && value <= 22).length
+    };
+  });
+  const record = { interaction: label, ...result };
+  frameMetrics.push(record);
+  console.log('[frames 4x CPU] ' + label + ': worst ' + result.worstFrameMs +
+    'ms; ' + result.frames + ' frames; ' + result.over50ms + ' over 50ms; ' + result.near16ms + ' near 16ms.');
+  return record;
+}
+
+
 let providerServer;
 let app;
 let browser;
@@ -57,120 +94,86 @@ try {
     console.log('Browser E2E fixture provider request ' + completionCalls + ' (' +
       (Array.isArray(request.messages) ? request.messages.length : 0) + ' messages)');
 
-    // Keep the fixture deterministic: first create a file, then read it, then report.
+    // Exercise the visible activity story: create, read, edit, approve
+    // a protected edit, approve a failing command, then report.
     let assistantMessage;
     let finishReason = 'tool_calls';
     if (completionCalls === 1) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_write',
-          type: 'function',
-          function: {
-            name: 'write_file',
-            arguments: JSON.stringify({
-              path: 'browser-e2e-output.txt',
-              content: 'Created by the authenticated browser agent tool cycle.\n'
-            })
-          }
-        }]
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_write', type: 'function',
+        function: { name: 'write_file', arguments: JSON.stringify({
+          path: 'browser-e2e-output.txt',
+          content: 'Created by the authenticated browser agent tool cycle.\n'
+        }) }
+      }] };
     } else if (completionCalls === 2) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_read',
-          type: 'function',
-          function: {
-            name: 'read_file',
-            arguments: JSON.stringify({ path: 'browser-e2e-output.txt' })
-          }
-        }]
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_read', type: 'function',
+        function: { name: 'read_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt', token: 'super-secret-value' }) }
+      }] };
     } else if (completionCalls === 3) {
-      finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'Browser end-to-end fixture completed successfully. The agent wrote and read back a workspace file.'
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_edit', type: 'function',
+        function: { name: 'edit_file', arguments: JSON.stringify({
+          path: 'browser-e2e-output.txt',
+          old_string: 'Created by the authenticated browser agent tool cycle.',
+          new_string: 'Edited by the authenticated browser agent tool cycle.'
+        }) }
+      }] };
     } else if (completionCalls === 4) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_delete',
-          type: 'function',
-          function: {
-            name: 'delete_file',
-            arguments: JSON.stringify({ path: 'browser-e2e-output.txt' })
-          }
-        }]
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_protected_edit', type: 'function',
+        function: { name: 'edit_file', arguments: JSON.stringify({
+          path: '.oasis/settings.json',
+          old_string: '"theme":"dark"',
+          new_string: '"theme":"light"'
+        }) }
+      }] };
     } else if (completionCalls === 5) {
-      finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'The delete request was denied; the file remains unchanged.'
-      };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_failing_command', type: 'function',
+        function: { name: 'run_command', arguments: JSON.stringify({
+          command: 'node', args: ['-e', 'process.exit(7)']
+        }) }
+      }] };
     } else if (completionCalls === 6) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_cancel',
-          type: 'function',
-          function: {
-            name: 'run_command',
-            arguments: JSON.stringify({
-              command: 'node',
-              args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
-            })
-          }
-        }]
-      };
-    } else if (completionCalls === 7) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_worktree_write',
-          type: 'function',
-          function: {
-            name: 'write_file',
-            arguments: JSON.stringify({
-              path: 'review-e2e-output.txt',
-              content: 'Created in the isolated worktree for diff review.\n'
-            })
-          }
-        }]
-      };
-    } else if (completionCalls === 8) {
-      assistantMessage = {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{
-          id: 'call_browser_e2e_worktree_read',
-          type: 'function',
-          function: {
-            name: 'read_file',
-            arguments: JSON.stringify({ path: 'review-e2e-output.txt' })
-          }
-        }]
-      };
-    } else if (completionCalls === 9) {
       finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.'
-      };
+      assistantMessage = { role: 'assistant', content: 'Browser end-to-end fixture completed successfully. The agent wrote, read and edited a file, showed both approvals, and kept the failed command visible.' };
+    } else if (completionCalls === 7) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_delete', type: 'function',
+        function: { name: 'delete_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt' }) }
+      }] };
+    } else if (completionCalls === 8) {
+      finishReason = 'stop';
+      assistantMessage = { role: 'assistant', content: 'The delete request was denied; the file remains unchanged.' };
+    } else if (completionCalls === 9) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_cancel', type: 'function',
+        function: { name: 'run_command', arguments: JSON.stringify({
+          command: 'node',
+          args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
+        }) }
+      }] };
+    } else if (completionCalls === 10) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_worktree_write', type: 'function',
+        function: { name: 'write_file', arguments: JSON.stringify({
+          path: 'review-e2e-output.txt',
+          content: 'Created in the isolated worktree for diff review.\n'
+        }) }
+      }] };
+    } else if (completionCalls === 11) {
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_worktree_read', type: 'function',
+        function: { name: 'read_file', arguments: JSON.stringify({ path: 'review-e2e-output.txt' }) }
+      }] };
+    } else if (completionCalls === 12) {
+      finishReason = 'stop';
+      assistantMessage = { role: 'assistant', content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.' };
     } else {
       finishReason = 'stop';
-      assistantMessage = {
-        role: 'assistant',
-        content: 'Unexpected extra browser E2E model request.'
-      };
+      assistantMessage = { role: 'assistant', content: 'Unexpected extra browser E2E model request.' };
     }
 
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -278,8 +281,27 @@ try {
   await page.waitForFunction(() => window.scrollY > 0, null, { timeout: timeoutMs });
   await assertAgentContrast(page, 'Agent provider settings · desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-provider-settings-desktop.png'), fullPage: true });
+  const perfCdp = await context.newCDPSession(page);
+  await perfCdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
-  await page.locator('#agentSendBtn').click();
+  await measureFrames(page, 'approval card opening', async () => {
+    await page.locator('#agentSendBtn').click();
+    await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  });
+  await assertAgentContrast(page, 'Agent edit approval card');
+  const editApprovalDiff = await page.locator('#agentApprovalDiff').innerText();
+  assert.match(editApprovalDiff, /-"theme":"dark"/);
+  assert.match(editApprovalDiff, /\+"theme":"light"/);
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-edit-approval-desktop.png'), fullPage: true });
+  await page.locator('#agentApproveBtn').click();
+  await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
+  await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
+  const commandApproval = await page.locator('#agentApprovalPrompt').innerText();
+  assert.match(commandApproval, /node "-e" "process\.exit\(7\)"/);
+  assert.equal(await page.locator('#agentApprovalDiff').isHidden(), true,
+    'A command approval should not display a file-edit diff.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-command-approval-desktop.png'), fullPage: true });
+  await page.locator('#agentApproveBtn').click();
   try {
     await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
       .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
@@ -293,19 +315,98 @@ try {
       '; page errors=' + JSON.stringify(pageErrors));
   }
 
+  const activitySummary = page.locator('#agentMessages .turn-work');
+  await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
+  const defaultActivityText = await page.locator('#agentMessages').innerText();
+  assert.match(defaultActivityText, /The command failed|failed \(exit code 7\)|exit code 7/i,
+    'The failed command warning must remain visible outside the fold.');
+  assert.equal(await page.locator('#agentMessages .notice-warn').count() > 0, true,
+    'A failed command must use the visible warning treatment.');
+  assert.equal(await activitySummary.locator('.notice-warn').count(), 0,
+    'The warning must not be hidden inside the Worked for disclosure.');
+  assert.doesNotMatch(defaultActivityText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
+    'The default chat view must not expose raw tool names or JSON arguments.');
+  assert.match(await activitySummary.locator('summary').innerText(), /Worked for .* · 5 tool calls/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-desktop.png'), fullPage: true });
+
+  await measureFrames(page, 'opening Worked for activity fold', async () => {
+    await activitySummary.locator('summary').click();
+  });
+  const groups = page.locator('#agentMessages .turn-work .activity-group');
+  assert.equal(await groups.count(), 4, 'File creation, reading, editing and the command should form readable groups.');
+  const groupText = await activitySummary.innerText();
+  assert.match(groupText, /Wrote 1 file/);
+  assert.match(groupText, /Read 1 file/);
+  assert.match(groupText, /Edited 2 files/);
+  assert.match(groupText, /Ran 1 command/);
+  assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
+    'Raw tool detail should stay hidden until Show details is opened.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop.png'), fullPage: true });
+
+  const readGroup = groups.filter({ hasText: 'Read 1 file' }).first();
+  await readGroup.locator('.activity-group-fold > summary').click();
+  const readDetails = readGroup.locator('.activity-tool-details');
+  await readDetails.locator('summary').click();
+  const readDetailText = await readDetails.innerText();
+  assert.match(readDetailText, /Tool: read_file/);
+  assert.match(readDetailText, /browser-e2e-output\.txt/);
+  assert.doesNotMatch(readDetailText, /super-secret-value/,
+    'Secrets must remain masked in the expanded details view.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-details-desktop.png'), fullPage: true });
+
+  await measureFrames(page, 'streaming a long assistant reply', async () => {
+    await page.evaluate(async () => {
+      const id = 'oasis-frame-stream-fixture';
+      const node = window.agentAppendMessage('assistant', '', id);
+      window.agentAssistantNodes[id] = node;
+      const chunk = 'A streamed sentence is appended without rebuilding the message. ';
+      for (let index = 0; index < 48; index++) {
+        window.agentAppendAssistantDelta(id, chunk);
+        if (index % 4 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      node.remove();
+      delete window.agentAssistantNodes[id];
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth) <= 390,
+    'The activity groups and approval details must fit a 390px phone viewport.');
+  await assertAgentContrast(page, 'Agent activity · 390px');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-390px.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await measureFrames(page, 'switching between saved chats', async () => {
+    await page.locator('#newAgentSessionBtn').click();
+    await page.locator('#sidebarChatList [data-sidebar-session-id]').first().click();
+    await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.user')]
+      .some((element) => element.textContent.includes('Run the browser end-to-end fixture and report its result.')),
+    null, { timeout: timeoutMs });
+  });
+  await perfCdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  const worstFrame = Math.max(0, ...frameMetrics.map((item) => item.worstFrameMs));
+  await writeFile(path.join(screenshotDir, 'frame-timings.json'), JSON.stringify({
+    cpuThrottleRate: 4,
+    interactions: frameMetrics,
+    worstFrameMs: Number(worstFrame.toFixed(1)),
+    targetWorstFrameMs: 50,
+    metTarget: frameMetrics.every((item) => item.worstFrameMs <= 50)
+  }, null, 2));
+  console.log('[frames 4x CPU] worst measured frame: ' + worstFrame.toFixed(1) + 'ms across ' + frameMetrics.length + ' interactions.');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop-after-switch.png'), fullPage: true });
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
-  assert.equal(completionCalls, 3, 'The agent should write the file, read it back, and then produce a final answer.');
+  assert.equal(completionCalls, 6, 'The agent should create, read, edit, approve two actions, and report the results.');
   await page.waitForFunction(() => document.querySelectorAll('#sidebarChatList [data-sidebar-session-id]').length > 0,
     null, { timeout: timeoutMs });
   assert.ok(await page.locator('#sidebarChatList [data-sidebar-session-id]').count() > 0,
     'The sidebar should show saved conversations from the authenticated runtime.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
-    'Created by the authenticated browser agent tool cycle.\n',
-    'The browser request should result in a real workspace file write.'
+    'Edited by the authenticated browser agent tool cycle.\n',
+    'The browser request should result in a real workspace edit after the initial write and read.'
   );
 
   // Destructive actions should be explained in plain language and remain denyable.
@@ -323,10 +424,10 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
     .some((element) => element.textContent.includes('The delete request was denied; the file remains unchanged.')),
   null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 5, 'The denial should be reported to the model without running the delete operation.');
+  assert.equal(completionCalls, 8, 'The denial should be reported to the model without running the delete operation.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
-    'Created by the authenticated browser agent tool cycle.\n',
+    'Edited by the authenticated browser agent tool cycle.\n',
     'Denying the delete approval must leave the file intact.'
   );
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
@@ -366,7 +467,7 @@ try {
 
   // Commit the output from the preceding non-isolated file test so the real
   // worktree run begins from a clean user workspace, as required in production.
-  execFileSync('git', ['add', 'browser-e2e-output.txt'], { cwd: root });
+  execFileSync('git', ['add', 'browser-e2e-output.txt', '.oasis/settings.json'], { cwd: root });
   execFileSync('git', ['commit', '--quiet', '-m', 'Commit browser chat fixture output'], { cwd: root });
   assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }), '',
     'The primary checkout must be clean before creating an isolated worktree.');
@@ -403,7 +504,7 @@ try {
   assert.equal(await page.locator('#agentStopBtn').isEnabled(), true, 'Stop should be enabled while command approval is pending.');
   await page.locator('#agentStopBtn').click();
   await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''), null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 6, 'Cancellation must abort the task before another model request.');
+  assert.equal(completionCalls, 9, 'Cancellation must abort the task before another model request.');
   await assert.rejects(readFile(path.join(root, 'cancel-e2e-side-effect.txt')), { code: 'ENOENT' });
 
   // The isolated run should create a committed branch artifact without changing
@@ -418,7 +519,7 @@ try {
     .some((element) => element.textContent.includes('Isolated worktree fixture completed successfully.')),
   null, { timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 9, 'The isolated task should write the file, read it back for verification, and then finish.');
+  assert.equal(completionCalls, 12, 'The isolated task should write the file, read it back for verification, and then finish.');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Finishing isolated work must not advance the primary branch.');
   assert.ok(execFileSync('git', ['branch', '--list', 'oasis/*'], { cwd: root, encoding: 'utf8' }).trim(),
