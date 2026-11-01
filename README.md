@@ -197,7 +197,7 @@ The [documentation index](docs/README.md) maps every canonical guide, integratio
 | Setup and daily use | [Installation](docs/INSTALL.md) · [User-guide map](docs/USER_GUIDE_MAP.md) · [Full user guide](docs/USER_GUIDE.md) · [Termux](docs/TERMUX.md) |
 | Trust and evaluation | [Security audit](docs/SECURITY_RELIABILITY_AUDIT.md) · [Security policy](SECURITY.md) · [Privacy](docs/PRIVACY.md) · [Benchmarks](docs/BENCHMARKS.md) |
 | Extensibility and experience | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) · [Shortcuts](docs/KEYS.md) · [Brand guide](docs/BRAND.md) |
-| Project upkeep and research | [Repository maintenance](docs/REPOSITORY_MAINTENANCE.md) · [Research notes](docs/research/README.md) |
+| Project upkeep and research | [Repository maintenance](docs/REPOSITORY_MAINTENANCE.md) · [Runtime source map](src/README.md) · [Test map](test/README.md) · [Research notes](docs/research/README.md) |
 | Automation on GitHub | [GitHub Action guide](docs/github-action.md) · [workflow example](docs/examples/oasis-github.yml) |
 | Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 Beta notes](docs/releases/v0.4.0.md) |
 | Contributions | [Contributing guide](CONTRIBUTING.md) |
