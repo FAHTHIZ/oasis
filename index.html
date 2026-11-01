@@ -1668,14 +1668,18 @@ C.hook('agentAssistantUpdate',function(coreUpdate){return function(jobId,text){
 var coreAppend=null;C.hook('agentAppendMessage',function(f){coreAppend=f;return f});
 C.hook('agentAppendMessage',function(f){return function(kind,text){var el=f.apply(null,arguments);if(kind==='assistant'&&el&&text&&!/^Oasis is working…?$/.test(String(text).trim())){pending.set(el,String(text));if(!raf)raf=requestAnimationFrame(paint)}return el}});
 var activityGroups=[],currentActivityGroup=null,activityStepsById=new Map();
-function fallbackActivitySentence(category){
-  return category==='read'?'I’m reading the files needed for this task.':
-    category==='edit'?'I’m updating the requested files.':
-    category==='write'?'I’m saving the requested files.':
-    category==='delete'?'I’m removing the requested files.':
-    category==='command'?'I’m running a project command to check the work.':
-    category==='search'?'I’m searching the project for relevant information.':
-    'I’m checking the project details.';
+function fallbackActivitySentence(category,label){
+  var item=String(label||'').replace(/^(?:Read|Edited|Wrote|Created|Deleted)\s+/i,'');
+  if(category==='read')return item?'I’m reading '+item+'.':'I’m reading the files needed for this task.';
+  if(category==='edit')return item?'I’m editing '+item+'.':'I’m updating the requested files.';
+  if(category==='write')return item?'I’m saving '+item+'.':'I’m saving the requested files.';
+  if(category==='delete')return item?'I’m deleting '+item+'.':'I’m removing the requested files.';
+  if(category==='command')return /tests/i.test(label||'')?'I’m running the tests.':'I’m running a project command to check the work.';
+  if(category==='search'){
+    var query=String(label||'').replace(/^Searched for\s*/i,'');
+    return query?'I’m searching for '+query+'.':'I’m searching the project for relevant information.';
+  }
+  return 'I’m checking the project details.';
 }
 function modelActivitySentence(){
   var node=lastAssistant(),raw=node&&(node.dataset.raw||node.textContent)||'';
@@ -1701,9 +1705,9 @@ function groupSummary(group){
   return 'Completed '+count+' step'+(count===1?'':'s');
 }
 function refreshGroupSummary(group){group.summaryText.textContent=group.summaryOverride||groupSummary(group)}
-function createActivityGroup(category){
+function createActivityGroup(category,label){
   var wrapper=document.createElement('section');wrapper.className='activity-group';wrapper.dataset.category=category;
-  var intro=document.createElement('p');intro.className='activity-group-intro';intro.textContent=modelActivitySentence()||fallbackActivitySentence(category);
+  var intro=document.createElement('p');intro.className='activity-group-intro';intro.textContent=modelActivitySentence()||fallbackActivitySentence(category,label);
   var details=document.createElement('details');details.className='activity-group-fold';
   var summary=document.createElement('summary');summary.setAttribute('aria-label','Show activity details');
   var summaryText=document.createElement('span');summaryText.className='activity-group-summary';summary.appendChild(summaryText);
@@ -1741,7 +1745,7 @@ function addActivityStep(data){
   data=data&&typeof data==='object'?data:{};
   var category=String(data.category||'other'),label=String(data.label||'Completed a project step');
   var group=currentActivityGroup;
-  if(!group||group.category!==category)group=createActivityGroup(category);
+  if(!group||group.category!==category)group=createActivityGroup(category,label);
   currentActivityGroup=group;group.count++;refreshGroupSummary(group);
   var step=document.createElement('article');step.className='activity-step';
   var title=document.createElement('div');title.className='activity-step-label';title.textContent=label;
