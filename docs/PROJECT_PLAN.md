@@ -1,13 +1,15 @@
 # OASIS project plan
 
-**Updated:** October 31, 2026  
+**Updated:** November 1, 2026  
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
+**Current main snapshot inspected:** [`ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615`](https://github.com/FAHTHIZ/oasis/commit/ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615)  
+**Latest published release:** [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), published October 31, 2026.  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
-**Latest fully enumerated CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
-**Architecture source baseline (system-map audit):** [`e43d4187825a3a31bdcbe4136d0afab05a980641`](https://github.com/FAHTHIZ/oasis/commit/e43d4187825a3a31bdcbe4136d0afab05a980641)  
-**Architecture guide revision:** [`aba586eda6f440be86c5e8b978f9e973f44034d2`](https://github.com/FAHTHIZ/oasis/commit/aba586eda6f440be86c5e8b978f9e973f44034d2)  
-**Latest User Guide and documentation audit snapshot:** [`e9e79441eee7cad70b4229d69b98c18d553020db`](https://github.com/FAHTHIZ/oasis/commit/e9e79441eee7cad70b4229d69b98c18d553020db)
+**Historical CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
+**Historical architecture source baseline (system-map audit):** [`e43d4187825a3a31bdcbe4136d0afab05a980641`](https://github.com/FAHTHIZ/oasis/commit/e43d4187825a3a31bdcbe4136d0afab05a980641)  
+**Historical architecture guide revision:** [`aba586eda6f440be86c5e8b978f9e973f44034d2`](https://github.com/FAHTHIZ/oasis/commit/aba586eda6f440be86c5e8b978f9e973f44034d2)  
+**Historical User Guide and documentation audit snapshot:** [`e9e79441eee7cad70b4229d69b98c18d553020db`](https://github.com/FAHTHIZ/oasis/commit/e9e79441eee7cad70b4229d69b98c18d553020db)
 
 This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. The [architecture guide](ARCHITECTURE.md) is its companion system map for how those implemented components fit together. This plan replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
 
@@ -41,27 +43,35 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ## Current release snapshot
 
-**Latest release-check snapshot:** `2a2127f9f6237b9061545991d924b7d3950d7099` (October 31, 2026). Every workflow passed on this exact SHA:
+**Inspected source commit:** `ebb5fa1321bb8eae9d57b5f4b91e3ccb75b8a615` on `main` (November 1, 2026). This is the audit baseline for the findings below; later commits require their own verification.
 
-- **Quality Checks — all nine jobs green** (Node 22/24/26 full gate, Linux/macOS/Windows security matrix including process-tree cancellation and adversarial URL tests, native PTY, clean environment, browser E2E with axe): [run 41211015746](https://github.com/FAHTHIZ/oasis/actions/runs/41211015746). The first all-green SHA was `8ebb5ce` (after fixing a gate hang caused by bare `node --test` running a helper LSP server).
-- **Installer checks passed on Windows, macOS and Ubuntu:** [run 41211015686](https://github.com/FAHTHIZ/oasis/actions/runs/41211015686).
-- **Desktop packaging completed** (unsigned): [run 41211015701](https://github.com/FAHTHIZ/oasis/actions/runs/41211015701).
-- **Public-site validation and deployment passed:** [run 41211015685](https://github.com/FAHTHIZ/oasis/actions/runs/41211015685).
-- **Guarded branch cleanup passed:** [run 41211015684](https://github.com/FAHTHIZ/oasis/actions/runs/41211015684).
+### Published release
 
-Release state, checked against live Git refs:
+- `v0.4.0` is a real Git tag pointing to `8ebb5cec5a273133950fd5f40f5b36f9da654e8e`.
+- The matching GitHub Release was published on October 31, 2026 at 13:00:21 UTC and is the latest release.
+- Published desktop assets include a Windows x64 `.exe`, macOS arm64 `.dmg`, Linux x86_64 `.AppImage` and `.deb`, updater metadata, and `SHA256SUMS`.
+- The installers are unsigned. A checksum manifest detects accidental corruption; it is not a publisher signature.
+- GitHub currently marks the release `prerelease: false`, although its name and product documentation identify it as Beta. The next release workflow must align GitHub metadata with the declared product lifecycle. Do not infer product stability from the GitHub flag alone.
 
-- The only version tag is `v0.3.0`; there is no published GitHub Release object or downloadable asset. A Git tag is not a published GitHub Release.
-- `package.json` on `main` is version **0.4.0**, and [the 0.4.0 notes](releases/v0.4.0.md) are prepared only. The stable CLI installer therefore still resolves `v0.3.0`.
-- Desktop installers remain unsigned. Automatic desktop updates and publisher signing/provenance are not configured.
-- The 33-task evaluation suite is a regression/smoke harness, not a representative repository-scale coding benchmark. No live, authenticated Claude Code head-to-head result is published.
+### Development branch after v0.4.0
 
-The runtime source audit remains anchored to `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`; that source-review baseline is distinct from the historical CI evidence baseline above. The README, documentation index, User Guide, architecture guide, installer guide, Android guide, changelog, prepared release notes and security policy were audited and aligned in the recent documentation pass. The architecture guide revision `aba586eda6f440be86c5e8b978f9e973f44034d2` changes documentation only; its same-commit CI checks are tracked separately. The named run states are snapshots, not promises: later commits need same-commit checks, and older passing jobs must not substitute for a newer candidate's results.
+- `main` is 101 commits ahead of the `v0.4.0` tag in the inspected comparison.
+- `package.json` on `main` still reports `0.4.0`. This version string must not be mistaken for a new `v0.4.0` release: current `main` includes later, unreleased changes.
+- Do not move, replace, or retag `v0.4.0` to absorb subsequent work. The next versioned release should use a new version, immutable tag, release notes, checksums, and artifacts. `0.5.0` is a candidate next version, not a declared or published release.
 
+### CI evidence for the inspected main commit
+
+- **Quality Checks:** [run 41265370702](https://github.com/FAHTHIZ/oasis/actions/runs/41265370702) — **8 of 9 jobs passed; Browser end-to-end smoke test failed**. Node 22/24/26 package checks, Windows/macOS/Linux runtime-security tests, clean-environment tests, and native PTY integration passed. The browser job timed out after 15 seconds waiting for `#agentMessages .turn-work` to become visible at `.github/scripts/browser-e2e.mjs:320`. The run also reported accessible-name mismatches on `.send-key-toggle` and activity disclosure summaries; these findings need review.
+- **Installer checks:** [run 41265370731](https://github.com/FAHTHIZ/oasis/actions/runs/41265370731) — Windows, macOS, and Ubuntu installer jobs passed.
+- **Desktop packaging:** [run 41265370753](https://github.com/FAHTHIZ/oasis/actions/runs/41265370753) — Linux, macOS, and Windows package jobs and the workflow publish step passed.
+- **Public site and repository metadata:** [run 41265370712](https://github.com/FAHTHIZ/oasis/actions/runs/41265370712) — validation and deployment jobs passed.
+- **Branch cleanup:** [run 41265370788](https://github.com/FAHTHIZ/oasis/actions/runs/41265370788) passed; the GitHub branches endpoint at this snapshot returned only `main`.
+
+The previous all-green run on October 31 belongs to an older commit and is historical evidence only. It must not be used to describe the inspected November 1 commit as fully green. Any new candidate needs fresh same-commit checks.
 
 ## Production-readiness outlook
 
-The working planning target is to reach a production-oriented release in the coming weeks. This is a target, not a release promise. It depends on the P0 acceptance gates below, clean-machine first-run checks, critical user journeys, security-boundary validation, and accurate release artifacts. Do not describe OASIS as production-ready until those gates have been demonstrated on the same candidate commit.
+Production readiness is an evidence gate, not a calendar date or a feature-count milestone. Do not describe OASIS as production-ready until the P0 acceptance gates, clean-machine first-run checks, critical user journeys, security-boundary validation, and release-artifact checks have all been demonstrated on one candidate commit.
 
 ## Known boundaries
 
@@ -79,7 +89,7 @@ The working planning target is to reach a production-oriented release in the com
 
 ## Priorities
 
-### P0 — Establish a trustworthy Beta release
+### P0 — Stabilize the next versioned Beta release
 
 1. Require Quality Checks, public-site validation, installer checks and desktop packaging to pass on one final commit.
 2. Fix any failures in the actual code or tests. Do not remove gates, suppress meaningful assertions or use older runs as substitutes.
@@ -105,15 +115,15 @@ Prioritize high-value user journeys: provider setup, project onboarding, CLI/bro
 
 ## Release acceptance checklist
 
-- [x] Latest Quality Checks pass on the exact candidate SHA. `2a2127f` passed all nine jobs (Node 22/24/26 gate, Linux/macOS/Windows security matrix, PTY, clean environment, browser E2E): [run 41211015746](https://github.com/FAHTHIZ/oasis/actions/runs/41211015746). Re-run on the final release SHA before tagging.
-- [x] Public-site validation passes on that same SHA: [run 41211015685](https://github.com/FAHTHIZ/oasis/actions/runs/41211015685).
-- [x] Windows/macOS/Linux installer checks pass on that same SHA: [run 41211015686](https://github.com/FAHTHIZ/oasis/actions/runs/41211015686).
-- [x] Desktop packaging completes on that same SHA: [run 41211015701](https://github.com/FAHTHIZ/oasis/actions/runs/41211015701) (unsigned builds).
-- [x] Browser end-to-end tests cover first-run, approval/denial, cancellation, edit/verify and recovery paths (`.github/scripts/browser-e2e.mjs`: first-run at desktop and 390px, denied delete leaves the file intact, Stop during a pending approval prevents the side effect, write/read/verify with rendered reply, saved-chat recovery, isolated-diff review, axe contrast).
-- [ ] Clean-machine install and first-run behavior is exercised for each advertised desktop OS. (Needs real Windows/macOS/Linux machines; CI builds only.)
-- [ ] Release version, immutable tag, release notes, checksums and uploaded artifacts agree. (Blocked until `v0.4.0` is tagged and published.)
-- [x] Unsigned status and sandbox/platform limitations are visible (README Beta status and Quick start, INSTALL availability note, in-app footer "this is not an OS sandbox").
-- [x] README, Install, User Guide, Privacy, Security and release notes describe the same product (Node 22+, 0.4.0 untagged, `v0.3.0` installer target, unsigned desktop builds; checked 2026-10-31).
-- [x] Benchmark claims stay within the evidence actually published (README states the 33-task suite is a smoke/regression suite with no head-to-head claims; the "about 2.7k tokens" lean-tools figure was re-measured at 10,883 schema characters ≈ 2,721 tokens).
+- [ ] Quality Checks pass on the exact candidate SHA. The inspected `main` snapshot passed 8/9 jobs; browser E2E remains failing at the `.turn-work` visibility wait. Resolve the behavior and accessibility findings, then rerun the full workflow.
+- [x] Windows, macOS, and Ubuntu installer workflow passed on the inspected `main` SHA: [run 41265370731](https://github.com/FAHTHIZ/oasis/actions/runs/41265370731).
+- [x] Windows, macOS, and Linux desktop packaging workflow passed on the inspected `main` SHA: [run 41265370753](https://github.com/FAHTHIZ/oasis/actions/runs/41265370753). Packages remain unsigned.
+- [x] Public-site validation and deployment passed on the inspected `main` SHA: [run 41265370712](https://github.com/FAHTHIZ/oasis/actions/runs/41265370712).
+- [x] The `v0.4.0` tag, GitHub Release object, release notes, checksums, and downloadable desktop assets exist.
+- [ ] GitHub release lifecycle metadata aligns with the Beta label. The published `v0.4.0` release is currently marked `prerelease: false`; set the correct metadata policy for the next release.
+- [ ] Clean-machine install, first launch, provider setup, update, and uninstall are exercised on each advertised desktop OS. CI package success is not a substitute for real clean-machine checks.
+- [ ] Desktop signing, publisher identity, and provenance are configured or their absence is explicitly accepted for the target audience.
+- [ ] Documentation is verified against the exact candidate commit after the current consistency repair; then rerun applicable site and repository checks.
+- [ ] Representative repository-scale evaluation is published. The current 33-task evaluator remains a smoke/regression suite, not a defensible coding-quality benchmark.
 
 A green CI matrix is necessary, not sufficient. It does not replace security review, real-user journeys, clean-machine installation checks or representative coding evaluation.
