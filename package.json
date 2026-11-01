@@ -144,6 +144,6 @@
   "oasisRelease": {
     "channel": "stable",
     "stableTag": "v1.0.0",
-    "published": false
+    "published": true
   }
 }
