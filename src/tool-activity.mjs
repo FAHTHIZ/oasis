@@ -88,5 +88,10 @@ export function toolActivityWarning(result) {
   }
   if (value.exitCodeWarning) return text(value.exitCodeWarning, 700);
   if (Array.isArray(value.warnings) && value.warnings.length) return text(value.warnings.join(' · '), 700);
+  const logWarnings = [value.output, value.stdout, value.stderr]
+    .filter((part) => typeof part === 'string')
+    .flatMap((part) => part.split(/\r?\n/))
+    .filter((line) => /\bwarning\b|verification incomplete|test.{0,24}weaken|weaken.{0,24}test/i.test(line));
+  if (logWarnings.length) return text(logWarnings.slice(0, 3).join(' · '), 700);
   return '';
 }
