@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: "Publish a fully verified Beta release from main"
+        description: "Publish a fully verified release candidate or stable release from main"
         required: true
         default: false
         type: boolean
@@ -89,14 +89,13 @@ jobs:
           retention-days: 14
 
   publish-release:
-    name: Publish the latest validated OASIS Beta release
+    name: Publish the explicitly approved OASIS release
     if: >-
       needs.package.result == 'success' &&
       needs.validate.result == 'success' &&
-      (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-        (github.event_name == 'workflow_dispatch' && inputs.publish_release == true && github.ref == 'refs/heads/main')
-      )
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish_release == true &&
+      github.ref == 'refs/heads/main'
     needs: [validate, package]
     runs-on: ubuntu-latest
     permissions:
@@ -148,6 +147,15 @@ jobs:
             fi
             echo "::error::Tag $tag already points to $existing_sha, not $COMMIT_SHA."
             exit 1
+          fi
+          if [[ "$tag" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "make_latest=false" >> "$GITHUB_OUTPUT"
+            echo "release_name=OASIS $tag (Release Candidate)" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "make_latest=true" >> "$GITHUB_OUTPUT"
+            echo "release_name=OASIS $tag" >> "$GITHUB_OUTPUT"
           fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -210,11 +218,12 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.release-version.outputs.tag }}
-          name: OASIS ${{ steps.release-version.outputs.tag }} (Beta)
+          name: ${{ steps.release-version.outputs.release_name }}
           target_commitish: ${{ steps.release-version.outputs.target_commitish }}
           body_path: ${{ steps.release-version.outputs.notes_path }}
           generate_release_notes: false
-          make_latest: true
+          prerelease: ${{ steps.release-version.outputs.prerelease }}
+          make_latest: ${{ steps.release-version.outputs.make_latest }}
           fail_on_unmatched_files: true
           draft: false
           files: release-assets/*
