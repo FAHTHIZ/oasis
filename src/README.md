@@ -22,7 +22,7 @@ The groups below describe primary responsibility. A module may be used across mo
 |---|---|
 | Agent runtime and context | `agent.mjs`, `context.mjs`, `memory.mjs`, `auto-memory.mjs`, `rule-refresh.mjs`, `standing-corrections.mjs`, `reply-language.mjs`, `style-rules.mjs` |
 | Sessions and recovery | `sessions.mjs`, `session-tools.mjs`, `session-messaging.mjs`, `session-notes.mjs`, `checkpoints.mjs`, `backups.mjs`, `followups.mjs`, `read-dedup.mjs`, `purge.mjs` |
-| Tools and workspace operations | `tools.mjs`, `power-tools.mjs`, `power-tool-definitions.mjs`, `file-state.mjs`, `edit-match.mjs`, `inplace-edit-check.mjs`, `change-guard.mjs`, `repo-map.mjs`, `file-watch.mjs`, `scratch.mjs`, `notebook.mjs`, `pdf.mjs`, `artifacts.mjs` |
+| Tools and workspace operations | `tools.mjs`, `power-tools.mjs`, `shell-risk.mjs`, `power-tool-definitions.mjs`, `file-state.mjs`, `edit-match.mjs`, `inplace-edit-check.mjs`, `change-guard.mjs`, `repo-map.mjs`, `file-watch.mjs`, `scratch.mjs`, `notebook.mjs`, `pdf.mjs`, `artifacts.mjs` |
 | Git and isolation | `git-tools.mjs`, `git-safety.mjs`, `worktrees.mjs`, `branch-names.mjs`, `protected-paths.mjs`, `scope-lock.mjs` |
 | Providers and model selection | `config.mjs`, `cloud-providers.mjs`, `cloud-setup.mjs`, `model-aliases.mjs`, `model-routing.mjs`, `pricing.mjs`, `ollama-discovery.mjs` |
 | Permissions and host safety | `permissions.mjs`, `permission-modes.mjs`, `approval-language.mjs`, `sandbox.mjs`, `process-tree.mjs`, `network-safety.mjs`, `public-fetch.mjs`, `safe-regex.mjs`, `safe-storage.mjs`, `secure-store.mjs`, `secret-shield.mjs`, `package-vetting.mjs` |

@@ -133,3 +133,8 @@ test('JSX and "implementation omitted" placeholders are caught; variadics and do
   assert.equal(findElisionPlaceholder('func f(args ...string) {}\n'), '');
   assert.equal(findElisionPlaceholder('/** Accepts a, b, ... and returns the sum. */\n'), '');
 });
+
+test('generic "rest of the <thing> unchanged" comments are elisions; descriptive comments are not', () => {
+  for (const text of ['/* rest of styles unchanged */', '# remaining tasks unchanged', '// other handlers stay unchanged']) assert.ok(findElisionPlaceholder(text + '\n'), text);
+  for (const text of ['// the rest of the arguments are passed through', '// existing behavior unchanged', '// existing API unchanged', 'const next = { ...prev };']) assert.ok(!findElisionPlaceholder(text + '\n'), text);
+});

@@ -17,7 +17,11 @@ function lineNormalizers() {
   return [
     { name: 'line endings and trailing whitespace', line: (line) => line.replace(/\r$/, '').replace(/[ \t]+$/, '') },
     { name: 'typographic quotes', line: (line) => normalizeQuotes(line.replace(/\r$/, '').replace(/[ \t]+$/, '')) },
-    { name: 'indentation', line: (line) => normalizeQuotes(line.replace(/\r$/, '').trim()) }
+    { name: 'indentation', line: (line) => normalizeQuotes(line.replace(/\r$/, '').trim()) },
+    // Spacing inside a line ("a":1 vs "a": 1, f(x,y) vs f(x, y)). Only spaces
+    // next to punctuation are ignored; a space between two words still counts,
+    // so `return x` never matches `returnx` and "a b" never matches "ab".
+    { name: 'inner whitespace', line: (line) => normalizeQuotes(line.replace(/\r$/, '').trim()).replace(/[ \t]+/g, ' ').replace(/ ?([^\w ]) ?/g, '$1') }
   ];
 }
 
@@ -101,6 +105,30 @@ function keepUntouchedLines(replacement, rawReplacement, needleLines, actual) {
   });
 }
 
+// Keep the file's own spacing around the part of a line the edit changed:
+// align the non-whitespace characters of the replacement and the file line,
+// copy the file line through the common prefix and suffix, and splice in only
+// the replacement's changed middle.
+function restoreSpacing(replacementLine, actualLine) {
+  if (replacementLine === undefined || actualLine === undefined) return replacementLine;
+  const chars = (line) => [...line].map((ch, idx) => ({ ch, idx })).filter((c) => !/[ \t]/.test(c.ch));
+  const r = chars(replacementLine);
+  const a = chars(actualLine);
+  let p = 0;
+  while (p < r.length && p < a.length && r[p].ch === a[p].ch) p++;
+  let s = 0;
+  while (s < r.length - p && s < a.length - p && r[r.length - 1 - s].ch === a[a.length - 1 - s].ch) s++;
+  if (!p && !s) return replacementLine;
+  if (p === r.length && p === a.length) return actualLine;
+  const lead = (line) => leadOf(line).length;
+  const aStart = p ? a[p - 1].idx + 1 : lead(actualLine);
+  const rStart = p ? r[p - 1].idx + 1 : lead(replacementLine);
+  const aEnd = s ? a[a.length - s].idx : actualLine.replace(/[ \t]+$/, '').length;
+  const rEnd = s ? r[r.length - s].idx : replacementLine.replace(/[ \t]+$/, '').length;
+  const middle = rEnd > rStart ? replacementLine.slice(rStart, rEnd) : '';
+  return actualLine.slice(0, aStart) + middle + actualLine.slice(Math.max(aEnd, aStart));
+}
+
 const TYPOGRAPHIC = /[\u2018\u2019\u201A\u201B\u2032\u201C\u201D\u201E\u201F\u2033\u2013\u2014\u00A0]/;
 
 // The model typed ASCII quotes/dashes for text that uses typographic ones. Keep the
@@ -162,7 +190,8 @@ export function relaxedReplace(current, oldString, newString) {
     const actual = fileLines.slice(start, start + needleLines.length).map((line) => line.replace(/\r$/, ''));
     const rawReplacement = newString.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
     let replacement = rawReplacement;
-    if (strategy.name === 'indentation') replacement = reindent(replacement, needleLines, actual);
+    if (strategy.name === 'indentation' || strategy.name === 'inner whitespace') replacement = reindent(replacement, needleLines, actual);
+    if (strategy.name === 'inner whitespace' && rawReplacement.length === needleLines.length) replacement = replacement.map((line, index) => restoreSpacing(line, actual[index]));
     if (strategy.name !== 'line endings and trailing whitespace') replacement = keepTypography(replacement, needleLines, actual);
     replacement = keepUntouchedLines(replacement, rawReplacement, needleLines, actual);
     const hadCr = /\r$/.test(fileLines[start + needleLines.length - 1] || '');

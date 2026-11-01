@@ -20,7 +20,9 @@ const ELISION_PATTERNS = [
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*\.{3}\s*(?:the\s+)?(?:rest|remaining|existing|other|previous|unchanged|same|original)\b[^\n]*$/im,
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*(?:the\s+)?(?:rest of (?:the )?(?:file|code|function|class|implementation|component|module)|existing code|previous code|remaining code|other (?:methods|functions|code))\b[^\n]*(?:unchanged|here|remains?|stays?|same|omitted|as before|\.{3})[^\n]*$/im,
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*\.{3}\s*(?:code|implementation)?\s*(?:unchanged|omitted|truncated|elided)\b[^\n]*$/im,
-  /^\s*(?:\/\/|#|\/\*+)\s*\[?\s*\.{3}\s*(?:keep|leave) (?:the )?(?:rest|existing|everything else)\b[^\n]*$/im
+  /^\s*(?:\/\/|#|\/\*+)\s*\[?\s*\.{3}\s*(?:keep|leave) (?:the )?(?:rest|existing|everything else)\b[^\n]*$/im,
+  // Any short "rest of the <thing> unchanged" comment: styles, rules, props, routes...
+  /^\s*(?:\/\/|#|--|;|\/\*+|<!--|\*)\s*(?:\.{3}\s*)?(?:the\s+)?(?:rest of (?:the )?|remaining |existing |other )(?!behaviou?r|api|semantics|output|format|signature|contract)[a-z]+(?:\s[a-z]+)?\s+(?:are |is |remains? |stays? )?(?:unchanged|the same|as before|omitted)\s*\.?\s*(?:\*\/|-->)?\s*$/im
 ];
 
 export const SHRINK_MIN_LINES = 40;

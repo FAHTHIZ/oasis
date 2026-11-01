@@ -171,7 +171,7 @@ Provider setup tests a small inert tool-call schema before saving supported conf
 
 ## Workspace tools and execution
 
-The principal tool catalog and execution boundary live in `src/tools.mjs`; related command helpers live in `src/power-tools.mjs`, `src/process-tree.mjs`, `src/installer.mjs`, and `src/permissions.mjs`.
+The principal tool catalog and execution boundary live in `src/tools.mjs`; related command helpers live in `src/power-tools.mjs`, `src/shell-risk.mjs` (parses `run_shell` lines into simple commands and classifies each as blocked, high-risk or ordinary), `src/process-tree.mjs`, `src/installer.mjs`, and `src/permissions.mjs`.
 
 ### File operations
 
@@ -356,7 +356,7 @@ The table below identifies primary implementations. For a domain-grouped file ca
 | CLI and headless runtime | `src/cli.mjs`, `src/headless.mjs` |
 | Agent loop, sessions and verification | `src/agent.mjs`, `src/sessions.mjs`, `src/checkpoints.mjs` |
 | Provider configuration and adapters | `src/config.mjs`, `src/cloud-providers.mjs` |
-| Tool execution and workspace checks | `src/tools.mjs`, `src/power-tools.mjs`, `src/process-tree.mjs` |
+| Tool execution and workspace checks | `src/tools.mjs`, `src/power-tools.mjs`, `src/shell-risk.mjs`, `src/process-tree.mjs` |
 | Permission policy and OS sandbox | `src/permissions.mjs`, `src/sandbox.mjs`, `src/settings.mjs` |
 | Subagents, teams and task board | `src/subagents.mjs`, `src/agent-tasks.mjs`, `src/shared-tasks.mjs`, `src/session-messaging.mjs` |
 | Dynamic workflows | `src/workflows.mjs`, `src/workflow-sandbox.mjs` |
