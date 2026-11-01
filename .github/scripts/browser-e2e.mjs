@@ -170,18 +170,18 @@ try {
           args: ['--test', 'browser-e2e-verification.test.mjs']
         }) }
       }] };
-    } else if (completionCalls === 10) {
+    } else if (completionCalls === 9) {
       finishReason = 'stop';
       assistantMessage = { role: 'assistant', content: 'A focused Node test passed for the edited file. The separate negative-command scenario remained an intentional approval and activity-visibility check.' };
-    } else if (completionCalls === 11) {
+    } else if (completionCalls === 10) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_delete', type: 'function',
         function: { name: 'delete_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt' }) }
       }] };
-    } else if (completionCalls === 12) {
+    } else if (completionCalls === 11) {
       finishReason = 'stop';
       assistantMessage = { role: 'assistant', content: 'The delete request was denied; the file remains unchanged.' };
-    } else if (completionCalls === 13) {
+    } else if (completionCalls === 12) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_cancel', type: 'function',
         function: { name: 'run_command', arguments: JSON.stringify({
@@ -189,7 +189,7 @@ try {
           args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
         }) }
       }] };
-    } else if (completionCalls === 14) {
+    } else if (completionCalls === 13) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_worktree_write', type: 'function',
         function: { name: 'write_file', arguments: JSON.stringify({
@@ -197,12 +197,12 @@ try {
           content: 'Created in the isolated worktree for diff review.\n'
         }) }
       }] };
-    } else if (completionCalls === 15) {
+    } else if (completionCalls === 14) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_worktree_read', type: 'function',
         function: { name: 'read_file', arguments: JSON.stringify({ path: 'review-e2e-output.txt' }) }
       }] };
-    } else if (completionCalls === 16) {
+    } else if (completionCalls === 15) {
       finishReason = 'stop';
       assistantMessage = { role: 'assistant', content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.' };
     } else {
@@ -552,7 +552,7 @@ try {
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
-  assert.equal(completionCalls, 10, 'The agent should create, read, edit, create a verification test, review the diff, pass the test, approve three consequential actions, and report the results.');
+  assert.equal(completionCalls, 9, 'The agent should create, read, edit, create a verification test, review the diff, pass the test, approve three consequential actions, and report the results.');
   await page.waitForFunction(() => document.querySelectorAll('#sidebarChatList [data-sidebar-session-id]').length > 0,
     null, { timeout: timeoutMs });
   assert.ok(await page.locator('#sidebarChatList [data-sidebar-session-id]').count() > 0,
@@ -578,7 +578,7 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
     .some((element) => element.textContent.includes('The delete request was denied; the file remains unchanged.')),
   null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 12, 'The denial should be reported to the model without running the delete operation.');
+  assert.equal(completionCalls, 11, 'The denial should be reported to the model without running the delete operation.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
     'Edited by the authenticated browser agent tool cycle.\n',
@@ -658,7 +658,7 @@ try {
   assert.equal(await page.locator('#agentStopBtn').isEnabled(), true, 'Stop should be enabled while command approval is pending.');
   await page.locator('#agentStopBtn').click();
   await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''), null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 13, 'Cancellation must abort the task before another model request.');
+  assert.equal(completionCalls, 12, 'Cancellation must abort the task before another model request.');
   await assert.rejects(readFile(path.join(root, 'cancel-e2e-side-effect.txt')), { code: 'ENOENT' });
 
   // The isolated run should create a committed branch artifact without changing
@@ -673,7 +673,7 @@ try {
     .some((element) => element.textContent.includes('Isolated worktree fixture completed successfully.')),
   null, { timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 16, 'The isolated task should write the file, read it back for verification, and then finish.');
+  assert.equal(completionCalls, 15, 'The isolated task should write the file, read it back for verification, and then finish.');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Finishing isolated work must not advance the primary branch.');
   assert.ok(execFileSync('git', ['branch', '--list', 'oasis/*'], { cwd: root, encoding: 'utf8' }).trim(),
