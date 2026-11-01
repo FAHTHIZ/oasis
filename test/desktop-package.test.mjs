@@ -5,6 +5,7 @@ import test from 'node:test';
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const desktopMain = await readFile(new URL('../desktop/main.mjs', import.meta.url), 'utf8');
 const installGuide = await readFile(new URL('../docs/INSTALL.md', import.meta.url), 'utf8');
+const releaseWorkflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
 
 test('desktop packaging defines one-click Windows installer and macOS/Linux packages', () => {
   assert.match(packageJson.version, /^\d+\.\d+\.\d+$/, 'desktop version must be a stable semantic version');
@@ -17,6 +18,17 @@ test('desktop packaging defines one-click Windows installer and macOS/Linux pack
   assert.ok(packageJson.files.includes('desktop/'));
   assert.ok(packageJson.dependencies['@xterm/xterm']);
   assert.ok(packageJson.dependencies['@xterm/addon-fit']);
+});
+
+
+test('stable desktop release requires explicit owner confirmation and stable package channel', () => {
+  assert.match(releaseWorkflow, /publish_release:\s*\n\s*description:/);
+  assert.match(releaseWorkflow, /confirm_stable_release:\s*\n\s*description:/);
+  assert.match(releaseWorkflow, /inputs\.publish_release == true/);
+  assert.match(releaseWorkflow, /inputs\.confirm_stable_release == true/);
+  assert.match(releaseWorkflow, /oasisRelease\?\.channel/);
+  assert.match(releaseWorkflow, /must be stable/);
+  assert.doesNotMatch(releaseWorkflow.match(/publish-release:[\s\S]*?needs:/)?.[0] || '', /github\.event_name == 'push'/);
 });
 
 test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', () => {
