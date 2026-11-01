@@ -113,7 +113,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
       if (!spec || typeof spec !== 'object') throw new Error('entry must be an object');
       if (spec.disabled === true || spec.enabled === false) continue;
       const type = String(spec.type || (spec.url ? 'http' : 'stdio')).toLowerCase();
-      if (type === 'http' || type === 'streamable-http') {
+      if (type === 'http' || type === 'streamable-http' || type === 'sse') {
         const url = new URL(expandVariables(spec.url, env));
         if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopbackUrl(url.toString()))) throw new Error('remote MCP servers must use HTTPS (HTTP only for localhost)');
         const headers = {};
@@ -130,7 +130,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
           if (Number.isInteger(spec.oauth.callbackPort) && spec.oauth.callbackPort > 1023 && spec.oauth.callbackPort < 65536) oauth.callbackPort = spec.oauth.callbackPort;
         }
         if (spec.headersHelper !== undefined && (typeof spec.headersHelper !== 'string' || !spec.headersHelper.trim())) throw new Error('headersHelper must be a command string');
-        servers.push({ name, type: 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), ...(spec.headersHelper ? { headersHelper: spec.headersHelper, ...(env.CLAUDE_PLUGIN_ROOT ? { pluginRoot: env.CLAUDE_PLUGIN_ROOT } : {}) } : {}), source });
+        servers.push({ name, type: type === 'sse' ? 'sse' : 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), ...(spec.headersHelper ? { headersHelper: spec.headersHelper, ...(env.CLAUDE_PLUGIN_ROOT ? { pluginRoot: env.CLAUDE_PLUGIN_ROOT } : {}) } : {}), source });
       } else if (type === 'stdio') {
         const extraEnv = {};
         for (const [key, value] of Object.entries(spec.env || {})) {
@@ -139,7 +139,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
         }
         servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, source });
       } else {
-        throw new Error('transport "' + type + '" is not supported (use stdio or http)');
+        throw new Error('transport "' + type + '" is not supported (use stdio, http or sse)');
       }
     } catch (error) {
       failures.push({ name, error: error.message });
@@ -224,7 +224,7 @@ async function readSseResponse(response, id, onMessage = null) {
 // Minimal Streamable HTTP MCP client with the same surface as McpServerClient.
 export class McpHttpClient {
   constructor(config, options = {}) {
-    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}) };
+    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}) };
     this.helperHeaders = null;
     this.fetch = options.fetch || fetch;
     this.env = options.env || process.env;
@@ -425,5 +425,207 @@ export class McpHttpClient {
     if (this.sessionId) {
       this.fetch(this.config.url, { method: 'DELETE', headers: { ...this.config.headers, 'mcp-session-id': this.sessionId } }).catch(() => {});
     }
+  }
+}
+
+
+// Legacy HTTP+SSE transport (MCP 2024-11-05), still used by many hosted servers:
+// GET the URL for an event stream, wait for an `endpoint` event, POST each
+// JSON-RPC message there, and read the replies from the stream. Auth, headers,
+// headersHelper and OAuth behave exactly as for Streamable HTTP.
+const SSE_MAX_EVENT = 1024 * 1024;
+
+export class McpSseClient extends McpHttpClient {
+  constructor(config, options = {}) {
+    super({ ...config, type: 'sse' }, options);
+    this.pending = new Map();
+    this.endpoint = null;
+    this.streamController = null;
+  }
+
+  async _authHeaders(refresh = false) {
+    const extra = await this._helperHeaders(refresh);
+    const helperAuth = Object.keys(extra).some((key) => key.toLowerCase() === 'authorization');
+    const authorization = this.explicitAuth || helperAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
+    return { ...this.config.headers, ...extra, ...(authorization ? { authorization } : {}) };
+  }
+
+  _authError(status) {
+    if (status === 401 && !this.explicitAuth && !this.config.headersHelper) {
+      const error = new Error('MCP server ' + this.config.name + ' needs sign-in. Run oasis mcp login ' + this.config.name + ' (or /mcp login ' + this.config.name + ' in the terminal).');
+      error.code = 'MCP_AUTH_REQUIRED';
+      return error;
+    }
+    return new Error('MCP server ' + this.config.name + ' rejected the credentials (HTTP ' + status + '). Check the headers in .mcp.json.');
+  }
+
+  async _openStream(timeoutMs = 15000) {
+    const controller = new AbortController();
+    this.streamController = controller;
+    this.activeRequests.add(controller);
+    let response;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      let headers = await this._authHeaders(false);
+      response = await this.fetch(this.config.url, { method: 'GET', redirect: 'error', signal: controller.signal, headers: { ...headers, accept: 'text/event-stream' } });
+      if (response.status === 401 && this.config.headersHelper) {
+        await response.body?.cancel().catch(() => {});
+        headers = await this._authHeaders(true);
+        response = await this.fetch(this.config.url, { method: 'GET', redirect: 'error', signal: controller.signal, headers: { ...headers, accept: 'text/event-stream' } });
+      }
+      if (response.status === 401 || response.status === 403) throw this._authError(response.status);
+      if (!response.ok) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + ' for the SSE stream.');
+      if (!String(response.headers.get('content-type') || '').includes('text/event-stream')) throw new Error('MCP server ' + this.config.name + ' did not answer with an event stream. If it uses Streamable HTTP, set "type": "http".');
+    } catch (error) {
+      clearTimeout(timer);
+      this.activeRequests.delete(controller);
+      if (error.name === 'AbortError') throw new Error(this.closed ? 'MCP server session closed.' : 'MCP server ' + this.config.name + ' did not open its SSE stream in time.');
+      throw error;
+    }
+    let resolveEndpoint;
+    let rejectEndpoint;
+    const endpoint = new Promise((resolve, reject) => { resolveEndpoint = resolve; rejectEndpoint = reject; });
+    this._readStream(response, controller, resolveEndpoint, rejectEndpoint);
+    try {
+      this.endpoint = await endpoint;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async _readStream(response, controller, resolveEndpoint, rejectEndpoint) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let failure = null;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        if (buffer.length > SSE_MAX_EVENT * 4) throw new Error('MCP server ' + this.config.name + ' sent an oversized SSE event.');
+        let index;
+        while ((index = buffer.search(/\r?\n\r?\n/)) >= 0) {
+          const block = buffer.slice(0, index);
+          buffer = buffer.slice(index).replace(/^\r?\n\r?\n/, '');
+          let name = 'message';
+          const data = [];
+          for (const line of block.split(/\r?\n/)) {
+            if (line.startsWith('event:')) name = line.slice(6).trim();
+            else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+          }
+          const text = data.join('\n');
+          if (!text || text.length > SSE_MAX_EVENT) continue;
+          if (name === 'endpoint') {
+            let target;
+            try { target = new URL(text.trim(), this.config.url); } catch { rejectEndpoint(new Error('MCP server ' + this.config.name + ' sent an invalid endpoint.')); continue; }
+            // Messages carry credentials, so they may only go back to the same origin.
+            if (target.origin !== new URL(this.config.url).origin) { rejectEndpoint(new Error('MCP server ' + this.config.name + ' asked OASIS to post to a different origin (' + target.origin + '); refused.')); continue; }
+            resolveEndpoint(target.toString());
+            continue;
+          }
+          if (name !== 'message') continue;
+          let message;
+          try { message = JSON.parse(text); } catch { continue; }
+          for (const item of Array.isArray(message) ? message : [message]) this._onMessage(item);
+        }
+      }
+    } catch (error) {
+      failure = error;
+    } finally {
+      try { await reader.cancel(); } catch {}
+      this.activeRequests.delete(controller);
+    }
+    const reason = this.closed ? new Error('MCP server session closed.')
+      : failure && failure.name !== 'AbortError' ? failure
+      : new Error('MCP server ' + this.config.name + (this.endpoint ? ' closed its SSE stream.' : ' did not send its message endpoint in time.'));
+    rejectEndpoint(reason);
+    this.streamClosed = true;
+    this._failAll(reason);
+  }
+
+  _onMessage(message) {
+    if (!message || typeof message !== 'object') return;
+    if (typeof message.method === 'string') {
+      routeServerMessage(this, message, (reply) => this._send(reply)).catch(() => {});
+      return;
+    }
+    const key = String(message.id);
+    const pending = this.pending.get(key);
+    if (!pending) return;
+    this.pending.delete(key);
+    clearTimeout(pending.timer);
+    if (message.error) pending.reject(new Error(message.error.message || 'MCP request failed.'));
+    else pending.resolve(message.result || {});
+  }
+
+  _failAll(error) {
+    for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(error); }
+    this.pending.clear();
+  }
+
+  async _send(message, retried = false) {
+    if (this.closed) throw new Error('MCP server session closed.');
+    if (!this.endpoint || this.streamClosed) throw new Error('MCP server ' + this.config.name + ' has no open SSE stream.');
+    const controller = new AbortController();
+    this.activeRequests.add(controller);
+    const timer = setTimeout(() => controller.abort(), 30000);
+    try {
+      const headers = await this._authHeaders(retried);
+      const response = await this.fetch(this.endpoint, { method: 'POST', redirect: 'error', signal: controller.signal, headers: { ...headers, 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify(message) });
+      if (response.status === 401 && this.config.headersHelper && !retried) { await response.body?.cancel().catch(() => {}); clearTimeout(timer); return await this._send(message, true); }
+      if (response.status === 401 || response.status === 403) throw this._authError(response.status);
+      if (!response.ok) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + '.');
+      // Replies normally arrive on the stream; accept an inline JSON reply too.
+      const type = String(response.headers.get('content-type') || '');
+      if (type.includes('application/json')) {
+        const text = await readBoundedResponseText(response);
+        try { const parsed = JSON.parse(text); for (const item of Array.isArray(parsed) ? parsed : [parsed]) this._onMessage(item); } catch {}
+      } else {
+        await response.body?.cancel().catch(() => {});
+      }
+      return null;
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error(this.closed ? 'MCP server session closed.' : 'MCP request to ' + this.config.name + ' timed out.');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      this.activeRequests.delete(controller);
+    }
+  }
+
+  _request(method, params = {}, timeoutMs = 30000) {
+    if (this.closed) return Promise.reject(new Error('MCP server session closed.'));
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pending.delete(String(id))) return;
+        if (method !== 'initialize') this._send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id, reason: 'MCP request timed out: ' + method } }).catch(() => {});
+        reject(new Error('MCP request timed out: ' + method));
+      }, timeoutMs);
+      this.pending.set(String(id), { resolve, reject, timer });
+      this._send({ jsonrpc: '2.0', id, method, params }).catch((error) => {
+        if (!this.pending.delete(String(id))) return;
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+  }
+
+  // The base class sends notifications through _post.
+  async _post(message) {
+    if (message && message.id !== undefined && typeof message.method === 'string') return await this._request(message.method, message.params || {});
+    return await this._send(message);
+  }
+
+  async start() {
+    await this._openStream();
+    return await super.start();
+  }
+
+  close() {
+    if (this.closed) return;
+    super.close();
+    this._failAll(new Error('MCP server session closed.'));
   }
 }

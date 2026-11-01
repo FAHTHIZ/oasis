@@ -1552,7 +1552,7 @@ async function manageMcp(rest, root = process.cwd()) {
     if (project.servers.length || project.failures.length) {
       const trusted = (await loadSettings(root)).trusted;
       stdout.write('Project servers from .mcp.json' + (trusted ? '' : ' (ignored until you run oasis trust)') + ':\n');
-      for (const server of project.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const server of project.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
       for (const failure of project.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     const { loadClaudeCodeMcpServers } = await import('./mcp-project.mjs');
@@ -1561,12 +1561,12 @@ async function manageMcp(rest, root = process.cwd()) {
     const userJson = await loadUserMcpJson({ env: process.env }).catch(() => ({ servers: [], failures: [] }));
     if (userJson.servers.length || userJson.failures.length) {
       stdout.write('User servers from ' + userJson.file + ':\n');
-      for (const server of userJson.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const server of userJson.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
       for (const failure of userJson.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     if (claude.local.length || claude.user.length || claude.failures.length) {
       stdout.write('Claude Code servers from ' + (claude.file || '~/.claude.json') + ':\n');
-      for (const server of [...claude.local, ...claude.user]) stdout.write('  ' + server.name + ' — ' + (server.source === 'claude-local' ? 'local' : 'user') + ' scope, ' + (server.type === 'http' ? 'http ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const server of [...claude.local, ...claude.user]) stdout.write('  ' + server.name + ' — ' + (server.source === 'claude-local' ? 'local' : 'user') + ' scope, ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
       for (const failure of claude.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');

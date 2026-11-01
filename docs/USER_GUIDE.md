@@ -317,7 +317,7 @@ OASIS reads a portable-format `.mcp.json` at the workspace root, so a team can s
 }
 ```
 
-- `stdio` (the default) and Streamable `http` transports are supported. SSE-only servers are reported as unsupported.
+- Transports: `stdio` (the default), Streamable `http`, and the older HTTP+SSE transport with `"type": "sse"` (used by many hosted servers). SSE servers get the same headers, `headersHelper` and `oasis mcp login` OAuth as `http` ones, and OASIS only posts messages back to the server's own origin.
 - `${VAR}` and `${VAR:-default}` are expanded from your environment. A missing variable disables only that server, with a clear message.
 - Remote servers must use HTTPS unless they are on localhost.
 - Project servers start only after you run `oasis trust` for the workspace. A user-level server with the same name wins.
