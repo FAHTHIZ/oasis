@@ -329,9 +329,10 @@ async function markRecalled(memories) {
 
 // ---------- prompt integration ----------
 // L0: the index of abstracts that goes into the system prompt.
-export async function memoryIndexPrompt(root, { env = process.env, budget = INDEX_BUDGET_CHARS } = {}) {
+export async function memoryIndexPrompt(root, { env = process.env, budget = INDEX_BUDGET_CHARS, compact = false } = {}) {
   const memories = await listMemories(root, { env });
-  const intro = [
+  // Small windows get the one-sentence version of the same policy.
+  const intro = compact ? 'Auto memory: save lasting preferences, corrections, decisions and non-obvious project facts with memory_save (never secrets or one-off details); look them up with memory_search, and verify a memory against the code before relying on it.' : [
     'Auto memory: you keep durable notes across sessions with memory_save, and look them up with memory_search.',
     'Save a memory when the user states a preference or corrects you, when a decision is made with a reason, when you learn a non-obvious fact about this project (how to build, test, deploy; where things live; gotchas), or when a fix only worked after several attempts (save the lesson). Use scope "user" for preferences that apply to every project.',
     'Do not save secrets, one-off task details, or facts that are obvious from the code. Update an existing memory instead of adding a near-duplicate. Memories can be outdated: verify against current code or reliable evidence before relying on them, then use memory_verify to record current, outdated, or uncertain status with a short evidence reference.'

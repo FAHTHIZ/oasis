@@ -22,3 +22,15 @@ test('small-context prompts keep one short sentence per skill', () => {
   assert.ok(second.startsWith('- long [project]: word') && second.endsWith('…') && second.length < 140, second);
   assert.equal(third, 'other line');
 });
+
+test('README background drops badges, images and layout tags; small windows keep its opening', async () => {
+  const { readmeText } = await import('../src/memory.mjs');
+  const { compactProjectContext } = await import('../src/agent.mjs');
+  const readme = '<!-- note -->\n<p align="center"><img src="logo.svg" alt="x"></p>\n<h1 align="center">Tool</h1>\n<p align="center"><a href="ci"><img src="badge.svg"></a> ![shot](a.png)</p>\n\n\n\n<strong>Fast</strong> agent.\n\n## Use\nRun it.';
+  assert.equal(readmeText(readme), '# Tool\n\nFast agent.\n\n## Use\nRun it.');
+  const context = '--- Project context: AGENTS.md ---\nRules.\n\n--- Project context: README.md ---\n' + 'word '.repeat(1000);
+  const compact = compactProjectContext(context);
+  assert.ok(compact.startsWith('--- Project context: AGENTS.md ---\nRules.'));
+  assert.ok(compact.length < 2700 && compact.endsWith('read_file README.md for the rest]'), compact.length);
+  assert.equal(compactProjectContext('--- Project context: AGENTS.md ---\nShort.'), '--- Project context: AGENTS.md ---\nShort.');
+});
