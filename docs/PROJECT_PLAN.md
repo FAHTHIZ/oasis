@@ -1,134 +1,144 @@
-# OASIS project plan
+# OASIS product and release-qualification plan
 
-**Updated:** November 1, 2026  
-**Lifecycle:** Beta  
-**Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
-**Documentation navigation checkpoint:** [`4e48392f38748f4ade4c21ef023ae9a063245670`](https://github.com/FAHTHIZ/oasis/commit/4e48392f38748f4ade4c21ef023ae9a063245670) (initial user-guide, source, and test maps).  
-**Runtime/CI audit baseline:** [`7927275a0edefd4e6c791a5774fd82eb13e7ec62`](https://github.com/FAHTHIZ/oasis/commit/7927275a0edefd4e6c791a5774fd82eb13e7ec62) (source snapshot inspected November 1, 2026; later commits in this pass are documentation-only).  
-**Latest published release:** [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), published October 31, 2026.  
-**Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
-**Historical CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
-**Historical architecture source baseline (system-map audit):** [`e43d4187825a3a31bdcbe4136d0afab05a980641`](https://github.com/FAHTHIZ/oasis/commit/e43d4187825a3a31bdcbe4136d0afab05a980641)  
-**Historical architecture guide revision:** [`aba586eda6f440be86c5e8b978f9e973f44034d2`](https://github.com/FAHTHIZ/oasis/commit/aba586eda6f440be86c5e8b978f9e973f44034d2)  
-**Historical User Guide and documentation audit snapshot:** [`e9e79441eee7cad70b4229d69b98c18d553020db`](https://github.com/FAHTHIZ/oasis/commit/e9e79441eee7cad70b4229d69b98c18d553020db)
+**Product lifecycle:** Release Candidate / Production Qualification  
+**Development version:** `1.0.0-rc.1`  
+**Candidate source:** `main`  
+**Latest published stable release:** `v0.4.0` (historical release; not the current development version)  
+**License:** Apache-2.0
 
-This is the single working reference for what OASIS is, what is implemented, what is still limited, and what must happen before a wider Beta release. The [architecture guide](ARCHITECTURE.md) is its companion system map for how those implemented components fit together. This plan replaces the overlapping status, milestone, readiness, capability-gate, implementation-plan, roadmap and gap-register documents. Historical CI results are not current release evidence.
+This document is the canonical statement of product scope, maturity, supported surfaces, known limits, and release gates. The root README is the concise public overview; the [architecture guide](ARCHITECTURE.md) describes the system; the [user guide](USER_GUIDE.md) describes how to operate it.
 
-## Product direction
+## 1. Product position
 
-OASIS is an **open-source, local-first AI coding agent and developer workspace**. It connects a model chosen by the user to a real project workspace, then helps explore code, plan changes, edit files, run commands, inspect diffs and verify results. It is designed around model choice, explicit execution controls, reusable workflows and an inspectable local runtime—not around one hosted model or a single chat interface.
+OASIS is an open-source, local-first agentic development workspace. It connects a model selected by the user to a real project and coordinates codebase exploration, planning, file operations, controlled command execution, integrations, agent coordination, and verification.
 
-OASIS has its own identity. Claude Code and other tools are useful comparison points for specific capabilities, but feature-count parity is not the product goal. Correctness, useful work, clear controls, reliability and user trust matter more than matching another product's command list.
+OASIS is not a hosted model or a proprietary model endpoint. The user chooses the provider or local model; OASIS owns the local runtime, tool contracts, workspace access, execution policy, session state, interfaces, and verification reporting.
 
-OASIS does not include an AI model, hosted execution service or paid API subscription. Users connect a supported provider or a local model. When a hosted provider is selected, prompts and relevant code context are sent to that provider under its own terms.
+### Current maturity
 
-## What is implemented
+The 1.0 feature scope is established. OASIS is no longer being managed as an early feature-preview or Beta project. The current phase is **Release Candidate / Production Qualification**.
 
-The repository contains real implementations—not only plans—for these product areas:
+The work remaining is primarily refinement and qualification: stronger agent behavior, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. New product-surface expansion is not the default priority for 1.0.
 
-| Area | What the code provides |
+This maturity statement is not a claim that production qualification is complete. A release-candidate label says the product scope is being stabilized; it does not certify security, platform support, uptime, or defect-free behavior.
+
+## 2. Version and release channels
+
+- The previously published `v0.4.0` remains an immutable historical Git tag and GitHub Release. Its name and release notes accurately record that it shipped as Beta at that time.
+- The current development package on `main` is `1.0.0-rc.1`.
+- `1.0.0-rc.1` is a development candidate, not yet a Git tag, GitHub Release, or downloadable installer.
+- The stable CLI installer intentionally resolves the latest stable tag and therefore continues to install `v0.4.0` until a stable 1.0.0 release is published.
+- The 1.0.0 release workflow must mark `1.0.0-rc.1` and later prerelease candidates as GitHub prereleases. The final `v1.0.0` release must be published only after all acceptance gates pass.
+- Never move, replace, or retag `v0.4.0`. Never publish an RC package as stable.
+
+## 3. Product scope for 1.0
+
+The intended 1.0 product is a unified runtime with multiple interfaces—not a collection of unrelated apps.
+
+| Domain | Included capability |
 |---|---|
-| Coding agent | Multi-step model/tool loop, repository exploration, planning, bounded file and command tools, tool-result recovery, cancellation and post-edit verification tracking. |
-| Workspace operations | File search/read/edit/write/delete with workspace checks, snapshots, Git inspection and isolated worktree support. |
-| Execution controls | Permission rules and modes, approval prompts, command-risk analysis, hooks, output limits and process-tree cleanup. Optional OS sandboxing is a separate control from approval prompts. |
-| Models | Multiple provider protocols and compatible endpoints, including local Ollama-style endpoints and gateways such as OmniRoute. Provider setup tests an inert tool-call response before saving a new configuration. |
-| Continuity | Saved sessions, workspace instructions and memory, context estimates, history compaction, checkpoints, rewind and output preservation. |
-| Agent coordination | Bounded subagents, specialist review, session-local teams/task boards, dependency-aware task dispatch, background task records and worktree isolation. |
-| Automation | Sandboxed JavaScript workflows with schema-checked results, phases, pipelines and parallel work. |
-| Integrations | MCP clients, hooks, skills, plugin adapters/native local plugin packages, web search and extension import/export paths. Compatibility is feature-specific, not universal. |
-| Code intelligence | Language-server navigation/diagnostics where configured, project-checker execution and explicit unavailable states when a tool cannot provide evidence. |
-| User surfaces | CLI, local authenticated browser workspace, VS Code-compatible integration and Electron desktop packaging for Windows, macOS and Linux. |
-| Operations | Run monitoring and persisted task/event records, browser job history, diagnostics and a public landing page separate from the app workspace. |
+| Agent orchestration | Multi-step model/tool loop, planning, repository exploration, tool orchestration, completion and failure reporting. |
+| Workspace | File search/read/write/edit/delete, workspace checks, Git inspection, snapshots, diffs, and isolated worktree support. |
+| Execution policy | Permission modes, approvals, command-risk analysis, protected paths/configuration, output bounds, process cleanup, and optional OS sandbox adapters. |
+| Models and providers | Multiple provider protocols, compatible endpoints, local model services, provider setup, model routing, and cost estimation. |
+| Context and memory | Sessions, project instructions, memory, context estimation, compaction, rewind, checkpoints, and saved task records. |
+| Agent coordination | Bounded subagents, specialist reviews, task boards, dependency-aware dispatch, background records, and workflow automation. |
+| Integrations | MCP, hooks, Agent Skills, plugins, extension import/export, search integrations, GitHub workflows, and editor bridges. |
+| Code intelligence and verification | Diagnostics, language-server support where configured, project checks, automatic testing, weakened-test detection, diff review, and claim checks. |
+| Developer surfaces | CLI, authenticated local browser workspace, Electron desktop shell, VS Code-family integration, SDK, and GitHub Action. |
 
-These capabilities are present in the source and have subsystem tests. That does not mean every platform path, provider, integration or end-to-end user journey has been certified for release.
+Implementation presence does not mean every feature works identically across all providers, operating systems, editors, or third-party integrations. Use the support matrix below and the relevant subsystem tests.
 
-## Current release snapshot
+## 4. Support and qualification matrix
 
-**Inspected runtime source commit:** `7927275a0edefd4e6c791a5774fd82eb13e7ec62` on `main` (November 1, 2026). The documentation changes in this pass followed it; the code/CI findings below refer to this unchanged runtime snapshot.
+| Surface / environment | Current status | Qualification boundary |
+|---|---|---|
+| CLI on Node.js 22+ | Primary workflow | Requires a compatible model/provider and the OS permissions required by chosen tools. |
+| Local browser workspace | Available | Authenticated local runtime; some Projects/Tasks/Notes state remains separate from CLI state. Browser lifecycle and accessibility E2E must pass before 1.0. |
+| Desktop Windows x64 | Installer packaged in v0.4.0 | Unsigned. Clean-machine install, first-run, update, and uninstall need explicit real-machine evidence. No native OASIS OS sandbox. |
+| Desktop macOS arm64 | Installer packaged in v0.4.0 | Unsigned. Clean-machine install, first-run, update, and uninstall need explicit real-machine evidence. Optional sandbox integration is not full filesystem-read isolation. |
+| Desktop Linux x86_64 | Installer packaged in v0.4.0 | Unsigned. Clean-machine install, first-run, update, and uninstall need explicit real-machine evidence. Optional sandbox integration is not full filesystem-read isolation. |
+| VS Code-family integration | Implemented integration | Do not claim universal parity with every editor or extension marketplace. |
+| SDK / GitHub Action | Implemented integration | Unattended execution must be deliberately scoped and isolated by the adopting repository/operator. |
+| Android / Termux | Experimental use path | No native APK. PTY, background behavior, and real-device reliability are not fully qualified. |
+| Remote access / phone pairing | Not in 1.0 scope | No shipped trusted-device enrollment or secure remote pairing service. |
+| Tor/onion access | Not in 1.0 scope | Not a shipped capability. |
+| Native Windows OS sandbox | Not implemented | Approval checks are not equivalent to OS isolation. |
 
-### Published release
+## 5. Operational and security boundaries
 
-- `v0.4.0` is a real Git tag pointing to `8ebb5cec5a273133950fd5f40f5b36f9da654e8e`.
-- The matching GitHub Release was published on October 31, 2026 at 13:00:21 UTC and is the latest release.
-- Published desktop assets include a Windows x64 `.exe`, macOS arm64 `.dmg`, Linux x86_64 `.AppImage` and `.deb`, updater metadata, and `SHA256SUMS`.
-- The installers are unsigned. A checksum manifest detects accidental corruption; it is not a publisher signature.
-- GitHub currently marks the release `prerelease: false`, although its name and product documentation identify it as Beta. The next release workflow must align GitHub metadata with the declared product lifecycle. Do not infer product stability from the GitHub flag alone.
+OASIS is a local-first runtime, not a security boundary around arbitrary code.
 
-### Development branch after v0.4.0
+- Approved commands execute with the current operating-system user's permissions.
+- Optional Linux/macOS sandboxing is disabled by default and is not full filesystem-read isolation.
+- Native Windows OS sandboxing is not implemented.
+- MCP servers, hooks, plugins, executable skills, package installers, and repository scripts may execute beyond OASIS file-tool restrictions.
+- Browser Projects/Tasks/Notes data is stored in browser local storage and is not encrypted by OASIS.
+- Browser-side project/task/note state is not fully synchronized with CLI state.
+- Restarting the runtime does not resurrect killed worker processes, in-memory team state, PTY sessions, or pending approvals. Persisted history is not a live resumed worker.
+- Desktop installers are unsigned; checksum manifests detect transfer corruption but are not publisher signatures.
+- The 33-task evaluation harness is a regression/smoke suite, not a representative repository-scale coding benchmark. No parity, speed, accuracy, or token-savings claims are justified by it.
 
-- At the runtime/CI audit baseline, `main` was 120 commits ahead of the `v0.4.0` tag; at the initial documentation-navigation checkpoint it was 126 commits ahead. Subsequent commits in this pass continued the documentation-only repair. Commit distance is not a product version or release-readiness measure.
-- `package.json` on `main` still reports `0.4.0`. This version string must not be mistaken for a new `v0.4.0` release: current `main` includes later, unreleased changes.
-- Do not move, replace, or retag `v0.4.0` to absorb subsequent work. The next versioned release should use a new version, immutable tag, release notes, checksums, and artifacts. `0.5.0` is a candidate next version, not a declared or published release.
+These are explicit product boundaries. They should not be hidden by maturity wording or treated as completed merely because the corresponding functionality exists in some form.
 
-### CI evidence for the inspected runtime commit
+## 6. Current release-candidate blockers
 
-The following workflows were triggered for the exact runtime commit `7927275a0edefd4e6c791a5774fd82eb13e7ec62`:
+The following items are release qualification work, not a request to expand product scope.
 
-- **Quality Checks:** [run 41267442597](https://github.com/FAHTHIZ/oasis/actions/runs/41267442597) — **8 of 9 jobs passed; Browser end-to-end smoke test failed**. Node 22/24/26 package checks, Windows/macOS/Linux runtime-security tests, clean-environment tests, and native PTY integration passed. The browser job timed out waiting for `#agentMessages .turn-work`. Its diagnostic trace showed the expected write/read/edit/command activity groups rendered, but the completed-turn disclosure was absent while a delete action remained pending. This is an unresolved browser-turn lifecycle issue; do not weaken the assertion or hide the pending action.
-- **Installer checks:** [run 41267442660](https://github.com/FAHTHIZ/oasis/actions/runs/41267442660) — Windows, macOS, and Ubuntu installer jobs passed.
-- **Desktop packaging:** [run 41267442696](https://github.com/FAHTHIZ/oasis/actions/runs/41267442696) — Linux, macOS, and Windows package jobs and the publish step passed.
-- **Public site and repository metadata:** [run 41267442674](https://github.com/FAHTHIZ/oasis/actions/runs/41267442674) — validation and deployment jobs passed.
-- **Branch cleanup:** [run 41267442561](https://github.com/FAHTHIZ/oasis/actions/runs/41267442561) passed; the branch listing at that snapshot contained only `main`.
+### P0 — Release blockers
 
-The separate CI workflows on the later documentation snapshot `4e48392` were still running when checked. Their final outcomes must be read from their own same-SHA run links before making a green-build claim.
+1. **Browser task lifecycle:** the Quality Checks workflow still fails in the authenticated browser E2E. The activity groups render, but the completed-turn `Worked for …` disclosure is not created while a delete action remains pending. Fix the lifecycle defect and retain the test's side-effect and visibility assertions.
+2. **Accessibility:** run and resolve accessibility findings across empty, connection-error, provider, approval, activity-detail, and mobile states. Do not suppress axe findings simply to produce a green run.
+3. **Same-candidate CI:** run Quality Checks, installer checks, desktop packaging, and public-site validation against one immutable candidate commit. Older successful runs are historical evidence only.
+4. **Clean-machine desktop journey:** test installation, first launch, provider setup, a small task, update, uninstall, and user-data preservation on clean Windows, macOS, and Linux environments.
+5. **Security-boundary review:** re-check workspace escape, protected paths, command execution, process descendants, network/private-address restrictions, credential storage/redaction, browser token handling, and integration trust boundaries on the candidate source.
+6. **Release integrity:** build artifacts from the exact candidate commit; produce checksums; align package version, Git tag, release notes, updater metadata, and GitHub prerelease/stable flag; verify that the release page and installers point to the same immutable candidate.
+7. **Documentation/public identity:** README, public site, package metadata, installer instructions, security policy, and release notes must describe the same version and lifecycle.
 
-The previous all-green run on October 31 belongs to an older commit and is historical evidence only. It must not be used to describe the inspected November 1 runtime snapshot as fully green. Any new candidate needs fresh same-commit checks.
+### P1 — Quality and robustness improvements
 
-## Production-readiness outlook
+- Improve agent planning and tool selection without changing stable tool contracts unexpectedly.
+- Improve long-running task lifecycle, interruption handling, progress, and accurate partial-completion reporting.
+- Reduce avoidable context/tool-schema overhead while preserving correct tool availability.
+- Improve browser/CLI state clarity and accessible interaction patterns.
+- Add regression cases where real failures are observed; do not inflate tests with nonrepresentative checks.
+- Improve cross-platform process, PTY, installer, and update diagnostics.
 
-Production readiness is an evidence gate, not a calendar date or a feature-count milestone. Do not describe OASIS as production-ready until the P0 acceptance gates, clean-machine first-run checks, critical user journeys, security-boundary validation, and release-artifact checks have all been demonstrated on one candidate commit.
+### P2 — Post-1.0 options
 
-## Known boundaries
+Potential future areas include remote runner infrastructure, trusted-device pairing, additional editor surfaces, a native Android app, expanded sandbox isolation, and a larger real-world coding evaluation program. These are explicitly outside the current 1.0 release scope unless a separate product decision adds them.
 
-| Boundary | Accurate statement |
-|---|---|
-| Beta maturity | OASIS is Beta software. Do not describe it as stable, production-certified or defect-free. |
-| OS sandbox | Optional Linux/macOS sandboxing is disabled by default and is not full filesystem-read isolation. Windows has no OASIS-native OS sandbox; approval-based controls are not OS isolation. |
-| Shell and tool permissions | Approval, command-risk checks and workspace path controls reduce risk but do not make arbitrary code, MCP servers, hooks or third-party plugins safe. |
-| Desktop distribution | Windows, macOS and Linux desktop packages are built by CI but are unsigned. Build success is not proof of clean-machine first-run, update or uninstall behavior. |
-| Android | There is no native Android APK release. The CLI may be tried in Termux, but native PTY behavior and background execution are experimental and not guaranteed. |
-| Browser/CLI state | The browser workspace is local and authenticated, but project/task/note state is not fully synchronized with CLI state. |
-| Multi-agent continuity | Run history and interrupted states can be recorded, but a runtime restart does not resurrect killed worker processes or pending approvals. Durable pause/resume and complete lease recovery remain open. |
-| Benchmarks | The 33 fixtures are small regression tasks. The five-track benchmark design has not produced publishable results. No parity, speed, accuracy or token-savings claim is justified. |
-| Remote/onion access | Self-hosted remote runner, trusted phone pairing and Tor/onion access remain design-only. They are not shipped capabilities. |
+## 7. Release acceptance checklist
 
-## Priorities
+- [ ] Browser E2E passes on the exact candidate SHA, including task completion, activity fold, approval/denial, cancellation, and worktree review.
+- [ ] Accessibility checks show no unresolved release-blocking findings across the required UI states.
+- [ ] Quality Checks passes all jobs on the same candidate SHA (Node 22/24/26, Windows/macOS/Linux runtime/security matrix, clean environment, native PTY, browser E2E).
+- [ ] Installer checks pass on Windows, macOS, and Ubuntu for the same candidate SHA.
+- [ ] Desktop packaging passes for Windows, macOS, and Linux on the same candidate SHA.
+- [ ] Public-site validation and repository metadata checks pass on the same candidate SHA.
+- [ ] Clean-machine install, first-run, provider setup, basic task, update, and uninstall are manually verified on Windows, macOS, and Linux.
+- [ ] Security review is refreshed against the candidate source and remaining limitations are visible.
+- [ ] Desktop signing/provenance is implemented, or an explicit unsigned-distribution decision is documented for 1.0.
+- [ ] Version, tag, release notes, checksums, updater metadata, assets, and GitHub prerelease/stable status agree.
+- [ ] The 1.0.0 release is published only from the verified immutable candidate commit.
 
-### P0 — Stabilize the next versioned Beta release
+## 8. Release and maintenance policy
 
-1. Require Quality Checks, public-site validation, installer checks and desktop packaging to pass on one final commit.
-2. Fix any failures in the actual code or tests. Do not remove gates, suppress meaningful assertions or use older runs as substitutes.
-3. Verify first launch, provider setup, a small edit-and-test task, update and uninstall on clean Windows/macOS/Linux environments.
-4. Keep the published version, immutable tag, release notes, checksums and installer assets consistent. State unsigned status plainly until signing and provenance are configured.
-5. Keep README, installer instructions, release notes, security policy and platform support statements aligned with the actual build.
+- Keep direct maintainer work on `main` for this repository's current owner-directed workflow. Do not create new branches as a convenience for automated maintenance.
+- Do not rewrite or force-push release tags.
+- Make focused commits with a clear purpose; avoid bundling unrelated runtime changes and documentation changes.
+- Every behavior change needs regression coverage at the closest stable boundary.
+- Any update to a public claim must be backed by an implementation, test, or explicit limitation.
+- After runtime changes, run focused tests, `npm test`, and `npm run check`; run relevant platform workflows.
+- Do not claim a check passed unless its result is tied to the exact commit being described.
+- Keep the changelog split into the current candidate and future Unreleased changes.
+- Treat research notes as non-normative: proposals are not shipped features or commitments.
 
-### P1 — Measure real coding work
+## 9. Source-of-truth order
 
-Expand beyond the 33 helper-oriented fixtures to at least 50 representative repository tasks. Include multi-file features, real bug fixes with regression tests, failing-test diagnosis, refactoring, long-context continuity, permission denial, cancellation and recovery. Pin repository snapshots, model/provider, prompt, permissions, budgets and verifier. Run at least three trials per task and publish every failure and timeout. Keep automated acceptance and human diff review separate. See [Benchmarks](BENCHMARKS.md).
-
-### P1 — Close the trust and platform evidence gap
-
-Publish a clear support matrix for process cleanup, PTY, browser workspace, sandboxing and desktop packaging. Continue adversarial testing for path/symlink escape, network/private-address access, secrets, process descendants, cancellation and storage boundaries. Validate Windows credential-file ACLs and process-tree behavior; keep the absence of native Windows OS sandboxing explicit unless a supported solution is implemented and tested.
-
-### P2 — Make agent work more recoverable
-
-The next meaningful orchestration investment is not spawning more workers. It is a truthful, durable lifecycle: persisted worker/task identity, lease reconciliation, cancellation propagation, recoverable checkpoints, restart-aware state and clear handling of partial work. Keep parallel edits isolated. Show diffs and verification evidence before integration. Never describe a restored transcript as a live resumed worker.
-
-### P2 — Improve the complete product journey
-
-Prioritize high-value user journeys: provider setup, project onboarding, CLI/browser state ownership, accessible approval flows, browser PTY lifecycle and clear recovery after failed or interrupted tasks. Consider remote/mobile, JetBrains or other additional surfaces only after identity, trusted-device enrollment, workspace isolation, revocation and audit requirements are designed.
-
-## Release acceptance checklist
-
-- [ ] Quality Checks pass on the exact candidate SHA. The runtime audit baseline passed 8/9 jobs; browser E2E still fails at the `.turn-work` visibility wait while a delete action remains pending. Resolve the lifecycle issue and rerun the full workflow.
-- [x] Windows, macOS, and Ubuntu installer workflow passed on the runtime audit SHA: [run 41267442660](https://github.com/FAHTHIZ/oasis/actions/runs/41267442660).
-- [x] Windows, macOS, and Linux desktop packaging workflow passed on the runtime audit SHA: [run 41267442696](https://github.com/FAHTHIZ/oasis/actions/runs/41267442696). Packages remain unsigned.
-- [x] Public-site validation and deployment passed on the runtime audit SHA: [run 41267442674](https://github.com/FAHTHIZ/oasis/actions/runs/41267442674).
-- [x] The `v0.4.0` tag, GitHub Release object, release notes, checksums, and downloadable desktop assets exist.
-- [ ] GitHub release lifecycle metadata aligns with the Beta label. The published `v0.4.0` release is currently marked `prerelease: false`; set the correct metadata policy for the next release.
-- [ ] Clean-machine install, first launch, provider setup, update, and uninstall are exercised on each advertised desktop OS. CI package success is not a substitute for real clean-machine checks.
-- [ ] Desktop signing, publisher identity, and provenance are configured or their absence is explicitly accepted for the target audience.
-- [ ] Documentation is verified against the exact candidate commit after this consistency and navigation pass; the new documentation-only snapshot has its own CI runs in progress.
-- [ ] Representative repository-scale evaluation is published. The current 33-task evaluator remains a smoke/regression suite, not a defensible coding-quality benchmark.
-
-A green CI matrix is necessary, not sufficient. It does not replace security review, real-user journeys, clean-machine installation checks or representative coding evaluation.
+1. Executed code and tests for actual behavior.
+2. This plan for product scope, lifecycle, support status, known limits, and release gates.
+3. [Architecture](ARCHITECTURE.md) for system boundaries and component relationships.
+4. [Installation](INSTALL.md) and [User guide](USER_GUIDE.md) for operational instructions.
+5. [Security policy](../SECURITY.md), [privacy notes](PRIVACY.md), and the dated [security/reliability audit](SECURITY_RELIABILITY_AUDIT.md) for trust boundaries and evidence.
+6. [Research archive](research/README.md) for non-normative analysis and future proposals.
