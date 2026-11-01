@@ -24,7 +24,7 @@ const required = [
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
   'id="features"', 'id="providers"', 'id="safety"', 'id="docs"',
   'https://github.com/FAHTHIZ/oasis/releases', 'https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md', 'no terminal required',
-  'Desktop release status', 'public desktop installers have not been published yet.',
+  'Desktop release status', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
   'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
   'property="og:image"', 'summary_large_image', '<span class="beta-badge">BETA</span>'
@@ -43,7 +43,8 @@ for (const [name, sticker] of [['wide beta sticker', betaSticker], ['round beta 
 assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
 assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/USER_GUIDE.md'), 'Homepage must link directly to Install and the detailed User Guide.');
-assert.ok(html.includes('Desktop installer downloads are not publicly available yet.') && html.includes('When published, the packaged app will not require a separate Node.js or Git installation.'), 'Homepage must clearly state desktop release availability and explain the packaged app runtime requirement.');
+assert.ok(html.includes('Desktop installers are available in the published v0.4.0 release.') && html.includes('They are unsigned') && html.includes('clean-machine install, update, and uninstall checks remain outstanding.'), 'Homepage must identify the published desktop release and keep its unsigned and clean-machine verification limits visible.');
+assert.ok(html.includes('The packaged app does not require a separate Node.js or Git installation.'), 'Homepage must explain that the packaged desktop app includes its own runtime.');
 assert.ok(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))') && html.includes('@media(max-width:850px){.install-choices{grid-template-columns:repeat(2,minmax(0,1fr))}') && html.includes('@media(max-width:560px){.install-choices{grid-template-columns:1fr}'), 'Platform choices must fit desktop, tablet, and mobile layouts.');
 assert.ok(!html.includes('Just for fun'), 'Homepage must not contain the old repository description.');
 assert.ok(!html.includes('award-winning') && !html.includes('100% success'), 'Homepage must not make unsupported credibility claims.');
