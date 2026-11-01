@@ -26,10 +26,9 @@ This maturity statement is not a claim that production qualification is complete
 ## 2. Version and release channels
 
 - The previously published `v0.4.0` remains an immutable historical Git tag and GitHub Release. Its name and release notes accurately record that it shipped as Beta at that time.
-- The current development package on `main` is `1.0.0`; `package.json` separately identifies the channel as `release-candidate`, candidate `1`.
-- `1.0.0` is a development candidate, not yet a Git tag, GitHub Release, or downloadable installer.
-- The stable CLI installer intentionally resolves the latest stable tag and therefore continues to install `v0.4.0` until a stable 1.0.0 release is published.
-- The numeric `1.0.0` package on `main` carries `oasisRelease.channel: release-candidate` and `oasisRelease.candidate: 1`. This is an unpublished source candidate, not a prerelease tag or GitHub Release. The final `v1.0.0` release must be published only after all acceptance gates pass.
+- The current development package on `main` is numeric SemVer `1.0.0`; `package.json` separately identifies the channel as `release-candidate`, candidate `1`.
+- This is an unpublished source candidate, not a Git tag, GitHub Release, or downloadable installer. The stable CLI installer continues to resolve the latest stable tag, currently `v0.4.0`.
+- The final `v1.0.0` release must be created from a newly qualified immutable commit only after every acceptance gate passes; never move or retag the historical `v0.4.0` release.
 - Never move, replace, or retag `v0.4.0`. Never publish an RC package as stable.
 
 ## 3. Product scope for 1.0
@@ -88,7 +87,7 @@ The following items are release qualification work, not a request to expand prod
 
 ### P0 — Release blockers
 
-1. **Browser task lifecycle:** the Quality Checks workflow still fails in the authenticated browser E2E. The activity groups render, but the completed-turn `Worked for …` disclosure is not created while a delete action remains pending. Fix the lifecycle defect and retain the test's side-effect and visibility assertions.
+1. **Browser E2E verification fixture:** the prior failure was caused by an out-of-sequence fake-provider response. The fixture requested a final answer immediately after file edits, while the real runtime correctly requested `git_diff` to satisfy the post-edit verification gate; the fixture then misread a later delete request as that diff call and left it pending. The fixture now supplies a full diff-review response before finalizing. Re-run and retain the completed-turn disclosure, failed-command warning, approval/denial, cancellation, and side-effect assertions.
 2. **Accessibility:** run and resolve accessibility findings across empty, connection-error, provider, approval, activity-detail, and mobile states. Do not suppress axe findings simply to produce a green run.
 3. **Same-candidate CI:** run Quality Checks, installer checks, desktop packaging, and public-site validation against one immutable candidate commit. Older successful runs are historical evidence only.
 4. **Clean-machine desktop journey:** test installation, first launch, provider setup, a small task, update, uninstall, and user-data preservation on clean Windows, macOS, and Linux environments.
