@@ -4,7 +4,7 @@ This is the canonical navigation hub for OASIS. The root [README](../README.md) 
 
 ## Current product status
 
-OASIS is in **1.0 Release Candidate / Production Qualification**. The 1.0 feature scope is established; the current work is reliability, agent quality, security-boundary validation, accessibility, platform qualification, and operational refinement.
+OASIS is a **feature-complete 1.0 Release Candidate in Production Qualification**. It is beyond Beta and early feature development. Current work focuses on strengthening existing agents and workflows, reliability, security-boundary validation, accessibility, platform qualification, and operational refinement—not substantial scope expansion.
 
 - Development package on `main`: `1.0.0` (Release Candidate 1 metadata)
 - Latest published stable release: `v0.4.0`
