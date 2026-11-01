@@ -693,6 +693,7 @@ export function createOasisWebServer(options = {}) {
           }
         }
         const toolActivityArgsByCallId = new Map();
+        let assistantDeltaBuffer = '';
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
           ...(planOnly ? { planOnly: true } : {}),
@@ -705,8 +706,14 @@ export function createOasisWebServer(options = {}) {
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
-          onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
+          onDelta: (text) => {
+            const current = String(text || '').slice(0, 24000);
+            const delta = current.startsWith(assistantDeltaBuffer) ? current.slice(assistantDeltaBuffer.length) : current;
+            assistantDeltaBuffer = current;
+            if (delta) emit(job, 'assistant_delta', { text: delta });
+          },
           onToolStart: ({ name, args, call, subagent }) => {
+            assistantDeltaBuffer = '';
             const safeArgs = safeToolActivityArgs(args);
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
             if (callId) toolActivityArgsByCallId.set(callId, safeArgs);
