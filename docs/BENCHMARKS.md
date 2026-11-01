@@ -192,6 +192,8 @@ No live Claude Code results are included yet. The CLI integration is testable wi
 
 These are diagnostic runs, not a benchmark result. They were run on a 2-CPU, 7 GB machine with llama.cpp `llama-server` b12024 (`--jinja -c 16384`) and Qwen2.5-Coder-1.5B and -3B Instruct (Q4_K_M), using `oasis -p` and `oasis eval --task clamp-integer --trials 1`.
 
+Rows without a note used the earlier task wording, where `clampInteger(...)` did not state its argument order (see [task statements](#task-statements-name-the-exact-signature-2026-11-02)). Both earlier Qwen3-4B `clamp-integer` failures returned `0` for `clampInteger('8', 7, 1, 10)`, which fits a different argument order rather than broken clamping logic. That is a guess from the output; the runs did not log the code.
+
 | Model | Run | Outcome | Main failure modes seen |
 | --- | --- | --- | --- |
 | Qwen2.5-Coder-1.5B | about 12 `oasis -p` runs | File created in later runs; logic still wrong | Described steps instead of acting; text and XML-attribute tool calls; announced a step then stopped; canned refusals; claimed changes it never made; echoed `<tool_response>`; tutorial pseudo-code in place of the file |
