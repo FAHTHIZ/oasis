@@ -1973,7 +1973,16 @@ export function createOasisWebServer(options = {}) {
       for (const session of activeSessions.values()) closeSession(session);
       activeSessions.clear();
       try { ptyManager.closeAll(); } catch {}
-      if (server.listening) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      if (server.listening) {
+        // server.close() waits for every open socket. Browsers keep event streams
+        // and keep-alive sockets open indefinitely, so drop idle sockets now and
+        // force-close the rest after a short grace period instead of hanging.
+        const closed = new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+        server.closeIdleConnections?.();
+        const grace = setTimeout(() => server.closeAllConnections?.(), 1000);
+        grace.unref?.();
+        try { await closed; } finally { clearTimeout(grace); }
+      }
       await taskStore.flush([...jobs.values()]);
     }
   };
