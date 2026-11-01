@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   labelToolActivity,
   safeToolActivityArgs,
+  toolActivityArtifacts,
   toolActivityCategory,
+  toolActivityStatus,
   toolActivityWarning
 } from '../src/tool-activity.mjs';
 
@@ -52,4 +54,43 @@ test('failed commands, warnings, timeouts and tool errors produce visible warnin
   assert.match(toolActivityWarning({ exitCode: 0, output: 'Tests weakened in 1 place.' }), /Tests weakened/);
   assert.match(toolActivityWarning({ timedOut: true }), /timed out/i);
   assert.equal(toolActivityWarning({ exitCode: 0, output: 'ok' }), '');
+});
+
+
+test('activity receipts distinguish successful, warned and failed tool outcomes', () => {
+  assert.equal(toolActivityStatus({ exitCode: 0, output: 'All checks passed' }), 'success');
+  assert.equal(toolActivityStatus({ warning: 'One optional check was unavailable' }), 'warning');
+  assert.equal(toolActivityStatus({ approved: false, message: 'User denied the edit' }), 'warning');
+  assert.equal(toolActivityStatus({ exitCode: 2, output: 'Typecheck failed' }), 'error');
+  assert.equal(toolActivityStatus({ error: 'File not found' }), 'error');
+});
+
+test('successful file writes and edits create safe inline preview metadata only after a real change', () => {
+  assert.deepEqual(
+    toolActivityArtifacts('write_file', { path: 'src/new-module.mjs' }, {
+      path: 'src/new-module.mjs', writtenBytes: 42, backedUpExistingFile: false
+    }),
+    [{ path: 'src/new-module.mjs', action: 'created' }]
+  );
+  assert.deepEqual(
+    toolActivityArtifacts('write_file', { path: 'src/module.mjs' }, {
+      path: 'src/module.mjs', writtenBytes: 42, backedUpExistingFile: true
+    }),
+    [{ path: 'src/module.mjs', action: 'updated' }]
+  );
+  assert.deepEqual(
+    toolActivityArtifacts('edit_file', { path: 'src/module.mjs' }, {
+      path: 'src/module.mjs', changed: true, replacements: 1
+    }),
+    [{ path: 'src/module.mjs', action: 'updated' }]
+  );
+  assert.deepEqual(toolActivityArtifacts('edit_file', { path: 'src/module.mjs' }, {
+    path: 'src/module.mjs', changed: false
+  }), []);
+  assert.deepEqual(toolActivityArtifacts('write_file', { path: 'src/blocked.mjs' }, {
+    error: 'Write was blocked'
+  }), []);
+  assert.deepEqual(toolActivityArtifacts('run_command', { command: 'npm', args: ['test'] }, {
+    exitCode: 0
+  }), []);
 });
