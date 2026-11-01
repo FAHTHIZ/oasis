@@ -179,12 +179,15 @@
     <div class="agent-compose">
       <form id="agentForm" class="agent-compose-form">
         <label class="sr-only" for="agentPrompt">Describe what you want Oasis to do</label>
-        <textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Describe a change, ask a question, or paste an error…" required></textarea>
+        <textarea id="agentPrompt" rows="3" maxlength="12000" placeholder="Describe a change, ask a question, or paste an error or screenshot…" required></textarea>
+        <div id="agentAttachments" class="agent-attachments" hidden></div>
+        <input id="agentAttachInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
         <label class="worktree-toggle" for="agentIsolateWorktree">
           <input id="agentIsolateWorktree" type="checkbox">
           <span><strong>Isolated Git worktree</strong><small>Keep edits on a separate review branch. Requires a clean Git workspace. Nothing is merged automatically.</small></span>
         </label>
         <div class="agent-buttons agent-compose-actions">
+          <button class="btn btn-secondary agent-attach" id="agentAttachBtn" type="button" aria-label="Attach images" title="Attach images · or paste or drop them here"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.5l-8.4 8.4a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
           <button class="btn btn-primary agent-send" id="agentSendBtn" type="submit" aria-label="Send"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg><span>Send</span></button>
           <button class="btn btn-secondary agent-stop" id="agentStopBtn" type="button" hidden><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span>Stop</span></button>
         </div>
@@ -1003,7 +1006,7 @@ document.getElementById('agentQuestionForm').addEventListener('submit',function(
 document.getElementById('agentQuestionSkip').addEventListener('click',function(){void agentAnswerQuestion('')});
 document.getElementById('agentHistorySelect').addEventListener('change',function(){if(this.value)void agentOpenSession(this.value)});
 document.getElementById('agentModeSelect').addEventListener('change',function(){if(agentBusy||!agentToken)return;document.getElementById('agentPrompt').value='/mode '+this.value;document.getElementById('agentForm').requestSubmit()});
-document.getElementById('agentForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;var message=document.getElementById('agentPrompt').value.trim(),isolated=document.getElementById('agentIsolateWorktree').checked;if(!message)return;if(!agentToken){agentSetStatus('Connect a runtime before sending',false);notify('Connect Oasis first.');return}if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';agentClearMessages()}agentAppendMessage('user',message);document.getElementById('agentPrompt').value='';agentSetBusy(true);agentSetStatus(isolated?'Preparing isolated Git worktree…':'Starting task…',true);try{var payload={message:message,sessionId:isolated?null:(agentSessionId||null)};if(isolated)payload.isolation='worktree';var d=await agentApi('/api/chat',{method:'POST',body:JSON.stringify(payload)});agentActiveJob=d.jobId;if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentActivity('Isolated worktree created'+(d.branch?' · '+d.branch:'')+'. The main checkout stays untouched.')}else{agentSessionId=d.sessionId||agentSessionId;if(agentSessionId)sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}agentAssistantUpdate(agentActiveJob,'Oasis is working…');void agentPoll(agentActiveJob)}catch(err){agentAppendMessage('assistant','Could not start the task: '+err.message);agentSetStatus('Unable to start task',false);agentSetBusy(false)}});
+document.getElementById('agentForm').addEventListener('submit',async function(e){e.preventDefault();if(agentBusy)return;var message=document.getElementById('agentPrompt').value.trim(),isolated=document.getElementById('agentIsolateWorktree').checked;if(!message)return;if(!agentToken){agentSetStatus('Connect a runtime before sending',false);notify('Connect Oasis first.');return}if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');document.getElementById('agentHistorySelect').value='';agentClearMessages()}agentAppendMessage('user',message);document.getElementById('agentPrompt').value='';agentSetBusy(true);agentSetStatus(isolated?'Preparing isolated Git worktree…':'Starting task…',true);try{var payload={message:message,sessionId:isolated?null:(agentSessionId||null)};if(isolated)payload.isolation='worktree';if(window.oasisTakeAttachments){var attached=window.oasisTakeAttachments();if(attached.length)payload.images=attached}var d=await agentApi('/api/chat',{method:'POST',body:JSON.stringify(payload)});agentActiveJob=d.jobId;if(isolated){agentSessionId='';sessionStorage.removeItem('oasis.web.sessionId');agentActivity('Isolated worktree created'+(d.branch?' · '+d.branch:'')+'. The main checkout stays untouched.')}else{agentSessionId=d.sessionId||agentSessionId;if(agentSessionId)sessionStorage.setItem('oasis.web.sessionId',agentSessionId)}agentAssistantUpdate(agentActiveJob,'Oasis is working…');void agentPoll(agentActiveJob)}catch(err){agentAppendMessage('assistant','Could not start the task: '+err.message);agentSetStatus('Unable to start task',false);agentSetBusy(false)}});
 
 function terminalStatus(text){document.getElementById('terminalStatus').textContent=text}
 function terminalAppend(text){var message=String(text||'');if(oasisTerminal){oasisTerminal.write(message+'\r\n');oasisTerminal.scrollToBottom();return}var out=document.getElementById('terminalOutput');out.textContent=(out.textContent+'\n'+message).slice(-24000);out.scrollTop=out.scrollHeight}
@@ -2136,6 +2139,54 @@ C.hook('agentProcessEvent',function(prev){return function(jobId,event){
   else if(t==='failed')attentionNotify('Oasis stopped with an error',d.message||'');
   return prev(jobId,event);
 }});
+/* Images: paste a screenshot, drop files on the composer, or use the attach
+   button. Up to 4 PNG, JPEG, GIF or WebP images, 3.75 MB each; the server
+   checks type, file signature, size and whether the model accepts images. */
+var attachments=[],attachBox=$('agentAttachments'),attachInput=$('agentAttachInput'),attachBtn=$('agentAttachBtn');
+var ATTACH_TYPES=['image/png','image/jpeg','image/gif','image/webp'],ATTACH_MAX=3750000;
+function renderAttachments(){
+  if(!attachBox)return;attachBox.innerHTML='';attachBox.hidden=!attachments.length;
+  if(prompt)prompt.required=!attachments.length;
+  attachments.forEach(function(a,i){
+    var chip=document.createElement('figure');chip.className='agent-attachment';
+    var img=document.createElement('img');img.src=a.url;img.alt=a.name;chip.appendChild(img);
+    var cap=document.createElement('figcaption');cap.textContent=a.name;chip.appendChild(cap);
+    var rm=document.createElement('button');rm.type='button';rm.className='agent-attachment-remove';rm.setAttribute('aria-label','Remove '+a.name);rm.textContent='×';
+    rm.addEventListener('click',function(){attachments.splice(i,1);renderAttachments();if(prompt)prompt.focus()});chip.appendChild(rm);
+    attachBox.appendChild(chip);
+  });
+}
+function addAttachmentFiles(list){
+  Array.from(list||[]).forEach(function(file){
+    if(ATTACH_TYPES.indexOf(file.type)<0){if(window.notify)window.notify(file.name+' is not a PNG, JPEG, GIF or WebP image.');return}
+    if(file.size>ATTACH_MAX){if(window.notify)window.notify(file.name+' is larger than 3.75 MB.');return}
+    if(attachments.length>=4){if(window.notify)window.notify('Attach up to 4 images per message.');return}
+    var reader=new FileReader();
+    reader.onload=function(){var url=String(reader.result||''),comma=url.indexOf(',');if(comma<0||attachments.length>=4)return;
+      attachments.push({name:String(file.name||'pasted image').slice(0,80)||'pasted image',mediaType:file.type,data:url.slice(comma+1),url:url});renderAttachments()};
+    reader.readAsDataURL(file);
+  });
+}
+window.oasisAddAttachments=addAttachmentFiles;
+window.oasisTakeAttachments=function(){
+  if(!attachments.length)return [];
+  var taken=attachments.slice();attachments=[];renderAttachments();
+  var bubbles=document.querySelectorAll('#agentMessages .agent-message.user'),last=bubbles[bubbles.length-1];
+  if(last){var strip=document.createElement('div');strip.className='agent-message-images';taken.forEach(function(a){var img=document.createElement('img');img.src=a.url;img.alt=a.name;img.loading='lazy';strip.appendChild(img)});last.appendChild(strip)}
+  return taken.map(function(a){return {name:a.name,mediaType:a.mediaType,data:a.data}});
+};
+if(attachBtn&&attachInput){attachBtn.addEventListener('click',function(){attachInput.click()});attachInput.addEventListener('change',function(){addAttachmentFiles(attachInput.files);attachInput.value=''})}
+if(prompt)prompt.addEventListener('paste',function(e){
+  var items=(e.clipboardData&&e.clipboardData.items)||[],files=[];
+  for(var i=0;i<items.length;i++){if(items[i].kind==='file'&&/^image\//.test(items[i].type)){var f=items[i].getAsFile();if(f)files.push(f)}}
+  if(files.length){e.preventDefault();addAttachmentFiles(files)}
+});
+if(form){
+  form.addEventListener('dragover',function(e){if(e.dataTransfer&&Array.from(e.dataTransfer.types||[]).indexOf('Files')>=0){e.preventDefault();form.classList.add('drop-target')}});
+  form.addEventListener('dragleave',function(e){if(!form.contains(e.relatedTarget))form.classList.remove('drop-target')});
+  form.addEventListener('drop',function(e){if(!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();form.classList.remove('drop-target');addAttachmentFiles(e.dataTransfer.files)});
+  form.addEventListener('submit',function(){if(prompt&&!prompt.value.trim()&&attachments.length&&!C.busy)prompt.value=attachments.length>1?'Take a look at the attached images.':'Take a look at the attached image.'},true);
+}
 function queueMessage(){
   var text=prompt.value.trim();if(!text||queued.length>=5)return;
   queued.push(text);prompt.value='';renderQueue();autosize();syncSend();

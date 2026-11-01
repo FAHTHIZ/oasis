@@ -318,6 +318,17 @@ try {
     return status && /connected/i.test(status.textContent) && !/not connected|connection failed/i.test(status.textContent);
   }, null, { timeout: timeoutMs });
   await page.locator('#topbarProjectName').waitFor({ state: 'visible', timeout: timeoutMs });
+  // Images can be attached from the composer; each shows a removable thumbnail.
+  const tinyPng = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex');
+  await page.locator('#agentAttachInput').setInputFiles([{ name: 'screenshot.png', mimeType: 'image/png', buffer: tinyPng }]);
+  await page.locator('#agentAttachments .agent-attachment').first().waitFor({ state: 'visible', timeout: timeoutMs });
+  assert.equal(await page.locator('#agentAttachments .agent-attachment').count(), 1);
+  assert.equal(await page.locator('#agentPrompt').evaluate((node) => node.required), false, 'An attached image alone should be sendable.');
+  await assertAgentContrast(page, 'Agent image attachment · desktop');
+  await page.screenshot({ path: path.join(screenshotDir, 'agent-attachment-desktop.png'), fullPage: true });
+  await page.locator('#agentAttachments .agent-attachment-remove').click();
+  assert.equal(await page.locator('#agentAttachments .agent-attachment').count(), 0);
+  assert.equal(await page.locator('#agentAttachments').isHidden(), true);
   await assertAgentContrast(page, 'Agent workspace · desktop');
   await page.locator('#agentModelButton').click();
   await page.waitForFunction(() => window.scrollY > 0, null, { timeout: timeoutMs });

@@ -77,6 +77,7 @@ Same agent, same safety policy, two front ends. `oasis web` opens a local browse
 | Steer while it works | Enter (Tab queues) | Enter (Alt+Enter queues) | VS Code chat panel |
 | Review changes | `/diff`, inline diffs | Changes panel, per-file diffs | Native diff view, accept or reject |
 | Approvals | Inline prompt | Approval card with the exact command or diff | Inline in the panel |
+| Images | Ctrl+V pastes a screenshot, or `@screenshot.png` | Paste, drag and drop, or attach | `@screenshot.png` in the chat panel |
 | Low-power devices | Lite or no animation on 2-CPU, SSH, Linux console, CI, screen readers | Respects reduced-motion, works as an offline-capable PWA | Editor theme |
 
 ## Install
