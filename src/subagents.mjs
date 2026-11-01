@@ -13,6 +13,7 @@
 //   You are a test specialist...
 // Locations (later wins): ~/.claude/agents, ~/.config/oasis/agents, .claude/agents, .oasis/agents
 import { readdir, readFile } from 'node:fs/promises';
+import { frontMatterValue } from './frontmatter.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -75,6 +76,7 @@ export function parseFrontMatter(text) {
     const kv = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
     if (!kv) continue;
     let value = kv[2].trim();
+    if (/^[>|][+-]?\d*$/.test(value)) value = frontMatterValue(match[1], kv[1]);
     if (/^".*"$|^'.*'$/.test(value)) value = value.slice(1, -1);
     if (/^\[.*\]$/.test(value)) value = value.slice(1, -1).split(',').map((item) => item.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
     data[kv[1].toLowerCase()] = value;

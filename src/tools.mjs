@@ -1,4 +1,5 @@
 import * as gitSafety from './git-safety.mjs';
+import { frontMatterValue } from './frontmatter.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
@@ -1335,10 +1336,7 @@ async function installExternalSkill(args, context, root) {
 function parseSkillMetadata(content, fallbackName) {
   const front = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   const metadata = front ? front[1] : '';
-  const read = (key) => {
-    const match = metadata.match(new RegExp('^' + key + ':\\s*(.+)$', 'mi'));
-    return match ? match[1].trim().replace(/^["']|["']$/g, '') : '';
-  };
+  const read = (key) => frontMatterValue(metadata, key);
   const rawName = read('name') || fallbackName;
   const name = /^[a-z][a-z0-9-]{0,63}$/i.test(rawName) ? rawName : fallbackName;
   const description = (read('description') || 'Workflow instructions for ' + name + '.').slice(0, 320);
