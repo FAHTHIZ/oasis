@@ -2,6 +2,11 @@
 
 Notable user-facing changes to the OASIS VS Code integration are recorded here.
 
+## Unreleased
+
+- Messages sent while OASIS is working steer the current turn (the agent reads them at its next step) instead of waiting.
+- Add an Attach button that inserts `@path` mentions for PNG, JPEG, GIF or WebP images in the workspace, so the model can see screenshots.
+
 ## 0.2.0
 
 - Add the OASIS activity-bar chat panel and commands for opening or starting chats.
