@@ -6,7 +6,7 @@ import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, SHARED_TASK_READ_
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 
 export const TOOL_SEARCH_DEFINITION = fn('tool_search',
-  'Find and load deferred tools (usually MCP tools) by keyword. Use "select:name1,name2" to load exact tools. Loaded tools become callable on your next step.',
+  'Find and load deferred TOOLS (usually MCP tools) by keyword. It does not search code or files: use grep or glob_files for that. Use "select:name1,name2" to load exact tools. Loaded tools become callable on your next step.',
   { query: { type: 'string', description: 'Keywords, or select:<comma-separated tool names>.' }, max_results: { type: 'integer', minimum: 1, maximum: 20 } }, ['query']);
 
 export const SESSION_TOOL_DEFINITIONS = [
@@ -95,7 +95,7 @@ export function searchTools(session, { query, max_results: max = 5 } = {}) {
     session.toolDefinitions.push(deferred.get(name));
     deferred.delete(name);
   }
-  return { loaded: matches, remaining_deferred: deferred.size, message: matches.length ? 'Loaded ' + matches.join(', ') + '. They are callable now.' : 'No deferred tools matched. Try other keywords.' };
+  return { loaded: matches, remaining_deferred: deferred.size, message: matches.length ? 'Loaded ' + matches.join(', ') + '. They are callable now.' : 'No deferred tools matched. tool_search only finds tools, not code: to find code or files use grep, glob_files or list_files, and to create a file use write_file.' };
 }
 
 export async function monitorCommand(session, args = {}, { signal } = {}) {

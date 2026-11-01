@@ -223,8 +223,18 @@ export function extractTextToolCalls(content, availableNames) {
     const fencedBlocks = [...content.matchAll(/```(?:json|tool_call|tool)?\s*\n[\s\S]*?\n?```/g)];
     const prose = fencedBlocks.reduce((rest, block) => rest.replace(block[0], ''), content).trim();
     for (let match; prose.length <= 160 && !/\n\s*\S[\s\S]*\n\s*\S/.test(prose) && (match = fenced.exec(content));) {
-      const parsed = tryParse(match[1].trim());
-      const values = parsed.ok ? (Array.isArray(parsed.value) ? parsed.value : [parsed.value]) : [];
+      const body = match[1].trim();
+      const parsed = tryParse(body);
+      let values = parsed.ok ? (Array.isArray(parsed.value) ? parsed.value : [parsed.value]) : [];
+      if (!parsed.ok) {
+        // Several call objects one after another (JSON Lines) in one fence.
+        const objects = balancedObjects(body);
+        const rest = objects.reduceRight((text, object) => text.slice(0, object.start) + text.slice(object.end), body);
+        if (objects.length > 1 && !rest.trim()) {
+          const each = objects.map((object) => tryParse(object.text));
+          if (each.every((item) => item.ok)) values = each.map((item) => item.value);
+        }
+      }
       const found = values.map((value) => asCall(value, toolNames)).filter(Boolean);
       if (found.length && found.length === values.length) {
         calls.push(...found);

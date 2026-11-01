@@ -72,3 +72,9 @@ test('fencedFileFromReply ignores pseudo-code that calls agent tools', async () 
   const reply = '```javascript\nconst existing = read_file(\'src/lib.mjs\');\nwrite_file(\'src/lib.mjs\', existing);\n```';
   assert.equal(fencedFileFromReply('Create src/lib.mjs', reply), null);
 });
+
+test('fencedFileFromReply never writes JSON tool calls into a file', async () => {
+  const { fencedFileFromReply } = await import('../src/agent.mjs');
+  const reply = '```\n{"name": "read_file", "arguments": {"path": "src/lib.mjs"}}\n{"name": "edit_file", "arguments": {"path": "src/lib.mjs"}}\n```';
+  assert.equal(fencedFileFromReply('Create src/lib.mjs', reply), null);
+});
