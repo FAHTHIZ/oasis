@@ -22,6 +22,53 @@ function inputValue(input, key) {
   return input && typeof input === 'object' && typeof input[key] === 'string' ? input[key] : '';
 }
 
+function diffBody(prefix, value) {
+  const normalized = String(value == null ? '' : value).replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  return lines.map((line) => prefix + line);
+}
+
+/**
+ * A reviewable, redacted text diff for file-edit approvals. This is display
+ * data only; it never changes the proposed input or how approval is enforced.
+ */
+export function formatApprovalDiff(toolName, input = {}) {
+  const tool = String(toolName || '').toLowerCase();
+  const path = redactApprovalSecrets(inputValue(input, 'path') || inputValue(input, 'notebook_path') || 'requested file');
+  const chunks = [];
+  const addChange = (oldText, newText, heading) => {
+    chunks.push('--- a/' + path, '+++ b/' + path, '@@ ' + heading + ' @@');
+    if (oldText !== undefined) chunks.push(...diffBody('-', redactApprovalSecrets(oldText)));
+    if (newText !== undefined) chunks.push(...diffBody('+', redactApprovalSecrets(newText)));
+  };
+
+  if (tool === 'edit_file') {
+    addChange(inputValue(input, 'old_string'), inputValue(input, 'new_string'), 'proposed replacement');
+  } else if (tool === 'multi_edit' && Array.isArray(input.edits)) {
+    input.edits.forEach((edit, index) => {
+      if (edit && typeof edit === 'object') addChange(
+        typeof edit.old_string === 'string' ? edit.old_string : '',
+        typeof edit.new_string === 'string' ? edit.new_string : '',
+        'change ' + (index + 1)
+      );
+    });
+  } else if (tool === 'write_file') {
+    chunks.push('--- /dev/null', '+++ b/' + path, '@@ proposed file contents @@');
+    chunks.push(...diffBody('+', inputValue(input, 'content')));
+  } else if (tool === 'notebook_edit' && typeof input.patch === 'string') {
+    chunks.push(redactApprovalSecrets(input.patch));
+  } else if (tool === 'apply_patch' && typeof input.patch === 'string') {
+    chunks.push(redactApprovalSecrets(input.patch));
+  }
+
+  if (!chunks.length) return '';
+  let output = redactApprovalSecrets(chunks.join('\n'));
+  const max = 18000;
+  if (output.length > max) output = output.slice(0, max) + '\n… [diff truncated for display]';
+  return output;
+}
+
 export function formatApprovalMessage(prompt, meta = {}) {
   const original = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim()).slice(0, 3500);
   const tool = String(meta && meta.tool || '').toLowerCase();
@@ -64,5 +111,5 @@ export function formatApprovalMessage(prompt, meta = {}) {
   }
 
   if (risky) message = 'WARNING — RISKY ACTION\n' + message;
-  return { message, risky };
+  return { message, risky, diff: formatApprovalDiff(tool, input) };
 }
