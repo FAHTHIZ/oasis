@@ -143,6 +143,10 @@ sequenceDiagram
   A-->>U: Events, result, and verification state
 ~~~
 
+### Steering a running turn
+
+A message sent while a turn runs is queued on the session (`steerSession` in `src/agent.mjs`, at most `STEER_LIMIT` = 20 pending). Before each model request after the first step, `deliverSteering` appends pending messages as real user messages, so the model reads them at its next step without losing tool results already gathered. If the model is about to finish while messages are pending, the turn continues so they are handled. Messages the turn never consumed are returned (`undeliveredSteering`) and sent as the next prompt, never dropped. Subagents never consume the parent's messages. Surfaces: Enter in the terminal (Tab queues for after the turn), `POST /api/jobs/:id/steer` in the browser (Alt+Enter queues), `{"type":"user","steer":true}` lines in stream-json headless mode, and the VS Code chat panel.
+
 The model proposes actions; OASIS owns the local policy decision and execution boundary. A model response is not itself proof that a file changed correctly or that a test passed.
 
 ## Model and provider boundary
@@ -247,7 +251,7 @@ For a non-loopback listener, HTTPS with a user-supplied certificate and private 
 
 ### Chat and approvals
 
-Browser chat jobs call the shared agent runtime and stream bounded events for assistant output, tool activity, usage, completion, and approval requests. Consequential operations can be approved or denied in the browser. Cancellation denies outstanding approvals, aborts supported model/command operations, and records a terminal state; it cannot undo changes that completed before cancellation.
+Browser chat jobs call the shared agent runtime and stream bounded events for assistant output, tool activity, usage, completion, and approval requests. Each model step renders as its own message bubble, and replies render as Markdown while they stream (throttled; slower on lite-motion devices). Motion level (`full`, `lite`, `off`) is chosen at page load from CPU cores, device memory, Data Saver and reduced-motion, and can be overridden with `?motion=`. Consequential operations can be approved or denied in the browser. Cancellation denies outstanding approvals, aborts supported model/command operations, and records a terminal state; it cannot undo changes that completed before cancellation.
 
 ### Terminal
 
