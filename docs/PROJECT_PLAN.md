@@ -135,6 +135,9 @@ Potential future areas include remote runner infrastructure, trusted-device pair
 - Keep the changelog split into the current candidate and future Unreleased changes.
 - Treat research notes as non-normative: proposals are not shipped features or commitments.
 
+
+A stable 1.0.0 publication is deliberately a separate maintainer action. Before dispatch, update `package.json` so `oasisRelease.channel` is `stable` (and the candidate state is cleared), add curated `docs/releases/v1.0.0.md` notes, and confirm all manual qualification gates. The workflow requires both `publish_release: true` and `confirm_stable_release: true`, checks that the package channel is `stable`, and waits for same-commit quality, site, and installer workflows. Normal pushes build/validate artifacts but do not publish a GitHub Release.
+
 ## 9. Source-of-truth order
 
 1. Executed code and tests for actual behavior.
