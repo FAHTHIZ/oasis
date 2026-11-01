@@ -1,5 +1,7 @@
 # OASIS user-guide map
 
+The current development source is `1.0.0-rc.1` (Release Candidate / Production Qualification); stable installers still resolve the published `v0.4.0` release. The [project plan](PROJECT_PLAN.md) owns current support status and release gates.
+
 The [full user guide](USER_GUIDE.md) is the comprehensive behavior reference. It remains at its existing path so older links stay valid. This map groups the manual by the task a reader is trying to complete; it does not duplicate the instructions.
 
 ## First session
