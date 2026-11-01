@@ -330,6 +330,17 @@ try {
     }), () => ({ event: 'activity-result-return', after: state() }));
     wrap('agentSetBusy', (args) => ({ event: 'set-busy-before', value: !!args[0], state: state() }),
       (args) => ({ event: 'set-busy-after', value: !!args[0], state: state() }));
+    for (const name of ['oasisBeginActivityTurn', 'oasisFinishActivityTurn']) {
+      const original = window[name];
+      if (typeof original !== 'function') continue;
+      window[name] = function (...args) {
+        const snapshot = () => typeof window.oasisActivityState === 'function' ? window.oasisActivityState() : null;
+        trace.push({ event: name + '-before', state: snapshot() });
+        const result = original.apply(this, args);
+        trace.push({ event: name + '-after', result, state: snapshot() });
+        return result;
+      };
+    }
   });
   await page.locator('#agentPrompt').fill('Run the browser end-to-end fixture and report its result.');
   await measureFrames(page, 'approval card opening', async () => {
@@ -363,15 +374,17 @@ try {
       '; page errors=' + JSON.stringify(pageErrors));
   }
 
+  await page.waitForFunction(() => window.oasisCore?.busy === false &&
+    typeof window.oasisActivityState === 'function' && window.oasisActivityState().active === false,
+  null, { timeout: timeoutMs });
   const activitySummary = page.locator('#agentMessages .turn-work');
   try {
     await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
   } catch (error) {
     const activityDebug = await page.evaluate(() => ({
       preference: localStorage.getItem('oasis.web.collapseWork') || 'on',
-      runtimeBusy: typeof window.agentBusy === 'boolean' ? window.agentBusy : null,
-      workStart: Number(window.workStart || 0),
-      activityGroupArrayLength: Array.isArray(window.activityGroups) ? window.activityGroups.length : null,
+      runtimeBusy: window.oasisCore?.busy ?? null,
+      activityState: typeof window.oasisActivityState === 'function' ? window.oasisActivityState() : null,
       groups: [...document.querySelectorAll('#agentMessages .activity-group')].map((node) => ({
         category: node.dataset.category || '',
         parent: node.parentElement?.id || node.parentElement?.className || '',
