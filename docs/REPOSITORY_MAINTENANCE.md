@@ -7,22 +7,20 @@ This document is the canonical record for repository layout, intentional copies,
 | Path | Purpose |
 |---|---|
 | `src/` | Runtime modules and service boundaries. Keep security, storage, process, network, provider, session and integration services independently testable. |
-| `test/` | Focused subsystem and integration regression tests. Keep tests near their behavior boundary; similar filenames do not prove duplicate coverage. |
-| `index.html`, `src/web.mjs`, `assets/` | Local browser workspace/PWA. |
+| `index.html`, `src/web.mjs`, `assets/`, `manifest.webmanifest`, `sw.js` | Connected local browser workspace/PWA shell, local API surface, styles, shared app assets, manifest and service worker. |
 | `site/` | Separate static public landing page deployed through GitHub Pages. |
 | `desktop/` | Electron host, secure-secret bridge and desktop failure surfaces. |
 | `ide/vscode/` | VS Code-compatible extension and chat bridge. |
-| `skills/` | Shared portable Agent Skills. |
-| `plugins/` | Reviewed example/plugin packages and catalog. |
+| `test/` | Focused subsystem and integration regression tests. Keep tests near their behavior boundary; similar filenames do not prove duplicate coverage. |
 | `evals/tasks/` | Frozen task prompts, snapshots, reference patches and independent verifiers. |
 | `evals/snapshots/` | Immutable evaluation repository snapshots. Never silently replace with live source. |
-| `docs/` | Canonical product, architecture, release, security, benchmark and user documentation; supporting research lives under `docs/research/`. |
-| `.github/workflows/`, `.github/scripts/` | CI, release, public-site and guarded branch-maintenance automation. |
-| `assets/` | Shared app artwork, fonts, styles, and demo media. Keep public-site deployment copies under `site/assets/` when the deployed site needs a self-contained asset tree. |
 | `bench/` | Focused performance and subsystem benchmark scripts; benchmark outputs are evidence, not product claims by themselves. |
+| `plugins/` | Reviewed example/plugin packages and catalog. |
+| `skills/` | Shared portable Agent Skills. |
 | `scripts/` | Installers, environment checks, packaging helpers, local maintenance scripts, and developer utilities. |
-| `index.html`, `manifest.webmanifest`, `sw.js` | Root browser-workspace shell, PWA metadata, and service-worker entry. |
-| `package.json`, lockfile | Package identity, Node engine floor, dependencies, export surface, scripts, and desktop build configuration. Keep these in sync with the release process. |
+| `.github/workflows/`, `.github/scripts/` | CI, release, public-site and guarded branch-maintenance automation. |
+| `docs/` | Canonical product, architecture, release, security, benchmark and user documentation; release notes live under `docs/releases/`, supporting research under `docs/research/`. |
+| `package.json`, lockfile | Package identity, Node engine floor, dependencies, export surface, scripts, and desktop build configuration. Keep these in sync with release and test contracts. |
 | Root `README.md`, `CHANGELOG.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md` | Public entry point, user-facing history, legal terms, vulnerability reporting, and contribution contract. Keep the root concise; detailed guidance belongs under `docs/`. |
 
 ## Intentional exact-content copies
@@ -68,6 +66,42 @@ The October 29 duplicate sweep recorded three maintenance fixes:
 - Replaced a duplicate desktop persistence assertion with coverage for the distinct non-desktop fallback path.
 
 These are historical change notes, not current verification evidence. Use the latest same-SHA Quality and release workflow results.
+
+## Modularization and migration rules
+
+The repository is feature-rich, but several implementation files are large enough to make review and change isolation harder. Do not respond with a one-shot directory rename or a mechanical file split. Refactor along tested responsibility boundaries, in small main-only commits.
+
+### Runtime modules
+
+- Keep the existing public entry points and import paths working while extracting internal domain modules. In particular, treat `src/agent.mjs`, `src/cli.mjs`, `src/tools.mjs`, `src/slash.mjs`, and `src/web.mjs` as high-risk orchestration surfaces, not candidates for blind splitting.
+- Extract cohesive subsystems behind narrow interfaces: provider adapters; session/context lifecycle; tool definitions versus execution; permission/risk policy; process/PTY lifecycle; verification; integrations; and transport/API handlers.
+- Preserve dependency direction: domain logic must not import CLI, browser, Electron or editor presentation code. Adapters may depend on domain contracts; avoid circular imports and hidden global state.
+- Keep security decisions in one enforcement path. A refactor must not create an alternate path that bypasses workspace validation, approval policy, redaction, execution limits, or audit events.
+- Preserve the current public exports, CLI commands, configuration keys, state formats and plugin interfaces unless an intentional compatibility change is separately designed and documented.
+
+### Browser workspace
+
+- The root `index.html` is the connected browser workspace; `site/index.html` is a separate public landing page. Never merge or conflate them.
+- Extract browser behavior by responsibility (for example activity rendering, chat/session UI, approvals, settings, terminal, and workspace utilities) while retaining explicit initialization order and a small, documented bridge to shared state.
+- Prefer external scripts/styles with clear ownership over a growing inline application. Keep static asset allowlists, cache versioning, offline behavior, CSP assumptions, and `scripts/check-site.mjs` in sync when assets move.
+- Do not duplicate runtime policy in browser code. The browser is a presentation client; the authenticated local API and shared runtime own execution and permission decisions.
+
+### Tests, evaluations, and documentation
+
+- The current test command uses the top-level glob `test/*.test.mjs`. Moving tests into nested folders requires an explicit test-discovery update and proof that no tests were dropped from CI.
+- Organize tests by behavior and fixtures, not by arbitrary alphabetic buckets. Keep adversarial security regressions close to the subsystem they protect.
+- Never move or regenerate frozen evaluation snapshots as part of a refactor. Validate fixture quarantine and the independent task verifiers after any test/eval path change.
+- `docs/ARCHITECTURE.md` owns the system map and source map. Update it when module ownership or runtime boundaries actually change; do not create competing architecture inventories.
+- `docs/USER_GUIDE.md` remains at its stable path while the new [user-guide map](USER_GUIDE_MAP.md) provides task navigation. Split chapters only with stable compatibility anchors or redirects for existing inbound links.
+
+### Required sequence for a subsystem extraction
+
+1. Record current behavior, imports, exports, state ownership and test coverage.
+2. Add or identify contract tests before moving implementation.
+3. Extract one responsibility without changing public behavior.
+4. Update source maps, package files, static asset allowlists and service-worker cache inputs where relevant.
+5. Run focused tests, then `npm run check`, then the complete same-commit CI matrix.
+6. Review the diff for dependency cycles, widened permissions, compatibility drift, missing tests and stale documentation.
 
 ## Maintenance discipline
 
