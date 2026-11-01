@@ -6,7 +6,8 @@ This document is the canonical record for repository layout, intentional copies,
 
 | Path | Purpose |
 |---|---|
-| `src/` | Runtime modules and service boundaries. Keep security, storage, process, network, provider, session and integration services independently testable. |
+| `src/` | Shared runtime modules and service boundaries. The code is currently organized as top-level domain modules; use [the source map](../src/README.md) before adding or extracting modules. |
+| `test/` | Focused subsystem and integration tests. The current top-level `test/*.test.mjs` pattern is intentional; see [the test map](../test/README.md) before changing paths or discovery rules. |
 | `index.html`, `src/web.mjs`, `assets/`, `manifest.webmanifest`, `sw.js` | Connected local browser workspace/PWA shell, local API surface, styles, shared app assets, manifest and service worker. |
 | `site/` | Separate static public landing page deployed through GitHub Pages. |
 | `desktop/` | Electron host, secure-secret bridge and desktop failure surfaces. |
@@ -22,6 +23,13 @@ This document is the canonical record for repository layout, intentional copies,
 | `docs/` | Canonical product, architecture, release, security, benchmark and user documentation; release notes live under `docs/releases/`, supporting research under `docs/research/`. |
 | `package.json`, lockfile | Package identity, Node engine floor, dependencies, export surface, scripts, and desktop build configuration. Keep these in sync with release and test contracts. |
 | Root `README.md`, `CHANGELOG.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md` | Public entry point, user-facing history, legal terms, vulnerability reporting, and contribution contract. Keep the root concise; detailed guidance belongs under `docs/`. |
+
+
+## Source and test organization
+
+The current root-level layout is deliberate: the runtime is a single Node package with shared entry points and many independently imported modules. Do not create an `apps/` or `packages/` monorepo split, move all runtime modules into speculative folders, or relocate test files just to make the tree look more conventional. Those moves would affect relative imports, package file lists, scripts, test discovery, bundling, install paths, and plugin loaders.
+
+Use the source and test maps to identify existing domain boundaries. The safe path is incremental: extract a tested responsibility, keep a compatibility re-export when needed, update all importers and packaging lists, and run the complete same-commit quality matrix. A broad directory migration is a separate engineering project and should have a dependency map and compatibility test before the first move.
 
 ## Intentional exact-content copies
 
