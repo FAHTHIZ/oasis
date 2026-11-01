@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0--rc.1-8A7CFF.svg?style=flat" alt="Version 1.0.0 Release Candidate 1" />
+  <img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0 Release Candidate 1" />
   <img src="https://img.shields.io/badge/stage-release%20candidate-5B8DEF.svg?style=flat" alt="Release candidate" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
 </p>
