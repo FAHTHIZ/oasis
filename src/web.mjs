@@ -1529,7 +1529,7 @@ export function createOasisWebServer(options = {}) {
           path: target.relative.split(path.sep).join('/'),
           content,
           bytes: buffer.length,
-          lineCount: content.split(/\\r?\\n/).length,
+          lineCount: content.length ? content.split(/\r?\n/).length - (content.endsWith('\n') ? 1 : 0) : 0,
           modifiedAt: info.mtime.toISOString()
         });
       } catch (error) {
