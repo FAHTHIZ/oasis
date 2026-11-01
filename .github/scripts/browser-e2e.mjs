@@ -395,7 +395,7 @@ try {
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
   try {
     await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
-      .some((element) => element.textContent.includes('Browser end-to-end fixture completed successfully.')),
+      .some((element) => element.textContent.includes('A focused Node test passed for the edited file.')),
     null, { timeout: timeoutMs });
   } catch (error) {
     const messages = await page.locator('#agentMessages').innerText().catch(() => '[messages unavailable]');
@@ -551,7 +551,7 @@ try {
   console.log('[frames 4x CPU] worst measured frame: ' + worstFrame.toFixed(1) + 'ms across ' + frameMetrics.length + ' interactions.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop-after-switch.png'), fullPage: true });
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
-  assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
+  assert.ok(response.some((text) => text.includes('A focused Node test passed for the edited file.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
   assert.equal(completionCalls, 9, 'The agent should create, read, edit, create a verification test, review the diff, pass the test, approve three consequential actions, and report the results.');
   await page.waitForFunction(() => document.querySelectorAll('#sidebarChatList [data-sidebar-session-id]').length > 0,
