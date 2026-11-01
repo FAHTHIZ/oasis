@@ -24,7 +24,7 @@ const required = [
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
   'id="features"', 'id="providers"', 'id="safety"', 'id="docs"',
   'https://github.com/FAHTHIZ/oasis/releases', 'https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md', 'no terminal required',
-  'Latest stable desktop downloads', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0',
+  'Get OASIS', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
   'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
   'property="og:image"', 'summary_large_image', '<span class="stage-badge">RC1</span>', 'Release Candidate · Open source · Apache-2.0', '1.0.0-rc.1', 'docs/PROJECT_PLAN.md'
