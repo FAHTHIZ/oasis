@@ -312,7 +312,17 @@ function adoptReportedContextWindow(session, error, env) {
     if (deferred) {
       changed = true;
       const system = (session.messages || []).find((message) => message && message.role === 'system');
-      if (system && typeof system.content === 'string' && !system.content.includes('tool_search')) system.content += '\n\n' + deferredToolsPrompt(session);
+      // Apply to the live system message and to baseSystemPrompt, which
+      // refreshTodoPrompt rebuilds the system message from on later steps.
+      const swap = session.compactPromptSwap;
+      session.compactPromptSwap = null;
+      const shrink = (text) => {
+        let next = swap && text.startsWith(swap.full) ? swap.compact + text.slice(swap.full.length) : text;
+        if (!next.includes('tool_search')) next += '\n\n' + deferredToolsPrompt(session);
+        return next;
+      };
+      if (typeof session.baseSystemPrompt === 'string') session.baseSystemPrompt = shrink(session.baseSystemPrompt);
+      if (system && typeof system.content === 'string') system.content = shrink(system.content);
     }
   }
   return changed;
@@ -487,8 +497,21 @@ export function compactSkillLines(skillDescriptions) {
   }).join('\n');
 }
 
+// Small windows: the README is background, so keep only its opening.
+export function compactProjectContext(projectContext, limit = 2500) {
+  const text = String(projectContext || '');
+  const start = text.search(/--- Project context: [^\n]*README[^\n]* ---\n/i);
+  if (start < 0) return text;
+  const end = text.indexOf('\n\n--- ', start + 1);
+  const block = end < 0 ? text.slice(start) : text.slice(start, end);
+  if (block.length <= limit) return text;
+  const clipped = block.slice(0, limit).replace(/\s+\S*$/, '') + '\n[README shortened for a small context window; read_file README.md for the rest]';
+  return text.slice(0, start) + clipped + (end < 0 ? '' : text.slice(end));
+}
+
 function compactSystemPrompt(root, projectContext, skillDescriptions = '', environment = '') {
   skillDescriptions = compactSkillLines(skillDescriptions);
+  projectContext = compactProjectContext(projectContext);
   return [
     'You are Oasis OSS, a coding agent running in the user’s workspace. Do the work with tools; do not just describe steps.',
     'Loop: inspect the code, make the smallest correct change, run a relevant test or check, read the result, then report what actually happened.',
@@ -638,6 +661,8 @@ export async function createSession({ root, config, restore = null, permissionMo
   const smallContext = !bare && contextWindowSize(contextProbe.config, env) <= SMALL_CONTEXT_TOKENS && !/^(?:0|false|off|no)$/i.test(String(env.OASIS_SMALL_CONTEXT_TOOLS || ''));
   let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : (smallContext ? compactSystemPrompt : systemPrompt)(dynamicOut ? '(given in the first user message)' : root, projectContext, visibleSkills, dynamicOut ? '' : environmentText);
   const dynamicSections = dynamicOut ? ['The current workspace root is: ' + root, 'Environment:\n' + environmentText] : null;
+  // If an overflow later reveals a small window, swap the base prompt for the compact one.
+  const compactPromptSwap = !smallContext && !systemPromptOverride && !dynamicOut && !bare ? { full: systemText, compact: compactSystemPrompt(root, projectContext, visibleSkills, environmentText) } : null;
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   const channelEntries = parseChannelEntries(channels);
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });
@@ -695,6 +720,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
   session.modelEnv = env;
+  if (compactPromptSwap) session.compactPromptSwap = compactPromptSwap;
   if (env.OASIS_DEBUG && env.OASIS_DEBUG !== '0' && !debugEnabled()) {
     const { enableDebug } = await import('./debug-log.mjs');
     session.debugFile = enableDebug({ categories: env.OASIS_DEBUG, file: env.OASIS_DEBUG_FILE || null, env, sessionId: session.sessionId || null });
@@ -716,7 +742,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.autoMemory = true;
     session.recalledMemoryIds = new Set();
     session.toolDefinitions = session.toolDefinitions.concat(MEMORY_TOOL_DEFINITIONS);
-    try { const memoryText = await memoryIndexPrompt(root, { env }); if (dynamicSections) dynamicSections.push(memoryText); else systemText += '\n\n' + memoryText; } catch {}
+    try { const memoryText = await memoryIndexPrompt(root, { env, compact: Boolean(smallContext) }); if (dynamicSections) dynamicSections.push(memoryText); else systemText += '\n\n' + memoryText; } catch {}
   }
   // Standing corrections ("stop saying X") from settings and from earlier sessions.
   addCorrections(session, Array.isArray(loadedSettings.avoidPhrases) ? loadedSettings.avoidPhrases.filter((item) => typeof item === 'string') : []);

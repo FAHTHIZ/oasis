@@ -112,7 +112,7 @@ export async function loadMemory(root, options = {}) {
     if (file.label !== 'readme') content = await readImports(root, content);
     const name = file.label === 'user' || file.label === 'parent' ? file.path.replace(os.homedir(), '~') : path.relative(path.resolve(root), file.path);
     const heading = file.label === 'user' ? 'User memory (applies to all projects)' : file.label === 'local' ? 'Personal project memory' : file.label === 'parent' ? 'Parent directory memory' : 'Project context';
-    const block = '--- ' + heading + ': ' + name + ' ---\n' + (file.label === 'readme' ? content.slice(0, PER_FILE_LIMIT) : clipInstruction(name, content, notices));
+    const block = '--- ' + heading + ': ' + name + ' ---\n' + (file.label === 'readme' ? readmeText(content).slice(0, PER_FILE_LIMIT) : clipInstruction(name, content, notices));
     if (file.label === 'readme') readmePart = block;
     else parts.push(block);
   }
@@ -133,6 +133,21 @@ export async function loadMemory(root, options = {}) {
   const instructionsOnly = parts.slice(0, readmePart ? -1 : undefined).join('\n\n');
   if (instructionsOnly.length > MAX_TOTAL - marker.length) notices.push('Instruction files total ' + instructionsOnly.length + ' characters; only the first ' + MAX_TOTAL + ' were loaded.');
   return joined.slice(0, MAX_TOTAL - marker.length) + marker;
+}
+
+// README as background: drop markup the model cannot use (HTML comments, badges,
+// images, layout tags) so the character budget goes to the actual prose.
+export function readmeText(content) {
+  return String(content)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<img\b[^>]*>/gi, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[\s*\]\([^)]*\)/g, '')
+    .replace(/<\/?(?:p|div|a|picture|source|table|tr|td|th|tbody|thead|br|sup|sub|span|details|summary|center|strong|em|b|i)\b[^>]*>/gi, '')
+    .replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (match, level, text) => '#'.repeat(Number(level)) + ' ' + text.trim())
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 // Claude Code rules: every .md file under a rules/ directory (recursive, sorted).
