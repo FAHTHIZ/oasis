@@ -80,3 +80,32 @@ test('a first request that overflows a small local window drops to the small-con
   assert.equal(events[0].smallContextTools, true);
   assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'tool_search'));
 });
+
+test('a llama-server overflow on an unprobed port identifies the server for prompt progress', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-overflow-llama-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const bodies = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const parsed = body ? JSON.parse(body) : {};
+    bodies.push(parsed);
+    if ((parsed.tools || []).length > 20) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { code: 400, type: 'exceed_context_size_error', message: 'request (16695 tokens) exceeds the available context size (16384 tokens), try increasing it' } }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write('data: ' + JSON.stringify({ choices: [{ delta: { role: 'assistant', content: 'Ready.' } }] }) + '\n\n');
+    res.end('data: [DONE]\n\n');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'local.gguf', apiKey: '', maxSteps: 3 } });
+  assert.equal(session.localContext, undefined);
+  await runAgentTurn(session, 'hello', { autoApprove: true, onDelta: () => {}, onModelWait: () => {} });
+  assert.equal(session.localContext.server, 'llama.cpp');
+  assert.equal(session.localContext.contextLength, 16384);
+  await runAgentTurn(session, 'again', { autoApprove: true, onDelta: () => {}, onModelWait: () => {} });
+  assert.equal(bodies.at(-1).return_progress, true);
+});
