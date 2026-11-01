@@ -11,22 +11,23 @@ This document is the canonical statement of product scope, maturity, supported s
 
 ## Current verification snapshot
 
-**Runtime and CI audit baseline:** [`f83d73e69ec24ce5a57588784de7531d2c585934`](https://github.com/FAHTHIZ/oasis/commit/f83d73e69ec24ce5a57588784de7531d2c585934)  
-**Latest documentation snapshot in this pass:** [`3c93154b371586053f6691fe223686496528b2e8`](https://github.com/FAHTHIZ/oasis/commit/3c93154b371586053f6691fe223686496528b2e8)  
+**Browser lifecycle fix:** [`f83d73e69ec24ce5a57588784de7531d2c585934`](https://github.com/FAHTHIZ/oasis/commit/f83d73e69ec24ce5a57588784de7531d2c585934)  
+**Browser E2E fixture follow-up:** [`31bfdb7065d4a0f7c6098984e3a750eaa72dfde1`](https://github.com/FAHTHIZ/oasis/commit/31bfdb7065d4a0f7c6098984e3a750eaa72dfde1)  
+**Latest documentation snapshot in this pass:** [`48fc802e7855b82115d6260bd90a1a055567374b`](https://github.com/FAHTHIZ/oasis/commit/48fc802e7855b82115d6260bd90a1a055567374b)  
 **Inspection date:** November 1, 2026  
 **Release metadata:** package `1.0.0`, Release Candidate 1; no RC tag or public 1.0.0 release has been created.
 
 | Workflow on this exact commit | Current result |
 |---|---|
-| [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272634369) | Queued/pending at inspection; no job result available yet. |
-| [Installer checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272634233) | Passed. |
-| [Desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/41272634253) | In progress at inspection. |
-| [Public site and repository metadata](https://github.com/FAHTHIZ/oasis/actions/runs/41272634248) | In progress at inspection. |
-| [Branch cleanup](https://github.com/FAHTHIZ/oasis/actions/runs/41272634284) | Passed. |
+| [Quality Checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272900653) | Pending at inspection; no completed job results available yet. |
+| [Installer checks](https://github.com/FAHTHIZ/oasis/actions/runs/41272900715) | Queued at inspection. |
+| [Desktop packaging](https://github.com/FAHTHIZ/oasis/actions/runs/41272900640) | Queued at inspection. |
+| [Public site and repository metadata](https://github.com/FAHTHIZ/oasis/actions/runs/41272900621) | In progress at inspection. |
+| [Branch cleanup](https://github.com/FAHTHIZ/oasis/actions/runs/41272900625) | Queued at inspection. |
 
-The latest runtime change reconciles the browser UI's busy/activity state from the terminal job status, so the interface cannot remain indefinitely busy if the event stream ends before a terminal event is consumed. The browser E2E workflow for this exact commit has not yet completed; this fix is therefore implemented but not yet CI-verified. Do not infer a green browser test from the code change alone.
+The browser client now reconciles busy/activity state from the server's terminal job status, so the interface cannot remain indefinitely busy if the event stream ends before a terminal event is consumed. A subsequent test commit also corrected the scripted provider fixture: it now performs a focused content check after diff review instead of trying to finish immediately after the diff call. The latest full CI run for the documented snapshot has not yet completed; these changes are implemented but not yet proven by a green same-commit browser E2E run. Do not infer a green browser test from the code changes alone.
 
-The CI rows above refer to the runtime audit baseline, not the later documentation-only commits. The documentation-only pass through `3c93154` changed product wording, release qualification evidence and navigation; it did not change runtime code. A fresh CI run is required for the final documentation snapshot before describing that snapshot as fully green. Never combine passing jobs from different commits into one claimed green result.
+The CI rows above refer to the latest documented candidate snapshot. Between the lifecycle fix and this snapshot, commit `31bfdb7` updated the browser E2E fixture; the remaining commits in this pass updated product wording, release evidence, documentation and the public landing page. A fresh CI run is required for the final snapshot before describing it as fully green. Never combine passing jobs from different commits into one claimed green result.
 
 
 ## 1. Product position
