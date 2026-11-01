@@ -18,6 +18,7 @@
 
 <p align="center">
   <a href="#install"><strong>Install</strong></a> ·
+  <a href="#terminal-or-browser">Web UI</a> ·
   <a href="#measured-not-claimed">Benchmarks</a> ·
   <a href="#a-one-minute-tour">Tour</a> ·
   <a href="docs/USER_GUIDE_MAP.md">User guide</a> ·
@@ -61,6 +62,22 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 </td>
 </tr>
 </table>
+
+## Terminal or browser
+
+Same agent, same safety policy, two front ends. `oasis web` opens a local browser workspace: chat on the left, live activity grouped by step, approval cards that show the exact command or diff, and a Changes panel to review everything before you keep it. Type while it works and the agent reads your message at its next step (shown here: "Keep the CLI output format unchanged").
+
+<p align="center">
+  <a href="assets/demo/oasis-web-demo.mp4"><img src="assets/demo/oasis-web-demo.gif" alt="OASIS web workspace: the user asks for a bug fix, sends a steering message while the agent works, approves two edits and a test run, then reviews the diff in the Changes panel" width="100%" /></a>
+  <br/><sub>Real OASIS web server, browser UI and tools; scripted model replies, reproducible with <a href="scripts/demo/record-web-demo.mjs">scripts/demo/record-web-demo.mjs</a>. <a href="assets/demo/oasis-web-demo.mp4">MP4</a></sub>
+</p>
+
+| | Terminal (`oasis`) | Browser (`oasis web`) | Editor |
+| --- | --- | --- | --- |
+| Steer while it works | Enter (Tab queues) | Enter (Alt+Enter queues) | VS Code chat panel |
+| Review changes | `/diff`, inline diffs | Changes panel, per-file diffs | Native diff view, accept or reject |
+| Approvals | Inline prompt | Approval card with the exact command or diff | Inline in the panel |
+| Low-power devices | Lite or no animation on 2-CPU, SSH, Linux console, CI, screen readers | Respects reduced-motion, works as an offline-capable PWA | Editor theme |
 
 ## Install
 

@@ -4,6 +4,8 @@ const READ_TOOLS = new Set(['read_file', 'read_notebook', 'notebook_read', 'list
 const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch']);
 const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'auto_test']);
 const SEARCH_TOOLS = new Set(['search_files', 'grep', 'glob_files', 'repo_map']);
+const REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'diagnostics', 'ide_get_diagnostics']);
+const WEB_TOOLS = new Set(['web_search', 'fetch_url']);
 
 function text(value, limit = 240) {
   return redactApprovalSecrets(String(value == null ? '' : value).replace(/[\r\n\0]+/g, ' ').trim()).slice(0, limit);
@@ -28,6 +30,8 @@ export function toolActivityCategory(name) {
   if (EDIT_TOOLS.has(tool)) return 'edit';
   if (COMMAND_TOOLS.has(tool)) return 'command';
   if (SEARCH_TOOLS.has(tool)) return 'search';
+  if (REVIEW_TOOLS.has(tool)) return 'review';
+  if (WEB_TOOLS.has(tool)) return 'web';
   return 'other';
 }
 
@@ -55,7 +59,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'repo_map') return 'Mapped the project files';
   if (tool === 'fetch_url' || tool === 'web_search') return 'Looked up information online';
   if (tool === 'git_status') return 'Checked project changes';
-  if (tool === 'git_diff') return 'Reviewed a file comparison';
+  if (tool === 'git_diff') return 'Reviewed the diff';
   if (tool === 'git_log') return 'Reviewed recent project history';
   if (tool === 'task') return 'Asked a helper to investigate';
   if (tool === 'diagnostics' || tool === 'ide_get_diagnostics') return 'Checked for code issues';

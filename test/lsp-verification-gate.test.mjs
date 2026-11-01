@@ -103,3 +103,14 @@ test('a missing built-in language server is reported as non-blocking, not as an 
   });
   assert.deepEqual(issues, []);
 });
+
+test('files missing the same language server share one short notice line', () => {
+  const reason = 'No typescript language server found. Install one with: npm install -g typescript. Meanwhile, use grep or the diagnostics tool.';
+  const text = appendLspUnavailableNotice('Done.', {
+    changedPaths: new Set(['src/a.mjs', 'test/a.test.mjs']),
+    lspVerificationByPath: new Map([['src/a.mjs', { status: 'unavailable', reason }], ['test/a.test.mjs', { status: 'unavailable', reason }]])
+  });
+  assert.match(text, /src\/a\.mjs, test\/a\.test\.mjs: no typescript language server installed \(npm install -g typescript\)/);
+  assert.equal((text.match(/language server installed/g) || []).length, 1);
+  assert.doesNotMatch(text, /Meanwhile/);
+});

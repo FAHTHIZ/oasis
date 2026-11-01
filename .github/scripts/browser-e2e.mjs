@@ -381,7 +381,7 @@ try {
   const editApprovalPrompt = await page.locator('#agentApprovalPrompt').innerText();
   await approveAndWaitForNextApproval(page, editApprovalPrompt);
   const commandApproval = await page.locator('#agentApprovalPrompt').innerText();
-  assert.match(commandApproval, /node "-e" "process\.exit\(7\)"/);
+  assert.match(commandApproval, /node -e "process\.exit\(7\)"/);
   assert.equal(await page.locator('#agentApprovalDiff').isHidden(), true,
     'A command approval should not display a file-edit diff.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-command-approval-desktop.png'), fullPage: true });
@@ -472,7 +472,7 @@ try {
   assert.match(groupText, /Edited 2 files/);
   assert.equal((groupText.match(/Ran 1 command/g) || []).length, 2,
     'The intentionally failing command and successful Node test should remain separate, visible activity groups.');
-  assert.match(groupText, /Completed 1 step/);
+  assert.match(groupText, /Reviewed changes/);
   assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'Raw tool detail should stay hidden until Show details is opened.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop.png'), fullPage: true });
