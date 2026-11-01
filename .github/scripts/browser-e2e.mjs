@@ -45,6 +45,41 @@ async function assertAgentContrast(page, label) {
   console.log('[axe] ' + label + ': no color-contrast violations (' + results.passes.length + ' passing rules).');
 }
 
+const frameMetrics = [];
+async function measureFrames(page, label, action) {
+  await page.evaluate(() => {
+    const probe = { active: true, last: performance.now(), samples: [] };
+    window.__oasisFrameProbe = probe;
+    const tick = (now) => {
+      if (!probe.active) return;
+      probe.samples.push(now - probe.last);
+      probe.last = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await action();
+  await page.waitForTimeout(180);
+  const result = await page.evaluate(() => {
+    const probe = window.__oasisFrameProbe;
+    if (!probe) return { frames: 0, worstFrameMs: 0, over50ms: 0, near16ms: 0 };
+    probe.active = false;
+    const frames = probe.samples;
+    return {
+      frames: frames.length,
+      worstFrameMs: Number(Math.max(0, ...frames).toFixed(1)),
+      over50ms: frames.filter((value) => value > 50).length,
+      near16ms: frames.filter((value) => value >= 12 && value <= 22).length
+    };
+  });
+  const record = { interaction: label, ...result };
+  frameMetrics.push(record);
+  console.log('[frames 4x CPU] ' + label + ': worst ' + result.worstFrameMs +
+    'ms; ' + result.frames + ' frames; ' + result.over50ms + ' over 50ms; ' + result.near16ms + ' near 16ms.');
+  return record;
+}
+
+
 let providerServer;
 let app;
 let browser;
