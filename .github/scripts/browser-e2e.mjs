@@ -389,7 +389,7 @@ try {
   await page.locator('#agentApproveBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
   const contentCheckApproval = await page.locator('#agentApprovalPrompt').innerText();
-  assert.match(contentCheckApproval, /node "-e".*browser-e2e-output\.txt/);
+  assert.match(contentCheckApproval, /node --test browser-e2e-verification\.test\.mjs/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-content-check-approval-desktop.png'), fullPage: true });
   await page.locator('#agentApproveBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
