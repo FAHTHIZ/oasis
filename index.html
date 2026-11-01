@@ -2128,6 +2128,7 @@ C.hook('agentProcessEvent',function(prev){return function(jobId,event){
   }
   if(event&&event.type==='steered'){window.oasisAgentActivity('Oasis read your '+(d.delivered>1?d.delivered+' messages':'message')+' and is adjusting');return}
   if(event&&event.type==='steer_queued')return;
+  if(event&&event.type==='auto_commit'){if(typeof window.oasisAgentActivity==='function')window.oasisAgentActivity(d.commit?'Committed '+String(d.commit).slice(0,12)+' · '+String(d.message||'').slice(0,90)+' ('+(Array.isArray(d.files)?d.files.length:0)+' file'+(Array.isArray(d.files)&&d.files.length===1?'':'s')+')':'Auto-commit: '+String(d.error||'failed').slice(0,160));return}
   if(event&&event.type!=='model_wait'&&typeof window.oasisPromptReading==='function')window.oasisPromptReading(null);
   if(event&&event.type==='model_wait'){
     if(d.promptProgress&&Number(d.promptProgress.total)>0&&typeof window.oasisPromptReading==='function')window.oasisPromptReading(d.promptProgress);

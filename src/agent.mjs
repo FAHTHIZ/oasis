@@ -768,6 +768,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (!session.toolDefinitions.some((tool) => tool.function.name === 'workflow') && loadedSettings.workflowsEnabled !== false && env.OASIS_DISABLE_WORKFLOWS !== '1' && (!(Array.isArray(tools) || typeof tools === 'string') || (allowedToolNames || []).includes('workflow'))) session.toolDefinitions.push(WORKFLOW_TOOL_DEFINITION);
   session.ultracode = loadedSettings.ultracode === true;
   session.fastMode = loadedSettings.fastMode === true;
+  session.settings = { ...(session.settings || {}), autoCommit: loadedSettings.autoCommit === true };
   session.teammateMode = env.OASIS_TEAMMATE_MODE || loadedSettings.teammateMode || 'auto';
   if (dynamicSections && !restore) session.pendingDynamicContext = dynamicSections.join('\n\n');
   if (loadedSettings.autoCompactEnabled === false && config && config.autoCompactPercent === undefined) config.autoCompactPercent = 0;
