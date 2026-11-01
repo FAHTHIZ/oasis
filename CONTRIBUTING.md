@@ -19,11 +19,13 @@ npm install
 npm run check
 ```
 
-For the normal test suite, run:
+For the normal test suite, use the repository's explicit test-file pattern:
 
 ```bash
-node --test
+npm test
 ```
+
+Do not replace this with bare `node --test`: Node may discover support servers and archived fixtures that are not independent tests. See the [test-suite map](test/README.md) before changing test paths or discovery rules. For runtime module boundaries and safe extraction guidance, see the [source map](src/README.md).
 
 If you change the browser app, try it in a desktop-sized window and at 390px width. Check both themes, keyboard-only use, `NO_COLOR` in terminal output, and `OASIS_NO_ANIMATION=1` where relevant. If you cannot run a check, say so instead of claiming it passed.
 
