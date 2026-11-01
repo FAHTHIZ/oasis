@@ -2,6 +2,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
+import { labelToolActivity, safeToolActivityArgs, toolActivityCategory, toolActivityWarning } from './tool-activity.mjs';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { access, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -437,6 +438,7 @@ export function createOasisWebServer(options = {}) {
       job.status = 'waiting_approval';
       emit(job, 'approval_required', {
         approvalId, prompt: detail.message, risky: detail.risky, expiresInSeconds: 300,
+        ...(detail.diff ? { diff: detail.diff } : {}),
         ...(suggestion ? { suggestion } : {}),
         ...(meta && meta.tool ? { tool: String(meta.tool).slice(0, 100) } : {}),
         ...(meta && meta.subagent ? { subagent: String(meta.subagent).slice(0, 100) } : {})
@@ -703,8 +705,34 @@ export function createOasisWebServer(options = {}) {
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
           onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
           onDelta: (text) => emit(job, 'assistant_delta', { text: String(text || '').slice(0, 24000) }),
-          onToolStart: ({ name, args, subagent }) => emit(job, 'tool_start', { name: String(name || 'tool').slice(0, 100), detail: toolDetail(name, args), ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {}) }),
-          onToolResult: ({ name, result: value }) => emit(job, 'tool_result', { name: String(name || 'tool').slice(0, 100), result: summarizeToolResult(value) }),
+          onToolStart: ({ name, args, call, subagent }) => {
+            const safeArgs = safeToolActivityArgs(args);
+            const callId = call && call.id ? String(call.id).slice(0, 160) : '';
+            if (callId) job.toolActivityArgs ||= new Map(), job.toolActivityArgs.set(callId, safeArgs);
+            emit(job, 'tool_start', {
+              name: String(name || 'tool').slice(0, 100),
+              callId,
+              args: safeArgs,
+              label: labelToolActivity(name, safeArgs),
+              category: toolActivityCategory(name),
+              detail: toolDetail(name, safeArgs),
+              ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
+            });
+          },
+          onToolResult: ({ name, result: value, call }) => {
+            const callId = call && call.id ? String(call.id).slice(0, 160) : '';
+            const args = callId && job.toolActivityArgs instanceof Map ? job.toolActivityArgs.get(callId) || {} : {};
+            if (callId && job.toolActivityArgs instanceof Map) job.toolActivityArgs.delete(callId);
+            emit(job, 'tool_result', {
+              name: String(name || 'tool').slice(0, 100),
+              callId,
+              args,
+              label: labelToolActivity(name, args, value),
+              category: toolActivityCategory(name),
+              result: summarizeToolResult(value),
+              warning: toolActivityWarning(value)
+            });
+          },
           onContextOverflow: (info) => emit(job, 'context_overflow', info),
           onContextPruned: (info) => emit(job, 'context_pruned', info)
         });
