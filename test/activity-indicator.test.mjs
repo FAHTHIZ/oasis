@@ -61,7 +61,7 @@ test('indicator draws on one line, then clears it when stopped', () => {
   assert.match(writes.at(-1), /Thinking… · 5s · 2k tokens sent · esc to stop/);
   indicator.stop();
   assert.equal(cleared, true);
-  assert.equal(writes.at(-1), '\r\x1b[2K');
+  assert.equal(writes.at(-1), '\r\x1b[2K\x1b[?25h', 'clears the line and shows the cursor again');
   const count = writes.length;
   indicator.stop();
   assert.equal(writes.length, count, 'stopping twice writes nothing');
@@ -80,7 +80,7 @@ test('long lines are clipped to the terminal width', () => {
   const stream = { isTTY: true, columns: 30, write: (chunk) => writes.push(chunk) };
   const indicator = createActivityIndicator({ stream, env: { OASIS_MOTION: 'lite' }, color: false, timers: { setInterval: () => ({}), clearInterval: () => {} } });
   indicator.start({ inputTokens: 123456, step: 9 });
-  const visible = writes[0].replace('\r\x1b[2K', '');
+  const visible = writes[0].replace('\r\x1b[2K', '').replace('\x1b[?25l', '');
   assert.ok([...visible].length <= 33, visible);
   indicator.stop();
 });

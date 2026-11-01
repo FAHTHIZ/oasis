@@ -244,3 +244,20 @@ test('verbose tool output preserves distinct stdout and stderr', () => {
   assert.ok(rendered.includes('[stderr]'));
   assert.ok(rendered.indexOf('[stderr]') < rendered.indexOf('standard error'));
 });
+
+test('tool results get a one-line summary under the call', async () => {
+  const { describeToolResult, summarizeTestOutput } = await import('../src/terminal-ui.mjs');
+  assert.equal(summarizeTestOutput('ok 1 - a\n# tests 20\n# pass 20\n# fail 0\n'), '20 passed, 0 failed');
+  assert.equal(summarizeTestOutput('Tests:       2 failed, 40 passed, 42 total'), '2 failed, 40 passed, 42 total');
+  assert.equal(summarizeTestOutput('===== 12 passed, 1 skipped in 0.42s ====='), '12 passed, 1 skipped');
+  assert.equal(summarizeTestOutput('test result: ok. 7 passed; 0 failed; 0 ignored'), '7 passed, 0 failed');
+  assert.equal(summarizeTestOutput('  14 passing (30ms)\n  2 failing'), '14 passed, 2 failed');
+  assert.equal(describeToolResult('run_command', { exitCode: 0, stdout: '# pass 20\n# fail 0\n' }, { color: false }), '  ⎿ ✓ exit 0 · 20 passed, 0 failed');
+  assert.equal(describeToolResult('run_command', { exitCode: 2, stdout: '', stderr: 'boom\nError: missing file\n' }, { color: false }), '  ⎿ ✗ exit 2 · Error: missing file');
+  assert.equal(describeToolResult('run_command', { error: 'This destructive Git command is blocked by default.' }, { color: false }), '  ⎿ ✗ This destructive Git command is blocked by default.');
+  assert.equal(describeToolResult('read_file', { content: 'a\nb\nc\n' }, { color: false }), '  ⎿ Read 3 lines');
+  assert.equal(describeToolResult('search_files', { matches: [{ path: 'a' }, { path: 'a' }, { path: 'b' }] }, { color: false }), '  ⎿ 3 matches in 2 files');
+  assert.equal(describeToolResult('git_diff', { stdout: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@\n-old\n+new\n+more\n' }, { color: false }), '  ⎿ 1 file changed, +2 -1');
+  assert.equal(describeToolResult('edit_file', { ok: true }, { color: false }), '');
+  assert.equal(describeToolResult('todo_write', { ok: true }, { color: false }), '');
+});
