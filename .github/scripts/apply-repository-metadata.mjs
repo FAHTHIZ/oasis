@@ -6,7 +6,7 @@ if (!ownerRepo || ownerRepo.toLowerCase() !== 'fahthiz/oasis') throw new Error('
 if (!token) throw new Error('OASIS_REPO_ADMIN_TOKEN is not set. See docs/PUBLIC_LAUNCH.md.');
 if (!homepage || !homepage.startsWith('https://') || !homepage.endsWith('/')) throw new Error('A verified HTTPS GitHub Pages URL was not provided by the deployment step.');
 
-const description = 'Open-source AI coding agent and local-first developer workspace with a CLI, browser UI, multi-provider LLMs, MCP integrations, skills, hooks, memory, and subagents.';
+const description = 'Open-source, local-first agentic development workspace for coding, automation, agent orchestration, and verification.';
 const topics = ['ai-coding-agent','coding-agent','ai-agents','developer-tools','developer-workspace','cli','terminal-agent','llm','mcp','model-context-protocol','agent-skills','agentic-workflows','local-first','open-source','javascript','nodejs','automation','subagents','ollama','multi-provider'];
 
 const response = await fetch('https://api.github.com/repos/FAHTHIZ/oasis', {
