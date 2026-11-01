@@ -65,6 +65,7 @@ import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentR
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
+import { unrequestedGitWrite } from './git-intent.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 
@@ -3757,6 +3758,8 @@ async function executeOneCallRaw(session, call, context, options) {
     }
     const outOfScope = scopeViolation(session, name, args);
     if (outOfScope) throw new Error(outOfScope);
+    const gitWrite = unrequestedGitWrite(session.currentRequest, name, args, { settings: session.settings || {}, env: (context && context.env) || options.env || process.env });
+    if (gitWrite) throw new Error(gitWrite);
     if (name === 'ask_user_question') {
       const budget = questionBudget(session, options);
       session.turnQuestionCount = Number(session.turnQuestionCount || 0) + 1;
@@ -4416,7 +4419,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (assistant.unknownToolNames && unknownToolNudges < 2) {
         unknownToolNudges++;
         const names = [...availableToolNames(session)].filter((name) => !name.includes('__')).slice(0, 30);
-        session.messages.push({ role: 'user', content: '<system-reminder>' + assistant.unknownToolNames.join(', ') + (assistant.unknownToolNames.length === 1 ? ' is not a tool' : ' are not tools') + ', so nothing ran. Available tools: ' + names.join(', ') + '. Use run_command for anything else (for example git commands). Call a real tool now, or give your final answer.</system-reminder>' });
+        session.messages.push({ role: 'user', content: '<system-reminder>' + assistant.unknownToolNames.join(', ') + (assistant.unknownToolNames.length === 1 ? ' is not a tool' : ' are not tools') + ', so nothing ran. Available tools: ' + names.join(', ') + '. Do only what the user asked (do not commit or push unless asked). Call a real tool now, or give your final answer.</system-reminder>' });
         continue;
       }
       if (!text && assistant.echoedToolResponse && echoNudges < 2) {
