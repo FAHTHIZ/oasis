@@ -472,7 +472,8 @@ try {
   assert.match(groupText, /Wrote 1 file/);
   assert.match(groupText, /Read 1 file/);
   assert.match(groupText, /Edited 2 files/);
-  assert.match(groupText, /Ran 2 commands/);
+  assert.equal((groupText.match(/Ran 1 command/g) || []).length, 2,
+    'The intentionally failing command and successful Node test should remain separate, visible activity groups.');
   assert.match(groupText, /Completed 1 step/);
   assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'Raw tool detail should stay hidden until Show details is opened.');
