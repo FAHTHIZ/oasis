@@ -24,6 +24,9 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     if (settings.ignoredUntrusted.length) problems.push('Ignored until you run oasis trust: ' + settings.ignoredUntrusted.join(', '));
     const sandbox = detectSandbox();
     lines.push('  Sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'off') + ' (' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable: ' + sandbox.reason) + ')');
+    lines.push('  Command isolation: ' + (settings.sandbox.enabled && sandbox.available
+      ? 'OS sandbox active'
+      : 'not active; approval controls are not OS isolation'));
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
   } catch (error) { problems.push('Settings are invalid: ' + error.message); }
   const workflow = await workflowRuntimeStatus();
