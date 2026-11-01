@@ -260,6 +260,25 @@ try {
     null, { timeout: timeoutMs });
   assert.equal(await page.locator('#view-agent').evaluate((node) => node.classList.contains('active')), true,
     'The workspace should open on the coding conversation.');
+
+  // llama-server prompt-reading progress: shown in the live status, advanced between reports, cleared on the reply.
+  const promptReading = await page.evaluate(async () => {
+    let setBusy = null;
+    window.oasisCore.hook('agentSetBusy', (current) => { setBusy = current; return current; });
+    setBusy(true);
+    const span = document.querySelector('.agent-typing span');
+    window.oasisCore.processEvent('e2e-progress', { type: 'model_wait', data: { phase: 'progress', step: 1, promptProgress: { total: 3725, cache: 0, processed: 2048, time_ms: 79165 } } });
+    const first = span.textContent;
+    await new Promise((resolve) => setTimeout(resolve, 2300));
+    const later = span.textContent;
+    window.oasisCore.processEvent('e2e-progress', { type: 'assistant_delta', data: { text: '' } });
+    const cleared = span.textContent;
+    setBusy(false);
+    return { first, later, cleared };
+  });
+  assert.match(promptReading.first, /^Local model is reading the prompt · 54% of 3\.7k tokens · about 1m 0\ds left$/);
+  assert.match(promptReading.later, /· 5[5-9]% of 3\.7k tokens/);
+  assert.equal(promptReading.cleared, 'Working…');
   await page.locator('.sidebar [data-nav="home"]').first().click();
   assert.equal(await page.locator('#view-home').evaluate((node) => node.classList.contains('active')), true,
     'The existing Overview page should remain available.');

@@ -74,3 +74,32 @@ test('the wait line switches from reading to thinking when the prompt is read', 
   assert.equal(waitLabel(read, 1000), 'Thinking');
   assert.match(describeWait(read, 1000), /4k tokens sent/);
 });
+
+test('between llama-server reports the line moves on at the measured rate', () => {
+  const report = { total: 3725, cache: 0, processed: 2048, time_ms: 79165 };
+  assert.equal(promptProgressText(report), '54% of 3.7k tokens · about 1m 04s left');
+  assert.equal(promptProgressText(report, 30000), '75% of 3.7k tokens · about 34s left');
+  // Never reaches 100% or zero time before the server says the read is done.
+  assert.equal(promptProgressText(report, 600000), '99% of 3.7k tokens · about 1s left');
+  // Without a measured rate there is nothing to extrapolate.
+  assert.equal(promptProgressText({ total: 3725, cache: 0, processed: 0, time_ms: 0 }, 30000), '0% of 3.7k tokens');
+});
+
+test('the indicator extrapolates from the time of the last report', async () => {
+  const { createActivityIndicator } = await import('../src/activity-indicator.mjs');
+  let clock = 0;
+  let written = '';
+  let tick = null;
+  const stream = { isTTY: true, columns: 200, write: (text) => { written = text; } };
+  const timers = { setInterval: (fn) => { tick = fn; return { unref() {} }; }, clearInterval: () => {} };
+  const indicator = createActivityIndicator({ stream, env: { OASIS_MOTION: 'lite' }, color: false, now: () => clock, timers });
+  indicator.start({ step: 1, local: true, inputTokens: 3725 });
+  clock = 80000;
+  indicator.update({ promptProgress: { total: 3725, cache: 0, processed: 2048, time_ms: 79165 } });
+  tick();
+  assert.match(written, /54% of 3\.7k tokens · about 1m 04s left/);
+  clock = 110000;
+  tick();
+  assert.match(written, /Local model is reading the prompt… · 1m 50s · 75% of 3\.7k tokens · about 34s left/);
+  indicator.stop();
+});
