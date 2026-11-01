@@ -2522,9 +2522,18 @@ async function runSubagent(parent, args, context, options) {
     worktree = await createWorktree(parent.root, description, { env: options.env || process.env, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId });
   }
   const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
+  const requestedModel = String(args.model || '').trim();
+  if (requestedModel && !modelAllowed(requestedModel, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol })) {
+    throw new Error(modelRestrictionMessage(requestedModel, parent.availableModels));
+  }
+  const configuredAgentModel = agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol })
+    ? agent.model
+    : null;
+  const selectedModel = requestedModel || configuredAgentModel;
+  const childConfig = selectedModel ? { ...parent.config, model: selectedModel } : parent.config;
   const child = {
     root: worktree ? worktree.path : parent.root,
-    config: subagentEffortConfig(parent, agent, options.env || process.env, args.model && modelAllowed(String(args.model), parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: String(args.model) } : agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol }) ? { ...parent.config, model: agent.model } : parent.config),
+    config: subagentEffortConfig(parent, agent, options.env || process.env, childConfig),
     sessionId: parent.sessionId,
     branchRules: parent.branchRules,
     messages: [{ role: 'system', content: systemText + isolationNote }, ...(args.fork_context === true ? forkedConversation(parent) : [])],
