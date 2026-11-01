@@ -202,7 +202,14 @@ async function runCleanup() {
     console.log('[' + (apply ? 'retire' : 'dry-run') + '] ' + branch.name + ': ' + decision.reason);
     if (!apply) continue;
     try {
-      await githubRequest(repository, token, '/repos/' + repository + '/git/refs/heads/' + refPath(branch.name), 'DELETE');
+      const refUrl = '/repos/' + repository + '/git/refs/heads/' + refPath(branch.name);
+      const latestRef = await githubRequest(repository, token, refUrl);
+      if (latestRef?.object?.sha !== branch.commit?.sha) {
+        kept++;
+        console.log('[skip] ' + branch.name + ': branch head changed after inventory; no ref was deleted');
+        continue;
+      }
+      await githubRequest(repository, token, refUrl, 'DELETE');
       retired++;
     } catch (error) {
       if (error.status === 404) {
