@@ -27,7 +27,7 @@ const required = [
   'Download stable v0.4.0', 'Try 1.0 RC1 from source', 'https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0', 'Download OASIS v0.4.0', 'docs/INSTALL.md#run-the-current-release-candidate-from-source',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
   'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
-  'property="og:image"', 'summary_large_image', 'Release Candidate · Open source · Apache-2.0', '1.0.0', 'docs/PROJECT_PLAN.md'
+  'property="og:image"', 'summary_large_image', 'Feature-complete 1.0 RC · Open source · Apache-2.0', '1.0.0', 'docs/PROJECT_PLAN.md'
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
 const heroStart = html.indexOf('<div class="hero-actions">');
@@ -48,7 +48,7 @@ assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta
 assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.svg"'), 'Homepage must point Open Graph at the social preview image.');
 assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.includes('<svg'), 'Social preview must be a 1200x630 SVG image.');
 assert.ok(socialPreview.includes('OASIS') && !socialPreview.includes('OASIS OSS') && socialPreview.includes('CODE. AUTOMATE.') && socialPreview.includes('local-first workspace'), 'Social preview must use the current OASIS-only product identity and descriptor.');
-assert.ok(html.includes('Release Candidate · Open source · Apache-2.0'), 'Public homepage must show the current release-candidate lifecycle.');
+assert.ok(html.includes('Feature-complete 1.0 RC · Open source · Apache-2.0'), 'Public homepage must show the current release-candidate lifecycle.');
 for (const [name, sticker, marker] of [['wide RC sticker', rcSticker, 'RELEASE CANDIDATE'], ['round RC seal', rcSeal, 'RC 1'], ['compact RC mark', rcMark, 'RC1']]) {
   assert.ok(sticker.startsWith('<svg') && sticker.includes('</svg>'), name + ' must be an SVG document.');
   assert.ok(sticker.includes(marker), name + ' must visibly identify the release-candidate stage.');
