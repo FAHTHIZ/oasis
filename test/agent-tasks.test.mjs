@@ -766,7 +766,7 @@ test('agent lifecycle observers receive structured events without affecting orch
       stopBackgroundProcesses: () => { cleaned++; return 1; },
       ptyManager: {
         closeAll: () => ({ stopped: 2 }),
-        list: () => ({ sessions: [] })
+        list: () => ({ sessions: [{ state: 'running' }, { state: 'exited' }] })
       }
     }
   });
@@ -776,6 +776,7 @@ test('agent lifecycle observers receive structured events without affecting orch
   assert.equal(view.model, 'fixture-model');
   assert.equal(view.availableToolCount, 2);
   assert.equal(view.backgroundProcesses, 1);
+  assert.equal(view.interactiveTerminals, 1);
   const startedEvent = agentEvents(session).events.find((event) => event.type === 'agent.started');
   assert.match(startedEvent.detail, /read-only access/);
   assert.equal(observed.length, 1);
