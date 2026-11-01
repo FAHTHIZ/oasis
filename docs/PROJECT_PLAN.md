@@ -29,7 +29,7 @@ This maturity statement is not a claim that production qualification is complete
 - The current development package on `main` is numeric SemVer `1.0.0`; `package.json` separately identifies the channel as `release-candidate`, candidate `1`.
 - This is an unpublished source candidate, not a Git tag, GitHub Release, or downloadable installer. The stable CLI installer continues to resolve the latest stable tag, currently `v0.4.0`.
 - The final `v1.0.0` release must be created from a newly qualified immutable commit only after every acceptance gate passes; never move or retag the historical `v0.4.0` release.
-- Never move, replace, or retag `v0.4.0`. Never publish an RC package as stable.
+- Preserve the historical `v0.4.0` tag and never publish an RC candidate as stable.
 
 ## 3. Product scope for 1.0
 
