@@ -27,7 +27,7 @@ jobs:
           node-version: 22
       - name: Verify cleanup and file-hygiene safeguards
         run: node --test test/branch-cleanup.test.mjs test/installer-scripts.test.mjs test/repository-hygiene.test.mjs
-      - name: Retire only verified merged or content-equivalent branches
+      - name: Retire only verified or explicitly owner-approved branch heads
         run: node scripts/cleanup-merged-branches.mjs --apply
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
