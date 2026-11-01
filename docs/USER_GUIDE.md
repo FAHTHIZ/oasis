@@ -32,6 +32,8 @@ During setup, choose a provider preset or a custom endpoint: **OmniRoute**, Open
 
 ## Connected browser workspace and runtime
 
+<p align="center"><a href="../assets/demo/oasis-demo.mp4"><img src="../assets/demo/oasis-demo.gif" alt="The OASIS browser workspace working through a coding task, with the approval flow, verification gate and Changes panel" width="100%" /></a><br/><sub>Browser workspace demo. The model reply is a scripted local fixture; the workspace, tools, approvals, verification gate and Changes panel are the real runtime.</sub></p>
+
 The authenticated browser runtime and extension hub are included in the default `main` installation. From the project you want OASIS to operate on:
 
 ~~~bash

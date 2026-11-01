@@ -5,54 +5,86 @@
 </p>
 
 <h1 align="center">OASIS</h1>
-<p align="center"><strong>Code. Automate. Flourish.</strong></p>
-<p align="center">Open-source, model-agnostic, local-first coding agent.</p>
+<p align="center"><strong>The open-source coding agent whose safety and reliability live in the runtime, not the prompt.</strong><br/>Any model, from a 4B model on your laptop to the frontier.</p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0" />
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0" /></a>
   <img src="https://img.shields.io/badge/stage-stable-2EA44F.svg?style=flat" alt="Stable" />
+  <img src="https://img.shields.io/badge/node-%E2%89%A522-339933.svg?style=flat&logo=node.js&logoColor=white" alt="Node.js 22 or newer" />
+  <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555.svg?style=flat" alt="macOS, Linux and Windows" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
 </p>
 
-**The open-source coding agent that makes any model safer and more capable — from a 4B model on your laptop to the frontier.**
-
-OASIS is a terminal-first agent runtime: point it at Claude, GPT, Gemini, DeepSeek, OpenRouter, Bedrock, Vertex, or a local Ollama / LM Studio / llama.cpp model, and it plans, reads your codebase, edits files, runs commands and checks its own work, with guardrails that live in the runtime rather than in the prompt.
-
-```bash
-git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install -g .
-oasis setup      # pick a provider, or a local model
-cd ~/your-project && oasis
-```
-
-> **Current lifecycle — OASIS 1.0, stable.** The 1.0 release gates in the [project plan](docs/PROJECT_PLAN.md) are met on one commit: full Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. Desktop installers are **unsigned** (each release ships `SHA256SUMS`), and install/update/uninstall is verified on clean CI runners rather than by hand on physical machines.
-
 <p align="center">
-  <a href="#quick-start"><strong>Get started</strong></a>
-  &nbsp;·&nbsp;
-  <a href="#measured-not-claimed">Benchmarks</a>
-  &nbsp;·&nbsp;
-  <a href="docs/USER_GUIDE_MAP.md">User guide</a>
-  &nbsp;·&nbsp;
+  <a href="#install"><strong>Install</strong></a> ·
+  <a href="#measured-not-claimed">Benchmarks</a> ·
+  <a href="#a-one-minute-tour">Tour</a> ·
+  <a href="docs/USER_GUIDE_MAP.md">User guide</a> ·
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Downloads</a>
 </p>
 
----
-
 <p align="center">
-  <img src="assets/demo/oasis-demo.gif" alt="OASIS working through a coding task in the local browser workspace" width="100%" />
-  <br/><sub>Reproducible browser-workspace demo. The model response is a scripted local fixture; the workspace, tools, approval flow, verification gate, and Changes panel are the actual OASIS runtime.</sub>
+  <a href="assets/demo/oasis-terminal-demo.mp4"><img src="assets/demo/oasis-terminal-demo.gif" alt="OASIS in a terminal: it finds a time-zone bug, fixes it with a one-line change, adds a regression test, runs the tests after approval, reviews its diff, then refuses a destructive git clean" width="100%" /></a>
+  <br/><sub>Real OASIS 1.0 runtime, tools, approval prompt and safety policy; the model's replies are scripted so anyone can reproduce it with <a href="scripts/demo/">scripts/demo/</a>. <a href="assets/demo/oasis-terminal-demo.mp4">MP4</a> · <a href="assets/demo/oasis-terminal-demo.cast">asciicast</a></sub>
 </p>
 
-## The harness is the product
+## Why OASIS
 
-A coding agent is a model plus a harness. The model decides what to do; the harness decides what actually happens to your repository. Most of the frustration with coding agents comes from the harness: tool calls that fail to parse, edits that miss by one space, `rm -rf` in auto mode, "done" without running a test, a function replaced by `// ... rest unchanged`.
+A coding agent is a model plus a harness. The model decides what to do; the harness decides what actually happens to your repository. Most of what people hate about coding agents is harness failure: tool calls that don't parse, edits that miss by one space, `rm -rf` in auto mode, "done" without running a test, a function replaced by `// ... rest unchanged`, a terminal that looks frozen for two minutes.
 
-OASIS treats each of those as a runtime problem with a runtime fix, so the fixes hold whichever model you connect. A small local model becomes usable; a frontier model stops wasting turns and stops making the mistakes that cost you an afternoon.
+OASIS fixes each of those in the runtime, so the fix holds whichever model you connect.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Any model, really.** Claude, GPT, Gemini, DeepSeek, OpenRouter, Bedrock, Vertex, Azure Foundry, or a local Ollama, LM Studio, llama.cpp or vLLM server. Small models get a compact prompt, a 13-tool profile and tool-call repair, so a 4B model on a laptop can do real work.
+
+</td>
+<td width="50%" valign="top">
+
+**Safety you don't have to trust the model for.** Every shell line is parsed into commands and scored. Deleting your home folder, force pushes, `reset --hard` and `clean -fdx` are refused even with approvals off. Plan mode is enforced by the runtime, not requested in the prompt.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**"Done" means verified.** The agent can't finish until it has reviewed its own diff and run a relevant check. It is told when it claims a file it never wrote, weakens a test to make it pass, or repeats the same failing fix.
+
+</td>
+<td valign="top">
+
+**Your workflow, kept.** Accepts Claude Code's CLI flags (`-p`, `--output-format stream-json`, `--allowedTools`, `--mcp-config`), reads `AGENTS.md` and `CLAUDE.md`, loads Claude Code plugins, and imports MCP servers, instructions and commands from Codex, Gemini CLI and Cursor.
+
+</td>
+</tr>
+</table>
+
+## Install
+
+**Requirements:** Node.js 22 or newer and Git.
+
+```bash
+git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install -g .
+oasis setup                 # pick a provider, or point it at a local model
+cd ~/your-project && oasis
+```
+
+That installs the current `main`. Other ways in:
+
+| Option | How |
+| --- | --- |
+| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable tag (currently `v1.0.0`) to an immutable commit. |
+| **Desktop app** | Windows x64, macOS arm64 and Linux x86_64 installers on the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest), with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. |
+| **Local model, no API key** | `llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080`, then `OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis`. OASIS reads the loaded context window and picks the right profile. Ollama and LM Studio work the same way. |
+| **Coming from another agent** | `oasis import codex`, `oasis import gemini` or `oasis import cursor` (add `--dry-run` to preview). Existing `CLAUDE.md` / `AGENTS.md` files are picked up as they are. |
+| **Android** | The CLI runs in Termux; see the [Termux guide](docs/TERMUX.md) for what is and isn't supported. |
 
 ## Measured, not claimed
 
-The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01) feeds the runtime the outputs real models actually produce and scores what happens. It needs no model or API key; run it yourself in seconds with `node bench/harness/run.mjs`.
+The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01) feeds the runtime outputs that real models actually produce and scores what happens. It needs no model or API key and runs in seconds: `npm run bench:harness`.
 
 | What the model sends | No harness layer | OASIS, on held-out cases it was never tuned on |
 | --- | --- | --- |
@@ -61,95 +93,85 @@ The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchma
 | Destructive shell commands with approvals switched off | 0 of 31 stopped | **22 of 31 stopped** (23 with a scorer fix), every everyday command still runs |
 | Placeholder rewrites, weakened tests, leaked secrets | 0 of 23 caught | **16 of 23 caught**, 0 false alarms |
 
-Every miss above was then fixed and turned into a regression test, so the current runtime scores 100% on all three case sets except one deliberate secret-scanner miss. Those post-fix numbers measure tuning, not generalization, which is why the table shows the untuned ones. A same-model, head-to-head task benchmark against Claude Code is supported by the [eval runner](docs/BENCHMARKS.md#run-claude-code-on-the-same-fixtures) but has not been published yet.
+Every miss above was then fixed and turned into a regression test, so the current runtime scores 100% on all three case sets except one deliberate secret-scanner miss. Those post-fix numbers measure tuning, not generalization, which is why the table shows the untuned ones.
 
-## Quick start
-
-**Requirements:** Node.js 22 or newer and Git.
-
-### Install from source
-
-```bash
-git clone https://github.com/FAHTHIZ/oasis.git
-cd oasis
-npm install
-npm install -g .
-
-oasis setup
-cd ~/your-project
-oasis
-```
-
-This installs the current `main` source. For a pinned, checksum-verified install of the latest stable release, use the installer below.
-
-### Install the latest stable CLI release
-
-Use the [checksum-verified installer](docs/INSTALL.md#command-line-installation). It resolves the latest stable semantic-version tag (currently `v1.0.0`) to an immutable commit and does not install the moving `main` branch.
-
-### Download the desktop app
-
-The [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) has Windows x64, macOS arm64, and Linux x86_64 installers plus a `SHA256SUMS` file. The installers are not code-signed, so Windows SmartScreen and macOS Gatekeeper will warn on first launch; check the file against `SHA256SUMS` before opening it ([how](docs/INSTALL.md)).
-
-### Run it on a local model
-
-```bash
-llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080
-OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis
-```
-
-OASIS reads the loaded window from the server and switches to its small-context profile automatically. Ollama (`ollama serve`) and LM Studio work the same way.
+The agent evaluator has **50 tasks**: 33 focused fixtures plus 17 repository-level bug reports and multi-file features, scored by hidden assertions the agent never sees (`oasis eval`). A same-model, head-to-head run against Claude Code is built into the [eval runner](docs/BENCHMARKS.md#run-claude-code-on-the-same-fixtures) but has not been published yet, so OASIS does not claim to beat it. Live runs with small local models, including the failures, are in [Benchmarks](docs/BENCHMARKS.md).
 
 ## What it fixes
 
 | Common frustration with coding agents | What OASIS does |
 |---|---|
-| "It said it was done, but never ran the tests." | A post-edit verification gate. The agent must review its diff and run a relevant check before it can finish, and any later edit resets that state. |
-| "Ten patches, and the same error every time." | Fix-thrash detection. The agent is told to step back and diagnose on the 3rd identical failure after edits, and to summarize and change approach (or ask you) on the 5th. Unchanged retries stop after 5. |
-| "It changed the test to match the broken code." | Weakened-test detection (skips, `.only`, deleted tests, removed assertions, an exact check swapped for `toBeDefined()`), plus reminders never to weaken a test to make it pass. |
+| "It said it was done, but never ran the tests." | A post-edit verification gate: the agent must review its diff and run a relevant check before it can finish, and any later edit resets that. |
+| "Ten patches, and the same error every time." | Fix-thrash detection. On the 3rd identical failure after edits the agent is told to step back and diagnose; on the 5th, to change approach or ask you. |
+| "It changed the test to match the broken code." | Weakened-test detection (skips, `.only`, deleted tests, removed assertions, an exact check swapped for `toBeDefined()`). |
 | "It replaced my function with `// ... rest unchanged`." | A change guard blocks placeholder edits and flags large, unexplained deletions. |
-| "It ran `rm -rf` while I wasn't watching." | Every shell line is parsed into its commands. Catastrophic ones (deleting home or system folders, raw disk writes, publishing, force pushes) are refused; high-risk ones (`curl \| sh`, `terraform destroy`, `kubectl delete`, `DROP TABLE`, `git branch -D`) always ask, even in bypass mode. |
-| "It ran a destructive git command." | Force-push, `reset --hard` and `clean -f` are blocked by default. Other commands that throw away work (`checkout .`, `restore`, `stash drop`, `rm`) need your explicit approval, and the working tree is saved under `refs/oasis/safety/` before they run. |
+| "It ran `rm -rf` while I wasn't watching." | Catastrophic commands (home or system folders, raw disk writes, publishing, force pushes) are refused. High-risk ones (`curl \| sh`, `terraform destroy`, `kubectl delete`, `DROP TABLE`) always ask, even in bypass mode. |
+| "It ran a destructive git command." | `push --force`, `reset --hard` and `clean -f` are blocked by default. Other work-discarding commands need your approval, and the working tree is saved under `refs/oasis/safety/` first. |
 | "It edited files in plan mode." | Plan mode is enforced in the runtime: only read-only tools run. |
-| "It committed my API key." | Commit secret scanning, including raw `git commit` typed through the shell. |
+| "It committed my API key." | Commit secret scanning, including a raw `git commit` typed through the shell. |
+| "It looks frozen. Is it doing anything?" | A live status line shows what it is waiting for, elapsed time, context sent and `esc to stop`. Local models get 15 minutes to read a long prompt instead of timing out. |
+| "I can't tell what that command did." | Every tool call gets a one-line outcome: `✓ exit 0 · 20 passed, 0 failed`, `10 matches in 4 files`, `2 files changed, +6 -1`. Blocks and failures show in red. |
 | "The connection dropped and it ran my tool twice." | Dropped streams restart the reply. Tools run only after a reply completes, so a restart can never run a tool twice. |
-| "Cancelling erased the conversation." | Cancelling keeps your request and the partial reply in history. |
-| "CI killed the job, but the command kept running and the job passed." | Headless mode stops running commands on SIGTERM, SIGINT or SIGHUP and exits with `128 + signal`. |
-| "Tool definitions eat my context." | Lean tool loading defers rarely used tool schemas and MCP tools until they are needed. |
-| "It switched to English halfway through." | When you set a reply language, a short reminder follows each tool batch to keep replies in that language. |
+| "Tool definitions eat my context." | Rarely used tool schemas and MCP tools load only when needed. `/context` shows where the window goes and `/cost` what it cost. |
+| "I want to undo what it just did." | `/undo` reverts the last turn's file and conversation changes; `Esc Esc` or `/rewind` jumps to any checkpoint. |
+| "Animations stutter over SSH and on my old laptop." | Motion adapts: smooth on capable machines, a light pulse on low-power hardware, SSH and the Linux console, none in CI, for screen readers or with `OASIS_REDUCED_MOTION=1`. |
 
-Each row describes implemented, tested runtime behavior. See [Benchmarks](docs/BENCHMARKS.md) for what has and has not been measured.
+Each row describes implemented, tested runtime behavior.
+
+## A one-minute tour
+
+```bash
+oasis                                   # interactive session in this folder
+oasis "fix the failing date tests"      # start with a task
+oasis plan "add rate limiting"          # read-only plan, nothing is changed
+oasis -w feature-x                      # work in a new git worktree on its own branch
+oasis -p "summarize this diff" --output-format json < changes.diff   # scripts and CI
+oasis --bg "upgrade the test runner"    # background session: oasis bg list | logs | attach
+oasis web                               # local browser workspace with a Changes panel
+oasis doctor --test-provider            # check the setup, including live tool calling
+```
+
+| In a session | Does |
+| --- | --- |
+| `@file` · `!cmd` · `#note` | Mention a file · run a shell command yourself · save a memory |
+| `Shift+Tab` | Cycle permission mode: default → accept edits → plan → auto |
+| `Esc` · `Esc Esc` · `Ctrl+C` | Stop the current step · rewind · interrupt (twice at an empty prompt to quit) |
+| `Ctrl+K` · `Ctrl+R` · `Ctrl+G` | Command palette · search prompt history · write a long prompt in your editor |
+| `/undo` · `/rewind` · `/diff` | Undo the last turn · pick a checkpoint · review changes |
+| `/model` · `/context` · `/cost` | Switch model · see context use · see spend |
+| `/init` · `/memory` · `/keys` | Create `OASIS.md` project instructions · manage memory · all shortcuts |
+
+Full reference: [keyboard shortcuts](docs/KEYS.md) and the [user guide](docs/USER_GUIDE_MAP.md).
 
 ## Built for small and local models
 
 OASIS assumes the model might be small, quantized, or running on your laptop:
 
-- **Real context windows.** OASIS reads the window that is actually loaded from Ollama, LM Studio and llama.cpp `llama-server`, and for unknown hosted or self-hosted models it reads the provider's `/models` listing (DeepSeek, OpenRouter, vLLM). If the first request still overflows, it reads the size from the server's error, drops to the small-context profile and retries.
-- **Small-context profile.** At 16K or less, OASIS uses a compact system prompt (about 1.6K tokens), sends 13 essential tools (about 3.7K tokens for the whole first request, versus about 15K by default), starts compaction earlier, and trims long tool results to fit. Everything else stays reachable through `tool_search`.
-- **Tool-call repair.** Almost-valid JSON (code fences, comments, unquoted keys, trailing commas, Python literals, missing braces) is repaired, and tool calls written as text (Hermes, Qwen, Llama and XML-wrapper formats) are executed. Unrepairable calls return an error that explains how to resend them, instead of ending the turn.
-- **Forgiving edits.** Edit matching tolerates indentation, spacing and quote drift while preserving CRLF line endings, BOMs, curly quotes and your formatting. Ambiguous or absent matches are refused rather than guessed.
-- **Small-model coaching.** When a model describes a change instead of making it, claims a file it never wrote, quits after one error or stops without checking its work, OASIS tells it so and, on small models, runs the review step itself.
+- **Real context windows.** OASIS reads the window actually loaded in Ollama, LM Studio and llama.cpp, and the provider's `/models` listing for hosted and self-hosted models (DeepSeek, OpenRouter, vLLM). If the first request still overflows, it reads the size from the server's error, switches to the small-context profile and retries.
+- **Small-context profile.** At 16K or less: a compact system prompt (about 1.6K tokens), 13 essential tools (about 3.7K tokens for the whole first request, versus about 15K by default), earlier compaction and trimmed tool results. Everything else stays reachable through `tool_search`.
+- **Tool-call repair.** Almost-valid JSON (code fences, comments, unquoted keys, trailing commas, Python literals, missing braces) is repaired, and tool calls written as text (Hermes, Qwen, Llama and XML formats) are executed. Unrepairable calls get an error that explains how to resend them.
+- **Forgiving edits.** Matching tolerates indentation, spacing and quote drift while preserving CRLF, BOMs and your formatting. Ambiguous matches are refused, never guessed.
+- **Coaching.** When a model describes a change instead of making it, claims a file it never wrote, quits after one error or stops without checking its work, OASIS tells it so and, on small models, runs the review step itself.
 
-See [local context windows](docs/USER_GUIDE.md#local-models-and-small-context-windows) and [tool-call repair](docs/USER_GUIDE.md#tool-call-repair-for-smaller-models) in the user guide.
+See [local models and small context windows](docs/USER_GUIDE.md#local-models-and-small-context-windows) and [tool-call repair](docs/USER_GUIDE.md#tool-call-repair-for-smaller-models).
 
-## What OASIS provides
+## Everything in the box
 
-| Capability area | What is included |
+| Area | Included |
 |---|---|
-| **Agent runtime** | Multi-step model/tool orchestration, planning, codebase exploration, edits, tool-result handling, and task completion reporting. |
-| **Workspace operations** | File search/read/write/edit/delete, Git inspection, scoped work, snapshots, diffs, and optional isolated worktrees. |
-| **Execution policy** | Permission modes, command-risk checks, approval rules, protected paths, bounded output, process cleanup, and optional OS sandbox integration. |
-| **Verification** | Project checks, diagnostics, language-server integration where configured, diff review, weakened-test detection, automatic test runs, and claim checks. |
-| **Context and continuity** | Saved sessions, project instructions, memory, context estimates, compaction, checkpoints, rewind, and recovery records. |
-| **Agent coordination** | Bounded subagents, specialist reviews, task boards, dependency-aware dispatch, monitoring, and workflow automation. |
-| **Integrations** | MCP, hooks, Agent Skills, local plugins, extension import/export, search integrations, GitHub automation, and editor bridges. |
-| **Developer surfaces** | Terminal CLI, authenticated local browser workspace, Electron desktop shell, VS Code-family integration, SDK, and GitHub Action. |
-| **Local-first operation** | Local runtime and workspace; connect hosted or local models under the provider and endpoint policies you choose. |
+| **Agent runtime** | Multi-step tool loop, planning, codebase map, edits, verification gate, completion reports, fallback model, budget limits. |
+| **Workspace** | File search, read, write and edit; Git tools; snapshots, backups, diffs, checkpoints and rewind; isolated worktrees. |
+| **Safety** | Permission modes and rules, shell-risk analysis, protected paths, secret shield, bounded output, process cleanup, optional OS sandbox on Linux and macOS. |
+| **Verification** | Project checks, diagnostics and language servers, diff review, weakened-test and placeholder detection, auto-test, claim checks. |
+| **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, memory, compaction with must-keep context, rule refresh. |
+| **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows. |
+| **Integrations** | MCP (client and server, OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, GitHub Action, VS Code / Cursor / Windsurf bridge. |
+| **Surfaces** | Terminal CLI, headless mode with JSON and stream-JSON, local browser workspace, Electron desktop app, SDK. |
+| **Accessibility** | Screen-reader mode (`--ax-screen-reader`), reduced motion, `NO_COLOR`, colorblind-friendly and light themes, `--calm` output. |
 
-Capabilities are shared across the product but are not identical on every operating system, provider, editor, or integration. Read the [support and qualification matrix](docs/PROJECT_PLAN.md#support-and-qualification-matrix) before relying on a platform-specific path.
+Capabilities are shared across surfaces but not identical on every OS, provider or editor; check the [support matrix](docs/PROJECT_PLAN.md#support-and-qualification-matrix) before relying on a platform-specific path.
 
-## Product architecture
-
-OASIS separates the user-facing surfaces from the shared runtime and the model provider:
+## How it fits together
 
 ```mermaid
 flowchart TD
@@ -164,66 +186,68 @@ flowchart TD
     Verify --> Runtime
 ```
 
-The model reasons and requests tools. OASIS owns tool contracts, workspace checks, permission decisions, process execution, state handling, and the evidence returned to the model and user.
+The model reasons and requests tools. OASIS owns the tool contracts, workspace checks, permission decisions, process execution, state and the evidence returned to you. See [Architecture](docs/ARCHITECTURE.md) and the [source map](src/README.md).
 
-See [Architecture](docs/ARCHITECTURE.md) and the [runtime source map](src/README.md).
+## Status and boundaries
 
-## Supported surfaces and boundaries
+> **Current lifecycle — OASIS 1.0, stable.** The 1.0 release gates in the [project plan](docs/PROJECT_PLAN.md) are met on one commit: full Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. Released as [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0).
 
-| Surface | Current position |
+What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums are provided), clean-machine install, update and uninstall are verified on CI runners rather than by hand on physical machines, and the 50-task evaluator runs on small projects, so it is a regression suite rather than a broad benchmark.
+
+<details>
+<summary><strong>Surfaces</strong></summary>
+
+| Surface | Position |
 |---|---|
-| **CLI** | Primary supported developer workflow; Node.js 22+. |
-| **Local browser workspace** | Local authenticated interface backed by the shared runtime. It is not a hosted cloud service. Some browser-side project/task/note state remains separate from CLI state. |
-| **Desktop** | Installers for Windows x64, macOS arm64, and Linux x86_64, built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums; install/update/uninstall is checked on clean CI runners, not by hand on physical machines. |
-| **VS Code-family integration** | Supported integration path; compatibility is not universal across every editor extension ecosystem. |
-| **SDK and GitHub Action** | Programmatic and repository-automation surfaces; unattended use still requires deliberate permissions and isolation. |
-| **Android / Termux** | CLI can be tried in Termux, but Android is not a fully qualified platform. There is no native Android APK and native PTY/background behavior is not guaranteed. |
+| **CLI** | Primary workflow; Node.js 22+. |
+| **Browser workspace** | Local, authenticated, backed by the shared runtime; not a hosted service. Some browser-side project, task and note state is separate from CLI state. |
+| **Desktop** | Windows x64, macOS arm64 and Linux x86_64, built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums. |
+| **VS Code-family editors** | Supported integration; not every editor extension ecosystem is covered. |
+| **SDK and GitHub Action** | Programmatic and repository automation; unattended use still needs deliberate permissions and isolation. |
+| **Android / Termux** | The CLI can be tried in Termux; Android is not a fully qualified platform and there is no native APK. |
 
-## Security and operating boundaries
+</details>
 
-OASIS provides layered controls, not a guarantee that arbitrary model output, repository code, commands, packages, MCP servers, hooks, skills, or plugins are safe.
+<details>
+<summary><strong>Security boundaries</strong></summary>
 
-- Approved commands execute with the operating-system permissions of the user who launched OASIS.
-- Optional Linux/macOS sandboxing is disabled by default and does not provide full filesystem-read isolation. Native Windows OS sandboxing is not implemented.
-- Approval prompts and workspace checks are not equivalent to operating-system isolation.
-- Third-party integrations can execute code with the user's permissions. Enable only sources you trust.
-- The browser workspace stores some local data in browser storage; that content is not encrypted by OASIS.
-- The runtime should remain loopback-only unless TLS, authentication, trusted-device controls, and the deployment threat model have been deliberately reviewed.
+OASIS provides layered controls, not a guarantee that arbitrary model output, repository code, commands, packages, MCP servers, hooks, skills or plugins are safe.
 
-Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md), and the dated [security/reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md).
+- Approved commands run with the operating-system permissions of the user who launched OASIS.
+- Optional Linux/macOS sandboxing is off by default and does not isolate filesystem reads. Native Windows sandboxing is not implemented.
+- Approval prompts and workspace checks are not operating-system isolation.
+- Third-party integrations can run code with your permissions. Enable only sources you trust.
+- The browser workspace keeps some local data in browser storage, unencrypted by OASIS.
+- Keep the runtime on loopback unless TLS, authentication, trusted devices and the threat model have been reviewed.
 
-## Release status
+Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md) and the dated [security and reliability audit](docs/SECURITY_RELIABILITY_AUDIT.md).
 
-OASIS 1.0 is the first stable release, published as [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0). Its gates (same-commit CI across all platforms, browser E2E with accessibility checks, installer and packaging checks, public-site validation, a refreshed security review, and matching version, tag, notes and checksums) are listed in the [project plan](docs/PROJECT_PLAN.md), with the evidence for each.
-
-What 1.0 does not claim: the installers are unsigned (a documented decision for 1.0; SHA-256 checksums are provided), clean-machine journeys are covered by CI runners rather than manual testing on physical machines, and the 50-task evaluator (33 focused fixtures plus 17 repository-level bug-fix and feature tasks) is a regression suite on small projects, not a broad benchmark. See [Benchmarks](docs/BENCHMARKS.md) for what has and has not been measured, including live runs with small local models.
+</details>
 
 ## Documentation
 
 | Need | Reference |
 |---|---|
-| Product scope, maturity, support matrix, and release gates | [Project and qualification plan](docs/PROJECT_PLAN.md) |
-| System boundaries, execution flow, and data ownership | [Architecture](docs/ARCHITECTURE.md) |
-| Installation, downloads, update, and uninstall | [Installation](docs/INSTALL.md) |
-| Android / Termux | [Termux guide](docs/TERMUX.md) |
-| Task-oriented usage navigation | [User-guide map](docs/USER_GUIDE_MAP.md) |
-| Full commands, settings, tools, integrations, and workflows | [Complete user guide](docs/USER_GUIDE.md) |
-| Security, privacy, and evaluation | [Security policy](SECURITY.md) · [Privacy](docs/PRIVACY.md) · [Benchmarks](docs/BENCHMARKS.md) |
-| Workflows, skills, plugins, and shortcuts | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) · [Keys](docs/KEYS.md) |
-| Runtime module map and extraction policy | [src/README.md](src/README.md) |
-| Test domains and runner conventions | [test/README.md](test/README.md) |
-| Repository ownership and maintenance | [Maintenance guide](docs/REPOSITORY_MAINTENANCE.md) |
-| Release history | [Changelog](CHANGELOG.md) · [1.0.0 release notes](docs/releases/v1.0.0.md) · [v0.4.0 notes](docs/releases/v0.4.0.md) |
+| Install, update, uninstall | [Installation](docs/INSTALL.md) · [Termux](docs/TERMUX.md) |
+| Learn by task | [User-guide map](docs/USER_GUIDE_MAP.md) |
+| Every command, setting, tool and integration | [Complete user guide](docs/USER_GUIDE.md) · [Keys](docs/KEYS.md) |
+| Workflows, skills and plugins | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) |
+| What has and hasn't been measured | [Benchmarks](docs/BENCHMARKS.md) · [Competitive analysis](docs/research/COMPETITIVE_ANALYSIS_2026-10-31.md) |
+| Scope, support matrix, release gates | [Project plan](docs/PROJECT_PLAN.md) |
+| How it works inside | [Architecture](docs/ARCHITECTURE.md) · [Source map](src/README.md) · [Test map](test/README.md) |
+| Security and privacy | [Security policy](SECURITY.md) · [Privacy](docs/PRIVACY.md) |
+| Maintaining the repository | [Maintenance guide](docs/REPOSITORY_MAINTENANCE.md) |
+| Release history | [Changelog](CHANGELOG.md) · [1.0.0 release notes](docs/releases/v1.0.0.md) |
 
-## Development
+## Contributing
 
 ```bash
 npm install
-npm test
-npm run check
+npm test               # unit and integration tests
+npm run check          # everything CI runs: site checks, tests, harness benchmark, eval validation
 ```
 
-Use the explicit `npm test` command; bare `node --test` can discover helper servers and archived fixtures. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [test map](test/README.md).
+Use `npm test` rather than bare `node --test`, which also picks up helper servers and archived fixtures. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [test map](test/README.md). Bug reports with a failing case are the most useful kind; harness misses become regression tests.
 
 ## License
 
