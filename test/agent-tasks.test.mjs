@@ -71,6 +71,48 @@ test('built-in independent reviewers are read-only and the task schema exposes s
   assert.ok(schema.properties.subagent_type.enum.includes('security-review'));
 });
 
+
+test('subagent model override is applied when allowed and rejected when restricted', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-subagent-model-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, parentRequests, childRequests } = await modelServer(t, {
+    parent: (payload) => {
+      const last = payload.messages[payload.messages.length - 1];
+      if (last.role === 'user' && last.content === 'start allowed') {
+        return { content: null, tool_calls: [call('t1', 'task', {
+          description: 'Use approved child model',
+          prompt: 'Report the selected model.',
+          subagent_type: 'explore',
+          model: 'child-model'
+        })] };
+      }
+      if (last.role === 'user' && last.content === 'start denied') {
+        return { content: null, tool_calls: [call('t2', 'task', {
+          description: 'Use restricted child model',
+          prompt: 'This must not start.',
+          subagent_type: 'explore',
+          model: 'blocked-model'
+        })] };
+      }
+      return { content: 'Task request handled.' };
+    },
+    child: () => ({ content: 'Child completed.' })
+  });
+  const session = await createSession({
+    root, config, settings: { ...settings, availableModels: ['fixture', 'child-model'] }
+  });
+  t.after(() => closeSession(session));
+
+  await runAgentTurn(session, 'start allowed');
+  assert.equal(childRequests.length, 1);
+  assert.equal(childRequests[0].model, 'child-model');
+
+  await runAgentTurn(session, 'start denied');
+  assert.equal(childRequests.length, 1, 'a restricted model override must not silently launch with the parent model');
+  const denied = parentRequests.flatMap((request) => request.messages).filter((message) => message.role === 'tool').at(-1);
+  assert.match(denied.content, /not in availableModels/i);
+});
+
 test('background task returns at once, reports back on the next turn, and can be resumed with context', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));
   t.after(() => rm(root, { recursive: true, force: true }));
