@@ -69,6 +69,18 @@ This keyboard layout is optional. Use the layout you prefer.
 - **Background tasks:** Android may pause apps in the background. Keep Termux open while a task runs until you have confirmed your device handles it reliably.
 - **Isolation:** approval prompts are not a full operating-system sandbox. Review commands and file changes before approving.
 
+## 5. Optional on-device smoke check
+
+From a checkout of the OASIS repository on the phone, run:
+
+```sh
+bash scripts/termux-smoke.sh
+```
+
+The script is deliberately local to that checkout. It installs the production dependencies there, checks the CLI, runs `oasis doctor`, verifies the QuickJS workflow runtime, and reports whether the optional native PTY module can load. It does not install or remove a global OASIS package, modify your Termux PATH, call a model provider, or change your project files outside the checkout.
+
+This is a reproducible smoke test, not a substitute for recording results from a real device. Android background-process behaviour and native PTY support still need to be verified on each supported Termux/device combination.
+
 ## If you get stuck
 
 Run `oasis doctor` and copy only the relevant error text. Remove API keys, private paths, and project details you do not want to share. Include your Android version, Termux source (F-Droid or GitHub), and the outputs of `node --version` and `oasis --version`.
