@@ -246,6 +246,12 @@ try {
 
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: 'block' });
+  // Scripted speech recognition so dictation can be checked without a microphone.
+  await context.addInitScript(() => {
+    const Fake = class { start() { window.__oasisE2eRecognition = this; } stop() { if (this.onend) this.onend(); } };
+    window.SpeechRecognition = Fake;
+    window.webkitSpeechRecognition = Fake;
+  });
   const page = await context.newPage();
   const pageErrors = [];
   const consoleErrors = [];
@@ -279,6 +285,27 @@ try {
   assert.match(promptReading.first, /^Local model is reading the prompt · 54% of 3\.7k tokens · about 1m 0\ds left$/);
   assert.match(promptReading.later, /· 5[5-9]% of 3\.7k tokens/);
   assert.equal(promptReading.cleared, 'Working…');
+
+  // Dictation: interim words show in place, final words are kept, typed text is preserved.
+  const dictation = await page.evaluate(() => {
+    const button = document.getElementById('agentDictateBtn');
+    const input = document.getElementById('agentPrompt');
+    const visible = !button.hidden;
+    input.value = 'Fix the bug';
+    button.click();
+    const pressed = button.getAttribute('aria-pressed');
+    const results = (items) => ({ resultIndex: 0, results: items.map(([transcript, isFinal]) => Object.assign([{ transcript }], { isFinal })) });
+    window.__oasisE2eRecognition.onresult(results([['in the parser', false]]));
+    const interim = input.value;
+    window.__oasisE2eRecognition.onresult(results([['in the parser', true], [' and add a test', false]]));
+    const mixed = input.value;
+    button.click();
+    const final = input.value;
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return { visible, pressed, interim, mixed, final, released: button.getAttribute('aria-pressed') };
+  });
+  assert.deepEqual(dictation, { visible: true, pressed: 'true', interim: 'Fix the bug in the parser', mixed: 'Fix the bug in the parser and add a test', final: 'Fix the bug in the parser', released: 'false' });
   await page.locator('.sidebar [data-nav="home"]').first().click();
   assert.equal(await page.locator('#view-home').evaluate((node) => node.classList.contains('active')), true,
     'The existing Overview page should remain available.');
