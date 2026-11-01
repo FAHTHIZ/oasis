@@ -93,7 +93,7 @@ Each row describes implemented, tested runtime behavior. It is not a benchmark c
 OASIS assumes the model might be small, quantized, or running on your laptop:
 
 - **Real context windows.** OASIS reads the window that is actually loaded from Ollama, LM Studio and llama.cpp `llama-server`. For unknown hosted or self-hosted models, it reads the provider's `/models` listing (DeepSeek, OpenRouter, vLLM). If the window is too small, OASIS prints the exact command to fix it.
-- **Small-context profile.** At 16K or less, only 13 essential tools are sent, compaction starts earlier, and long tool results are trimmed to fit.
+- **Small-context profile.** At 16K or less, OASIS uses a compact system prompt (about 1.6K tokens), sends only 13 essential tools, starts compaction earlier, and trims long tool results to fit.
 - **Tool-call repair.** Almost-valid JSON (code fences, trailing commas, Python literals, missing braces) is repaired, and tool calls written as text (Hermes, Qwen and Llama formats) are executed. Unrepairable calls return an error that explains how to resend them, instead of ending the turn.
 - **Forgiving edits.** Edit matching tolerates whitespace and indentation drift while preserving CRLF line endings, BOMs, curly quotes and your indentation style.
 

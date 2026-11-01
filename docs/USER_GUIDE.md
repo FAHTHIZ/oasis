@@ -899,6 +899,7 @@ Local servers often run a model with a much smaller context window than the mode
 
 OASIS asks the server what it actually loaded and works within that window:
 
+- **Compact prompt.** At 16K tokens or less, OASIS also uses a short system prompt (about 1.6K tokens instead of 4.2K, before project instructions) that keeps the rules for correctness and safety, such as reading before editing, not claiming unverified results, not weakening tests, and not reading secrets. With the 13-tool set, startup overhead on an 8K window drops from about 6.3K tokens to about 3.7K.
 - **Detection.** Ollama (`/api/ps`, then the Modelfile `num_ctx`), LM Studio (`/api/v0/models` `loaded_context_length`) and llama.cpp `llama-server` (`/props` `n_ctx`) are probed at session start on their default ports (11434, 1234, 8080) or any Ollama host. Other loopback ports are probed only with `OASIS_LOCAL_CONTEXT_PROBE=1`; `OASIS_LOCAL_CONTEXT_PROBE=0` turns probing off. An explicit `contextWindow` or `OASIS_CONTEXT_WINDOW` always wins.
 - **Earlier compaction.** Windows smaller than 32K compact at about 45% full, leaving room for tool schemas and the reply.
 - **Small tool set.** At 16K or less, only 13 essential tools (read, list, glob, search, grep, edit, write, run, command output, git status, git diff, todos, tool search) are sent. The rest load on first use or through `tool_search`. `OASIS_SMALL_CONTEXT_TOOLS=0` turns this off.

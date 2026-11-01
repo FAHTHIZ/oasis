@@ -163,3 +163,19 @@ test('DeepSeek V4 models get the 1M window', async () => {
   assert.equal(modelContextWindow('deepseek-flash'), 1_048_576);
   assert.equal(modelContextWindow('deepseek-chat'), 128_000);
 });
+
+test('small context windows get a compact system prompt; normal windows keep the full one', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-compact-prompt-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const base = { protocol: 'openai-compatible', baseURL: 'https://api.example.test/v1', model: 'fixture', apiKey: '' };
+  const small = await createSession({ root, config: { ...base, contextWindow: 8192 }, env: { ...process.env, OASIS_MODEL_INFO_PROBE: '0' } });
+  const large = await createSession({ root, config: { ...base, contextWindow: 200000 }, env: { ...process.env, OASIS_MODEL_INFO_PROBE: '0' } });
+  t.after(() => { closeSession(small); closeSession(large); });
+  const smallPrompt = small.messages[0].content;
+  const largePrompt = large.messages[0].content;
+  assert.match(smallPrompt, /Read a file before editing it/);
+  assert.match(smallPrompt, /Never claim a test passed/);
+  assert.doesNotMatch(smallPrompt, /use delegate_openhands|use setup_omniroute|launch a bounded wave/);
+  assert.match(largePrompt, /launch a bounded wave/);
+  assert.ok(smallPrompt.length < largePrompt.length / 2, smallPrompt.length + ' vs ' + largePrompt.length);
+});
