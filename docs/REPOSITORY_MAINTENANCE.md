@@ -29,7 +29,7 @@ This document is the canonical record for repository layout, intentional copies,
 
 The current package version is `1.0.0` with Release Candidate 1 metadata. Its `oasisRelease` metadata identifies Release Candidate 1 on `main`; it is not a Git tag, GitHub Release, or stable installer channel. The stable installer intentionally ignores prerelease tags and continues to resolve the latest stable semantic-version tag.
 
-The desktop workflow builds artifacts on normal pushes, but publishing now requires an explicit workflow dispatch with `publish_release: true`. Tags containing a prerelease suffix (for example `v1.0.0`) must be published with GitHub's prerelease flag and must not be marked latest. The final `v1.0.0` release may be marked latest only after the full same-commit qualification checklist passes.
+The desktop workflow builds artifacts on normal pushes, but publishing now requires an explicit workflow dispatch with `publish_release: true`. The current RC1 source snapshot is not tagged. The final `v1.0.0` release may be marked latest only after the full same-commit qualification checklist passes.
 
 ## Source and test organization
 
