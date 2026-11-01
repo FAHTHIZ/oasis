@@ -6,7 +6,7 @@ This is the canonical navigation hub for OASIS. The root [README](../README.md) 
 
 OASIS is in **1.0 Release Candidate / Production Qualification**. The 1.0 feature scope is established; the current work is reliability, agent quality, security-boundary validation, accessibility, platform qualification, and operational refinement.
 
-- Development package on `main`: `1.0.0-rc.1`
+- Development package on `main`: `1.0.0` (Release Candidate 1 metadata)
 - Latest published stable release: `v0.4.0`
 - RC1 has not been tagged or published. The stable installer continues to resolve `v0.4.0` until stable 1.0.0 is accepted.
 
@@ -50,8 +50,8 @@ The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for
 |---|---|
 | [GitHub Action guide](github-action.md) | Repository automation, configuration, and safety boundaries. |
 | [GitHub Action example](examples/oasis-github.yml) | Copyable workflow example. |
-| [Changelog](../CHANGELOG.md) | Current 1.0.0-rc.1 candidate changes and historical release history. |
-| [1.0.0-rc.1 candidate notes](releases/v1.0.0-rc.1.md) | Candidate scope, unpublished status, and qualification gates. |
+| [Changelog](../CHANGELOG.md) | Current 1.0.0 candidate changes and historical release history. |
+| [1.0.0 Release Candidate 1 notes](releases/v1.0.0-candidate.md) | Candidate scope, unpublished status, and qualification gates. |
 | [Published v0.4.0 notes](releases/v0.4.0.md) | Historical Beta release notes and its downloadable assets. |
 | [Contributing guide](../CONTRIBUTING.md) | Development setup, test expectations, and change policy. |
 | [License](../LICENSE) | Apache License 2.0. |
