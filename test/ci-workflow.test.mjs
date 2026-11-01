@@ -27,27 +27,35 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
   assert.ok(publishing.includes('group: oasis-public-launch-${{ github.ref }}'));
 });
 
-test('public product lifecycle is Beta, not Alpha', async () => {
+test('public product lifecycle is 1.0 Release Candidate 1, not Beta', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const status = await readFile(new URL('../docs/PROJECT_PLAN.md', import.meta.url), 'utf8');
-  assert.match(readme, /status-beta-/);
-  assert.match(readme, /OASIS is in beta/i);
-  assert.doesNotMatch(readme, /status-alpha|OASIS is in alpha/i);
-  assert.match(status, /\*\*Lifecycle:\*\* Beta/);
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.match(readme, /stage-release%20candidate/);
+  assert.match(readme, /Current lifecycle.*Release Candidate/i);
+  assert.doesNotMatch(readme, /OASIS is in beta|status-alpha|OASIS is in alpha/i);
+  assert.match(status, /\*\*Product lifecycle:\*\* Release Candidate \/ Production Qualification/);
+  assert.match(status, /\*\*Release channel:\*\* Release Candidate 1/);
+  assert.equal(pkg.version, '1.0.0');
+  assert.equal(pkg.oasisRelease?.channel, 'release-candidate');
+  assert.equal(pkg.oasisRelease?.candidate, 1);
 });
 
-test('desktop Beta release auto-publishes a new main version only after all gates', async () => {
+test('desktop release requires an explicit stable publication dispatch and same-commit gates', async () => {
   const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
   const notes = await readFile(new URL('../docs/releases/v0.4.0.md', import.meta.url), 'utf8');
   assert.ok(workflow.includes('branches: [main]'));
   assert.ok(!workflow.includes("tags: ['v*']"));
-  assert.ok(workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
-  assert.ok(workflow.includes('[ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$REF" = "refs/heads/main" ]'));
-  assert.ok(workflow.includes('tag="$expected"'));
   assert.ok(workflow.includes('publish_release:'));
-  assert.ok(workflow.includes('default: false'));
-  assert.ok(workflow.includes('type: boolean'));
+  assert.ok(workflow.includes('confirm_stable_release:'));
   assert.ok(workflow.includes('inputs.publish_release == true'));
+  assert.ok(workflow.includes('inputs.confirm_stable_release == true'));
+  assert.ok(workflow.includes("github.event_name == 'workflow_dispatch'"));
+  assert.ok(!workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
+  assert.ok(workflow.includes('release_channel='));
+  assert.ok(workflow.includes('oasisRelease?.channel'));
+  assert.ok(workflow.includes('must be stable'));
+  assert.ok(workflow.includes('tag="$expected"'));
   assert.ok(workflow.includes('echo "publish=false"'));
   assert.ok(workflow.includes('echo "publish=true"'));
   assert.ok(workflow.includes("if: steps.release-version.outputs.publish == 'true'"));
@@ -59,7 +67,7 @@ test('desktop Beta release auto-publishes a new main version only after all gate
   assert.ok(workflow.includes('Timed out waiting for $workflow to pass'));
   for (const name of ['quality.yml', 'pages.yml', 'installer-checks.yml']) assert.ok(workflow.includes(name));
   assert.ok(workflow.includes('target_commitish: ${{ steps.release-version.outputs.target_commitish }}'));
-  assert.ok(workflow.includes('make_latest: true'));
+  assert.ok(workflow.includes('make_latest:'));
   assert.ok(workflow.includes('body_path: ${{ steps.release-version.outputs.notes_path }}'));
   assert.ok(workflow.includes('sha256sum'));
   assert.ok(!workflow.includes('git push origin "$tag"'));
