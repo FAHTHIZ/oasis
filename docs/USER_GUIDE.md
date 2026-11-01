@@ -654,6 +654,7 @@ More built-ins:
 - `/security-review` does the same with a security focus.
 - `/export [file]` saves the conversation as Markdown inside the workspace.
 - `/resume` lists saved sessions; `/resume N` or `/resume ID` switches to one.
+- From the shell: `oasis -c` continues the latest session, `oasis -r ID` resumes one, and `oasis -r` with no ID opens the list. Codex's `oasis resume`, `oasis resume --last` and `oasis resume ID` work too.
 - A custom command with the same name, such as `.oasis/commands/review.md`, replaces the built-in review prompt.
 
 Custom commands are Markdown files, compatible with Claude Code. `.oasis/commands/review.md` becomes `/review`, and `.oasis/commands/git/pr.md` becomes `/git:pr`. OASIS also reads `.claude/commands/`, `~/.config/oasis/commands/`, and `~/.claude/commands/`.

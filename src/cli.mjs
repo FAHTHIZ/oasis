@@ -2912,6 +2912,10 @@ async function main() {
   const rawArgs = process.argv.slice(2);
   // `oasis exec PROMPT` is an alias for `oasis -p PROMPT` (Codex CLI muscle memory).
   if (rawArgs[0] === 'exec') rawArgs[0] = '-p';
+  // `oasis resume [--last | ID]` (Codex CLI) maps to -c / -r.
+  if (rawArgs[0] === 'resume' && (rawArgs.length === 1 || rawArgs[1] === '--last' || /^[0-9a-f][0-9a-f-]{6,}$/i.test(rawArgs[1] || '') || String(rawArgs[1] || '').startsWith('-'))) {
+    if (rawArgs[1] === '--last') rawArgs.splice(0, 2, '-c'); else rawArgs[0] = '-r';
+  }
   let autoApprove = process.env.OASIS_AUTO_APPROVE === '1';
   if (process.env.CLAUDE_CODE_SAFE_MODE === '1' || process.env.OASIS_SAFE_MODE === '1') { SESSION_OPTIONS.safeMode = true; process.env.OASIS_SAFE_MODE = '1'; }
   // Sessions are saved by default (resume with -c / -r / /resume), like Claude Code.
@@ -3173,7 +3177,8 @@ async function main() {
     if (arg === '--no-session-persistence') { noPersist = true; continue; }
     if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume' || arg === '-r') {
-      if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
+      // Without an ID (like `claude -r`), open the session picker.
+      if (!rawArgs[i + 1] || rawArgs[i + 1].startsWith('-')) { SESSION_OPTIONS.resumePicker = true; persistSession = true; continue; }
       resumeId = rawArgs[++i]; persistSession = true; continue;
     }
     if (arg === '--workspace' || arg === '-C' || arg === '--cd') {
@@ -3242,6 +3247,10 @@ async function main() {
     return;
   }
   if (SESSION_OPTIONS.tmux && !worktreeName) throw new Error('--tmux requires --worktree.');
+  if (SESSION_OPTIONS.resumePicker) {
+    if (headless.enabled) throw new Error('--resume requires a saved session ID with -p.');
+    QUEUED_INPUT.unshift('/resume');
+  }
   if (SESSION_OPTIONS.initialPrompt && !headless.enabled) {
     if (command && command !== '--interactive') throw new Error('--prompt-interactive takes the whole first message; quote it, for example oasis -i "fix the tests".');
     QUEUED_INPUT.push(SESSION_OPTIONS.initialPrompt);
