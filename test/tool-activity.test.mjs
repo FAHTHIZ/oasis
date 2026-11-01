@@ -48,6 +48,8 @@ test('failed commands, warnings, timeouts and tool errors produce visible warnin
   assert.match(toolActivityWarning({ exitCode: 1, output: 'Assertion failed' }), /failed \(exit code 1\)/i);
   assert.match(toolActivityWarning({ error: 'File could not be read' }), /could not be read/i);
   assert.match(toolActivityWarning({ warning: 'Verification incomplete' }), /Verification incomplete/);
+  assert.match(toolActivityWarning({ exitCode: 0, stdout: 'Warning: the compiler skipped a check.' }), /Warning: the compiler skipped a check/);
+  assert.match(toolActivityWarning({ exitCode: 0, output: 'Tests weakened in 1 place.' }), /Tests weakened/);
   assert.match(toolActivityWarning({ timedOut: true }), /timed out/i);
   assert.equal(toolActivityWarning({ exitCode: 0, output: 'ok' }), '');
 });
