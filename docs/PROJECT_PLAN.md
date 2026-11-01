@@ -36,9 +36,9 @@ OASIS is not a hosted model or a proprietary model endpoint. The user chooses th
 
 ### Current maturity
 
-The 1.0.0 feature scope is established. OASIS is no longer being managed as an early feature-preview or Beta project. The current phase is **Release Candidate / Production Qualification**.
+The planned 1.0.0 product scope is feature-complete. OASIS is no longer in Beta or an early feature-building phase. The current phase is **1.0 Release Candidate / Production Qualification**.
 
-The work remaining is primarily refinement and qualification: stronger agent behavior, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. New product-surface expansion is not the default priority for 1.0.
+The work remaining is primarily refinement and qualification: stronger agents, better tool selection and task completion, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. The default priority is to improve and finish the existing product—not introduce substantial new product surfaces or expand scope.
 
 This maturity statement is not a claim that production qualification is complete. A release-candidate label says the product scope is being stabilized; it does not certify security, platform support, uptime, or defect-free behavior.
 
