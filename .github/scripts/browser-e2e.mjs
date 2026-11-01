@@ -27,6 +27,14 @@ const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(
 await mkdir(screenshotDir, { recursive: true });
 
 async function assertAgentContrast(page, label) {
+  // Measure the settled UI, not a frame mid fade-in: wait for finite animations
+  // and transitions (infinite pulses are skipped) before sampling colors.
+  await page.evaluate(() => Promise.race([
+    Promise.all(document.getAnimations()
+      .filter((animation) => { const timing = animation.effect && animation.effect.getComputedTiming(); return animation.playState === 'running' && timing && Number.isFinite(timing.endTime); })
+      .map((animation) => animation.finished.catch(() => {}))),
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]));
   const results = await new AxeBuilder({ page })
     .include('#view-agent')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
