@@ -290,12 +290,23 @@ export function contextWindowFromError(error) {
 // tool schemas alone exceed it, so there is no history to compact. Learn the
 // real window from the error and drop to the small-context tool set (rare tools
 // stay reachable through tool_search).
+const LLAMA_OVERFLOW_PATTERN = /exceed_context_size_error|exceeds the available context size/i;
+function isLoopbackBaseURL(baseURL) {
+  try { return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(new URL(String(baseURL || '')).hostname.toLowerCase()); } catch { return false; }
+}
+
 function adoptReportedContextWindow(session, error, env) {
   const window = contextWindowFromError(error);
   if (!window) return false;
   const current = Number(session.config && session.config.contextWindow) || 0;
   let changed = false;
   if (!current || window < current) { session.config = { ...(session.config || {}), contextWindow: window }; changed = true; }
+  // llama-server words its overflow error in its own way. On a port OASIS does not
+  // probe, that error is the first sign of the server, so remember it: prompt
+  // read progress (return_progress) then works for the rest of the session.
+  if (!session.localContext && LLAMA_OVERFLOW_PATTERN.test(String(error && error.message || '')) && isLoopbackBaseURL(session.config && session.config.baseURL)) {
+    session.localContext = { server: 'llama.cpp', contextLength: window, source: 'overflow-error' };
+  }
   if (window <= SMALL_CONTEXT_TOKENS && !/^(?:0|false|off|no)$/i.test(String((env || process.env).OASIS_SMALL_CONTEXT_TOOLS || '')) && Array.isArray(session.toolDefinitions)) {
     const deferred = applySmallContextProfile(session, TOOL_SEARCH_DEFINITION);
     if (deferred) {
