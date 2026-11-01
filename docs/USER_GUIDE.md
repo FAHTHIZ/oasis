@@ -1,5 +1,7 @@
 # OASIS user guide
 
+**Version channel:** the current `main` source package is `1.0.0-rc.1` (Release Candidate / Production Qualification). The stable installer still resolves the latest published stable tag, currently `v0.4.0`. The RC package is not yet a published stable release. See [the project plan](PROJECT_PLAN.md) for qualification gates.
+
 Need a topic-first overview? Start with the [user-guide map](USER_GUIDE_MAP.md). For the project overview and quickest start, see the [main README](../README.md). For the system map and component boundaries, see the [architecture guide](ARCHITECTURE.md). For the implementation inventory and known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
 ## Quick navigation
