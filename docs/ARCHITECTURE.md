@@ -166,6 +166,8 @@ This is a protocol distinction, not a claim that every model on every provider h
 
 Provider setup tests a small inert tool-call schema before saving supported configurations. The probe response is checked but the proposed tool is not executed. A failed verification should not replace the previously working provider configuration. Optional easy/strong model routing is separate from provider selection, is off by default, and estimates cost from configured rates and observed usage; it does not guarantee savings or equal answer quality.
 
+**Timeouts and transport.** Each request has a first-byte timeout (`requestTimeoutMs`: 120 s for streamed cloud requests, 600 s otherwise, 900 s for loopback providers; `OASIS_REQUEST_TIMEOUT_SECONDS` overrides up to 2 h), replaced by a stream-idle watchdog once data flows. Requests to loopback providers use `src/loopback-fetch.mjs` (`node:http`) instead of the built-in `fetch`, because undici's fixed 300 s header timeout would otherwise cancel any prompt that takes a local server longer than five minutes to read. It keeps fetch's error contract (network failures are `TypeError`, a mid-body drop is `TypeError('terminated')` and restarts the stream) and is skipped when `fetch` has been replaced or `OASIS_LOOPBACK_FETCH=0`.
+
 ### Credential ownership
 
 - CLI and ordinary local browser mode use user-level OASIS configuration and environment overrides. On POSIX hosts, configuration files are written with restrictive permissions where supported; this is file-permission protection, not OS-backed encryption.
