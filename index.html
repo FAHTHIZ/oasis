@@ -1421,6 +1421,9 @@ if(agentToken){void agentConnect(true);void githubRefreshStatus(true,false)}
 window.oasisCore={
   get token(){return agentToken},get busy(){return agentBusy},get nodes(){return agentAssistantNodes},
   navigate:function(v){return navigate(v)},
+  processEvent:function(jobId,event){return agentProcessEvent(jobId,event)},
+  appendMessage:function(role,text,id){return agentAppendMessage(role,text,id)},
+  appendAssistantDelta:function(jobId,delta){return agentAppendAssistantDelta(jobId,delta)},
   hook:function(name,factory){
     switch(name){
       case 'agentScroll':agentScroll=factory(agentScroll);break;
