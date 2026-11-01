@@ -49,7 +49,7 @@ test('installers resolve the latest stable versioned Git tag to an immutable com
   assert.match(install, /command -v wget/);
   assert.match(termux, /command -v curl/);
   assert.match(termux, /command -v wget/);
-  assert.match(termux, /Android is not yet a fully verified support target/i);
+  assert.match(termux, /Android remains an experimental platform target/i);
   assert.match(install, /TERMUX\.md/);
 });
 
