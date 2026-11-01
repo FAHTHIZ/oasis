@@ -47,6 +47,7 @@ test('tool activity details redact secrets before the browser receives arguments
 test('failed commands, warnings, timeouts and tool errors produce visible warnings', () => {
   assert.match(toolActivityWarning({ exitCode: 1, output: 'Assertion failed' }), /failed \(exit code 1\)/i);
   assert.match(toolActivityWarning({ error: 'File could not be read' }), /could not be read/i);
+  assert.match(toolActivityWarning({ warning: 'Verification incomplete' }), /Verification incomplete/);
   assert.match(toolActivityWarning({ timedOut: true }), /timed out/i);
   assert.equal(toolActivityWarning({ exitCode: 0, output: 'ok' }), '');
 });
