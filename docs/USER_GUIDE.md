@@ -554,7 +554,7 @@ Every shortcut can be rebound in compatible-format `keybindings.json` format. OA
 - Ctrl+C, Ctrl+D, Ctrl+M, Ctrl+[, Ctrl+I and Ctrl+H are reserved and cannot be rebound.
 - In history search, Enter accepts the match into the prompt by default. Bind `enter` to `historySearch:execute` to send it right away, using the supported format.
 
-Replies render as Markdown with syntax-highlighted code, and edits show as colored diffs. Settings: `OASIS_NO_ANIMATION=1` skips the startup animation, `OASIS_SIMPLE_INPUT=1` uses a plain line reader, `OASIS_PLAIN_OUTPUT=1` prints raw text, and `NO_COLOR` turns off colors.
+Replies render as Markdown with syntax-highlighted code, and edits show as colored diffs. While Oasis waits for the model's first token it shows a one-line status (`⠋ Thinking… · 12s · 15.4k tokens sent · esc to stop`); with a local model that is still reading a long prompt it says so. Motion adapts to the machine: a smooth spinner with a shimmer on capable machines, a slow dot pulse and a short logo reveal on low-power machines (2 or fewer CPUs, under 4 GB RAM, a busy CPU), over SSH and on the Linux console, and no animation in CI, on dumb terminals, in screen-reader mode or with `OASIS_REDUCED_MOTION=1` / `NO_MOTION=1`. `OASIS_MOTION=full|lite|off` overrides detection. Settings: `OASIS_NO_ANIMATION=1` skips the startup animation, `OASIS_SIMPLE_INPUT=1` uses a plain line reader, `OASIS_PLAIN_OUTPUT=1` prints raw text, and `NO_COLOR` turns off colors.
 
 ### Workflow commands
 
@@ -976,7 +976,7 @@ These are on by default and each can be switched off.
 | Pipe warning | Commands like `npm test \| tail` that hide a failing exit status are flagged. | — |
 | Background watchdog | Background commands accept `max_seconds`; a stuck notice fires after `OASIS_BACKGROUND_STUCK_SECONDS` (default 300) with no output. | — |
 | Scope lock | `/scope src/api/**` (or `OASIS_EDIT_SCOPE`) blocks edits outside the given paths. `/scope off` clears it. | — |
-| Stream watchdog | Idle streams are detected after `OASIS_STREAM_IDLE_SECONDS` (default 120) and retried or sent to the fallback model. `OASIS_REQUEST_TIMEOUT_SECONDS` sets the request timeout. | — |
+| Stream watchdog | Idle streams are detected after `OASIS_STREAM_IDLE_SECONDS` (default 120) and retried or sent to the fallback model. `OASIS_REQUEST_TIMEOUT_SECONDS` sets the request timeout (default 120 s for streamed cloud requests, 600 s otherwise, and 900 s for providers on localhost, which can spend minutes reading a long prompt). | — |
 | Tool aliases | Claude Code style tool names (`Read`, `Edit`, `Bash`, `Glob`, `Grep`, `TodoWrite`, `Task` …) work and are mapped to OASIS tools. | — |
 
 ## Extra agent tools

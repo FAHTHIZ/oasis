@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scrubEnvironment } from './tools.mjs';
+import { motionLevel } from './activity-indicator.mjs';
 import { ANSI, colorEnabled, renderDiff } from './markdown.mjs';
 import { currentTheme, themeFg } from './themes.mjs';
 import { stringWidth, stripAnsi } from './line-editor.mjs';
@@ -44,7 +45,7 @@ const rgb = (tone) => (tone ? '\x1b[38;2;' + tone[0] + ';' + tone[1] + ';' + ton
 export function animationEnabled(stream = process.stdout, env = process.env) {
   if (!colorEnabled(stream, env)) return false;
   if (env.OASIS_NO_ANIMATION === '1' || env.CI || env.TERM === 'dumb') return false;
-  return true;
+  return motionLevel({ env, stream }) !== 'off';
 }
 
 // Renders one logo frame. `reveal` (0..1) controls how many columns are drawn;
@@ -106,9 +107,12 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
     try {
       for (let i = 0; i < height; i += 1) output.write('\n');
       const draw = (lines) => output.write('\x1b[' + height + 'A\r' + lines.map((line) => '\x1b[2K' + line).join('\n') + '\n');
-      const revealFrames = 16;
-      for (let f = 1; f <= revealFrames; f += 1) { draw(logoFrame(f / revealFrames, Math.round((f / revealFrames) * width), color)); await sleep(22); }
-      for (let s = width; s >= -6; s -= 3) { draw(logoFrame(1, s, color)); await sleep(16); }
+      // Low-power machines and SSH sessions get a short reveal with no sweep:
+      // fewer full-logo redraws, same final frame.
+      const lite = motionLevel({ env, stream: output }) === 'lite';
+      const revealFrames = lite ? 4 : 16;
+      for (let f = 1; f <= revealFrames; f += 1) { draw(logoFrame(f / revealFrames, lite ? -1 : Math.round((f / revealFrames) * width), color)); await sleep(lite ? 40 : 22); }
+      if (!lite) for (let s = width; s >= -6; s -= 3) { draw(logoFrame(1, s, color)); await sleep(16); }
       draw(logoFrame(1, -1, color));
     } finally { output.write('\x1b[?25h'); }
   } else {

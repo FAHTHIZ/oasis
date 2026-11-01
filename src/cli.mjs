@@ -40,6 +40,7 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled } from './markdown.mjs';
+import { createActivityIndicator } from './activity-indicator.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, verboseToolOutput } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
@@ -826,7 +827,15 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
 let streamedSoFar = '';
 let markdownStream = null;
 const richOutput = () => colorEnabled(stdout) && process.env.OASIS_PLAIN_OUTPUT !== '1';
+let waitIndicator = null;
+function onModelWait(event = {}) {
+  if (event.phase !== 'start') { stopWaitIndicator(); return; }
+  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
+  waitIndicator.start(event);
+}
+function stopWaitIndicator() { if (waitIndicator) waitIndicator.stop(); }
 function streamDelta(accumulated) {
+  stopWaitIndicator();
   const text = String(accumulated || '');
   // An empty update means the stream restarted; onStreamRestart ends the line.
   if (!text) return;
@@ -841,6 +850,7 @@ function streamDelta(accumulated) {
   streamedSoFar = text || ' ';
 }
 function endStream() {
+  stopWaitIndicator();
   if (!streamedSoFar) return false;
   if (markdownStream) { markdownStream.end(); markdownStream = null; }
   else stdout.write('\n');
@@ -1742,6 +1752,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onThinkingBudget: (budget) => stdout.write('[thinking] Extended thinking on for this task (budget ' + budget + ' tokens).\n'),
       onReasoningEffort: (effort) => stdout.write('[thinking] Reasoning effort ' + effort + ' for this task.\n'),
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
+      ...(stdout.isTTY ? { onModelWait } : {}),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
@@ -1826,6 +1837,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       haltAutoContinue(error);
     }
   } finally {
+    stopWaitIndicator();
     process.removeListener('SIGINT', onInterrupt);
     if (turnKeys) { turnKeys.stop(); turnKeys = null; }
   }
