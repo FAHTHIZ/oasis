@@ -10,6 +10,7 @@ Future changes after the current 1.0.0 release candidate belong here.
 
 Reliability and token-efficiency work driven by common coding-agent complaints:
 
+- **Compact system prompt for small windows** — at 16K tokens or less the system prompt shrinks from ~4.2K to ~1.6K tokens while keeping the core correctness and safety rules; with the small tool set, an 8K window keeps ~4.3K tokens for work instead of ~1.7K.
 - **Context windows from the provider** — unknown hosted or self-hosted models read their window from `GET /models` (DeepSeek, OpenRouter, vLLM) instead of assuming 32K; DeepSeek V4 (`deepseek-v4-pro`, `deepseek-flash`) is listed at 1M. `OASIS_MODEL_INFO_PROBE=0` disables the lookup.
 - **Cancel keeps history** — stopping a turn mid-reply keeps the request and the partial reply (marked as interrupted) in the conversation, so "continue" or a correction builds on it (Gemini CLI complaint: cancel erases history).
 - **Headless signal handling** — SIGTERM/SIGINT/SIGHUP during `oasis -p` cancel the turn, stop running commands and their process groups (previously they outlived Oasis), and exit `128+signal` instead of looking like a success (Gemini CLI headless bug class).
