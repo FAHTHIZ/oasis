@@ -71,7 +71,7 @@ Use **OASIS** as the product name and **Code. Automate. Flourish.** as the prima
 
 ## Release-state identity
 
-The current product lifecycle is **1.0 Release Candidate / Production Qualification**. Use the `1.0.0-rc.1` status badge in current product material. Do not use Beta-stage artwork as the current status signal; the `oasis-beta-*` files remain historical assets associated with the v0.4.0 release period.
+The current product lifecycle is **1.0 Release Candidate / Production Qualification**. Use the `1.0.0` / RC1 status badge in current product material. Do not use Beta-stage artwork as the current status signal; the `oasis-beta-*` files remain historical assets associated with the v0.4.0 release period.
 
 Current release-candidate status assets:
 
