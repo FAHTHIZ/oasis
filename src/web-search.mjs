@@ -2,6 +2,7 @@
 // Legacy mode preserves the original provider selection. Federated mode searches
 // configured engines in parallel and merges independent rankings using RRF.
 // Credentials are read only from the process environment and are never returned.
+import { oasisVersion } from './version.mjs';
 
 export const WEB_SEARCH_TOOL_DEFINITION = {
   type: 'function',
@@ -224,7 +225,7 @@ async function searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl) {
   const effectiveQuery = providerQuery(query, allowed);
   const response = await request('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(effectiveQuery), {
     headers: {
-      'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/0.3; +https://github.com/FAHTHIZ/oasis)',
+      'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/' + oasisVersion() + '; +https://github.com/FAHTHIZ/oasis)',
       accept: 'text/html'
     }
   }, fetchImpl);

@@ -1,3 +1,4 @@
+import { oasisVersion } from './version.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { access, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -52,7 +53,7 @@ async function getResponseText(fetchImpl, url, options = {}) {
       redirect: 'manual',
       signal: timer.signal,
       headers: {
-        'user-agent': 'OasisOSS/0.3 (+https://github.com/FAHTHIZ/oasis)',
+        'user-agent': 'OasisOSS/' + oasisVersion() + ' (+https://github.com/FAHTHIZ/oasis)',
         accept: options.json ? 'application/vnd.github+json' : 'text/plain, text/markdown, */*;q=0.1'
       }
     });

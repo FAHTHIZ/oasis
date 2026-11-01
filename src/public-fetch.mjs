@@ -1,3 +1,4 @@
+import { oasisVersion } from './version.mjs';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
@@ -50,7 +51,7 @@ async function requestPublicUrl(url, addresses, signal) {
       method: 'GET',
       signal,
       headers: {
-        'user-agent': 'OasisOSS/0.2 (+https://github.com/FAHTHIZ/oasis)',
+        'user-agent': 'OasisOSS/' + oasisVersion() + ' (+https://github.com/FAHTHIZ/oasis)',
         accept: 'text/plain,text/html,application/json,text/markdown,*/*;q=0.2'
       }
     };
