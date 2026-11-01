@@ -56,3 +56,24 @@ test('a failed edit does not reset the count', async (t) => {
   const toolMessages = payloads.at(-1).messages.filter((message) => message.role === 'tool');
   assert.match(toolMessages[3].content, /failed 3 times/);
 });
+
+test('edits that never change the failure trigger a step-back reminder', async (t) => {
+  const edit = (from, to) => ({ tool: 'edit_file', args: { path: 'a.txt', old_string: from, new_string: to } });
+  const { session, payloads } = await fixture(t, [npmTest, edit('one', 'two'), npmTest, edit('two', 'three'), npmTest, { content: 'explaining' }]);
+  const thrashes = [];
+  await runAgentTurn(session, 'make tests pass', { autoApprove: true, onThrash: (event) => thrashes.push(event) });
+  const toolMessages = payloads.at(-1).messages.filter((message) => message.role === 'tool');
+  assert.doesNotMatch(toolMessages[2].content, /did not change this failure/);
+  assert.match(toolMessages[4].content, /Your last 3 edits did not change this failure/);
+  assert.equal(thrashes.length, 1);
+  assert.equal(thrashes[0].count, 3);
+});
+
+test('failureSignature ignores timings, numbers and temp paths but not the error itself', async () => {
+  const { failureSignature } = await import('../src/agent.mjs');
+  const a = failureSignature({ exitCode: 1, stderr: 'AssertionError: expected 41 to equal 42\n  at /tmp/oasis-x1/test.js:10:3\n(12ms)' });
+  const b = failureSignature({ exitCode: 1, stderr: 'AssertionError: expected 41 to equal 42\n  at /tmp/oasis-y9/test.js:10:3\n(98ms)' });
+  const c = failureSignature({ exitCode: 1, stderr: 'TypeError: cannot read properties of undefined' });
+  assert.equal(a, b);
+  assert.notEqual(a, c);
+});

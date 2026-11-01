@@ -1747,6 +1747,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
+      onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
       onStreamRestart: (info) => { endStream(); stdout.write('[network] The model connection dropped mid-response; retrying (' + info.attempt + '/2). The partial reply above is discarded.\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write('\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
       onCompactionStart: (info) => { endStream(); stdout.write('\n[context] Compacting ' + info.messages + ' older messages (about ' + Number(info.beforeTokens || 0).toLocaleString('en-US') + ' tokens; local fallback after ' + info.timeoutSeconds + 's)…\n'); },

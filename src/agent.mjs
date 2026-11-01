@@ -2253,6 +2253,24 @@ const FILE_EDITING_TOOL_NAMES = new Set(['edit_file', 'write_file', 'multi_edit'
 const RETRY_TRACKED_COMMANDS = new Set(['run_command', 'run_shell', 'powershell']);
 const RETRY_WARN_AT = 3;
 const RETRY_HALT_AT = 5;
+// Edit -> same failure -> edit -> same failure: the fixes are not reaching the
+// cause. Nudge at 3 identical failures across edits, escalate at 5.
+const THRASH_WARN_AT = 3;
+const THRASH_ESCALATE_AT = 5;
+
+// A stable fingerprint of why a command failed, ignoring timings, counts,
+// addresses and temp paths that differ between otherwise identical runs.
+export function failureSignature(result) {
+  const text = String((result && result.stderr) || '') + '\n' + String((result && result.stdout) || '');
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const telling = lines.filter((line) => /error|fail|assert|expected|exception|traceback|panic|cannot|undefined|not ok|✗|✖/i.test(line) && !/^#\s*(pass|fail|tests|suites|duration)/i.test(line));
+  const picked = (telling.length ? telling : lines.slice(-10)).slice(0, 20);
+  return picked.map((line) => line
+    .replace(/\b0x[0-9a-f]+\b/gi, '0x')
+    .replace(/\/(?:tmp|var\/folders)\/[^\s:'")]+/g, '/tmp/…')
+    .replace(/\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds|m)\b/gi, 'T')
+    .replace(/\d+/g, 'N')).join('\n') + '\nexit:' + (result && result.exitCode);
+}
 const PROTECTED_EDIT_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 const AUTO_LSP_EDIT_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 
@@ -3973,6 +3991,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const claimState = newClaimState();
   let correctionNudged = false;
   const failedCommandRuns = new Map();
+  // command key -> { signature, count, editEpoch } for failures that persist across edits.
+  const persistentFailures = new Map();
+  let editEpoch = 0;
   session.turnQuestionCount = 0;
 
   for (let step = 0; step < maxSteps; step++) {
@@ -4326,10 +4347,27 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         // Same failing command again and again with nothing changed in between
         // (outputs differ by timestamps, so the identical-outcome check misses it).
         const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
-        if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) failedCommandRuns.clear();
+        if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); editEpoch++; }
         else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
           const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
           const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
+          if (!failed) persistentFailures.delete(key);
+          else {
+            const signature = failureSignature(result);
+            const previous = persistentFailures.get(key);
+            if (previous && previous.signature === signature) {
+              // Only count a repeat when the model changed files since the last run;
+              // unchanged retries are handled by failedCommandRuns below.
+              if (previous.editEpoch !== editEpoch) { previous.count += 1; previous.editEpoch = editEpoch; }
+            } else persistentFailures.set(key, { signature, count: 1, editEpoch });
+            const thrash = persistentFailures.get(key).count;
+            if (thrash >= THRASH_WARN_AT && typeof item.content === 'string') {
+              item.content += thrash >= THRASH_ESCALATE_AT
+                ? '\n\n<system-reminder>' + thrash + ' rounds of edits have not changed this failure at all. Stop patching. Summarize for the user what you tried, what the failure says, and what you now suspect, then either try one clearly different approach backed by new evidence (logging, a minimal reproduction, reading the code that actually raises the error) or ask the user. Do not weaken or delete the test to make it pass.</system-reminder>'
+                : '\n\n<system-reminder>Your last ' + thrash + ' edits did not change this failure: the command fails the same way each time. The fix is not reaching the cause. Before editing again, re-read the exact error and the code it points to, state a specific hypothesis, and verify it (for example with a print, a smaller test, or by reading the caller) instead of trying another variation.</system-reminder>';
+              if (typeof options.onThrash === 'function') { try { options.onThrash({ command: commandText.slice(0, 160), count: thrash }); } catch {} }
+            }
+          }
           if (!failed) failedCommandRuns.delete(key);
           else {
             const count = (failedCommandRuns.get(key) || 0) + 1;

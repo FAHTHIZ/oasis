@@ -915,6 +915,10 @@ Smaller and local models often almost follow the tool-calling format. OASIS repa
 
 If the model connection drops or stalls mid-response, OASIS restarts that response on the same model up to twice before falling back or failing. Tool calls are only returned once a response completes, so a restart can never run a tool twice. The partial reply is replaced, not duplicated, and the CLI, browser and `stream-json` output each show that the response was restarted.
 
+### Debugging loops
+
+OASIS watches for two kinds of loops. If the same command fails again with no file changes in between, it warns on the 3rd attempt and stops on the 5th. If the model keeps editing but a command fails the same way each time (the same error, ignoring timings, counts and temp paths), the 3rd identical failure adds a reminder to stop patching, re-read the error, and test a specific hypothesis. By the 5th, the model is told to summarize what it tried for you, then either try one clearly different approach or ask you. It is also reminded not to weaken the test. The CLI shows a `[stuck?]` notice when this happens.
+
 The default per-task budget is now 60 model steps and 300 tool calls (it was 12 and 30). Raise or lower them with `maxSteps`, `maxToolCalls`, and `maxTokens` in the provider config, or `OASIS_MAX_STEPS`, `OASIS_MAX_TOOL_CALLS`, and `OASIS_MAX_TOKENS`.
 
 ## Command safety and OS sandbox
