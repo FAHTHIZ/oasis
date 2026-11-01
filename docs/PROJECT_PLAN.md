@@ -3,8 +3,8 @@
 **Updated:** November 1, 2026  
 **Lifecycle:** Beta  
 **Repository:** [FAHTHIZ/oasis](https://github.com/FAHTHIZ/oasis)  
-**Documentation snapshot after this pass:** [`4e48392f38748f4ade4c21ef023ae9a063245670`](https://github.com/FAHTHIZ/oasis/commit/4e48392f38748f4ade4c21ef023ae9a063245670)  
-**Runtime/CI audit baseline:** [`7927275a0edefd4e6c791a5774fd82eb13e7ec62`](https://github.com/FAHTHIZ/oasis/commit/7927275a0edefd4e6c791a5774fd82eb13e7ec62) (source snapshot inspected November 1, 2026; documentation-only commits followed).  
+**Documentation navigation checkpoint:** [`4e48392f38748f4ade4c21ef023ae9a063245670`](https://github.com/FAHTHIZ/oasis/commit/4e48392f38748f4ade4c21ef023ae9a063245670) (initial user-guide, source, and test maps).  
+**Runtime/CI audit baseline:** [`7927275a0edefd4e6c791a5774fd82eb13e7ec62`](https://github.com/FAHTHIZ/oasis/commit/7927275a0edefd4e6c791a5774fd82eb13e7ec62) (source snapshot inspected November 1, 2026; later commits in this pass are documentation-only).  
 **Latest published release:** [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0), published October 31, 2026.  
 **Source-audit baseline (runtime review):** `2683addcd077b3b20f5b4ad7e25f05e743e7c1bf`  
 **Historical CI evidence baseline:** `5d6225e982755dd333dc0d476e685b4f8f0282ac`  
@@ -56,7 +56,7 @@ These capabilities are present in the source and have subsystem tests. That does
 
 ### Development branch after v0.4.0
 
-- At the end of this documentation pass, `main` is 126 commits ahead of the `v0.4.0` tag. This includes later documentation and audit updates; the runtime/CI baseline above was 120 commits ahead.
+- At the runtime/CI audit baseline, `main` was 120 commits ahead of the `v0.4.0` tag; at the initial documentation-navigation checkpoint it was 126 commits ahead. Subsequent commits in this pass continued the documentation-only repair. Commit distance is not a product version or release-readiness measure.
 - `package.json` on `main` still reports `0.4.0`. This version string must not be mistaken for a new `v0.4.0` release: current `main` includes later, unreleased changes.
 - Do not move, replace, or retag `v0.4.0` to absorb subsequent work. The next versioned release should use a new version, immutable tag, release notes, checksums, and artifacts. `0.5.0` is a candidate next version, not a declared or published release.
 
