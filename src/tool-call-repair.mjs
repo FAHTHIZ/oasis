@@ -180,8 +180,14 @@ export function extractTextToolCalls(content, availableNames) {
   if (!toolNames.size) return null;
   const calls = [];
   const spans = [];
+  // Call syntax inside a code fence is being shown or quoted (for example from
+  // a file the model read), not invoked.
+  const fences = [];
+  for (const fence of content.matchAll(/```[\s\S]*?(?:```|$)/g)) fences.push([fence.index, fence.index + fence[0].length]);
+  const quoted = (index) => fences.some(([from, to]) => index > from && index < to);
   const tagged = /<tool_call>\s*([\s\S]*?)\s*(?:<\/tool_call>|$)/g;
   for (let match; (match = tagged.exec(content));) {
+    if (quoted(match.index)) continue;
     for (const object of balancedObjects(match[1])) {
       const call = asCall(tryParse(object.text).ok ? JSON.parse(object.text) : (() => { try { return repairToolArguments(object.text).args; } catch { return null; } })(), toolNames);
       if (call) calls.push(call);
@@ -190,7 +196,7 @@ export function extractTextToolCalls(content, availableNames) {
   }
   const llama = /<function=([\w.-]+)>\s*([\s\S]*?)\s*<\/function>/g;
   for (let match; (match = llama.exec(content));) {
-    if (!toolNames.has(match[1])) continue;
+    if (!toolNames.has(match[1]) || quoted(match.index)) continue;
     let args;
     try { args = repairToolArguments(match[2] || '{}').args; } catch { continue; }
     calls.push({ name: match[1], args });
@@ -198,7 +204,12 @@ export function extractTextToolCalls(content, availableNames) {
   }
   if (!calls.length) {
     const fenced = /```(?:json|tool_call|tool)?\s*\n([\s\S]*?)\n?```/g;
-    for (let match; (match = fenced.exec(content));) {
+    // A fenced call counts only when the reply is essentially just that call
+    // (at most a short lead-in line). A fence inside an explanation is an
+    // example for the user and must never run.
+    const fencedBlocks = [...content.matchAll(/```(?:json|tool_call|tool)?\s*\n[\s\S]*?\n?```/g)];
+    const prose = fencedBlocks.reduce((rest, block) => rest.replace(block[0], ''), content).trim();
+    for (let match; prose.length <= 160 && !/\n\s*\S[\s\S]*\n\s*\S/.test(prose) && (match = fenced.exec(content));) {
       const parsed = tryParse(match[1].trim());
       const values = parsed.ok ? (Array.isArray(parsed.value) ? parsed.value : [parsed.value]) : [];
       const found = values.map((value) => asCall(value, toolNames)).filter(Boolean);
