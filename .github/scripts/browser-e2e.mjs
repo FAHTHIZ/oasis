@@ -34,8 +34,9 @@ async function assertAgentContrast(page, label) {
   const contrast = results.violations.filter((violation) => violation.id === 'color-contrast');
   const other = results.violations.filter((violation) => violation.id !== 'color-contrast');
   if (other.length) {
-    console.warn('[axe] ' + label + ': other accessibility findings: ' +
-      other.map((violation) => violation.id + ' (' + violation.impact + ')').join(', '));
+    const details = other.map((violation) => violation.id + ' (' + violation.impact + '): ' +
+      violation.nodes.map((node) => node.target.join(', ') + ' — ' + String(node.failureSummary || violation.help).replace(/\\s+/g, ' ').slice(0, 220)).join(' | ')).join(' || ');
+    console.warn('[axe] ' + label + ': other accessibility findings: ' + details);
   }
   const detail = contrast.map((violation) =>
     violation.nodes.map((node) => violation.id + ' ' + node.target.join(', ') + ': ' +
@@ -383,6 +384,7 @@ try {
         if (index % 4 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
       }
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (node.textContent !== chunk.repeat(48)) throw new Error('Streaming did not preserve every assistant text chunk.');
       node.remove();
       delete window.agentAssistantNodes[id];
     });
