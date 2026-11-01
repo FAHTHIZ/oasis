@@ -162,9 +162,9 @@ test('Windows installer checks and updates only the persistent user PATH', async
 
 test('Termux smoke script checks the runtime without making global or user-data changes', async () => {
   const smoke = await read('scripts/termux-smoke.sh');
-  assert.match(smoke, /TERMUX_VERSION|data\\/data\\/com\.termux/);
-  assert.match(smoke, /node src\\/cli\\.mjs --version/);
-  assert.match(smoke, /node src\\/cli\\.mjs doctor/);
-  assert.match(smoke, /quickjs-emscripten/);
-  assert.doesNotMatch(smoke, /npm install --global|npm uninstall --global|SetEnvironmentVariable/);
+  assert.ok(smoke.includes('TERMUX_VERSION') && smoke.includes('/data/data/com.termux'));
+  assert.ok(smoke.includes('node src/cli.mjs --version'));
+  assert.ok(smoke.includes('node src/cli.mjs doctor'));
+  assert.ok(smoke.includes('quickjs-emscripten'));
+  assert.ok(!/npm install --global|npm uninstall --global|SetEnvironmentVariable/.test(smoke));
 });
