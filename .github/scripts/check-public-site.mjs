@@ -30,7 +30,9 @@ const required = [
   'property="og:image"', 'summary_large_image', 'Release Candidate · Open source · Apache-2.0', '1.0.0', 'docs/PROJECT_PLAN.md'
 ];
 for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
-const heroActions = html.match(/<div class="hero-actions">([\\s\\S]*?)<\\/div>/)?.[1] || '';
+const heroStart = html.indexOf('<div class="hero-actions">');
+const heroEnd = heroStart >= 0 ? html.indexOf('</div>', heroStart) : -1;
+const heroActions = heroStart >= 0 && heroEnd >= 0 ? html.slice(heroStart, heroEnd + '</div>'.length) : '';
 assert.ok(
   heroActions.includes('href="https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0"') &&
   heroActions.includes('Download stable v0.4.0'),
