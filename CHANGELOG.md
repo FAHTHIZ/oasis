@@ -6,7 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Future changes after the current 1.0.0 release candidate belong here.
 
-## 1.0.0-rc.1 — Release Candidate (not yet published)
+## 1.0.0 — Release Candidate 1 (not yet published)
 
 Reliability and token-efficiency work driven by common coding-agent complaints:
 
