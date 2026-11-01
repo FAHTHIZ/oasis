@@ -6,7 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: "Publish a fully verified release candidate or stable release from main"
+        description: "Enable the stable release publication job"
+        required: true
+        default: false
+        type: boolean
+      confirm_stable_release:
+        description: "Confirm all manual release gates are complete and publish v1.0.0 as stable"
         required: true
         default: false
         type: boolean
@@ -95,6 +100,7 @@ jobs:
       needs.validate.result == 'success' &&
       github.event_name == 'workflow_dispatch' &&
       inputs.publish_release == true &&
+      inputs.confirm_stable_release == true &&
       github.ref == 'refs/heads/main'
     needs: [validate, package]
     runs-on: ubuntu-latest
@@ -115,6 +121,11 @@ jobs:
         run: |
           set -euo pipefail
           expected="v$(node -p "require('./package.json').version")"
+          release_channel="$(node -p "require('./package.json').oasisRelease?.channel || ''")"
+          if [ "$release_channel" != "stable" ]; then
+            echo "::error::Refusing to publish: package.json oasisRelease.channel must be stable, not '$release_channel'. Keep the current RC1 source unpublished."
+            exit 1
+          fi
           if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$REF" = "refs/heads/main" ]; then
             if [ "$REF" != "refs/heads/main" ]; then
               echo "::error::Manual release publication is allowed only from main."
