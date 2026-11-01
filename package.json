@@ -1,6 +1,6 @@
 {
   "name": "oasis-oss",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Open-source AI coding agent and local-first developer workspace with a CLI, browser UI, multi-provider LLMs, MCP integrations, skills, hooks, memory, and subagents.",
   "type": "module",
   "main": "./src/sdk.mjs",
@@ -140,5 +140,11 @@
   "author": {
     "name": "OASIS Contributors",
     "email": "noreply@github.com"
+  },
+  "oasisRelease": {
+    "channel": "release-candidate",
+    "candidate": 1,
+    "stableTag": "v1.0.0",
+    "published": false
   }
 }
