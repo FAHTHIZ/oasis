@@ -48,3 +48,19 @@ test('Codex-style --output-schema FILE and -o FILE work with exec', async (t) =>
   assert.deepEqual(result.structured_output, { answer: 42 });
   assert.equal(await readFile(out, 'utf8'), '{"answer":42}\n');
 });
+
+test('Codex and Gemini CLI permission flags map to OASIS modes', async (t) => {
+  const config = await mkdtemp(path.join(os.tmpdir(), 'oasis-exec-flags-'));
+  t.after(() => rm(config, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: config };
+  await saveConfig({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:9/v1', model: 'm', apiKey: 'x' }, { env });
+  const cases = [[['--full-auto'], 'acceptEdits'], [['--sandbox', 'read-only'], 'plan'], [['--approval-mode', 'auto_edit'], 'acceptEdits'], [['--approval-mode=plan'], 'plan'], [['-a', 'never'], 'auto'], [['--yolo'], 'bypassPermissions'], [['--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check'], 'bypassPermissions']];
+  for (const [flags, mode] of cases) {
+    const run = spawnSync(process.execPath, [cli, 'exec', 'hi', '--output-format', 'stream-json', '--verbose', ...flags], { cwd: config, env, input: '', encoding: 'utf8', timeout: 60000 });
+    const init = JSON.parse(run.stdout.split('\n')[0]);
+    assert.equal(init.permission_mode, mode, flags.join(' '));
+  }
+  const bad = spawnSync(process.execPath, [cli, 'exec', 'hi', '--sandbox', 'everything'], { cwd: config, env, input: '', encoding: 'utf8', timeout: 60000 });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr + bad.stdout, /--sandbox must be read-only, workspace-write or danger-full-access/);
+});

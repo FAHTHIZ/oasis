@@ -2098,7 +2098,7 @@ async function tmuxWorktreeSession(root, name, rawArgs) {
     const arg = rawArgs[i];
     if (arg === '--tmux' || arg === '--tmux=classic') continue;
     if (arg === '-w' || arg === '--worktree') { if (rawArgs[i + 1] && !rawArgs[i + 1].startsWith('-')) i++; continue; }
-    if (arg === '-C' || arg === '--cwd') { i++; continue; }
+    if (arg === '-C' || arg === '--cwd' || arg === '--cd') { i++; continue; }
     inner.push(arg);
   }
   const command = [process.execPath, fileURLToPath(import.meta.url), '-C', worktree.path, ...inner];
@@ -3108,13 +3108,48 @@ async function main() {
     if (arg === '--plugin-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
     if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; autoApprove = true; continue; }
+    // Codex and Gemini CLI flags, mapped to the nearest OASIS policy. The runtime's
+    // hard refusals (home deletion, force pushes, reset --hard, ...) still apply.
+    if (arg === '--yolo' || arg === '--dangerously-bypass-approvals-and-sandbox') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; autoApprove = true; process.env.OASIS_SANDBOX = '0'; continue; }
+    if (arg === '--full-auto') { SESSION_OPTIONS.permissionMode = 'acceptEdits'; process.env.OASIS_SANDBOX = '1'; continue; }
+    if (arg === '--sandbox' || arg === '-s' || arg.startsWith('--sandbox=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (value === 'read-only') SESSION_OPTIONS.permissionMode = 'plan';
+      else if (value === 'workspace-write') process.env.OASIS_SANDBOX = '1';
+      else if (value === 'danger-full-access') process.env.OASIS_SANDBOX = '0';
+      else throw new Error('--sandbox must be read-only, workspace-write or danger-full-access.');
+      continue;
+    }
+    if (arg === '--ask-for-approval' || arg === '-a' || arg.startsWith('--ask-for-approval=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      // never: no prompts, like Codex; OASIS uses auto mode, whose risk check still blocks dangerous commands.
+      if (value === 'never') SESSION_OPTIONS.permissionMode = 'auto';
+      else if (value === 'on-request' || value === 'on-failure' || value === 'untrusted') SESSION_OPTIONS.permissionMode = SESSION_OPTIONS.permissionMode || 'default';
+      else throw new Error('--ask-for-approval must be untrusted, on-failure, on-request or never.');
+      continue;
+    }
+    if (arg === '--approval-mode' || arg.startsWith('--approval-mode=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const mode = { default: 'default', auto_edit: 'acceptEdits', 'auto-edit': 'acceptEdits', yolo: 'bypassPermissions', plan: 'plan' }[value];
+      if (!mode) throw new Error('--approval-mode must be default, auto_edit, yolo or plan.');
+      SESSION_OPTIONS.permissionMode = mode;
+      if (mode === 'bypassPermissions') { SESSION_OPTIONS.allowBypass = true; autoApprove = true; }
+      continue;
+    }
+    if (arg === '--include-directories' || arg.startsWith('--include-directories=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!value) throw new Error('--include-directories needs a comma-separated list of directories.');
+      for (const dir of value.split(',').map((item) => item.trim()).filter(Boolean)) SESSION_OPTIONS.addDirs.push(path.resolve(dir));
+      continue;
+    }
+    if (arg === '--skip-git-repo-check') continue;
     if (arg === '--no-session-persistence') { noPersist = true; continue; }
     if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume' || arg === '-r') {
       if (!rawArgs[i + 1]) throw new Error('--resume requires a saved session ID.');
       resumeId = rawArgs[++i]; persistSession = true; continue;
     }
-    if (arg === '--workspace' || arg === '-C') {
+    if (arg === '--workspace' || arg === '-C' || arg === '--cd') {
       if (!rawArgs[i + 1]) throw new Error('--workspace requires a path.');
       workspace = path.resolve(rawArgs[++i]);
       continue;
