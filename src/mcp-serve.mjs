@@ -4,6 +4,7 @@
 // read-only tools by default, edits with --allow-edits, commands with
 // --allow-commands. Secret files and paths outside the workspace stay blocked.
 import { createInterface } from 'node:readline';
+import { oasisVersion } from './version.mjs';
 import path from 'node:path';
 import { TOOL_DEFINITIONS, executeTool } from './tools.mjs';
 import { stopLspClients } from './lsp.mjs';
@@ -25,7 +26,7 @@ export function servedTools({ allowEdits = false, allowCommands = false, env = p
   }));
 }
 
-export function createMcpServeHandler({ root, allowEdits = false, allowCommands = false, env = process.env, version = '0.2.0' } = {}) {
+export function createMcpServeHandler({ root, allowEdits = false, allowCommands = false, env = process.env, version = oasisVersion() } = {}) {
   const tools = servedTools({ allowEdits, allowCommands, env });
   const allowed = new Set(tools.map((tool) => tool.name));
   const session = { root, background: new Map(), settings: {} };

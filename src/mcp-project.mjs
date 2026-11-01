@@ -12,6 +12,7 @@
 // "${VAR}" and "${VAR:-default}" expand from the host environment when the session
 // starts; expanded values are never written back to disk.
 import { readFile } from 'node:fs/promises';
+import { oasisVersion } from './version.mjs';
 import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
@@ -388,7 +389,7 @@ export class McpHttpClient {
   }
 
   async start() {
-    const init = await this._request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: clientCapabilities(), clientInfo: { name: 'oasis-oss', version: '0.2.0' } }, 15000);
+    const init = await this._request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: clientCapabilities(), clientInfo: { name: 'oasis-oss', version: oasisVersion() } }, 15000);
     this.protocolVersion = init && init.protocolVersion || PROTOCOL_VERSION;
     await this._post({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }, 10000).catch(() => {});
     await this.refreshTools();
