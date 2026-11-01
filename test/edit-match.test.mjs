@@ -10,7 +10,8 @@ test('relaxed match tolerates trailing whitespace and CRLF', () => {
   const file = 'function a() {   \r\n  return 1;\r\n}\r\n';
   const out = relaxedReplace(file, 'function a() {\n  return 1;\n}', 'function a() {\n  return 2;\n}');
   assert.ok(out);
-  assert.equal(out.next, 'function a() {\r\n  return 2;\r\n}\r\n');
+  // The untouched first line keeps its trailing spaces; only the edited line changes.
+  assert.equal(out.next, 'function a() {   \r\n  return 2;\r\n}\r\n');
 });
 
 test('relaxed match tolerates smart quotes', () => {
@@ -46,7 +47,7 @@ test('edit_file applies a unique relaxed match and reports how it matched', asyn
     const result = await executeTool('edit_file', { path: 'a.js', old_string: 'if (ok) {\n  run();\n}', new_string: 'if (ok) {\n  walk();\n}' }, { root });
     assert.equal(result.changed, true);
     assert.equal(result.matchedBy, 'line endings and trailing whitespace');
-    assert.equal(await readFile(path.join(root, 'a.js'), 'utf8'), 'if (ok) {\n  walk();\n}\n');
+    assert.equal(await readFile(path.join(root, 'a.js'), 'utf8'), 'if (ok) {   \n  walk();\n}\n');
     await assert.rejects(
       executeTool('edit_file', { path: 'a.js', old_string: 'if (okay) {\n  walking();\n}', new_string: 'x' }, { root }),
       /Closest match .* line 1/s
@@ -108,4 +109,20 @@ test('write_file warns when a rewrite flattens typographic quotes into ASCII', a
   await writeFile(path.join(root, 'copy.md'), 'It’s “easy”.\n');
   const reworded = await executeTool('write_file', { path: 'copy.md', content: 'Completely different text.\n' }, { root, autoApprove: true });
   assert.ok(!reworded.warning || !/Typography/.test(reworded.warning), 'rewording is not flattening');
+});
+
+test('relaxed edits translate indentation into the file style, including new levels', () => {
+  const tabs = 'function f() {\n\tif (a) {\n\t\treturn 1;\n\t}\n}\n';
+  const result = relaxedReplace(tabs,
+    'function f() {\n    if (a) {\n        return 1;\n    }\n}',
+    'function f() {\n    if (a) {\n        if (b) {\n            return 2;\n        }\n    }\n}');
+  assert.equal(result.strategy, 'indentation');
+  assert.equal(result.next, 'function f() {\n\tif (a) {\n\t\tif (b) {\n\t\t\treturn 2;\n\t\t}\n\t}\n}\n');
+  const twoSpaces = relaxedReplace('a {\n  b {\n    c;\n  }\n}\n', 'a {\n    b {\n        c;\n    }\n}', 'a {\n    b {\n        d;\n    }\n}');
+  assert.equal(twoSpaces.next, 'a {\n  b {\n    d;\n  }\n}\n');
+});
+
+test('relaxed edits copy untouched lines from the file verbatim', () => {
+  const result = relaxedReplace('const a = 1;   \nconst b = 2;\n', 'const a = 1;\nconst b = 2;', 'const a = 1;\nconst b = 3;');
+  assert.equal(result.next, 'const a = 1;   \nconst b = 3;\n');
 });
