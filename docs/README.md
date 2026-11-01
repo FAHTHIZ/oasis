@@ -1,6 +1,6 @@
 # OASIS documentation
 
-This directory contains the detailed references behind the root [README](../README.md). Use this page to find the right guide without having to read every document.
+This directory contains the canonical product, user, engineering, security, and release documentation behind the root [README](../README.md). Use this page as the navigation hub; the [repository maintenance guide](REPOSITORY_MAINTENANCE.md) defines file ownership and layout rules.
 
 ## Start here
 
@@ -10,7 +10,8 @@ This directory contains the detailed references behind the root [README](../READ
 | Check what is implemented, what remains limited, and what blocks release | [Project plan and release status](PROJECT_PLAN.md) |
 | Install the CLI or understand desktop availability | [Installation guide](INSTALL.md) |
 | Try OASIS on Android | [Android / Termux guide](TERMUX.md) |
-| Learn commands, configuration, tools, sessions, and workflows | [User guide](USER_GUIDE.md) |
+| Find the right section of the full user manual | [User-guide map](USER_GUIDE_MAP.md) |
+| Learn commands, configuration, tools, sessions, and workflows | [Full user guide](USER_GUIDE.md) |
 
 ## Product and engineering
 
@@ -37,11 +38,21 @@ This directory contains the detailed references behind the root [README](../READ
 |---|---|
 | [GitHub Action guide](github-action.md) | Mention-triggered repository automation, setup, inputs, and safety boundaries. |
 | [GitHub Action workflow example](examples/oasis-github.yml) | Copyable example workflow for a repository. |
-| [Changelog](../CHANGELOG.md) | User-facing changes, including prepared but unpublished version notes. |
-| [OASIS 0.4.0 Beta notes](releases/v0.4.0.md) | Prepared release notes; not a published release or download page. |
+| [Changelog](../CHANGELOG.md) | User-facing changes, with a distinct Unreleased section and published version history. |
+| [OASIS 0.4.0 Beta notes](releases/v0.4.0.md) | Notes for the published `v0.4.0` GitHub release, including assets and release boundaries. |
 | [Contributing guide](../CONTRIBUTING.md) | Development setup, test expectations, dependency policy, and contribution workflow. |
 | [License](../LICENSE) | Apache License 2.0 terms. |
 
 ## Supporting research and proposals
 
 The [research index](research/README.md) groups time-sensitive comparisons, prior-art reviews, and design proposals. These documents are supporting material—not product specifications, release promises, or proof that a proposed feature has shipped. For current behavior, defer to the root README, project plan, architecture, and user guide.
+
+## Documentation rules
+
+- The root README is the concise public product overview.
+- [Project plan](PROJECT_PLAN.md) is the canonical source for current maturity, known limits, priorities, and release gates.
+- [Architecture](ARCHITECTURE.md) describes system boundaries and how runtime components fit together.
+- [User guide](USER_GUIDE.md) remains the complete behavior and command reference; [its map](USER_GUIDE_MAP.md) provides task-oriented navigation.
+- [Repository maintenance](REPOSITORY_MAINTENANCE.md) owns repository layout, file ownership, and cleanup rules.
+- Release notes describe a specific immutable release. They must never be used as a substitute for current `main` status.
+- Research files are non-normative. A proposal in `docs/research/` is not a shipped feature or a release commitment.
