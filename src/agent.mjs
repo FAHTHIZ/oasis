@@ -61,7 +61,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
@@ -584,6 +584,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     background: new Map(),
     hookMessages: []
   };  if (typeof onHookEvent === 'function') session.onHookEvent = onHookEvent;
+  if (restore && Array.isArray(restore.agents) && restore.agents.length) restoreAgentHistory(session, restore.agents);
 
   if (restore && restore.workflowCheckpoint && restore.workflowCheckpoint.active === true) {
     const checkpoint = restore.workflowCheckpoint;
@@ -3023,6 +3024,7 @@ async function runAgentTool(session, name, args, context, options) {
   if (name === 'agent_stop') return stopAgent(session, args);
   // send_message
   const record = getAgent(session, args.id);
+  if (!record.child) throw new Error('Agent ' + record.id + ' has no live worker process. Its saved status and report are available, but a runtime restart does not restore the original worker; launch a new task from its saved checkpoint instead.');
   const message = String(args.message || '').trim();
   if (!message) throw new Error('send_message needs a message.');
   if (message.length > 20000) throw new Error('Messages must be 20,000 characters or fewer.');

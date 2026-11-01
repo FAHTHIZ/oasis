@@ -5,6 +5,7 @@ import { readBoundedRegularFile } from './safe-storage.mjs';
 import { getConfigDirectory } from './config.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
+import { redactSecrets } from './auto-memory.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_MESSAGES = 120;
@@ -64,6 +65,65 @@ function sanitizeWorkflowCheckpoint(value) {
   return { active: true, maxParallel, teamId, savedAt };
 }
 
+const SESSION_AGENT_LIMIT = 32;
+const SESSION_AGENT_STATUSES = new Set(['running', 'completed', 'failed', 'cancelled', 'interrupted']);
+
+function safePersistedText(value, max) {
+  return redactSecrets(String(value == null ? '' : value)).text.slice(0, max);
+}
+
+function safeWorktreePath(value) {
+  const text = String(value || '').replace(/\\/g, '/').trim();
+  if (!text || text.length > 240 || text.startsWith('/') || /^[A-Za-z]:/.test(text) ||
+      text.split('/').some((segment) => segment === '..' || segment === '.')) return '';
+  return text;
+}
+
+/** Persist agent summaries only; live child sessions, prompts, tools and process handles never survive. */
+export function sanitizeAgentHistory(agentTasks) {
+  const source = agentTasks && agentTasks.agents instanceof Map
+    ? [...agentTasks.agents.values()]
+    : Array.isArray(agentTasks) ? agentTasks : [];
+  return source.slice(-SESSION_AGENT_LIMIT).flatMap((record) => {
+    if (!record || typeof record !== 'object') return [];
+    const id = String(record.id || '');
+    if (!/^agent_[1-9]\\d{0,8}$/.test(id)) return [];
+    const status = SESSION_AGENT_STATUSES.has(record.status) ? record.status : 'interrupted';
+    const worktree = record.worktree && typeof record.worktree === 'object' ? record.worktree : {};
+    const worktreeInfo = record.worktreeInfo && typeof record.worktreeInfo === 'object' ? record.worktreeInfo : {};
+    const branch = String(worktree.branch || worktreeInfo.branch || '').slice(0, 160);
+    const relative = safeWorktreePath(worktree.relative || worktreeInfo.relative || worktree.path);
+    const commitSha = String(worktree.commitSha || '').toLowerCase();
+    const recentTools = Array.isArray(record.recentTools)
+      ? record.recentTools.slice(-10).map((name) => String(name || '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 100)).filter(Boolean)
+      : [];
+    const snapshot = {
+      id,
+      type: safePersistedText(record.type || 'general-purpose', 80),
+      description: safePersistedText(record.description || '', 120),
+      status,
+      background: Boolean(record.background),
+      startedAt: Number.isFinite(Number(record.startedAt)) ? Number(record.startedAt) : Date.now(),
+      finishedAt: Number.isFinite(Number(record.finishedAt)) ? Number(record.finishedAt) : null,
+      runs: Math.max(1, Math.min(1000, Number.parseInt(record.runs, 10) || 1)),
+      toolCalls: Math.max(0, Math.min(100000, Number.parseInt(record.toolCalls, 10) || 0)),
+      tokensUsed: Math.max(0, Math.min(1000000000, Number(record.tokensUsed) || 0)),
+      recentTools,
+      report: safePersistedText(record.report || '', 8000),
+      error: safePersistedText(record.error || '', 1500),
+      readOnly: Boolean(record.readOnly),
+      workspaceIsolation: (record.worktreeInfo || record.worktree || record.workspaceIsolation === 'worktree') ? 'worktree' : 'shared',
+      ...(record.teamId && /^team_[1-9]\\d{0,5}$/.test(String(record.teamId)) ? { teamId: String(record.teamId) } : {}),
+      ...(record.sharedTaskId && /^task_[1-9]\\d{0,8}$/.test(String(record.sharedTaskId)) ? { sharedTaskId: String(record.sharedTaskId) } : {}),
+      ...(branch ? { worktreeBranch: branch } : {}),
+      ...(relative ? { worktreePath: relative } : {}),
+      ...(worktree.changed === true ? { worktreeChanged: true } : {}),
+      ...( /^[0-9a-f]{40}$/.test(commitSha) ? { worktreeCommit: commitSha } : {})
+    };
+    return [snapshot];
+  });
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
@@ -85,6 +145,7 @@ export async function saveSession(session, options = {}) {
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
+    agents: sanitizeAgentHistory(session.agentTasks),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(
       session.agentTasks && session.agentTasks.autoDispatch && session.agentTasks.autoDispatch.enabled === true
         ? {
@@ -130,6 +191,7 @@ export async function loadSession(root, id, options = {}) {
     todos: sanitizeTodos(payload.todos),
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
+    agents: sanitizeAgentHistory(payload.agents),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint)
   };
 }

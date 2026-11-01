@@ -56,6 +56,62 @@ export const AGENT_TOOL_DEFINITIONS = [
 
 export const AGENT_TOOL_NAMES = new Set(AGENT_TOOL_DEFINITIONS.map((tool) => tool.function.name));
 
+
+/**
+ * Restore worker summaries from a saved session without pretending their live
+ * processes or child conversations survived. Running workers become interrupted
+ * records that can be inspected but must be relaunched as new tasks.
+ */
+export function restoreAgentHistory(session, snapshots = []) {
+  if (!Array.isArray(snapshots)) return [];
+  const registry = agentRegistry(session);
+  const restored = [];
+  for (const snapshot of snapshots.slice(-32)) {
+    if (!snapshot || typeof snapshot !== 'object') continue;
+    const id = String(snapshot.id || '');
+    const match = id.match(/^agent_([1-9]\\d{0,8})$/);
+    if (!match || registry.agents.has(id)) continue;
+    const wasRunning = snapshot.status === 'running';
+    const status = wasRunning ? 'interrupted' : ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status) ? snapshot.status : 'interrupted';
+    const record = {
+      id,
+      type: String(snapshot.type || 'general-purpose').slice(0, 80),
+      description: String(snapshot.description || '').slice(0, 120),
+      status,
+      background: Boolean(snapshot.background),
+      startedAt: Number.isFinite(Number(snapshot.startedAt)) ? Number(snapshot.startedAt) : Date.now(),
+      finishedAt: wasRunning ? Date.now() : (Number.isFinite(Number(snapshot.finishedAt)) ? Number(snapshot.finishedAt) : null),
+      runs: Math.max(1, Math.min(1000, Number.parseInt(snapshot.runs, 10) || 1)),
+      toolCalls: Math.max(0, Math.min(100000, Number.parseInt(snapshot.toolCalls, 10) || 0)),
+      tokensUsed: Math.max(0, Math.min(1000000000, Number(snapshot.tokensUsed) || 0)),
+      recentTools: Array.isArray(snapshot.recentTools) ? snapshot.recentTools.slice(-10) : [],
+      report: String(snapshot.report || '').slice(0, 8000),
+      error: wasRunning ? 'Runtime restarted; the live worker process and its private execution environment were not restored.' : String(snapshot.error || '').slice(0, 1500),
+      readOnly: Boolean(snapshot.readOnly),
+      teamId: typeof snapshot.teamId === 'string' ? snapshot.teamId : null,
+      sharedTaskId: typeof snapshot.sharedTaskId === 'string' ? snapshot.sharedTaskId : null,
+      workspaceIsolation: snapshot.workspaceIsolation === 'worktree' ? 'worktree' : 'shared',
+      ...(snapshot.worktreeBranch ? { worktree: { branch: String(snapshot.worktreeBranch).slice(0, 160), relative: String(snapshot.worktreePath || '').slice(0, 240), changed: snapshot.worktreeChanged === true, commitSha: String(snapshot.worktreeCommit || '') } } : {}),
+      child: null,
+      controller: null,
+      promise: null,
+      resumable: false
+    };
+    registry.agents.set(id, record);
+    registry.next = Math.max(Number(registry.next) || 1, Number(match[1]) + 1);
+    restored.push(record);
+    if (wasRunning) {
+      recordAgentEvent(session, 'agent.interrupted', {
+        agentId: id,
+        teamId: record.teamId || undefined,
+        description: record.description,
+        detail: record.error
+      });
+    }
+  }
+  return restored;
+}
+
 export function agentRegistry(session) {
   if (!session.agentTasks) session.agentTasks = { next: 1, agents: new Map(), nextTeam: 1, teams: new Map(), events: [], nextEventId: 1 };
   const registry = session.agentTasks;
