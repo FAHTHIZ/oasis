@@ -1,7 +1,7 @@
 import { redactApprovalSecrets } from './approval-language.mjs';
 
 const READ_TOOLS = new Set(['read_file', 'read_notebook', 'notebook_read', 'list_files', 'list_directory']);
-const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'notebook_edit', 'write_file', 'delete_file', 'apply_patch']);
+const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch']);
 const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'auto_test']);
 const SEARCH_TOOLS = new Set(['search_files', 'grep', 'glob_files', 'repo_map']);
 
@@ -23,6 +23,8 @@ function commandText(args) {
 export function toolActivityCategory(name) {
   const tool = String(name || '').toLowerCase();
   if (READ_TOOLS.has(tool)) return 'read';
+  if (tool === 'write_file') return 'write';
+  if (tool === 'delete_file') return 'delete';
   if (EDIT_TOOLS.has(tool)) return 'edit';
   if (COMMAND_TOOLS.has(tool)) return 'command';
   if (SEARCH_TOOLS.has(tool)) return 'search';
