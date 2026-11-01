@@ -1912,7 +1912,25 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (!config.configured) throw new Error('No model provider is configured. Run oasis setup, or set OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the API key variable.');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
-  const { exitCode } = await runHeadless({
+  // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own
+  // process group, so without this they would outlive Oasis and the job would
+  // exit 0. Abort the turn (which stops running commands), then exit 128+signal.
+  const stopController = new AbortController();
+  let stopSignal = null;
+  const SIGNAL_CODES = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
+  const onStopSignal = (name) => {
+    if (stopSignal) process.exit(128 + SIGNAL_CODES[name]);
+    stopSignal = name;
+    stderr.write('[oasis] Received ' + name + '; stopping the task and any running commands.\n');
+    stopController.abort();
+    setTimeout(() => process.exit(128 + SIGNAL_CODES[name]), 5000).unref();
+  };
+  const stopHandlers = Object.keys(SIGNAL_CODES).map((name) => [name, () => onStopSignal(name)]);
+  for (const [name, handler] of stopHandlers) process.on(name, handler);
+  let exitCode;
+  try {
+  ({ exitCode } = await runHeadless({
+    signal: stopController.signal,
     prompt, root, config, autoApprove,
     outputFormat: headless.outputFormat,
     maxTurns: headless.maxTurns,
@@ -1929,7 +1947,9 @@ async function printMode(root, headless, args, autoApprove, persistence) {
     includeHookEvents: Boolean(headless.includeHookEvents),
     forwardSubagentText: Boolean(headless.forwardSubagentText),
     promptSuggestions: Boolean(headless.promptSuggestions)
-  });
+  }));
+  } finally { for (const [name, handler] of stopHandlers) process.removeListener(name, handler); }
+  if (stopSignal) exitCode = 128 + SIGNAL_CODES[stopSignal];
   process.exitCode = exitCode;
   if (process.env.OASIS_BACKGROUND_ID) {
     const { finishBackgroundSession } = await import('./background-sessions.mjs');

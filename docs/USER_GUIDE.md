@@ -742,6 +742,8 @@ oasis -p "find bugs in src/" --json-schema @bug-schema.json --output-format json
 oasis -w fix-login "fix the login redirect"
 ~~~
 
+If the job is stopped with SIGTERM, SIGINT or SIGHUP (a CI timeout or `docker stop`, for example), OASIS cancels the turn, stops any command it is running together with that command's child processes, and exits with `128 + signal` (143 for SIGTERM). A stopped job is never reported as a success. A second signal exits immediately.
+
 `--bare` starts a minimal session for scripts. It skips project instructions (AGENTS.md, CLAUDE.md, OASIS.md), skills, hooks, MCP servers, and auto memory. Only the model, the built-in tools, and your permission rules remain.
 
 `--safe-mode` (or `CLAUDE_CODE_SAFE_MODE=1`) is for troubleshooting a broken setup. Like `--bare` it skips project instructions, skills, plugins, hooks, MCP servers, auto memory and the status line, and it also skips custom slash commands, output styles, custom themes and `keybindings.json`. Your model, built-in tools and permission rules still work.
