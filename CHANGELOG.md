@@ -10,6 +10,9 @@ Future changes after the current 1.0.0 release candidate belong here.
 
 Reliability and token-efficiency work driven by common coding-agent complaints:
 
+- **Act, don't describe** — when a change request gets a tutorial-style reply with no tool use, or the model announces a next step ("I need to create the file") and stops with nothing changed, OASIS nudges it to do the work (at most twice per turn). Found by running a real 1.5B local model end to end.
+- **More text tool-call formats** — bare call objects followed by commentary, and XML-attribute calls (`<function name="..." arguments='{...}'>`) inside `<tools>` wrappers, are recovered.
+- **Near-greedy sampling for local servers** — local model endpoints default to temperature 0.2 (llama-server and Ollama default to about 0.8, which makes small models drift between call formats). Set `temperature` in the provider config or `OASIS_TEMPERATURE` to override; hosted APIs keep their defaults.
 - **UTF-8 PowerShell writes** — the PowerShell tool defaults `Out-File` (and `>`), `Set-Content`, `Add-Content` and `Export-Csv` to UTF-8, so Windows PowerShell 5.1 no longer writes UTF-16 or ANSI and corrupts non-English text.
 - **Security hardening** — the bubblewrap sandbox no longer re-exposes `/tmp` socket directories (such as ssh-agent) or whole `/tmp` entries, only toolchain prefixes. Tool-call recovery from reply text ignores quoted and example calls.
 - **Compact system prompt for small windows** — at 16K tokens or less the system prompt shrinks from ~4.2K to ~1.6K tokens while keeping the core correctness and safety rules; with the small tool set, an 8K window keeps ~4.3K tokens for work instead of ~1.7K.

@@ -202,6 +202,19 @@ export function extractTextToolCalls(content, availableNames) {
     calls.push({ name: match[1], args });
     spans.push([match.index, match.index + match[0].length]);
   }
+  // XML-attribute form: <function name="write_file" arguments='{"path": ...}'>
+  const attributed = /<function\s+name=(["'])([\w.-]+)\1\s+(?:arguments|parameters|args)=(["'])([\s\S]*?)\3\s*\/?>(?:\s*<\/function>)?/g;
+  for (let match; (match = attributed.exec(content));) {
+    if (!toolNames.has(match[2]) || quoted(match.index)) continue;
+    let args;
+    try { args = repairToolArguments(match[4] || '{}').args; } catch { continue; }
+    calls.push({ name: match[2], args });
+    spans.push([match.index, match.index + match[0].length]);
+  }
+  if (calls.length) {
+    // Drop now-empty <tools>…</tools> or <tool_calls>…</tool_calls> wrappers.
+    for (const wrapper of content.matchAll(/<\/?(?:tools|tool_calls|function_calls)>/g)) spans.push([wrapper.index, wrapper.index + wrapper[0].length]);
+  }
   if (!calls.length) {
     const fenced = /```(?:json|tool_call|tool)?\s*\n([\s\S]*?)\n?```/g;
     // A fenced call counts only when the reply is essentially just that call
@@ -225,6 +238,25 @@ export function extractTextToolCalls(content, availableNames) {
       const values = Array.isArray(whole.value) ? whole.value : [whole.value];
       const found = values.map((value) => asCall(value, toolNames)).filter(Boolean);
       if (found.length && found.length === values.length) return { calls: found, text: '' };
+    }
+  }
+  if (!calls.length) {
+    // The reply opens with one or more bare call objects and then comments on
+    // them ("{...}\n\nThis creates the file."). Opening with a call is never an
+    // example for the user, so the leading objects are recovered.
+    const start = content.length - content.trimStart().length;
+    if (content[start] === '{') {
+      let cursor = start;
+      for (const object of balancedObjects(content.slice(start))) {
+        const at = start + object.start;
+        if (content.slice(cursor, at).trim()) break;
+        const parsed = tryParse(object.text);
+        const call = parsed.ok ? asCall(parsed.value, toolNames) : null;
+        if (!call) break;
+        calls.push(call);
+        spans.push([at, at + object.text.length]);
+        cursor = at + object.text.length;
+      }
     }
   }
   if (!calls.length) return null;
