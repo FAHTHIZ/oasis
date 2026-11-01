@@ -50,7 +50,7 @@ Before removing any same-content file, check its deployment root, task snapshot,
 
 ## Branch state and cleanup receipt
 
-At the inspected main snapshot `3e54447abc8bd6c90a8e6415cd340edc9aeb7759` (November 1, 2026), the GitHub branches endpoint returned exactly one branch: `main`. The guarded cleanup workflow passed on that same snapshot: [run 41272068560](https://github.com/FAHTHIZ/oasis/actions/runs/41272068560). The current direct-maintainer workflow remains main-only; no additional branch was created for this qualification work.
+At the runtime audit snapshot `f83d73e69ec24ce5a57588784de7531d2c585934`, the branches endpoint returned exactly one branch: `main`; guarded cleanup passed on that snapshot: [run 41272634284](https://github.com/FAHTHIZ/oasis/actions/runs/41272634284). The documentation snapshot `3c93154b371586053f6691fe223686496528b2e8` also showed only `main`. The subsequent documentation-only commits in this pass have not created any branches. The current direct-maintainer workflow remains main-only.
 
 Older cleanup receipts below are history, not evidence of current branch state:
 
