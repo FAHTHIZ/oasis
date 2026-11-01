@@ -297,7 +297,7 @@ try {
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
   await page.locator('#agentApprovalCard').waitFor({ state: 'visible', timeout: timeoutMs });
   const commandApproval = await page.locator('#agentApprovalPrompt').innerText();
-  assert.match(commandApproval, /node -e process\.exit\(7\)/);
+  assert.match(commandApproval, /node "-e" "process\.exit\(7\)"/);
   assert.equal(await page.locator('#agentApprovalDiff').isHidden(), true,
     'A command approval should not display a file-edit diff.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-command-approval-desktop.png'), fullPage: true });
