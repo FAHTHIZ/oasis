@@ -64,3 +64,55 @@ test('Codex and Gemini CLI permission flags map to OASIS modes', async (t) => {
   assert.notEqual(bad.status, 0);
   assert.match(bad.stderr + bad.stdout, /--sandbox must be read-only, workspace-write or danger-full-access/);
 });
+
+test('Aider flags: --message, --message-file, and --test-cmd with --auto-test', async (t) => {
+  const { createServer } = await import('node:http');
+  const { spawn } = await import('node:child_process');
+  const { readFile, writeFile } = await import('node:fs/promises');
+  const { existsSync } = await import('node:fs');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-aider-flags-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const prompts = [];
+  let calls = 0;
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const parsed = JSON.parse(body);
+    const users = parsed.messages.filter((m) => m.role === 'user');
+    if (users.length === 1 && !parsed.messages.some((m) => m.role === 'tool')) prompts.push(String(typeof users[0].content === 'string' ? users[0].content : JSON.stringify(users[0].content)));
+    calls += 1;
+    const writes = parsed.messages.some((m) => m.role === 'tool');
+    const message = writes || !String(prompts.at(-1) || '').includes('edit please')
+      ? { role: 'assistant', content: 'done' }
+      : { role: 'assistant', content: null, tool_calls: [{ id: 'w1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'a.txt', content: 'x\n' }) } }] };
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ index: 0, message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const env = { ...process.env, OASIS_CONFIG_DIR: dir, OASIS_LOCAL_CONTEXT_PROBE: '0', OASIS_MODEL_INFO_PROBE: '0' };
+  delete env.OASIS_AUTO_TEST;
+  await saveConfig({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'm', apiKey: 'x' }, { env });
+  const run = async (args) => {
+    const child = spawn(process.execPath, [cli, ...args, '--output-format', 'json'], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.stderr.on('data', (chunk) => { out += chunk; });
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    return { code, out };
+  };
+  let result = await run(['--message', 'hello from aider']);
+  assert.equal(result.code, 0, result.out);
+  assert.match(prompts.at(-1), /hello from aider/);
+  await writeFile(path.join(dir, 'msg.txt'), 'from a file');
+  result = await run(['--message-file', 'msg.txt']);
+  assert.equal(result.code, 0, result.out);
+  assert.match(prompts.at(-1), /from a file/);
+  const marker = path.join(dir, 'tests-ran');
+  const testCmd = JSON.stringify(process.execPath) + ' -e "require(\'fs\').writeFileSync(process.argv[1], \'1\')" ' + JSON.stringify(marker);
+  result = await run(['--message', 'edit please', '--yes-always', '--test-cmd', testCmd, '--auto-test']);
+  assert.equal(result.code, 0, result.out);
+  assert.equal(await readFile(path.join(dir, 'a.txt'), 'utf8'), 'x\n');
+  assert.ok(existsSync(marker), 'auto-test ran the --test-cmd command:\n' + result.out);
+  assert.ok(calls >= 4);
+});

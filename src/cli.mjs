@@ -3143,6 +3143,27 @@ async function main() {
       continue;
     }
     if (arg === '--skip-git-repo-check') continue;
+    // Aider flags. --test-cmd plus --auto-test uses Oasis auto-test; commits use auto-commit.
+    if (arg === '--yes-always') { autoApprove = true; continue; }
+    if (arg === '--message' || arg === '--msg' || arg.startsWith('--message=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!value) throw new Error(arg.split('=')[0] + ' needs a message.');
+      headless.enabled = true; headless.prompt = value; continue;
+    }
+    if (arg === '--message-file' || arg.startsWith('--message-file=')) {
+      const file = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!file) throw new Error('--message-file needs a file.');
+      headless.enabled = true; headless.prompt = readFileSync(path.resolve(file), 'utf8'); continue;
+    }
+    if (arg === '--test-cmd' || arg.startsWith('--test-cmd=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!value) throw new Error('--test-cmd needs a command.');
+      SESSION_OPTIONS.aiderTestCmd = value; continue;
+    }
+    if (arg === '--auto-test') { SESSION_OPTIONS.aiderAutoTest = true; continue; }
+    if (arg === '--no-auto-test') { process.env.OASIS_AUTO_TEST = 'off'; continue; }
+    if (arg === '--auto-commits') { process.env.OASIS_AUTO_COMMIT = '1'; continue; }
+    if (arg === '--no-auto-commits') { process.env.OASIS_AUTO_COMMIT = '0'; continue; }
     if (arg === '--no-session-persistence') { noPersist = true; continue; }
     if (arg === '--continue' || arg === '-c') { persistSession = true; continueSession = true; continue; }
     if (arg === '--resume' || arg === '-r') {
@@ -3156,6 +3177,10 @@ async function main() {
     }
     if (arg.startsWith('--workspace=')) { workspace = path.resolve(arg.slice('--workspace='.length)); continue; }
     args.push(arg);
+  }
+  if (SESSION_OPTIONS.aiderAutoTest) {
+    // Aider runs --test-cmd only with --auto-test; without --test-cmd, keep the configured command.
+    if (SESSION_OPTIONS.aiderTestCmd && process.env.OASIS_AUTO_TEST !== 'off') process.env.OASIS_AUTO_TEST = SESSION_OPTIONS.aiderTestCmd;
   }
   await access(workspace);
   await resolveFlagFiles(workspace);

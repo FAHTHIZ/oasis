@@ -800,6 +800,16 @@ Permission flags from Codex and Gemini CLI map to the nearest OASIS mode. The ru
 | `--cd DIR` (Codex) | `-C DIR` |
 | `--skip-git-repo-check` (Codex) | Accepted and ignored; OASIS does not require a Git repository |
 
+Aider users can keep theirs too:
+
+| Flag | OASIS equivalent |
+| --- | --- |
+| `--message TEXT` (`--msg`), `--message-file FILE` | `-p TEXT`: one headless turn, then exit |
+| `--yes-always` | `--yes` |
+| `--test-cmd CMD --auto-test` | Auto-test with `CMD`: after edits OASIS runs it and hands failures back to the model (up to 3 tries). `--test-cmd` alone only sets the command, as in Aider |
+| `--no-auto-test` | Turns auto-test off for this run |
+| `--auto-commits` · `--no-auto-commits` | Auto-commit on or off for this run (`OASIS_AUTO_COMMIT`) |
+
 `-w/--worktree [NAME]` runs the session (interactive or `-p`) in a new git worktree under `.oasis/worktrees/` on its own `oasis/NAME-*` branch, so your checkout is untouched. When the session ends, a worktree with no changes is removed along with its branch. Otherwise OASIS keeps it and prints how to review, merge or remove it.
 
 - `--output-format text` (default) prints the final answer. `json` prints one object with `result`, `subtype` (`success`, `error_max_turns`, `error_during_execution`), `is_error`, `num_turns`, `usage`, `tool_calls`, `session_id`, and `permission_denials`. `stream-json` prints one JSON event per line (`system`, `tool_use`, `tool_result`, `assistant`, then `result`).
