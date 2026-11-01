@@ -1623,7 +1623,12 @@ async function manageMcp(rest, root = process.cwd()) {
     const name = rest[1];
     if (!name) throw new Error('Usage: oasis mcp remove NAME');
     const existing = config.servers.find((server) => server.name === name);
-    if (!existing) throw new Error('No configured MCP server named "' + name + '".');
+    if (!existing) {
+      const { removeUserMcpJsonServer } = await import('./mcp-remote-add.mjs');
+      const removed = await removeUserMcpJsonServer(name, { env: process.env, approve: (text) => approve(text, true, false) });
+      if (removed) { stdout.write(removed + '\n'); return; }
+      throw new Error('No configured MCP server named "' + name + '". Project servers live in .mcp.json; edit that file to remove one.');
+    }
     if (!(await approve('Remove MCP server "' + name + '" from the user-level configuration?', true, false))) {
       stdout.write('MCP removal cancelled.\n');
       return;

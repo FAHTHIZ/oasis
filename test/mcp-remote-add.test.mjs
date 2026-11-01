@@ -54,3 +54,14 @@ test('plain HTTP is refused for remote hosts and a declined prompt changes nothi
   assert.match(message, /cancelled/);
   assert.deepEqual((await loadUserMcpJson({ env })).servers, []);
 });
+
+test('servers added to mcp.json can be removed again', async (t) => {
+  const { removeUserMcpJsonServer } = await import('../src/mcp-remote-add.mjs');
+  const { root, env } = await dirs(t);
+  await addRemoteMcpServer(['--transport', 'http', 'one', 'https://example.com/a'], { root, env });
+  await addRemoteMcpServer(['--transport', 'sse', 'two', 'https://example.com/b'], { root, env });
+  assert.equal(await removeUserMcpJsonServer('missing', { env }), null);
+  assert.match(await removeUserMcpJsonServer('one', { env, approve: async () => false }), /cancelled/);
+  assert.match(await removeUserMcpJsonServer('one', { env }), /Removed MCP server "one"/);
+  assert.deepEqual((await loadUserMcpJson({ env })).servers.map((server) => server.name), ['two']);
+});

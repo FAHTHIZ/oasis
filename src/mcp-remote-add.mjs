@@ -79,3 +79,18 @@ export async function addRemoteMcpServer(args, { root = process.cwd(), env = pro
   const warn = unset.length ? ' Set ' + unset.join(', ') + ' before starting OASIS; the server is skipped while ' + (unset.length > 1 ? 'they are' : 'it is') + ' unset.' : '';
   return (replacing ? 'Updated' : 'Added') + ' MCP server "' + normalized + '" (' + transport + ') in ' + file + '. It starts with your next session.' + next + login + warn;
 }
+
+// oasis mcp remove NAME for servers in <oasis config>/mcp.json. Returns null when absent.
+export async function removeUserMcpJsonServer(name, { env = process.env, approve = async () => true } = {}) {
+  const file = path.join(getConfigDirectory(env), 'mcp.json');
+  let parsed;
+  try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch { return null; }
+  const servers = parsed && parsed.mcpServers && typeof parsed.mcpServers === 'object' ? parsed.mcpServers : null;
+  const key = servers && Object.keys(servers).find((item) => item === name || item.toLowerCase().replace(/[^a-z0-9_-]/g, '-') === name);
+  if (!key) return null;
+  if (!(await approve('Remove MCP server "' + key + '" from ' + file + '?'))) return 'MCP removal cancelled.';
+  const { [key]: removed, ...others } = servers;
+  void removed;
+  await writeFile(file, JSON.stringify({ ...parsed, mcpServers: others }, null, 2) + '\n', { mode: 0o600 });
+  return 'Removed MCP server "' + key + '" from ' + file + '.';
+}
