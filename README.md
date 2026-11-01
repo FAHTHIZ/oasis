@@ -151,7 +151,7 @@ The [release-qualification plan](docs/PROJECT_PLAN.md) is the authoritative stat
 | Runtime module map and extraction policy | [src/README.md](src/README.md) |
 | Test domains and runner conventions | [test/README.md](test/README.md) |
 | Repository ownership and maintenance | [Maintenance guide](docs/REPOSITORY_MAINTENANCE.md) |
-| Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 notes](docs/releases/v0.4.0.md) · [current 1.0.0-rc.1 qualification notes](docs/RELEASE_CANDIDATE.md) |
+| Release history | [Changelog](CHANGELOG.md) · [published v0.4.0 notes](docs/releases/v0.4.0.md) · [current 1.0.0-rc.1 candidate notes](docs/releases/v1.0.0-rc.1.md) |
 
 ## Development
 
