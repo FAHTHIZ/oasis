@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyRetirement, AUDITED_SUPERSEDED_HEADS } from '../scripts/cleanup-merged-branches.mjs';
+import { classifyRetirement, AUDITED_SUPERSEDED_HEADS, USER_APPROVED_BRANCH_HEADS } from '../scripts/cleanup-merged-branches.mjs';
 
 const mainTree = new Map([
   ['src/merged.mjs', 'blob-merged'],
@@ -137,21 +137,46 @@ test('audited superseded branch set uses exact heads and existing replacement pa
   }
 });
 
-test('unreviewed CLI, UX, and phase-0 branches fail closed', () => {
-  const unreviewed = [
+test('owner-approved branch retirements are limited to exact remote heads', () => {
+  const approved = [
+    ['app/alpha-readiness-gaps', 'e9548e4924cea21d16c21a707e584cf3216d83a8'],
+    ['app/empty-chat', '7e8e827a9d4a17fd7a3ebc9a9eaac34df4a9cada'],
+    ['app/first-run', '6d821ad3331d1ccaca62995f907505021b1faaa6'],
+    ['app/status-activity', 'e5922434686dc2e0af33a4dfb530d6fa68985609'],
+    ['app/workspace-layout', '0d55bbabf518bca12e887cb7bce57b444f1a7350'],
     ['cli/getting-started', '0d77138168847f8c45dd392a3bc0a6c788a22a8c'],
-    ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6'],
+    ['cloud-engine/maturity-foundation', 'b943703f4e7c1e785f3bb7f8a7e7fc8fccd18586'],
+    ['feat/plain-language-activity-artifacts', 'fa3547bec8bc272fed6681a8dcd4c67daee2caed'],
+    ['fix/phase-0-finish-plan-20261030-sync', 'c31c38037c59a7f11dec1d7e382ef29996e47333'],
     ['fix/phase-0-finish-plan-20261030', '7862c21ea72db14b2a801b0c7684578cfae05d3c'],
-    ['fix/phase-0-finish-plan-20261030-sync', 'c31c38037c59a7f11dec1d7e382ef29996e47333']
+    ['ux/chat-first-step-0', 'e3bd92d5aa7ae2a2ff2fd6d9e351ea576eb7aca6'],
+    ['ux/chat-first-step-1', '747d8ea21dfb3854e74c2fd6c51e2cafd10318ec']
   ];
-  for (const [name, sha] of unreviewed) {
-    assert.equal(AUDITED_SUPERSEDED_HEADS.has(name), false, name + ' must not be in the superseded allowlist');
+  assert.equal(USER_APPROVED_BRANCH_HEADS.size, approved.length);
+  for (const [name, sha] of approved) {
+    assert.equal(USER_APPROVED_BRANCH_HEADS.get(name), sha, name + ' must match the owner-approved remote head');
     assert.equal(
       classifyRetirement({ name, commit: { sha } }, null, 'main', openPRs, mainTree).retire,
+      true,
+      name + ' should be eligible at the exact approved head'
+    );
+    assert.equal(
+      classifyRetirement({ name, commit: { sha: 'moved-' + sha } }, null, 'main', openPRs, mainTree).retire,
       false,
-      name + ' must remain preserved until its unique changes are reviewed'
+      name + ' must be preserved if it moves after approval'
+    );
+    assert.equal(
+      classifyRetirement({ name, commit: { sha }, protected: true }, null, 'main', openPRs, mainTree).retire,
+      false,
+      name + ' must remain protected even with an approved head'
+    );
+    assert.equal(
+      classifyRetirement({ name, commit: { sha } }, null, 'main', new Set([name]), mainTree).retire,
+      false,
+      name + ' must remain if an open pull request appears'
     );
   }
+  assert.equal(USER_APPROVED_BRANCH_HEADS.has('main'), false);
 });
 
 test('default, protected, and open-PR branches are never retired', () => {
