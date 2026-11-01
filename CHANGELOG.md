@@ -10,6 +10,8 @@ Future changes after the current 1.0.0 release candidate belong here.
 
 Reliability and token-efficiency work driven by common coding-agent complaints:
 
+- **UTF-8 PowerShell writes** — the PowerShell tool defaults `Out-File` (and `>`), `Set-Content`, `Add-Content` and `Export-Csv` to UTF-8, so Windows PowerShell 5.1 no longer writes UTF-16 or ANSI and corrupts non-English text.
+- **Security hardening** — the bubblewrap sandbox no longer re-exposes `/tmp` socket directories (such as ssh-agent) or whole `/tmp` entries, only toolchain prefixes. Tool-call recovery from reply text ignores quoted and example calls.
 - **Compact system prompt for small windows** — at 16K tokens or less the system prompt shrinks from ~4.2K to ~1.6K tokens while keeping the core correctness and safety rules; with the small tool set, an 8K window keeps ~4.3K tokens for work instead of ~1.7K.
 - **Context windows from the provider** — unknown hosted or self-hosted models read their window from `GET /models` (DeepSeek, OpenRouter, vLLM) instead of assuming 32K; DeepSeek V4 (`deepseek-v4-pro`, `deepseek-flash`) is listed at 1M. `OASIS_MODEL_INFO_PROBE=0` disables the lookup.
 - **Cancel keeps history** — stopping a turn mid-reply keeps the request and the partial reply (marked as interrupted) in the conversation, so "continue" or a correction builds on it (Gemini CLI complaint: cancel erases history).

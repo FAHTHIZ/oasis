@@ -23,6 +23,10 @@ test('PowerShell is opt-in off Windows and on by default on Windows', async () =
   const launch = powerShellLaunch('pwsh.exe', 'Get-Date', {}, 'win32');
   assert.deepEqual(launch.args.slice(0, 4), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass']);
   assert.ok(!powerShellLaunch('pwsh.exe', 'x', { CLAUDE_CODE_POWERSHELL_RESPECT_EXECUTION_POLICY: '1' }, 'win32').args.includes('Bypass'));
+  // Files written through Out-File, > and Set-Content default to UTF-8, not UTF-16/ANSI.
+  const script = launch.args.at(-1);
+  for (const cmdlet of ['Out-File', 'Set-Content', 'Add-Content']) assert.ok(script.includes("$PSDefaultParameterValues['" + cmdlet + ":Encoding'] = 'utf8'"), cmdlet);
+  assert.ok(script.endsWith('Get-Date'));
   assert.match(benignExitNote('rg foo', 1), /no matches/);
   assert.equal(benignExitNote('npm test', 1), null);
   assert.ok(shellCommandBlocked('Remove-Item -Recurse -Force C:\\'));
