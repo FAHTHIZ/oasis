@@ -10,6 +10,7 @@ import { runBuiltinCommand } from '../src/slash.mjs';
 import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, restoreAgentHistory, summarizeAgent, stopAgent } from '../src/agent-tasks.mjs';
 import { runSharedTaskTool } from '../src/shared-tasks.mjs';
 import { isCommitIntegrated } from '../src/worktrees.mjs';
+import { BUILTIN_AGENTS, taskToolDefinition } from '../src/subagents.mjs';
 
 // These scripted fixtures overwrite files without reading them first; read-before-edit
 // enforcement is covered by test/file-state.test.mjs.
@@ -51,6 +52,24 @@ async function until(check, ms = 5000, onTimeout = null) {
     await new Promise((r) => setTimeout(r, 10));
   }
 }
+
+
+test('built-in independent reviewers are read-only and the task schema exposes safe context/model controls', () => {
+  for (const type of ['code-review', 'security-review']) {
+    const definition = BUILTIN_AGENTS[type];
+    assert.ok(definition, type + ' should be available as a built-in reviewer');
+    assert.ok(definition.tools && definition.tools.includes('read_file'));
+    assert.ok(!definition.tools.includes('edit_file'));
+    assert.ok(!definition.tools.includes('write_file'));
+  }
+  const schema = taskToolDefinition(BUILTIN_AGENTS).function.parameters;
+  assert.ok(Object.hasOwn(schema.properties, 'model'));
+  assert.ok(Object.hasOwn(schema.properties, 'fork_context'));
+  assert.deepEqual(schema.required, ['description', 'prompt']);
+  assert.ok(Object.hasOwn(schema.properties.subagent_type.enum ? { subagent_type: schema.properties.subagent_type } : {}, 'subagent_type') === false || schema.properties.subagent_type.enum.includes('security-review'));
+  assert.ok(schema.properties.subagent_type.enum.includes('code-review'));
+  assert.ok(schema.properties.subagent_type.enum.includes('security-review'));
+});
 
 test('background task returns at once, reports back on the next turn, and can be resumed with context', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bg-'));

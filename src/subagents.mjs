@@ -50,6 +50,20 @@ export const BUILTIN_AGENTS = {
     tools: READ_ONLY,
     prompt: 'You are a planning subagent. Investigate the code, then return a numbered implementation plan listing the exact files and functions to change, the order of work, tests to add, and risks. Do not edit files.',
     source: 'built-in'
+  },
+  'code-review': {
+    name: 'code-review',
+    description: 'Independent read-only reviewer: finds correctness bugs, regressions, edge cases and missing tests in proposed changes.',
+    tools: READ_ONLY,
+    prompt: 'You are an independent code reviewer. Inspect the actual diff and surrounding implementation. Report only actionable findings, ordered by severity. For every finding include the exact file and line, the failing scenario, why the behavior is incorrect, and a concrete test that would catch it. Distinguish confirmed defects from risks or suggestions. Do not edit files. Do not report style-only preferences as bugs. If you find no actionable defects, say so and list the areas you inspected.',
+    source: 'built-in'
+  },
+  'security-review': {
+    name: 'security-review',
+    description: 'Independent read-only security reviewer: inspects trust boundaries, permissions, secrets, filesystem and network access.',
+    tools: READ_ONLY,
+    prompt: 'You are an independent security reviewer. Inspect the relevant changed code and nearby enforcement boundaries. Focus on authorization, path traversal and symlink races, secrets, untrusted input, network destinations, process execution, cancellation and data exposure. Do not attempt exploitation or make changes. Report only evidence-backed findings with file paths and line numbers, realistic impact, preconditions and a specific regression test. Separate confirmed vulnerabilities from hardening suggestions. If you find no actionable issue, state the scope and limits of your review.',
+    source: 'built-in'
   }
 };
 
@@ -167,7 +181,9 @@ export function taskToolDefinition(agents) {
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' },
       run_in_background: { type: 'boolean', description: 'Start the agent and return its id immediately, so you can keep working (or launch more agents) while it runs. You are notified with its report when it finishes. In the background it cannot ask for approval: actions not already allowed by permission rules are denied, so prefer read-only agents or worktree isolation.' },
       isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' },
-      team_id: { type: 'string', description: 'Optional named team ID created by team_create (for example team_1). Team members share a roster and can message one another directly.' }
+      team_id: { type: 'string', description: 'Optional named team ID created by team_create (for example team_1). Team members share a roster and can message one another directly.' },
+      model: { type: 'string', description: 'Optional model ID for this child. OASIS checks it against the models available to the parent; omit to inherit the parent or agent-configured model.' },
+      fork_context: { type: 'boolean', description: 'Include a bounded copy of the parent conversation in the child context. Off by default; use only when earlier discussion is needed, because it increases context and may disclose unrelated conversation details to the child.' }
     }, required: ['description', 'prompt'] }
   } };
 }
