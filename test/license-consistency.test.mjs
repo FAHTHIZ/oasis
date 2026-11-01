@@ -19,7 +19,9 @@ test('the canonical project license and package/README declarations agree on Apa
   assert.equal(pkg.license, 'Apache-2.0');
   assert.match(readme, /license-Apache--2\.0/);
   assert.match(readme, /Apache License 2\.0 — see \[LICENSE\]\(LICENSE\)/);
-  assert.match(projectPlan, /\*\*Lifecycle:\*\* Beta/);
+  assert.match(projectPlan, /\*\*Product lifecycle:\*\* Release Candidate \/ Production Qualification/);
+  assert.match(projectPlan, /\*\*Development version:\*\* `1\.0\.0-rc\.1`/);
+  assert.equal(pkg.version, '1.0.0-rc.1');
 });
 
 test('published documentation describes the project as Apache-2.0, not MIT', async () => {
