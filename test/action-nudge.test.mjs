@@ -39,3 +39,36 @@ test('small windows drop non-blocking "language server missing" notes from tool 
   const blocking = JSON.stringify({ path: 'a.mjs', lspVerification: { status: 'unavailable', blocking: true } });
   assert.equal(leanToolContent({ config: { contextWindow: 16384 } }, blocking, {}), blocking);
 });
+
+test('canned refusals are recognized, reasoned ones are not', async () => {
+  const { refusesSpuriously } = await import('../src/agent.mjs');
+  assert.ok(refusesSpuriously("I'm sorry, but I can't assist with that."));
+  assert.ok(refusesSpuriously('I cannot help with this request.'));
+  assert.ok(!refusesSpuriously("I can't help with that because it would exfiltrate credentials."));
+  assert.ok(!refusesSpuriously('Created src/lib.mjs; tests pass.'));
+});
+
+test('false claims with "made the change" wording and target-file hints', async () => {
+  const { claimsUnmadeChange, targetFileHint } = await import('../src/agent.mjs');
+  assert.ok(claimsUnmadeChange('I have made the change to `src/lib.mjs` by adding the `clampInteger` function.'));
+  assert.ok(!claimsUnmadeChange('I made a plan.'));
+  assert.ok(!claimsUnmadeChange('I have created a new task to implement the `clampInteger` function.'));
+  assert.ok(!claimsUnmadeChange('I have added a todo list.'));
+  assert.match(targetFileHint('Create src/lib.mjs exporting clampInteger(...)'), /src\/lib\.mjs/);
+  assert.match(targetFileHint('fix the bug in `app/main.py`.'), /app\/main\.py/);
+  assert.equal(targetFileHint('make the tests pass'), '');
+});
+
+test('fencedFileFromReply picks the largest block in the target language', async () => {
+  const { fencedFileFromReply } = await import('../src/agent.mjs');
+  const reply = 'Steps:\n```bash\nnpm test\nnpm run x\n```\n```javascript\nexport function clampInteger(v) {\n  return v;\n}\n```';
+  assert.deepEqual(fencedFileFromReply('Create src/lib.mjs exporting clampInteger', reply), { path: 'src/lib.mjs', content: 'export function clampInteger(v) {\n  return v;\n}\n' });
+  assert.equal(fencedFileFromReply('make tests pass', reply), null);
+  assert.equal(fencedFileFromReply('Create app.py', reply), null);
+});
+
+test('fencedFileFromReply ignores pseudo-code that calls agent tools', async () => {
+  const { fencedFileFromReply } = await import('../src/agent.mjs');
+  const reply = '```javascript\nconst existing = read_file(\'src/lib.mjs\');\nwrite_file(\'src/lib.mjs\', existing);\n```';
+  assert.equal(fencedFileFromReply('Create src/lib.mjs', reply), null);
+});

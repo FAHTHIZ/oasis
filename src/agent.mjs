@@ -2333,9 +2333,54 @@ export function givesUpEarly(text) {
 
 const GIVE_UP_NUDGE = '<system-reminder>Do not give up yet: nothing has been changed and the user asked for this change. A tool error is information, not a dead end. Read the error, change your approach (for example, use write_file to create a new file, or read_file first to copy the exact text for edit_file), and try again. Only stop if the task is truly impossible, and then explain exactly why.</system-reminder>';
 
+// Small models sometimes emit a canned refusal ("I'm sorry, but I can't assist
+// with that.") for ordinary coding tasks. Only short, reason-free refusals count.
+export function refusesSpuriously(text) {
+  const reply = String(text || '').trim();
+  if (!reply || reply.length > 240) return false;
+  if (/\b(?:because|harm|malicious|illegal|unsafe|danger|policy|credential|password|exploit|malware)\b/i.test(reply)) return false;
+  return /\b(?:i(?:'m| am|’m) sorry,? but )?i (?:can't|cannot|can’t|won't|am not able to|'m not able to|’m not able to) (?:assist|help) with (?:that|this)(?: request)?\b/i.test(reply)
+    || /^i(?:'m| am|’m) sorry,? (?:but )?(?:i )?(?:can't|cannot|can’t) (?:do|fulfil|fulfill|complete) (?:that|this)/i.test(reply);
+}
+
+const FENCE_LANGS = {
+  '.js': ['js', 'javascript', 'mjs', 'cjs', 'node'], '.mjs': ['js', 'javascript', 'mjs', 'node'], '.cjs': ['js', 'javascript', 'cjs', 'node'],
+  '.ts': ['ts', 'typescript'], '.tsx': ['tsx', 'ts', 'typescript'], '.jsx': ['jsx', 'js', 'javascript'],
+  '.py': ['py', 'python', 'python3'], '.go': ['go', 'golang'], '.rs': ['rs', 'rust'], '.rb': ['rb', 'ruby'], '.sh': ['sh', 'bash', 'shell']
+};
+
+// Weak models sometimes put the whole new file in a fenced block instead of
+// calling write_file. When the request names one new file, take the largest
+// block in that file's language (or an unlabeled one) as its content.
+export function fencedFileFromReply(request, reply) {
+  const hint = String(request || '').match(/(?:^|[\s`'"(])((?:[\w.-]+\/)*[\w-]+\.(?:m?[jt]sx?|cjs|py|go|rs|rb|sh))(?=$|[\s`'"),:;.])/);
+  if (!hint) return null;
+  const file = hint[1];
+  const langs = FENCE_LANGS[path.extname(file).toLowerCase()] || [];
+  let best = '';
+  for (const match of String(reply || '').matchAll(/```([\w+-]*)[^\n]*\n([\s\S]*?)```/g)) {
+    const lang = match[1].toLowerCase();
+    if (lang && !langs.includes(lang)) continue;
+    const body = match[2];
+    if (body.trim().split('\n').length < 2) continue;
+    // Tutorial pseudo-code that "calls" the agent's own tools is not file content.
+    if (/\b(?:read_file|write_file|edit_file|run_command|git_diff)\s*\(/.test(body)) continue;
+    if (body.length > best.length) best = body;
+  }
+  return best ? { path: file, content: best.endsWith('\n') ? best : best + '\n' } : null;
+}
+
+// The file a request names ("Create src/lib.mjs ..."), as a concrete next step.
+export function targetFileHint(request) {
+  const match = String(request || '').match(/(?:^|[\s`'"(])((?:[\w.-]+\/)*[\w-]+\.(?:m?[jt]sx?|cjs|py|go|rs|rb|java|kt|cs|cpp|cc|c|h|hpp|php|swift|json|ya?ml|toml|md|html|css|sh))(?=$|[\s`'"),:;.])/);
+  return match ? '\n<system-reminder>The file to work on is ' + match[1] + '. Your next message should be a write_file or edit_file call for it.</system-reminder>' : '';
+}
+
+const REFUSAL_NUDGE = '<system-reminder>This is an ordinary software task in the user\'s own repository. Start now with one tool call: use write_file to create a new file, or read_file to look at an existing one, then edit_file. If you believe the request is actually harmful, say specifically why.</system-reminder>';
+
 // "I have created clampInteger in src/lib.mjs" when no file changed this turn.
 export function claimsUnmadeChange(text) {
-  return /\b(?:i(?:'ve|’ve| have)?|i've)\s+(?:now\s+|successfully\s+|already\s+)?(?:created|added|updated|modified|written|wrote|implemented|fixed|changed|edited|refactored|removed|deleted|renamed)\b/i.test(String(text || ''))
+  return /\b(?:i(?:'ve|’ve| have)?|i've)\s+(?:now\s+|successfully\s+|already\s+)?(?:created|added|updated|modified|written|wrote|implemented|fixed|changed|edited|refactored|removed|deleted|renamed|made (?:the|these|those|this|all|your) (?:change|changes|edit|edits|update|updates)|completed the (?:change|task|implementation))\b(?!\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:task|todo|to-do|plan|list|checklist)\b)/i.test(String(text || ''))
     || /\b(?:has|have) been (?:created|added|updated|modified|written|implemented|fixed)\b/i.test(String(text || ''));
 }
 
@@ -4167,6 +4212,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const claimState = newClaimState();
   let correctionNudged = false;
   let actionNudges = 0;
+  let refusalNudged = false;
+  let fencedApplied = false;
   let echoNudges = 0;
   const failedCommandRuns = new Map();
   // command key -> { signature, count, editEpoch } for failures that persist across edits.
@@ -4293,6 +4340,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (typeof options.onOutputTruncated === 'function') options.onOutputTruncated({ limit: assistant.outputLimit || 0, droppedTool: dropped && dropped.function && dropped.function.name || null, attempt: outputRecoveries });
       }
     }
+    if (debugEnabled('raw')) debugLog('raw', 'model reply before cleanup: ' + JSON.stringify({ content: typeof assistant.content === 'string' ? assistant.content.slice(0, 4000) : assistant.content, tool_calls: assistant.tool_calls || [] }).slice(0, 6000));
     const toolCallRepairs = normalizeAssistantToolCalls(session, assistant, step);
     if ((toolCallRepairs.textCalls || toolCallRepairs.repairedArguments || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
@@ -4314,6 +4362,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const text = typeof assistant.content === 'string' ? assistant.content.trim() : '';
     let calls = assistantMessage.tool_calls || [];
     let assistedBatch = false;
+    let fencedBatch = false;
     if (truncationNotice && !calls.length) {
       if (text && options.onText) await emitDisplayText(session, options, text);
       session.messages.push({ role: 'user', content: truncationNotice });
@@ -4353,14 +4402,43 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         session.messages.push({ role: 'user', content: '<system-reminder>You wrote a tool result yourself instead of replying. Tool results come only from OASIS. Continue the task: call a tool, or give your final answer to the user in plain text.</system-reminder>' });
         continue;
       }
+      // After one nudge, a reply that still holds the new file in a code block
+      // is applied with write_file (small/local models only, new files only,
+      // through the normal tool path and permissions).
+      if (actionNudges >= 1 && !fencedApplied && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request) && assistedVerificationEnabled(session, options.env || process.env)) {
+        const fenced = fencedFileFromReply(request, text);
+        let exists = true;
+        if (fenced) { try { await stat(path.join(session.root, fenced.path)); } catch { exists = false; } }
+        if (fenced && !exists) {
+          fencedApplied = true;
+          calls = [{ id: 'oasis_apply_1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify(fenced) } }];
+          assistantMessage.tool_calls = calls;
+          fencedBatch = true;
+          break finalize; // the text is shown once below, with the calls
+        }
+      }
+      // A canned refusal stays in context and small models then repeat it, so
+      // drop it (and a scolding nudge just before it) and retry with a plain,
+      // neutral instruction. Once per turn, small or local models only.
+      if (!refusalNudged && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request) && refusesSpuriously(text) && assistedVerificationEnabled(session, options.env || process.env)) {
+        refusalNudged = true;
+        if (session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
+        const previous = session.messages[session.messages.length - 1];
+        if (previous && previous.role === 'user' && typeof previous.content === 'string' && previous.content.startsWith('<system-reminder>')) session.messages.pop();
+        if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'refused' }); } catch {} }
+        session.messages.push({ role: 'user', content: REFUSAL_NUDGE + targetFileHint(request) });
+        continue;
+      }
       // Smaller models often answer "create X" with a tutorial instead of doing it.
       // They also announce the next step ("I need to create the file") and stop.
       if (actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
         const kind = claimsUnmadeChange(text) ? 'false-claim' : readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
         if (kind) {
           actionNudges++;
+          // A false "I created it" in context gets repeated by small models; drop it.
+          if (kind === 'false-claim' && assistedVerificationEnabled(session, options.env || process.env) && session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
           if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind }); } catch {} }
-          session.messages.push({ role: 'user', content: kind === 'false-claim' ? FALSE_CLAIM_NUDGE : kind === 'described' ? ACTION_NUDGE : kind === 'gave-up' ? GIVE_UP_NUDGE : CONTINUE_NUDGE });
+          session.messages.push({ role: 'user', content: kind === 'false-claim' ? FALSE_CLAIM_NUDGE + targetFileHint(request) : kind === 'described' ? ACTION_NUDGE : kind === 'gave-up' ? GIVE_UP_NUDGE : CONTINUE_NUDGE });
           continue;
         }
       }
@@ -4394,8 +4472,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           verification.syntaxCheckIds = new Set(checks.map((check, index) => check.syntax ? 'oasis_check_' + verification.assistedRuns + '_' + index : null).filter(Boolean));
           assistantMessage.tool_calls = calls;
           assistedBatch = true;
-          if (text && options.onText) await emitDisplayText(session, options, text);
-          break finalize;
+          break finalize; // the text is shown once below, with the calls
         }
       }
       if (issues.length && !verification.nudgeUsed) {
@@ -4675,6 +4752,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
     }
 
+    if (fencedBatch) {
+      const lastTool = session.messages[session.messages.length - 1];
+      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>OASIS saved the code block from your reply into the file named in the request. Next time, call write_file yourself. Now check the file: read it, fix anything wrong with edit_file, and run a check.</system-reminder>';
+    }
     if (assistedBatch) {
       const syntaxIds = verification.syntaxCheckIds || new Set();
       if (syntaxIds.size) {
