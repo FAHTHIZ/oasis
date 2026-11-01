@@ -268,6 +268,7 @@ const STATIC_FILES = new Map([
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/assets/oasis-icon.svg', ['assets/oasis-icon.svg', 'image/svg+xml']],
   ['/assets/oasis-interface.css', ['assets/oasis-interface.css', 'text/css; charset=utf-8']],
+  ['/assets/activity-artifacts.css', ['assets/activity-artifacts.css', 'text/css; charset=utf-8']],
   ['/assets/oasis-mark.svg', ['assets/oasis-mark.svg', 'image/svg+xml']],
   ['/assets/oasis-logo.svg', ['assets/oasis-logo.svg', 'image/svg+xml']],
   ['/assets/oasis-readme-banner.svg', ['assets/oasis-readme-banner.svg', 'image/svg+xml']],
