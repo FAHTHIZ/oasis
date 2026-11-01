@@ -1,6 +1,6 @@
 # Contributing to OASIS
 
-Thanks for helping with OASIS! The project is currently in beta, and small, careful improvements are welcome. See [the project plan and release gates](docs/PROJECT_PLAN.md) before assuming a capability is complete.
+Thanks for helping with OASIS. The project is in 1.0 Release Candidate / Production Qualification: the feature scope is established, and careful improvements to reliability, agent quality, security boundaries, accessibility, and platform consistency are the priority. Read [the project and qualification plan](docs/PROJECT_PLAN.md) before changing a product contract or making a support claim.
 
 ## Before you begin
 
