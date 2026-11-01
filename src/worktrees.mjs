@@ -207,6 +207,37 @@ export async function worktreeBranchPrefix(root, env = process.env) {
   } catch { return 'oasis/'; }
 }
 
+// Worktree add/remove/prune and branch deletion all write the shared
+// .git/worktrees list and refs. Parallel workers finishing while the
+// dispatcher creates the next worktree would otherwise race on git's lock
+// files, so serialize them per repository and retry briefly on lock errors.
+const repoLocks = new Map();
+export async function withRepoWorktreeLock(root, fn) {
+  const key = path.resolve(root);
+  const previous = repoLocks.get(key) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  const chained = previous.then(() => current);
+  repoLocks.set(key, chained);
+  await previous;
+  try { return await fn(); }
+  finally {
+    release();
+    if (repoLocks.get(key) === chained) repoLocks.delete(key);
+  }
+}
+
+const GIT_LOCK_ERROR = /\.lock'?:? File exists|Unable to create '.*\.lock'|cannot lock ref|could not lock|is locked|another git process/i;
+export async function retryOnGitLock(fn, { attempts = 5, delayMs = 150 } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try { return await fn(); }
+    catch (error) {
+      if (attempt >= attempts || !GIT_LOCK_ERROR.test(String(error && error.message || error))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+    }
+  }
+}
+
 export async function createWorktree(root, label, options = {}) {
   const env = options.env || process.env;
   if (options.hookOptions && hasHooks(options.hookOptions.hooks, 'WorktreeCreate')) return createHookWorktree(root, label, options);
@@ -227,7 +258,7 @@ export async function createWorktree(root, label, options = {}) {
   const relative = path.join(WORKTREE_DIR, name);
   const worktreeParent = await ensureWorktreeParent(root);
   const absolute = path.join(worktreeParent, name);
-  await git(root, ['worktree', 'add', '-b', branch, absolute, 'HEAD'], env, 60000);
+  await withRepoWorktreeLock(commonDir, () => retryOnGitLock(() => git(root, ['worktree', 'add', '-b', branch, absolute, 'HEAD'], env, 60000)));
   const base = await git(absolute, ['rev-parse', 'HEAD'], env);
   return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base };
 }
@@ -359,11 +390,15 @@ export async function removeWorktree(root, worktree, options = {}) {
     if (result.failed && existsSync(worktree.path)) throw new Error('worktree removal failed, kept: ' + worktree.path + (result.messages[0] ? ' (' + result.messages[0] + ')' : ''));
     return { removed: true };
   }
-  await git(root, ['worktree', 'remove', '--force', worktree.path], env).catch(async () => {
-    await rm(worktree.path, { recursive: true, force: true });
-    await git(root, ['worktree', 'prune'], env).catch(() => {});
+  const commonDir = await git(root, ['rev-parse', '--git-common-dir'], env)
+    .then((dir) => path.resolve(root, dir)).catch(() => path.resolve(root));
+  await withRepoWorktreeLock(commonDir, async () => {
+    await retryOnGitLock(() => git(root, ['worktree', 'remove', '--force', worktree.path], env)).catch(async () => {
+      await rm(worktree.path, { recursive: true, force: true });
+      await git(root, ['worktree', 'prune'], env).catch(() => {});
+    });
+    if (options.deleteBranch) await retryOnGitLock(() => git(root, ['branch', '-D', worktree.branch], env)).catch(() => {});
   });
-  if (options.deleteBranch) await git(root, ['branch', '-D', worktree.branch], env).catch(() => {});
 }
 
 export async function listWorktrees(root, options = {}) {

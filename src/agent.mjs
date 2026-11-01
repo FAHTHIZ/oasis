@@ -3297,7 +3297,13 @@ async function dispatchReadyTasksUnlocked(session, args = {}, context = {}, opti
       }, context, options);
       launched.push({ task_id: task.id, agent_id: result.id, status: result.status, subject: task.subject });
     } catch (error) {
-      failed.push({ task_id: task.id, error: String(error && error.message || error).slice(0, 1000) });
+      const message = String(error && error.message || error).slice(0, 1000);
+      failed.push({ task_id: task.id, error: message });
+      recordAgentEvent(session, 'task.dispatch_failed', {
+        teamId: teamId || undefined,
+        description: task.id,
+        detail: (task.id + ': ' + message).slice(0, 300)
+      });
     }
   }
 
