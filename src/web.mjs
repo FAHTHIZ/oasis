@@ -2,9 +2,9 @@ import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { labelToolActivity, safeToolActivityArgs, toolActivityCategory, toolActivityWarning } from './tool-activity.mjs';
+import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { access, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
@@ -257,6 +257,7 @@ export function toolDetail(name, args = {}) {
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
+const MAX_FILE_PREVIEW_BYTES = 256 * 1024;
 const MAX_JOBS = 20;
 const MAX_EVENTS_PER_JOB = 120;
 const SESSION_ID_PATTERN = /^[a-f0-9-]{20,80}$/i;
@@ -734,7 +735,7 @@ export function createOasisWebServer(options = {}) {
             assistantDeltaBuffer = '';
             const safeArgs = safeToolActivityArgs(args);
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
-            if (callId) toolActivityArgsByCallId.set(callId, safeArgs);
+            if (callId) toolActivityArgsByCallId.set(callId, { args: safeArgs, startedAt: Date.now() });
             emit(job, 'tool_start', {
               name: String(name || 'tool').slice(0, 100),
               callId,
@@ -747,16 +748,21 @@ export function createOasisWebServer(options = {}) {
           },
           onToolResult: ({ name, result: value, call }) => {
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
-            const args = callId ? toolActivityArgsByCallId.get(callId) || {} : {};
+            const tracked = callId ? toolActivityArgsByCallId.get(callId) : null;
+            const args = tracked && tracked.args ? tracked.args : {};
             if (callId) toolActivityArgsByCallId.delete(callId);
+            const artifacts = toolActivityArtifacts(name, args, value);
             emit(job, 'tool_result', {
               name: String(name || 'tool').slice(0, 100),
               callId,
               args,
               label: labelToolActivity(name, args, value),
               category: toolActivityCategory(name),
+              status: toolActivityStatus(value),
+              ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt) } : {}),
               result: summarizeToolResult(value),
-              warning: toolActivityWarning(value)
+              warning: toolActivityWarning(value),
+              ...(artifacts.length ? { artifacts, previewJobId: job.id } : {})
             });
           },
           onCompactionStart: (info) => emit(job, 'compaction_started', {
@@ -1476,6 +1482,61 @@ export function createOasisWebServer(options = {}) {
       const body = await readJsonBody(req);
       const result = await startGithubCloneJob(body);
       json(res, 202, result);
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/workspace/file') {
+      const requestedPath = parsedUrl.searchParams.get('path') || '';
+      if (!requestedPath || requestedPath.length > 1000) {
+        json(res, 400, { error: 'Choose a workspace file to preview.' });
+        return;
+      }
+      let previewRoot = activeRoot;
+      const previewJobId = parsedUrl.searchParams.get('jobId') || '';
+      if (previewJobId) {
+        if (!/^[a-f0-9-]{20,80}$/i.test(previewJobId)) {
+          json(res, 400, { error: 'The preview task identifier is invalid.' });
+          return;
+        }
+        const previewJob = jobs.get(previewJobId);
+        if (!previewJob || previewJob.type !== 'agent' || !previewJob.executionRoot) {
+          json(res, 404, { error: 'The task workspace is no longer available for preview.' });
+          return;
+        }
+        previewRoot = previewJob.executionRoot;
+      }
+      try {
+        const target = await resolveWorkspacePath(previewRoot, requestedPath, { rejectSymlinks: true, workspaceOnly: true });
+        const info = await lstat(target.absolute);
+        if (!info.isFile() || info.isSymbolicLink()) {
+          json(res, 400, { error: 'Only regular text files can be previewed here.' });
+          return;
+        }
+        if (info.size > MAX_FILE_PREVIEW_BYTES) {
+          json(res, 413, { error: 'This file is too large for an inline preview (256 KiB limit). Use the project editor or Changes panel to inspect it.' });
+          return;
+        }
+        const buffer = await readFile(target.absolute);
+        if (buffer.includes(0)) {
+          json(res, 415, { error: 'This file appears to be binary and cannot be shown as text.' });
+          return;
+        }
+        let content;
+        try { content = new TextDecoder('utf-8', { fatal: true }).decode(buffer); }
+        catch { json(res, 415, { error: 'This file is not valid UTF-8 text and cannot be previewed.' }); return; }
+        json(res, 200, {
+          path: target.relative.split(path.sep).join('/'),
+          content,
+          bytes: buffer.length,
+          lineCount: content.split(/\\r?\\n/).length,
+          modifiedAt: info.mtime.toISOString()
+        });
+      } catch (error) {
+        const message = String(error && error.message || error || 'Could not preview this file.');
+        const status = error && error.code === 'ENOENT' ? 404 :
+          (/sensitive|outside the workspace|symbolic link|resolves outside/i.test(message) ? 403 : 400);
+        json(res, status, { error: status === 403 ? 'This path is protected or outside the task workspace.' : message.slice(0, 500) });
+      }
       return;
     }
 
