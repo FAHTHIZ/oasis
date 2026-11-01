@@ -1,0 +1,67 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..38f9855 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -3,7 +3,7 @@ import path from 'node:path';
+ import os from 'node:os';
+ import { pathToFileURL } from 'node:url';
+ import { openStore } from './store.mjs';
+-import { filterTasks, sortTasks, paginate } from './query.mjs';
++import { filterTasks, sortTasks, paginate, summarize } from './query.mjs';
+ import { formatList } from './format.mjs';
+ 
+ const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file']);
+@@ -80,13 +80,18 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       print(`Tagged task ${id}.`);
+       return 0;
+     }
++    case 'stats': {
++      const s = summarize(store.all(), clock);
++      print(`Open: ${s.open}\nDone: ${s.done}\nOverdue: ${s.overdue}\nBy priority: high ${s.byPriority.high}, normal ${s.byPriority.normal}, low ${s.byPriority.low}`);
++      return 0;
++    }
+     case 'rm': {
+       for (const id of args.map(parseId)) await store.remove(id);
+       print(`Removed ${args.length} task(s).`);
+       return 0;
+     }
+     default:
+-      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');
++      print('Usage: taskflow <add|list|done|reopen|tag|rm|stats> [options]');
+       return command ? 2 : 0;
+   }
+ }
+diff --git a/src/query.mjs b/src/query.mjs
+index a5ab571..9105c90 100644
+--- a/src/query.mjs
++++ b/src/query.mjs
+@@ -26,6 +26,13 @@ export function sortTasks(tasks, key = 'id') {
+   return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);
+ }
+ 
++export function summarize(tasks, now = new Date()) {
++  const open = tasks.filter((task) => task.status === 'open');
++  const byPriority = { high: 0, normal: 0, low: 0 };
++  for (const task of open) byPriority[task.priority] = (byPriority[task.priority] || 0) + 1;
++  return { open: open.length, done: tasks.length - open.length, overdue: open.filter((task) => isOverdue(task, now)).length, byPriority };
++}
++
+ // Pages are numbered from 1.
+ export function paginate(items, page = 1, size = 20) {
+   if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');
+diff --git a/test/query.test.mjs b/test/query.test.mjs
+index 7c5c148..6a71f12 100644
+--- a/test/query.test.mjs
++++ b/test/query.test.mjs
+@@ -23,6 +23,11 @@ test('sorts by due date with undated tasks last, and by priority', () => {
+   assert.throws(() => sortTasks(tasks, 'color'), /Unknown sort key/);
+ });
+ 
++test('summarizes open, done and overdue tasks', async () => {
++  const { summarize } = await import('../src/query.mjs');
++  assert.deepEqual(summarize(tasks, NOW), { open: 3, done: 1, overdue: 1, byPriority: { high: 1, normal: 1, low: 1 } });
++});
++
+ test('paginates from page 1', () => {
+   const items = Array.from({ length: 5 }, (_, i) => i);
+   assert.deepEqual(paginate(items, 1, 2), { items: [0, 1], page: 1, pages: 3, total: 5 });

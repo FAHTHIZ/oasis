@@ -1,0 +1,72 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..be6e971 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -44,6 +44,15 @@ function parseId(text) {
+   return Number(text);
+ }
+ 
++function checkIds(store, args) {
++  if (!args.length) throw new Error('No task IDs given');
++  const ids = [...new Set(args.map(parseId))];
++  const known = new Set(store.all().map((task) => task.id));
++  const missing = ids.filter((id) => !known.has(id));
++  if (missing.length) throw new Error(`No task with ID ${missing.join(', ')}`);
++  return ids;
++}
++
+ export async function run(argv, { stdout = process.stdout, env = process.env, now } = {}) {
+   const { command, args, flags } = parseArgs(argv);
+   const file = flags.file || env.TASKFLOW_FILE || path.join(os.homedir(), '.taskflow.json');
+@@ -65,13 +74,15 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       return 0;
+     }
+     case 'done': {
+-      for (const id of args.map(parseId)) await store.update(id, { status: 'done' });
+-      print(`Completed ${args.length} task(s).`);
++      const ids = checkIds(store, args);
++      for (const id of ids) await store.update(id, { status: 'done' });
++      print(`Completed ${ids.length} task(s).`);
+       return 0;
+     }
+     case 'reopen': {
+-      for (const id of args.map(parseId)) await store.update(id, { status: 'open' });
+-      print(`Reopened ${args.length} task(s).`);
++      const ids = checkIds(store, args);
++      for (const id of ids) await store.update(id, { status: 'open' });
++      print(`Reopened ${ids.length} task(s).`);
+       return 0;
+     }
+     case 'tag': {
+@@ -81,8 +92,9 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       return 0;
+     }
+     case 'rm': {
+-      for (const id of args.map(parseId)) await store.remove(id);
+-      print(`Removed ${args.length} task(s).`);
++      const ids = checkIds(store, args);
++      for (const id of ids) await store.remove(id);
++      print(`Removed ${ids.length} task(s).`);
+       return 0;
+     }
+     default:
+diff --git a/test/cli.test.mjs b/test/cli.test.mjs
+index 28c8e84..ca53bdf 100644
+--- a/test/cli.test.mjs
++++ b/test/cli.test.mjs
+@@ -26,6 +26,15 @@ test('add, list and done round-trip through the file', async (t) => {
+   assert.doesNotMatch(after.text, /Old thing/);
+ });
+ 
++test('done is all-or-nothing', async (t) => {
++  const env = { TASKFLOW_FILE: await tempFile(t) };
++  await run(['add', 'a'], { stdout: sink(), env, now: () => NOW });
++  await assert.rejects(run(['done', '1', '9'], { stdout: sink(), env, now: () => NOW }), /No task with ID 9/);
++  const out = sink();
++  await run(['list'], { stdout: out, env, now: () => NOW });
++  assert.match(out.text, /\[ \]/);
++});
++
+ test('unknown commands print usage and exit 2', async (t) => {
+   const out = sink();
+   assert.equal(await run(['frobnicate'], { stdout: out, env: { TASKFLOW_FILE: await tempFile(t) } }), 2);

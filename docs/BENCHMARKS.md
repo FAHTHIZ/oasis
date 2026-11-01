@@ -1,6 +1,6 @@
 # OASIS coding-agent benchmarks
 
-**Status: model-free harness benchmark published (below); 33-task agent suite and runners ready. No same-model head-to-head against Claude Code has been published yet.**
+**Status: model-free harness benchmark published (below); 50-task agent suite (including 17 repository-level tasks) and runners ready. No same-model head-to-head against Claude Code has been published yet.**
 
 The first task taxonomy is an explicit, reviewable estimate in `evals/tasks/metadata.json`; the difficulty labels are not calibrated benchmarks, and the current suite still lacks large repository-level tasks.
 
@@ -55,9 +55,9 @@ Tokens are estimated as characters / 4. Times are medians of 5 cold `oasis -p` r
 
 It does not measure task success with a real model, and it does not compare OASIS with Claude Code, Codex CLI or any other product. It shows that, for the same model output, the OASIS runtime recovers more calls, applies more edits correctly and stops more damage than a harness without these layers. Task success needs the agent suite below, run with the same model in each harness.
 
-## What the current 33-task suite proves
+## What the current 50-task suite proves
 
-The repository has 33 deterministic evaluation fixtures under **evals/tasks/**. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. The `config-strict-integer-bounds` task is the first multi-file project regression: it fixes permissive configuration parsing and requires a dedicated regression-test file. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
+The repository has 50 deterministic evaluation fixtures under **evals/tasks/**. Seventeen of them (`taskflow-*`) are repository-level tasks on a small multi-module CLI project (`evals/snapshots/taskflow`: store, query, dates, format, CLI and event modules with its own 19-test suite): eight are bug reports in which the agent must find a defect from a user-style symptom description and add a regression test, and nine are multi-file features (search, weekday due dates, unsubscribe, an urgent priority, stats, export with secret redaction, undo, recurring tasks, atomic bulk completion). Their verifiers run the project's whole test suite, require new tests to be added, and then check behaviour with hidden assertions that the agent never sees. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. The `config-strict-integer-bounds` task is the first multi-file project regression: it fixes permissive configuration parsing and requires a dedicated regression-test file. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
 
 ### Added fixture catalogue
 
@@ -164,15 +164,15 @@ The comparator now fingerprints each task's prompt, shared repository snapshot, 
 4. Treat deterministic verifier outcomes as the success signal. Do not use a model to judge itself and do not count a task as passed just because the agent says done.
 5. Run three trials at minimum and publish every failure and timeout. Report task-balanced, category-balanced, and difficulty-balanced pass rates plus total trial counts.
 6. Report cost only when supported by per-run usage metadata or documented token rates. Subscription usage with no per-run dollar amount is **unknown**, not zero. OASIS's token-price setting produces an estimate and does not account for every cache/billing modifier; label it as an estimate.
-7. Do not claim "90%" or "at the same level as Claude Code" from this 33-task smoke suite. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
+7. Do not claim "90%" or "at the same level as Claude Code" from this 50-task suite alone. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
 
 ## Coverage audit and result limits
 
-The checked-in evaluator currently has **33 deterministic task fixtures**: 16 labelled small and 17 medium, with no large tasks. Many exercise bounded helper logic, parsing, validation, storage and security/configuration cases. This is valuable regression coverage; it is not yet a representative repository-scale software-engineering benchmark.
+The checked-in evaluator currently has **50 deterministic task fixtures**: 19 labelled small, 28 medium and 3 large. The original 33 mostly exercise bounded helper logic, parsing, validation, storage and security/configuration cases; the 17 `taskflow-*` tasks add repository-level bug diagnosis and multi-file features with hidden verifier assertions. All 50 pass the validator (baseline fails, reference patch passes). This is stronger regression coverage, but one small project is still not a representative SWE-bench-scale benchmark.
 
 The static audit identified these priorities:
 
-1. Add at least 17 more repository-level tasks to reach a maintained 50-task minimum, covering multi-file features, real bug fixes, failing-test diagnosis/recovery, context continuity, permission denial, cancellation and unrelated-change preservation.
+1. Done (November 1, 2026): 17 repository-level tasks added to reach 50. Still open: more pinned repositories, covering multi-file features, real bug fixes, failing-test diagnosis/recovery, context continuity, permission denial, cancellation and unrelated-change preservation.
 2. Pin source revision, task and snapshot fingerprints, model/provider, prompt, permission policy, budget, timeout and environment for every run.
 3. Run stochastic tasks at least three times and retain raw results, including all failures and timeouts.
 4. Keep independent deterministic acceptance separate from blinded human diff review for correctness, regressions and maintainability.
@@ -234,7 +234,7 @@ The default classifier sends only short, clearly read-only prompts to the easy m
 
 ## Five-track measurement contract
 
-The five-track work measures narrow failure modes—context durability, token efficiency, task-list fidelity, ambiguity safety and long-horizon completion. It is separate from the existing 33-task regression evaluator and is not a training system; it does not train, tune or modify a model. A track is publishable only after frozen tasks, hash validation, a deterministic scorer, a negative control, at least three seeds, CI and a raw result artifact all exist.
+The five-track work measures narrow failure modes—context durability, token efficiency, task-list fidelity, ambiguity safety and long-horizon completion. It is separate from the existing 50-task regression evaluator and is not a training system; it does not train, tune or modify a model. A track is publishable only after frozen tasks, hash validation, a deterministic scorer, a negative control, at least three seeds, CI and a raw result artifact all exist.
 
 **Status: benchmark infrastructure is being built in gated stages. No five-track result has been published.**
 
@@ -244,7 +244,7 @@ The five-track work measures narrow failure modes—context durability, token ef
 
 This suite measures five narrow, falsifiable behaviors: context durability, token efficiency, task-list fidelity, ambiguity safety, and long-horizon completion. It is not a training system and it does not train, tune, or modify a model.
 
-The existing `evals/tasks/` suite remains a separate utility-focused regression suite. Its 33 fixtures, disposable snapshots, reference patches, external verifiers, snapshot fingerprints, validator, Claude Code runner, and JSON/HTML comparison reports are reused rather than rebuilt. The 33 fixtures must not be presented as a representative coding-quality score.
+The existing `evals/tasks/` suite remains a separate utility-focused regression suite. Its 50 fixtures, disposable snapshots, reference patches, external verifiers, snapshot fingerprints, validator, Claude Code runner, and JSON/HTML comparison reports are reused rather than rebuilt. The fixtures must not be presented as a representative coding-quality score.
 
 ## Measurement rules
 
@@ -348,7 +348,7 @@ bench/
 
 ## Build order and gates
 
-1. **Infrastructure reuse audit:** validate the existing 33 fixtures on current HEAD, inspect quarantine CI, verify the Claude Code runner's minimum version and restricted mode, and keep this document linked from the root README.
+1. **Infrastructure reuse audit:** validate the existing 50 fixtures on current HEAD, inspect quarantine CI, verify the Claude Code runner's minimum version and restricted mode, and keep this document linked from the root README.
 2. **Existing-suite negative control:** add `--negative-control` to the existing eval runner. It must substitute no-op or random predictions and assert a pass rate strictly below the configured threshold.
 3. **FRR:** do not begin the next track until the FRR negative control passes and checkpoint scores are reported.
 4. **Staleness:** proceed only after its frozen-list control proves the metric moves in the expected direction.
@@ -372,4 +372,4 @@ The README summary must distinguish wins, ties, and losses. Missing runs and una
 
 ## Five-track implementation status
 
-As of October 31, 2026, the five-track protocol and required layout are documented, but no five-track result or OASIS-vs-Claude Code score has been published. External issue reports and paper figures in the design are hypotheses for constructing falsifiable tasks, not population baselines. The current 33-task evaluator and its report comparator remain distinct from these future track-specific runners and scorers.
+As of October 31, 2026, the five-track protocol and required layout are documented, but no five-track result or OASIS-vs-Claude Code score has been published. External issue reports and paper figures in the design are hypotheses for constructing falsifiable tasks, not population baselines. The current 50-task evaluator and its report comparator remain distinct from these future track-specific runners and scorers.

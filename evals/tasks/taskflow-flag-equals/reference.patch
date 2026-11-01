@@ -1,0 +1,58 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 41b7ec4..565e137 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -9,7 +9,7 @@ import { formatList } from './format.mjs';
+ const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file']);
+ const BOOLEAN_FLAGS = new Set(['overdue', 'help']);
+ 
+-// Supports --flag value and boolean --flag. "--" ends options.
++// Supports --flag value, --flag=value, and boolean --flag. "--" ends options.
+ export function parseArgs(argv) {
+   const positional = [];
+   const flags = {};
+@@ -18,14 +18,20 @@ export function parseArgs(argv) {
+     const arg = argv[i];
+     if (arg === '--') { positional.push(...argv.slice(i + 1)); break; }
+     if (!arg.startsWith('--')) { positional.push(arg); continue; }
+-    const name = arg.slice(2);
++    const eq = arg.indexOf('=');
++    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq);
+     if (BOOLEAN_FLAGS.has(name)) {
++      if (eq !== -1) throw new Error(`--${name} does not take a value`);
+       flags[name] = true;
+       continue;
+     }
+     if (!VALUE_FLAGS.has(name)) throw new Error(`Unknown option: --${name}`);
+-    const value = argv[++i];
+-    if (value === undefined) throw new Error(`--${name} needs a value`);
++    let value;
++    if (eq !== -1) value = arg.slice(eq + 1);
++    else {
++      value = argv[++i];
++      if (value === undefined) throw new Error(`--${name} needs a value`);
++    }
+     if (name === 'tag') tags.push(value);
+     else flags[name] = value;
+   }
+diff --git a/test/cli.test.mjs b/test/cli.test.mjs
+index 1229b02..8490739 100644
+--- a/test/cli.test.mjs
++++ b/test/cli.test.mjs
+@@ -4,7 +4,7 @@ import { run, parseArgs } from '../src/cli.mjs';
+ import { NOW, tempFile, sink } from './helpers.mjs';
+ 
+ test('parses flags in both forms', () => {
+-  assert.deepEqual(parseArgs(['add', 'Buy', 'milk', '--priority', 'high', '--tag', 'home', '--tag', 'errand']), { command: 'add', args: ['Buy', 'milk'], flags: { priority: 'high', tags: ['home', 'errand'] } });
++  assert.deepEqual(parseArgs(['add', 'Buy', 'milk', '--priority', 'high', '--tag=home', '--tag', 'errand']), { command: 'add', args: ['Buy', 'milk'], flags: { priority: 'high', tags: ['home', 'errand'] } });
+   assert.deepEqual(parseArgs(['list', '--overdue', '--', '--literal']).flags, { overdue: true });
+   assert.throws(() => parseArgs(['list', '--color', 'red']), /Unknown option/);
+   assert.throws(() => parseArgs(['list', '--sort']), /needs a value/);
+@@ -31,3 +31,7 @@ test('unknown commands print usage and exit 2', async (t) => {
+   assert.equal(await run(['frobnicate'], { stdout: out, env: { TASKFLOW_FILE: await tempFile(t) } }), 2);
+   assert.match(out.text, /Usage/);
+ });
++
++test('--flag=value works for value flags', () => {
++  assert.deepEqual(parseArgs(['add', 'x', '--due=tomorrow', '--notes=a=b']).flags, { due: 'tomorrow', notes: 'a=b' });
++});

@@ -1,0 +1,70 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..4afc0fe 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -4,9 +4,9 @@ import os from 'node:os';
+ import { pathToFileURL } from 'node:url';
+ import { openStore } from './store.mjs';
+ import { filterTasks, sortTasks, paginate } from './query.mjs';
+-import { formatList } from './format.mjs';
++import { formatList, toCsv } from './format.mjs';
+ 
+-const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file']);
++const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file', 'format']);
+ const BOOLEAN_FLAGS = new Set(['overdue', 'help']);
+ 
+ // Supports --flag value, --flag=value, and boolean --flag. "--" ends options.
+@@ -80,6 +80,14 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       print(`Tagged task ${id}.`);
+       return 0;
+     }
++    case 'export': {
++      const format = flags.format || 'csv';
++      const tasks = store.all().sort((a, b) => a.id - b.id);
++      if (format === 'csv') stdout.write(toCsv(tasks));
++      else if (format === 'json') print(JSON.stringify(tasks, null, 2));
++      else throw new Error(`Unknown export format: ${format}`);
++      return 0;
++    }
+     case 'rm': {
+       for (const id of args.map(parseId)) await store.remove(id);
+       print(`Removed ${args.length} task(s).`);
+diff --git a/src/format.mjs b/src/format.mjs
+index 87286b2..875b465 100644
+--- a/src/format.mjs
++++ b/src/format.mjs
+@@ -26,6 +26,18 @@ export function formatTask(task, { now = new Date(), width = 40 } = {}) {
+   return `${String(task.id).padStart(3)} ${box} ${MARK[task.priority]} ${truncate(task.title, width)}${tags}${due ? ` (${due})` : ''}`;
+ }
+ 
++const csvField = (value) => {
++  const text = value === null || value === undefined ? '' : String(value);
++  return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
++};
++const safeText = (value) => (/^[=+\-@]/.test(String(value || '')) ? "'" + value : value || '');
++
++export function toCsv(tasks) {
++  const rows = [['id', 'title', 'priority', 'status', 'due', 'tags', 'notes']];
++  for (const task of [...tasks].sort((a, b) => a.id - b.id)) rows.push([task.id, safeText(task.title), task.priority, task.status, task.due, task.tags.join(';'), safeText(task.notes)]);
++  return rows.map((row) => row.map(csvField).join(',')).join('\r\n') + '\r\n';
++}
++
+ export function formatList(tasks, options) {
+   if (!tasks.length) return 'No tasks.';
+   return tasks.map((task) => formatTask(task, options)).join('\n');
+diff --git a/test/format.test.mjs b/test/format.test.mjs
+index eedbba0..d71a07a 100644
+--- a/test/format.test.mjs
++++ b/test/format.test.mjs
+@@ -15,6 +15,11 @@ test('describes due dates relative to now', () => {
+   assert.equal(relativeDue({ due: '2026-10-01', status: 'open' }, NOW), 'overdue');
+ });
+ 
++test('exports CSV with quoting', async () => {
++  const { toCsv } = await import('../src/format.mjs');
++  assert.equal(toCsv([{ id: 1, title: 'a, "b"', priority: 'low', status: 'open', due: null, tags: ['x', 'y'], notes: '' }]), 'id,title,priority,status,due,tags,notes\r\n1,"a, ""b""",low,open,,x;y,\r\n');
++});
++
+ test('formats a task line', () => {
+   assert.equal(formatTask({ id: 7, title: 'Ship', priority: 'high', status: 'open', due: '2026-11-02', tags: ['rel'] }, { now: NOW }), '  7 [ ] ! Ship #rel (tomorrow)');
+ });

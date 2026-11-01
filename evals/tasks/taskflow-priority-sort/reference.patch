@@ -1,0 +1,26 @@
+diff --git a/src/query.mjs b/src/query.mjs
+index 970623e..a5ab571 100644
+--- a/src/query.mjs
++++ b/src/query.mjs
+@@ -15,7 +15,7 @@ export function filterTasks(tasks, { status, tag, priority, overdue, now = new D
+ const SORTERS = {
+   id: (a, b) => a.id - b.id,
+   due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),
+-  priority: (a, b) => a.priority.localeCompare(b.priority),
++  priority: (a, b) => PRIORITIES.indexOf(b.priority) - PRIORITIES.indexOf(a.priority),
+   title: (a, b) => a.title.localeCompare(b.title)
+ };
+ 
+diff --git a/test/query.test.mjs b/test/query.test.mjs
+index 7c5c148..2744639 100644
+--- a/test/query.test.mjs
++++ b/test/query.test.mjs
+@@ -29,3 +29,8 @@ test('paginates from page 1', () => {
+   assert.deepEqual(paginate(items, 3, 2).items, [4]);
+   assert.throws(() => paginate(items, 0, 2), /positive integer/);
+ });
++
++test('priority sort is high, normal, low with ID ties', () => {
++  const list = [{ id: 3, priority: 'low' }, { id: 1, priority: 'normal' }, { id: 2, priority: 'high' }, { id: 4, priority: 'normal' }];
++  assert.deepEqual(sortTasks(list, 'priority').map((t) => t.id), [2, 1, 4, 3]);
++});

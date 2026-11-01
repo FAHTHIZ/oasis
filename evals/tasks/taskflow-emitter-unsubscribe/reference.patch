@@ -1,0 +1,49 @@
+diff --git a/src/events.mjs b/src/events.mjs
+index 18a94cb..83f6d53 100644
+--- a/src/events.mjs
++++ b/src/events.mjs
+@@ -3,10 +3,20 @@ export function createEmitter() {
+   return {
+     on(name, fn) {
+       if (!listeners.has(name)) listeners.set(name, []);
+-      listeners.get(name).push(fn);
++      const entry = { fn };
++      listeners.get(name).push(entry);
++      return () => {
++        const list = listeners.get(name);
++        const index = list ? list.indexOf(entry) : -1;
++        if (index !== -1) list.splice(index, 1);
++      };
++    },
++    once(name, fn) {
++      const off = this.on(name, (payload) => { off(); fn(payload); });
++      return off;
+     },
+     emit(name, payload) {
+-      for (const fn of listeners.get(name) || []) fn(payload);
++      for (const entry of [...(listeners.get(name) || [])]) entry.fn(payload);
+     },
+     count(name) {
+       return (listeners.get(name) || []).length;
+diff --git a/test/store.test.mjs b/test/store.test.mjs
+index 5428276..f3bcc85 100644
+--- a/test/store.test.mjs
++++ b/test/store.test.mjs
+@@ -28,6 +28,17 @@ test('emits completed once per completion', async (t) => {
+   assert.deepEqual(seen, [1]);
+ });
+ 
++test('listeners can unsubscribe', async () => {
++  const { createEmitter } = await import('../src/events.mjs');
++  const e = createEmitter();
++  const seen = [];
++  const off = e.on('x', (v) => seen.push(v));
++  e.emit('x', 1);
++  off();
++  e.emit('x', 2);
++  assert.deepEqual(seen, [1]);
++});
++
+ test('returned tasks are copies', async (t) => {
+   const store = await openStore(await tempFile(t), { now: () => NOW });
+   await store.add({ title: 'one', tags: ['a'] });

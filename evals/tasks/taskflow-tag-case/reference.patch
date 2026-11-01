@@ -1,0 +1,25 @@
+diff --git a/src/query.mjs b/src/query.mjs
+index eba4246..a5ab571 100644
+--- a/src/query.mjs
++++ b/src/query.mjs
+@@ -2,7 +2,7 @@ import { isOverdue } from './dates.mjs';
+ import { PRIORITIES, normalizeTag } from './task.mjs';
+ 
+ export function filterTasks(tasks, { status, tag, priority, overdue, now = new Date() } = {}) {
+-  const wanted = tag || null;
++  const wanted = tag ? normalizeTag(tag) : null;
+   return tasks.filter((task) => {
+     if (status && status !== 'all' && task.status !== status) return false;
+     if (wanted && !task.tags.includes(wanted)) return false;
+diff --git a/test/query.test.mjs b/test/query.test.mjs
+index 7c5c148..4779567 100644
+--- a/test/query.test.mjs
++++ b/test/query.test.mjs
+@@ -29,3 +29,7 @@ test('paginates from page 1', () => {
+   assert.deepEqual(paginate(items, 3, 2).items, [4]);
+   assert.throws(() => paginate(items, 0, 2), /positive integer/);
+ });
++
++test('tag filters are case-insensitive', () => {
++  assert.deepEqual(filterTasks(tasks, { status: 'all', tag: 'WORK' }).map((t) => t.id), [2, 3]);
++});

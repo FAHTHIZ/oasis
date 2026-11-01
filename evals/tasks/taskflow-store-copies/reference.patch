@@ -1,0 +1,30 @@
+diff --git a/src/store.mjs b/src/store.mjs
+index 094060c..c501ef5 100644
+--- a/src/store.mjs
++++ b/src/store.mjs
+@@ -30,8 +30,8 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+ 
+   return {
+     events,
+-    all: () => tasks,
+-    get: (id) => find(id),
++    all: () => tasks.map((t) => ({ ...t, tags: [...t.tags] })),
++    get: (id) => { const t = find(id); return { ...t, tags: [...t.tags] }; },
+     async add(fields) {
+       const task = createTask(fields, { id: nextId(tasks), now: now() });
+       tasks = [...tasks, task];
+diff --git a/test/store.test.mjs b/test/store.test.mjs
+index 5428276..2d60f56 100644
+--- a/test/store.test.mjs
++++ b/test/store.test.mjs
+@@ -34,3 +34,10 @@ test('returned tasks are copies', async (t) => {
+   store.all()[0].tags.push('mutated');
+   assert.deepEqual(store.get(1).tags, ['a']);
+ });
++
++test('changing a task returned by get does not change the store', async (t) => {
++  const store = await openStore(await tempFile(t), { now: () => NOW });
++  await store.add({ title: 'one', tags: ['a'] });
++  store.get(1).tags.push('b');
++  assert.deepEqual(store.get(1).tags, ['a']);
++});

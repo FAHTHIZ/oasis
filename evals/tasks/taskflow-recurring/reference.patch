@@ -1,0 +1,102 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..36ab54f 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -6,7 +6,7 @@ import { openStore } from './store.mjs';
+ import { filterTasks, sortTasks, paginate } from './query.mjs';
+ import { formatList } from './format.mjs';
+ 
+-const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file']);
++const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file', 'repeat']);
+ const BOOLEAN_FLAGS = new Set(['overdue', 'help']);
+ 
+ // Supports --flag value, --flag=value, and boolean --flag. "--" ends options.
+@@ -52,7 +52,7 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+   const clock = now ? now() : new Date();
+   switch (command) {
+     case 'add': {
+-      const task = await store.add({ title: args.join(' '), priority: flags.priority, due: flags.due, tags: flags.tags, notes: flags.notes });
++      const task = await store.add({ title: args.join(' '), priority: flags.priority, due: flags.due, tags: flags.tags, notes: flags.notes, repeat: flags.repeat });
+       print(`Added task ${task.id}.`);
+       return 0;
+     }
+diff --git a/src/store.mjs b/src/store.mjs
+index c501ef5..1d6fcf5 100644
+--- a/src/store.mjs
++++ b/src/store.mjs
+@@ -2,6 +2,7 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
+ import { createEmitter } from './events.mjs';
+ import { createTask, updateTask } from './task.mjs';
+ import { nextId } from './ids.mjs';
++import { addDays, toDay } from './dates.mjs';
+ 
+ // The task file holds { version: 1, tasks: [...] }. Writes go to a temporary
+ // file first and are renamed into place, so a crash never leaves half a file.
+@@ -43,8 +44,16 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+       const before = find(id);
+       const after = updateTask(before, changes, { now: now() });
+       tasks = tasks.map((t) => (t.id === id ? after : t));
++      let follow = null;
++      if (before.status !== 'done' && after.status === 'done' && after.repeat) {
++        const [y, m, d] = (after.due || toDay(now())).split('-').map(Number);
++        const due = toDay(addDays(new Date(y, m - 1, d), after.repeat === 'weekly' ? 7 : 1));
++        follow = createTask({ title: after.title, priority: after.priority, tags: after.tags, notes: after.notes, repeat: after.repeat, due }, { id: nextId(tasks), now: now() });
++        tasks = [...tasks, follow];
++      }
+       await save();
+       if (before.status !== 'done' && after.status === 'done') events.emit('completed', after);
++      if (follow) events.emit('added', follow);
+       return after;
+     },
+     async remove(id) {
+diff --git a/src/task.mjs b/src/task.mjs
+index 443e2d1..8c4ca19 100644
+--- a/src/task.mjs
++++ b/src/task.mjs
+@@ -2,6 +2,13 @@ import { parseDue } from './dates.mjs';
+ 
+ export const PRIORITIES = ['low', 'normal', 'high'];
+ export const STATUSES = ['open', 'done'];
++export const REPEATS = ['daily', 'weekly'];
++
++function checkRepeat(repeat) {
++  if (repeat === undefined || repeat === null) return null;
++  if (!REPEATS.includes(repeat)) throw new Error(`Unknown repeat: ${repeat}`);
++  return repeat;
++}
+ 
+ export function normalizeTag(tag) {
+   const value = String(tag).trim().toLowerCase();
+@@ -24,6 +31,7 @@ export function createTask(fields, { id, now = new Date() }) {
+     due: fields.due ? parseDue(fields.due, now) : null,
+     tags,
+     notes: fields.notes ? String(fields.notes) : '',
++    repeat: checkRepeat(fields.repeat),
+     created: now.toISOString()
+   };
+ }
+@@ -53,5 +61,6 @@ export function updateTask(task, changes, { now = new Date() } = {}) {
+     next.tags = next.tags.filter((tag) => !remove.has(tag));
+   }
+   if (changes.notes !== undefined) next.notes = String(changes.notes);
++  if (changes.repeat !== undefined) next.repeat = checkRepeat(changes.repeat);
+   return next;
+ }
+diff --git a/test/store.test.mjs b/test/store.test.mjs
+index 5428276..f83c7e1 100644
+--- a/test/store.test.mjs
++++ b/test/store.test.mjs
+@@ -28,6 +28,13 @@ test('emits completed once per completion', async (t) => {
+   assert.deepEqual(seen, [1]);
+ });
+ 
++test('completing a weekly task schedules the next one', async (t) => {
++  const store = await openStore(await tempFile(t), { now: () => NOW });
++  await store.add({ title: 'Report', due: '2026-11-02', repeat: 'weekly' });
++  await store.update(1, { status: 'done' });
++  assert.deepEqual(store.all().map((x) => [x.id, x.status, x.due]), [[1, 'done', '2026-11-02'], [2, 'open', '2026-11-09']]);
++});
++
+ test('returned tasks are copies', async (t) => {
+   const store = await openStore(await tempFile(t), { now: () => NOW });
+   await store.add({ title: 'one', tags: ['a'] });

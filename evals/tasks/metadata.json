@@ -102,6 +102,11 @@
       "difficulty": "small",
       "rationale": "Reject invalid tool argument shapes."
     },
+    "provider-setup-preserves-config": {
+      "category": "configuration-integration",
+      "difficulty": "medium",
+      "rationale": "Cross-module provider setup defaults, credential-preserving CLI flow, and regression tests for reopening configuration."
+    },
     "read-range-bounds": {
       "category": "input-validation",
       "difficulty": "small",
@@ -152,6 +157,91 @@
       "difficulty": "small",
       "rationale": "Stable line slicing with explicit bounds."
     },
+    "taskflow-atomic-done": {
+      "category": "input-validation",
+      "difficulty": "medium",
+      "rationale": "All-or-nothing batch command with validation before any write."
+    },
+    "taskflow-emitter-unsubscribe": {
+      "category": "agent-operations",
+      "difficulty": "medium",
+      "rationale": "Event emitter API change used by another module; ordering and re-entrancy edge cases."
+    },
+    "taskflow-emoji-truncate": {
+      "category": "utility-logic",
+      "difficulty": "small",
+      "rationale": "Unicode code-point handling; existing tests pass, so the bug must be reproduced first."
+    },
+    "taskflow-export": {
+      "category": "secret-handling",
+      "difficulty": "medium",
+      "rationale": "Output encoding with RFC 4180 quoting edge cases; formula-injection hardening."
+    },
+    "taskflow-flag-equals": {
+      "category": "input-validation",
+      "difficulty": "medium",
+      "rationale": "CLI argument parsing regression across value, repeatable and boolean flags."
+    },
+    "taskflow-id-reuse": {
+      "category": "data-structures",
+      "difficulty": "medium",
+      "rationale": "ID allocation bug that only shows after a delete; existing tests pass."
+    },
+    "taskflow-overdue-today": {
+      "category": "utility-logic",
+      "difficulty": "medium",
+      "rationale": "Local-calendar-day overdue logic in a multi-module project, reported as a user symptom."
+    },
+    "taskflow-page-count": {
+      "category": "data-structures",
+      "difficulty": "small",
+      "rationale": "Pagination arithmetic in a library used by the CLI."
+    },
+    "taskflow-priority-sort": {
+      "category": "data-structures",
+      "difficulty": "small",
+      "rationale": "Sort order bug that a failing project test exposes."
+    },
+    "taskflow-recurring": {
+      "category": "agent-operations",
+      "difficulty": "large",
+      "rationale": "Feature spanning validation, store behavior, events and CLI flags."
+    },
+    "taskflow-search": {
+      "category": "data-structures",
+      "difficulty": "medium",
+      "rationale": "Multi-file feature: library filter plus CLI flag plus end-to-end behavior."
+    },
+    "taskflow-stats": {
+      "category": "context-and-cost",
+      "difficulty": "medium",
+      "rationale": "New library function and CLI command with an exact output contract."
+    },
+    "taskflow-store-copies": {
+      "category": "data-structures",
+      "difficulty": "medium",
+      "rationale": "Aliasing bug: store getters leak internal state to callers."
+    },
+    "taskflow-tag-case": {
+      "category": "input-validation",
+      "difficulty": "medium",
+      "rationale": "Normalization applied on write but not on query; reported as a CLI symptom."
+    },
+    "taskflow-undo": {
+      "category": "agent-operations",
+      "difficulty": "large",
+      "rationale": "Persistent one-level undo across processes; file-format compatibility."
+    },
+    "taskflow-urgent-priority": {
+      "category": "configuration-integration",
+      "difficulty": "large",
+      "rationale": "Cross-cutting enum change: validation, sorting, rendering and CLI must agree."
+    },
+    "taskflow-weekday-due": {
+      "category": "input-validation",
+      "difficulty": "medium",
+      "rationale": "Date parsing extension with edge cases around the current weekday."
+    },
     "transient-provider-retry": {
       "category": "agent-operations",
       "difficulty": "medium",
@@ -176,11 +266,6 @@
       "category": "input-validation",
       "difficulty": "small",
       "rationale": "Validation of a structured TODO-list input."
-    },
-    "provider-setup-preserves-config": {
-      "category": "configuration-integration",
-      "difficulty": "medium",
-      "rationale": "Cross-module provider setup defaults, credential-preserving CLI flow, and regression tests for reopening configuration."
     }
   }
 }
