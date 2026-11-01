@@ -4076,6 +4076,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
+      // Stopped mid-reply: keep what the user already saw, so "continue" or a
+      // correction builds on it instead of the reply silently vanishing.
+      if (options.signal && options.signal.aborted && streamedText.trim()) {
+        session.messages.push({ role: 'assistant', content: streamedText + '\n\n[Reply interrupted by the user.]' });
+      }
       // StopFailure: the turn ended on an API error (observability only).
       if (error && error.name !== 'AbortError' && hasHooks(session.hooks, 'StopFailure')) {
         await runHooks('StopFailure', { session_id: session.sessionId || 'unsaved', error_type: stopFailureType(error), error: String(error.message || error).slice(0, 2000) }, hookOptions(session, options.env)).catch(() => {});
