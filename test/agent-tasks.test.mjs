@@ -104,7 +104,8 @@ test('background task returns at once, reports back on the next turn, and can be
   assert.ok(worker);
   assert.notEqual(worker.child.background, session.background, 'each child owns a separate background-process registry');
   assert.equal(typeof worker.child.stopBackgroundProcesses, 'function');
-  assert.equal(worker.child.allowedToolNames.has('memory_save'), false, 'children cannot mutate shared durable memory');
+  assert.equal(worker.child.allowedToolNames.has('memory_save'), false, 'children cannot save shared durable memory');
+  assert.equal(worker.child.allowedToolNames.has('memory_verify'), false, 'children cannot change shared memory verification');
   assert.equal(worker.child.allowedToolNames.has('memory_delete'), false, 'children cannot delete shared durable memory');
   assert.match(launched.content, /"id":"agent_1"/);
   assert.match(launched.content, /"status":"running"/);
