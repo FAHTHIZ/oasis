@@ -1667,7 +1667,7 @@ C.hook('agentAssistantUpdate',function(coreUpdate){return function(jobId,text){
 /* ---------- Plain-language activity groups ---------- */
 var coreAppend=null;C.hook('agentAppendMessage',function(f){coreAppend=f;return f});
 C.hook('agentAppendMessage',function(f){return function(kind,text){var el=f.apply(null,arguments);if(kind==='assistant'&&el&&text&&!/^Oasis is working…?$/.test(String(text).trim())){pending.set(el,String(text));if(!raf)raf=requestAnimationFrame(paint)}return el}});
-var activityGroups=[],currentActivityGroup=null,activityStepsById=new Map();
+var activityGroups=[],currentActivityGroup=null,activityStepsById=new Map(),activityNarrationLength=0;
 function fallbackActivitySentence(category,label){
   var item=String(label||'').replace(/^(?:Read|Edited|Wrote|Created|Deleted)\s+/i,'');
   if(category==='read')return item?'I’m reading '+item+'.':'I’m reading the files needed for this task.';
@@ -1682,8 +1682,12 @@ function fallbackActivitySentence(category,label){
   return 'I’m checking the project details.';
 }
 function modelActivitySentence(){
-  var node=lastAssistant(),raw=node&&(node.dataset.raw||node.textContent)||'';
-  if(!raw||/^Oasis is working…?$/.test(raw.trim()))return '';
+  var node=lastAssistant(),all=node&&(node.dataset.raw||node.textContent)||'';
+  if(!all||/^Oasis is working…?$/.test(all.trim()))return '';
+  if(all.length<activityNarrationLength)activityNarrationLength=0;
+  var raw=all.slice(activityNarrationLength);
+  activityNarrationLength=all.length;
+  if(!raw.trim())return '';
   var blocks=String(raw).replace(/\r/g,'').split(/\n\s*\n/).filter(function(part){return part.trim()});
   var candidate=(blocks[blocks.length-1]||'').trim();
   candidate=candidate.replace(/^>\s*/gm,'').replace(/^[-*+]\s+/gm,'').replace(/^\d+[.)]\s+/gm,'').replace(/[*_#]/g,'').trim();
@@ -1804,7 +1808,7 @@ function collapseWork(){
   steps.forEach(function(n){innerContent.appendChild(n)});
 }
 C.hook('agentSetBusy',function(prev){return function(v){
-  if(v&&!workStart){workStart=Date.now();workMark=messages.lastElementChild;if(workMark===typing)workMark=workMark.previousElementSibling;currentActivityGroup=null;activityStepsById.clear();activityGroups=[];updateLiveStatus('Working…')}
+  if(v&&!workStart){workStart=Date.now();workMark=messages.lastElementChild;if(workMark===typing)workMark=workMark.previousElementSibling;currentActivityGroup=null;activityStepsById.clear();activityGroups=[];activityNarrationLength=0;updateLiveStatus('Working…')}
   prev(v);
   if(!v&&workStart){try{collapseWork()}catch(e){}workStart=0;workMark=null;currentActivityGroup=null;activityStepsById.clear();updateLiveStatus('Working…')}
 }});
@@ -1853,7 +1857,7 @@ document.addEventListener('click',function(e){
   if(e.target.closest('#topbarChangesBtn,#agentChangesUtilityTab'))setTimeout(function(){loadWorkspaceDiff(true)},0);
 });
 window.oasisLoadWorkspaceDiff=loadWorkspaceDiff;
-C.hook('agentClearMessages',function(coreClear){return function(){coreClear();typing.remove();currentActivityGroup=null;activityGroups=[];activityStepsById.clear();if(emptyTemplate&&!$('agentEmptyState'))messages.appendChild(emptyTemplate.cloneNode(true));stick=true}});
+C.hook('agentClearMessages',function(coreClear){return function(){coreClear();typing.remove();currentActivityGroup=null;activityGroups=[];activityStepsById.clear();activityNarrationLength=0;if(emptyTemplate&&!$('agentEmptyState'))messages.appendChild(emptyTemplate.cloneNode(true));stick=true}});
 messages.addEventListener('click',function(e){
   var ex=e.target.closest('[data-agent-example]');
   if(ex){var input=$('agentPrompt');var d=ex.querySelector('span');input.value=(ex.getAttribute('data-agent-example')||'')+(d?': '+d.textContent.trim().replace(/^./,function(c){return c.toLowerCase()}):'');autosize();syncSend();input.focus();return}
