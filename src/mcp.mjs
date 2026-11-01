@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { oasisVersion } from './version.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { debugLog } from './debug-log.mjs';
 import { mkdir, readFile, writeFile, chmod, stat } from 'node:fs/promises';
@@ -211,7 +212,7 @@ export class McpServerClient {
     const init = await this._request('initialize', {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: clientCapabilities(),
-      clientInfo: { name: 'oasis-oss', version: '0.2.0' }
+      clientInfo: { name: 'oasis-oss', version: oasisVersion() }
     }, 15000);
     this._notify('notifications/initialized', {});
     await this.refreshTools();

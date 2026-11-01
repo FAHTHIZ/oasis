@@ -110,3 +110,14 @@ test('connectMcpServers starts sse servers from project config', async (t) => {
   assert.ok(clients.get('legacy') instanceof McpSseClient);
   assert.equal(clients.get('legacy').tools[0].name, 'echo');
 });
+
+test('MCP clients announce the real package version', async (t) => {
+  const { readFile } = await import('node:fs/promises');
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const fixture = await sseServer(t);
+  const client = new McpSseClient({ name: 'version', url: fixture.url });
+  t.after(() => client.close());
+  await client.start();
+  const init = fixture.received.find((message) => message.method === 'initialize');
+  assert.equal(init.params.clientInfo.version, pkg.version);
+});
