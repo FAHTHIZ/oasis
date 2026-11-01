@@ -23,5 +23,5 @@ test('workspace doctor includes workflow runtime availability', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-workflow-doctor-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const report = await workspaceDoctor(root, { env: { ...process.env, OASIS_CONFIG_DIR: path.join(root, '.config') } });
-  assert.match(report, /Workflow runtime: available \\(QuickJS\\)/);
+  assert.match(report, /Workflow runtime: available \(QuickJS\)/);
 });

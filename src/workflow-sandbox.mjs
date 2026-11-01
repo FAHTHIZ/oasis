@@ -36,7 +36,7 @@ export async function workflowRuntimeStatus({ loadRuntime = loadQuickJSRuntime }
     return {
       available: false,
       runtime: 'QuickJS',
-      reason: String(error && error.message || error).replace(/[\\r\\n\\0]+/g, ' ').slice(0, 300)
+      reason: String(error && error.message || error).replace(/[\r\n\0]+/g, ' ').slice(0, 300)
     };
   }
 }
