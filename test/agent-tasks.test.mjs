@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
-import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, restoreAgentHistory, summarizeAgent, stopAgent } from '../src/agent-tasks.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, restoreAgentHistory, summarizeAgent, stopAgent, stopAllAgents } from '../src/agent-tasks.mjs';
 import { runSharedTaskTool } from '../src/shared-tasks.mjs';
 import { isCommitIntegrated } from '../src/worktrees.mjs';
 import { BUILTIN_AGENTS, taskToolDefinition } from '../src/subagents.mjs';
@@ -790,6 +790,30 @@ test('restored worker history marks live workers interrupted and refuses to fake
   const completed = session.agentTasks.agents.get('agent_2');
   assert.equal(completed.status, 'completed');
   assert.equal(completed.report, 'No changes needed.');
+});
+
+
+test('parent shutdown closes PTYs and background processes left by completed workers', async () => {
+  let backgroundStopped = 0;
+  let terminalsStopped = 0;
+  const session = {
+    agentTasks: { next: 1, nextTeam: 1, agents: new Map(), teams: new Map(), events: [], nextEventId: 1 }
+  };
+  const record = registerAgent(session, {
+    type: 'general-purpose',
+    description: 'Completed work with a lingering terminal',
+    child: {
+      background: new Map([['watcher', {}]]),
+      stopBackgroundProcesses: () => { backgroundStopped++; return 1; },
+      ptyManager: { closeAll: () => { terminalsStopped++; return { stopped: 1 }; } }
+    }
+  });
+  record.status = 'completed';
+  record.finishedAt = Date.now();
+  await stopAllAgents(session);
+  assert.equal(backgroundStopped, 1);
+  assert.equal(terminalsStopped, 1);
+  assert.equal(record.child.ptyManager, undefined);
 });
 
 test('agent lifecycle observers receive structured events without affecting orchestration', () => {
