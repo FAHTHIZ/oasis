@@ -96,7 +96,9 @@ try {
       (Array.isArray(request.messages) ? request.messages.length : 0) + ' messages)');
 
     // Exercise the visible activity story: create, read, edit, approve
-    // a protected edit, approve a failing command, then report.
+    // a protected edit, approve a failing command, review the resulting diff,
+    // then report. The explicit git_diff response is required by the real
+    // post-edit verification gate before the final answer can be accepted.
     let assistantMessage;
     let finishReason = 'tool_calls';
     if (completionCalls === 1) {
@@ -138,17 +140,22 @@ try {
         }) }
       }] };
     } else if (completionCalls === 6) {
-      finishReason = 'stop';
-      assistantMessage = { role: 'assistant', content: 'Browser end-to-end fixture completed successfully. The agent wrote, read and edited a file, showed both approvals, and kept the failed command visible.' };
+      assistantMessage = { role: 'assistant', content: null, tool_calls: [{
+        id: 'call_browser_e2e_diff', type: 'function',
+        function: { name: 'git_diff', arguments: JSON.stringify({ scope: 'all' }) }
+      }] };
     } else if (completionCalls === 7) {
+      finishReason = 'stop';
+      assistantMessage = { role: 'assistant', content: 'Browser end-to-end fixture completed successfully. The agent wrote, read and edited a file, reviewed the diff, showed both approvals, and kept the failed command visible.' };
+    } else if (completionCalls === 8) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_delete', type: 'function',
         function: { name: 'delete_file', arguments: JSON.stringify({ path: 'browser-e2e-output.txt' }) }
       }] };
-    } else if (completionCalls === 8) {
+    } else if (completionCalls === 9) {
       finishReason = 'stop';
       assistantMessage = { role: 'assistant', content: 'The delete request was denied; the file remains unchanged.' };
-    } else if (completionCalls === 9) {
+    } else if (completionCalls === 10) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_cancel', type: 'function',
         function: { name: 'run_command', arguments: JSON.stringify({
@@ -156,7 +163,7 @@ try {
           args: ['-e', 'require("node:fs").writeFileSync("cancel-e2e-side-effect.txt", "ran")']
         }) }
       }] };
-    } else if (completionCalls === 10) {
+    } else if (completionCalls === 11) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_worktree_write', type: 'function',
         function: { name: 'write_file', arguments: JSON.stringify({
@@ -164,12 +171,12 @@ try {
           content: 'Created in the isolated worktree for diff review.\n'
         }) }
       }] };
-    } else if (completionCalls === 11) {
+    } else if (completionCalls === 12) {
       assistantMessage = { role: 'assistant', content: null, tool_calls: [{
         id: 'call_browser_e2e_worktree_read', type: 'function',
         function: { name: 'read_file', arguments: JSON.stringify({ path: 'review-e2e-output.txt' }) }
       }] };
-    } else if (completionCalls === 12) {
+    } else if (completionCalls === 13) {
       finishReason = 'stop';
       assistantMessage = { role: 'assistant', content: 'Isolated worktree fixture completed successfully. I read back the new file and the review branch is ready.' };
     } else {
@@ -389,19 +396,20 @@ try {
     'The warning must not be hidden inside the Worked for disclosure.');
   assert.doesNotMatch(defaultActivityText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'The default chat view must not expose raw tool names or JSON arguments.');
-  assert.match(await activitySummary.locator('summary').innerText(), /Worked for .* · 5 tool calls/);
+  assert.match(await activitySummary.locator('summary').innerText(), /Worked for .* · 6 tool calls/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-desktop.png'), fullPage: true });
 
   await measureFrames(page, 'opening Worked for activity fold', async () => {
     await activitySummary.locator('summary').click();
   });
   const groups = page.locator('#agentMessages .turn-work .activity-group');
-  assert.equal(await groups.count(), 4, 'File creation, reading, editing and the command should form readable groups.');
+  assert.equal(await groups.count(), 5, 'File creation, reading, editing, the command, and diff review should form readable groups.');
   const groupText = await activitySummary.innerText();
   assert.match(groupText, /Wrote 1 file/);
   assert.match(groupText, /Read 1 file/);
   assert.match(groupText, /Edited 2 files/);
   assert.match(groupText, /Ran 1 command/);
+  assert.match(groupText, /Completed 1 step/);
   assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'Raw tool detail should stay hidden until Show details is opened.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop.png'), fullPage: true });
@@ -480,7 +488,7 @@ try {
   const response = await page.locator('#agentMessages .agent-message.assistant').allTextContents();
   assert.ok(response.some((text) => text.includes('Browser end-to-end fixture completed successfully.')),
     'The fixture model response should be rendered in the actual agent chat UI.');
-  assert.equal(completionCalls, 6, 'The agent should create, read, edit, approve two actions, and report the results.');
+  assert.equal(completionCalls, 7, 'The agent should create, read, edit, review the diff, approve two actions, and report the results.');
   await page.waitForFunction(() => document.querySelectorAll('#sidebarChatList [data-sidebar-session-id]').length > 0,
     null, { timeout: timeoutMs });
   assert.ok(await page.locator('#sidebarChatList [data-sidebar-session-id]').count() > 0,
@@ -506,7 +514,7 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('#agentMessages .agent-message.assistant')]
     .some((element) => element.textContent.includes('The delete request was denied; the file remains unchanged.')),
   null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 8, 'The denial should be reported to the model without running the delete operation.');
+  assert.equal(completionCalls, 9, 'The denial should be reported to the model without running the delete operation.');
   assert.equal(
     await readFile(path.join(root, 'browser-e2e-output.txt'), 'utf8'),
     'Edited by the authenticated browser agent tool cycle.\n',
@@ -586,7 +594,7 @@ try {
   assert.equal(await page.locator('#agentStopBtn').isEnabled(), true, 'Stop should be enabled while command approval is pending.');
   await page.locator('#agentStopBtn').click();
   await page.waitForFunction(() => /cancelled/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''), null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 9, 'Cancellation must abort the task before another model request.');
+  assert.equal(completionCalls, 10, 'Cancellation must abort the task before another model request.');
   await assert.rejects(readFile(path.join(root, 'cancel-e2e-side-effect.txt')), { code: 'ENOENT' });
 
   // The isolated run should create a committed branch artifact without changing
@@ -601,7 +609,7 @@ try {
     .some((element) => element.textContent.includes('Isolated worktree fixture completed successfully.')),
   null, { timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentStopBtn')?.hidden === true, null, { timeout: timeoutMs });
-  assert.equal(completionCalls, 12, 'The isolated task should write the file, read it back for verification, and then finish.');
+  assert.equal(completionCalls, 13, 'The isolated task should write the file, read it back for verification, and then finish.');
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), mainHeadBeforeWorktree,
     'Finishing isolated work must not advance the primary branch.');
   assert.ok(execFileSync('git', ['branch', '--list', 'oasis/*'], { cwd: root, encoding: 'utf8' }).trim(),
