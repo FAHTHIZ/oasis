@@ -290,8 +290,8 @@ try {
   });
   await assertAgentContrast(page, 'Agent edit approval card');
   const editApprovalDiff = await page.locator('#agentApprovalDiff').innerText();
-  assert.match(editApprovalDiff, /-\"theme\":\"dark\"/);
-  assert.match(editApprovalDiff, /\\+\"theme\":\"light\"/);
+  assert.match(editApprovalDiff, /-"theme":"dark"/);
+  assert.match(editApprovalDiff, /-"theme":"dark"/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-edit-approval-desktop.png'), fullPage: true });
   await page.locator('#agentApproveBtn').click();
   await page.locator('#agentApprovalCard').waitFor({ state: 'hidden', timeout: timeoutMs });
@@ -324,7 +324,7 @@ try {
     'A failed command must use the visible warning treatment.');
   assert.equal(await activitySummary.locator('.notice-warn').count(), 0,
     'The warning must not be hidden inside the Worked for disclosure.');
-  assert.doesNotMatch(defaultActivityText, /Tool: (?:read_file|edit_file|run_command)|\"path\"\\s*:/,
+  assert.doesNotMatch(defaultActivityText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'The default chat view must not expose raw tool names or JSON arguments.');
   assert.match(await activitySummary.locator('summary').innerText(), /Worked for .* · 5 tool calls/);
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-desktop.png'), fullPage: true });
@@ -339,7 +339,7 @@ try {
   assert.match(groupText, /Read 1 file/);
   assert.match(groupText, /Edited 2 files/);
   assert.match(groupText, /Ran 1 command/);
-  assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|\"path\"\\s*:/,
+  assert.doesNotMatch(groupText, /Tool: (?:read_file|edit_file|run_command)|"path"\s*:/,
     'Raw tool detail should stay hidden until Show details is opened.');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-chat-activity-desktop.png'), fullPage: true });
 
