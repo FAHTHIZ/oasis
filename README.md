@@ -19,7 +19,7 @@
 
 OASIS is not a model, hosted inference service, or vendor-locked IDE. You choose the model/provider—including a local endpoint—and OASIS supplies the agent runtime, workspace tools, policy controls, memory, automation, and developer surfaces.
 
-> **Current lifecycle — Release Candidate.** The 1.0 feature scope is established. Current work is production qualification: reliability, lifecycle correctness, security-boundary validation, platform verification, accessibility, and documentation. The development package on `main` is `1.0.0`, with `oasisRelease` metadata marking it as Release Candidate 1; it is not a published stable release. The last published stable desktop/CLI release remains [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0) until the 1.0.0 release gates are satisfied.
+> **Current lifecycle — Feature-complete 1.0 Release Candidate.** The planned product scope is established; OASIS is no longer in Beta or an early feature-building phase. Work on `main` is focused on making the existing agents and product surfaces more capable, robust, consistent, accessible, and production-ready. Remaining qualification covers reliability, lifecycle correctness, security boundaries, platform verification, accessibility, packaging, and documentation. The development package on `main` is `1.0.0`, with `oasisRelease` metadata marking it as Release Candidate 1; it is not a published stable release. The last published stable desktop/CLI release remains [`v0.4.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v0.4.0) until the 1.0.0 release gates are satisfied.
 
 <p align="center">
   <a href="#quick-start"><strong>Get started</strong></a>
