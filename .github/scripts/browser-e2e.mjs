@@ -831,7 +831,10 @@ try {
   if (browser) await browser.close().catch(() => {});
   if (app) await app.close().catch(() => {});
   if (providerServer && providerServer.listening) {
-    await new Promise((resolve) => providerServer.close(resolve));
+    const closed = new Promise((resolve) => providerServer.close(resolve));
+    // Keep-alive sockets from the agent's provider client would otherwise hold close() open.
+    providerServer.closeAllConnections?.();
+    await closed;
   }
   // The final cloud-task event can finish writing just after browser shutdown.
   // Retry transient ENOTEMPTY/EBUSY races rather than marking a clean E2E run failed.
