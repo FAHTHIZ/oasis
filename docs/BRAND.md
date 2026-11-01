@@ -3,7 +3,7 @@
 **Primary name:** OASIS  
 **Primary tagline:** Code. Automate. Flourish.
 
-OASIS is an open-source coding agent and local-first developer workspace. The portal mark is an arch with a fine inner contour and horizontal strata that taper inward as they descend. Preserve that silhouette; do not replace it with a generic ring, orb, lens, or unrelated geometric symbol.
+OASIS is an open-source, local-first agentic development workspace for coding, automation, agent orchestration, and verification. The portal mark is an arch with a fine inner contour and horizontal strata that taper inward as they descend. Preserve that silhouette; do not replace it with a generic ring, orb, lens, or unrelated geometric symbol.
 
 ## Color system
 
@@ -68,3 +68,15 @@ Motion should feel like the portal activating: short, calm fades and a restraine
 ## Naming
 
 Use **OASIS** as the product name and **Code. Automate. Flourish.** as the primary tagline. Avoid introducing alternate public product names or competing taglines in the repository's primary identity materials.
+
+## Release-state identity
+
+The current product lifecycle is **1.0 Release Candidate / Production Qualification**. Use the `1.0.0-rc.1` status badge in current product material. Do not use Beta-stage artwork as the current status signal; the `oasis-beta-*` files remain historical assets associated with the v0.4.0 release period.
+
+Current release-candidate status assets:
+
+- `assets/oasis-rc-sticker.svg` — wide release-candidate sticker.
+- `assets/oasis-rc-seal.svg` — round RC1 seal.
+- `assets/oasis-rc-mark.svg` — compact RC1 mark.
+
+The release-candidate label is not a certification mark. Do not describe the product as stable, production-certified, or defect-free until the [release acceptance gates](PROJECT_PLAN.md#release-acceptance-checklist) are satisfied.
