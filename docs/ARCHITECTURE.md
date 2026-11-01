@@ -292,7 +292,7 @@ There are two separate GitHub integrations:
 | Saved agent sessions | User-level config, under a workspace-derived session directory | Bounded JSON records written atomically with restrictive POSIX permissions where supported. Message history is capped; image attachments are not saved. Sessions are workspace-bound and validated when loaded. |
 | Rewind checkpoints | In-memory session state | Captures supported OASIS file-tool changes for recent turns. Not persisted as a durable restore point and does not capture arbitrary shell side effects. |
 | Backup snapshots | User-level OASIS config directory | Separate recoverable copies of supported file changes; outside the project checkout. |
-| Memory and instructions | User/project instruction files and OASIS memory directories | Layered text context. Imported/project instructions are data for the model, not a way to override OASIS's base policy. |
+| Memory and instructions | User/project instruction files and OASIS memory directories | Layered text context. Imported/project instructions are data for the model, not a way to override OASIS's base policy. | Auto memories also carry optional source and verification metadata; project/reference memories are flagged stale after 90 days without a later verification.
 | Shared task board | Sanitized saved-session metadata | Tasks and progress checkpoints can persist; active leases are cleared on restore because worker processes are not restored. |
 | Browser job history | User-level OASIS config directory | Bounded local metadata and event history. Restart converts unfinished browser jobs to interrupted records. |
 | Browser Projects/Tasks/Notes | Browser local storage | Local to that browser profile; separate from CLI sessions and workspace files. |

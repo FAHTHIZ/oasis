@@ -83,7 +83,10 @@ function serialize(memory) {
     updated: memory.updated,
     recalls: memory.recalls || 0,
     ...(memory.lastRecalled ? { lastRecalled: memory.lastRecalled } : {}),
-    ...(memory.source ? { source: memory.source } : {})
+    ...(memory.source ? { source: memory.source } : {}),
+    ...(memory.verifiedAt ? { verifiedAt: memory.verifiedAt } : {}),
+    ...(memory.verificationStatus ? { verificationStatus: memory.verificationStatus } : {}),
+    ...(memory.verificationNote ? { verificationNote: memory.verificationNote } : {})
   };
   const header = Object.entries(meta).map(([key, value]) => key + ': ' + (typeof value === 'number' ? value : JSON.stringify(String(value)))).join('\n');
   return '---\n' + header + '\n---\n' + String(memory.content || '').trim() + '\n';
@@ -112,6 +115,9 @@ function parse(source, file, scope) {
     recalls: Number(meta.recalls) || 0,
     lastRecalled: meta.lastRecalled || null,
     source: meta.source || null,
+    verifiedAt: meta.verifiedAt || null,
+    verificationStatus: ['current', 'outdated', 'uncertain', 'unverified'].includes(meta.verificationStatus) ? meta.verificationStatus : 'unverified',
+    verificationNote: meta.verificationNote || null,
     content,
     scope,
     file,
@@ -215,6 +221,43 @@ function similarity(a, b) {
 }
 
 // ---------- write ----------
+const TIME_SENSITIVE_CATEGORIES = new Set(['project', 'decisions', 'lessons', 'reference']);
+const MEMORY_STALE_AFTER_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function memoryFreshness(memory, now = Date.now()) {
+  const category = String(memory && memory.category || '');
+  if (!TIME_SENSITIVE_CATEGORIES.has(category)) return 'personal';
+  const status = String(memory && memory.verificationStatus || 'unverified');
+  if (status === 'outdated') return 'outdated';
+  if (status === 'uncertain') return 'uncertain';
+  const updated = Date.parse(memory && memory.updated || '');
+  const verified = Date.parse(memory && memory.verifiedAt || '');
+  if (status === 'current' && Number.isFinite(verified) && Number.isFinite(updated) && verified >= updated) return 'current';
+  if (Number.isFinite(updated) && now - updated > MEMORY_STALE_AFTER_MS) return 'stale';
+  return 'unverified';
+}
+
+export async function verifyMemory(root, id, { status, evidence, env = process.env } = {}) {
+  const memory = await findMemory(root, id, { env });
+  if (!memory) throw new Error('No memory matches ' + id + '.');
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!['current', 'outdated', 'uncertain'].includes(normalized)) {
+    throw new Error('Memory verification status must be current, outdated, or uncertain.');
+  }
+  const note = oneLine(redactSecrets(evidence).text, 500);
+  if (!note) throw new Error('Provide concise evidence for the verification decision.');
+  const verifiedAt = new Date().toISOString();
+  const updated = { ...memory, verifiedAt, verificationStatus: normalized, verificationNote: note };
+  await atomicWrite(memory.file, serialize(updated));
+  return {
+    id: memory.id,
+    status: normalized,
+    verifiedAt,
+    evidence: note,
+    freshness: memoryFreshness(updated)
+  };
+}
+
 export async function saveMemory(root, input = {}, { env = process.env, source = null } = {}) {
   const scope = input.scope === 'user' ? 'user' : 'project';
   const category = MEMORY_CATEGORIES.includes(input.category) ? input.category : (scope === 'user' ? 'preferences' : 'project');
@@ -237,7 +280,15 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
       : similarity(target.content, cleaned.text) >= 0.85 ? cleaned.text.trim()
       : (target.content + '\n\n' + cleaned.text.trim()).slice(-MAX_BODY);
     if (body === target.content && (!input.description || description === target.description)) return { action: 'unchanged', id: target.id, file: target.file, redacted: cleaned.redacted };
-    const merged = { ...target, description: input.description ? description : target.description, content: body, updated: now, source: source || target.source };
+    const contentChanged = body !== target.content;
+    const merged = {
+      ...target,
+      description: input.description ? description : target.description,
+      content: body,
+      updated: now,
+      source: source || target.source,
+      ...(contentChanged ? { verifiedAt: null, verificationStatus: 'unverified', verificationNote: null } : {})
+    };
     await atomicWrite(target.file, serialize(merged));
     await writeIndex(root, scope, env);
     return { action: 'updated', id: target.id, file: target.file, redacted: cleaned.redacted };
@@ -245,7 +296,7 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
   const dir = path.join(memoryRoots(root, env)[scope], category);
   let file = path.join(dir, slug + '.md');
   for (let n = 2; await stat(file).then(() => true, () => false); n += 1) file = path.join(dir, slug + '-' + n + '.md');
-  await atomicWrite(file, serialize({ name, description, category, created: now, updated: now, recalls: 0, source, content: cleaned.text }));
+  await atomicWrite(file, serialize({ name, description, category, created: now, updated: now, recalls: 0, source, verificationStatus: 'unverified', content: cleaned.text }));
   await writeIndex(root, scope, env);
   return { action: 'created', id: scope + ':' + category + '/' + path.basename(file, '.md'), file, redacted: cleaned.redacted };
 }
@@ -281,7 +332,7 @@ export async function memoryIndexPrompt(root, { env = process.env, budget = INDE
   const intro = [
     'Auto memory: you keep durable notes across sessions with memory_save, and look them up with memory_search.',
     'Save a memory when the user states a preference or corrects you, when a decision is made with a reason, when you learn a non-obvious fact about this project (how to build, test, deploy; where things live; gotchas), or when a fix only worked after several attempts (save the lesson). Use scope "user" for preferences that apply to every project.',
-    'Do not save secrets, one-off task details, or facts that are obvious from the code. Update an existing memory instead of adding a near-duplicate. Memories can be outdated: verify against the code before relying on one, and fix or delete it when it is wrong.'
+    'Do not save secrets, one-off task details, or facts that are obvious from the code. Update an existing memory instead of adding a near-duplicate. Memories can be outdated: verify against current code or reliable evidence before relying on them, then use memory_verify to record current, outdated, or uncertain status with a short evidence reference.'
   ].join(' ');
   if (!memories.length) return intro + '\nNo memories saved yet.';
   const sorted = memories.slice().sort((a, b) => (b.scope === 'user') - (a.scope === 'user') || String(b.updated).localeCompare(String(a.updated)));
@@ -307,7 +358,17 @@ export async function recallForPrompt(root, prompt, { env = process.env, limit =
   const chosen = ranked.filter((item) => item.score >= Math.max(0.2, top * 0.45)).slice(0, limit);
   if (!chosen.length) return { text: '', ids: [] };
   const per = Math.floor(budget / chosen.length);
-  const blocks = chosen.map(({ memory }) => '<memory id="' + memory.id + '" updated="' + String(memory.updated || '').slice(0, 10) + '">\n' + memory.name + ': ' + (memory.content.length > per ? memory.content.slice(0, per) + '\n[truncated; memory_read ' + memory.id + ' for the rest]' : memory.content) + '\n</memory>');
+  const blocks = chosen.map(({ memory }) => {
+    const freshness = memoryFreshness(memory);
+    const verification = memory.verifiedAt ? ' verified="' + String(memory.verifiedAt).slice(0, 10) + '"' : '';
+    const note = memory.verificationNote ? '\\nVerification evidence: ' + memory.verificationNote : '';
+    const staleWarning = ['stale', 'outdated', 'uncertain', 'unverified'].includes(freshness)
+      ? '\\nFreshness: ' + freshness + '. Verify against current evidence before relying on this note.'
+      : '';
+    return '<memory id="' + memory.id + '" updated="' + String(memory.updated || '').slice(0, 10) + '" freshness="' + freshness + '"' + verification + '>\\n' +
+      memory.name + ': ' + (memory.content.length > per ? memory.content.slice(0, per) + '\\n[truncated; memory_read ' + memory.id + ' for the rest]' : memory.content) +
+      note + staleWarning + '\\n</memory>';
+  });
   await markRecalled(chosen.map((item) => item.memory));
   return { text: '<recalled-memories note="Saved notes that may be relevant. They can be outdated; check against the code.">\n' + blocks.join('\n') + '\n</recalled-memories>', ids: chosen.map((item) => item.memory.id) };
 }
@@ -353,6 +414,23 @@ export const MEMORY_TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'memory_verify',
+      description: 'Record that you checked a saved memory against current evidence. Use current only when the claim was actually verified; use outdated when contradicted and uncertain when evidence is incomplete. Include a short evidence reference such as a file path, line range, or check result.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          status: { type: 'string', enum: ['current', 'outdated', 'uncertain'] },
+          evidence: { type: 'string', description: 'Short evidence reference (max 500 characters)' }
+        },
+        required: ['id', 'status', 'evidence'],
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'memory_delete',
       description: 'Delete a memory that is wrong or no longer useful.',
       parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false }
@@ -369,13 +447,24 @@ export async function runMemoryTool(name, args = {}, { root, env = process.env, 
   }
   if (name === 'memory_search') {
     const ranked = rankMemories(await listMemories(root, { env }), args.query, { limit: Math.min(20, Number(args.limit) || 5) });
-    return { results: ranked.map(({ memory, score }) => ({ id: memory.id, name: memory.name, description: memory.description, updated: memory.updated, score: Math.round(score * 100) / 100, content: memory.content.slice(0, 3000) })) };
+    return { results: ranked.map(({ memory, score }) => ({
+      id: memory.id, name: memory.name, description: memory.description, updated: memory.updated,
+      freshness: memoryFreshness(memory), verified_at: memory.verifiedAt || null,
+      verification_status: memory.verificationStatus || 'unverified', verification_note: memory.verificationNote || null,
+      source: memory.source || null, score: Math.round(score * 100) / 100, content: memory.content.slice(0, 3000)
+    })) };
   }
   if (name === 'memory_read') {
     const memory = await findMemory(root, args.id, { env });
     if (!memory) throw new Error('No memory matches ' + args.id + '.');
-    return { id: memory.id, name: memory.name, description: memory.description, category: memory.category, updated: memory.updated, content: memory.content };
+    return {
+      id: memory.id, name: memory.name, description: memory.description, category: memory.category,
+      updated: memory.updated, freshness: memoryFreshness(memory), verified_at: memory.verifiedAt || null,
+      verification_status: memory.verificationStatus || 'unverified', verification_note: memory.verificationNote || null,
+      source: memory.source || null, content: memory.content
+    };
   }
+  if (name === 'memory_verify') return await verifyMemory(root, args.id, { status: args.status, evidence: args.evidence, env });
   if (name === 'memory_delete') return await deleteMemory(root, args.id, { env });
   throw new Error('Unknown memory tool: ' + name);
 }
