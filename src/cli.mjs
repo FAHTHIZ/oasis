@@ -828,6 +828,8 @@ let markdownStream = null;
 const richOutput = () => colorEnabled(stdout) && process.env.OASIS_PLAIN_OUTPUT !== '1';
 function streamDelta(accumulated) {
   const text = String(accumulated || '');
+  // An empty update means the stream restarted; onStreamRestart ends the line.
+  if (!text) return;
   if (richOutput()) {
     if (!markdownStream) markdownStream = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' });
     if (text.startsWith(streamedSoFar)) markdownStream.push(text.slice(streamedSoFar.length));
@@ -1744,6 +1746,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
+      onStreamRestart: (info) => { endStream(); stdout.write('[network] The model connection dropped mid-response; retrying (' + info.attempt + '/2). The partial reply above is discarded.\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write('\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
       onCompactionStart: (info) => { endStream(); stdout.write('\n[context] Compacting ' + info.messages + ' older messages (about ' + Number(info.beforeTokens || 0).toLocaleString('en-US') + ' tokens; local fallback after ' + info.timeoutSeconds + 's)…\n'); },
       onCompaction: (info) => stdout.write('\n[context] ' + String(info.note || 'Compacted older conversation history.') + (info.notesSaved ? ' Continuity note saved in .oasis/session-notes.md.' : ' Continuity note was not saved.') + '\n'),

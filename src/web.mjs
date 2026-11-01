@@ -57,7 +57,7 @@ export function summarizeAgentRun(job) {
   const visibleRunTypes = new Set([
     'started', 'approval_required', 'approval_resolved', 'cancel_requested',
     'cancelled', 'failed', 'completed', 'interrupted', 'worktree_ready', 'worktree_merged', 'usage',
-    'compaction_started', 'compaction_completed', 'context_overflow', 'context_pruned'
+    'compaction_started', 'compaction_completed', 'context_overflow', 'context_pruned', 'stream_restarted'
   ]);
   const agentEvents = rawEvents
     .filter((event) => event && event.data && typeof event.data === 'object' &&
@@ -136,6 +136,10 @@ export function summarizeAgentRun(job) {
         description = 'Request recovered from context limit';
         const attempt = Number(data.attempt);
         detail = Number.isFinite(attempt) && attempt > 0 ? 'Retry ' + Math.floor(attempt) + ' with a smaller history' : 'Retrying with a smaller history';
+      } else if (event.type === 'stream_restarted') {
+        description = 'Model connection recovered';
+        const attempt = Number(data.attempt);
+        detail = Number.isFinite(attempt) && attempt > 0 ? 'Response restarted (retry ' + Math.floor(attempt) + ')' : 'Response restarted';
       } else if (event.type === 'context_pruned') {
         description = 'Older tool output shortened';
         const pruned = Number(data.pruned);
@@ -781,6 +785,10 @@ export function createOasisWebServer(options = {}) {
               midTurn: Boolean(info && info.midTurn)
             });
             emit(job, 'session_state', webSessionState(session, env));
+          },
+          onStreamRestart: (info) => {
+            assistantDeltaBuffer = '';
+            emit(job, 'stream_restarted', { attempt: Math.max(0, Math.min(5, Math.floor(Number(info && info.attempt) || 0))) });
           },
           onContextOverflow: (info) => {
             emit(job, 'context_overflow', {

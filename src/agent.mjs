@@ -1526,9 +1526,25 @@ export async function suggestNextPrompt(session, options = {}) {
   } catch { return ''; }
 }
 
+// A response that dies mid-stream never yields tool calls (they're only returned
+// once the stream completes), so retrying the same request can't run anything twice.
+const MAX_STREAM_RESTARTS = 2;
+
+async function requestCompletionWithStreamRestarts(session, options = {}) {
+  for (let restart = 0; ; restart++) {
+    try {
+      return await requestCompletionTraced(session, options);
+    } catch (error) {
+      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || restart >= MAX_STREAM_RESTARTS || (options.signal && options.signal.aborted)) throw error;
+      if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, reason: error.message });
+      await waitForProviderRetry(providerRetryDelayMs(restart + 1), options.signal || new AbortController().signal);
+    }
+  }
+}
+
 async function requestCompletion(session, options = {}) {
   try {
-    return await requestCompletionTraced(session, options);
+    return await requestCompletionWithStreamRestarts(session, options);
   } catch (error) {
     const fallback = session && session.fallbackModel;
     if (!fallback || !session.config || session.config.model === fallback || (options.signal && options.signal.aborted) || !FALLBACK_TRIGGER.test(String(error && error.message || error))) throw error;
@@ -1537,7 +1553,7 @@ async function requestCompletion(session, options = {}) {
     session.fallbackActive = { from: previous, to: fallback, reason: String(error.message || error).slice(0, 200) };
     (session.hookMessages ||= []).push('[fallback] ' + previous + ' failed (' + String(error.message || error).slice(0, 120) + '); switched to ' + fallback + '.');
     if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
-    return requestCompletionTraced(session, options);
+    return requestCompletionWithStreamRestarts(session, options);
   }
 }
 
@@ -1705,6 +1721,7 @@ async function requestCompletionRaw(session, options = {}) {
   const streamIdleMs = Math.min(900000, Math.max(1000, Number(options.streamIdleMs) || Number(providerEnv.OASIS_STREAM_IDLE_SECONDS) * 1000 || 120000));
   let timedOut = false;
   let stalled = false;
+  let responseStarted = false;
   let timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : fetch;
   const abortFromCaller = () => controller.abort();
@@ -1751,6 +1768,7 @@ async function requestCompletionRaw(session, options = {}) {
       throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol)), { status });
     }
     if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
+    responseStarted = true;
     const contentType = response.headers.get('content-type') || '';
     const streamed = Boolean(typeof options.onDelta === 'function' && contentType.toLowerCase().includes('text/event-stream'));
     let data;
@@ -1811,8 +1829,10 @@ async function requestCompletionRaw(session, options = {}) {
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    if (stalled) throw new Error('The model stream stalled: no data arrived for ' + Math.round(streamIdleMs / 1000) + ' seconds (set OASIS_STREAM_IDLE_SECONDS to change this).');
+    if (stalled) throw Object.assign(new Error('The model stream stalled: no data arrived for ' + Math.round(streamIdleMs / 1000) + ' seconds (set OASIS_STREAM_IDLE_SECONDS to change this).'), { code: 'OASIS_STREAM_INTERRUPTED' });
     if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after ' + Math.round(timeoutMs / 1000) + ' seconds waiting for a response (set OASIS_REQUEST_TIMEOUT_SECONDS to change this).');
+    // undici reports a connection dropped while reading the body as TypeError('terminated').
+    if (error instanceof TypeError && responseStarted) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the response finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
     if (error instanceof TypeError) throw new Error('Could not reach the model provider. Check the network and provider base URL.');
     throw error;
   } finally {
@@ -3979,7 +3999,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
           options.onDelta(streamedText);
-        } } : {})
+        } } : {}),
+        // Deltas are cumulative, so a restarted stream replaces the partial text
+        // instead of appending a second copy.
+        onStreamRestart: (event) => {
+          streamedText = '';
+          if (typeof options.onDelta === 'function') options.onDelta('');
+          if (typeof options.onStreamRestart === 'function') options.onStreamRestart(event);
+        }
       });
     } catch (error) {
       if (isContextOverflowError(error) && overflowRecoveries < 2 && !(options.signal && options.signal.aborted)) {

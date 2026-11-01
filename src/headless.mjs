@@ -239,6 +239,10 @@ export async function runHeadless(options) {
         partialSoFar = text;
         if (delta) emit({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: delta } } });
       } } : {}),
+      ...(outputFormat === 'stream-json' ? { onStreamRestart: (info) => {
+        partialSoFar = '';
+        emit({ type: 'system', subtype: 'stream_restarted', attempt: info.attempt, reason: info.reason });
+      } } : {}),
       onUsage: (step) => {
         costUsd += Number(step.costUsd || 0);
         usage.input_tokens += Number(step.inputTokens || 0);
