@@ -80,6 +80,7 @@ export function toolActivityWarning(result) {
   if (!value || typeof value !== 'object') return '';
   const detail = text(value.error || value.warning || value.message || '', 700);
   if (value.error) return detail ? 'This step failed: ' + detail : 'This step failed.';
+  if (typeof value.warning === 'string' && value.warning.trim()) return detail || 'This step returned a warning.';
   if (value.isError === true || value.failed === true || value.passed === false) return detail ? 'This step did not complete successfully: ' + detail : 'This step did not complete successfully.';
   if (value.timedOut === true) return 'The command timed out before it finished.';
   if (Number.isInteger(value.exitCode) && value.exitCode !== 0) {
