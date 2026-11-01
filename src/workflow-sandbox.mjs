@@ -27,6 +27,20 @@ async function loadQuickJSRuntime() {
   }
 }
 
+/** Report whether the optional workflow runtime can actually initialize. */
+export async function workflowRuntimeStatus({ loadRuntime = loadQuickJSRuntime } = {}) {
+  try {
+    await loadRuntime();
+    return { available: true, runtime: 'QuickJS' };
+  } catch (error) {
+    return {
+      available: false,
+      runtime: 'QuickJS',
+      reason: String(error && error.message || error).replace(/[\\r\\n\\0]+/g, ' ').slice(0, 300)
+    };
+  }
+}
+
 /** Run workflow-authored JavaScript in a separate QuickJS WebAssembly runtime. */
 export async function runWorkflowScript({ body, args, agent, phase, log, signal, onLimit = () => {} }) {
   const QuickJS = await loadQuickJSRuntime();
