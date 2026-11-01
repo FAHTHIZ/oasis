@@ -374,9 +374,28 @@ try {
       '; page errors=' + JSON.stringify(pageErrors));
   }
 
-  await page.waitForFunction(() => window.oasisCore?.busy === false &&
-    typeof window.oasisActivityState === 'function' && window.oasisActivityState().active === false,
-  null, { timeout: timeoutMs });
+  try {
+    await page.waitForFunction(() => window.oasisCore?.busy === false &&
+      typeof window.oasisActivityState === 'function' && window.oasisActivityState().active === false,
+    null, { timeout: timeoutMs });
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      busy: window.oasisCore?.busy ?? null,
+      activity: typeof window.oasisActivityState === 'function' ? window.oasisActivityState() : null,
+      runtime: document.querySelector('#agentRuntimeState')?.textContent || '',
+      approvalVisible: !document.querySelector('#agentApprovalCard')?.hidden,
+      groups: [...document.querySelectorAll('#agentMessages .activity-group')].map((node) => ({
+        category: node.dataset.category || '',
+        parent: node.parentElement?.id || node.parentElement?.className || '',
+        steps: node.querySelectorAll('.activity-step').length
+      })),
+      trace: window.__oasisE2EActivityTrace || [],
+      messages: document.querySelector('#agentMessages')?.innerText.slice(-3500) || ''
+    }));
+    await page.screenshot({ path: path.join(screenshotDir, 'agent-activity-lifecycle-debug.png'), fullPage: true });
+    throw new Error(String(error && error.message || error) +
+      '; provider calls=' + completionCalls + '; terminal lifecycle=' + JSON.stringify(state));
+  }
   const activitySummary = page.locator('#agentMessages .turn-work');
   try {
     await activitySummary.waitFor({ state: 'visible', timeout: timeoutMs });
