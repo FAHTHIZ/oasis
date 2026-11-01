@@ -336,7 +336,11 @@ body.agent-busy .agent-runtime-state::before{background:var(--accent);animation:
 .agent-model-chevron{color:var(--faint);font-size:12px}
 .agent-session-tools{display:flex;align-items:center;gap:8px}
 .agent-session-tools select{width:auto;min-height:32px;height:32px;padding:0 28px 0 10px;font-size:12.5px;background-color:var(--panel);border-color:var(--line)}
-.agent-context-meter{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:var(--r-pill);border:1px solid var(--line);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.agent-context-meter{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px 2px;border-radius:var(--r-pill);border:1px solid var(--line);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.agent-context-meter::after{content:"";position:absolute;z-index:-1;left:0;right:auto;bottom:0;width:var(--context-fill,0%);height:2px;border-radius:0 2px 2px 0;background:var(--accent);transition:width .18s ease}
+.agent-context-meter[data-level="mid"]{border-color:var(--line-strong);color:var(--text-2)}
+.agent-context-meter[data-level="high"]{border-color:var(--danger);color:var(--danger)}
+.agent-context-meter[data-level="high"]::after{background:var(--danger)}
 #newAgentSessionBtn{height:32px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-md);color:var(--text-2);font-size:12.5px}
 #newAgentSessionBtn:hover{background:var(--raised);color:var(--text)}
 
@@ -351,6 +355,11 @@ body.agent-busy .agent-runtime-state::before{background:var(--accent);animation:
 .agent-message.assistant.failed{color:var(--danger)}
 .agent-message.assistant.failed::before{border-color:#FF8A8A55}
 .agent-message.activity{align-self:stretch;font:12.5px/1.5 var(--font-mono);color:var(--muted);padding:6px 10px 6px 34px;margin:-10px 0 -10px 0;position:relative;white-space:pre-wrap;max-height:220px;overflow:auto;border-radius:var(--r-sm)}
+.agent-message.activity.agent-context-notice{display:grid;gap:3px;max-width:min(100%,760px);padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-md);background:var(--panel);font:12.5px/1.5 var(--font-sans);white-space:normal}
+.agent-context-notice strong{font-weight:650;color:var(--text)}
+.agent-context-notice.context-success{border-left-color:var(--accent)}
+.agent-context-notice.context-warning{border-left-color:var(--danger);background:color-mix(in srgb,var(--danger) 5%,var(--panel))}
+.agent-context-notice.context-warning strong{color:var(--danger)}
 .agent-message.activity::before{content:"";position:absolute;left:11px;top:12px;width:6px;height:6px;border-radius:50%;background:var(--line-strong)}
 .agent-message.activity.tool-call{color:var(--text-2)}
 .agent-message.activity.tool-call::before{background:var(--accent-2)}
