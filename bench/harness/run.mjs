@@ -8,6 +8,7 @@
 //
 //   node bench/harness/run.mjs            # print a summary table
 //   node bench/harness/run.mjs --json out.json
+//   node bench/harness/run.mjs --check     (CI: exit 1 on any regression)
 //   node bench/harness/run.mjs --verbose  # list every failing case
 //
 // The run is deterministic apart from the startup/latency track, which uses
@@ -40,7 +41,8 @@ const repoRoot = path.resolve(here, '..', '..');
 const argv = process.argv.slice(2);
 const verbose = argv.includes('--verbose');
 const jsonOut = argv.includes('--json') ? argv[argv.indexOf('--json') + 1] : '';
-const skipLatency = argv.includes('--no-latency');
+const checkMode = argv.includes('--check');
+const skipLatency = argv.includes('--no-latency') || checkMode;
 
 const deepEqual = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
 function sortKeys(value) {
@@ -328,4 +330,16 @@ print('Held-out set v2 (first score: bench/results/harness-heldout-v2.json)', he
 if (jsonOut) {
   await writeFile(jsonOut, JSON.stringify(report, null, 2) + '\n');
   console.log('\nWrote ' + jsonOut);
+}
+
+// --check: every case passes except the documented, deliberate misses.
+const KNOWN_MISSES = new Set(['v2-slack']);
+if (checkMode) {
+  const regressions = [...results, ...heldout, ...heldoutV2Results]
+    .flatMap((r) => (r.failures || []).map((f) => ({ track: r.track, id: String(f).split(' ')[0] })))
+    .filter((f) => !KNOWN_MISSES.has(f.id));
+  if (regressions.length) {
+    console.error('\nHarness regressions:\n' + regressions.map((f) => '  ' + f.track + ': ' + f.id).join('\n'));
+    process.exitCode = 1;
+  } else console.log('\nHarness check passed (known deliberate misses: ' + [...KNOWN_MISSES].join(', ') + ').');
 }

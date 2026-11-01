@@ -15,7 +15,7 @@ Use a focused test while iterating:
 node --test test/<name>.test.mjs
 ```
 
-The full `npm run check` pipeline additionally validates the public site, repository metadata, evaluation quarantine rules, and evaluation fixtures. GitHub Actions adds Node-version, operating-system, native PTY, browser, installer, and desktop-package workflows.
+The full `npm run check` pipeline additionally validates the public site, repository metadata, evaluation quarantine rules, the model-free harness benchmark (`node bench/harness/run.mjs --check` fails on any regression), and evaluation fixtures. GitHub Actions adds Node-version, operating-system, native PTY, browser, installer, and desktop-package workflows.
 
 ## Test domains
 
