@@ -1651,7 +1651,7 @@ messages.addEventListener('keydown',function(e){if(/^(PageUp|PageDown|ArrowUp|Ar
 /* Only a user-initiated scroll can unstick; layout shifts and clamped scrollTop keep following the latest output. */
 messages.addEventListener('scroll',function(){var near=distance()<90;if(near)stick=true;else if(Date.now()-userScrollAt<1200)stick=false;else if(stick)messages.scrollTop=messages.scrollHeight;jump.classList.toggle('show',!stick&&distance()>=90)},{passive:true});
 jump.addEventListener('click',function(){stick=true;messages.scrollTop=messages.scrollHeight;jump.classList.remove('show')});
-var C=window.oasisCore;var agentScroll=function(force){if(force===true)stick=true;if(stick){messages.scrollTop=messages.scrollHeight;jump.classList.remove('show')}else jump.classList.toggle('show',distance()>=90)};C.hook('agentScroll',function(){return agentScroll});
+var C=window.oasisCore;var agentScroll=function(force){if(force===true)stick=true;if(stick){var top=messages.scrollHeight;var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;if(!reduce&&typeof messages.scrollTo==='function')messages.scrollTo({top:top,behavior:'smooth'});else messages.scrollTop=top;jump.classList.remove('show')}else jump.classList.toggle('show',distance()>=90)};C.hook('agentScroll',function(){return agentScroll});
 /* ---------- Assistant messages as markdown ---------- */
 var pending=new Map(),raf=0;
 function paint(){raf=0;pending.forEach(function(text,node){node.classList.add('md');node.dataset.raw=text;node.innerHTML=renderMarkdown(text)+(document.body.classList.contains('agent-busy')&&node===lastAssistant()?'':'<div class="msg-actions"><button type="button" class="msg-action" data-copy-message>Copy</button></div>')});pending.clear();agentScroll()}
@@ -1853,7 +1853,7 @@ document.addEventListener('click',function(e){
   if(e.target.closest('#topbarChangesBtn,#agentChangesUtilityTab'))setTimeout(function(){loadWorkspaceDiff(true)},0);
 });
 window.oasisLoadWorkspaceDiff=loadWorkspaceDiff;
-C.hook('agentClearMessages',function(coreClear){return function(){coreClear();typing.remove();if(emptyTemplate&&!$('agentEmptyState'))messages.appendChild(emptyTemplate.cloneNode(true));stick=true}});
+C.hook('agentClearMessages',function(coreClear){return function(){coreClear();typing.remove();currentActivityGroup=null;activityGroups=[];activityStepsById.clear();if(emptyTemplate&&!$('agentEmptyState'))messages.appendChild(emptyTemplate.cloneNode(true));stick=true}});
 messages.addEventListener('click',function(e){
   var ex=e.target.closest('[data-agent-example]');
   if(ex){var input=$('agentPrompt');var d=ex.querySelector('span');input.value=(ex.getAttribute('data-agent-example')||'')+(d?': '+d.textContent.trim().replace(/^./,function(c){return c.toLowerCase()}):'');autosize();syncSend();input.focus();return}
