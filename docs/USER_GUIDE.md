@@ -518,7 +518,7 @@ More Claude Code commands:
 - `/reload-plugins` and `/reload-skills` rebuild the session from current settings, plugins, skills, agents, hooks and MCP servers without losing the conversation (running background commands are stopped).
 - `/list-agents` (alias `/peers`) lists running subagents, teams and background processes.
 - `/statusline [what to show]` has the agent write and register a status line script; `/update-config DESCRIPTION` has it edit the right `settings.json`.
-- Aliases: `/settings` (`/config`), `/checkpoint` (`/rewind`), `/continue` (`/resume`), `/allowed-tools` (`/permissions`), `/stats` (`/usage`), `/checkup` (`/doctor`), `/code-review` (`/review`).
+- Aliases: `/settings` (`/config`), `/checkpoint` (`/rewind`), `/continue` (`/resume`), `/allowed-tools` (`/permissions`), `/stats` (`/usage`), `/checkup` (`/doctor`), `/code-review` (`/review`), and for people coming from Aider or Codex, `/tokens` (`/context`), `/approvals` (`/permissions`) and `/ask` (`/plan`, read-only).
 
 ```json
 { "name": "Dracula", "base": "dark", "overrides": { "claude": "#bd93f9", "error": "#ff5555", "success": "#50fa7b" } }
