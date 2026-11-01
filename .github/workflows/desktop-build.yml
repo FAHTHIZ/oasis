@@ -222,6 +222,8 @@ jobs:
         run: |
           set -euo pipefail
           cd release-assets
+          # electron-builder's internal build log is not a user download.
+          rm -f builder-debug.yml builder-effective-config.yaml
           find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
           test -s SHA256SUMS
       - name: Publish GitHub release
