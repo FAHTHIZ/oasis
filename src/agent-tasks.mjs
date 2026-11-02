@@ -95,7 +95,10 @@ export function restoreAgentHistory(session, snapshots = []) {
       child: null,
       controller: null,
       promise: null,
-      resumable: false
+      resumable: false,
+      // A saved transcript lets send_message rebuild a shared-workspace worker
+      // with its full context after a restart.
+      ...(snapshot.transcript === true && snapshot.workspaceIsolation !== 'worktree' && status !== 'cancelled' ? { restoredTranscript: true, transcriptSaved: true } : {})
     };
     registry.agents.set(id, record);
     registry.next = Math.max(Number(registry.next) || 1, Number(match[1]) + 1);
@@ -105,7 +108,7 @@ export function restoreAgentHistory(session, snapshots = []) {
         agentId: id,
         teamId: record.teamId || undefined,
         description: record.description,
-        detail: record.error
+        detail: record.error + (record.restoredTranscript ? ' Its conversation was saved: send_message resumes it with full context.' : '')
       });
     }
   }
