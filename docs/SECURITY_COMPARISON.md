@@ -21,7 +21,8 @@ Sources:
 | Protected config files (`.vscode/tasks.json`, `.envrc`, git hooks, `.npmrc`, other agents' configs) | Yes, incl. shell writes | Protected paths for its own config | Sandbox limits writes | Not documented |
 | Secret masking in model context | Yes (35+ token formats, placeholders unmasked only in tool args) | Credential masking | Not documented | Not documented |
 | Per-edit security pattern check | Yes, built in (`OASIS_SECURITY_CHECK=0` to disable) | Plugin (security-guidance) | No | No |
-| Crash-safe atomic file writes | Yes | Not documented | Not documented | Yes (recent) |
+| Crash-safe atomic file writes | Yes (edits, config, credentials, state) | Not documented | Not documented | Yes (recent) |
+| Sandbox keeps package caches writable | Yes (`~/.npm`, pip, cargo, Go, Maven, Gradle…) | Configurable allow-list | Configurable writable roots | Container-based |
 
 ## Where OASIS is behind
 
