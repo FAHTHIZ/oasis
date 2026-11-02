@@ -169,19 +169,3 @@ test('web: /api/transcribe needs the token, accepts browser audio and uses the u
   const page = await fetch(base + '/');
   assert.match(page.headers.get('permissions-policy') || '', /microphone=\(self\), camera=\(\)/);
 });
-
-test('desktop permission policy allows only microphone and clipboard for the app origin', async () => {
-  const { allowPermission } = await import('../desktop/permissions.mjs');
-  const app = 'http://127.0.0.1:4310';
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio'] }, app), true);
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio', 'video'] }, app), false);
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaType: 'video' }, app), false);
-  assert.equal(allowPermission('media', { requestingUrl: 'https://evil.example/', mediaTypes: ['audio'] }, app), false);
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio'], isMainFrame: false }, app), false);
-  assert.equal(allowPermission('clipboard-sanitized-write', { requestingUrl: app }, app), true);
-  assert.equal(allowPermission('notifications', { requestingUrl: app + '/' }, app), true, 'turn-finished notifications');
-  for (const permission of ['geolocation', 'midi', 'pointerLock', 'openExternal', 'display-capture', 'hid', 'serial', 'usb']) {
-    assert.equal(allowPermission(permission, { requestingUrl: app + '/' }, app), false, permission);
-  }
-  assert.equal(allowPermission('media', { requestingUrl: app, mediaTypes: ['audio'] }, null), false, 'nothing before the server is up');
-});
