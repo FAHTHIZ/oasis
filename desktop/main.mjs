@@ -6,6 +6,7 @@ import { loadConfig, saveConfig } from '../src/config.mjs';
 import { loadDesktopApiKey, saveDesktopApiKey } from './secure-secrets.mjs';
 import { crashRecoveryHtml } from './crash-screen.mjs';
 import { showErrorWithCopy } from './error-dialog.mjs';
+import { installPermissionPolicy } from './permissions.mjs';
 
 let mainWindow = null;
 let runtime = null;
@@ -119,6 +120,7 @@ function createWindow() {
     backgroundColor: '#0B0F0C', show: false, autoHideMenuBar: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true }
   });
+  installPermissionPolicy(mainWindow.webContents.session, () => activeOrigin);
   mainWindow.once('ready-to-show', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try { const parsed = new URL(url); if (parsed.protocol === 'https:') void shell.openExternal(url).catch(() => {}); } catch {}
