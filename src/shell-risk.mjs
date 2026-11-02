@@ -65,7 +65,22 @@ export function splitShell(line) {
   return commands;
 }
 
-const PREFIXES = new Set(['sudo', 'doas', 'command', 'builtin', 'exec', 'time', 'nice', 'nohup', 'env', 'xargs', 'timeout', 'stdbuf', 'ionice', 'then', 'do', 'else', '!']);
+const PREFIXES = new Set(['sudo', 'doas', 'command', 'builtin', 'exec', 'time', 'nice', 'nohup', 'env', 'xargs', 'timeout', 'stdbuf', 'ionice', 'setsid', 'unbuffer', 'chronic', 'flock', 'then', 'do', 'else', '!', 'npx', 'pnpx', 'bunx', 'busybox', 'chrt', 'taskset']);
+// Options of transparent prefixes that consume the next token as their value.
+const PREFIX_VALUE_OPTIONS = {
+  sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-U', '-T']),
+  doas: new Set(['-u', '-C']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
+  nice: new Set(['-n', '--adjustment']),
+  timeout: new Set(['-s', '--signal', '-k', '--kill-after']),
+  ionice: new Set(['-c', '-n', '-p']),
+  stdbuf: new Set(['-i', '-o', '-e']),
+  xargs: new Set(['-I', '-i', '-n', '-P', '-L', '-l', '-d', '-a', '-E', '-e', '-s', '--max-args', '--max-procs', '--delimiter', '--arg-file']),
+  npx: new Set(['-p', '--package', '-c', '--call']),
+  flock: new Set(['-w', '--timeout', '-E', '--conflict-exit-code']),
+  chrt: new Set(['-p']),
+  taskset: new Set(['-c', '--cpu-list'])
+};
 const base = (token) => String(token || '').replace(/^.*[\\/]/, '').replace(/\.exe$/i, '').toLowerCase();
 
 // Returns the program name and its arguments, skipping env assignments and
@@ -78,8 +93,16 @@ export function programOf(tokens) {
     const b = base(t);
     if (PREFIXES.has(b)) {
       i++;
-      while (i < tokens.length && tokens[i].startsWith('-')) i++;
+      const valued = PREFIX_VALUE_OPTIONS[b];
+      while (i < tokens.length && tokens[i].startsWith('-') && tokens[i] !== '-') {
+        const opt = tokens[i];
+        i++;
+        if (valued && valued.has(opt) && !opt.includes('=')) i++;
+      }
       if (b === 'timeout' && /^\d/.test(tokens[i] || '')) i++;
+      if ((b === 'nice' || b === 'chrt') && /^-?\d+$/.test(tokens[i] || '')) i++;
+      if (b === 'taskset' && /^(0x)?[0-9a-f,-]+$/i.test(tokens[i] || '') && tokens[i + 1]) i++;
+      if (b === 'flock' && tokens[i] && tokens[i + 1]) i++;
       continue;
     }
     break;
@@ -88,9 +111,37 @@ export function programOf(tokens) {
 }
 
 // Paths whose recursive deletion or ownership change is catastrophic.
+// Rewrites spellings that expand to the same place: ${HOME:?}, ${HOME}, "$HOME",
+// trailing /. or //, and ../ that climbs above a home or root directory.
+export function normalizeTarget(raw) {
+  let p = String(raw).replace(/^["']|["']$/g, '');
+  p = p.replace(/\$\{(HOME|USERPROFILE)(?::?[-?=+][^}]*)?\}/g, '$$$1');
+  p = p.replace(/\$USERPROFILE\b/g, '$$HOME');
+  p = p.replace(/^~[A-Za-z0-9._-]+(?=\/|$)/, '/home/user');
+  p = p.replace(/\/{2,}/g, '/');
+  for (let prev = ''; prev !== p;) { prev = p; p = p.replace(/\/\.(?=\/|$)/g, '').replace(/^\.\/(?=.)/, ''); }
+  if (p.length > 1) p = p.replace(/\/$/, '');
+  return p || '/';
+}
+
+// Resolves ../ against a stand-in home so ~/.., $HOME/../.. or /usr/.. are
+// judged by where they actually land.
+function resolvedParent(p) {
+  if (!/(^|\/)\.\.(\/|$)/.test(p) || !/^(~|\$HOME|\/)/.test(p)) return '';
+  const stand = p.replace(/^(~|\$HOME)/, '/home/oasis-user');
+  const parts = [];
+  for (const part of stand.split('/').filter(Boolean)) {
+    if (part === '..') parts.pop();
+    else parts.push(part);
+  }
+  return '/' + parts.join('/');
+}
+
 function isCriticalPath(raw) {
-  const p = String(raw).replace(/^["']|["']$/g, '');
+  const p = normalizeTarget(raw);
   if (!p) return false;
+  const landed = resolvedParent(p);
+  if (landed) return isCriticalPath(landed.replace(/^\/home\/oasis-user(?=\/|$)/, '~') || '/');
   if (/^(~|\$HOME|\$\{HOME\}|\$env:USERPROFILE|%USERPROFILE%)(\/|\\)?(\*|\.\*)?$/i.test(p)) return true;
   if (/^(\/|\/\*|\/\.\*)$/.test(p)) return true;
   if (/^\/(home|Users)\/[^/]+\/?(\*)?$/.test(p)) return true;
@@ -128,6 +179,19 @@ const operands = (args) => {
 const INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'python', 'python3', 'node', 'perl', 'ruby', 'php', 'iex', 'invoke-expression', 'pwsh', 'powershell']);
 const DOWNLOADERS = new Set(['curl', 'wget', 'iwr', 'invoke-webrequest', 'irm', 'invoke-restmethod', 'fetch']);
 
+// Words of a package-manager command after dropping options and their values.
+const PM_VALUE_OPTIONS = new Set(['--registry', '--otp', '--tag', '--access', '--workspace', '-w', '--filter', '-F', '--cwd', '-C', '--prefix', '--userconfig', '--loglevel', '--scope', '--dir']);
+function packageVerb(args) {
+  const words = [];
+  for (let i = 0; i < args.length && words.length < 2; i++) {
+    const a = args[i];
+    if (a.startsWith('-')) { if (PM_VALUE_OPTIONS.has(a)) i++; continue; }
+    words.push(a);
+    if (a !== 'npm') break;
+  }
+  return words;
+}
+
 function analyzeSimple(cmd, ctx = {}) {
   const { tokens } = cmd;
   const { name, args } = programOf(tokens);
@@ -155,6 +219,18 @@ function analyzeSimple(cmd, ctx = {}) {
   if (name === 'rm' && cmd.tokens.some((t) => base(t) === 'xargs') && (f.short.has('r') || f.short.has('R') || f.long.has('--recursive'))) {
     return { highRisk: 'deletes every path fed to it through xargs, recursively' };
   }
+  if (name === 'rimraf' || name === 'del-cli' || name === 'trash' || name === 'del') {
+    const target = ops.find(isCriticalPath);
+    if (target) return { blocked: name + ' recursively deletes ' + target };
+  }
+  if (name === 'rm' && (f.short.has('r') || f.short.has('R') || f.long.has('--recursive')) && ops.some((a) => /^(\.\/)?\.git\/?$/.test(normalizeTarget(a)))) {
+    return { highRisk: 'deletes the .git directory, which destroys the repository history and every local branch' };
+  }
+  if (/^(truncate|tee|cp|install|ln|mv|rsync|sed|perl)$/.test(name)) {
+    const writes = name === 'sed' || name === 'perl' ? (args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith('--in-place')) ? ops.slice(1) : []) : (name === 'tee' || name === 'truncate' ? ops : ops.slice(-1));
+    const target = writes.find((a) => SYSTEM_WRITE_TARGET.test(normalizeTarget(a)));
+    if (target) return { blocked: name + ' overwrites the system file ' + target };
+  }
   if (name === 'shred' || name === 'srm') return { highRisk: name + ' destroys files beyond recovery' };
   if ((name === 'mv' || name === 'move' || name === 'move-item') && ops.length >= 2 && /^\/dev\/null$|^nul$/i.test(ops[ops.length - 1])) {
     return { blocked: 'moves files onto ' + ops[ops.length - 1] + ', which destroys them' };
@@ -172,7 +248,12 @@ function analyzeSimple(cmd, ctx = {}) {
   if (/^(shutdown|reboot|poweroff|halt)$/.test(name) || (name === 'systemctl' && /^(poweroff|reboot|halt|kexec)$/.test(lower[0] || ''))) {
     return { blocked: 'shuts down or restarts the machine' };
   }
-  if (/^(npm|pnpm|yarn|bun)$/.test(name) && (ops[0] === 'publish' || (ops[0] === 'npm' && ops[1] === 'publish'))) return { blocked: 'publishes a package to a public registry' };
+  if (/^(npm|pnpm|yarn|bun)$/.test(name) && /^(npm )?publish$/.test(packageVerb(args).join(' ')) && !args.includes('--dry-run')) return { blocked: 'publishes a package to a public registry' };
+  if (/^(npm|pnpm|yarn|bun)$/.test(name) && ops[0] === 'unpublish') return { blocked: 'unpublishes a package from a public registry' };
+  if (name === 'poetry' && ops[0] === 'publish') return { blocked: 'publishes a Python package' };
+  if ((name === 'uv' || name === 'hatch' || name === 'flit') && ops[0] === 'publish') return { blocked: 'publishes a Python package' };
+  if (name === 'dotnet' && ops[0] === 'nuget' && ops[1] === 'push') return { blocked: 'publishes a NuGet package' };
+  if (name === 'docker' && ops[0] === 'push') return { highRisk: 'pushes an image to a container registry' };
   if (name === 'cargo' && ops[0] === 'publish') return { blocked: 'publishes a crate to crates.io' };
   if (name === 'gem' && ops[0] === 'push') return { blocked: 'publishes a gem' };
   if (name === 'twine' && ops[0] === 'upload') return { blocked: 'publishes a Python package' };
@@ -204,6 +285,7 @@ function analyzeGit(args, f, ops) {
     if (sub === 'gc' && lower.some((a) => /^--prune(=now)?$/.test(a))) return { highRisk: 'permanently prunes unreachable commits' };
     if (sub === 'branch' && (f.short.has('D') || (f.short.has('d') && f.short.has('f')))) return { highRisk: 'force-deletes a branch' };
     if (sub === 'update-ref' && f.short.has('d')) return { highRisk: 'deletes a Git ref' };
+    if (sub === 'reset' && (f.long.has('--hard') || f.long.has('--merge') || f.long.has('--keep'))) return { highRisk: 'git reset ' + [...f.long].join(' ') + ' discards uncommitted work (OASIS saves a safety snapshot under refs/oasis/safety first)' };
     if (sub === 'clean' && (f.short.has('x') || f.short.has('X'))) return { highRisk: 'git clean -x deletes ignored files (.env, local config, caches) that the safety snapshot does not keep' };
   }
   return null;
@@ -235,29 +317,151 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
     }
   }
   if (INTERPRETERS.has(name) && cmd.pipedFrom) {
-    const source = programOf(cmd.pipedFrom.tokens).name;
-    if (DOWNLOADERS.has(source)) return { highRisk: 'pipes a downloaded script straight into ' + name + ' without review' };
+    for (let up = cmd.pipedFrom, hops = 0; up && hops < 16; up = up.pipedFrom, hops++) {
+      const source = programOf(up.tokens).name;
+      if (DOWNLOADERS.has(source)) return { highRisk: 'pipes a downloaded script straight into ' + name + ' without review' };
+    }
+  }
+  if (INTERPRETERS.has(name) && cmd.substitutions && cmd.substitutions.some((inner) => splitShell(inner).some((c) => DOWNLOADERS.has(programOf(c.tokens).name)))) {
+    return { highRisk: name + ' runs a script downloaded by a command substitution without review' };
   }
   if (name === 'dd' && args.some((a) => /^of=\/dev\//.test(a))) return { blocked: 'dd writes directly to a disk device' };
   if (/^mkfs(\.|$)/.test(name) || /^(wipefs|fdisk|sfdisk|parted|diskpart|format-volume|clear-disk|initialize-disk)$/.test(name)) return { blocked: name + ' rewrites a disk or partition table' };
   return null;
 }
 
-// Returns { blocked?: string, highRisk?: string } for the whole shell line.
-export function analyzeShellLine(line) {
+// Finds the bodies of $(...), `...`, <(...) and >(...) outside single quotes.
+// Each body is a command line the shell runs before (or alongside) the outer
+// command, so it is analyzed on its own.
+export function extractSubstitutions(line) {
+  const text = String(line || '');
+  const found = [];
+  let quote = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote === "'") { if (ch === "'") quote = ''; continue; }
+    if (ch === '\\') { i++; continue; }
+    if (ch === "'" && !quote) { quote = "'"; continue; }
+    if (ch === '"') { quote = quote === '"' ? '' : '"'; continue; }
+    if ((ch === '$' || ((ch === '<' || ch === '>') && !quote)) && text[i + 1] === '(' && text[i + 2] !== '(') {
+      let depth = 1;
+      let j = i + 2;
+      for (; j < text.length && depth; j++) {
+        if (text[j] === '\\') { j++; continue; }
+        if (text[j] === '(') depth++;
+        else if (text[j] === ')') depth--;
+      }
+      found.push(text.slice(i + 2, depth ? j : j - 1));
+      i = j - 1;
+      continue;
+    }
+    if (ch === '`') {
+      const end = text.indexOf('`', i + 1);
+      found.push(text.slice(i + 1, end === -1 ? text.length : end));
+      i = end === -1 ? text.length : end;
+    }
+  }
+  return found;
+}
+
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'ash', 'mksh', 'busybox']);
+const CODE_FLAGS = { python: ['-c'], python3: ['-c'], node: ['-e', '--eval', '-p', '--print'], perl: ['-e', '-E'], ruby: ['-e'], php: ['-r'], deno: ['eval'], bun: ['-e', '--eval'] };
+const SSH_VALUE_OPTIONS = new Set(['-b', '-c', '-D', '-E', '-e', '-F', '-I', '-i', '-J', '-L', '-l', '-m', '-O', '-o', '-p', '-Q', '-R', '-S', '-W', '-w', '-B']);
+
+// Command lines nested inside another command: sh -c '...', eval ..., su -c,
+// ssh host '...', watch '...', env -S '...', find -exec sh -c '...'.
+function nestedLines(cmd) {
+  const { name, args } = programOf(cmd.tokens);
+  const out = [];
+  if (SHELLS.has(name)) {
+    const at = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+    if (at !== -1 && args[at + 1] !== undefined) out.push(args[at + 1]);
+  }
+  if (name === 'eval' || name === 'watch') out.push(operands(args).join(' '));
+  if (name === 'su') { const at = args.findIndex((a) => a === '-c' || a === '--command'); if (at !== -1 && args[at + 1]) out.push(args[at + 1]); }
+  for (let i = 0; i < cmd.tokens.length - 2; i++) {
+    if (base(cmd.tokens[i]) === 'env' && (cmd.tokens[i + 1] === '-S' || cmd.tokens[i + 1] === '--split-string')) out.push(cmd.tokens.slice(i + 2).join(' '));
+  }
+  if (name === 'ssh') {
+    let i = 0;
+    while (i < args.length && args[i].startsWith('-')) i += SSH_VALUE_OPTIONS.has(args[i]) ? 2 : 1;
+    if (args.length > i + 1) out.push(args.slice(i + 1).join(' '));
+  }
+  if (name === 'find' || name === 'xargs') {
+    for (let i = 0; i < cmd.tokens.length; i++) {
+      if (SHELLS.has(base(cmd.tokens[i])) && cmd.tokens[i + 1] === '-c' && cmd.tokens[i + 2]) out.push(cmd.tokens[i + 2]);
+    }
+  }
+  return out;
+}
+
+// Inline code for python/node/perl/ruby/php. Shell strings handed to
+// system()/exec()/subprocess are analyzed as shell lines, and APIs that delete
+// a home or root directory recursively are refused.
+const HOME_OR_ROOT = /(expanduser\(\s*['"]~['"]\s*\)|Path\.home\(\)|os\.homedir\(\)|process\.env\.(HOME|USERPROFILE)|os\.environ(\.get\(\s*|\[\s*)['"]HOME['"]|ENV\[\s*['"]HOME['"]\s*\]|\$ENV\{\s*HOME\s*\}|getenv\(\s*['"]HOME['"]\s*\)|Dir\.home|['"](~|\/|\/home\/[^'"\/]+|\/Users\/[^'"\/]+|[A-Za-z]:\\\\?)['"])/;
+const RECURSIVE_DELETE_API = /(shutil\.rmtree|rmSync|rmdirSync|fs\.rm\b|fs\.promises\.rm|rimraf|rm_rf|rm_r\b|remove_tree|rmtree|FileUtils\.rm|remove_dir_all|File\.Delete|Directory\.Delete)/;
+function inlineCode(cmd) {
+  const { name, args } = programOf(cmd.tokens);
+  const flagsFor = CODE_FLAGS[name.replace(/[\d.]+$/, '')] || CODE_FLAGS[name];
+  if (!flagsFor) return null;
+  const at = args.findIndex((a) => flagsFor.includes(a));
+  return at !== -1 && args[at + 1] !== undefined ? args[at + 1] : null;
+}
+
+function analyzeInlineCode(code, depth) {
+  if (RECURSIVE_DELETE_API.test(code) && HOME_OR_ROOT.test(code)) return { blocked: 'runs inline code that recursively deletes a home or root directory' };
   let highRisk = '';
+  for (const m of code.matchAll(/(["'])((?:\\.|(?!\1).)*)\1/g)) {
+    const literal = m[2];
+    if (!/\s/.test(literal) || literal.length < 4) continue;
+    const r = analyze(literal, depth + 1);
+    if (r.blocked) return { blocked: 'runs inline code containing a shell command that ' + r.blocked };
+    if (r.highRisk && !highRisk) highRisk = r.highRisk;
+  }
+  return highRisk ? { highRisk } : null;
+}
+
+const MAX_DEPTH = 6;
+
+function analyze(line, depth) {
+  if (depth > MAX_DEPTH) return { highRisk: 'nests shell commands too deeply to analyze' };
+  let highRisk = '';
+  const note = (r) => { if (r && r.highRisk && !highRisk) highRisk = r.highRisk; };
+  const substitutions = extractSubstitutions(line);
+  for (const inner of substitutions) {
+    const r = analyze(inner, depth + 1);
+    if (r.blocked) return { blocked: r.blocked + ' (inside a command substitution)' };
+    note(r);
+  }
   const ctx = { cwdCritical: '' };
   for (const cmd of splitShell(line)) {
+    cmd.substitutions = substitutions;
     const { name, args } = programOf(cmd.tokens);
     if (name === 'cd' || name === 'pushd' || name === 'set-location' || name === 'sl' || name === 'chdir') {
       const dir = operands(args)[0];
       ctx.cwdCritical = dir === undefined || dir === '~' ? '~' : (isCriticalPath(dir) && !/^\.\./.test(dir) ? dir : '');
       continue;
     }
+    for (const nested of nestedLines(cmd)) {
+      const r = analyze(nested, depth + 1);
+      if (r.blocked) return { blocked: r.blocked + (name === 'ssh' ? ' on a remote host' : '') };
+      note(r);
+    }
+    const code = inlineCode(cmd);
+    if (code) {
+      const r = analyzeInlineCode(code, depth);
+      if (r && r.blocked) return r;
+      note(r);
+    }
     const result = analyzeSimple(cmd, ctx);
     if (!result) continue;
     if (result.blocked) return { blocked: result.blocked };
-    if (result.highRisk && !highRisk) highRisk = result.highRisk;
+    note(result);
   }
   return highRisk ? { highRisk } : {};
+}
+
+// Returns { blocked?: string, highRisk?: string } for the whole shell line.
+export function analyzeShellLine(line) {
+  return analyze(String(line || ''), 0);
 }

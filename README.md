@@ -45,7 +45,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 </td>
 <td width="50%" valign="top">
 
-**Safety you don't have to trust the model for.** Every shell line is parsed into commands and scored. Deleting your home folder, force pushes, `reset --hard` and `clean -fdx` are refused even with approvals off. Plan mode is enforced by the runtime, not requested in the prompt.
+**Safety you don't have to trust the model for.** Every shell line is parsed into commands and scored. Deleting your home folder, force pushes and publishing are refused even with approvals off, including when hidden inside `bash -c`, `eval`, `$(…)`, `ssh host '…'` or inline Python/Node code. `reset --hard` and `clean -fdx` always need a person, even in bypass mode, and the working tree is snapshotted first. Plan mode is enforced by the runtime, not requested in the prompt.
 
 </td>
 </tr>
@@ -124,7 +124,7 @@ The agent evaluator has **50 tasks**: 33 focused fixtures plus 17 repository-lev
 | "It changed the test to match the broken code." | Weakened-test detection (skips, `.only`, deleted tests, removed assertions, an exact check swapped for `toBeDefined()`). |
 | "It replaced my function with `// ... rest unchanged`." | A change guard blocks placeholder edits and flags large, unexplained deletions. |
 | "It ran `rm -rf` while I wasn't watching." | Catastrophic commands (home or system folders, raw disk writes, publishing, force pushes) are refused. High-risk ones (`curl \| sh`, `terraform destroy`, `kubectl delete`, `DROP TABLE`) always ask, even in bypass mode. |
-| "It ran a destructive git command." | `push --force`, `reset --hard` and `clean -f` are blocked by default. Other work-discarding commands need your approval, and the working tree is saved under `refs/oasis/safety/` first. |
+| "It ran a destructive git command." | `push --force` is refused. `reset --hard` and `clean -x` always need a person, even in bypass mode (the direct command tool refuses `reset --hard` and `clean -f` outright). Other work-discarding commands need your approval, and the working tree is saved under `refs/oasis/safety/` first. |
 | "It edited files in plan mode." | Plan mode is enforced in the runtime: only read-only tools run. |
 | "It committed my API key." | Commit secret scanning, including a raw `git commit` typed through the shell. |
 | "It looks frozen. Is it doing anything?" | A live status line shows what it is waiting for, elapsed time, context sent and `esc to stop`. Local models get 15 minutes to read a long prompt instead of timing out. |
