@@ -1,4 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { injectionHoldReason } from './untrusted-content.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { frontMatterValue } from './frontmatter.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
@@ -432,7 +433,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   // (inline code, wrappers, find -exec, ...) always need an interactive answer.
   const configRisk = options.bypassPermissions || protectedEditsAllowed(options.env || process.env) ? null
     : protectedShellWrite([command].concat(args).join(' '));
-  const highRisk = configRisk || (analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null);
+  const highRisk = configRisk || (analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null) || (options.injectionHold ? 'needs a person because ' + options.injectionHold : null);
   const sandboxAutoAllowed = sandbox && sandbox.available && sandbox.autoAllowCommands !== false && !highRisk;
   const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed);
   if (needsApproval) {
@@ -1941,7 +1942,8 @@ export async function executeTool(name, args = {}, context = {}) {
         backgroundRegistry: context.session && (context.session.background ||= new Map()),
         onExit: args.run_in_background === true && context.session ? backgroundExitNotifier(context.session) : undefined,
         onStuck: args.run_in_background === true && context.session ? backgroundStuckNotifier(context.session) : undefined,
-        maxSeconds: args.max_seconds
+        maxSeconds: args.max_seconds,
+        injectionHold: injectionHoldReason(context.session)
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
       if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {
