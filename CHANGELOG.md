@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- `repo_map` ranks files with personalized PageRank over the import and symbol-use graph: JavaScript/TypeScript and Python imports are resolved, coincidental name matches, property accesses, scripts and test helpers no longer count as uses, and a focus now lifts both the focus file's dependencies and its callers.
 - `oasis mcp search` and `oasis mcp install` use the official MCP Registry: search ranks the vendor's own server first, and install writes a version-pinned entry (remote, `npx`, `uvx` or `docker`) with secrets kept as `${VAR}` references, after showing the source and asking.
 - `diagnostics` now also runs oxlint and Biome (when configured), ShellCheck for shell scripts, hadolint for Dockerfiles, actionlint for GitHub workflows (catches script injection from untrusted event fields), and `cargo clippy` instead of `cargo check` when Clippy is installed.
 - New `security_scan` tool: runs installed gitleaks (secrets, including git history), osv-scanner (or npm audit / pip-audit), semgrep and trivy, and merges their results into one severity-sorted list. Secret values never reach the model, every scanner runs through the normal approval and sandbox, and `/security-review` uses it first.
