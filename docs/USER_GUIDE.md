@@ -283,7 +283,7 @@ The `env` key sets environment variables for every session (`{ "env": { "ANTHROP
 }
 ~~~
 
-Precedence is deny > ask > allow. `name(prefix:*)` matches a command prefix, file rules take globs, `fetch_url(domain:x)` matches a domain and its subdomains, and `mcp_server` matches every tool of one MCP server. Claude Code names (`Bash`, `Edit`, `Write`, `Read`, `WebFetch`, `Grep`, `Glob`) are accepted as aliases. In a terminal, approvals use a portable-format dialog: move with ↑/↓ (or j/k) and press Enter, press 1-3, or answer at once with `y`, `n` or `a` (always allow that command prefix for the rest of the session); Esc declines. The keys live in the `Confirmation` and `Select` keybinding contexts (`confirm:yes`, `confirm:no`, `confirm:always`, `confirm:next`, `confirm:previous`, `select:accept`, `select:cancel`, ...). Set `OASIS_LINE_APPROVALS=1` for the old typed `y/N` prompt. `/model`, `/theme` and `/color` without an argument (and Alt+P for the model) open the same kind of picker, honoring `availableModels`; their keys come from the `ModelPicker`, `ThemePicker` and `Select` contexts.
+Precedence is deny > ask > allow. `name(prefix:*)` matches a command prefix, file rules take globs, `fetch_url(domain:x)` matches a domain and its subdomains, and `mcp_server` matches every tool of one MCP server. Claude Code names (`Bash`, `Edit`, `Write`, `Read`, `WebFetch`, `Grep`, `Glob`) are accepted as aliases. In a terminal, approvals use a portable-format dialog: move with ↑/↓ (or j/k) and press Enter, press 1-3, or answer at once with `y`, `n` or `a` (always allow that command prefix for the rest of the session); Esc declines. The keys live in the `Confirmation` and `Select` keybinding contexts (`confirm:yes`, `confirm:no`, `confirm:always`, `confirm:next`, `confirm:previous`, `select:accept`, `select:cancel`, ...). Set `OASIS_LINE_APPROVALS=1` for the old typed `y/N` prompt. `/model`, `/theme` and `/color` without an argument (and Alt+P for the model) open the same kind of picker, honoring `availableModels` (the model picker also lists the models your provider serves; `OASIS_MODEL_PICKER_FETCH=0` turns that off); their keys come from the `ModelPicker`, `ThemePicker` and `Select` contexts.
 
 Modes: `default`, `acceptEdits`, `plan` (read-only), `auto`, and `bypassPermissions` (same as `--yes`). The aliases `manual` → `default` and `accept-edits` (also `accept_edits`) → `acceptEdits` are accepted in settings, `/mode`, and `--permission-mode`; they do not add any permission beyond the canonical mode. Set one per run with `--permission-mode`, or add rules for one run with `--allowedTools` / `--disallowedTools`.
 
@@ -629,7 +629,7 @@ For ordinary interactive prompts, only short, clearly read-only, low-risk reques
 
 ## Slash commands, @mentions, and memory
 
-Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/routing`, `/model [id]`, `/mode [default|acceptEdits|plan|auto|bypassPermissions|log]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
+Inside `oasis`, type `/help` to see everything. Built-in commands include `/compact [focus]`, `/context`, `/cost`, `/routing`, `/model [id]` (`/model --list` asks your provider which models it serves), `/mode [default|acceptEdits|plan|auto|bypassPermissions|log]`, `/permissions`, `/agents`, `/commands`, `/hooks`, `/bashes`, `/todos`, `/memory`, `/mcp`, `/init`, `/plan`, and `/clear`.
 
 Context controls:
 

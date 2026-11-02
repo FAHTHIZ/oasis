@@ -83,7 +83,17 @@ export async function pickerFor(command, { session = null, env = process.env, se
     const { MODEL_ALIASES, modelAllowed } = await import('./model-aliases.mjs');
     const current = session && session.config ? session.config.model : '';
     const allowed = session && session.availableModels;
-    const names = [...new Set([...(current ? [current] : []), ...MODEL_ALIASES, ...(allowed || [])])]
+    // Add what the provider actually serves (bounded wait; the picker still opens if it is slow).
+    let served = [];
+    if (session && session.config && !/^(0|false)$/i.test(String(env.OASIS_MODEL_PICKER_FETCH || ''))) {
+      const { listProviderModels } = await import('./provider-models.mjs');
+      const listed = await listProviderModels(session.config, { env: session.providerEnv || env, cwd: session.root, timeoutMs: 2500 }).catch(() => ({ models: null }));
+      served = listed.models || [];
+    }
+    // Claude aliases mean nothing to other providers unless ANTHROPIC_DEFAULT_*_MODEL maps them.
+    const mapsAliases = Object.keys(env).some((name) => /^ANTHROPIC_DEFAULT_\w+_MODEL$/.test(name) && env[name]);
+    const aliases = session && session.config && session.config.protocol && !['anthropic', 'bedrock', 'vertex', 'foundry'].includes(session.config.protocol) && served.length && !mapsAliases ? [] : MODEL_ALIASES;
+    const names = [...new Set([...(current ? [current] : []), ...aliases, ...(allowed || []), ...served])]
       .filter((name) => modelAllowed(name, allowed, { env, protocol: session && session.config && session.config.protocol }));
     const options = names.map((name) => ({ label: name + (name === current ? ' (current)' : ''), value: name }));
     return { context: 'ModelPicker', options: [...options, cancel], initial: Math.max(0, names.indexOf(current)) };
