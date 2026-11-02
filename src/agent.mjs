@@ -51,7 +51,7 @@ import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { estimateTokens, microcompact, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
-import { getTelemetry, lineChanges } from './telemetry.mjs';
+import { getTelemetry, lineChanges, genAiProviderName } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { loadSettings, normalizeLanguage } from './settings.mjs';
 import { withReplyLanguage } from './reply-language.mjs';
@@ -1777,12 +1777,20 @@ async function requestCompletionTracedInner(session, options = {}) {
   if (!tel) return requestCompletionRaw(session, options);
   const model = session.config && session.config.model || '';
   const attrs = { model, provider: session.config && session.config.protocol || '', ...(session.sessionId ? { 'session.id': session.sessionId } : {}) };
-  return tel.span('oasis.llm_request', attrs, async (span) => {
+  const genAi = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': genAiProviderName(session.config), 'gen_ai.request.model': model, ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}) };
+  return tel.span('oasis.llm_request', { ...attrs, ...genAi }, async (span) => {
     const started = Date.now();
     try {
       const reply = await requestCompletionRaw(session, options);
       const usage = reply.usage || {};
       const duration = Date.now() - started;
+      Object.assign(span.attrs, {
+        'gen_ai.usage.input_tokens': usage.inputTokens || 0,
+        'gen_ai.usage.output_tokens': usage.outputTokens || 0,
+        ...(usage.cacheReadTokens ? { 'gen_ai.usage.cache_read.input_tokens': usage.cacheReadTokens } : {}),
+        ...(usage.cacheCreationTokens ? { 'gen_ai.usage.cache_creation.input_tokens': usage.cacheCreationTokens } : {}),
+        'gen_ai.response.finish_reasons': reply.truncated ? 'length' : Array.isArray(reply.tool_calls) && reply.tool_calls.length ? 'tool_calls' : 'stop'
+      });
       tel.record('oasis.api.duration', duration, attrs, 'ms', 'Model request latency');
       tel.add('oasis.token.usage', usage.inputTokens || 0, { ...attrs, type: 'input' }, 'tokens', 'Tokens used');
       tel.add('oasis.token.usage', usage.outputTokens || 0, { ...attrs, type: 'output' }, 'tokens', 'Tokens used');
@@ -1794,9 +1802,10 @@ async function requestCompletionTracedInner(session, options = {}) {
     } catch (error) {
       tel.add('oasis.api.error.count', 1, attrs, '1', 'Failed model requests');
       tel.event('oasis.api_error', { ...attrs, duration_ms: Date.now() - started, error: String(error && error.message || error).slice(0, 500) });
+      span.attrs['error.type'] = error && (error.status || error.code || error.name) ? String(error.status || error.code || error.name).slice(0, 80) : '_OTHER';
       throw error;
     }
-  });
+  }, { kind: 3 });
 }
 
 async function requestCompletionRaw(session, options = {}) {
@@ -3991,13 +4000,14 @@ async function executeOneCallTraced(session, call, context, options) {
   if (!tel) return executeOneCallRaw(session, call, context, options);
   const name = call.function && call.function.name || 'unknown';
   const attrs = { tool_name: name, ...(session.sessionId ? { 'session.id': session.sessionId } : {}), ...(options.isSubagent ? { subagent: true } : {}) };
-  return tel.span('oasis.tool', attrs, async (span) => {
+  const genAi = { 'gen_ai.operation.name': 'execute_tool', 'gen_ai.tool.name': name, 'gen_ai.tool.type': name.startsWith('mcp_') ? 'extension' : 'function', ...(call.id ? { 'gen_ai.tool.call.id': String(call.id).slice(0, 200) } : {}), ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}) };
+  return tel.span('oasis.tool', { ...attrs, ...genAi }, async (span) => {
     const started = Date.now();
     const message = await executeOneCallRaw(session, call, context, options);
     const result = message && message.result;
     const error = result && typeof result === 'object' && typeof result.error === 'string' ? result.error : '';
     const duration = Date.now() - started;
-    if (error) span.error = error;
+    if (error) { span.error = error; span.attrs['error.type'] = 'tool_error'; }
     tel.add('oasis.tool.count', 1, { ...attrs, success: !error }, '1', 'Tool calls');
     tel.record('oasis.tool.duration', duration, attrs, 'ms', 'Tool latency');
     const args = safeToolArguments(call.function && call.function.arguments);
@@ -4357,7 +4367,8 @@ async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
   const request = String(prompt || '');
   const attrs = { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), model: session.config && session.config.model || '', ...(options.isSubagent ? { subagent: true } : {}) };
   tel.event('oasis.user_prompt', { ...attrs, prompt_length: request.length, ...(tel.logPrompts ? { prompt: request.slice(0, 20000) } : {}) });
-  return tel.span(options.isSubagent ? 'oasis.subagent_turn' : 'oasis.turn', attrs, async (span) => {
+  const genAi = { 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': options.isSubagent ? String(options.agentType || 'subagent') : 'oasis', ...(options.agentId ? { 'gen_ai.agent.id': String(options.agentId) } : {}), 'gen_ai.provider.name': genAiProviderName(session.config), 'gen_ai.request.model': attrs.model, ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}) };
+  return tel.span(options.isSubagent ? 'oasis.subagent_turn' : 'oasis.turn', { ...attrs, ...genAi }, async (span) => {
     const started = Date.now();
     const result = await runAgentTurnRaw(session, prompt, options);
     Object.assign(span.attrs, { tool_calls: result.toolCalls || 0, tokens: result.tokensUsed || 0, finished: Boolean(result.finished) });
