@@ -1,3 +1,4 @@
+import { securityWarning } from './security-patterns.mjs';
 // Additional OASIS tools for deeper repository work and interactive process control:
 //   grep           regex search (ripgrep when available, JS fallback) with globs, context, and modes
 //   multi_edit     several exact-string edits to one file, applied atomically
@@ -300,7 +301,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
   await atomicWriteFile(target.absolute, next, 'utf8');
   await recordFileState(context, target.absolute);
-  const warning = combineWarnings(commentWarning(original, next, relative, context.session && context.session.commentMode), shrinkWarning(original, next, relative), testTamperWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
+  const warning = combineWarnings(commentWarning(original, next, relative, context.session && context.session.commentMode), shrinkWarning(original, next, relative), testTamperWarning(original, next, relative), securityWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
   return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true, ...(relaxedNotes.length ? { note: relaxedNotes.join('; ') + '.' } : {}), ...(warning ? { warning } : {}) };
 }
 
