@@ -148,3 +148,40 @@ test('only user and managed settings control voice; a repository cannot', async 
   assert.match(status.output, /Voice dictation: on/);
   assert.doesNotMatch(status.output, /evil/);
 });
+
+test('web: /api/transcribe needs the token, accepts browser audio and uses the user endpoint', async (t) => {
+  const { startOasisWebServer } = await import('../src/web.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-voice-'));
+  const server = await transcriber(t, { text: 'from the desktop' });
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root, OASIS_IGNORE_CLAUDE_SETTINGS: '1', OASIS_VOICE_TRANSCRIPTION_URL: server.url };
+  const token = 'test-runtime-token-0123456789';
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token });
+  t.after(() => app.close());
+  const base = 'http://127.0.0.1:' + app.port;
+  const auth = { authorization: 'Bearer ' + token };
+  assert.equal((await fetch(base + '/api/transcribe', { method: 'POST', headers: { 'content-type': 'audio/webm' }, body: Buffer.alloc(100) })).status, 401);
+  assert.deepEqual(await (await fetch(base + '/api/voice', { headers: auth })).json(), { transcription: true, disabledByPolicy: false });
+  assert.equal((await fetch(base + '/api/transcribe', { method: 'POST', headers: { ...auth, 'content-type': 'text/plain' }, body: 'x' })).status, 415);
+  const ok = await fetch(base + '/api/transcribe', { method: 'POST', headers: { ...auth, 'content-type': 'audio/webm;codecs=opus' }, body: Buffer.alloc(500) });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { text: 'from the desktop' });
+  assert.match(server.seen[0].body, /filename="dictation.webm"/);
+  const page = await fetch(base + '/');
+  assert.match(page.headers.get('permissions-policy') || '', /microphone=\(self\), camera=\(\)/);
+});
+
+test('desktop permission policy allows only microphone and clipboard for the app origin', async () => {
+  const { allowPermission } = await import('../desktop/permissions.mjs');
+  const app = 'http://127.0.0.1:4310';
+  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio'] }, app), true);
+  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio', 'video'] }, app), false);
+  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaType: 'video' }, app), false);
+  assert.equal(allowPermission('media', { requestingUrl: 'https://evil.example/', mediaTypes: ['audio'] }, app), false);
+  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio'], isMainFrame: false }, app), false);
+  assert.equal(allowPermission('clipboard-sanitized-write', { requestingUrl: app }, app), true);
+  assert.equal(allowPermission('notifications', { requestingUrl: app + '/' }, app), true, 'turn-finished notifications');
+  for (const permission of ['geolocation', 'midi', 'pointerLock', 'openExternal', 'display-capture', 'hid', 'serial', 'usb']) {
+    assert.equal(allowPermission(permission, { requestingUrl: app + '/' }, app), false, permission);
+  }
+  assert.equal(allowPermission('media', { requestingUrl: app, mediaTypes: ['audio'] }, null), false, 'nothing before the server is up');
+});

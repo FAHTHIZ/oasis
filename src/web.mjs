@@ -395,6 +395,8 @@ function hasValidToken(req, token) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
+const MAX_TRANSCRIBE_BYTES = 12 * 1024 * 1024;
+
 async function readJsonBody(req, limit = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
@@ -1190,7 +1192,9 @@ export function createOasisWebServer(options = {}) {
         'cache-control': usingFallback ? 'no-store' : file === 'index.html' ? 'no-cache' : 'public, max-age=300',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
-        'x-frame-options': 'DENY'
+        'x-frame-options': 'DENY',
+        // The page may use the microphone (dictation) and nothing else of this kind.
+        'permissions-policy': 'microphone=(self), camera=(), geolocation=(), usb=(), serial=(), hid=(), payment=()'
       });
       res.end(body);
       return;
@@ -1704,6 +1708,37 @@ export function createOasisWebServer(options = {}) {
       const body = await readJsonBody(req);
       const result = await startTerminalJob(body);
       json(res, 202, result);
+      return;
+    }
+
+    // Dictation for browsers without working speech recognition (Electron, Firefox): the page
+    // records with MediaRecorder and OASIS transcribes with the user's configured endpoint.
+    if (req.method === 'POST' && pathname === '/api/transcribe') {
+      const voice = await import('./voice.mjs');
+      const settings = await loadSettings(root, { env }).catch(() => ({}));
+      if (settings && settings.voiceDisabledByPolicy) { json(res, 403, { error: 'Voice dictation is turned off by managed settings.' }); return; }
+      const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+      if (!voice.AUDIO_TYPES.has(type)) { json(res, 415, { error: 'Send audio (webm, ogg, mp4, mpeg or wav).' }); return; }
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > MAX_TRANSCRIBE_BYTES) { json(res, 413, { error: 'The recording is too long.' }); return; }
+        chunks.push(chunk);
+      }
+      try {
+        const text = await voice.transcribeAudio(Buffer.concat(chunks), { settings, env, mediaType: type, hints: [path.basename(root)] });
+        json(res, 200, { text });
+      } catch (error) {
+        json(res, 502, { error: String(error && error.message || error).slice(0, 300) });
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/voice') {
+      const voice = await import('./voice.mjs');
+      const settings = await loadSettings(root, { env }).catch(() => ({}));
+      json(res, 200, { transcription: !(settings && settings.voiceDisabledByPolicy) && voice.transcriptionReady(settings, env), disabledByPolicy: Boolean(settings && settings.voiceDisabledByPolicy) });
       return;
     }
 

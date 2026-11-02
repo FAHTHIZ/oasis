@@ -129,16 +129,34 @@ export function transcriptionTarget(settings = {}, env = process.env) {
   };
 }
 
-/** Uploads a WAV and returns the transcript text. */
-export async function transcribe(file, { settings = {}, env = process.env, fetchImpl = globalThis.fetch, timeoutMs = 60000, hints = [] } = {}) {
+/** Uploads a WAV file and returns the transcript text. */
+export async function transcribe(file, options = {}) {
+  return transcribeAudio(await readFile(file), { ...options, mediaType: 'audio/wav' });
+}
+
+// Formats browsers record (MediaRecorder) and OpenAI-compatible endpoints accept.
+export const AUDIO_TYPES = new Map([['audio/wav', 'wav'], ['audio/x-wav', 'wav'], ['audio/webm', 'webm'], ['audio/ogg', 'ogg'], ['audio/mp4', 'mp4'], ['audio/mpeg', 'mp3'], ['audio/x-m4a', 'm4a']]);
+
+export function transcriptionReady(settings = {}, env = process.env) {
+  try {
+    const target = transcriptionTarget(settings, env);
+    return Boolean(target.apiKey || ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(target.url).hostname));
+  } catch { return false; }
+}
+
+/** Uploads recorded audio (a Buffer) and returns the transcript text. */
+export async function transcribeAudio(audio, { settings = {}, env = process.env, fetchImpl = globalThis.fetch, timeoutMs = 60000, hints = [], mediaType = 'audio/wav' } = {}) {
   const target = transcriptionTarget(settings, env);
   if (!target.apiKey && new URL(target.url).hostname !== '127.0.0.1' && new URL(target.url).hostname !== 'localhost') {
     throw new Error('Voice transcription needs a key: set OPENAI_API_KEY (or OASIS_VOICE_API_KEY), or point voice.transcriptionUrl at a local Whisper server.');
   }
-  const audio = await readFile(file);
+  const type = String(mediaType || '').split(';')[0].trim().toLowerCase();
+  const extension = AUDIO_TYPES.get(type);
+  if (!extension) throw new Error('Unsupported audio format: ' + (type || 'unknown') + '.');
+  if (!audio || !audio.length) throw new Error('Nothing was recorded.');
   if (audio.length > MAX_UPLOAD_BYTES) throw new Error('The recording is too large to transcribe (over 25 MB).');
   const form = new FormData();
-  form.append('file', new Blob([audio], { type: 'audio/wav' }), 'dictation.wav');
+  form.append('file', new Blob([audio], { type }), 'dictation.' + extension);
   form.append('model', target.model);
   form.append('response_format', 'json');
   if (target.language) form.append('language', target.language);
