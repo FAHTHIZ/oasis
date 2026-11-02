@@ -1195,7 +1195,11 @@ function truncationRecoveryPrompt(limit, droppedCall) {
 export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
   const text = String(prompt || '').toLowerCase();
   let budget = 0;
-  if (/\bultrathink\b|\bthink (?:harder|intensely|super hard|really hard|very hard)\b/.test(text)) budget = 31999;
+  // OASIS_DISABLE_THINK_KEYWORDS / CLAUDE_CODE_DISABLE_ULTRATHINK: words like "think hard" in
+  // pasted text (logs, docs) no longer raise the budget; configured defaults still apply.
+  const keywordsOff = env.OASIS_DISABLE_THINK_KEYWORDS === '1' || env.CLAUDE_CODE_DISABLE_ULTRATHINK === '1';
+  if (keywordsOff) { /* keyword boosts disabled */ }
+  else if (/\bultrathink\b|\bthink (?:harder|intensely|super hard|really hard|very hard)\b/.test(text)) budget = 31999;
   else if (/\bmegathink\b|\bthink (?:hard|deeply|a lot|more)\b/.test(text)) budget = 10000;
   else if (/\bthink\b/.test(text) && /\b(?:think (?:about|through|carefully|step)|please think|let'?s think)\b/.test(text)) budget = 4000;
   const configured = firstPositiveConfiguredInteger(env.OASIS_THINKING_BUDGET, env.MAX_THINKING_TOKENS, config.thinkingBudget);
