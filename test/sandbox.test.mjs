@@ -92,3 +92,12 @@ test('existing package caches are writable in the sandbox, home and credentials 
   assert.deepEqual(found.sort(), [path.join(real, '.cargo', 'registry'), path.join(real, '.npm')].sort());
   assert.ok(!found.includes(real));
 });
+
+test('cache directories are found when the home path is a symlink (macOS /var -> /private/var)', async () => {
+  const { mkdtemp, mkdir, symlink } = await import('node:fs/promises');
+  const { collectCacheDirectories } = await import('../src/sandbox.mjs');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-cache-link-'));
+  await mkdir(path.join(base, 'real', '.npm'), { recursive: true });
+  await symlink(path.join(base, 'real'), path.join(base, 'link'));
+  assert.deepEqual(collectCacheDirectories({ HOME: path.join(base, 'link') }), [path.join(realpathSync(base), 'real', '.npm')]);
+});
