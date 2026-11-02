@@ -5,6 +5,7 @@
 //   kill_command   stop a background process
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+import { atomicWriteFile } from './atomic-write.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
 import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
 import * as gitSafety from './git-safety.mjs';
@@ -296,7 +297,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
   const relative = target.relative.split(path.sep).join('/');
   if (next === original) return { path: relative, changed: false };
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
-  await writeFile(target.absolute, next, 'utf8');
+  await atomicWriteFile(target.absolute, next, 'utf8');
   await recordFileState(context, target.absolute);
   const warning = combineWarnings(commentWarning(original, next, relative, context.session && context.session.commentMode), shrinkWarning(original, next, relative), testTamperWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
   return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true, ...(relaxedNotes.length ? { note: relaxedNotes.join('; ') + '.' } : {}), ...(warning ? { warning } : {}) };
