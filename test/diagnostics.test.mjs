@@ -115,3 +115,54 @@ test('/diagnostics sends a fix-and-verify prompt', async () => {
   assert.match(handled.prompt, /diagnostics tool/);
   assert.match(handled.prompt, /src\/a\.ts/);
 });
+
+test('parses oxlint, Biome, ShellCheck, hadolint and actionlint output (captured from the real tools)', () => {
+  const ox = parseDiagnostics('oxlint', 'b.js:2:17: `debugger` statement is not allowed [Warning/eslint(no-debugger)]\n\n2 problems');
+  assert.deepEqual(ox, [{ file: 'b.js', line: 2, column: 17, severity: 'warning', message: '`debugger` statement is not allowed', code: 'eslint(no-debugger)', source: 'oxlint' }]);
+  const biome = parseDiagnostics('biome', '::error title=lint/suspicious/noDebugger,file=/w/b.js,line=2,endLine=2,col=17,endColumn=26::This is an unexpected use of the debugger statement.\nlint ━━━━', '/w');
+  assert.deepEqual(biome, [{ file: 'b.js', line: 2, column: 17, severity: 'error', message: 'This is an unexpected use of the debugger statement.', code: 'lint/suspicious/noDebugger', source: 'biome' }]);
+  const sc = parseDiagnostics('shellcheck', 'a.sh:3:6: warning: Quote this to prevent word splitting. [SC2046]\na.sh:3:6: note: Use $(...) notation instead of legacy backticks `...`. [SC2006]');
+  assert.equal(sc.length, 2);
+  assert.deepEqual([sc[0].severity, sc[0].code, sc[1].severity], ['warning', 'SC2046', 'info']);
+  const hado = parseDiagnostics('hadolint', 'hadolint:Dockerfile:2: DL3008 warning: Pin versions in apt get install.');
+  assert.deepEqual(hado[0], { file: 'Dockerfile', line: 2, column: 1, severity: 'warning', message: 'Pin versions in apt get install.', code: 'DL3008', source: 'hadolint' });
+  const al = parseDiagnostics('actionlint', '.github/workflows/ci.yml:6:23: "github.event.issue.title" is potentially untrusted. avoid using it directly in inline scripts. [expression]');
+  assert.equal(al[0].file, '.github/workflows/ci.yml');
+  assert.equal(al[0].code, 'expression');
+  assert.match(al[0].message, /potentially untrusted/);
+  const embedded = parseDiagnostics('actionlint', '.github/workflows/a.yml:121:9: shellcheck reported issue in this script: SC2129:style:42:3: Consider using { cmd1; cmd2; } >> file instead of individual redirects [shellcheck]');
+  assert.equal(embedded[0].severity, 'info', 'embedded ShellCheck style notes are not errors');
+});
+
+test('file-based linters run only when installed and matching files exist, and stay under the argument limit', { skip: process.platform === 'win32' }, async () => {
+  const root = await workspace();
+  const bin = path.join(root, '..', path.basename(root) + '-bin');
+  await mkdir(bin, { recursive: true });
+  for (const name of ['shellcheck', 'hadolint', 'actionlint', 'cargo', 'cargo-clippy']) {
+    await writeFile(path.join(bin, name), '#!/bin/sh\necho "$0 $*" >> "' + path.join(bin, 'calls.log') + '"\n');
+    await chmod(path.join(bin, name), 0o755);
+  }
+  const env = { PATH: bin + ':/usr/bin:/bin' };
+  let checkers = await detectCheckers(root, { env });
+  assert.deepEqual(checkers.filter((c) => !c.builtin).map((c) => c.name), [], 'nothing to lint yet');
+  await mkdir(path.join(root, 'scripts'));
+  for (let i = 0; i < 75; i++) await writeFile(path.join(root, 'scripts', 'job' + String(i).padStart(2, '0') + '.sh'), 'echo hi\n');
+  await writeFile(path.join(root, 'Dockerfile'), 'FROM node:22\n');
+  await mkdir(path.join(root, '.github', 'workflows'), { recursive: true });
+  await writeFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'on: push\n');
+  await writeFile(path.join(root, 'Cargo.toml'), '[package]\nname = "x"\n');
+  checkers = await detectCheckers(root, { env });
+  const byName = Object.fromEntries(checkers.map((c) => [c.name, c]));
+  assert.deepEqual(byName.shellcheck.args.slice(0, 3), ['-f', 'gcc', '-x']);
+  assert.ok(byName.shellcheck.args.length <= 80, 'runWorkspaceCommand accepts at most 80 arguments');
+  assert.equal(byName.shellcheck.filesSkipped, 5);
+  assert.deepEqual(byName.hadolint.args, ['--no-color', '-f', 'gnu', 'Dockerfile']);
+  assert.deepEqual(byName.actionlint.args, ['-no-color', '-oneline']);
+  assert.equal(byName.cargo.args[0], 'clippy', 'clippy replaces cargo check when installed');
+  const focused = await detectCheckers(root, { env, paths: ['Dockerfile'] });
+  assert.deepEqual(focused.filter((c) => !c.builtin && c.name !== 'cargo').map((c) => c.name), ['hadolint']);
+  const result = await runDiagnostics(root, { checker: 'shellcheck', paths: ['scripts/job01.sh'] }, { env, autoApprove: true });
+  assert.deepEqual(result.ran.map((r) => r.name), ['shellcheck']);
+  const missing = await runDiagnostics(root, { checker: 'hadolint' }, { env: { PATH: '/usr/bin:/bin' }, autoApprove: true });
+  assert.match(missing.message, /hadolint is not installed/);
+});
