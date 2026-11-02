@@ -28,10 +28,13 @@ const ZERO_WIDTH_RUN = /[\u200B-\u200D\u2060\uFEFF]{3,}/g;
 
 const SIGNALS = [
   [/\b(ignore|disregard|forget|override)\b[^.\n]{0,40}\b(previous|prior|above|earlier|all|your|system)\b[^.\n]{0,30}\b(instructions?|prompts?|rules|directives|guidelines)\b/i, 'asks the agent to ignore its instructions'],
-  [/\b(you are now|from now on,? you|new (system )?instructions?:|act as (an?|the) (unrestricted|jailbroken|developer mode))/i, 'tries to redefine the agent\'s role'],
+  // "You are now logged in" is ordinary page text; only role rewrites count.
+  [/\b(you are now (an?|the|in|my)?\s*[^.\n]{0,30}\b(AI|assistant|model|chatbot|DAN|unrestricted|jailbroken|uncensored|developer mode|god mode)\b|from now on,? you (will|must|are|should|shall)\b|new (system )?instructions?:|act as (an?|the) (unrestricted|jailbroken|developer mode))/i, 'tries to redefine the agent\'s role'],
   [/<\/?\s*(system|assistant|im_start|im_end|tool_call|function_call)\b[^>]*>|\[\/?(INST|SYS)\]|<\|(im_start|im_end|system|endoftext)\|>/i, 'contains fake chat-role or tool-call markup'],
   [/\b(AI|LLM|assistant|agent|claude|gpt|gemini|copilot|cursor)s?\b[^.\n]{0,60}\b(must|should|need to|are required to|please)\b[^.\n]{0,60}\b(run|execute|curl|wget|send|post|upload|exfiltrate|delete|push|install)\b/i, 'addresses AI agents with commands to run or send data'],
-  [/\b(send|post|upload|exfiltrate|leak|forward|email)\b[^.\n]{0,50}\b(api[ _-]?keys?|tokens?|secrets?|credentials?|\.env|ssh keys?|passwords?|cookies)\b/i, 'asks for secrets or credentials to be sent somewhere'],
+  // API docs say "send the access token in the Authorization header" all the time;
+  // only exfiltration verbs, or a secret sent to an outside destination, count.
+  [/\b(exfiltrate|leak)\b[^.\n]{0,50}(\b(api[ _-]?keys?|tokens?|secrets?|credentials?|ssh keys?|passwords?|cookies)\b|\.env\b)|\b(send|post|upload|forward|email)\b[^.\n]{0,50}(\b(api[ _-]?keys?|tokens?|secrets?|credentials?|ssh keys?|passwords?|cookies)\b|\.env\b)[^.\n]{0,40}\b(to|at)\s+(https?:\/\/|[\w.+-]+@[\w-]+\.|this (url|address|endpoint|server|webhook)|the following (url|address|endpoint)|my (server|endpoint|webhook)|attacker)/i, 'asks for secrets or credentials to be sent somewhere'],
   [/\b(do not|don't|never)\b[^.\n]{0,30}\b(tell|inform|mention|reveal|show)\b[^.\n]{0,30}\b(the )?(user|human|developer|operator)\b/i, 'asks the agent to hide something from the user']
 ];
 
