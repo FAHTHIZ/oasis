@@ -4,6 +4,10 @@ import { request as httpRequest } from 'node:http';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { isNonPublicIpAddress } from './network-safety.mjs';
+import { Agent as HttpsAgent } from 'node:https';
+import { Agent as HttpAgent } from 'node:http';
+import { connect as tlsConnect } from 'node:tls';
+import { proxyForUrl, openTunnel } from './proxy.mjs';
 
 const MAX_TOOL_OUTPUT = 24 * 1024;
 const MAX_PUBLIC_RESPONSE_BYTES = 1024 * 1024;
@@ -37,7 +41,29 @@ async function validatePublicUrl(raw, options = {}) {
   return { url, addresses };
 }
 
-async function requestPublicUrl(url, addresses, signal) {
+// Behind a proxy the request still goes to the address that passed the
+// private-network check: the CONNECT tunnel names that IP, never the host name,
+// so the proxy's own DNS cannot steer it to an internal address. Plain http://
+// is tunnelled too (an absolute-URI request would make the proxy rewrite Host).
+async function proxiedAgent(url, addresses, signal, env) {
+  const proxy = proxyForUrl(url, env);
+  if (!proxy) return null;
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  const ip = addresses && addresses.length ? addresses[0].address : host;
+  const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
+  const socket = await openTunnel(proxy, ip, port, { signal });
+  if (url.protocol === 'https:') {
+    const agent = new HttpsAgent({ keepAlive: false });
+    agent.createConnection = () => tlsConnect({ socket, servername: isIP(host) ? undefined : host, ALPNProtocols: ['http/1.1'] });
+    return agent;
+  }
+  const agent = new HttpAgent({ keepAlive: false });
+  agent.createConnection = () => socket;
+  return agent;
+}
+
+async function requestPublicUrl(url, addresses, signal, env = process.env) {
+  const agent = await proxiedAgent(url, addresses, signal, env);
   return await new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? httpsRequest : httpRequest;
     let settled = false;
@@ -65,7 +91,8 @@ async function requestPublicUrl(url, addresses, signal) {
         else callback(null, addresses[0].address, addresses[0].family);
       };
     }
-    const request = transport(url, requestOptions, (response) => {
+    if (agent) { requestOptions.agent = agent; delete requestOptions.lookup; }
+    const onResponse = (response) => {
       const headers = {
         get(name) {
           const value = response.headers[String(name).toLowerCase()];
@@ -101,7 +128,8 @@ async function requestPublicUrl(url, addresses, signal) {
       response.on('end', () => finishResponse({
         status, headers, body: Buffer.concat(chunks).toString('utf8'), tooLarge: false
       }));
-    });
+    };
+    const request = transport(url, requestOptions, onResponse);
     request.on('error', (error) => finish(error));
     request.setTimeout(15000, () => request.destroy(new Error('Public URL request timed out.')));
     request.end();
@@ -113,7 +141,7 @@ export async function fetchPublicUrl(raw, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await (options.requestImpl || requestPublicUrl)(url, addresses, controller.signal);
+    const response = await (options.requestImpl || requestPublicUrl)(url, addresses, controller.signal, options.env || process.env);
     if (response.tooLarge) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
     const responseStatus = Number(response.status) || 0;
     if ([301, 302, 303, 307, 308].includes(responseStatus)) {
