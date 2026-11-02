@@ -10,6 +10,7 @@ import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordCla
 import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
+import { loadPins, savePins } from './mcp-trust.mjs';
 import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecrets, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
@@ -645,7 +646,9 @@ export async function createSession({ root, config, restore = null, permissionMo
   const mcpBackground = mcpNonBlocking ? connectMcpServers(mcpOptions).catch((error) => ({ clients: new Map(), failures: [{ name: 'mcp', error: error.message }] })) : null;
   const mcp = bare && !flagServers.length || mcpNonBlocking ? { clients: new Map(), failures: [] }
     : await connectMcpServers({ root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
-  const dynamic = mcpToolDefinitions(mcp.clients);
+  const mcpPins = loadPins(env);
+  const dynamic = mcpToolDefinitions(mcp.clients, { pins: mcpPins });
+  if (mcpPins && mcpPins.dirty) { delete mcpPins.dirty; savePins(mcpPins, env); }
   let visibleSkills = skillDescriptions;
   const skillDeny = ((loadedSettings.permissions && loadedSettings.permissions.deny) || []).filter((rule) => /^(?:Skill|load_skill)\(/i.test(String(rule)));
   if (skillDeny.length && typeof skillDescriptions === 'string') {
@@ -687,6 +690,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     mcpHost,
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
+    mcpPins,
     toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.function.name !== 'web_search' || webSearchEnabled(env)).concat(dynamic.definitions),
     toolCallsThisSession: 0,
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
