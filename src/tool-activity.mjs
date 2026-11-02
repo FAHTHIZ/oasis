@@ -3,8 +3,8 @@ import { redactApprovalSecrets } from './approval-language.mjs';
 const READ_TOOLS = new Set(['read_file', 'read_notebook', 'notebook_read', 'list_files', 'list_directory']);
 const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch']);
 const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'auto_test']);
-const SEARCH_TOOLS = new Set(['search_files', 'grep', 'glob_files', 'repo_map']);
-const REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'diagnostics', 'ide_get_diagnostics']);
+const SEARCH_TOOLS = new Set(['search_files', 'grep', 'ast_grep', 'glob_files', 'repo_map']);
+const REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'diagnostics', 'ide_get_diagnostics', 'security_scan']);
 const WEB_TOOLS = new Set(['web_search', 'fetch_url']);
 
 function text(value, limit = 240) {
@@ -64,6 +64,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'git_log') return 'Reviewed recent project history';
   if (tool === 'task') return 'Asked a helper to investigate';
   if (tool === 'diagnostics' || tool === 'ide_get_diagnostics') return 'Checked for code issues';
+  if (tool === 'security_scan') return 'Ran the security scanners';
   if (tool === 'install_package') return 'Prepared a package installation';
   return 'Completed a project step';
 }

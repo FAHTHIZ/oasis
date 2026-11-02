@@ -37,6 +37,7 @@ import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
 import { executePowerTool, startBackgroundProcess, commandLineText, timeoutToBackground } from './power-tools.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
+import { SECURITY_SCAN_TOOL_DEFINITION } from './security-scan.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
 import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
@@ -2069,6 +2070,17 @@ export async function executeTool(name, args = {}, context = {}) {
         ruleAllowed: Boolean(context.ruleAllowed),
         env: context.env || process.env
       });
+    case 'security_scan': {
+      const { runSecurityScan } = await import('./security-scan.mjs');
+      return await runSecurityScan(root, args, {
+        approval: context.approval,
+        autoApprove: Boolean(context.autoApprove),
+        ruleAllowed: Boolean(context.ruleAllowed),
+        env: context.env || process.env,
+        signal: context.signal,
+        sandbox: context.sandbox
+      });
+    }
     case 'diagnostics':
       return await runDiagnostics(root, args, {
         approval: context.approval,
@@ -2098,6 +2110,7 @@ export async function loadProjectInstructions(root, options = {}) {
 TOOL_DEFINITIONS.push(...POWER_TOOL_DEFINITIONS);
 TOOL_DEFINITIONS.push(WEB_SEARCH_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(DIAGNOSTICS_TOOL_DEFINITION);
+TOOL_DEFINITIONS.push(SECURITY_SCAN_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(LSP_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(MONITOR_TOOL_DEFINITION);
 TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);

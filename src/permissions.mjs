@@ -30,6 +30,8 @@ const TOOL_ALIASES = {
   webfetch: ['fetch_url'],
   websearch: ['web_search'],
   diagnostics: ['diagnostics'],
+  securityscan: ['security_scan'],
+  scan: ['security_scan'],
   lsp: ['lsp'],
   git: ['git_commit', 'git_branch', 'git_push', 'create_pull_request'],
   gitcommit: ['git_commit'],

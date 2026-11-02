@@ -1804,6 +1804,7 @@ export function reviewPrompt(kind, argument = '') {
   if (kind === 'security-review') {
     return [gather,
       'Focus only on security: injection (SQL, shell, path traversal, template), authentication and authorization gaps, secrets in code or logs, unsafe deserialization, SSRF, XSS/CSRF, insecure crypto or randomness, and risky dependency changes.',
+      'If the security_scan tool is available, run it first (secrets including git history, vulnerable dependencies, semgrep rules, IaC misconfigurations) and treat its results as leads: confirm each one in the code, and keep only those that touch the changes under review or are high severity.',
       'Report only findings you are confident are exploitable or clearly dangerous; skip style and theoretical issues.',
       'For each finding give: severity (high/medium/low), file:line, the vulnerable code, an attack scenario, and a concrete fix.',
       'Do not modify any files; this is a read-only review. If there are no changes to review, say so.'].join('\n');
