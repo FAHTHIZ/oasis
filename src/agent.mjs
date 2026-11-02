@@ -62,7 +62,7 @@ import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, searchBackends, searchBackend } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
-import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
@@ -3058,7 +3058,7 @@ async function runSubagent(parent, args, context, options) {
   const resume = options.resumeAgent || null;
   const isolation = resume ? '' : String(args.isolation || agent.isolation || '').toLowerCase();
   if (isolation && isolation !== 'worktree') throw new Error('isolation must be "worktree" when set.');
-  let worktree = null;
+  let worktree = resume && resume.worktree ? resume.worktree : null;
   if (isolation === 'worktree' && !readOnly) {
     if (options.planOnly) throw new Error('Worktree subagents edit files; leave plan mode first.');
     worktree = await createWorktree(parent.root, description, { env: options.env || process.env, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId });
@@ -3114,6 +3114,7 @@ async function runSubagent(parent, args, context, options) {
     // Rebuilt from a saved transcript after a restart: keep the same id, counters and team.
     record = resume.record;
     Object.assign(record, { child, readOnly, resumable: true, restoredTranscript: false, background: true });
+    if (worktree) { record.worktreeInfo = worktree; record.keepWorktreeOnFailure = true; delete record.worktree; delete record.resumeWorktree; }
     record.runs = (record.runs || 1) + 1;
   } else {
     record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
@@ -3136,6 +3137,29 @@ async function runSubagent(parent, args, context, options) {
     id: record.id, agent: type, description, status: 'running', background: true,
     message: 'Started in the background. You will be told when it finishes; meanwhile continue with other work. Use agent_status (wait_seconds to block), send_message to steer it, or agent_stop to cancel.'
   };
+}
+
+// Before resuming an interrupted worktree worker, make sure its checkout is still the
+// OASIS-made worktree on the recorded branch, inside this repository, with the same base
+// commit in its history. Anything else (removed, moved, switched, replaced by a symlink)
+// is refused rather than guessed at.
+async function verifyResumeWorktree(root, saved, env) {
+  const relative = String(saved.relative || '').replace(/\\/g, '/');
+  if (!relative.startsWith('.oasis/worktrees/') || relative.split('/').some((part) => part === '..' || part === '.' || !part) || relative.split('/').length !== 3) throw new Error('its saved worktree path is not valid.');
+  const rootReal = await realpath(root);
+  const absolute = path.join(rootReal, ...relative.split('/'));
+  let info;
+  try { info = await lstat(absolute); } catch { throw new Error('its worktree ' + relative + ' no longer exists.'); }
+  if (!info.isDirectory() || info.isSymbolicLink() || (await realpath(absolute)) !== absolute) throw new Error('its worktree ' + relative + ' is not a plain directory.');
+  const run = (args) => new Promise((resolve, reject) => {
+    execFile('git', args, { cwd: absolute, env: { ...env, GIT_TERMINAL_PROMPT: '0' }, timeout: 15000, maxBuffer: 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(String(stdout).trim()));
+  });
+  let top, branch;
+  try { [top, branch] = await Promise.all([run(['rev-parse', '--show-toplevel']), run(['symbolic-ref', '--quiet', '--short', 'HEAD'])]); } catch { throw new Error('its worktree ' + relative + ' is not a git checkout on a branch.'); }
+  if (path.resolve(await realpath(top)) !== absolute) throw new Error('its worktree ' + relative + ' is not its own git worktree.');
+  if (branch !== saved.branch) throw new Error('its worktree is on branch ' + branch + ', not ' + saved.branch + '.');
+  try { await run(['merge-base', '--is-ancestor', saved.base, 'HEAD']); } catch { throw new Error('its worktree no longer contains the commit it started from.'); }
+  return { name: relative.split('/').pop(), branch: saved.branch, path: absolute, relative, base: saved.base };
 }
 
 // Runs one turn of a subagent's own conversation and records the outcome.
@@ -3182,7 +3206,9 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
       maxSteps: options.subagentMaxSteps
     });
   } catch (error) {
-    if (worktree && !record.worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});
+    // A resumed worker's checkout holds work from before the restart: keep it for review.
+    if (worktree && !record.worktree && !record.keepWorktreeOnFailure) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});
+    if (worktree && record.keepWorktreeOnFailure) error.message += ' (Its worktree ' + worktree.relative + ' on branch ' + worktree.branch + ' was kept for review.)';
     // A cancelled/failed worker must relinquish its shared task lease immediately.
     if (record.sharedTaskId) {
       try { runSharedTaskTool(child, 'task_release', { task_id: record.sharedTaskId }); } catch {}
@@ -3600,11 +3626,17 @@ async function runAgentTool(session, name, args, context, options) {
       record.restoredTranscript = false;
       throw new Error('Agent ' + record.id + ' has no usable saved conversation (' + error.message + '); launch a new task from its saved report instead.');
     }
+    let resumeWorktree = null;
+    if (record.resumeWorktree) {
+      try { resumeWorktree = await verifyResumeWorktree(session.root, record.resumeWorktree, options.env || process.env); } catch (error) {
+        throw new Error('Agent ' + record.id + ' cannot resume: ' + error.message + ' Launch a new task instead (it can start from branch ' + record.resumeWorktree.branch + ').');
+      }
+    }
     const restoredMessages = [{ role: 'system', content: '' }, ...saved.messages];
     repairInterruptedHistory({ messages: restoredMessages });
     recordAgentEvent(session, 'agent.resume_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: message });
     const resumedPrompt = (record.status === 'interrupted' ? 'OASIS restarted while you were working, and your conversation was restored. Check the current state of the files before continuing (your last step may not have finished).\n\n' : '') + 'New message from the parent agent:\n' + message;
-    return await runSubagent(session, { subagent_type: record.type, description: record.description, prompt: resumedPrompt, run_in_background: true, ...(saved.model && saved.model !== (session.config && session.config.model) ? { model: saved.model } : {}) }, context, { ...options, resumeAgent: { record, messages: restoredMessages.slice(1) } });
+    return await runSubagent(session, { subagent_type: record.type, description: record.description, prompt: resumedPrompt, run_in_background: true, ...(saved.model && saved.model !== (session.config && session.config.model) ? { model: saved.model } : {}) }, context, { ...options, resumeAgent: { record, messages: restoredMessages.slice(1), worktree: resumeWorktree } });
   }
   if (!record.child) throw new Error('Agent ' + record.id + ' has no live worker process. Its saved status and report are available, but a runtime restart does not restore the original worker; launch a new task from its saved checkpoint instead.');
   const message = String(args.message || '').trim();

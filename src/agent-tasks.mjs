@@ -98,7 +98,11 @@ export function restoreAgentHistory(session, snapshots = []) {
       resumable: false,
       // A saved transcript lets send_message rebuild a shared-workspace worker
       // with its full context after a restart.
-      ...(snapshot.transcript === true && snapshot.workspaceIsolation !== 'worktree' && status !== 'cancelled' ? { restoredTranscript: true, transcriptSaved: true } : {})
+      ...(snapshot.transcript === true && snapshot.workspaceIsolation !== 'worktree' && status !== 'cancelled' ? { restoredTranscript: true, transcriptSaved: true } : {}),
+      // An unfinished worktree worker: send_message re-checks the checkout and resumes it there.
+      ...(snapshot.transcript === true && snapshot.workspaceIsolation === 'worktree' && status === 'interrupted' && /^[0-9a-f]{40}$/.test(String(snapshot.worktreeBase || '')) && snapshot.worktreeBranch && String(snapshot.worktreePath || '').startsWith('.oasis/worktrees/')
+        ? { restoredTranscript: true, transcriptSaved: true, resumeWorktree: { branch: String(snapshot.worktreeBranch).slice(0, 160), relative: String(snapshot.worktreePath).slice(0, 240), base: String(snapshot.worktreeBase) } }
+        : {})
     };
     registry.agents.set(id, record);
     registry.next = Math.max(Number(registry.next) || 1, Number(match[1]) + 1);
