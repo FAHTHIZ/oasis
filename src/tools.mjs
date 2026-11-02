@@ -35,7 +35,7 @@ import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
-import { executePowerTool, startBackgroundProcess, commandLineText } from './power-tools.mjs';
+import { executePowerTool, startBackgroundProcess, commandLineText, timeoutToBackground } from './power-tools.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
@@ -152,7 +152,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
-  { type: 'function', function: { name: 'run_command', description: 'Run one executable with argv arguments in the workspace, without shell expansion. Requires approval unless the user explicitly enabled --yes. Set interactive=true to start a persistent real PTY terminal session for REPLs, prompts, and terminal-aware tools; use terminal_read/input/resize/interrupt/stop to control it. Interactive sessions end when stopped or when OASIS closes the session. Destructive executables and shell interpreters remain blocked unless explicitly allowed.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120 for non-interactive commands' }, run_in_background: { type: 'boolean', description: 'Start a piped long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' }, max_seconds: { type: 'integer', description: 'With run_in_background: stop the process automatically after this many seconds (for example 1800 for a long test run). You are notified when it ends.' }, interactive: { type: 'boolean', description: 'Run inside a real pseudo-terminal and keep the session open for terminal_input, terminal_read, terminal_resize, terminal_interrupt, and terminal_stop. Cannot be combined with run_in_background.' } }, required: ['command', 'args'] } } },
+  { type: 'function', function: { name: 'run_command', description: 'Run one executable with argv arguments in the workspace, without shell expansion. Requires approval unless the user explicitly enabled --yes. Set interactive=true to start a persistent real PTY terminal session for REPLs, prompts, and terminal-aware tools; use terminal_read/input/resize/interrupt/stop to control it. Interactive sessions end when stopped or when OASIS closes the session. Destructive executables and shell interpreters remain blocked unless explicitly allowed.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120 for non-interactive commands. A command still running at the timeout moves to the background (read it with command_output) rather than being stopped.' }, run_in_background: { type: 'boolean', description: 'Start a piped long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' }, max_seconds: { type: 'integer', description: 'With run_in_background: stop the process automatically after this many seconds (for example 1800 for a long test run). You are notified when it ends.' }, interactive: { type: 'boolean', description: 'Run inside a real pseudo-terminal and keep the session open for terminal_input, terminal_read, terminal_resize, terminal_interrupt, and terminal_stop. Cannot be combined with run_in_background.' } }, required: ['command', 'args'] } } },
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
   { type: 'function', function: { name: 'fetch_url', description: 'Fetch public HTTP or HTTPS documentation as text. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public documentation URL using HTTP or HTTPS' } }, required: ['url'] } } },
 
@@ -510,9 +510,40 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     };
     child.stdout.on('data', (chunk) => append('stdout', chunk));
     child.stderr.on('data', (chunk) => append('stderr', chunk));
+    const startedAt = new Date().toISOString();
     const timer = setTimeout(() => {
       if (settled) return;
       timedOut = true;
+      // Still running at the timeout: hand it to the background registry so a
+      // long build or test run keeps its progress (see run_shell).
+      const registry = options.backgroundRegistry && options.timeoutToBackground !== false && timeoutToBackground(options.env || process.env) ? options.backgroundRegistry : null;
+      const running = registry ? [...registry.values()].filter((item) => item.status === 'running').length : Infinity;
+      if (registry && running < 8 && child.exitCode === null && child.signalCode === null) {
+        settled = true; cleanup();
+        child.stdout.removeAllListeners('data');
+        child.stderr.removeAllListeners('data');
+        child.removeAllListeners('close');
+        child.removeAllListeners('error');
+        const logFiles = finishOutputLog();
+        const stdout = stdoutBuffer.text(logFiles.stdoutLogPath, logFiles.stdoutLogTruncated);
+        const stderr = stderrBuffer.text(logFiles.stderrLogPath, logFiles.stderrLogTruncated);
+        let started;
+        try {
+          started = startBackgroundProcess(registry, null, { adopt: { child, output: stdout + (stderr ? (stdout ? '\n' : '') + stderr : ''), startedAt }, env: options.env || process.env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onExit: options.adoptOnExit, onStuck: options.adoptOnStuck });
+        } catch {
+          terminateTree();
+          resolve({ command, approved: true, exitCode: null, stdout, stderr, ...logFiles, timedOut: true, cancelled: false });
+          return;
+        }
+        resolve({
+          command, approved: true, exitCode: null, stdout, stderr,
+          stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated, ...logFiles,
+          timedOut: true, movedToBackground: true, background: true, id: started.id, pid: child.pid,
+          message: 'Still running after ' + timeoutSeconds + ' seconds, so it was moved to the background instead of being stopped. Output so far is above; read more with command_output (id ' + started.id + '), stop it with kill_command, or wait for the exit notice.',
+          ...(sandbox && sandbox.available ? { sandboxed: sandbox.kind } : {})
+        });
+        return;
+      }
       terminateTree();
     }, timeoutSeconds * 1000);
     if (options.signal) {
@@ -1953,6 +1984,8 @@ export async function executeTool(name, args = {}, context = {}) {
         backgroundRegistry: context.session && (context.session.background ||= new Map()),
         onExit: args.run_in_background === true && context.session ? backgroundExitNotifier(context.session) : undefined,
         onStuck: args.run_in_background === true && context.session ? backgroundStuckNotifier(context.session) : undefined,
+        adoptOnExit: context.session ? backgroundExitNotifier(context.session) : undefined,
+        adoptOnStuck: context.session ? backgroundStuckNotifier(context.session) : undefined,
         maxSeconds: args.max_seconds,
         injectionHold: injectionHoldReason(context.session)
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
