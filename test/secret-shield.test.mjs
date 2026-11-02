@@ -92,3 +92,29 @@ test('bare secret keys are detected, and a key never borrows the next line as it
   assert.deepEqual(findSecretsInText('password:\n  valueFrom:\n    secretKeyRef: { name: db, key: password }'), []);
   assert.deepEqual(findSecretsInText('DB_PASSWORD:\n  from_env: DB_PASSWORD'), []);
 });
+
+test('newer provider keys, OAuth tokens and webhook URLs are masked', () => {
+  const r = (n, chars = 'aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9rS1tV3') => chars.repeat(4).slice(0, n);
+  const samples = [
+    'sk-or-v1-' + r(64),
+    'gsk_' + r(52),
+    'xai-' + r(80),
+    'pplx-' + r(48),
+    'r8_' + r(37),
+    'ya29.' + r(120),
+    'GOCSPX-' + r(28),
+    'dop_v1_' + 'a1b2c3d4'.repeat(8),
+    'shpat_' + 'a1b2c3d4'.repeat(4),
+    'lin_api_' + r(40),
+    'whsec_' + r(32),
+    '1234567890:AA' + r(33),
+    'https://hooks.slack.com/services/T0ABCDEF1/B0ABCDEF1/' + r(24),
+    'https://discord.com/api/webhooks/123456789012345678/' + r(68)
+  ];
+  for (const secret of samples) {
+    const session = {};
+    const masked = maskSecrets(session, 'value: ' + secret + ' end').text;
+    assert.ok(!masked.includes(secret), secret.slice(0, 12));
+    assert.match(masked, /«secret:[0-9a-f]{8}»/);
+  }
+});
