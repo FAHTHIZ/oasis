@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 // `oasis auth status|login|logout` (Claude Code's `claude auth`), `oasis setup-token`,
 // and `oasis agents --json`. Credentials are never printed.
 import { readFile, writeFile } from 'node:fs/promises';
@@ -56,7 +57,7 @@ export async function authLogout(env = process.env) {
   let saved;
   try { saved = JSON.parse(await readFile(file, 'utf8')); } catch { saved = null; }
   const had = Boolean(saved && saved.apiKey);
-  if (had) { delete saved.apiKey; await writeFile(file, JSON.stringify(saved, null, 2) + '\n', { mode: 0o600 }); }
+  if (had) { delete saved.apiKey; await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', { mode: 0o600 }); }
   const envKeys = ['OASIS_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_AUTH_TOKEN'].filter((name) => env[name]);
   return { removed: had, file, envKeys };
 }
