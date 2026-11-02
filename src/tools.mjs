@@ -925,7 +925,7 @@ async function configureMcpServer(args, context, root) {
   }
 
   context.session.mcpClients.set(candidate.name, client);
-  const dynamic = mcpToolDefinitions(context.session.mcpClients);
+  const dynamic = mcpToolDefinitions(context.session.mcpClients, { pins: context.session.mcpPins });
   context.session.mcpToolMap = dynamic.map;
   context.session.toolDefinitions = TOOL_DEFINITIONS.concat(dynamic.definitions);
   return {
