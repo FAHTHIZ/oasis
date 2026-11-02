@@ -11,7 +11,7 @@ import { activeAgentMonitors, startPluginMonitorsFor } from './monitors.mjs';
 
 const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'background-stuck', 'agent-notice', 'channel']);
 const WAKE_PREFIX = '[background event] ';
-import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt, steerSession, takeSteering } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt, steerSession, takeSteering, steeringMessage } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
@@ -359,6 +359,19 @@ export async function runHeadless(options) {
       session.onBackgroundEvent = null;
       if (!result) result = { text: '', finished: true, toolCalls: 0 };
     } else {
+      // A detached background run (oasis --bg) takes messages from
+      // `oasis bg send ID "..."` through its inbox file and steers mid-turn.
+      let stopInbox = null;
+      const lateMessages = [];
+      const backgroundId = env.OASIS_BACKGROUND_ID;
+      if (backgroundId) {
+        const { watchInbox } = await import('./background-sessions.mjs');
+        stopInbox = watchInbox(backgroundId, (text) => {
+          emit({ type: 'system', subtype: 'steer_received', text: text.slice(0, 500) });
+          if (!steerSession(session, text)) lateMessages.push(text);
+        }, env);
+      }
+      try {
       result = await runOne(rawPrompt);
       // Monitors the agent started keep the run open (up to their headless deadline);
       // each batch of events becomes a follow-up turn.
@@ -377,6 +390,17 @@ export async function runHeadless(options) {
         emit({ type: 'system', subtype: 'monitor_event', events: events.length, ids: [...new Set(events.map((entry) => entry.id).filter(Boolean))] });
         result = await runOne('[background event] ' + events.length + ' new monitor event(s).');
       }
+      // Messages that arrived after the last step (or while the model was
+      // finishing) become another turn, so a sent message is never dropped.
+      while (backgroundId && !(signal && signal.aborted) && result && !result.limitReached) {
+        const { drainInbox } = await import('./background-sessions.mjs');
+        const drained = await drainInbox(backgroundId, env).catch(() => []);
+        for (const text of drained) emit({ type: 'system', subtype: 'steer_received', text: text.slice(0, 500) });
+        const late = [...lateMessages.splice(0), ...takeSteering(session), ...drained];
+        if (!late.length) break;
+        result = await runOne(steeringMessage(late));
+      }
+      } finally { if (stopInbox) stopInbox(); }
     }
     // Structured output: validate, and give the model two chances to fix it.
     for (let attempt = 0; jsonSchema && result && !result.limitReached; attempt += 1) {

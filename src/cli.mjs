@@ -1122,7 +1122,10 @@ async function backgroundCommand(root, rest) {
   const [sub = 'list', query, ...more] = rest;
   if (sub === 'list' || sub === 'ls') {
     const entries = await bg.listBackgroundSessions(process.env);
-    stdout.write(entries.length ? entries.map(bg.describeEntry).join('\n') + '\n' : 'No background sessions. Start one with oasis --bg "task" or /background in a session.\n');
+    const activity = await Promise.all(entries.map((entry) => (entry.status === 'running' ? bg.readActivity(entry) : Promise.resolve(''))));
+    const interrupted = entries.filter((entry) => entry.status === 'interrupted').length;
+    if (interrupted) stdout.write(interrupted + ' run(s) stopped unexpectedly (crash, kill or reboot). oasis respawn --interrupted resumes them with their conversations.\n');
+    stdout.write(entries.length ? entries.map((entry, index) => bg.describeEntry(entry, activity[index])).join('\n') + '\n' : 'No background sessions. Start one with oasis --bg "task" or /background in a session.\n');
     return;
   }
   if (sub === 'respawn' && (query === '--all' || more.includes('--all'))) {
@@ -1131,7 +1134,13 @@ async function backgroundCommand(root, rest) {
     if (!running.length) stdout.write('No running background sessions to respawn.\n');
     return;
   }
-  if (!query) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID | respawn ID|--all');
+  if (sub === 'respawn' && (query === '--interrupted' || more.includes('--interrupted'))) {
+    const interrupted = (await bg.listBackgroundSessions(process.env)).filter((entry) => entry.status === 'interrupted');
+    for (const entry of interrupted) { await bg.respawnBackgroundSession(entry.id, process.env); stdout.write('Resumed ' + entry.id + (entry.name ? ' (' + entry.name + ')' : '') + '.\n'); }
+    if (!interrupted.length) stdout.write('No interrupted background sessions.\n');
+    return;
+  }
+  if (!query) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | send ID "message" | attach ID | stop ID | rm ID | respawn ID|--all|--interrupted');
   const id = await bg.resolveBackgroundId(query, process.env);
   if (sub === 'respawn') {
     const entry = await bg.respawnBackgroundSession(id, process.env);
@@ -1151,6 +1160,13 @@ async function backgroundCommand(root, rest) {
     }
     return;
   }
+  if (sub === 'send' || sub === 'message' || sub === 'steer') {
+    const text = more.join(' ').trim();
+    if (!text) throw new Error('Usage: oasis bg send ID "message"');
+    await bg.sendToBackgroundSession(id, text, process.env);
+    stdout.write('Sent to ' + id + '. It reads the message at its next step; oasis bg logs ' + id + ' --follow shows the reply.\n');
+    return;
+  }
   if (sub === 'stop' || sub === 'kill') { const result = await bg.stopBackgroundSession(id, process.env); stdout.write(result.stopped ? 'Stopped ' + id + '.\n' : id + ' is not running (' + result.status + ').\n'); return; }
   if (sub === 'rm') { await bg.removeBackgroundSession(id, process.env); stdout.write('Removed ' + id + '.\n'); return; }
   if (sub === 'attach') {
@@ -1167,7 +1183,7 @@ async function backgroundCommand(root, rest) {
     try { process.chdir(entry.root); } catch {}
     return await interactive(entry.root, false, { enabled: true, resumeId: entry.sessionId });
   }
-  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | attach ID | stop ID | rm ID | respawn ID|--all');
+  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | send ID "message" | attach ID | stop ID | rm ID | respawn ID|--all|--interrupted');
 }
 
 // oasis auto-mode defaults [--label PREFIX] | config | critique | reset [--yes]  (claude auto-mode ...)
