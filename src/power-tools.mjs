@@ -443,10 +443,13 @@ function describeBackground(entry) {
 
 // ---------------------------------------------------------------- run_shell
 const SHELL_BLOCK_PATTERNS = [
-  /\bsudo\b/, /\bdoas\b/, /\bsu\s+-?\s*\w*\s*-c\b/, /\bmkfs(\.\w+)?\b/, /\bdd\s+[^|;&]*of=\/dev\//, /\brm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(\/|~|\$HOME)(\s|$|\/\*)/i,
+  /\bsudo\b/, /\bdoas\b/, /\bsu\s+-?\s*\w*\s*-c\b/, /\bmkfs(\.\w+)?\b/, /\bdd\s+[^|;&]*of=\/dev\//,
   /\bRemove-Item\b[^;|]*-Recurse[^;|]*\s(['"]?)([A-Za-z]:\\?|\/|~|\$HOME|\$env:USERPROFILE)\1(\s|$)/i, /\b(Format-Volume|Clear-Disk|Stop-Computer|Restart-Computer|Initialize-Disk)\b/i,
-  /:\(\)\s*\{\s*:\|:&\s*\};:/, /\bchmod\s+-R\s+777\s+\//, /\bgit\s+push\b[^;&|]*(--force|-f\b)/
+  /:\(\)\s*\{\s*:\|:&\s*\};:/, /\bchmod\s+-R\s+777\s+\//
 ];
+// Recursive deletes of / or ~ and force pushes are handled by the parser in
+// shell-risk.mjs, which also sees through quoting, sh -c, eval and $(...)
+// without refusing commit messages or echo text that merely mention them.
 
 export function shellCommandBlocked(command) {
   const text = String(command || '');
