@@ -121,6 +121,8 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true }
   });
   installPermissionPolicy(mainWindow.webContents.session, () => activeOrigin);
+  // OASIS never embeds <webview>; refuse any attempt (Electron security checklist).
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
   mainWindow.once('ready-to-show', () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try { const parsed = new URL(url); if (parsed.protocol === 'https:') void shell.openExternal(url).catch(() => {}); } catch {}
