@@ -28,6 +28,7 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
       ? 'OS sandbox active'
       : 'not active; approval controls are not OS isolation'));
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
+    else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');
   } catch (error) { problems.push('Settings are invalid: ' + error.message); }
   const workflow = await workflowRuntimeStatus();
   lines.push('  Workflow runtime: ' + (workflow.available ? 'available (QuickJS)' : 'unavailable' + (workflow.reason ? ': ' + workflow.reason : '')));
