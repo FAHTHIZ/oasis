@@ -56,7 +56,8 @@ const CACHE_DIRS = [
   '.m2/repository', '.gradle/caches', '.cache/deno', '.cache/node-gyp', '.cache/ms-playwright', '.cache/huggingface'
 ];
 export function collectCacheDirectories(env = process.env) {
-  const home = path.resolve(env.HOME || os.homedir());
+  let home = path.resolve(env.HOME || os.homedir());
+  try { home = realpathSync(home); } catch { return []; }
   const found = [];
   for (const relative of CACHE_DIRS) {
     const candidate = path.join(home, ...relative.split('/'));
