@@ -1,4 +1,5 @@
 import { securityWarning } from './security-patterns.mjs';
+import { argvSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';
 import * as gitSafety from './git-safety.mjs';
@@ -1907,6 +1908,10 @@ export async function executeTool(name, args = {}, context = {}) {
       return { path: target.relative, deleted: true, backupCreated: true };
     }
     case 'run_command': {
+      if (args.run_in_background !== true && args.interactive !== true) {
+        const sleepError = longSleepError(argvSleepSeconds(args.command, args.args), context.env || process.env);
+        if (sleepError) throw new Error(sleepError);
+      }
       const env = context.env || process.env;
       const discard = gitSafety.gitSafetyEnabled(env) ? gitSafety.discardingGitCommand(args.command, args.args || []) : '';
       const commitCall = gitSafety.gitCommitInvocation(args.command, args.args || []);
