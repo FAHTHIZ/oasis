@@ -20,8 +20,8 @@ const CS = /\.cs$/i;
 const ANY_CODE = /\.(m?[jt]sx?|cjs|py|go|rb|php|java|kt|cs|rs|c|cc|cpp|h|hpp|swift|scala|sh|ya?ml|toml|json|env|ini|cfg|conf|tf)$/i;
 
 const RULES = [
-  [JS, /\beval\s*\(|\bnew\s+Function\s*\(/, 'dynamic code execution (eval / new Function)', 'parse data with JSON.parse or use a lookup table'],
-  [JS, /\b(?:child_process\.)?(?:exec|execSync)\s*\(\s*(?:`[^`]*\$\{|[^)]*\+\s*\w)/, 'a shell command built from variables (command injection)', 'use execFile/spawn with an argument array'],
+  [JS, /(?<![.\w$])eval\s*\(|\bnew\s+Function\s*\(/, 'dynamic code execution (eval / new Function)', 'parse data with JSON.parse or use a lookup table'],
+  [JS, /(?:\b(?:child_process|childProcess|cp)\.|(?<![.\w$]))(?:exec|execSync)\s*\(\s*(?:`[^`]*\$\{|[^)]*\+\s*\w)/, 'a shell command built from variables (command injection)', 'use execFile/spawn with an argument array'],
   [JS, /\.(?:innerHTML|outerHTML)\s*\+?=|\binsertAdjacentHTML\s*\(|\bdocument\.write\s*\(/, 'raw HTML insertion (XSS)', 'set textContent, or sanitize with a vetted library such as DOMPurify'],
   [JS, /dangerouslySetInnerHTML/, 'dangerouslySetInnerHTML (XSS)', 'render text as children, or sanitize the HTML first'],
   [JS, /rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0/, 'TLS certificate verification turned off', 'keep verification on and add the CA certificate instead'],

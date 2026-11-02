@@ -27,6 +27,13 @@ test('safe variants and unchanged code are not flagged', () => {
   assert.deepEqual(risks('', '// never use eval(x) here', 'src/a.js'), []);
 });
 
+test('look-alike method calls are not flagged', () => {
+  assert.deepEqual(risks('', 'const m = pattern.exec(line + suffix);', 'src/a.js'), []);
+  assert.deepEqual(risks('', 'model.eval()', 'app/train.py'), []);
+  assert.deepEqual(risks('', 'obj.eval(x)', 'src/a.js'), []);
+  assert.match(risks('', 'child_process.exec("ls " + dir)', 'src/a.js').join(), /command injection/);
+});
+
 test('tests, fixtures and docs are skipped', () => {
   assert.deepEqual(risks('', 'eval(x)', 'test/a.test.mjs'), []);
   assert.deepEqual(risks('', 'eval(x)', 'docs/guide.md'), []);
