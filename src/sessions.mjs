@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readdir, rename, writeFile, chmod, unlink } from 'node:fs/promises';
+import { mkdir, readdir, rename, writeFile, chmod, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { getConfigDirectory } from './config.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
 import { redactSecrets } from './auto-memory.mjs';
+import { atomicWriteFile } from './atomic-write.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_MESSAGES = 120;
@@ -118,10 +119,74 @@ export function sanitizeAgentHistory(agentTasks) {
       ...(branch ? { worktreeBranch: branch } : {}),
       ...(relative ? { worktreePath: relative } : {}),
       ...(worktree.changed === true ? { worktreeChanged: true } : {}),
-      ...( /^[0-9a-f]{40}$/.test(commitSha) ? { worktreeCommit: commitSha } : {})
+      ...( /^[0-9a-f]{40}$/.test(commitSha) ? { worktreeCommit: commitSha } : {}),
+      ...((record.transcriptSaved === true || record.transcript === true) && !branch && !(record.worktreeInfo || record.worktree) && record.workspaceIsolation !== 'worktree' ? { transcript: true } : {})
     };
     return [snapshot];
   });
+}
+
+// Subagent transcripts (like Claude Code's subagents/*.jsonl): the conversation of
+// each shared-workspace worker is saved next to the session, so after a restart
+// send_message can resume the worker with its full context instead of starting
+// over. Worktree workers are not saved: their checkout may be gone.
+const MAX_TRANSCRIPT_BYTES = 1536 * 1024;
+
+export function agentTranscriptPath(root, sessionId, agentId, env = process.env) {
+  if (!/^agent_[1-9]\d{0,8}$/.test(String(agentId || ''))) throw new Error('Invalid agent ID.');
+  return path.join(getSessionDirectory(root, env), validateId(sessionId) + '.agents', agentId + '.json');
+}
+
+function transcriptMessages(messages) {
+  const usable = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role !== 'system').map((m) => (m.images ? (({ images, ...rest }) => rest)(m) : m));
+  let list = usable.slice(-(MAX_MESSAGES - 1));
+  // Start at a user message so a trimmed transcript never opens with an orphan tool result.
+  while (list.length && list[0].role !== 'user') list = list.slice(1);
+  return list;
+}
+
+function resumableRecord(record) {
+  return record && record.child && Array.isArray(record.child.messages) && !record.worktreeInfo && !record.worktree && record.status !== 'cancelled' && /^agent_[1-9]\d{0,8}$/.test(String(record.id || ''));
+}
+
+async function saveAgentTranscripts(session, id, env) {
+  const registry = session.agentTasks;
+  if (!registry || !(registry.agents instanceof Map)) return new Set();
+  const saved = new Set();
+  for (const record of [...registry.agents.values()].slice(-SESSION_AGENT_LIMIT)) {
+    if (!resumableRecord(record)) { if (record && record.transcriptSaved) saved.add(record.id); continue; }
+    let list = transcriptMessages(record.child.messages);
+    if (!list.length) continue;
+    const signature = list.length + ':' + JSON.stringify(list[list.length - 1]).length;
+    if (record.transcriptSignature === signature) { saved.add(record.id); continue; }
+    let body = '';
+    for (;;) {
+      try { validateMessages([{ role: 'system', content: '' }, ...list]); } catch { list = []; }
+      body = JSON.stringify({ schemaVersion: 1, agentId: record.id, type: String(record.type || 'general-purpose').slice(0, 80), model: String(record.child.config && record.child.config.model || '').slice(0, 200), messages: list }) + '\n';
+      if (!list.length || Buffer.byteLength(body, 'utf8') <= MAX_TRANSCRIPT_BYTES) break;
+      list = list.slice(Math.max(1, Math.floor(list.length / 4)));
+      while (list.length && list[0].role !== 'user') list = list.slice(1);
+    }
+    if (!list.length) continue;
+    const file = agentTranscriptPath(session.root, id, record.id, env);
+    try {
+      await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+      await atomicWriteFile(file, body, { encoding: 'utf8', mode: 0o600 });
+      record.transcriptSignature = signature;
+      record.transcriptSaved = true;
+      saved.add(record.id);
+    } catch { /* a transcript is a convenience; never fail the session save for it */ }
+  }
+  return saved;
+}
+
+export async function loadAgentTranscript(root, sessionId, agentId, env = process.env) {
+  const file = agentTranscriptPath(root, sessionId, agentId, env);
+  const data = JSON.parse(await readBoundedRegularFile(file, MAX_TRANSCRIPT_BYTES + 4096, { label: 'Agent transcript', tooLargeMessage: 'Agent transcript is too large.' }));
+  if (!data || data.agentId !== agentId || !Array.isArray(data.messages) || !data.messages.length) throw new Error('Agent transcript is invalid.');
+  validateMessages([{ role: 'system', content: '' }, ...data.messages]);
+  if (data.messages.some((m) => m.role === 'system')) throw new Error('Agent transcript is invalid.');
+  return { type: String(data.type || ''), model: String(data.model || ''), messages: data.messages };
 }
 
 export async function saveSession(session, options = {}) {
@@ -130,6 +195,7 @@ export async function saveSession(session, options = {}) {
   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
   // Image attachments are not saved; the text note in the tool result remains.
   const messages = validateMessages(session.messages.slice(-MAX_MESSAGES).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
+  await saveAgentTranscripts(session, id, env);
   const payload = {
     schemaVersion: 1,
     id,
@@ -225,6 +291,7 @@ export async function deleteSession(root, id, options = {}) {
   const target = sessionPath(root, id, options.env || process.env);
   const data = await loadSession(root, id, options);
   await unlink(target);
+  await rm(target.replace(/\.json$/, '.agents'), { recursive: true, force: true }).catch(() => {});
   return { id: data.id, deleted: true };
 }
 

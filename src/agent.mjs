@@ -1,4 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { loadAgentTranscript } from './sessions.mjs';
 import { randomUUID } from 'node:crypto';
 import { providerFetch } from './loopback-fetch.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
@@ -3036,7 +3037,8 @@ async function runSubagent(parent, args, context, options) {
   ].join('\n\n');
   // Coordination tools can mutate the team board or inbox without editing the workspace.
   const readOnly = definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
-  const isolation = String(args.isolation || agent.isolation || '').toLowerCase();
+  const resume = options.resumeAgent || null;
+  const isolation = resume ? '' : String(args.isolation || agent.isolation || '').toLowerCase();
   if (isolation && isolation !== 'worktree') throw new Error('isolation must be "worktree" when set.');
   let worktree = null;
   if (isolation === 'worktree' && !readOnly) {
@@ -3058,7 +3060,7 @@ async function runSubagent(parent, args, context, options) {
     config: subagentEffortConfig(parent, agent, options.env || process.env, childConfig),
     sessionId: parent.sessionId,
     branchRules: parent.branchRules,
-    messages: [{ role: 'system', content: systemText + isolationNote }, ...(args.fork_context === true ? forkedConversation(parent) : [])],
+    messages: [{ role: 'system', content: systemText + isolationNote }, ...(resume ? resume.messages : args.fork_context === true ? forkedConversation(parent) : [])],
     baseSystemPrompt: systemText + isolationNote,
     mcpClients: parent.mcpClients || new Map(),
     mcpToolMap: parent.mcpToolMap || new Map(),
@@ -3089,7 +3091,15 @@ async function runSubagent(parent, args, context, options) {
     throw new Error('Already running ' + MAX_BACKGROUND_AGENTS + ' background agents. Wait for one with agent_status or stop one with agent_stop.');
   }
   const sharedTaskId = /^task_[1-9]\d{0,8}$/.test(String(args.shared_task_id || '')) ? String(args.shared_task_id) : null;
-  const record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
+  let record;
+  if (resume) {
+    // Rebuilt from a saved transcript after a restart: keep the same id, counters and team.
+    record = resume.record;
+    Object.assign(record, { child, readOnly, resumable: true, restoredTranscript: false, background: true });
+    record.runs = (record.runs || 1) + 1;
+  } else {
+    record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
+  }
   child.agentId = record.id;
   let startPrompt = prompt;
   if (hasHooks(parent.hooks, 'SubagentStart')) {
@@ -3103,6 +3113,7 @@ async function runSubagent(parent, args, context, options) {
     return { id: record.id, ...result };
   }
   startBackgroundRun(parent, record, prompt, options);
+  if (resume) return { id: record.id, status: 'running', delivered: 'resumed', message: 'The agent was rebuilt from its saved conversation and resumed in the background. You will be told when it finishes.' };
   return {
     id: record.id, agent: type, description, status: 'running', background: true,
     message: 'Started in the background. You will be told when it finishes; meanwhile continue with other work. Use agent_status (wait_seconds to block), send_message to steer it, or agent_stop to cancel.'
@@ -3561,6 +3572,22 @@ async function runAgentTool(session, name, args, context, options) {
   if (name === 'agent_stop') return stopAgent(session, args);
   // send_message
   const record = getAgent(session, args.id);
+  if (!record.child && record.restoredTranscript && record.status !== 'running') {
+    const message = String(args.message || '').trim();
+    if (!message) throw new Error('send_message needs a message.');
+    if (message.length > 20000) throw new Error('Messages must be 20,000 characters or fewer.');
+    if (runningBackgroundCount(session) >= MAX_BACKGROUND_AGENTS) throw new Error('Too many background agents are running; wait for one to finish first.');
+    let saved;
+    try { saved = await loadAgentTranscript(session.root, session.sessionId, record.id, options.env || process.env); } catch (error) {
+      record.restoredTranscript = false;
+      throw new Error('Agent ' + record.id + ' has no usable saved conversation (' + error.message + '); launch a new task from its saved report instead.');
+    }
+    const restoredMessages = [{ role: 'system', content: '' }, ...saved.messages];
+    repairInterruptedHistory({ messages: restoredMessages });
+    recordAgentEvent(session, 'agent.resume_requested', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: message });
+    const resumedPrompt = (record.status === 'interrupted' ? 'OASIS restarted while you were working, and your conversation was restored. Check the current state of the files before continuing (your last step may not have finished).\n\n' : '') + 'New message from the parent agent:\n' + message;
+    return await runSubagent(session, { subagent_type: record.type, description: record.description, prompt: resumedPrompt, run_in_background: true, ...(saved.model && saved.model !== (session.config && session.config.model) ? { model: saved.model } : {}) }, context, { ...options, resumeAgent: { record, messages: restoredMessages.slice(1) } });
+  }
   if (!record.child) throw new Error('Agent ' + record.id + ' has no live worker process. Its saved status and report are available, but a runtime restart does not restore the original worker; launch a new task from its saved checkpoint instead.');
   const message = String(args.message || '').trim();
   if (!message) throw new Error('send_message needs a message.');

@@ -894,6 +894,8 @@ You are a test specialist. Run the relevant tests, fix failures, and report resu
 
 Subagents share the parent's permission rules, hooks (`SubagentStop`), sandbox, and approvals. They cannot start further subagents.
 
+Each shared-workspace subagent's conversation is saved next to the session (`<session>.agents/agent_N.json`, owner-only). After OASIS restarts or you `--resume` the session, `send_message` to that agent rebuilds it with its full context, including a worker that was cut off mid-task (it is told to re-check the files before continuing). Worktree subagents are not saved this way because their checkout may be gone; start a new task from their branch instead. Deleting the session or `oasis purge` removes the transcripts.
+
 ### Asking you questions
 
 When a choice really changes the work (which library, which approach, how much scope), OASIS can stop and ask a multiple-choice question with the `ask_user_question` tool. This is like compatible-format AskUserQuestion. In the terminal, answer with a number (or several numbers when multiple answers are allowed), type your own answer, or press Enter to skip. In the browser, the question appears as a card with buttons. Headless `-p` runs and subagents never block: the model is told no user is available, so it picks a reasonable option and states the assumption.
