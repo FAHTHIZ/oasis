@@ -259,6 +259,8 @@ export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/corp-root.pem   # if the proxy or serv
 - `oasis doctor` shows the proxy in use (with credentials hidden) and any extra CA file. `oasis doctor --network` checks that the model provider, each remote MCP server in `.mcp.json`, and GitHub are reachable, and explains failures (DNS, refused, timeout, proxy credentials, or an untrusted certificate from a TLS-inspecting proxy). It sends bare requests without your API key or MCP headers, and exits non-zero if anything is unreachable.
 - `OASIS_PROXY=0` turns this off. With `NODE_USE_ENV_PROXY=1` (Node 24+), Node's own proxy support is used instead.
 - Shell commands the agent runs (git, npm, curl) get the same environment and use their own proxy support.
+- Desktop app: if you have not set a proxy variable, it uses the operating system's proxy settings (including PAC files), and it trusts certificates in the operating system's store as well as Node's bundled ones, so a company root CA installed by IT works without setup. `OASIS_PROXY=0` and `OASIS_SYSTEM_CA=0` turn these off.
+- Terminal: to trust the operating system's certificate store too, run with `NODE_OPTIONS=--use-system-ca` (Node 22.15+), or point `NODE_EXTRA_CA_CERTS` at the CA file.
 
 ## Safety model
 

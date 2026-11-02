@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog, Menu, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, safeStorage, session, shell } from 'electron';
+import tls from 'node:tls';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { startOasisWebServer } from '../src/web.mjs';
@@ -8,6 +9,7 @@ import { crashRecoveryHtml } from './crash-screen.mjs';
 import { showErrorWithCopy } from './error-dialog.mjs';
 import { installPermissionPolicy } from './permissions.mjs';
 import { installProxyFromEnv } from '../src/proxy.mjs';
+import { applySystemProxy, useSystemCertificates } from './system-network.mjs';
 
 // The agent runs in this process, so its model/MCP requests honour HTTPS_PROXY / NO_PROXY too.
 installProxyFromEnv();
@@ -254,6 +256,9 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(async () => {
     app.setName('OASIS');
+    // System proxy (incl. PAC) and OS-trusted certificates, unless set or disabled.
+    useSystemCertificates(tls);
+    await applySystemProxy({ session: session.defaultSession, envs: [process.env, desktopEnv] });
     installMenu();
     await restoreProviderSecret();
     const saved = await loadState();
