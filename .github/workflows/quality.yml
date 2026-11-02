@@ -70,8 +70,10 @@ jobs:
           node-version: 22
       - name: Install production dependencies
         run: npm install --omit=dev --no-audit --no-fund
+      - name: Install ast-grep (pinned) so the structural-search tests run
+        run: npm install --prefix /tmp/ast-grep --no-audit --no-fund --no-save @ast-grep/cli@0.51.0
       - name: Run tests without inherited environment variables
-        run: mkdir -p /tmp/h1 && env -i PATH="$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test test/*.test.mjs
+        run: mkdir -p /tmp/h1 && env -i PATH="/tmp/ast-grep/node_modules/.bin:$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test test/*.test.mjs
 
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)

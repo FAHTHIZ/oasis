@@ -54,6 +54,7 @@ export function labelToolActivity(name, args = {}, result = null) {
         (tool === 'auto_test' && /test|check|lint|build/i.test(command))) return 'Ran the tests';
     return 'Ran a command';
   }
+  if (tool === 'ast_grep') return query ? "Searched code structure for '" + query + "'" : 'Searched code structure';
   if (tool === 'search_files' || tool === 'grep') return query ? "Searched for '" + query + "'" : 'Searched the project';
   if (tool === 'glob_files') return query ? 'Found files matching ' + query : 'Found matching files';
   if (tool === 'repo_map') return 'Mapped the project files';

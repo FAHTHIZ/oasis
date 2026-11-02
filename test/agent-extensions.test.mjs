@@ -197,7 +197,7 @@ test('custom agents load from .claude/agents and .oasis/agents with Claude Code 
   await writeFile(path.join(root, '.oasis', 'agents', 'fixer.md'), '---\nname: fixer\ndescription: Fixes tests\ntools: [Read, Edit, Bash]\nmodel: fast-model\n---\nFix things.\n');
   const { loadAgentDefinitions } = await import('../src/subagents.mjs');
   const agents = await loadAgentDefinitions(root, { env: { ...process.env, HOME: root } });
-  assert.deepEqual(agents.reviewer.tools.sort(), ['glob_files', 'grep', 'read_file', 'search_files']);
+  assert.deepEqual(agents.reviewer.tools.sort(), ['ast_grep', 'glob_files', 'grep', 'read_file', 'search_files']);
   assert.ok(agents.fixer.tools.includes('edit_file') && agents.fixer.tools.includes('run_command'));
   assert.equal(agents.fixer.model, 'fast-model');
   assert.match(agents.reviewer.prompt, /review code carefully/);

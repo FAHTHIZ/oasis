@@ -2056,6 +2056,10 @@ export async function executeTool(name, args = {}, context = {}) {
       const { runMemoryTool } = await import('./auto-memory.mjs');
       return await runMemoryTool(name, args, { root, env: context.env || process.env, session: context.session });
     }
+    case 'ast_grep': {
+      const { runAstGrep } = await import('./ast-grep.mjs');
+      return await runAstGrep(root, args, { env: context.env || process.env, signal: context.signal });
+    }
     case 'lsp':
       return await runLsp(root, args, {
         session: context.session,

@@ -766,6 +766,13 @@ export async function createSession({ root, config, restore = null, permissionMo
       ? 'Commands run inside an OS sandbox (' + sandbox.kind + '): only the workspace is writable' + (sandbox.network ? '' : ' and network access is blocked') + '. If a command fails with a read-only or network error, explain that the sandbox blocked it instead of retrying the same way.'
       : 'The user asked for an OS sandbox but it is unavailable: ' + sandbox.reason + ' Commands still require approval.');
   }
+  if (!restricted) {
+    const { resolveAstGrep, AST_GREP_TOOL_DEFINITION } = await import('./ast-grep.mjs');
+    if (resolveAstGrep(root, env)) {
+      session.toolDefinitions = session.toolDefinitions.concat([AST_GREP_TOOL_DEFINITION]);
+      systemText += '\n\nast_grep (structural search) is installed: use it instead of grep when the question is about code shape, and for mechanical refactors across files use its rewrite preview, then apply the returned edits with multi_edit.';
+    }
+  }
   const powershellExe = findPowerShell(env);
   if (powershellExe) {
     session.powershell = powershellExe;
@@ -2375,7 +2382,7 @@ function normalizeUsage(usage = {}) {
   return out;
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
@@ -2445,7 +2452,7 @@ async function askUserQuestion(session, args, options) {
   return { answered: true, question: question.question, answer: String(answer).slice(0, 2000) };
 }
 
-const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep']);
+const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;
 const MAX_TURN_TOOL_CALLS = 2000;
