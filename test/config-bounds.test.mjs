@@ -89,3 +89,11 @@ test('configuration integer settings retain valid values and enforce bounds', as
   assert.equal(config.maxToolCalls, 1, 'the minimum tool-call bound remains inclusive');
   assert.equal(config.maxTokens, 10_000, 'the minimum token budget remains inclusive');
 });
+
+test('thinking keywords can be switched off without dropping the configured budget', async () => {
+  const { thinkingBudgetFor } = await import('../src/agent.mjs');
+  assert.equal(thinkingBudgetFor('ultrathink about this', {}, {}), 31999);
+  assert.equal(thinkingBudgetFor('ultrathink about this', {}, { CLAUDE_CODE_DISABLE_ULTRATHINK: '1' }), 0);
+  assert.equal(thinkingBudgetFor('think hard', {}, { OASIS_DISABLE_THINK_KEYWORDS: '1' }), 0);
+  assert.equal(thinkingBudgetFor('ultrathink', {}, { OASIS_DISABLE_THINK_KEYWORDS: '1', MAX_THINKING_TOKENS: '8000' }), 8000);
+});
