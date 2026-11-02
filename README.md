@@ -113,7 +113,7 @@ The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchma
 
 Every miss above was then fixed and turned into a regression test, so the current runtime scores 100% on all three case sets except one deliberate secret-scanner miss. Those post-fix numbers measure tuning, not generalization, which is why the table shows the untuned ones.
 
-The agent evaluator has **50 tasks**: 33 focused fixtures plus 17 repository-level bug reports and multi-file features, scored by hidden assertions the agent never sees (`oasis eval`). A same-model, head-to-head run against Claude Code is built into the [eval runner](docs/BENCHMARKS.md#run-claude-code-on-the-same-fixtures) but has not been published yet, so OASIS does not claim to beat it. Live runs with small local models, including the failures, are in [Benchmarks](docs/BENCHMARKS.md).
+The agent evaluator has **50 tasks**: 33 focused fixtures plus 17 repository-level bug reports and multi-file features, scored by hidden assertions the agent never sees (`oasis eval`). Head-to-head runs against Claude Code, Codex CLI and Gemini CLI on the same tasks are built into the [eval runner](docs/BENCHMARKS.md#run-claude-code-on-the-same-fixtures) (`--claude-code`, `--codex`, `--gemini-cli`) but have not been published yet, so OASIS does not claim to beat them. Live runs with small local models, including the failures, are in [Benchmarks](docs/BENCHMARKS.md).
 
 ## What it fixes
 

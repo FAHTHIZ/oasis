@@ -779,9 +779,15 @@ function parseArgs(args) {
       config.routingOptionsUsed = true;
       continue;
     }
-    if (arg === '--claude-code') { config.claudeCode = true; continue; }
+    if (arg === '--claude-code' || arg === '--codex' || arg === '--gemini-cli') {
+      const agent = arg === '--codex' ? 'codex' : arg === '--gemini-cli' ? 'gemini' : 'claude';
+      if (config.claudeCode && config.externalAgent !== agent) throw new Error('Choose one external agent: --claude-code, --codex or --gemini-cli.');
+      config.claudeCode = true;
+      config.externalAgent = agent;
+      continue;
+    }
     if (arg === '--model') {
-      if (!args[i + 1] || args[i + 1].startsWith('-')) throw new Error('--model requires a Claude Code model name or alias.');
+      if (!args[i + 1] || args[i + 1].startsWith('-')) throw new Error('--model requires a model name or alias for the external agent.');
       config.model = args[++i];
       config.claudeOptionsUsed = true;
       continue;
@@ -791,6 +797,7 @@ function parseArgs(args) {
       if (!Number.isInteger(value) || value < 1 || value > 200) throw new Error('--max-turns must be an integer from 1 to 200.');
       config.maxTurns = value;
       config.claudeOptionsUsed = true;
+      config.claudeOnlyOptionUsed = true;
       continue;
     }
     if (arg === '--timeout-seconds') {
@@ -805,6 +812,7 @@ function parseArgs(args) {
       if (!Number.isFinite(value) || value <= 0 || value > 1000) throw new Error('--budget-usd must be greater than 0 and no more than 1000.');
       config.budgetUSD = value;
       config.claudeOptionsUsed = true;
+      config.claudeOnlyOptionUsed = true;
       continue;
     }
     if (arg === '--help' || arg === '-h') { config.help = true; continue; }
@@ -835,7 +843,10 @@ function parseArgs(args) {
     throw new Error('JSON and HTML comparison outputs must use different paths.');
   }
   if (config.claudeOptionsUsed && !config.claudeCode) {
-    throw new Error('--model, --max-turns and --budget-usd require --claude-code.');
+    throw new Error('--model, --max-turns and --budget-usd require --claude-code (or --codex / --gemini-cli for --model).');
+  }
+  if (config.claudeOnlyOptionUsed && config.externalAgent && config.externalAgent !== 'claude') {
+    throw new Error('--max-turns and --budget-usd are Claude Code options; --codex and --gemini-cli accept --model and --timeout-seconds.');
   }
   if (config.routingOptionsUsed && config.claudeCode) {
     throw new Error('--route-easy-model and --route-strong-model apply only to OASIS eval runs, not --claude-code.');
@@ -964,6 +975,68 @@ export function buildClaudeCodeArgs(config, prompt) {
   return args;
 }
 
+/** Parse `codex exec --json` JSONL: usage from turn.completed, answer from the last agent_message. */
+export function parseCodexOutput(rawOutput) {
+  let inputTokens = null; let outputTokens = null; let result = ''; let isError = false; let toolCalls = 0; let model = null; let events = 0;
+  for (const line of String(rawOutput || '').split(/\r?\n/)) {
+    const text = line.trim();
+    if (!text.startsWith('{')) continue;
+    let event;
+    try { event = JSON.parse(text); } catch { continue; }
+    events++;
+    if (event.type === 'turn.completed' && event.usage) {
+      inputTokens = (inputTokens || 0) + (finiteMetric(event.usage.input_tokens) || 0);
+      outputTokens = (outputTokens || 0) + (finiteMetric(event.usage.output_tokens) || 0) + (finiteMetric(event.usage.reasoning_output_tokens) || 0);
+    }
+    if (event.type === 'turn.failed' || event.type === 'error') { isError = true; result = String((event.error && event.error.message) || event.message || result || 'Codex reported an error.'); }
+    if (event.type === 'thread.started' && typeof event.model === 'string') model = event.model;
+    if (event.type === 'item.completed' && event.item) {
+      if (event.item.type === 'agent_message' && typeof event.item.text === 'string') result = event.item.text;
+      else if (['command_execution', 'file_change', 'mcp_tool_call', 'web_search'].includes(event.item.type)) toolCalls++;
+    }
+  }
+  if (!events) throw new Error('Codex did not return JSONL events (is this codex exec --json?).');
+  return { model, inputTokens, outputTokens, totalTokens: inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens, costUSD: null, durationMs: null, numTurns: toolCalls, result, isError };
+}
+
+/** Parse `gemini -p --output-format json`: { response, stats: { models: { name: { tokens } }, tools }, error }. */
+export function parseGeminiOutput(rawOutput) {
+  const raw = String(rawOutput || '');
+  const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
+  let payload;
+  try { payload = JSON.parse(raw.slice(start, end + 1)); } catch (error) { throw new Error('Gemini CLI did not return a valid JSON result: ' + error.message); }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Gemini CLI JSON result must be an object.');
+  const models = payload.stats && payload.stats.models && typeof payload.stats.models === 'object' ? payload.stats.models : {};
+  const tokens = Object.values(models).map((entry) => (entry && entry.tokens) || {});
+  const inputTokens = tokens.length ? tokens.reduce((sum, t) => sum + (finiteMetric(t.prompt, t.input) || 0), 0) : null;
+  const outputTokens = tokens.length ? tokens.reduce((sum, t) => sum + (finiteMetric(t.candidates, t.output) || 0) + (finiteMetric(t.thoughts) || 0), 0) : null;
+  const error = payload.error ? (typeof payload.error === 'string' ? payload.error : payload.error.message || JSON.stringify(payload.error)) : '';
+  return {
+    model: Object.keys(models).sort().join(', ') || null,
+    inputTokens, outputTokens, totalTokens: inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens,
+    costUSD: null, durationMs: null,
+    numTurns: finiteMetric(payload.stats && payload.stats.tools && payload.stats.tools.totalCalls),
+    result: typeof payload.response === 'string' ? payload.response : error,
+    isError: Boolean(error)
+  };
+}
+
+export function buildCodexArgs(config, prompt) {
+  // workspace-write keeps Codex's default network-off sandbox, matching the benchmark rule of no network.
+  return ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', ...(config.model ? ['-m', config.model] : []), prompt];
+}
+
+export function buildGeminiArgs(config, prompt) {
+  // yolo auto-approves tools; Gemini CLI turns its own sandbox on with it (set GEMINI_SANDBOX=false if no container runtime).
+  return ['-p', prompt, '--output-format', 'json', '--approval-mode', 'yolo', ...(config.model ? ['-m', config.model] : [])];
+}
+
+export const EXTERNAL_AGENTS = {
+  claude: { name: 'Claude Code', flag: '--claude-code', binEnv: 'OASIS_CLAUDE_CODE_BIN', bin: 'claude', protocol: 'claude-code-cli', tempPrefix: 'oasis-claude-eval-', buildArgs: (config, prompt) => buildClaudeCodeArgs(config, prompt), parse: (raw) => parseClaudeCodeOutput(raw), checkVersion: (v) => versionSupportsRestrictedMode(v) ? '' : 'Claude Code ' + (v || '(unknown version)') + ' is too old or unrecognized. This benchmark requires Claude Code v2.1.248 or newer for restricted mode.', install: 'Install Claude Code, ensure it is on PATH, and sign in.' },
+  codex: { name: 'Codex CLI', flag: '--codex', binEnv: 'OASIS_CODEX_BIN', bin: 'codex', protocol: 'codex-cli', tempPrefix: 'oasis-codex-eval-', buildArgs: buildCodexArgs, parse: parseCodexOutput, checkVersion: () => '', install: 'Install the Codex CLI (npm i -g @openai/codex), ensure it is on PATH, and sign in.' },
+  gemini: { name: 'Gemini CLI', flag: '--gemini-cli', binEnv: 'OASIS_GEMINI_CLI_BIN', bin: 'gemini', protocol: 'gemini-cli', tempPrefix: 'oasis-gemini-eval-', buildArgs: buildGeminiArgs, parse: parseGeminiOutput, checkVersion: () => '', install: 'Install Gemini CLI (npm i -g @google/gemini-cli), ensure it is on PATH, and sign in.' }
+};
+
 function versionSupportsRestrictedMode(versionText) {
   const match = String(versionText || '').match(/\b(\d+)\.(\d+)\.(\d+)\b/);
   if (!match) return false;
@@ -973,8 +1046,10 @@ function versionSupportsRestrictedMode(versionText) {
 
 async function runClaudeCodeEval(config, options = {}) {
   const output = options.output || process.stdout;
+  const adapter = EXTERNAL_AGENTS[config.externalAgent || 'claude'];
+  const agentName = adapter.name;
   if (!options.autoApprove) {
-    throw new Error('Claude Code evaluation runs an external coding agent against disposable task copies. Review the task suite, then explicitly run oasis eval --claude-code --yes [--task ID] [--trials N].');
+    throw new Error(agentName + ' evaluation runs an external coding agent against disposable task copies. Review the task suite, then explicitly run oasis eval ' + adapter.flag + ' --yes [--task ID] [--trials N].');
   }
   const env = options.env || process.env;
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
@@ -982,26 +1057,25 @@ async function runClaudeCodeEval(config, options = {}) {
   const selectedDirs = config.task ? allDirs.filter((dir) => path.basename(dir) === config.task) : allDirs;
   if (!selectedDirs.length) throw new Error(config.task ? 'No evaluation task named "' + config.task + '" was found.' : 'No evaluation tasks were found in ' + tasksDir);
 
-  const command = String(env.OASIS_CLAUDE_CODE_BIN || 'claude');
+  const command = String(env[adapter.binEnv] || adapter.bin);
   const runCli = options.claudeRunner || ((args, runnerOptions) => runEvalProcess(command, args, runnerOptions));
   const versionResult = await runCli(['--version'], {
     cwd: APP_ROOT, env, timeoutMs: 15000, outputLimit: 20000
   });
   if (versionResult.exitCode !== 0 || versionResult.timedOut || versionResult.error) {
-    throw new Error('Could not start the Claude Code CLI (' + command + '). Install Claude Code, ensure it is on PATH, and sign in. ' +
+    throw new Error('Could not start the ' + agentName + ' CLI (' + command + '). ' + adapter.install + ' ' +
       (versionResult.error || versionResult.output || 'CLI version check failed.'));
   }
   const cliVersion = String(versionResult.stdout || '').trim().split(/\r?\n/).slice(0, 2).join(' ').slice(0, 120);
-  if (!versionSupportsRestrictedMode(cliVersion)) {
-    throw new Error('Claude Code ' + (cliVersion || '(unknown version)') + ' is too old or unrecognized. This benchmark requires Claude Code v2.1.248 or newer for restricted mode.');
-  }
+  const versionProblem = adapter.checkVersion(cliVersion);
+  if (versionProblem) throw new Error(versionProblem);
 
   const startedAt = new Date().toISOString();
   const trials = [];
   for (const dir of selectedDirs) {
     const task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
     for (let trial = 1; trial <= config.trials; trial++) {
-      const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-claude-eval-'));
+      const tempRoot = await mkdtemp(path.join(os.tmpdir(), adapter.tempPrefix));
       const workspace = path.join(tempRoot, 'workspace');
       const trialStarted = Date.now();
       let errorText = null;
@@ -1011,23 +1085,23 @@ async function runClaudeCodeEval(config, options = {}) {
       try {
         await copySnapshot(task.repoDir, workspace);
         const prompt = task.taskText.trim() + '\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.';
-        cliResult = await runCli(buildClaudeCodeArgs(config, prompt), {
+        cliResult = await runCli(adapter.buildArgs(config, prompt), {
           cwd: workspace,
           env,
           timeoutMs: config.timeoutSeconds * 1000,
           outputLimit: 1024 * 1024
         });
         try {
-          parsed = parseClaudeCodeOutput(cliResult.stdout);
+          parsed = adapter.parse(cliResult.stdout);
         } catch (error) {
           errorText = error.message || String(error);
         }
-        if (!errorText && cliResult.timedOut) errorText = 'Claude Code exceeded the ' + config.timeoutSeconds + '-second task timeout.';
+        if (!errorText && cliResult.timedOut) errorText = agentName + ' exceeded the ' + config.timeoutSeconds + '-second task timeout.';
         if (!errorText && cliResult.error) errorText = cliResult.error;
         if (!errorText && cliResult.exitCode !== 0) {
-          errorText = 'Claude Code exited with code ' + cliResult.exitCode + (cliResult.output ? ': ' + cliResult.output.slice(-2000) : '');
+          errorText = agentName + ' exited with code ' + cliResult.exitCode + (cliResult.output ? ': ' + cliResult.output.slice(-2000) : '');
         }
-        if (!errorText && parsed && parsed.isError) errorText = parsed.result || 'Claude Code reported an error.';
+        if (!errorText && parsed && parsed.isError) errorText = parsed.result || agentName + ' reported an error.';
         if (!errorText) verification = await runVerifier(task, workspace, env);
       } catch (error) {
         errorText = error.message || String(error);
@@ -1082,7 +1156,7 @@ async function runClaudeCodeEval(config, options = {}) {
   const observedModels = [...new Set(trials.map((item) => item.model).filter(Boolean))].sort();
   const modelLabel = config.model || (observedModels.length ? observedModels.join(', ') : 'model not reported by CLI');
   const summary = {
-    label: 'Claude Code ' + cliVersion + ' (' + modelLabel + ')',
+    label: agentName + ' ' + cliVersion + ' (' + modelLabel + ')',
     sourceRevision: await detectSourceRevision(env),
     runId: startedAt.replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt,
@@ -1100,18 +1174,18 @@ async function runClaudeCodeEval(config, options = {}) {
     costPerPassedTaskUSD,
     provider: {
       model: modelLabel,
-      protocol: 'claude-code-cli',
+      protocol: adapter.protocol,
       cliVersion,
       maxTurns: config.maxTurns,
       timeoutSeconds: config.timeoutSeconds,
       budgetUSD: config.budgetUSD
     },
     pricing: {
-      note: 'Cost is taken only from Claude Code CLI JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free.'
+      note: 'Cost is taken only from ' + agentName + ' JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free.'
     }
   };
   const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
-  output.write('Claude Code eval result: ' + resultPath + '\n');
+  output.write(agentName + ' eval result: ' + resultPath + '\n');
   output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
@@ -1145,7 +1219,7 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
