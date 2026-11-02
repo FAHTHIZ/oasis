@@ -45,6 +45,30 @@ export function collectSensitivePaths(env = process.env) {
   return masked;
 }
 
+// Package-manager caches that installs and builds write to. With the home
+// directory read-only, npm/pip/cargo/go fail on their cache instead of on the
+// network, which is the main reason sandboxes get switched off. Only existing
+// directories are opened, never the home directory itself, and credential
+// paths stay masked. "sandbox": { "writableCaches": false } turns this off.
+const CACHE_DIRS = [
+  '.npm', '.yarn/berry/cache', '.cache/yarn', '.cache/pnpm', '.local/share/pnpm/store', '.bun/install/cache',
+  '.cache/pip', '.cache/uv', '.cache/pypoetry', '.cache/go-build', 'go/pkg/mod', '.cargo/registry', '.cargo/git',
+  '.m2/repository', '.gradle/caches', '.cache/deno', '.cache/node-gyp', '.cache/ms-playwright', '.cache/huggingface'
+];
+export function collectCacheDirectories(env = process.env) {
+  const home = path.resolve(env.HOME || os.homedir());
+  const found = [];
+  for (const relative of CACHE_DIRS) {
+    const candidate = path.join(home, ...relative.split('/'));
+    let real;
+    try { real = realpathSync(candidate); if (!statSync(real).isDirectory()) continue; } catch { continue; }
+    // A symlinked cache must still point inside home and must not be home itself.
+    if (!pathContains(home, real) || path.resolve(real) === home) continue;
+    if (!found.includes(real)) found.push(real);
+  }
+  return found;
+}
+
 let cachedProbe = null;
 
 function probeBubblewrap() {
@@ -82,7 +106,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
   const probe = detectSandbox(force);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
-  const writable = [root, ...additionalWritable];
+  const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
+  const writable = [root, ...additionalWritable, ...caches.filter((dir) => !pathContains(root, dir))];
   return {
     enabled: true,
     available: probe.available,
@@ -95,7 +120,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
     maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
-    writable
+    writable,
+    writableCaches: caches
   };
 }
 
