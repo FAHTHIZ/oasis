@@ -65,7 +65,7 @@ test('Windows OAuth browser launch passes URL as an argument without cmd.exe', (
 });
 
 // A fake MCP server that is also its own OAuth authorization server.
-async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1' } = {}) {
+async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1', iss, issSupported = false } = {}) {
   const state = { codes: new Map(), tokens: new Set(), refreshes: 0, registered: [], authorizeParams: null, tokenRequests: [] };
   let base;
   const server = createServer(async (req, res) => {
@@ -74,7 +74,7 @@ async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1' } = {}) {
     for await (const chunk of req) body += chunk;
     const json = (status, value, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(value)); };
     if (url.pathname === '/.well-known/oauth-protected-resource/mcp' || url.pathname === '/.well-known/oauth-protected-resource') return json(200, { resource: base + '/mcp', authorization_servers: [base], scopes_supported: ['tools.read'] });
-    if (url.pathname === '/.well-known/oauth-authorization-server') return json(200, { issuer: base, authorization_endpoint: base + '/authorize', token_endpoint: base + '/token', registration_endpoint: base + '/register', code_challenge_methods_supported: ['S256'] });
+    if (url.pathname === '/.well-known/oauth-authorization-server') return json(200, { issuer: base, authorization_endpoint: base + '/authorize', token_endpoint: base + '/token', registration_endpoint: base + '/register', code_challenge_methods_supported: ['S256'], ...(issSupported ? { authorization_response_iss_parameter_supported: true } : {}) });
     if (url.pathname === '/register') { const reg = JSON.parse(body); state.registered.push(reg); return json(201, { client_id: 'client-' + state.registered.length, redirect_uris: reg.redirect_uris }); }
     if (url.pathname === '/authorize') {
       state.authorizeParams = Object.fromEntries(url.searchParams);
@@ -83,6 +83,7 @@ async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1' } = {}) {
       const back = new URL(url.searchParams.get('redirect_uri'));
       back.searchParams.set('code', code);
       back.searchParams.set('state', url.searchParams.get('state'));
+      if (iss !== undefined) back.searchParams.set('iss', iss === true ? base : iss);
       res.writeHead(302, { location: back.toString() });
       return res.end();
     }
@@ -318,4 +319,22 @@ test('signing in from a running session connects the server right away', async (
   assert.match(message, /Connected: 1 tool\(s\)/);
   assert.deepEqual(session.toolDefinitions.map((tool) => tool.function.name), ['read_file', 'mcp_remote_secret_data']);
   assert.equal(session.mcpFailures.length, 0);
+});
+
+test('RFC 9207: sign-in checks the iss parameter against the discovered issuer', async (t) => {
+  {
+    const { base } = await fakeServer(t, { iss: true, issSupported: true });
+    const { root, env } = await workspace(t, base);
+    assert.match(await mcpLogin(root, 'remote', { env, print: () => {}, open: browser }), /Signed in to remote/);
+  }
+  {
+    const { base } = await fakeServer(t, { iss: 'https://evil.example' });
+    const { root, env } = await workspace(t, base);
+    await assert.rejects(mcpLogin(root, 'remote', { env, print: () => {}, open: browser, timeoutMs: 5000 }), /different authorization server/);
+  }
+  {
+    const { base } = await fakeServer(t, { issSupported: true });
+    const { root, env } = await workspace(t, base);
+    await assert.rejects(mcpLogin(root, 'remote', { env, print: () => {}, open: browser, timeoutMs: 5000 }), /different authorization server/);
+  }
 });

@@ -363,7 +363,10 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
     tokenEndpoint: await requireSafeEndpoint(metadata.token_endpoint, 'Token endpoint', safety),
     registrationEndpoint: metadata.registration_endpoint ? await requireSafeEndpoint(metadata.registration_endpoint, 'Registration endpoint', safety) : null,
     scopes: resourceMetadata && Array.isArray(resourceMetadata.scopes_supported) ? resourceMetadata.scopes_supported : null,
-    pkce: !Array.isArray(metadata.code_challenge_methods_supported) || metadata.code_challenge_methods_supported.includes('S256')
+    pkce: !Array.isArray(metadata.code_challenge_methods_supported) || metadata.code_challenge_methods_supported.includes('S256'),
+    // RFC 9207: the issuer the authorization response must name, when the server says it sends one.
+    metadataIssuer: typeof metadata.issuer === 'string' ? metadata.issuer : null,
+    requireIss: metadata.authorization_response_iss_parameter_supported === true
   };
 }
 
@@ -425,11 +428,17 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname !== '/callback') { res.writeHead(404).end(); return; }
     const error = url.searchParams.get('error');
-    const ok = !error && url.searchParams.get('state') === state && url.searchParams.get('code');
+    // RFC 9207 mix-up defence: a response naming a different issuer (or none, when the
+    // server promised to send one) came from the wrong authorization server.
+    const iss = url.searchParams.get('iss');
+    const expectedIss = discovered.metadataIssuer;
+    const issProblem = expectedIss && ((iss !== null && iss !== expectedIss) || (iss === null && discovered.requireIss));
+    const ok = !error && !issProblem && url.searchParams.get('state') === state && url.searchParams.get('code');
     res.writeHead(ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
     res.end('<!doctype html><title>Oasis</title><body style="font-family:sans-serif;padding:2rem">' + (ok ? 'Signed in to ' + server.name.replace(/[<>&]/g, '') + '. You can close this tab and return to Oasis.' : 'Sign-in failed. Return to Oasis and try again.') + '</body>');
     if (error) fail(new Error('The server refused sign-in: ' + error + (url.searchParams.get('error_description') ? ' - ' + url.searchParams.get('error_description') : '')));
     else if (url.searchParams.get('state') !== state) fail(new Error('Sign-in state did not match; try again.'));
+    else if (issProblem) fail(new Error('Sign-in response came from a different authorization server (' + (iss || 'no issuer') + ', expected ' + expectedIss + '); refusing it.'));
     else if (ok) finish(url.searchParams.get('code'));
   });
   await new Promise((resolve, reject) => { callback.once('error', reject); callback.listen(Number(oauth.callbackPort) || 0, '127.0.0.1', resolve); });
