@@ -241,5 +241,10 @@ Gaps from this analysis that are now closed in `main` (each with regression test
 | No head-to-head evidence path for Codex / Gemini (priority 1, partial) | `oasis eval --codex` and `--gemini-cli` join `--claude-code`. No head-to-head results are published yet. |
 | Security parity | Per-edit vulnerability pattern check, prompt-injection guard on web/MCP output, MCP tool pinning, hidden-Unicode stripping in instruction files, exfiltration hold, protected editor/agent config files, nested-shell and PowerShell analysis. See [SECURITY_COMPARISON.md](../SECURITY_COMPARISON.md). |
 | Efficiency | Parallel tool calls enabled (previously hard-coded off); `prompt_cache_key` sent on OpenAI Responses requests. |
+| Enterprise networks (new) | `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` apply to every outbound request, through CONNECT tunnels with normal certificate checks; `NODE_EXTRA_CA_CERTS` for private CAs. Claude Code, Codex and Gemini CLI all support proxies; before this change OASIS could not reach a model from behind one. |
+| Unattended runs (new) | `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES` waits for the provider's advertised rate-limit reset instead of failing a headless or `/loop` job (comparable to Codex's retry watchdog). Retry backoff is jittered so parallel subagents don't retry in lockstep. |
+| Switching tools (new) | Personal `~/.codex/AGENTS.md` and `~/.gemini/GEMINI.md` load as user memory alongside `~/.claude/CLAUDE.md`. Project-level files from those tools were already read. |
+| Input and UI (new) | Push-to-talk voice dictation (Alt+V in the terminal, mic button in the web/desktop UI), line-range `@file:10-40` mentions, `/model --list` of the models a provider actually serves, OpenTelemetry GenAI semantic-convention attributes. |
+| Hardening (new) | Hash-based Content-Security-Policy on the web UI (no inline scripts), Electron permission policy (only audio for dictation, notifications, clipboard write), RFC 9207 issuer check on MCP OAuth callbacks, fewer prompt-injection false positives with `.env` exfiltration now caught. |
 
-Still open: published head-to-head results, a Windows sandbox, the sandbox-on-by-default decision, rebuilding worktree workers after a restart, and signed installers.
+Still open: published head-to-head results, a Windows sandbox, the sandbox-on-by-default decision, and signed installers.
