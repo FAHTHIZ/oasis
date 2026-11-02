@@ -1,0 +1,175 @@
+{
+ "vulnerabilities": {
+  "found": true,
+  "count": 2,
+  "list": [
+   {
+    "advisory": {
+     "id": "RUSTSEC-2021-0003",
+     "package": "smallvec",
+     "title": "Buffer overflow in SmallVec::insert_many",
+     "description": "A bug in the `SmallVec::insert_many` method caused it to allocate a buffer that was smaller than needed.  It then wrote ",
+     "date": "2021-01-08",
+     "aliases": [
+      "CVE-2021-25900",
+      "GHSA-43w2-9j62-hq99"
+     ],
+     "related": [],
+     "collection": "crates",
+     "categories": [
+      "memory-corruption"
+     ],
+     "keywords": [
+      "buffer-overflow",
+      "heap-overflow",
+      "unsound"
+     ],
+     "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+     "informational": null,
+     "references": [],
+     "source": null,
+     "url": "https://github.com/servo/rust-smallvec/issues/252",
+     "withdrawn": null,
+     "license": "CC0-1.0",
+     "expect-deleted": false
+    },
+    "versions": {
+     "patched": [
+      ">=0.6.14, <1.0.0",
+      ">=1.6.1"
+     ],
+     "unaffected": [
+      "<0.6.3"
+     ]
+    },
+    "affected": {
+     "arch": [],
+     "os": [],
+     "functions": {
+      "smallvec::SmallVec::insert_many": [
+       ">=0.6.3, <0.6.14",
+       ">=1.0.0, <1.6.1"
+      ]
+     }
+    },
+    "package": {
+     "name": "smallvec",
+     "version": "1.6.0",
+     "source": "registry+https://github.com/rust-lang/crates.io-index",
+     "checksum": null,
+     "replace": null
+    }
+   },
+   {
+    "advisory": {
+     "id": "RUSTSEC-2020-0071",
+     "package": "time",
+     "title": "Potential segfault in the time crate",
+     "description": "### Impact\n\nThe affected functions set environment variables without synchronization. On Unix-like operating systems, th",
+     "date": "2020-11-18",
+     "aliases": [
+      "CVE-2020-26235",
+      "GHSA-wcg3-cvx6-7396"
+     ],
+     "related": [],
+     "collection": "crates",
+     "categories": [
+      "code-execution",
+      "memory-corruption"
+     ],
+     "keywords": [
+      "segfault"
+     ],
+     "cvss": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+     "informational": null,
+     "references": [],
+     "source": null,
+     "url": "https://github.com/time-rs/time/issues/293",
+     "withdrawn": null,
+     "license": "CC0-1.0",
+     "expect-deleted": false
+    },
+    "versions": {
+     "patched": [
+      ">=0.2.23"
+     ],
+     "unaffected": [
+      "=0.2.0",
+      "=0.2.1",
+      "=0.2.2",
+      "=0.2.3",
+      "=0.2.4",
+      "=0.2.5",
+      "=0.2.6"
+     ]
+    },
+    "affected": {
+     "arch": [],
+     "os": [
+      "linux",
+      "redox",
+      "solaris",
+      "android",
+      "ios",
+      "macos",
+      "netbsd",
+      "openbsd",
+      "freebsd"
+     ],
+     "functions": {
+      "time::OffsetDateTime::now_local": [
+       "<0.2.23"
+      ],
+      "time::OffsetDateTime::try_now_local": [
+       "<0.2.23"
+      ],
+      "time::UtcOffset::current_local_offset": [
+       "<0.2.23"
+      ],
+      "time::UtcOffset::local_offset_at": [
+       "<0.2.23"
+      ],
+      "time::UtcOffset::try_current_local_offset": [
+       "<0.2.23"
+      ],
+      "time::UtcOffset::try_local_offset_at": [
+       "<0.2.23"
+      ],
+      "time::at": [
+       "^0.1"
+      ],
+      "time::at_utc": [
+       "^0.1"
+      ],
+      "time::now": [
+       "^0.1"
+      ]
+     }
+    },
+    "package": {
+     "name": "time",
+     "version": "0.1.43",
+     "source": "registry+https://github.com/rust-lang/crates.io-index",
+     "checksum": null,
+     "replace": null
+    }
+   }
+  ]
+ },
+ "warnings": {
+  "unmaintained": [
+   {
+    "kind": "unmaintained",
+    "package": {
+     "name": "ansi_term",
+     "version": "0.12.1"
+    },
+    "advisory": {
+     "id": "RUSTSEC-2021-0139",
+     "title": "ansi_term is Unmaintained",
+     "url": "https://github.com/ogham/rust-ansi-term/issues/72"
+    }
+   }
+  ]
+ }
+}
