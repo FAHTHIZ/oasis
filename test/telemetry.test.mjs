@@ -4,7 +4,7 @@ import http from 'node:http';
 import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Telemetry, telemetryEnabled, getTelemetry, shutdownTelemetry, lineChanges } from '../src/telemetry.mjs';
+import { Telemetry, telemetryEnabled, getTelemetry, shutdownTelemetry, lineChanges, genAiProviderName } from '../src/telemetry.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
@@ -89,6 +89,21 @@ test('an agent turn exports turn, model and tool spans plus metrics to a collect
   assert.ok(names.includes('oasis.tool'));
   const turn = spans.find((s) => s.name === 'oasis.turn');
   assert.ok(spans.filter((s) => s.name !== 'oasis.turn').every((s) => s.parentSpanId === turn.spanId && s.traceId === turn.traceId));
+  // OpenTelemetry GenAI semantic conventions, for LLM-observability backends.
+  const attr = (span, key) => { const a = span.attributes.find((x) => x.key === key); return a && (a.value.stringValue ?? a.value.intValue ?? a.value.doubleValue); };
+  const llm = spans.find((s) => s.name === 'oasis.llm_request');
+  assert.equal(llm.kind, 3, 'model calls are CLIENT spans');
+  assert.equal(attr(llm, 'gen_ai.operation.name'), 'chat');
+  assert.ok(attr(llm, 'gen_ai.provider.name'));
+  assert.ok(attr(llm, 'gen_ai.request.model'));
+  assert.notEqual(attr(llm, 'gen_ai.usage.input_tokens'), undefined);
+  assert.equal(attr(llm, 'gen_ai.response.finish_reasons'), 'tool_calls');
+  const tool = spans.find((s) => s.name === 'oasis.tool');
+  assert.equal(attr(tool, 'gen_ai.operation.name'), 'execute_tool');
+  assert.equal(attr(tool, 'gen_ai.tool.name'), 'list_files');
+  assert.equal(attr(tool, 'gen_ai.tool.call.id'), 'c1');
+  assert.equal(attr(turn, 'gen_ai.operation.name'), 'invoke_agent');
+  assert.equal(attr(turn, 'gen_ai.agent.name'), 'oasis');
   const metricNames = received.metrics.flatMap((p) => p.resourceMetrics[0].scopeMetrics[0].metrics.map((m) => m.name));
   for (const name of ['oasis.session.count', 'oasis.tool.count', 'oasis.api.duration', 'oasis.turn.duration']) assert.ok(metricNames.includes(name), name);
   const logs = JSON.stringify(received.logs);
@@ -116,4 +131,16 @@ test('events carry the git branch as vcs.ref.head.name', async () => {
   await mkdir(path.join(detached, '.git'));
   await writeFile(path.join(detached, '.git', 'HEAD'), '0123456789abcdef0123456789abcdef01234567\n');
   assert.equal(gitBranchName(detached), '');
+});
+
+test('gen_ai.provider.name follows the OpenTelemetry well-known values', () => {
+  assert.equal(genAiProviderName({ protocol: 'anthropic' }), 'anthropic');
+  assert.equal(genAiProviderName({ protocol: 'bedrock' }), 'aws.bedrock');
+  assert.equal(genAiProviderName({ protocol: 'vertex' }), 'gcp.vertex_ai');
+  assert.equal(genAiProviderName({ protocol: 'foundry' }), 'azure.ai.inference');
+  assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'https://api.openai.com/v1' }), 'openai');
+  assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' }), 'gcp.gemini');
+  assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'https://api.groq.com/openai/v1' }), 'groq');
+  assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'http://127.0.0.1:11434/v1' }), 'ollama');
+  assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'https://llm.internal.example/v1' }), 'openai-compatible');
 });

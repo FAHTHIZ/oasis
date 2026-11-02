@@ -156,7 +156,9 @@ export class Telemetry {
   }
 
   // Runs fn inside a span; nested spans and events attach to it automatically.
-  async span(name, attrs, fn) {
+  // options.kind: OTLP span kind (1 internal, 3 client for calls to a model API).
+  async span(name, attrs, fn, options = {}) {
+    const kind = [1, 2, 3, 4, 5].includes(options.kind) ? options.kind : 1;
     const parent = spanContext.getStore();
     const span = { traceId: parent ? parent.traceId : randomBytes(16).toString('hex'), spanId: randomBytes(8).toString('hex'), parentSpanId: parent ? parent.spanId : undefined, name, start: nowNanos(), attrs: { ...this.baseAttributes(), ...attrs } };
     let status = { code: 1 };
@@ -167,7 +169,7 @@ export class Telemetry {
       throw error;
     } finally {
       if (span.error) status = { code: 2, message: String(span.error).slice(0, 500) };
-      this.spans.push({ traceId: span.traceId, spanId: span.spanId, ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}), name, kind: 1, startTimeUnixNano: span.start, endTimeUnixNano: nowNanos(), attributes: toAttributes(span.attrs), status });
+      this.spans.push({ traceId: span.traceId, spanId: span.spanId, ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}), name, kind, startTimeUnixNano: span.start, endTimeUnixNano: nowNanos(), attributes: toAttributes(span.attrs), status });
       if (this.spans.length >= 512) this.flushTraces().catch(() => {});
     }
   }
@@ -252,4 +254,27 @@ export function lineChanges(name, args = {}) {
   if (name === 'multi_edit' && Array.isArray(args.edits)) return args.edits.reduce((sum, edit) => ({ added: sum.added + lines(edit && edit.new_string), removed: sum.removed + lines(edit && edit.old_string) }), { added: 0, removed: 0 });
   if (name === 'notebook_edit') return { added: lines(args.new_source), removed: 0 };
   return { added: 0, removed: 0 };
+}
+
+// OpenTelemetry GenAI semantic conventions (gen_ai.provider.name well-known values),
+// so LLM-observability backends recognise OASIS spans without custom mapping.
+const GENAI_HOSTS = [
+  [/(^|\.)openai\.com$/, 'openai'], [/(^|\.)openai\.azure\.com$/, 'azure.ai.openai'], [/(^|\.)anthropic\.com$/, 'anthropic'],
+  [/^generativelanguage\.googleapis\.com$/, 'gcp.gemini'], [/(^|\.)aiplatform\.googleapis\.com$/, 'gcp.vertex_ai'],
+  [/(^|\.)mistral\.ai$/, 'mistral_ai'], [/(^|\.)groq\.com$/, 'groq'], [/(^|\.)x\.ai$/, 'x_ai'], [/(^|\.)deepseek\.com$/, 'deepseek'],
+  [/(^|\.)perplexity\.ai$/, 'perplexity'], [/(^|\.)openrouter\.ai$/, 'openrouter'], [/(^|\.)cohere\.(com|ai)$/, 'cohere']
+];
+
+export function genAiProviderName(config = {}) {
+  const protocol = String(config && config.protocol || '');
+  if (protocol === 'anthropic') return 'anthropic';
+  if (protocol === 'bedrock') return 'aws.bedrock';
+  if (protocol === 'vertex') return 'gcp.vertex_ai';
+  if (protocol === 'foundry') return 'azure.ai.inference';
+  if (protocol === 'ollama') return 'ollama';
+  let host = '';
+  try { host = new URL(String(config && config.baseUrl || '')).hostname.toLowerCase(); } catch {}
+  for (const [pattern, name] of GENAI_HOSTS) if (host && pattern.test(host)) return name;
+  if (/^(localhost|127\.|\[?::1)/.test(host) && /11434/.test(String(config.baseUrl || ''))) return 'ollama';
+  return protocol === 'openai-responses' && !host ? 'openai' : (protocol || 'openai');
 }
