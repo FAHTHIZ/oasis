@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { frontMatterValue } from './frontmatter.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
@@ -1856,7 +1857,7 @@ export async function executeTool(name, args = {}, context = {}) {
       const editDisplayPath = target.relative.split(path.sep).join('/');
       assertNoNewElision(args.old_string, args.new_string, editDisplayPath);
       await snapshotFile(target.root, target.absolute, 'before-agent-edit');
-      await writeFile(target.absolute, next, { encoding: 'utf8' });
+      await atomicWriteFile(target.absolute, next, { encoding: 'utf8' });
       await recordFileState(context, target.absolute);
       const editWarning = combineWarnings(commentWarning(current, next, editDisplayPath, context.session && context.session.commentMode), shrinkWarning(current, next, editDisplayPath), testTamperWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
       return { path: editDisplayPath, changed: true, ...(relaxed ? { matchedBy: relaxed.strategy, matchedAtLine: relaxed.line, note: 'old_string did not match exactly; it matched uniquely after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line + '.' } : {}), replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
@@ -1882,7 +1883,7 @@ export async function executeTool(name, args = {}, context = {}) {
       await mkdir(path.dirname(target.absolute), { recursive: true });
       // New project files get normal permissions (umask applies) so web servers, containers and
       // teammates can read them; only secret-looking files are created owner-only.
-      await writeFile(target.absolute, args.content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
+      await atomicWriteFile(target.absolute, args.content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
       const writeWarning = previousContent === null ? combineWarnings(docWarning, commentWarning('', args.content, writeDisplayPath, context.session && context.session.commentMode)) : combineWarnings(commentWarning(previousContent, args.content, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));

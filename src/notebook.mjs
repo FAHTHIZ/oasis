@@ -1,5 +1,6 @@
 // Jupyter notebook (.ipynb) support: render cells for read_file and edit them
 // structurally with notebook_edit (Claude Code's NotebookEdit).
+import { atomicWriteFile } from './atomic-write.mjs';
 import { readFile, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -148,7 +149,7 @@ export async function editNotebook(root, args = {}) {
   const indentMatch = text.match(/^\{\s*\n(\s+)"/);
   const next = JSON.stringify(notebook, null, indentMatch ? indentMatch[1].length : 1) + (text.endsWith('\n') ? '\n' : '');
   await snapshotFile(target.root, target.absolute, 'before-agent-notebook-edit');
-  await writeFile(target.absolute, next, 'utf8');
+  await atomicWriteFile(target.absolute, next, 'utf8');
   const result = { path: displayPath, changed: true, edit_mode: mode, cell_id: cellId, cells: notebook.cells.length, backupCreated: true };
   if (warning) result.warning = warning;
   return result;
