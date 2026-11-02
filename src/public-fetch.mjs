@@ -8,6 +8,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 import { connect as tlsConnect } from 'node:tls';
 import { proxyForUrl, openTunnel } from './proxy.mjs';
+import { htmlToMarkdown } from './html-markdown.mjs';
 
 const MAX_TOOL_OUTPUT = 24 * 1024;
 const MAX_PUBLIC_RESPONSE_BYTES = 1024 * 1024;
@@ -154,14 +155,36 @@ export async function fetchPublicUrl(raw, options = {}) {
     const text = String(response.body || '');
     if (Buffer.byteLength(text, 'utf8') > MAX_PUBLIC_RESPONSE_BYTES) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
     let content = text;
-    if (/text\/html|application\/xhtml\+xml/i.test(type)) {
-      content = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<(?:br|\/p|\/div|\/h[1-6]|\/li|\/tr)[^>]*>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-        .replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n');
+    let title;
+    let extracted;
+    if (/text\/html|application\/xhtml\+xml/i.test(type) && !options.raw) {
+      const converted = htmlToMarkdown(text, { url: url.toString(), extract: options.extract !== false });
+      title = converted.title || undefined;
+      extracted = converted.extracted;
+      content = (title && !converted.titleInBody ? '# ' + title + '\n\n' : '') + converted.markdown;
     }
-    return { url: url.toString(), status: responseStatus, contentType: type, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT };
+    const limit = Math.max(500, Math.min(MAX_TOOL_OUTPUT, Number(options.maxLength) || MAX_TOOL_OUTPUT));
+    const start = Math.max(0, Math.floor(Number(options.startIndex) || 0));
+    if (start > 0 && start >= content.length) return { url: url.toString(), status: responseStatus, contentType: type, title, error: 'start_index ' + start + ' is past the end of the content (' + content.length + ' characters).' };
+    let end = Math.min(content.length, start + limit);
+    // Prefer to break pages at a paragraph or line boundary.
+    if (end < content.length) {
+      const para = content.lastIndexOf('\n\n', end);
+      const line = content.lastIndexOf('\n', end);
+      if (para > start + limit * 0.6) end = para;
+      else if (line > start + limit * 0.6) end = line;
+    }
+    const result = { url: url.toString(), status: responseStatus, contentType: type };
+    if (title) result.title = title;
+    if (extracted !== undefined) result.format = extracted ? 'markdown (main content)' : 'markdown';
+    result.content = content.slice(start, end);
+    result.truncated = end < content.length;
+    if (start > 0) result.startIndex = start;
+    if (result.truncated) {
+      result.totalLength = content.length;
+      result.nextStartIndex = end;
+      result.note = 'Content continues. Call fetch_url again with start_index ' + end + ' to read more.';
+    }
+    return result;
   } finally { clearTimeout(timer); }
 }
