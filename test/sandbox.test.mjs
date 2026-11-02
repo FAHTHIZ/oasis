@@ -73,3 +73,22 @@ test('bubblewrap overlays credential masks after writable mounts', () => {
   const credentialMask = launch.args.lastIndexOf('--tmpfs');
   assert.ok(writableBind >= 0 && credentialMask > writableBind, 'credential masks must overlay writable workspace mounts');
 });
+
+test('existing package caches are writable in the sandbox, home and credentials are not', async () => {
+  const { mkdtemp, mkdir, symlink } = await import('node:fs/promises');
+  const os = (await import('node:os')).default;
+  const path = (await import('node:path')).default;
+  const { collectCacheDirectories } = await import('../src/sandbox.mjs');
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-cache-home-'));
+  await mkdir(path.join(home, '.npm'), { recursive: true });
+  await mkdir(path.join(home, '.cargo', 'registry'), { recursive: true });
+  await mkdir(path.join(home, '.ssh'), { recursive: true });
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'oasis-cache-out-'));
+  await mkdir(path.join(home, '.cache'), { recursive: true });
+  await symlink(outside, path.join(home, '.cache', 'pip'));
+  const found = collectCacheDirectories({ HOME: home });
+  const { realpathSync } = await import('node:fs');
+  const real = realpathSync(home);
+  assert.deepEqual(found.sort(), [path.join(real, '.cargo', 'registry'), path.join(real, '.npm')].sort());
+  assert.ok(!found.includes(real));
+});
