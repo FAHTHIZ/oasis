@@ -149,3 +149,20 @@ test('local model servers keep the no-hidden-timeout client when the proxy is in
     globalThis.fetch = original;
   }
 });
+
+test('the fetch_url tool goes through the proxy but only to the address that passed the private-network check', async (t) => {
+  const { fetchPublicUrl } = await import('../src/public-fetch.mjs');
+  const proxy = await startProxy();
+  t.after(() => proxy.server.close());
+  const target = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('docs for ' + req.headers.host); });
+  await new Promise((resolve) => target.listen(0, '127.0.0.1', resolve));
+  t.after(() => target.close());
+  const port = target.address().port;
+  const lookupImpl = async () => [{ address: '93.184.216.34', family: 4 }];
+  const result = await fetchPublicUrl('http://docs.example.com:' + port + '/guide', { lookupImpl, env: { HTTP_PROXY: proxy.url } });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(result.content, 'docs for docs.example.com:' + port);
+  assert.deepEqual([proxy.seen[0].type, proxy.seen[0].url], ['connect', '93.184.216.34:' + port], 'the proxy is given the vetted IP, not the host name');
+  await assert.rejects(fetchPublicUrl('http://evil.example.com/', { lookupImpl: async () => [{ address: '10.0.0.5', family: 4 }], env: { HTTP_PROXY: proxy.url } }).then((r) => { if (r.error) throw new Error(r.error); return r; }), /private|blocked/i);
+  assert.equal(proxy.seen.length, 1, 'a blocked address never reaches the proxy');
+});
