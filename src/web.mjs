@@ -3,7 +3,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -396,6 +396,40 @@ function hasValidToken(req, token) {
 }
 
 const MAX_TRANSCRIBE_BYTES = 12 * 1024 * 1024;
+
+// Content-Security-Policy for the app page. Its inline scripts are allowed by hash, so
+// anything injected into the page (say, through model output rendered as HTML) cannot run,
+// load remote code, be framed, or send data anywhere but this server.
+const cspCache = new Map();
+export function pageContentSecurityPolicy(body) {
+  const html = Buffer.isBuffer(body) ? body.toString('utf8') : String(body || '');
+  const key = createHash('sha256').update(html).digest('base64');
+  if (cspCache.has(key)) return cspCache.get(key);
+  const hashes = [];
+  for (const match of html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)) {
+    if (/\ssrc\s*=/i.test(match[1] || '')) continue;
+    hashes.push("'sha256-" + createHash('sha256').update(match[2], 'utf8').digest('base64') + "'");
+  }
+  const policy = [
+    "default-src 'self'",
+    "script-src 'self' " + hashes.join(' '),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'"
+  ].join('; ');
+  if (cspCache.size > 8) cspCache.clear();
+  cspCache.set(key, policy);
+  return policy;
+}
 
 async function readJsonBody(req, limit = MAX_BODY_BYTES) {
   const chunks = [];
@@ -1194,7 +1228,8 @@ export function createOasisWebServer(options = {}) {
         'referrer-policy': 'no-referrer',
         'x-frame-options': 'DENY',
         // The page may use the microphone (dictation) and nothing else of this kind.
-        'permissions-policy': 'microphone=(self), camera=(), geolocation=(), usb=(), serial=(), hid=(), payment=()'
+        'permissions-policy': 'microphone=(self), camera=(), geolocation=(), usb=(), serial=(), hid=(), payment=()',
+        ...(contentType.startsWith('text/html') ? { 'content-security-policy': pageContentSecurityPolicy(body) } : {})
       });
       res.end(body);
       return;
