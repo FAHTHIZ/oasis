@@ -279,7 +279,16 @@ export async function runBuiltinCommand(name, argument, state) {
       const available = session.availableModels || (session.settings && session.settings.availableModels) || [];
       const current = session.config && session.config.model || '(provider default)';
       if (!String(argument || '').trim()) {
-        return { output: 'Model: ' + current + (available.length ? '\nAvailable models: ' + available.join(', ') : '') };
+        return { output: 'Model: ' + current + (available.length ? '\nAvailable models: ' + available.join(', ') : '') + '\n/model --list shows the models your provider serves.' };
+      }
+      if (/^(--list|-l|--refresh)$/.test(String(argument).trim())) {
+        // Ask the provider which models it serves, filtered by any availableModels policy.
+        const { listProviderModels } = await import('./provider-models.mjs');
+        const listed = await listProviderModels(session.config || {}, { env: session.providerEnv || env, cwd: root, refresh: String(argument).trim() === '--refresh' });
+        if (!listed.models) return { output: 'Model: ' + current + '\n' + listed.reason + (available.length ? '\nAllowed models: ' + available.join(', ') : '') };
+        const usable = listed.models.filter((name) => modelAllowed(name, available, { env, protocol: session.config && session.config.protocol }));
+        const hidden = listed.models.length - usable.length;
+        return { output: ['Model: ' + current, 'The provider serves ' + listed.models.length + ' model' + (listed.models.length === 1 ? '' : 's') + (hidden ? ' (' + hidden + ' hidden by availableModels)' : '') + ':', ...usable.map((name) => (name === current ? '* ' : '  ') + name), 'Switch with /model <name>.'].join('\n') };
       }
       const selected = String(argument).trim();
       if (!modelAllowed(selected, available, { env, protocol: session.config && session.config.protocol })) {
