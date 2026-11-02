@@ -170,3 +170,26 @@ test('/resume lists saved sessions and picks one by number or id prefix', async 
   const numeric = await saveSession({ sessionId: '12345678-0000-4000-8000-000000000000', root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'x' }] }, { env });
   assert.equal((await runBuiltinCommand('resume', '12345678', state)).resume, numeric.id);
 });
+
+test('@mentions with line ranges attach just those numbered lines', async () => {
+  const { root } = await workspace();
+  await mkdir(path.join(root, 'src'));
+  await writeFile(path.join(root, 'src', 'big.js'), Array.from({ length: 100 }, (_, i) => 'line ' + (i + 1)).join('\n') + '\n');
+  const range = await expandFileMentions(root, 'Why does @src/big.js:10-12 fail?');
+  assert.deepEqual(range.files, ['src/big.js:10-12']);
+  assert.match(range.text, /<file path="src\/big.js" lines="10-12" total_lines="101">\n10\tline 10\n11\tline 11\n12\tline 12\n<\/file>/);
+  assert.doesNotMatch(range.text, /line 13\b/);
+  const github = await expandFileMentions(root, 'see @src/big.js#L5-L6.');
+  assert.match(github.text, /lines="5-6"[^>]*>\n5\tline 5\n6\tline 6\n/);
+  // The VS Code extension inserts @path#L10-20 for a selection.
+  const vscode = await expandFileMentions(root, '@src/big.js#L7-8 explain');
+  assert.match(vscode.text, /lines="7-8"[^>]*>\n7\tline 7\n8\tline 8\n<\/file>/);
+  const focus = await expandFileMentions(root, 'what is @src/big.js:50');
+  assert.match(focus.text, /lines="30-70" focus="50"/);
+  const past = await expandFileMentions(root, '@src/big.js:500-510');
+  assert.match(past.text, /only 101 lines/);
+  const both = await expandFileMentions(root, '@src/big.js:1-2 and @src/big.js:99-100');
+  assert.equal(both.files.length, 2);
+  const plain = await expandFileMentions(root, 'whole @src/big.js');
+  assert.match(plain.text, /<file path="src\/big.js">\nline 1\n/);
+});
