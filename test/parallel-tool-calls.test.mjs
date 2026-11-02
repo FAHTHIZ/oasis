@@ -29,3 +29,19 @@ test('the chat request advertises parallel tool calls and a batch of reads runs'
   assert.equal(requests[0].parallel_tool_calls, true);
   assert.match(String(result.text || result.finalText || JSON.stringify(result)), /BOTH/);
 });
+
+test('prompt cache key is stable per session and agent, and only sent to OpenAI by default', async () => {
+  const { promptCacheKeyField } = await import('../src/agent.mjs');
+  const openai = { baseURL: 'https://api.openai.com/v1' };
+  const main = { sessionId: '11111111-2222-4333-8444-555555555555' };
+  const a = promptCacheKeyField(main, openai, {});
+  assert.match(a.prompt_cache_key, /^oasis-[0-9a-f]{32}$/);
+  assert.deepEqual(promptCacheKeyField(main, openai, {}), a);
+  assert.notDeepEqual(promptCacheKeyField({ ...main, agentId: 'agent_1' }, openai, {}), a);
+  assert.ok(!a.prompt_cache_key.includes('1111'), 'the session id is hashed, not sent');
+  assert.deepEqual(promptCacheKeyField(main, { baseURL: 'https://gateway.example/v1' }, {}), {});
+  assert.ok(promptCacheKeyField(main, { baseURL: 'https://gateway.example/v1' }, { OASIS_PROMPT_CACHE_KEY: '1' }).prompt_cache_key);
+  assert.deepEqual(promptCacheKeyField(main, openai, { OASIS_PROMPT_CACHE_KEY: '0' }), {});
+  const unsaved = {};
+  assert.deepEqual(promptCacheKeyField(unsaved, openai, {}), promptCacheKeyField(unsaved, openai, {}));
+});
