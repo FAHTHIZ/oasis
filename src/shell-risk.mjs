@@ -364,6 +364,47 @@ export function extractSubstitutions(line) {
   return found;
 }
 
+// Credential stores whose contents should never leave the machine unnoticed.
+const SENSITIVE_FILE = /(^|[\/@=<\s'"])(\.env(?!\.(example|sample|template|dist|defaults)\b)(\.[\w.-]+)?|\.ssh(\/|$|\s)|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|\.aws\/(credentials|config)|\.netrc|\.npmrc|\.pypirc|\.git-credentials|\.docker\/config\.json|\.kube\/config|\.gnupg(\/|$|\s)|\.config\/gh\/hosts\.ya?ml|credentials\.json|service[-_]account[\w.-]*\.json|[\w.-]+\.(pem|p12|pfx|key|keystore|jks)|\/etc\/(shadow|sudoers)|\.oasis\/(config|credentials)[\w.-]*|auth\.json)($|[\s'"])/i;
+const NETWORK_SENDERS = new Set(['curl', 'wget', 'nc', 'ncat', 'netcat', 'socat', 'scp', 'sftp', 'ftp', 'rsync', 'http', 'https', 'xh', 'telnet', 'openssl', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm', 'aws', 'gsutil', 'rclone']);
+const ENV_DUMPERS = new Set(['env', 'printenv', 'set', 'export', 'declare', 'get-childitem']);
+const SECRET_VAR = /\$\{?[A-Za-z_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIALS?)[A-Za-z0-9_]*\}?/i;
+
+function sendsOverNetwork(name, args) {
+  if (!NETWORK_SENDERS.has(name)) return false;
+  if (name === 'rsync' || name === 'scp') return args.some((a) => /^[^\/\s]*[^\/\s:]:/.test(a) && !/^[A-Za-z]:\\/.test(a));
+  if (name === 'aws') return args.includes('s3') && args.includes('cp');
+  if (name === 'openssl') return args.includes('s_client');
+  return true;
+}
+
+function readsSecrets(cmd) {
+  const { name, args } = programOf(cmd.tokens);
+  const first = base(cmd.tokens[0]);
+  if ((ENV_DUMPERS.has(first) && cmd.tokens.slice(1).every((t) => t.startsWith('-'))) || (ENV_DUMPERS.has(name) && operands(args).length === 0)) return 'the environment (which holds API keys)';
+  const hit = cmd.tokens.find((t) => SENSITIVE_FILE.test(' ' + t + ' '));
+  return hit ? hit : '';
+}
+
+// Data leaving the machine: a credential file, an environment dump or a
+// secret variable handed to a network command, directly or through a pipe.
+function exfiltrationRisk(cmd) {
+  const { name, args } = programOf(cmd.tokens);
+  if (!sendsOverNetwork(name, args)) return null;
+  const direct = cmd.tokens.slice(1).find((t) => SENSITIVE_FILE.test(' ' + t + ' '));
+  if (direct) return { highRisk: name + ' sends ' + direct + ' over the network; credential files must not leave the machine without a person seeing it' };
+  // Secret variables in a request body or URL (not an Authorization header,
+  // which is how a token is normally sent to its own service).
+  const BODY = /^(-d|--data(-\w+)?|-F|--form(-string)?|--post-data|--body-data|-T|--upload-file)$/;
+  const secretVar = args.find((a, i) => SECRET_VAR.test(a) && (BODY.test(args[i - 1] || '') || /^(-d|-F)./.test(a) || /^https?:\/\/[^\s]*[?&=\/]\$/.test(a)));
+  if (secretVar && name !== 'aws') return { highRisk: name + ' sends the secret variable in ' + secretVar.slice(0, 60) + ' to a remote host' };
+  for (let up = cmd.pipedFrom, hops = 0; up && hops < 16; up = up.pipedFrom, hops++) {
+    const source = readsSecrets(up);
+    if (source) return { highRisk: 'pipes ' + source + ' into ' + name + ', which sends it over the network' };
+  }
+  return null;
+}
+
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'ash', 'mksh', 'busybox']);
 const CODE_FLAGS = { python: ['-c'], python3: ['-c'], node: ['-e', '--eval', '-p', '--print'], perl: ['-e', '-E'], ruby: ['-e'], php: ['-r'], deno: ['eval'], bun: ['-e', '--eval'] };
 const SSH_VALUE_OPTIONS = new Set(['-b', '-c', '-D', '-E', '-e', '-F', '-I', '-i', '-J', '-L', '-l', '-m', '-O', '-o', '-p', '-Q', '-R', '-S', '-W', '-w', '-B']);
@@ -453,6 +494,7 @@ function analyze(line, depth) {
       if (r && r.blocked) return r;
       note(r);
     }
+    note(exfiltrationRisk(cmd));
     const result = analyzeSimple(cmd, ctx);
     if (!result) continue;
     if (result.blocked) return { blocked: result.blocked };
