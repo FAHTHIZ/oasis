@@ -10,6 +10,7 @@
 //   rules    .claude/rules/**/*.md (project) and ~/.claude/rules/**/*.md (user); a
 //            "paths:" front-matter list scopes a rule to matching files
 // Lines starting with "@path" inside a memory file include that workspace file.
+import { cleanInstructionText } from './untrusted-content.mjs';
 import { appendFile, lstat, mkdir, readFile, readdir, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -68,7 +69,7 @@ async function readImports(root, text, depth = 0) {
       const info = await lstat(target);
       if (!info.isFile()) { lines.push(line); continue; }
       if (info.size > MAX_MEMORY_FILE) { lines.push(line + '  [not imported: ' + relative + ' is ' + info.size + ' bytes, over the ' + MAX_MEMORY_FILE + '-byte import limit; read_file it if it matters]'); continue; }
-      const imported = await readFile(target, 'utf8');
+      const imported = cleanInstructionText(relative, await readFile(target, 'utf8'), null);
       const clippedImport = imported.length > PER_FILE_LIMIT ? imported.slice(0, PER_FILE_LIMIT) + '\n[... ' + relative + ' truncated: ' + (imported.length - PER_FILE_LIMIT) + ' more characters not imported ...]' : imported;
       lines.push('--- imported ' + relative + ' ---', await readImports(root, clippedImport, depth + 1), '--- end ' + relative + ' ---');
     } catch { lines.push(line); }
@@ -105,6 +106,7 @@ export async function loadMemory(root, options = {}) {
     let content;
     try { content = await readFile(real, 'utf8'); } catch { continue; }
     if (!content.trim() || content.includes('\0')) continue;
+    content = cleanInstructionText(path.basename(file.path), content, notices);
     // Many repositories keep identical copies (CLAUDE.md = AGENTS.md = GEMINI.md); load one.
     const fingerprint = content.replace(/\s+/g, ' ').trim();
     if (file.label !== 'readme' && seen.has('content:' + fingerprint)) continue;
@@ -123,7 +125,7 @@ export async function loadMemory(root, options = {}) {
   for (const rule of rules) {
     if (rule.paths.length || seen.has(rule.real)) continue;
     seen.add(rule.real);
-    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + clipInstruction('rule ' + rule.name, rule.body, notices));
+    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + clipInstruction('rule ' + rule.name, cleanInstructionText('rule ' + rule.name, rule.body, notices), notices));
   }
   // README is background, not instructions: it only gets whatever budget the real instruction files leave.
   if (readmePart) parts.push(readmePart);
@@ -251,7 +253,7 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
           found.push({ path: shown, text: '[' + shown + ' applies to this directory but is ' + info.size + ' bytes, over the ' + MAX_MEMORY_FILE + '-byte limit, so it was not loaded. read_file it before editing here.]' });
           continue;
         }
-        const raw = await readFile(file, 'utf8');
+        const raw = cleanInstructionText(shown, await readFile(file, 'utf8'), options.notices);
         let text = (await readImports(workspace, raw.slice(0, PER_FILE_LIMIT))).trim();
         if (raw.length > PER_FILE_LIMIT) text += '\n[... ' + shown + ' truncated: ' + (raw.length - PER_FILE_LIMIT) + ' more characters not loaded. read_file it if the rest matters ...]';
         if (!text) continue;
