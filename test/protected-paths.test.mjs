@@ -136,3 +136,15 @@ test('deleting a protected settings file asks with force and a warning', async (
   assert.equal(prompts[1].force, false);
   assert.doesNotMatch(prompts[1].message, /Warning/);
 });
+
+test('files that editors, other agents and hooks execute automatically are protected', async () => {
+  const { protectedConfigPath, protectedShellWrite } = await import('../src/protected-paths.mjs');
+  for (const p of ['.vscode/settings.json', '.vscode/tasks.json', '.vscode/launch.json', 'app.code-workspace', '.envrc', '.husky/pre-commit', '.pre-commit-config.yaml', 'lefthook.yml', '.cursor/mcp.json', '.cursor/rules/a.mdc', '.gemini/settings.json', '.codex/config.toml', '.devcontainer/devcontainer.json', '.yarnrc.yml', '.pnpmfile.cjs', '.npmrc']) {
+    assert.ok(protectedConfigPath('/r', p), p);
+  }
+  for (const p of ['src/app.js', 'README.md', '.github/workflows/ci.yml', '.github/ISSUE_TEMPLATE/bug.md', 'docs/.vscode-notes.md', 'vscode/settings.json']) {
+    assert.equal(protectedConfigPath('/r', p), null, p);
+  }
+  assert.ok(protectedShellWrite('echo "{}" > .vscode/tasks.json'));
+  assert.equal(protectedShellWrite('cat .envrc'), null);
+});
