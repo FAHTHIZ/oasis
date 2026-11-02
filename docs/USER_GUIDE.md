@@ -729,6 +729,7 @@ Memory files are loaded into every session, from broadest to most specific:
 | Project (commit it) | `OASIS.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md` |
 | Personal (gitignore it) | `OASIS.local.md`, `CLAUDE.local.md` |
 | Other agents' rules (project) | `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`, `.clinerules` (file form), `CONVENTIONS.md`. Turn off with `OASIS_OTHER_AGENT_RULES=0`. |
+| Claude Code auto memory | What Claude Code learned about this repository (`~/.claude/projects/<project>/memory/`): `MEMORY.md` (first 200 lines / 25 KB, as Claude Code loads it) plus the newest topic files within about 8 KB. Worktrees share the main checkout's memory. Read-only and marked as possibly out of date. `autoMemoryDirectory` in your own `~/.claude/settings.json` is honoured; a repository's settings cannot redirect it. Turn off with `OASIS_IMPORT_CLAUDE_MEMORY=0`. |
 | Other agents' rules (user) | `~/.codex/AGENTS.md` (or `$CODEX_HOME/AGENTS.md`) and `~/.gemini/GEMINI.md`, so personal instructions written for Codex or Gemini CLI carry over. A file symlinked to one already loaded is read once. Same off switch. |
 
 Files with the same content (for example `CLAUDE.md` copied to `AGENTS.md` and `GEMINI.md`) are loaded once.

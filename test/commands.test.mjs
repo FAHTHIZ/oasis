@@ -208,3 +208,26 @@ test('personal Codex and Gemini CLI instructions load as user memory, once', asy
   const off = await loadMemory(root, { env: { ...env, HOME: home, OASIS_OTHER_AGENT_RULES: '0' }, home });
   assert.doesNotMatch(off, /Codex habit/);
 });
+
+test('Claude Code auto memory for the repository is imported, including from a worktree', async () => {
+  const { claudeProjectDirName, claudeProjectRoot } = await import('../src/memory.mjs');
+  const { root, home, env } = await workspace();
+  await mkdir(path.join(root, '.git'), { recursive: true });
+  const claudeHome = path.join(home, '.claude');
+  const memDir = path.join(claudeHome, 'projects', claudeProjectDirName(root), 'memory');
+  await mkdir(memDir, { recursive: true });
+  await writeFile(path.join(memDir, 'MEMORY.md'), '- [Testing](feedback_testing.md) - integration tests hit a real DB\n');
+  await writeFile(path.join(memDir, 'feedback_testing.md'), '---\nname: testing\n---\nNever mock the database in integration tests.\n');
+  const e = { ...env, CLAUDE_CONFIG_DIR: claudeHome };
+  const memory = await loadMemory(root, { env: e, home });
+  assert.match(memory, /Claude Code auto memory for this repository/);
+  assert.match(memory, /integration tests hit a real DB/);
+  assert.match(memory, /Never mock the database/);
+  // A linked worktree shares the main checkout's memory, as in Claude Code.
+  const wt = await mkdtemp(path.join(os.tmpdir(), 'oasis-wt-'));
+  await writeFile(path.join(wt, '.git'), 'gitdir: ' + path.join(root, '.git', 'worktrees', 'feature') + '\n');
+  assert.equal(await claudeProjectRoot(wt), root);
+  assert.match(await loadMemory(wt, { env: e, home }), /Never mock the database/);
+  assert.doesNotMatch(await loadMemory(root, { env: { ...e, OASIS_IMPORT_CLAUDE_MEMORY: '0' }, home }), /Never mock the database/);
+  assert.equal(claudeProjectDirName('/home/me/my.repo'), '-home-me-my-repo');
+});
