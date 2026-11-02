@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 // Built-in interactive slash commands (Claude Code style). Each handler returns
 // { output } text, and optionally { prompt } to send to the agent, or
 // { resetSession: true } when the caller should drop the current session.
@@ -1284,7 +1285,7 @@ export async function runBuiltinCommand(name, argument, state) {
       try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
       saved.theme = wanted;
       await mkdir(path.dirname(file), { recursive: true });
-      await writeFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
+      await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
       return { output: 'Theme set to ' + theme.name + (env.OASIS_THEME ? ' (OASIS_THEME is set and wins at the next start)' : '') + '.\n' + themes.themePreview(theme) };
     }
     case 'vim': {
@@ -1300,7 +1301,7 @@ export async function runBuiltinCommand(name, argument, state) {
       try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
       saved.editorMode = wanted;
       await mkdir(path.dirname(file), { recursive: true });
-      await writeFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
+      await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
       return { output: wanted === 'vim' ? 'Vim mode on. Esc enters NORMAL mode; i, a, o, A, I return to INSERT. /vim again to turn it off.' : 'Vim mode off (standard editing).' };
     }
     case 'tips': {

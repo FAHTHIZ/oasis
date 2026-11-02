@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 // oasis mcp add --transport http|sse NAME URL [--header "Name: value"] [--scope user|project]
 // Writes a Claude Code-style entry to ~/.config/oasis/mcp.json (user scope, the
 // default) or ./.mcp.json (project scope), the files OASIS already reads.
@@ -72,7 +73,7 @@ export async function addRemoteMcpServer(args, { root = process.cwd(), env = pro
     '\nFile: ' + file + (isLoopbackUrl(url) ? '' : '\nThe server is remote; each of its tool calls still asks for approval by default.');
   if (!(await approve(summary))) return 'MCP configuration cancelled. Nothing was changed.';
   await mkdir(path.dirname(file), { recursive: true, ...(scope === 'user' ? { mode: 0o700 } : {}) });
-  await writeFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [name]: entry } }, null, 2) + '\n', scope === 'user' ? { mode: 0o600 } : {});
+  await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [name]: entry } }, null, 2) + '\n', scope === 'user' ? { mode: 0o600 } : {});
   if (scope === 'user') { try { await chmod(file, 0o600); } catch {} }
   const next = scope === 'project' ? ' Project servers run after you trust the folder (oasis trust).' : '';
   const login = !Object.keys(headers).some((key) => /^authorization$/i.test(key)) ? ' If it needs sign-in, run oasis mcp login ' + normalized + '.' : '';
@@ -91,6 +92,6 @@ export async function removeUserMcpJsonServer(name, { env = process.env, approve
   if (!(await approve('Remove MCP server "' + key + '" from ' + file + '?'))) return 'MCP removal cancelled.';
   const { [key]: removed, ...others } = servers;
   void removed;
-  await writeFile(file, JSON.stringify({ ...parsed, mcpServers: others }, null, 2) + '\n', { mode: 0o600 });
+  await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: others }, null, 2) + '\n', { mode: 0o600 });
   return 'Removed MCP server "' + key + '" from ' + file + '.';
 }
