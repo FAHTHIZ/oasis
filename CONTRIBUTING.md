@@ -50,8 +50,8 @@ Current direct application/runtime packages are pinned exactly in `package.json`
 | `@xterm/addon-fit` | `0.11.0` | Terminal panel sizing |
 | `quickjs-emscripten` | `0.32.0` | Isolated workflow JavaScript runtime |
 | `node-pty` | `1.1.0` (optional) | Native pseudo-terminal support |
-| `electron` | `45.1.0` (development/package build) | Desktop app runtime |
-| `electron-builder` | `26.4.0` (development/package build) | Desktop installer packaging |
+| `electron` | `45.2.1` (development/package build) | Desktop app runtime |
+| `electron-builder` | `26.18.0` (development/package build) | Desktop installer packaging |
 
 Browser CI installs Playwright `1.64.1` and `@axe-core/playwright` `4.14.0` dynamically; they are not production runtime dependencies.
 
