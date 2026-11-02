@@ -638,6 +638,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 ### Agent tools for long tasks
 
 - `monitor_command` waits on a background command until its output matches a pattern, it exits, or a timeout passes. Use it for dev servers and builds.
+- File discovery honours git's ignore rules. In a git repository, `glob`, `list_files`, the repo map, `@` completion and the built-in `grep` fallback (used when ripgrep isn't installed) list only tracked files plus untracked files that aren't ignored, using every ignore source git reads: nested `.gitignore` files, `.git/info/exclude` and `core.excludesFile`. Ignored build output therefore can't use up the file limits. Pointing a tool at an ignored folder on purpose (`grep` with `path: "dist"`) still searches it, and outside a repository the plain walk is used. `OASIS_RESPECT_GITIGNORE=0` turns this off.
 - Commands that start with a sleep of 10 seconds or more (`sleep 120 && gh run view`, `Start-Sleep -Seconds 60`, or `run_command` with `sleep`) are refused with a pointer to `monitor` or `run_in_background`, since they hold the turn while doing nothing. Short sleeps, sleeps later in a command (`npm start & sleep 5 && curl …`) and background runs are unaffected. `OASIS_ALLOW_LONG_SLEEP=1` turns this off.
 - `enter_plan_mode` lets the agent switch itself to plan mode for risky work.
 - `notify` sends a terminal or desktop notification.

@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- File discovery (glob, list_files, repo map, @ completion, built-in grep fallback) now honours git ignore rules, including nested .gitignore files, .git/info/exclude and core.excludesFile, via `git ls-files` with fsmonitor disabled. Explicitly targeted ignored folders are still searchable. `OASIS_RESPECT_GITIGNORE=0` restores the old walk.
 - Web UI and desktop app: MCP elicitation requests (forms and URLs) now show as an answerable card instead of being silently declined; new `POST /api/jobs/:id/elicitation` endpoint, schema sanitized before it reaches the page, 10-minute timeout.
 - Commands that start with a long sleep (10 s or more) are refused before approval, with a pointer to `monitor` or `run_in_background`, as in Claude Code. `OASIS_ALLOW_LONG_SLEEP=1` turns this off.
 - Memory: Claude Code's auto memory for the repository (`~/.claude/projects/<project>/memory/`) is imported read-only, so what it learned carries over when you switch to OASIS. Worktrees share the main checkout's memory. `OASIS_IMPORT_CLAUDE_MEMORY=0` skips it.
