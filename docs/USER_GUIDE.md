@@ -506,6 +506,14 @@ The native `node-pty` component is an optional dependency. The browser workspace
 | Esc Esc | Clear the input, or rewind when it is empty |
 | Ctrl+L, Ctrl+D | Clear the screen, exit |
 
+### Voice dictation
+
+`/voice` turns on dictation (saved as `"voiceEnabled": true` in your user settings, Claude Code's key); `/voice off` turns it off and `/voice status` shows the recorder and transcription endpoint in use. Press **Alt+V** to start recording, speak, and press Alt+V again: the transcript is inserted at the cursor so you can edit it, and nothing is sent until you press Enter. Esc cancels a recording without uploading it. Terminals do not report key release, so OASIS uses press-to-start, press-to-stop instead of hold-to-talk; rebind the key with the `voice:pushToTalk` action in the `Chat` context of `keybindings.json`.
+
+- Recording uses `sox`/`rec`, `arecord` (Linux) or `ffmpeg`, whichever is installed (`OASIS_VOICE_DEVICE` picks the ffmpeg input; on Windows ffmpeg needs it). `OASIS_VOICE_RECORD_COMMAND="my-recorder --out {file}"` uses your own; it must write a WAV file and stop on SIGINT. Recordings stop after 5 minutes and are deleted after transcription.
+- Transcription uses an OpenAI-compatible `/audio/transcriptions` endpoint, by default OpenAI with `OPENAI_API_KEY` and `gpt-4o-mini-transcribe`. Point it elsewhere in your user settings: `"voice": {"transcriptionUrl": "https://api.groq.com/openai/v1/audio/transcriptions", "model": "whisper-large-v3-turbo", "language": "en", "keyterms": ["OASIS", "pnpm"]}`, or at a local Whisper server on `http://127.0.0.1:…` so audio never leaves your machine. `OASIS_VOICE_API_KEY` is sent to custom endpoints; your OpenAI or Groq key only ever goes to that provider's own host. The project name and your `keyterms` are passed as a spelling hint.
+- Because dictation sends microphone audio somewhere, only your user settings, `--settings` and managed policy can turn it on or choose the endpoint; a repository's settings cannot. Managed settings with `"voiceEnabled": false` turn it off for everyone. `OASIS_VOICE=0` turns it off for one run.
+
 ### Vim mode
 
 `/vim` turns on vim editing for the prompt (`/vim off` turns it off). The choice is saved as `"editorMode": "vim"` in your user settings, and compatible-format `editorMode` in `~/.claude.json` is honored too. The input starts in INSERT mode. Esc switches to NORMAL, and the current mode shows under the prompt. Enter sends from either mode.

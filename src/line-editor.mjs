@@ -453,6 +453,7 @@ export const SHORTCUTS_HELP = [
   '  ↑/↓ history · Ctrl+R search history · Shift+Tab cycle permission mode · Esc Esc clear input (empty: rewind)',
   '  ! run a shell command · # save a memory note · Ctrl+V paste an image · Ctrl+L clear screen · Ctrl+D exit',
   '  Ctrl+G or Ctrl+X Ctrl+E edit the prompt in $EDITOR · Ctrl+S stash the prompt · /vim toggles vim editing',
+  '  Alt+V dictate (after /voice on): press to record, again to transcribe into the prompt',
   '  Rebind keys in ~/.claude/keybindings.json or ~/.oasis/keybindings.json (/keybindings)'
 ];
 
@@ -628,6 +629,7 @@ export function readInput(options = {}) {
     const finish = (result) => {
       if (done) return;
       done = true;
+      cancelRecording();
       hints = [];
       if (paletteScreen) { output.write('\x1b[?1049l'); paletteScreen = false; palette = null; }
       if (result.type === 'submit') draw(true);
@@ -700,8 +702,45 @@ export function readInput(options = {}) {
       } finally { rmSync(dir, { recursive: true, force: true }); }
     };
 
+    // Voice dictation: the first press starts recording, the next one stops it and inserts
+    // the transcript at the cursor (it is not sent until you press Enter). Esc cancels.
+    let recording = null;
+    const voiceKeyLabel = (sequence) => String(sequence || 'meta+v').split('+').map((part) => part === 'meta' ? 'Alt' : part.length === 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)).join('+');
+    const toggleVoice = async (sequence) => {
+      const voice = options.voice;
+      if (!voice || !voice.enabled()) { hints = [DIM('Voice dictation is off. Turn it on with /voice on.', color)]; return; }
+      const module = await import('./voice.mjs');
+      if (!recording) {
+        try {
+          recording = await (voice.startRecording || module.startRecording)({ env: options.env || process.env });
+          hints = [DIM('● Recording · ' + voiceKeyLabel(sequence) + ' to stop and transcribe · Esc to cancel', color)];
+        } catch (error) { recording = null; hints = [DIM(error.message, color)]; }
+        return;
+      }
+      const active = recording;
+      recording = null;
+      hints = [DIM('Transcribing…', color)];
+      draw();
+      try {
+        const file = await active.stop();
+        const text = await (voice.transcribe || module.transcribe)(file, { settings: voice.settings ? voice.settings() : {}, env: options.env || process.env, hints: voice.hints ? voice.hints() : [] });
+        if (!text) { hints = [DIM('No speech was recognised.', color)]; return; }
+        const before = state.text.slice(0, state.cursor);
+        const after = state.text.slice(state.cursor);
+        const insert = (before && !/\s$/.test(before) ? ' ' : '') + text + (after && !/^\s/.test(after) ? ' ' : '');
+        state = { ...state, text: before + insert + after, cursor: before.length + insert.length, undo: [...state.undo.slice(-49), { text: state.text, cursor: state.cursor }] };
+        hints = [];
+      } catch (error) {
+        hints = [DIM(error.message, color)];
+      } finally {
+        if (active.cleanup) await active.cleanup().catch(() => {});
+      }
+    };
+    const cancelRecording = () => { if (recording) { const active = recording; recording = null; active.cancel().catch(() => {}); return true; } return false; };
+
     // Maps a key through keybindings.json. Returns the key to apply, or null when consumed.
     const bindKey = async (key) => {
+      if (recording && key.name === 'escape') { cancelRecording(); hints = [DIM('Recording cancelled.', color)]; return null; }
       if (!bindings || !key.stroke) { chord = null; return key; }
       if (state.vim && state.vim.mode === 'normal' && (key.name === 'char' || key.name === 'escape') && !chord) return key;
       const now = Date.now();
@@ -732,6 +771,7 @@ export function readInput(options = {}) {
         return null;
       }
       if (effect.action === 'redraw') { output.write('\x1b[2J\x1b[H'); previousCursorRow = 0; return null; }
+      if (effect.action === 'voice') { await toggleVoice(sequence); return null; }
       return null;
     };
 

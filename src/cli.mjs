@@ -2318,6 +2318,18 @@ async function readMainInput(root, session, state) {
     onReady: (submit) => { IDLE_SUBMIT = submit; setTimeout(() => wakeIfPending(session), 0); },
     onDoubleEscape: () => '/rewind',
     onPasteImage: () => pasteClipboardImage(root),
+    voice: {
+      enabled: () => {
+        if (session && session.settings && session.settings.voiceDisabledByPolicy) return false;
+        if (/^(0|false|off|1|true|on)$/i.test(String(process.env.OASIS_VOICE || ''))) return /^(1|true|on)$/i.test(process.env.OASIS_VOICE);
+        if (typeof SESSION_OPTIONS.voiceEnabled === 'boolean') return SESSION_OPTIONS.voiceEnabled;
+        const settings = session && session.settings || {};
+        return settings.voiceEnabled === true || Boolean(settings.voice && settings.voice.enabled === true);
+      },
+      settings: () => (session && session.settings) || {},
+      // The project's name helps the transcriber spell it.
+      hints: () => [path.basename(root)]
+    },
     onCommandPalette: async () => {
       const commands = await interactiveCommandList(root);
       const commandItems = commands.map((item) => ({

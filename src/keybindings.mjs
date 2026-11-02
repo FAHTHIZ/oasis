@@ -26,7 +26,7 @@ export const DEFAULT_BINDINGS = {
     escape: 'chat:cancel', 'ctrl+l': 'chat:clearInput', 'shift+tab': 'chat:cycleMode', enter: 'chat:submit',
     'ctrl+j': 'chat:newline', 'shift+enter': 'chat:newline', 'meta+enter': 'chat:newline',
     'ctrl+_': 'chat:undo', 'ctrl+g': 'chat:externalEditor', 'ctrl+x ctrl+e': 'chat:externalEditor', 'ctrl+s': 'chat:stash',
-    'ctrl+v': 'chat:imagePaste', 'meta+p': 'chat:modelPicker',
+    'ctrl+v': 'chat:imagePaste', 'meta+p': 'chat:modelPicker', 'meta+v': 'voice:pushToTalk',
     'ctrl+r': 'history:search', up: 'history:previous', down: 'history:next'
   },
   Autocomplete: { tab: 'autocomplete:accept', escape: 'autocomplete:dismiss' },
@@ -45,6 +45,9 @@ export const ACTIONS = {
   'chat:submit': { key: 'enter' }, 'chat:queueSubmit': { key: 'enter' }, 'chat:sendNow': { key: 'enter' }, 'chat:newline': { key: 'newline' }, 'chat:undo': { key: 'undo' },
   'chat:externalEditor': { action: 'externalEditor' }, 'chat:stash': { action: 'stash' }, 'chat:imagePaste': { key: 'ctrlV' },
   'chat:modelPicker': { command: 'model' },
+  // Claude Code's action name, so existing keybindings.json files carry over. In OASIS a press
+  // starts dictation and the next press stops it (terminals do not report key release).
+  'voice:pushToTalk': { action: 'voice' },
   'autocomplete:accept': { key: 'tab' }, 'autocomplete:dismiss': { key: 'escape' },
   'confirm:yes': { dialog: 'yes' }, 'confirm:no': { dialog: 'no' }, 'confirm:always': { dialog: 'always' }, 'confirm:previous': { dialog: 'previous' }, 'confirm:next': { dialog: 'next' },
   'select:next': { dialog: 'next' }, 'select:previous': { dialog: 'previous' }, 'select:accept': { dialog: 'accept' }, 'select:cancel': { dialog: 'no' },
