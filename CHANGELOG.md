@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- Memory: Claude Code's auto memory for the repository (`~/.claude/projects/<project>/memory/`) is imported read-only, so what it learned carries over when you switch to OASIS. Worktrees share the main checkout's memory. `OASIS_IMPORT_CLAUDE_MEMORY=0` skips it.
 - Desktop app: uses the operating system's proxy settings (including PAC) when no proxy variable is set, and trusts the OS certificate store alongside Node's bundle, so it works on corporate networks with TLS inspection out of the box.
 - `oasis doctor --network` checks the route (direct or proxy), DNS and reachability of the model provider, remote MCP servers and GitHub, without sending credentials, and explains failures such as untrusted certificates behind TLS-inspecting proxies.
 - `OASIS_DISABLE_THINK_KEYWORDS=1` (or `CLAUDE_CODE_DISABLE_ULTRATHINK=1`) stops words like "ultrathink" and "think hard" from raising the thinking budget or reasoning effort; configured defaults still apply.
