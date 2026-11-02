@@ -133,6 +133,8 @@ export async function loadMemory(root, options = {}) {
     seen.add(rule.real);
     parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + clipInstruction('rule ' + rule.name, cleanInstructionText('rule ' + rule.name, rule.body, notices), notices));
   }
+  const imported = await claudeAutoMemoryBlock(root, { env, home: options.home, notices });
+  if (imported) parts.push(imported);
   // README is background, not instructions: it only gets whatever budget the real instruction files leave.
   if (readmePart) parts.push(readmePart);
   const joined = parts.join('\n\n');
@@ -307,4 +309,94 @@ export function rulePathMatches(pattern, relativePath) {
     else source += '^$+?.()|[]{}'.includes(char) || char === '\\' ? '\\' + char : char;
   }
   try { return new RegExp(source + '$').test(file); } catch { return false; }
+}
+
+// Claude Code's auto memory for this repository (~/.claude/projects/<project>/memory/),
+// so what it learned carries over: MEMORY.md (first 200 lines / 25 KB, as Claude Code
+// loads it) plus the newest topic files within a small budget. Read-only; OASIS keeps
+// its own memories separately. OASIS_IMPORT_CLAUDE_MEMORY=0 skips it.
+const CLAUDE_MEMORY_INDEX_LINES = 200;
+const CLAUDE_MEMORY_INDEX_BYTES = 25 * 1024;
+const CLAUDE_MEMORY_TOPIC_BUDGET = 8000;
+
+/** The repository root Claude Code keys auto memory on: the main checkout for worktrees, else the git top level, else the folder. */
+export async function claudeProjectRoot(root) {
+  let dir = path.resolve(root);
+  for (let i = 0; i < 40; i++) {
+    const marker = path.join(dir, '.git');
+    try {
+      const info = await lstat(marker);
+      if (info.isDirectory()) return dir;
+      if (info.isFile()) {
+        const text = await readFile(marker, 'utf8');
+        const gitdir = (text.match(/^gitdir:\s*(.+)$/m) || [])[1];
+        if (gitdir) {
+          const resolved = path.resolve(dir, gitdir.trim());
+          const m = resolved.match(/^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+$/);
+          if (m) return m[1];
+        }
+        return dir;
+      }
+    } catch {}
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(root);
+}
+
+export function claudeProjectDirName(projectRoot) {
+  return String(projectRoot).replace(/[^a-zA-Z0-9]/g, '-');
+}
+
+async function claudeAutoMemoryDir(root, env, home) {
+  const userHome = home || env.HOME || os.homedir();
+  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(userHome, '.claude');
+  // Only the user's own Claude settings may move it; a repository cannot point OASIS elsewhere.
+  try {
+    const settings = JSON.parse(await readFile(path.join(claudeHome, 'settings.json'), 'utf8'));
+    const custom = settings && typeof settings.autoMemoryDirectory === 'string' ? settings.autoMemoryDirectory.trim() : '';
+    if (custom.startsWith('~/')) return path.join(userHome, custom.slice(2));
+    if (custom && path.isAbsolute(custom)) return custom;
+  } catch {}
+  const name = env.CLAUDE_CODE_PROJECT_DIR_NAME && env.CLAUDE_CONFIG_DIR && !/[\\/]|^\.\.?$/.test(env.CLAUDE_CODE_PROJECT_DIR_NAME)
+    ? env.CLAUDE_CODE_PROJECT_DIR_NAME
+    : claudeProjectDirName(await claudeProjectRoot(root));
+  return path.join(claudeHome, 'projects', name, 'memory');
+}
+
+async function readSmallTextFile(file, limit) {
+  try {
+    const info = await lstat(file);
+    if (!info.isFile() || info.size > 256 * 1024) return null;
+    const text = await readFile(file, 'utf8');
+    if (text.includes('\0')) return null;
+    return { text: text.slice(0, limit), mtime: info.mtimeMs };
+  } catch { return null; }
+}
+
+export async function claudeAutoMemoryBlock(root, { env = process.env, home, notices = [] } = {}) {
+  if (env.OASIS_IMPORT_CLAUDE_MEMORY === '0' || env.CLAUDE_CODE_DISABLE_AUTO_MEMORY === '1') return '';
+  const dir = await claudeAutoMemoryDir(root, env, home);
+  const index = await readSmallTextFile(path.join(dir, 'MEMORY.md'), CLAUDE_MEMORY_INDEX_BYTES);
+  let names = [];
+  try { names = (await readdir(dir)).filter((n) => n.endsWith('.md') && n !== 'MEMORY.md').sort(); } catch {}
+  if (!index && !names.length) return '';
+  const sections = [];
+  if (index && index.text.trim()) sections.push(cleanInstructionText('Claude Code MEMORY.md', index.text.split('\n').slice(0, CLAUDE_MEMORY_INDEX_LINES).join('\n'), notices).trim());
+  const topics = (await Promise.all(names.slice(0, 200).map(async (name) => ({ name, file: await readSmallTextFile(path.join(dir, name), 4000) })))).filter((t) => t.file && t.file.text.trim());
+  topics.sort((a, b) => b.file.mtime - a.file.mtime);
+  let budget = CLAUDE_MEMORY_TOPIC_BUDGET;
+  const skipped = [];
+  for (const topic of topics) {
+    const body = cleanInstructionText('Claude Code memory ' + topic.name, topic.file.text, notices).trim();
+    const piece = '### ' + topic.name + '\n' + body;
+    if (piece.length > budget) { skipped.push(topic.name); continue; }
+    budget -= piece.length;
+    sections.push(piece);
+  }
+  if (skipped.length) sections.push('(Not loaded for space: ' + skipped.slice(0, 20).join(', ') + (skipped.length > 20 ? ', …' : '') + '.)');
+  if (!sections.length) return '';
+  const shown = dir.startsWith(os.homedir()) ? '~' + dir.slice(os.homedir().length) : dir;
+  return '--- Claude Code auto memory for this repository (imported, read-only; may be out of date, so verify before relying on it): ' + shown + ' ---\n' + sections.join('\n\n');
 }
