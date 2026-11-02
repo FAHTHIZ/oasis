@@ -114,3 +114,20 @@ test('install asks first, writes a private user mcp.json, and project scope keep
     await assert.rejects(() => installFromRegistry(['io.github.nobody/none'], { root: dir, env, fetchImpl, approve: async () => true }), /No MCP Registry server/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('/mcp search reads the registry named by OASIS_MCP_REGISTRY_URL', async () => {
+  const http = await import('node:http');
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  const server = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(req.url.includes('search=stripe%2F') ? { servers: [wrap({ name: 'com.stripe/mcp', description: 'Stripe tools', version: '0.2.4', remotes: [{ type: 'streamable-http', url: 'https://mcp.stripe.com' }] })], metadata: {} } : { servers: [], metadata: {} }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const env = { ...process.env, OASIS_MCP_REGISTRY_URL: 'http://127.0.0.1:' + server.address().port };
+    const result = await runBuiltinCommand('mcp', 'search stripe', { root: process.cwd(), env });
+    assert.match(result.output, /^com\.stripe\/mcp 0\.2\.4/);
+    assert.match(result.output, /from a terminal with: oasis mcp install NAME/);
+    assert.match((await runBuiltinCommand('mcp', 'search', { root: process.cwd(), env })).output, /Usage/);
+  } finally { server.close(); }
+});
