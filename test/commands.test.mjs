@@ -193,3 +193,18 @@ test('@mentions with line ranges attach just those numbered lines', async () => 
   const plain = await expandFileMentions(root, 'whole @src/big.js');
   assert.match(plain.text, /<file path="src\/big.js">\nline 1\n/);
 });
+
+test('personal Codex and Gemini CLI instructions load as user memory, once', async () => {
+  const { root, home, env } = await workspace();
+  await mkdir(path.join(home, '.codex'), { recursive: true });
+  await mkdir(path.join(home, '.gemini'), { recursive: true });
+  await mkdir(path.join(home, '.claude'), { recursive: true });
+  await writeFile(path.join(home, '.codex', 'AGENTS.md'), 'Codex habit: run make check.\n');
+  await writeFile(path.join(home, '.claude', 'CLAUDE.md'), 'Shared personal rule.\n');
+  await symlink(path.join(home, '.claude', 'CLAUDE.md'), path.join(home, '.gemini', 'GEMINI.md'));
+  const memory = await loadMemory(root, { env: { ...env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude') }, home });
+  assert.match(memory, /Codex habit: run make check/);
+  assert.equal(memory.split('Shared personal rule.').length - 1, 1, 'a symlinked copy is not loaded twice');
+  const off = await loadMemory(root, { env: { ...env, HOME: home, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  assert.doesNotMatch(off, /Codex habit/);
+});

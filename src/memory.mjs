@@ -1,5 +1,6 @@
 // Hierarchical memory, like Claude Code's CLAUDE.md files.
-//   user     ~/.config/oasis/OASIS.md and ~/.claude/CLAUDE.md  (all projects)
+//   user     ~/.config/oasis/OASIS.md and ~/.claude/CLAUDE.md  (all projects),
+//            plus ~/.codex/AGENTS.md and ~/.gemini/GEMINI.md
 //   project  OASIS.md, AGENTS.md, CLAUDE.md                     (shared, committed)
 //            plus GEMINI.md, .github/copilot-instructions.md, .cursorrules,
 //            .windsurfrules, .clinerules, CONVENTIONS.md (other agents' rules)
@@ -35,6 +36,11 @@ export function memoryFiles(root, options = {}) {
   const candidates = [
     { label: 'user', path: path.join(getConfigDirectory(env, home), 'OASIS.md') },
     { label: 'user', path: path.join(claudeHome, 'CLAUDE.md') },
+    // Personal instructions kept for Codex and Gemini CLI apply too (OASIS_OTHER_AGENT_RULES=0 skips them).
+    ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : [
+      { label: 'user', path: path.join(env.CODEX_HOME || path.join(options.home || env.HOME || os.homedir(), '.codex'), 'AGENTS.md') },
+      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.gemini', 'GEMINI.md') }
+    ]),
     ...parents,
     { label: 'project', path: path.join(workspace, 'OASIS.md') },
     { label: 'project', path: path.join(workspace, 'AGENTS.md') },
