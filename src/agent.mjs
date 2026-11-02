@@ -1,6 +1,6 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { providerFetch } from './loopback-fetch.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
@@ -1885,7 +1885,8 @@ async function requestCompletionRaw(session, options = {}) {
       ...(session.reasoningEffort && !options.forceTool ? { reasoning: { effort: session.reasoningEffort } } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // The runtime owns state and replays response items locally, including reasoning items.
-      store: false
+      store: false,
+      ...promptCacheKeyField(session, config, providerEnv)
     };
   } else {
     endpoint = openAIEndpoint(config.baseURL);
@@ -2589,6 +2590,23 @@ const ACTION_NUDGE = '<system-reminder>You described the work instead of doing i
 // reads saves a model round trip per call. OASIS_PARALLEL_TOOL_CALLS=0 (or
 // "parallelToolCalls": false) restores one call per response for gateways or
 // local models that handle multiple calls poorly.
+// OpenAI routes requests that share a prompt_cache_key to the same prompt cache,
+// which raises cache hits (cheaper, faster) for a long agent conversation, as
+// Codex does with its conversation id. Sent to api.openai.com by default (other
+// Responses gateways may reject unknown fields); OASIS_PROMPT_CACHE_KEY=1 sends
+// it to any Responses endpoint, =0 never. Subagents get their own key.
+export function promptCacheKeyField(session, config = {}, env = process.env) {
+  const flag = String(env.OASIS_PROMPT_CACHE_KEY ?? '').trim().toLowerCase();
+  if (['0', 'false', 'off', 'no'].includes(flag)) return {};
+  let host = '';
+  try { host = new URL(String(config.baseURL || 'https://api.openai.com/v1')).hostname.toLowerCase(); } catch {}
+  if (!['1', 'true', 'on', 'yes'].includes(flag) && host !== 'api.openai.com') return {};
+  const base = String(session && (session.sessionId || (session.promptCacheSeed ||= randomUUID())) || '');
+  if (!base) return {};
+  const key = 'oasis-' + createHash('sha256').update(base + '\0' + String(session.agentId || 'main')).digest('hex').slice(0, 32);
+  return { prompt_cache_key: key };
+}
+
 export function parallelToolCalls(config = {}, env = process.env) {
   const flag = String(env.OASIS_PARALLEL_TOOL_CALLS ?? '').trim().toLowerCase();
   if (['0', 'false', 'off', 'no'].includes(flag)) return false;
