@@ -6,6 +6,7 @@
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
 import { atomicWriteFile } from './atomic-write.mjs';
+import { injectionHoldReason } from './untrusted-content.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
 import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
 import * as gitSafety from './git-safety.mjs';
@@ -509,7 +510,8 @@ async function runShell(root, args, context, flavor = 'sh') {
   const { guardInstallCommand } = await import('./package-vetting.mjs');
   const install = await guardInstallCommand(command, null, { env: context.env || process.env, fetchImpl: context.fetchImpl || globalThis.fetch });
   if (install.blocked) return { command, ...install.blocked };
-  const hardRisk = shellHighRisk(command);
+  const injectionHold = injectionHoldReason(context.session);
+  const hardRisk = shellHighRisk(command) || (injectionHold ? 'needs a person because ' + injectionHold : null);
   const appRisk = appControlRisk(command) || (protectedEditsAllowed(context.env || process.env) ? null : protectedShellWrite(command));
   const bypass = Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions');
   const autoAllowed = !hardRisk && !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));

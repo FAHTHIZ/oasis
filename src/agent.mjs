@@ -10,6 +10,7 @@ import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordCla
 import { resolveToolAlias } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
+import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecrets, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
@@ -4140,6 +4141,7 @@ function refreshTodoPrompt(session) {
 
 export async function runAgentTurn(session, prompt, options = {}) {
   const env = options.env || process.env;
+  if (session && !options.isSubagent) clearInjectionTurnFlag(session);
   if (session && session.scratchDir && !session.scratchReady && !options.isSubagent) {
     session.scratchReady = true;
     await ensureScratch(session.root, session.scratchDir.slice(SCRATCH_ROOT.length + 1));
@@ -4996,6 +4998,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           session.secretsShielded = (session.secretsShielded || 0) + shielded.count;
         }
       }
+      if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) item.content = guardExternalContent(session, item.name || name, item.content);
       if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
       session.messages.push({
         role: 'tool',
