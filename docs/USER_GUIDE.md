@@ -256,7 +256,7 @@ export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/corp-root.pem   # if the proxy or serv
 - HTTPS traffic goes through a `CONNECT` tunnel. TLS runs end to end with the real server and its certificate is verified as usual, so the proxy never sees your prompts or API key.
 - `NO_PROXY` takes host names, `.domain` or `*.domain` suffixes, `host:port`, IP addresses, CIDR ranges, or `*`. `localhost` and loopback addresses always connect directly, so local models are never sent to the proxy.
 - The agent's `fetch_url` tool also uses the proxy, but it still resolves and checks the address locally first and tunnels to that exact IP, so the proxy cannot be used to reach internal hosts. If your machine cannot resolve public names itself, `fetch_url` reports that instead of handing the name to the proxy.
-- `oasis doctor` shows the proxy in use (with credentials hidden) and any extra CA file.
+- `oasis doctor` shows the proxy in use (with credentials hidden) and any extra CA file. `oasis doctor --network` checks that the model provider, each remote MCP server in `.mcp.json`, and GitHub are reachable, and explains failures (DNS, refused, timeout, proxy credentials, or an untrusted certificate from a TLS-inspecting proxy). It sends bare requests without your API key or MCP headers, and exits non-zero if anything is unreachable.
 - `OASIS_PROXY=0` turns this off. With `NODE_USE_ENV_PROXY=1` (Node 24+), Node's own proxy support is used instead.
 - Shell commands the agent runs (git, npm, curl) get the same environment and use their own proxy support.
 
