@@ -109,6 +109,8 @@ function printHelp() {
     '  oasis --resume SESSION_ID     Resume one saved session',
     '  oasis mcp list                List configured Model Context Protocol servers',
     '  oasis ide [install|package]   Connect VS Code/Cursor/Windsurf: selection context, diff review, diagnostics',
+    '  oasis mcp search QUERY        Search the official MCP Registry for servers',
+    '  oasis mcp install NAME        Add a server from the MCP Registry (pinned version, asks first)',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp add --transport http|sse NAME URL  Configure a remote MCP server',
     '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
@@ -1618,6 +1620,18 @@ async function manageMcp(rest, root = process.cwd()) {
       : await commands.mcpLogout(root, rest[1], { env: process.env })) + '\n');
     return;
   }
+  if (action === 'search') {
+    const registry = await import('./mcp-registry.mjs');
+    const query = rest.slice(1).filter((arg) => arg !== '--json').join(' ');
+    const rows = await registry.searchRegistry(query, { env: process.env });
+    stdout.write((rest.includes('--json') ? JSON.stringify(rows, null, 2) : registry.formatSearchResults(rows, query)) + '\n');
+    return;
+  }
+  if (action === 'install') {
+    const { installFromRegistry } = await import('./mcp-registry.mjs');
+    stdout.write(await installFromRegistry(rest.slice(1), { root, env: process.env, approve: (text) => approve(text, true, false) }) + '\n');
+    return;
+  }
   if (action === 'add' && rest.some((arg, i) => arg === '--transport' && /^(?:http|sse|streamable-http)$/i.test(String(rest[i + 1] || '')) || /^--transport=(?:http|sse|streamable-http)$/i.test(arg))) {
     const { addRemoteMcpServer } = await import('./mcp-remote-add.mjs');
     const result = await addRemoteMcpServer(rest.slice(1), { root, env: process.env, approve: (text) => approve(text, true, false) });
@@ -1679,7 +1693,7 @@ async function manageMcp(rest, root = process.cwd()) {
     stdout.write('MCP server "' + name + '" is now ' + (existing.enabled ? 'enabled' : 'disabled') + '. Saved ' + output + '\n');
     return;
   }
-  throw new Error('Unknown MCP action. Use oasis mcp list, add, remove, enable, or disable.');
+  throw new Error('Unknown MCP action. Use oasis mcp list, search, install, add, remove, enable, or disable.');
 }
 
 async function showBackups(root) {
