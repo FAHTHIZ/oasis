@@ -638,6 +638,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 ### Agent tools for long tasks
 
 - `monitor_command` waits on a background command until its output matches a pattern, it exits, or a timeout passes. Use it for dev servers and builds.
+- Commands that start with a sleep of 10 seconds or more (`sleep 120 && gh run view`, `Start-Sleep -Seconds 60`, or `run_command` with `sleep`) are refused with a pointer to `monitor` or `run_in_background`, since they hold the turn while doing nothing. Short sleeps, sleeps later in a command (`npm start & sleep 5 && curl …`) and background runs are unaffected. `OASIS_ALLOW_LONG_SLEEP=1` turns this off.
 - `enter_plan_mode` lets the agent switch itself to plan mode for risky work.
 - `notify` sends a terminal or desktop notification.
 - `tool_search` applies when MCP servers expose more than 25 tools: they are deferred, and the agent loads the ones it needs. Use `OASIS_TOOL_SEARCH=on` to always defer, `off` to never defer, or `OASIS_TOOL_SEARCH_THRESHOLD=N` to change the limit.

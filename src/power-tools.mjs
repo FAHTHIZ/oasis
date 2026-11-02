@@ -6,6 +6,7 @@ import { securityWarning } from './security-patterns.mjs';
 //   kill_command   stop a background process
 //   list_background list background processes
 //   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+import { leadingSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
@@ -491,6 +492,10 @@ async function runShell(root, args, context, flavor = 'sh') {
   if (command.length > 8000 || command.includes('\0')) throw new Error('Shell command is too long or invalid.');
   const blocked = shellCommandBlocked(command);
   if (blocked) throw new Error(blocked);
+  if (args.run_in_background !== true) {
+    const sleepError = longSleepError(leadingSleepSeconds(command, flavor === 'powershell' ? 'powershell' : 'sh'), context.env || process.env);
+    if (sleepError) throw new Error(sleepError);
+  }
   if (context.signal && context.signal.aborted) {
     return { approved: false, command, cancelled: true, message: 'Task was cancelled before shell approval or execution.' };
   }
