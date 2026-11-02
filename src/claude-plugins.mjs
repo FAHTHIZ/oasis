@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 // Native Claude Code plugin and marketplace support.
 //
 // OASIS installs and runs plugins written for Claude Code without conversion:
@@ -55,7 +56,7 @@ async function readJson(file, fallback = null) {
 
 async function writeJson(file, value) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+  await atomicWriteFile(file, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
 }
 
 async function exists(file) { try { await stat(file); return true; } catch { return false; } }

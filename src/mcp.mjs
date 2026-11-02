@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 import { inspectMcpTool, toolFingerprint, checkPin, repin, heldToolReason } from './mcp-trust.mjs';
 import { spawn } from 'node:child_process';
 import { oasisVersion } from './version.mjs';
@@ -107,7 +108,7 @@ export async function saveMcpServers(servers, options = {}) {
   }
   const configPath = options.configPath || getMcpConfigPath(options.env || process.env);
   await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
-  await writeFile(configPath, JSON.stringify({ schemaVersion: 1, servers: validated }, null, 2) + '\n', { mode: 0o600 });
+  await atomicWriteFile(configPath, JSON.stringify({ schemaVersion: 1, servers: validated }, null, 2) + '\n', { mode: 0o600 });
   try { await chmod(configPath, 0o600); } catch {}
   return configPath;
 }

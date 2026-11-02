@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 // Persistent prompt history (~/.oasis/history.jsonl), scoped per workspace
 // like Claude Code: Up/Down and Ctrl+R show prompts typed in this project.
 import { appendFile, mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
@@ -49,7 +50,7 @@ export async function appendHistory(root, text, { env = process.env } = {}) {
   try { await chmod(file, 0o600); } catch {}
   const entries = await readEntries(env);
   if (entries.length > MAX_ENTRIES * 1.25) {
-    await writeFile(file, entries.slice(-MAX_ENTRIES).map((entry) => JSON.stringify(entry)).join('\n') + '\n', { mode: 0o600 });
+    await atomicWriteFile(file, entries.slice(-MAX_ENTRIES).map((entry) => JSON.stringify(entry)).join('\n') + '\n', { mode: 0o600 });
   }
   return true;
 }

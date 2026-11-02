@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 // `oasis purge [path]` (Claude Code's `claude purge`): remove local OASIS state for a
 // project — saved transcripts and task metadata, debug logs, background-session records
 // and logs, prompt-history lines, and the workspace-trust entry. File rewind checkpoints
@@ -100,7 +101,7 @@ export async function applyPurge(plan, { env = process.env, confirm = null } = {
     else if (item.kind === 'history') {
       const lines = (await readFile(item.path, 'utf8')).split('\n').filter(Boolean);
       const keep = lines.filter((line) => { try { const entry = JSON.parse(line); return !(entry.root && path.resolve(entry.root) === plan.root); } catch { return true; } });
-      await writeFile(item.path, keep.length ? keep.join('\n') + '\n' : '', { mode: 0o600 });
+      await atomicWriteFile(item.path, keep.length ? keep.join('\n') + '\n' : '', { mode: 0o600 });
     } else if (item.kind === 'trust') {
       const { setWorkspaceTrust } = await import('./settings.mjs');
       await setWorkspaceTrust(plan.root, false, env);

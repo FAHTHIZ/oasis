@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { atomicWriteFile } from './atomic-write.mjs';
+import { mkdir, readFile, chmod } from 'node:fs/promises';
 import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';
 import path from 'node:path';
 import os from 'node:os';
@@ -204,6 +205,7 @@ export async function saveConfig(config, options = {}) {
   if (config.leanTools === false) safe.leanTools = false;
   if (config.followups === false) safe.followups = false;
   if (config.secretShield === false) safe.secretShield = false;
+  if (config.parallelToolCalls === false) safe.parallelToolCalls = false;
   const thinkingBudget = strictInteger(config.thinkingBudget);
   if (thinkingBudget !== null && thinkingBudget >= 1024 && thinkingBudget <= 64000) safe.thinkingBudget = thinkingBudget;
   if (config.requireReadBeforeEdit === false || config.requireReadBeforeEdit === 'strict') safe.requireReadBeforeEdit = config.requireReadBeforeEdit;
@@ -211,7 +213,8 @@ export async function saveConfig(config, options = {}) {
   if (maxOutputTokens !== null && maxOutputTokens >= 1024 && maxOutputTokens <= 128000) safe.maxOutputTokens = maxOutputTokens;
   if (['minimal', 'low', 'medium', 'high'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
   if (!safe.model) throw new Error('The model name cannot be empty.');
-  await writeFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+  // Atomic so a crash or full disk mid-save can't leave a truncated config.
+  await atomicWriteFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
   try { await chmod(configPath, 0o600); } catch { /* POSIX mode bits are unavailable on some filesystems. */ }
   return configPath;
 }

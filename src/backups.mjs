@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 import { copyFile, mkdir, readdir, realpath, stat, lstat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
@@ -45,7 +46,7 @@ export async function snapshotFile(root, filePath, reason = 'overwrite', options
     reason,
     createdAt: new Date().toISOString()
   };
-  await writeFile(path.join(backupRoot, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  await atomicWriteFile(path.join(backupRoot, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
   return manifest;
 }
 

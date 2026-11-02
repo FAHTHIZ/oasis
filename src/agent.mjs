@@ -1,3 +1,4 @@
+import { atomicWriteFile } from './atomic-write.mjs';
 import { randomUUID } from 'node:crypto';
 import { providerFetch } from './loopback-fetch.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
@@ -1878,7 +1879,7 @@ async function requestCompletionRaw(session, options = {}) {
         parameters: tool.function.parameters,
         strict: false
       })), tool_choice: options.forceTool ? { type: 'function', name: options.forceTool } : 'auto' } : {}),
-      parallel_tool_calls: false,
+      parallel_tool_calls: parallelToolCalls(config, providerEnv),
       max_output_tokens: (outputLimit = session.outputTokenCap || maxOutputTokensFor(config, providerEnv)),
       ...(session.reasoningEffort && !options.forceTool ? { reasoning: { effort: session.reasoningEffort } } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
@@ -1896,7 +1897,7 @@ async function requestCompletionRaw(session, options = {}) {
       ...samplingTemperature(config, providerEnv),
       messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
-      ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: false } : {}),
+      ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // llama-server can report how far it has read a long prompt; only asked of a server identified as llama.cpp.
       ...(typeof options.onDelta === 'function' && typeof options.onPromptProgress === 'function' && session.localContext && session.localContext.server === 'llama.cpp' ? { return_progress: true } : {})
@@ -2582,6 +2583,18 @@ const ACTION_NUDGE = '<system-reminder>You described the work instead of doing i
 // which makes small models drift between tool-call formats and invent
 // arguments. Agent work wants near-greedy decoding. Hosted APIs keep their own
 // defaults unless a temperature is configured.
+// Lets the model ask for several tool calls in one response. The executor runs
+// consecutive read-only calls concurrently and keeps edits in order, so batching
+// reads saves a model round trip per call. OASIS_PARALLEL_TOOL_CALLS=0 (or
+// "parallelToolCalls": false) restores one call per response for gateways or
+// local models that handle multiple calls poorly.
+export function parallelToolCalls(config = {}, env = process.env) {
+  const flag = String(env.OASIS_PARALLEL_TOOL_CALLS ?? '').trim().toLowerCase();
+  if (['0', 'false', 'off', 'no'].includes(flag)) return false;
+  if (['1', 'true', 'on', 'yes'].includes(flag)) return true;
+  return config.parallelToolCalls !== false;
+}
+
 export function samplingTemperature(config = {}, env = process.env) {
   const configured = config.temperature !== undefined ? config.temperature : env.OASIS_TEMPERATURE;
   if (configured !== undefined && configured !== '') {
@@ -2955,7 +2968,7 @@ async function runWorkflowTool(session, args, context, options) {
   const background = args.run_in_background === true || args.run_in_background === 'true';
   const run = { id, name, scriptPath, status: 'running', startedAt: Date.now(), controller, state: { agents: [], phases: [], logs: [], calls: [] }, agentIds: [], background };
   session.workflowRuns.set(id, run);
-  const persist = async (state) => { await writeFile(path.join(dir, id + '.state.json'), JSON.stringify({ id, name, scriptPath, status: run.status, calls: state.calls }, null, 2)).catch(() => {}); };
+  const persist = async (state) => { await atomicWriteFile(path.join(dir, id + '.state.json'), JSON.stringify({ id, name, scriptPath, status: run.status, calls: state.calls }, null, 2)).catch(() => {}); };
   const runAgent = async ({ prompt, label, agentType, model, isolation, signal }) => {
     if (signal && signal.aborted) return null;
     const subOptions = background ? { ...options, approval: async () => false, signal, onToolStart: undefined, onToolResult: undefined, onDelta: undefined } : { ...options, signal };
