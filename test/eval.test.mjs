@@ -950,3 +950,41 @@ test('OASIS eval applies a whole-turn timeout and aborts the agent session', asy
   assert.match(result.results[0].error, /Task exceeded the 1-second task timeout/);
   assert.equal(observedSignal.aborted, true);
 });
+
+for (const [flag, protocol, versionText, expectArg, stdout] of [
+  ['--codex', 'codex-cli', 'codex-cli 0.80.0', 'workspace-write', [
+    JSON.stringify({ type: 'thread.started', thread_id: 't' }),
+    JSON.stringify({ type: 'item.completed', item: { id: 'i1', type: 'command_execution', command: 'npm test' } }),
+    JSON.stringify({ type: 'item.completed', item: { id: 'i2', type: 'agent_message', text: 'done' } }),
+    JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 20, cached_input_tokens: 5, output_tokens: 4, reasoning_output_tokens: 1 } })
+  ].join('\n')],
+  ['--gemini-cli', 'gemini-cli', '0.20.0', 'yolo', 'Loaded cached credentials.\n' + JSON.stringify({ response: 'done', stats: { models: { 'gemini-fixture': { tokens: { prompt: 20, candidates: 4, thoughts: 1, total: 25 } } }, tools: { totalCalls: 1 } } })]
+]) {
+  test(flag + ' eval runs the external agent on a disposable copy and records tokens', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'oasis-ext-eval-'));
+    const tasksDir = path.join(tmp, 'tasks');
+    await mkdir(tasksDir);
+    const taskDir = await createFixtureTask(tasksDir, 'fixture-task');
+    const fakeRunner = async (args, runOptions = {}) => {
+      if (args.length === 1 && args[0] === '--version') return { exitCode: 0, stdout: versionText + '\n', stderr: '', output: '', timedOut: false };
+      assert.ok(args.includes(expectArg), args.join(' '));
+      assert.ok(args.includes('fixture-model'));
+      await writeFile(path.join(runOptions.cwd, 'demo.txt'), 'new\n');
+      return { exitCode: 0, stdout, stderr: '', output: '', timedOut: false };
+    };
+    const output = { text: '', write(value) { this.text += String(value); } };
+    const result = await runEvalCommand([flag, '--task', 'fixture-task', '--trials', '1', '--model', 'fixture-model'], {
+      autoApprove: true, env: { ...process.env, GITHUB_SHA: 'c'.repeat(40) }, tasksDir, resultsDir: path.join(tmp, 'results'), output, claudeRunner: fakeRunner
+    });
+    assert.equal(result.ok, true, output.text);
+    assert.equal(result.summary.provider.protocol, protocol);
+    assert.equal(result.results[0].totalTokens, 25);
+    assert.equal(result.results[0].costUSD, null);
+    assert.equal(await readFile(path.join(taskDir, 'repo', 'demo.txt'), 'utf8'), 'old\n');
+    await assert.rejects(runEvalCommand([flag, '--max-turns', '5'], { autoApprove: true, env: { ...process.env } }), /Claude Code options/);
+  });
+}
+
+test('only one external agent can be chosen', async () => {
+  await assert.rejects(runEvalCommand(['--codex', '--gemini-cli'], { autoApprove: true, env: { ...process.env } }), /Choose one external agent/);
+});

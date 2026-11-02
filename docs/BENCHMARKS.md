@@ -119,6 +119,23 @@ Options include **--model sonnet** or an exact model name, **--max-turns 30**, *
 
 This remains an agent running code. The verifier is kept outside the disposable workspace, but the runner is not an OS-level sandbox. Run benchmarks in a controlled environment, do not point it at personal workspaces, and use a dedicated account/configuration with no unrelated secrets. A timed-out or rejected tool request counts as a failed trial.
 
+## Run Codex CLI and Gemini CLI on the same fixtures
+
+The same runner drives [Codex CLI](https://developers.openai.com/codex/noninteractive) and [Gemini CLI](https://geminicli.com/docs/cli/headless/) in headless mode, on the same disposable copies and hidden verifiers:
+
+```sh
+node src/cli.mjs eval --codex --task clamp-integer --trials 1 --yes
+node src/cli.mjs eval --codex --trials 3 --model gpt-5.5 --yes
+node src/cli.mjs eval --gemini-cli --trials 3 --model gemini-3-pro --yes
+```
+
+- Codex runs as `codex exec --json --sandbox workspace-write --skip-git-repo-check`: its default sandbox with the network off, which matches the benchmark's no-network rule. Tokens come from the `turn.completed` usage events (reasoning tokens counted as output).
+- Gemini CLI runs as `gemini -p ... --output-format json --approval-mode yolo`. YOLO mode turns Gemini's own sandbox on, which needs Docker or Podman; set `GEMINI_SANDBOX=false` in a controlled environment without one. Tokens come from `stats.models`.
+- `--model` and `--timeout-seconds` apply to both; `--max-turns` and `--budget-usd` are Claude Code options. Point at a specific binary with `OASIS_CODEX_BIN` or `OASIS_GEMINI_CLI_BIN`.
+- Neither CLI reports a dollar cost in its output, so `costUSD` stays null; compare token counts, or use the vendor's billing records.
+
+The resulting reports work with `--compare` like any other run, so OASIS, Claude Code, Codex and Gemini CLI can be compared pairwise on identical tasks.
+
 ## Run OASIS and compare reports
 
 In a separate run, configure OASIS to use the model/provider configuration you want to compare:
