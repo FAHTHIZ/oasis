@@ -1,4 +1,6 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { explainNetworkError } from './network-doctor.mjs';
+import { proxyForUrl } from './proxy.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { providerFetch } from './loopback-fetch.mjs';
@@ -2105,7 +2107,13 @@ async function requestCompletionRaw(session, options = {}) {
     if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after ' + Math.round(timeoutMs / 1000) + ' seconds waiting for a response (set OASIS_REQUEST_TIMEOUT_SECONDS to change this).');
     // undici reports a connection dropped while reading the body as TypeError('terminated').
     if (error instanceof TypeError && responseStarted) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the response finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
-    if (error instanceof TypeError) throw new Error('Could not reach the model provider. Check the network and provider base URL.');
+    if (error instanceof TypeError) {
+      let proxied = false;
+      try { proxied = Boolean(proxyForUrl(String(endpoint && endpoint.url || endpoint))); } catch {}
+      const why = explainNetworkError(error, { proxied });
+      const detail = why.kind === 'error' && /^(fetch failed)?$/i.test(why.detail.trim()) ? 'Check the network and provider base URL.' : why.detail;
+      throw Object.assign(new Error('Could not reach the model provider: ' + detail + ' Run `oasis doctor --network` for a full check.'), { code: 'OASIS_NETWORK', networkKind: why.kind, cause: error });
+    }
     throw error;
   } finally {
     clearTimeout(timer);
