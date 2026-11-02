@@ -57,7 +57,7 @@ export const BUILTIN_COMMANDS = {
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
-  mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers',
+  mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers; /mcp search QUERY searches the MCP Registry',
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
   'add-dir': 'Add a working directory for this session (/add-dir PATH)',
@@ -1545,6 +1545,15 @@ export async function runBuiltinCommand(name, argument, state) {
         const results = await reconnectMcpServers(session, mcpWords.slice(1), { root, env });
         if (!results.length) return { output: 'No failed MCP servers to reconnect. Use /mcp reconnect NAME or /mcp reconnect all to restart a connected one.' };
         return { output: results.map((item) => item.ok ? '[MCP] ' + item.name + ' reconnected · ' + item.tools + ' tool(s)' : '[MCP] ' + item.name + ' failed: ' + item.error).join('\n') };
+      }
+      if (mcpWords[0] === 'search') {
+        const query = mcpWords.slice(1).join(' ');
+        if (!query) return { output: 'Usage: /mcp search QUERY (searches the official MCP Registry)' };
+        const registry = await import('./mcp-registry.mjs');
+        try {
+          const rows = await registry.searchRegistry(query, { env, limit: 10 });
+          return { output: registry.formatSearchResults(rows, query).replace(/\n\nInstall one with:.*$/, '\n\nInstall one from a terminal with: oasis mcp install NAME (it shows the source and asks first); it starts with your next session.') };
+        } catch (error) { return { output: 'MCP Registry search failed: ' + error.message }; }
       }
       const clients = session && session.mcpClients instanceof Map ? session.mcpClients : new Map();
       const failures = session && Array.isArray(session.mcpFailures) ? session.mcpFailures : [];
