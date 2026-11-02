@@ -14,6 +14,7 @@ import { commentWarning } from './style-rules.mjs';
 import { loadMemory } from './memory.mjs';
 import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
 import { fetchPublicUrl } from './public-fetch.mjs';
+import { gitVisibleFiles } from './git-visible-files.mjs';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -267,6 +268,10 @@ export async function walkFiles(root, options = {}) {
   const includeHidden = Boolean(options.includeHidden);
   const maxFiles = options.maxFiles || 1200;
   const maxDepth = options.maxDepth || 9;
+  if (options.respectGitignore !== false) {
+    const visible = await gitVisibleFiles(root, { maxFiles, maxDepth, includeHidden, skipDirs: SKIP_DIRS, skip: (rel) => sensitivePath(rel), env: options.env }).catch(() => null);
+    if (visible) return visible;
+  }
   const output = [];
   async function walk(dir, depth) {
     if (depth > maxDepth || output.length >= maxFiles) return;
