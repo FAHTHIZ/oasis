@@ -560,6 +560,36 @@ export function createOasisWebServer(options = {}) {
     });
   }
 
+  // MCP elicitation: a server asks the user to fill in a form (or open a URL) mid-call.
+  // The card is built from the schema in the page; elicit() validates the answer
+  // against the schema again before anything reaches the server.
+  function elicitationFor(job, request = {}) {
+    return new Promise((resolve) => {
+      const elicitationId = randomUUID();
+      let settled = false;
+      const finish = (answer) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        job.pendingApprovals.delete(elicitationId);
+        if (job.pendingApprovals.size === 0 && job.status === 'waiting_approval') job.status = 'running';
+        const result = answer && typeof answer === 'object' && ['accept', 'decline', 'cancel'].includes(answer.action) ? answer : { action: 'cancel' };
+        emit(job, 'elicitation_resolved', { elicitationId, action: result.action });
+        resolve(result);
+      };
+      const timer = setTimeout(() => finish({ action: 'cancel' }), 10 * 60 * 1000);
+      timer.unref?.();
+      const mode = request.mode === 'url' ? 'url' : 'form';
+      let url = '';
+      if (mode === 'url') { try { const parsed = new URL(String(request.url || '')); if (parsed.protocol === 'https:' || parsed.protocol === 'http:') url = parsed.href; } catch {} }
+      if (mode === 'url' && !url) { finish({ action: 'cancel' }); return; }
+      const schema = mode === 'form' ? elicitationSchemaForPage(request.schema) : null;
+      job.pendingApprovals.set(elicitationId, { resolve: (value) => finish(value), elicitation: { mode } });
+      job.status = 'waiting_approval';
+      emit(job, 'elicitation', { elicitationId, serverName: String(request.serverName || '').slice(0, 100), message: String(request.message || '').slice(0, 2000), mode, ...(url ? { url } : {}), ...(schema ? { schema } : {}), expiresInSeconds: 600 });
+    });
+  }
+
   function pruneJobs(additionalReservations = 0) {
     if (jobs.size + reservedJobSlots + additionalReservations <= MAX_JOBS) return;
     for (const [id, job] of jobs) {
@@ -790,6 +820,8 @@ export function createOasisWebServer(options = {}) {
         const toolActivityArgsByCallId = new Map();
         let assistantDeltaBuffer = '';
         job.steerTarget = session;
+        // MCP forms go to whichever browser job is running when the server asks.
+        session.elicit = (request) => elicitationFor(job, request);
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
           onSteer: (info) => emit(job, 'steered', { delivered: Math.max(0, Math.min(20, Number(info && info.delivered) || 0)) }),
@@ -2078,6 +2110,21 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    const elicitationMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/elicitation$/i);
+    if (req.method === 'POST' && elicitationMatch) {
+      const job = jobs.get(elicitationMatch[1]);
+      if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
+      const body = await readJsonBody(req);
+      const pending = job.pendingApprovals.get(String(body.elicitationId || ''));
+      if (!pending || !pending.elicitation) { json(res, 404, { error: 'That form is no longer waiting for an answer.' }); return; }
+      const action = ['accept', 'decline', 'cancel'].includes(body.action) ? body.action : null;
+      if (!action) { json(res, 400, { error: 'action must be accept, decline or cancel.' }); return; }
+      const content = action === 'accept' && pending.elicitation.mode === 'form' && body.content && typeof body.content === 'object' && !Array.isArray(body.content) ? body.content : undefined;
+      pending.resolve({ action, ...(content ? { content } : {}) });
+      json(res, 200, { resolved: true, action });
+      return;
+    }
+
     const approvalMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/approval$/i);
     if (req.method === 'POST' && approvalMatch) {
       const job = jobs.get(approvalMatch[1]);
@@ -2087,7 +2134,7 @@ export function createOasisWebServer(options = {}) {
       const approved = body.approved;
       if (typeof approved !== 'boolean') { json(res, 400, { error: 'approved must be true or false.' }); return; }
       const pending = job.pendingApprovals.get(approvalId);
-      if (!pending || pending.question) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
+      if (!pending || pending.question || pending.elicitation) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
       const always = approved && body.always === true && Boolean(pending.suggestion);
       pending.resolve(always ? 'always' : approved);
       json(res, 200, { resolved: true, approved, always });
@@ -2177,4 +2224,34 @@ export async function startOasisWebServer(options = {}) {
   });
   const address = app.server.address();
   return { ...app, host, port: address && typeof address === 'object' ? address.port : port };
+}
+
+// Only the flat, primitive schema MCP allows for forms is passed to the page, with
+// lengths capped; anything else is dropped (and elicit() validates the answer anyway).
+export function elicitationSchemaForPage(schema) {
+  const out = { type: 'object', properties: {}, required: [] };
+  const props = schema && typeof schema === 'object' && schema.properties && typeof schema.properties === 'object' ? schema.properties : {};
+  const text = (value, max) => (typeof value === 'string' ? value.slice(0, max) : undefined);
+  for (const [key, prop] of Object.entries(props).slice(0, 30)) {
+    if (!prop || typeof prop !== 'object' || !/^[\w.-]{1,64}$/.test(key)) continue;
+    const type = ['string', 'number', 'integer', 'boolean', 'array'].includes(prop.type) ? prop.type : (Array.isArray(prop.enum) ? 'string' : null);
+    if (!type) continue;
+    const field = { type };
+    for (const name of ['title', 'description']) { const v = text(prop[name], name === 'title' ? 120 : 500); if (v) field[name] = v; }
+    const options = Array.isArray(prop.enum) ? prop.enum.map((v, i) => ({ const: v, title: Array.isArray(prop.enumNames) ? text(prop.enumNames[i], 120) : undefined }))
+      : Array.isArray(prop.oneOf) ? prop.oneOf.filter((o) => o && 'const' in o).map((o) => ({ const: o.const, title: text(o.title, 120) })) : null;
+    if (options) field.options = options.filter((o) => ['string', 'number', 'boolean'].includes(typeof o.const)).slice(0, 50).map((o) => ({ const: typeof o.const === 'string' ? o.const.slice(0, 200) : o.const, ...(o.title ? { title: o.title } : {}) }));
+    if (type === 'array') {
+      const items = prop.items && typeof prop.items === 'object' ? prop.items : {};
+      const itemOptions = Array.isArray(items.enum) ? items.enum.map((v) => ({ const: v })) : Array.isArray(items.anyOf) ? items.anyOf.filter((o) => o && 'const' in o).map((o) => ({ const: o.const, title: text(o.title, 120) })) : [];
+      if (!itemOptions.length) continue;
+      field.options = itemOptions.filter((o) => typeof o.const === 'string').slice(0, 50).map((o) => ({ const: o.const.slice(0, 200), ...(o.title ? { title: o.title } : {}) }));
+    }
+    if (typeof prop.format === 'string' && ['email', 'uri', 'date', 'date-time'].includes(prop.format)) field.format = prop.format;
+    for (const name of ['minimum', 'maximum', 'minLength', 'maxLength']) if (Number.isFinite(prop[name])) field[name] = prop[name];
+    if (['string', 'number', 'boolean'].includes(typeof prop.default) || (Array.isArray(prop.default) && prop.default.every((v) => typeof v === 'string'))) field.default = prop.default;
+    out.properties[key] = field;
+  }
+  if (schema && Array.isArray(schema.required)) out.required = schema.required.filter((k) => typeof k === 'string' && out.properties[k]);
+  return out;
 }

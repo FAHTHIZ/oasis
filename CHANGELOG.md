@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- Web UI and desktop app: MCP elicitation requests (forms and URLs) now show as an answerable card instead of being silently declined; new `POST /api/jobs/:id/elicitation` endpoint, schema sanitized before it reaches the page, 10-minute timeout.
 - Commands that start with a long sleep (10 s or more) are refused before approval, with a pointer to `monitor` or `run_in_background`, as in Claude Code. `OASIS_ALLOW_LONG_SLEEP=1` turns this off.
 - Memory: Claude Code's auto memory for the repository (`~/.claude/projects/<project>/memory/`) is imported read-only, so what it learned carries over when you switch to OASIS. Worktrees share the main checkout's memory. `OASIS_IMPORT_CLAUDE_MEMORY=0` skips it.
 - Desktop app: uses the operating system's proxy settings (including PAC) when no proxy variable is set, and trusts the OS certificate store alongside Node's bundle, so it works on corporate networks with TLS inspection out of the box.
