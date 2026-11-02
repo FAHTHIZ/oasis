@@ -9,9 +9,14 @@
 //   mypy        mypy config + mypy            mypy --show-column-numbers --no-error-summary
 //   pyright     pyrightconfig.json + pyright  pyright
 //   go          go.mod + go                   go vet ./...
-//   cargo       Cargo.toml + cargo            cargo check --message-format short
+//   cargo       Cargo.toml + cargo            cargo clippy (when installed) or cargo check, --message-format short
+//   oxlint      .oxlintrc.json or dependency  oxlint --format=unix
+//   biome       biome.json(c) + biome         biome lint --reporter=github
+//   shellcheck  shell scripts + shellcheck    shellcheck -f gcc <files>
+//   hadolint    Dockerfiles + hadolint        hadolint -f gnu <files>
+//   actionlint  .github/workflows + actionlint actionlint -oneline (includes script-injection checks)
 //   node        built-in syntax check for .js/.mjs/.cjs (node --check, never executes code);
-//               skipped when ESLint is available
+//               skipped when ESLint, oxlint or Biome is available
 //   json        built-in JSON parse check
 //
 // External checkers go through runWorkspaceCommand, so approval prompts, permission
@@ -24,12 +29,21 @@ import path from 'node:path';
 // tools.mjs imports this module, so its helpers are loaded lazily to avoid a cycle.
 const workspaceTools = () => import('./tools.mjs');
 
-export const CHECKERS = ['typescript', 'eslint', 'ruff', 'mypy', 'pyright', 'go', 'cargo', 'node', 'json'];
+export const CHECKERS = ['typescript', 'eslint', 'oxlint', 'biome', 'ruff', 'mypy', 'pyright', 'go', 'cargo', 'shellcheck', 'hadolint', 'actionlint', 'node', 'json'];
+// runWorkspaceCommand accepts at most 80 arguments; file-list checkers stay under it.
+const MAX_FILE_ARGS = 70;
+const FILE_LINTER_INSTALL = {
+  shellcheck: 'brew install shellcheck, apt install shellcheck, or winget install koalaman.shellcheck',
+  hadolint: 'brew install hadolint, or a release from https://github.com/hadolint/hadolint/releases',
+  actionlint: 'brew install actionlint, or go install github.com/rhysd/actionlint/cmd/actionlint@latest'
+};
+const SHELL_FILE = /\.(sh|bash|ksh|bats)$/i;
+const DOCKERFILE = /(^|\/)(Dockerfile|Containerfile)(\.[\w.-]+)?$|\.(dockerfile|containerfile)$/i;
 const MAX_DIAGNOSTICS = 200;
 const MAX_BUILTIN_FILES = 60;
 const JS_EXT = new Set(['.js', '.mjs', '.cjs']);
 
-export const DIAGNOSTICS_TOOL_DEFINITION = { type: 'function', function: { name: 'diagnostics', description: 'Run the project\'s type checkers and linters (TypeScript, ESLint, Ruff, mypy, Pyright, go vet, cargo check) plus built-in JavaScript and JSON syntax checks, and return structured problems with file, line, column, severity and message. Use after editing code to catch errors before running tests. checker auto (default) runs every checker the project is set up for. paths limits results (and built-in checks) to specific files or folders; without paths the built-in checks cover files changed in Git. External checkers need the same approval as run_command.', parameters: { type: 'object', properties: {
+export const DIAGNOSTICS_TOOL_DEFINITION = { type: 'function', function: { name: 'diagnostics', description: 'Run the project\'s type checkers and linters (TypeScript, ESLint, oxlint, Biome, Ruff, mypy, Pyright, go vet, cargo clippy or check, ShellCheck, hadolint for Dockerfiles, actionlint for GitHub workflows) plus built-in JavaScript and JSON syntax checks, and return structured problems with file, line, column, severity and message. Use after editing code to catch errors before running tests. checker auto (default) runs every checker the project is set up for. paths limits results (and built-in checks) to specific files or folders; without paths the built-in checks cover files changed in Git. External checkers need the same approval as run_command.', parameters: { type: 'object', properties: {
   checker: { type: 'string', enum: ['auto', ...CHECKERS], description: 'Which checker to run; default auto' },
   paths: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Optional workspace-relative files or folders to focus on' },
   timeoutSeconds: { type: 'integer', description: 'Per-checker timeout, 10-600; default 180' }
@@ -105,11 +119,38 @@ export async function detectCheckers(root, { env = process.env, paths = [] } = {
     found.push(onPath('go', env) ? { name: 'go', command: 'go', args: ['vet', './...'] } : { name: 'go', missing: 'the go toolchain is not on PATH' });
   }
   if (await exists(path.join(root, 'Cargo.toml'))) {
-    found.push(onPath('cargo', env) ? { name: 'cargo', command: 'cargo', args: ['check', '--message-format', 'short', '--quiet'] } : { name: 'cargo', missing: 'cargo is not on PATH' });
+    // Clippy runs every check `cargo check` does plus its lints, in the same output format.
+    const clippy = onPath('cargo-clippy', env);
+    found.push(onPath('cargo', env) ? { name: 'cargo', command: 'cargo', args: [clippy ? 'clippy' : 'check', '--message-format', 'short', '--quiet'] } : { name: 'cargo', missing: 'cargo is not on PATH' });
+  }
+  const oxlintConfigured = await anyExists(root, ['.oxlintrc.json', 'oxlintrc.json', 'oxlint.config.ts']) || await fileContains(root, 'package.json', '"oxlint"');
+  if (oxlintConfigured) {
+    const bin = await findBinary(root, 'oxlint', env, { node: true });
+    found.push(bin ? { name: 'oxlint', command: bin, args: ['--format=unix', ...(paths.length ? paths : ['.'])] } : { name: 'oxlint', missing: 'oxlint is not installed (npm install -D oxlint)' });
+  }
+  if (await anyExists(root, ['biome.json', 'biome.jsonc'])) {
+    const bin = await findBinary(root, 'biome', env, { node: true });
+    found.push(bin ? { name: 'biome', command: bin, args: ['lint', '--reporter=github', '--colors=off', ...(paths.length ? paths : ['.'])] } : { name: 'biome', missing: 'biome is not installed (npm install -D @biomejs/biome)' });
+  }
+  // File-based linters: only when the tool is installed and matching files exist.
+  const shellcheck = onPath('shellcheck', env);
+  const hadolint = onPath('hadolint', env);
+  if (shellcheck || hadolint) {
+    const files = (await expandPaths(root, paths.length ? paths : ['.'])).filter((file) => !/(^|\/)(node_modules|vendor|third_party|\.git)\//.test(file));
+    const shellFiles = files.filter((file) => SHELL_FILE.test(file));
+    const dockerfiles = files.filter((file) => DOCKERFILE.test(file));
+    if (shellcheck && shellFiles.length) found.push({ name: 'shellcheck', command: 'shellcheck', args: ['-f', 'gcc', '-x', ...shellFiles.slice(0, MAX_FILE_ARGS)], ...(shellFiles.length > MAX_FILE_ARGS ? { filesSkipped: shellFiles.length - MAX_FILE_ARGS } : {}) });
+    if (hadolint && dockerfiles.length) found.push({ name: 'hadolint', command: 'hadolint', args: ['--no-color', '-f', 'gnu', ...dockerfiles.slice(0, MAX_FILE_ARGS)] });
+  }
+  if (await exists(path.join(root, '.github', 'workflows')) && onPath('actionlint', env)) {
+    const workflows = paths.filter((item) => /^\.github\/workflows\/.+\.ya?ml$/.test(item));
+    if (!paths.length || workflows.length || paths.some((item) => item === '.' || '.github/workflows'.startsWith(item.replace(/\/+$/, '')))) {
+      found.push({ name: 'actionlint', command: 'actionlint', args: ['-no-color', '-oneline', ...workflows] });
+    }
   }
   // Built-in checks always apply; they decide per file whether there is anything to do.
-  // ESLint already reports JavaScript parse errors, so the node syntax check only fills the gap.
-  if (!found.some((checker) => checker.name === 'eslint' && !checker.missing)) found.push({ name: 'node', builtin: true });
+  // ESLint, oxlint and Biome already report JavaScript parse errors, so the node syntax check only fills the gap.
+  if (!found.some((checker) => ['eslint', 'oxlint', 'biome'].includes(checker.name) && !checker.missing)) found.push({ name: 'node', builtin: true });
   found.push({ name: 'json', builtin: true });
   return found;
 }
@@ -148,7 +189,9 @@ export function parseDiagnostics(checker, output, root = '.') {
         if ((m = line.match(/^(.+?)\((\d+),(\d+)\): (error|warning|message) (TS\d+): (.*)$/))) push(m[1], m[2], m[3], severityOf(m[4]), m[6], m[5]);
         break;
       case 'eslint':
+      case 'oxlint':
         // /abs/src/a.js:3:5: 'x' is defined but never used. [Error/no-unused-vars]
+        // oxlint: b.js:2:17: `debugger` statement is not allowed [Warning/eslint(no-debugger)]
         if ((m = line.match(/^(.+?):(\d+):(\d+): (.*?)(?: \[(Error|Warning)(?:\/([^\]]+))?\])?$/))) push(m[1], m[2], m[3], severityOf(m[5] || 'error'), m[4], m[6]);
         break;
       case 'ruff':
@@ -171,6 +214,26 @@ export function parseDiagnostics(checker, output, root = '.') {
       case 'cargo':
         // src/main.rs:3:5: error[E0308]: mismatched types
         if ((m = line.match(/^(.+?\.rs):(\d+):(\d+): (error|warning)(?:\[(\w+)\])?: (.*)$/))) push(m[1], m[2], m[3], severityOf(m[4]), m[6], m[5]);
+        break;
+      case 'biome':
+        // ::error title=lint/suspicious/noDebugger,file=/abs/b.js,line=2,endLine=2,col=17,endColumn=26::message
+        if ((m = line.match(/^::(error|warning|notice) title=([^,]*),file=(.+?),line=(\d+)(?:,endLine=\d+)?,col=(\d+)(?:,endColumn=\d+)?::(.*)$/))) push(m[3], m[4], m[5], severityOf(m[1]), m[6], m[2]);
+        break;
+      case 'shellcheck':
+        // a.sh:2:8: warning: Quote this to prevent word splitting. [SC2046]
+        if ((m = line.match(/^(.+?):(\d+):(\d+): (error|warning|note|style|info): (.*?)(?: \[(SC\d+)\])?$/))) push(m[1], m[2], m[3], severityOf(m[4]), m[5], m[6]);
+        break;
+      case 'hadolint':
+        // hadolint:Dockerfile:2: DL3008 warning: Pin versions in apt get install.
+        if ((m = line.match(/^hadolint:(.+?):(\d+):(?:(\d+):)? ([A-Z]{2}\d+) (error|warning|info|style): (.*)$/))) push(m[1], m[2], m[3], severityOf(m[5]), m[6], m[4]);
+        break;
+      case 'actionlint':
+        // .github/workflows/ci.yml:6:23: "github.event.issue.title" is potentially untrusted. ... [expression]
+        // Its embedded ShellCheck findings carry their own level: "SC2129:style:42:3: ..."
+        if ((m = line.match(/^(.+?\.ya?ml):(\d+):(\d+): (.*?)(?: \[([a-z-]+)\])?$/))) {
+          const level = m[5] === 'shellcheck' && (m[4].match(/SC\d+:(error|warning|info|style):/) || [])[1];
+          push(m[1], m[2], m[3], level ? severityOf(level === 'style' ? 'info' : level) : 'error', m[4], m[5]);
+        }
         break;
       default:
         break;
@@ -361,6 +424,8 @@ export async function runDiagnostics(root, args = {}, options = {}) {
     checkers = checkers.filter((checker) => checker.name === requested);
     if (!checkers.length) {
       if (requested === 'node' || requested === 'json') checkers = [{ name: requested, builtin: true }];
+      else if (FILE_LINTER_INSTALL[requested] && !onPath(requested, env)) return { checker: requested, ran: [], diagnostics: [], summary: { errors: 0, warnings: 0, total: 0 }, message: requested + ' is not installed. Install it with ' + FILE_LINTER_INSTALL[requested] + '.' };
+      else if (FILE_LINTER_INSTALL[requested]) return { checker: requested, ran: [], diagnostics: [], summary: { errors: 0, warnings: 0, total: 0 }, message: 'No files for ' + requested + ' were found' + (paths.length ? ' in the given paths.' : '.') };
       else return { checker: requested, ran: [], diagnostics: [], summary: { errors: 0, warnings: 0, total: 0 }, message: 'This project is not set up for ' + requested + ' (no matching config file was found).' };
     }
   }
@@ -406,7 +471,7 @@ export async function runDiagnostics(root, args = {}, options = {}) {
     }
     if (result.approved === false) { ran.push({ name: checker.name, command: commandText, skipped: result.message || 'Not approved.' }); continue; }
     const found = parseDiagnostics(checker.name, (result.stdout || '') + '\n' + (result.stderr || ''), workspace);
-    const entry = { name: checker.name, command: commandText, exitCode: result.exitCode, problems: found.length };
+    const entry = { name: checker.name, command: commandText.length > 300 ? commandText.slice(0, 297) + '...' : commandText, exitCode: result.exitCode, problems: found.length, ...(checker.filesSkipped ? { filesSkipped: checker.filesSkipped } : {}) };
     if (result.timedOut) entry.timedOut = true;
     if (result.error) entry.error = result.error;
     // A failing checker that produced nothing we could parse: surface the raw tail.
