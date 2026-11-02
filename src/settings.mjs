@@ -251,6 +251,20 @@ export async function loadSettings(root, options = {}) {
     if (typeof settings.agent === 'string' && settings.agent.trim()) { result.agent = settings.agent.trim().toLowerCase(); result.agentSource = scope; }
     // Disabling channels only tightens, so any scope may do it (Claude Code's channelsEnabled policy).
     if (settings.channelsEnabled === false) result.channelsEnabled = false;
+    // Voice dictation sends microphone audio somewhere, so only your own user settings,
+    // --settings and managed policy may turn it on or pick the endpoint; a repository's
+    // settings cannot (managed policy can also force it off).
+    if (scope === 'user' || scope === 'flag' || scope === 'managed') {
+      if (typeof settings.voiceEnabled === 'boolean') result.voiceEnabled = settings.voiceEnabled;
+      if (settings.voice && typeof settings.voice === 'object' && !Array.isArray(settings.voice)) {
+        const voice = { ...(result.voice || {}) };
+        if (typeof settings.voice.enabled === 'boolean') voice.enabled = settings.voice.enabled;
+        for (const key of ['transcriptionUrl', 'model', 'language']) if (typeof settings.voice[key] === 'string' && settings.voice[key].trim()) voice[key] = settings.voice[key].trim().slice(0, 500);
+        if (Array.isArray(settings.voice.keyterms)) voice.keyterms = settings.voice.keyterms.filter((term) => typeof term === 'string').map((term) => term.trim().slice(0, 60)).filter(Boolean).slice(0, 50);
+        result.voice = voice;
+      }
+      if (scope === 'managed' && (settings.voiceEnabled === false || (settings.voice && settings.voice.enabled === false))) result.voiceDisabledByPolicy = true;
+    }
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (!trusted) {

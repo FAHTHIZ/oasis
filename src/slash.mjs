@@ -129,6 +129,7 @@ export const BUILTIN_COMMANDS = {
   tips: 'Show a rotating setup and workflow tip (/tips)',
   keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
+  voice: 'Voice dictation: /voice on|off|status; Alt+V starts and stops recording',
   diff: 'Show uncommitted changes in the working tree (/diff [PATH], /diff --stat)',
   autocompact: 'Show or set the auto-compaction threshold (/autocompact 70 = compact at 70% of the window, off, reset)',
   'reload-plugins': 'Reload plugins, skills, agents, hooks and MCP servers without losing the conversation',
@@ -1312,6 +1313,40 @@ export async function runBuiltinCommand(name, argument, state) {
       await mkdir(path.dirname(file), { recursive: true });
       await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
       return { output: wanted === 'vim' ? 'Vim mode on. Esc enters NORMAL mode; i, a, o, A, I return to INSERT. /vim again to turn it off.' : 'Vim mode off (standard editing).' };
+    }
+    case 'voice': {
+      // Voice dictation; saved as "voiceEnabled" in user settings (Claude Code's key).
+      const voice = await import('./voice.mjs');
+      const { userSettingsPath } = await import('./settings.mjs');
+      const { readFile, mkdir } = await import('node:fs/promises');
+      const settings = (session && session.settings) || {};
+      const arg = String(argument || '').trim().toLowerCase();
+      const describe = () => {
+        const recorder = voice.findRecorder({ env });
+        let target = null;
+        try { target = voice.transcriptionTarget(settings, env); } catch (error) { target = { error: error.message }; }
+        return [
+          'Voice dictation: ' + (voice.voiceEnabled(settings, env) ? 'on' : 'off'),
+          'Recorder: ' + (recorder ? recorder.name + ' (' + recorder.command + ')' : 'none found. ' + voice.recorderAdvice()),
+          'Transcription: ' + (target.error ? target.error : target.url + ' · ' + target.model + (target.apiKey || /^(http:\/\/(127\.0\.0\.1|localhost))/.test(target.url) ? '' : ' · no key: set OPENAI_API_KEY or OASIS_VOICE_API_KEY')),
+          'Press Alt+V (voice:pushToTalk) to start, again to stop; the text lands in the prompt for you to edit. Esc cancels.'
+        ].join('\n');
+      };
+      // A bare /voice toggles, like Claude Code; /voice status only reports.
+      if (arg === 'status') return { output: describe() };
+      if (!['', 'on', 'off', 'tap', 'hold'].includes(arg)) return { output: 'Usage: /voice [on|off|status]' };
+      if (settings.voiceDisabledByPolicy && arg !== 'off') return { output: 'Voice dictation is turned off by your organization\'s managed settings.' };
+      const wanted = arg === 'off' ? false : arg === '' ? !voice.voiceEnabled(settings, env) : true;
+      if (session && session.settings) session.settings.voiceEnabled = wanted;
+      sessionOptions.voiceEnabled = wanted;
+      const file = userSettingsPath(env);
+      let saved = {};
+      try { saved = JSON.parse(await readFile(file, 'utf8')) || {}; } catch {}
+      saved.voiceEnabled = wanted;
+      await mkdir(path.dirname(file), { recursive: true });
+      await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
+      if (!wanted) return { output: 'Voice dictation off.' };
+      return { output: 'Voice dictation on. Audio is sent to your transcription endpoint only while you record.\n' + describe() + (arg === 'hold' ? '\n(Terminals do not report key release, so OASIS uses press-to-start, press-to-stop.)' : '') };
     }
     case 'tips': {
       const { startupTip } = await import('./terminal-ui.mjs');
