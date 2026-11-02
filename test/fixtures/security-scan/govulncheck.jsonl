@@ -1,0 +1,8 @@
+{"config": {"protocol_version": "v1.0.0", "scanner_name": "govulncheck", "scanner_version": "v1.9.0", "db": "https://vuln.go.dev", "db_last_modified": "2026-10-27T21:16:18Z", "go_version": "go1.25.3", "scan_level": "symbol", "scan_mode": "source"}}
+{"osv": {"id": "GO-2021-0113", "aliases": ["CVE-2021-38561", "GHSA-ppp9-7jff-5vj2"], "summary": "Out-of-bounds read in golang.org/x/text/language"}}
+{"osv": {"id": "GO-2022-1059", "aliases": ["CVE-2022-32149", "GHSA-69ch-w2m2-3vjp"], "summary": "Denial of service via crafted Accept-Language header in golang.org/x/text/language"}}
+{"finding": {"osv": "GO-2021-0113", "fixed_version": "v0.3.7", "trace": [{"module": "golang.org/x/text", "version": "v0.3.5"}]}}
+{"finding": {"osv": "GO-2022-1059", "fixed_version": "v0.3.8", "trace": [{"module": "golang.org/x/text", "version": "v0.3.5"}]}}
+{"finding": {"osv": "GO-2021-0113", "fixed_version": "v0.3.7", "trace": [{"module": "golang.org/x/text", "version": "v0.3.5", "package": "golang.org/x/text/language"}]}}
+{"finding": {"osv": "GO-2022-1059", "fixed_version": "v0.3.8", "trace": [{"module": "golang.org/x/text", "version": "v0.3.5", "package": "golang.org/x/text/language"}]}}
+{"finding": {"osv": "GO-2021-0113", "fixed_version": "v0.3.7", "trace": [{"module": "golang.org/x/text", "version": "v0.3.5", "package": "golang.org/x/text/language", "function": "Parse", "position": {"filename": "language/parse.go", "offset": 1121, "line": 33, "column": 6}}, {"module": "example.com/vulnapp", "package": "example.com/vulnapp", "function": "main", "position": {"filename": "main.go", "offset": 100, "line": 9, "column": 24}}]}}

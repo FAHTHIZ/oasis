@@ -1,0 +1,105 @@
+{
+ "errors": [],
+ "results": [
+  {
+   "code": "SOURCE-LINE-MARKER",
+   "col_offset": 0,
+   "end_col_offset": 34,
+   "filename": "py/app.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 502,
+    "link": "https://cwe.mitre.org/data/definitions/502.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Consider possible security implications associated with pickle module.",
+   "line_number": 1,
+   "line_range": [
+    1
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b403-import-pickle",
+   "test_id": "B403",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "SOURCE-LINE-MARKER",
+   "col_offset": 4,
+   "end_col_offset": 36,
+   "filename": "py/app.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 78,
+    "link": "https://cwe.mitre.org/data/definitions/78.html"
+   },
+   "issue_severity": "HIGH",
+   "issue_text": "subprocess call with shell=True identified, security issue.",
+   "line_number": 3,
+   "line_range": [
+    3
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b602_subprocess_popen_with_shell_equals_true.html",
+   "test_id": "B602",
+   "test_name": "subprocess_popen_with_shell_equals_true"
+  },
+  {
+   "code": "SOURCE-LINE-MARKER",
+   "col_offset": 15,
+   "end_col_offset": 24,
+   "filename": "py/app.py",
+   "issue_confidence": "MEDIUM",
+   "issue_cwe": {
+    "id": 259,
+    "link": "https://cwe.mitre.org/data/definitions/259.html"
+   },
+   "issue_severity": "LOW",
+   "issue_text": "Possible hardcoded password: 'hunter2'",
+   "line_number": 4,
+   "line_range": [
+    4
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+   "test_id": "B105",
+   "test_name": "hardcoded_password_string"
+  },
+  {
+   "code": "SOURCE-LINE-MARKER",
+   "col_offset": 11,
+   "end_col_offset": 28,
+   "filename": "py/app.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 502,
+    "link": "https://cwe.mitre.org/data/definitions/502.html"
+   },
+   "issue_severity": "MEDIUM",
+   "issue_text": "Pickle and modules that wrap it can be unsafe when used to deserialize untrusted data, possible security issue.",
+   "line_number": 5,
+   "line_range": [
+    5
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_calls.html#b301-pickle",
+   "test_id": "B301",
+   "test_name": "blacklist"
+  },
+  {
+   "code": "SOURCE-LINE-MARKER",
+   "col_offset": 30,
+   "end_col_offset": 46,
+   "filename": "py/app.py",
+   "issue_confidence": "HIGH",
+   "issue_cwe": {
+    "id": 327,
+    "link": "https://cwe.mitre.org/data/definitions/327.html"
+   },
+   "issue_severity": "HIGH",
+   "issue_text": "Use of weak MD5 hash for security. Consider usedforsecurity=False",
+   "line_number": 5,
+   "line_range": [
+    5
+   ],
+   "more_info": "https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html",
+   "test_id": "B324",
+   "test_name": "hashlib"
+  }
+ ]
+}

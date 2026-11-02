@@ -1,0 +1,408 @@
+[
+ {
+  "ident": "artipacked",
+  "desc": "credential persistence through GitHub Actions artifacts",
+  "url": "https://docs.zizmor.sh/audits/#artipacked",
+  "determinations": {
+   "confidence": "Low",
+   "severity": "Medium",
+   "persona": "Regular"
+  },
+  "locations": [
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/cleanup-merged-branches.yml"
+      }
+     },
+     "annotation": "does not set persist-credentials: false",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "cleanup"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 0
+       }
+      ]
+     },
+     "feature_kind": "Normal",
+     "kind": "Primary"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 21,
+       "column": 8
+      },
+      "end_point": {
+       "row": 22,
+       "column": 80
+      },
+      "offset_span": {
+       "start": 411,
+       "end": 526
+      }
+     },
+     "feature": "name: Check out the cleanup policy\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+     "comments": [
+      "# v7.0.1"
+     ]
+    }
+   }
+  ],
+  "ignored": false,
+  "fixes": [
+   {
+    "title": "set persist-credentials: false",
+    "key": {
+     "Local": {
+      "verbatim_path": ".github/workflows/cleanup-merged-branches.yml"
+     }
+    },
+    "disposition": "unsafe"
+   }
+  ]
+ },
+ {
+  "ident": "superfluous-actions",
+  "desc": "action functionality is already included by the runner",
+  "url": "https://docs.zizmor.sh/audits/#superfluous-actions",
+  "determinations": {
+   "confidence": "High",
+   "severity": "Informational",
+   "persona": "Regular"
+  },
+  "locations": [
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/desktop-build.yml"
+      }
+     },
+     "annotation": "this step",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "publish-release"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 5
+       },
+       {
+        "Key": "name"
+       }
+      ]
+     },
+     "feature_kind": "Normal",
+     "kind": "Related"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 228,
+       "column": 8
+      },
+      "end_point": {
+       "row": 228,
+       "column": 36
+      },
+      "offset_span": {
+       "start": 9311,
+       "end": 9339
+      }
+     },
+     "feature": "name: Publish GitHub release",
+     "comments": []
+    }
+   },
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/desktop-build.yml"
+      }
+     },
+     "annotation": "use `gh release` in a script step",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "publish-release"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 5
+       },
+       {
+        "Key": "uses"
+       }
+      ]
+     },
+     "feature_kind": {
+      "Subfeature": {
+       "after": 0,
+       "fragment": {
+        "Raw": "softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64"
+       }
+      }
+     },
+     "kind": "Primary"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 230,
+       "column": 14
+      },
+      "end_point": {
+       "row": 230,
+       "column": 82
+      },
+      "offset_span": {
+       "start": 9414,
+       "end": 9482
+      }
+     },
+     "feature": "softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64",
+     "comments": [
+      "# v3.0.3"
+     ]
+    }
+   },
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/desktop-build.yml"
+      }
+     },
+     "annotation": "this step",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "publish-release"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 5
+       }
+      ]
+     },
+     "feature_kind": "Normal",
+     "kind": "Hidden"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 228,
+       "column": 8
+      },
+      "end_point": {
+       "row": 242,
+       "column": 0
+      },
+      "offset_span": {
+       "start": 9311,
+       "end": 10063
+      }
+     },
+     "feature": "name: Publish GitHub release\n        if: steps.release-version.outputs.publish == 'true'\n        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3\n        with:\n          tag_name: ${{ steps.release-version.outputs.tag }}\n          name: ${{ steps.release-version.outputs.release_name }}\n          target_commitish: ${{ steps.release-version.outputs.target_commitish }}\n          body_path: ${{ steps.release-version.outputs.notes_path }}\n          generate_release_notes: false\n          prerelease: ${{ steps.release-version.outputs.prerelease }}\n          make_latest: ${{ steps.release-version.outputs.make_latest }}\n          fail_on_unmatched_files: true\n          draft: false\n          files: release-assets/*\n",
+     "comments": [
+      "# v3.0.3"
+     ]
+    }
+   }
+  ],
+  "ignored": false,
+  "fixes": []
+ },
+ {
+  "ident": "adhoc-packages",
+  "desc": "ad-hoc installation of packages",
+  "url": "https://docs.zizmor.sh/audits/#adhoc-packages",
+  "determinations": {
+   "confidence": "High",
+   "severity": "Low",
+   "persona": "Regular"
+  },
+  "locations": [
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/quality.yml"
+      }
+     },
+     "annotation": "this step",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "clean-environment-tests"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 3
+       }
+      ]
+     },
+     "feature_kind": "Normal",
+     "kind": "Hidden"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 72,
+       "column": 8
+      },
+      "end_point": {
+       "row": 73,
+       "column": 99
+      },
+      "offset_span": {
+       "start": 3148,
+       "end": 3314
+      }
+     },
+     "feature": "name: Install ast-grep (pinned) so the structural-search tests run\n        run: npm install --prefix /tmp/ast-grep --no-audit --no-fund --no-save @ast-grep/cli@0.51.0",
+     "comments": []
+    }
+   },
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/quality.yml"
+      }
+     },
+     "annotation": "this step",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "clean-environment-tests"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 3
+       },
+       {
+        "Key": "run"
+       }
+      ]
+     },
+     "feature_kind": "KeyOnly",
+     "kind": "Related"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 73,
+       "column": 8
+      },
+      "end_point": {
+       "row": 73,
+       "column": 11
+      },
+      "offset_span": {
+       "start": 3223,
+       "end": 3226
+      }
+     },
+     "feature": "run",
+     "comments": []
+    }
+   },
+   {
+    "symbolic": {
+     "key": {
+      "Local": {
+       "verbatim_path": ".github/workflows/quality.yml"
+      }
+     },
+     "annotation": "installs a package outside of a lockfile",
+     "route": {
+      "route": [
+       {
+        "Key": "jobs"
+       },
+       {
+        "Key": "clean-environment-tests"
+       },
+       {
+        "Key": "steps"
+       },
+       {
+        "Index": 3
+       },
+       {
+        "Key": "run"
+       }
+      ]
+     },
+     "feature_kind": {
+      "Subfeature": {
+       "after": 0,
+       "fragment": {
+        "Regex": "npm\\s+install\\s+\\-\\-prefix\\s+/tmp/ast\\-grep\\s+\\-\\-no\\-audit\\s+\\-\\-no\\-fund\\s+\\-\\-no\\-save\\s+@ast\\-grep/cli@0\\.51\\.0"
+       }
+      }
+     },
+     "kind": "Primary"
+    },
+    "concrete": {
+     "location": {
+      "start_point": {
+       "row": 73,
+       "column": 13
+      },
+      "end_point": {
+       "row": 73,
+       "column": 99
+      },
+      "offset_span": {
+       "start": 3228,
+       "end": 3314
+      }
+     },
+     "feature": "npm install --prefix /tmp/ast-grep --no-audit --no-fund --no-save @ast-grep/cli@0.51.0",
+     "comments": []
+    }
+   }
+  ],
+  "ignored": false,
+  "fixes": []
+ }
+]
