@@ -61,6 +61,50 @@ test('--fallback-model switches models when the main one is overloaded', async (
   assert.deepEqual([...new Set(seen)], ['main', 'backup']);
 });
 
+test('a transient fallback goes back to the chosen model after the cooldown, unless the user switched models', async (t) => {
+  const { restorePrimaryModel, fallbackCooldownMs, runAgentTurn } = await import('../src/agent.mjs');
+  assert.equal(fallbackCooldownMs({}), 300000);
+  assert.equal(fallbackCooldownMs({ OASIS_FALLBACK_COOLDOWN_MINUTES: '0' }), 0);
+  const now = Date.now();
+  const fresh = { config: { model: 'backup' }, fallbackActive: { from: 'main', to: 'backup', at: now - 1000 } };
+  assert.equal(restorePrimaryModel(fresh, {}, now), false, 'still inside the cooldown');
+  assert.equal(fresh.config.model, 'backup');
+  const old = { config: { model: 'backup' }, fallbackActive: { from: 'main', to: 'backup', at: now - 301000 } };
+  assert.equal(restorePrimaryModel(old, {}, now), true);
+  assert.equal(old.config.model, 'main');
+  assert.equal(old.fallbackActive, null);
+  assert.match(old.hookMessages.at(-1), /back to main/);
+  const switched = { config: { model: 'picked-by-user' }, fallbackActive: { from: 'main', to: 'backup', at: 0 } };
+  assert.equal(restorePrimaryModel(switched, {}, now), false);
+  assert.equal(switched.config.model, 'picked-by-user');
+
+  // End to end: main is overloaded once, then recovers.
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const seen = [];
+  let overloaded = true;
+  const server = createServer(async (req, res) => {
+    let body = ''; for await (const chunk of req) body += chunk;
+    const payload = JSON.parse(body);
+    seen.push(payload.model);
+    if (payload.model === 'main' && overloaded) { overloaded = false; res.statusCode = 529; res.end('{"error":{"message":"overloaded"}}'); return; }
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'from ' + payload.model } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const env = { ...process.env, OASIS_FALLBACK_COOLDOWN_MINUTES: '0' };
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'main', apiKey: '', maxSteps: 4 }, settings, fallbackModel: 'backup', env });
+  t.after(() => closeSession(session));
+  const first = await runAgentTurn(session, 'one', { env });
+  assert.match(JSON.stringify(first), /from backup/);
+  assert.equal(session.config.model, 'backup');
+  const second = await runAgentTurn(session, 'two', { env });
+  assert.match(JSON.stringify(second), /from main/);
+  assert.equal(session.config.model, 'main');
+  assert.deepEqual(seen, ['main', 'backup', 'main']);
+});
+
 test('--tools limits the offered tools, --system-prompt replaces the prompt, --agents adds agents', async (t) => {
   const root = await tmp();
   t.after(() => rm(root, { recursive: true, force: true }));
