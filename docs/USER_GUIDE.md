@@ -894,7 +894,7 @@ You are a test specialist. Run the relevant tests, fix failures, and report resu
 
 Subagents share the parent's permission rules, hooks (`SubagentStop`), sandbox, and approvals. They cannot start further subagents.
 
-Each shared-workspace subagent's conversation is saved next to the session (`<session>.agents/agent_N.json`, owner-only). After OASIS restarts or you `--resume` the session, `send_message` to that agent rebuilds it with its full context, including a worker that was cut off mid-task (it is told to re-check the files before continuing). Worktree subagents are not saved this way because their checkout may be gone; start a new task from their branch instead. Deleting the session or `oasis purge` removes the transcripts.
+Each shared-workspace subagent's conversation is saved next to the session (`<session>.agents/agent_N.json`, owner-only). After OASIS restarts or you `--resume` the session, `send_message` to that agent rebuilds it with its full context, including a worker that was cut off mid-task (it is told to re-check the files before continuing). A worktree subagent that was interrupted before it finished is resumed in its own worktree, with its unfinished changes, after OASIS checks that the checkout still exists inside the repository, is on the recorded branch and still contains its starting commit. If any check fails, OASIS says why and you can start a new task from its branch. Worktree subagents that already finished have committed their work to their branch; start a new task from there. Deleting the session or `oasis purge` removes the transcripts.
 
 ### Asking you questions
 
