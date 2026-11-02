@@ -1491,6 +1491,52 @@ function parseRetryAfterMs(raw) {
   return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(0, timestamp - Date.now()));
 }
 
+// When a provider says how long until its rate limit clears. Retry-After first, then
+// Anthropic's anthropic-ratelimit-*-reset (RFC 3339) and OpenAI-style
+// x-ratelimit-reset-* durations ("1m30s", "250ms"). Uncapped; null when unknown.
+function parseDurationMs(text) {
+  const value = String(text || '').trim();
+  if (/^\d+(?:\.\d+)?$/.test(value)) return Number(value) * 1000;
+  const parts = [...value.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)];
+  if (!parts.length || parts.map((p) => p[0]).join('') !== value) return null;
+  const unit = { ms: 1, s: 1000, m: 60000, h: 3600000 };
+  return parts.reduce((sum, [, n, u]) => sum + Number(n) * unit[u], 0);
+}
+export function rateLimitResetMs(headers, now = Date.now()) {
+  const get = (name) => (headers && typeof headers.get === 'function' ? headers.get(name) : headers && headers[name]) || '';
+  const retryAfter = String(get('retry-after')).trim();
+  if (retryAfter) {
+    if (/^\d+(?:\.\d+)?$/.test(retryAfter)) return Number(retryAfter) * 1000;
+    const at = Date.parse(retryAfter);
+    if (Number.isFinite(at)) return Math.max(0, at - now);
+  }
+  const waits = [];
+  for (const kind of ['requests', 'tokens', 'input-tokens', 'output-tokens']) {
+    const at = Date.parse(String(get(`anthropic-ratelimit-${kind}-reset`)));
+    if (Number.isFinite(at)) waits.push(Math.max(0, at - now));
+  }
+  for (const kind of ['requests', 'tokens']) {
+    const ms = parseDurationMs(get(`x-ratelimit-reset-${kind}`));
+    if (ms !== null) waits.push(ms);
+  }
+  return waits.length ? Math.max(...waits) : null;
+}
+
+// Opt-in for unattended runs: OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=N lets a request that
+// is still rate-limited after the normal retries sleep until the advertised reset
+// (when it is at most N minutes away, max 24 h) and try again, up to 3 times.
+// Billing and out-of-credit errors never wait.
+const RESETTABLE_LIMIT_PATTERN = /usage limit reached|rate.?limit|too many requests/i;
+const BILLING_PATTERN = /insufficient_quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)/i;
+export function rateLimitWaitMs({ status, headers, body = '', maxMinutes = 0, now = Date.now() } = {}) {
+  const limit = Math.min(1440, Math.max(0, Number(maxMinutes) || 0)) * 60000;
+  if (!limit || status !== 429 || BILLING_PATTERN.test(String(body))) return null;
+  if (isHardQuotaError(body) && !RESETTABLE_LIMIT_PATTERN.test(String(body))) return null;
+  const wait = rateLimitResetMs(headers, now);
+  if (wait === null || wait > limit) return null;
+  return Math.round(wait + 1000);
+}
+
 export function providerRetryDelayMs(retryNumber, retryAfter = null, random = Math.random) {
   const advertised = parseRetryAfterMs(retryAfter);
   if (advertised !== null) return advertised;
@@ -1941,6 +1987,7 @@ async function requestCompletionRaw(session, options = {}) {
     let response = null;
     const bodyText = JSON.stringify(bodyObject);
     const requestHeaders = cloudAnthropic ? await cloudHeaders(config, providerEnv, endpoint, bodyText, headers) : headers;
+    let limitWaits = 0;
     for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
       try {
         response = await fetchImpl(endpoint, {
@@ -1963,6 +2010,19 @@ async function requestCompletionRaw(session, options = {}) {
       try { errorBody = await response.text(); } catch {}
       if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody)) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
+        continue;
+      }
+      const limitWait = limitWaits < 3 ? rateLimitWaitMs({ status, headers: response.headers, body: errorBody, maxMinutes: providerEnv.OASIS_WAIT_FOR_RATE_LIMIT_MINUTES }) : null;
+      if (limitWait !== null) {
+        limitWaits++;
+        // The header timeout must not fire while deliberately waiting for the reset.
+        clearTimeout(timer);
+        if (typeof options.onRateLimitWait === 'function') {
+          try { options.onRateLimitWait({ waitMs: limitWait, until: new Date(Date.now() + limitWait).toISOString(), attempt: limitWaits }); } catch {}
+        }
+        await waitForProviderRetry(limitWait, controller.signal);
+        timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+        attempt = -1;
         continue;
       }
       const cap = outputLimit && !options.outputCapRetried ? outputCapFromError(status, errorBody) : 0;
@@ -4592,6 +4652,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     try {
       assistant = await requestCompletion(session, {
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);

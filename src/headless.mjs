@@ -243,6 +243,8 @@ export async function runHeadless(options) {
       onToolResult: ({ name, result: toolResult, subagent }) => emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }),
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
+      // Notice on stderr in every output format, so text results on stdout stay clean.
+      onRateLimitWait: ({ waitMs, until, attempt }) => { process.stderr.write('[rate limit] Waiting ' + Math.ceil(waitMs / 60000) + ' min for the provider limit to reset (until ' + until + ').\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt }); },
       ...(includePartial && outputFormat === 'stream-json' ? { onDelta: (accumulated) => {
         const text = String(accumulated || '');
         const delta = text.startsWith(partialSoFar) ? text.slice(partialSoFar.length) : text;
