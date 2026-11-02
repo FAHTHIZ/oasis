@@ -21,6 +21,8 @@ const SEPARATORS = new Set([';', '&&', '||', '|', '&', '\n']);
 
 // Splits into simple commands. Each command is { tokens, pipedFrom }, where
 // pipedFrom is the previous command when joined by a single `|`.
+const WINDOWS_PATH_START = /^(?:[A-Za-z]:|%[A-Za-z_]+%|\$env:[A-Za-z_]+|\\\\)/i;
+
 export function splitShell(line) {
   const commands = [];
   let tokens = [];
@@ -40,11 +42,14 @@ export function splitShell(line) {
     const ch = text[i];
     if (quote) {
       if (ch === quote) { quote = ''; continue; }
-      if (ch === '\\' && quote === '"' && i + 1 < text.length) { word += text[++i]; continue; }
+      if (ch === '\\' && quote === '"' && i + 1 < text.length && !WINDOWS_PATH_START.test(word)) { word += text[++i]; continue; }
       word += ch;
       continue;
     }
     if (ch === '"' || ch === "'") { quote = ch; hasWord = true; continue; }
+    // C:\ , C:\Users\me and $env:USERPROFILE\x are Windows paths, where a
+    // backslash is a separator rather than an escape.
+    if (ch === '\\' && WINDOWS_PATH_START.test(word)) { word += ch; hasWord = true; continue; }
     if (ch === '\\' && i + 1 < text.length && text[i + 1] !== '\n') { word += text[++i]; hasWord = true; continue; }
     const two = text.slice(i, i + 2);
     if (two === '&&' || two === '||') { pushCommand(two); i++; continue; }
@@ -147,6 +152,8 @@ function isCriticalPath(raw) {
   if (/^\/(home|Users)\/[^/]+\/?(\*)?$/.test(p)) return true;
   if (/^\.\.(\/|\\)?(\*)?$/.test(p) || /^(\.\.(\/|\\))+\.?\.?$/.test(p)) return true;
   if (/^[A-Za-z]:(\\|\/)?(\*)?$/.test(p)) return true;
+  if (/^[A-Za-z]:[\\/](Users([\\/][^\\/]+)?|Windows|Program Files( \(x86\))?|ProgramData)[\\/]?(\*)?$/i.test(p)) return true;
+  if (/^(\$env:USERPROFILE|%USERPROFILE%|\$HOME|~)[\\/](Documents|Desktop|Pictures|\.ssh|AppData)[\\/]?$/i.test(p)) return true;
   if (/^\/(bin|boot|dev|etc|home|lib|lib64|opt|proc|root|sbin|srv|sys|usr|var|Users|Applications|Library|System)(\/\*?)?$/.test(p)) return true;
   if (/^(~|\$HOME|\$\{HOME\})\/(\.ssh|\.gnupg|\.config|Documents|Desktop|Pictures|\.aws|\.kube)\/?$/.test(p)) return true;
   return false;
@@ -322,6 +329,12 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
       if (DOWNLOADERS.has(source)) return { highRisk: 'pipes a downloaded script straight into ' + name + ' without review' };
     }
   }
+  if ((name === 'iex' || name === 'invoke-expression') && /\b(iwr|irm|invoke-webrequest|invoke-restmethod|curl|wget|downloadstring|downloadfile|net\.webclient)\b/i.test(cmd.tokens.join(' '))) {
+    return { highRisk: name + ' runs code downloaded from the network without review' };
+  }
+  if (name === 'set-executionpolicy' && cmd.tokens.some((t) => /^(bypass|unrestricted)$/i.test(t)) && cmd.tokens.some((t) => /^localmachine$/i.test(t))) {
+    return { highRisk: 'turns off PowerShell script signing checks for every user on this machine' };
+  }
   if (INTERPRETERS.has(name) && cmd.substitutions && cmd.substitutions.some((inner) => splitShell(inner).some((c) => DOWNLOADERS.has(programOf(c.tokens).name)))) {
     return { highRisk: name + ' runs a script downloaded by a command substitution without review' };
   }
@@ -418,7 +431,19 @@ function nestedLines(cmd) {
     const at = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
     if (at !== -1 && args[at + 1] !== undefined) out.push(args[at + 1]);
   }
-  if (name === 'eval' || name === 'watch') out.push(operands(args).join(' '));
+  if (name === 'eval' || name === 'watch' || name === 'iex' || name === 'invoke-expression') out.push(operands(args).join(' '));
+  if (name === 'cmd' || name === 'cmd.exe') {
+    const at = args.findIndex((a) => /^\/[ck]$/i.test(a));
+    if (at !== -1) out.push(args.slice(at + 1).join(' '));
+  }
+  if (/^(powershell|pwsh)(\.exe)?$/.test(name)) {
+    const at = args.findIndex((a) => /^-(c|command)$/i.test(a));
+    if (at !== -1) out.push(args.slice(at + 1).join(' '));
+    const enc = args.findIndex((a) => /^-(e|ec|enc|encodedcommand)$/i.test(a));
+    if (enc !== -1 && args[enc + 1]) {
+      try { out.push(Buffer.from(args[enc + 1], 'base64').toString('utf16le')); } catch {}
+    }
+  }
   if (name === 'su') { const at = args.findIndex((a) => a === '-c' || a === '--command'); if (at !== -1 && args[at + 1]) out.push(args[at + 1]); }
   for (let i = 0; i < cmd.tokens.length - 2; i++) {
     if (base(cmd.tokens[i]) === 'env' && (cmd.tokens[i + 1] === '-S' || cmd.tokens[i + 1] === '--split-string')) out.push(cmd.tokens.slice(i + 2).join(' '));
