@@ -359,7 +359,7 @@ export function describeTool({ name, args = {}, subagent }, { color = true } = {
   else if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
   else if (name === 'run_shell' || name === 'auto_test') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
-  else if (['search_files', 'grep', 'glob_files'].includes(name) && (args.query || args.pattern)) detail = String(args.query || args.pattern) + (args.path && args.path !== '.' ? ' in ' + args.path : '');
+  else if (['search_files', 'grep', 'ast_grep', 'glob_files'].includes(name) && (args.query || args.pattern)) detail = String(args.query || args.pattern) + (args.path && args.path !== '.' ? ' in ' + args.path : '');
   else if (args.path || args.pattern || args.query || args.url) detail = String(args.path || args.pattern || args.query || args.url);
   if (detail.length > 140) detail = detail.slice(0, 137) + '...';
   const indent = subagent ? '  ' : '';

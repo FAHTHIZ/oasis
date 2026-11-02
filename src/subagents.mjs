@@ -24,11 +24,11 @@ export const MAX_PARALLEL_SUBAGENTS = 6;
 const CLAUDE_TO_OASIS = {
   read: ['read_file'], write: ['write_file'], edit: ['edit_file'], multiedit: ['multi_edit'], notebookedit: ['notebook_edit'],
   bash: ['run_command', 'run_shell', 'command_output', 'kill_command', 'list_background'],
-  grep: ['grep', 'search_files'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'], websearch: ['web_search'],
+  grep: ['grep', 'search_files', 'ast_grep'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'], websearch: ['web_search'],
   todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command']
 };
 
-const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'memory_search', 'memory_read'];
+const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'memory_search', 'memory_read'];
 
 export const BUILTIN_AGENTS = {
   'general-purpose': {
