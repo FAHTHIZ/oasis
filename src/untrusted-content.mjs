@@ -93,3 +93,17 @@ export function injectionHoldReason(session) {
 export function clearInjectionTurnFlag(session) {
   if (session) session.injectionTurnFlag = null;
 }
+
+// Instruction files (AGENTS.md, CLAUDE.md, rules) are loaded into every
+// prompt. Hidden characters there are the "Rules File Backdoor" attack: the
+// file looks clean in an editor and on GitHub, but the model reads extra
+// instructions. They are removed and the user is told what they said.
+export function cleanInstructionText(name, text, notices) {
+  if (typeof text !== 'string' || !text) return text;
+  const hidden = hiddenTagText(text);
+  const { text: clean, removed } = stripInvisible(text);
+  if (removed && Array.isArray(notices)) {
+    notices.push('Security: ' + name + ' contained ' + removed + ' hidden Unicode character(s), which were removed before loading' + (hidden ? ' (they spelled out: "' + hidden.replace(/\s+/g, ' ').slice(0, 120) + '")' : '') + '. This is how "rules file backdoor" attacks hide instructions; review the file.');
+  }
+  return clean;
+}
