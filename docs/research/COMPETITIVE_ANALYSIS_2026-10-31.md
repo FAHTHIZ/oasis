@@ -228,3 +228,18 @@ No comparison in this document proves exhaustive security, broad real-world codi
 ---
 
 **Bottom line:** OASIS is an independent coding-agent project, and this audit should help it become better at its own goals. The external comparison is an engineering instrument—not a product identity or a feature-parity mandate. Immediate work is to strengthen process lifecycle and configuration validation, maintain evidence-backed platform boundaries, and prove real-world task quality with representative, reproducible evaluation.
+
+## Update — 2026-11-02
+
+Gaps from this analysis that are now closed in `main` (each with regression tests):
+
+| Gap | What shipped |
+|---|---|
+| Durable background agents (priority 3, partial) | `oasis bg send ID "message"` steers a running background agent; runs killed by a crash, `kill -9` or reboot are marked `interrupted` (boot-ID check against PID reuse) and `oasis respawn --interrupted` resumes them; `oasis bg list` shows each agent's latest step. |
+| Workers lost on restart (priority 3, partial) | Shared-workspace subagent conversations are saved next to the session; after a restart or `--resume`, `send_message` rebuilds the worker with full context. Worktree workers are still not rebuilt. |
+| Sandbox breaks builds (priority 2, partial) | Existing package-manager caches are writable inside the sandbox, so installs and builds work with it on. The sandbox is still opt-in. |
+| No head-to-head evidence path for Codex / Gemini (priority 1, partial) | `oasis eval --codex` and `--gemini-cli` join `--claude-code`. No head-to-head results are published yet. |
+| Security parity | Per-edit vulnerability pattern check, prompt-injection guard on web/MCP output, MCP tool pinning, hidden-Unicode stripping in instruction files, exfiltration hold, protected editor/agent config files, nested-shell and PowerShell analysis. See [SECURITY_COMPARISON.md](../SECURITY_COMPARISON.md). |
+| Efficiency | Parallel tool calls enabled (previously hard-coded off); `prompt_cache_key` sent on OpenAI Responses requests. |
+
+Still open: published head-to-head results, a Windows sandbox, the sandbox-on-by-default decision, rebuilding worktree workers after a restart, and signed installers.
