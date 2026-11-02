@@ -1822,6 +1822,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
       onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
+      onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write('[rate limit] Waiting ' + Math.ceil(event.waitMs / 60000) + ' min for the provider limit to reset (until ' + event.until + ').\n'); },
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
