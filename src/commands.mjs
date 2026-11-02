@@ -266,12 +266,16 @@ export async function expandFileMentions(root, text, options = {}) {
   const files = [];
   const attachments = [];
   const images = [];
-  const pattern = /(^|[\s(["'`])@((?:\.{0,2}\/)?[\w.\-/]+[\w\-/])/g;
+  // @path, @path:42, @path:10-40 and @path#L10-L40 (the GitHub/IDE form) are understood.
+  const pattern = /(^|[\s(["'`])@((?:\.{0,2}\/)?[\w.\-/]+[\w\-/])(?::(\d{1,7})(?:-(\d{1,7}))?|#L(\d{1,7})(?:-L?(\d{1,7}))?)?/g;
   let match;
   while ((match = pattern.exec(source)) && files.length < MAX_MENTIONS) {
     const raw = match[2];
-    if (seen.has(raw) || raw.includes('@')) continue;
-    seen.add(raw);
+    const startLine = Number(match[3] || match[5]) || 0;
+    const endLine = Number(match[4] || match[6]) || 0;
+    const key = raw + (startLine ? ':' + startLine + '-' + endLine : '');
+    if (seen.has(key) || raw.includes('@')) continue;
+    seen.add(key);
     const absolute = path.resolve(workspace, raw);
     let real;
     try { real = await realpath(absolute); } catch { continue; }
@@ -300,6 +304,26 @@ export async function expandFileMentions(root, text, options = {}) {
     }
     let content = await readFile(real, 'utf8').catch(() => null);
     if (content === null || content.includes('\0')) continue;
+    if (startLine) {
+      // A line range attaches just those lines, numbered, so a big file is not truncated
+      // before the part the user means. A single line comes with 20 lines either side.
+      const lines = content.split(/\r?\n/);
+      const focus = !endLine;
+      const from = Math.max(1, focus ? startLine - 20 : Math.min(startLine, endLine));
+      const to = Math.min(lines.length, focus ? startLine + 20 : Math.max(startLine, endLine));
+      if (from > lines.length) {
+        attachments.push('<file path="' + relative + '" lines="' + startLine + (endLine ? '-' + endLine : '') + '">(the file has only ' + lines.length + ' lines)</file>');
+        files.push(relative);
+        continue;
+      }
+      const width = String(to).length;
+      let body = lines.slice(from - 1, to).map((line, index) => String(from + index).padStart(width) + '\t' + line).join('\n');
+      let cut = '';
+      if (Buffer.byteLength(body) > MAX_MENTION_BYTES) { body = body.slice(0, MAX_MENTION_BYTES); cut = ' truncated="true"'; }
+      attachments.push('<file path="' + relative + '" lines="' + from + '-' + to + '"' + (focus ? ' focus="' + startLine + '"' : '') + ' total_lines="' + lines.length + '"' + cut + '>\n' + body + '\n</file>');
+      files.push(relative + ':' + from + '-' + to);
+      continue;
+    }
     let note = '';
     if (Buffer.byteLength(content) > MAX_MENTION_BYTES) {
       content = content.slice(0, MAX_MENTION_BYTES);

@@ -668,7 +668,7 @@ model: optional-model-id
 Create a PR titled "$ARGUMENTS". Follow @CONTRIBUTING.md
 ~~~
 
-Use `$ARGUMENTS` for everything after the command and `$1` to `$9` for single words. Writing `@path/to/file` in any prompt or command includes that file (or a directory listing). Secret files such as `.env` and paths outside the workspace are never included.
+Use `$ARGUMENTS` for everything after the command and `$1` to `$9` for single words. Writing `@path/to/file` in any prompt or command includes that file (or a directory listing). Add a line range to include only those lines, numbered: `@src/app.ts:120-180`, `@src/app.ts#L120-L180` or `@src/app.ts#L120-180` (the form the VS Code extension inserts). A single line, `@src/app.ts:42`, includes it with 20 lines either side. Secret files such as `.env` and paths outside the workspace are never included.
 
 More front matter, also compatible with Claude Code:
 
