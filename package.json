@@ -115,7 +115,10 @@
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "OASIS uses the microphone only while you dictate a prompt."
+      }
     },
     "win": {
       "target": [

@@ -2203,8 +2203,9 @@ window.oasisAddAttachments=addAttachmentFiles;
 // Interim words appear in place and are replaced by the final text; what you had typed is kept.
 (function(){
   var Recognition=window.SpeechRecognition||window.webkitSpeechRecognition,btn=$('agentDictateBtn');
-  if(!btn||!prompt||!Recognition)return;
-  btn.hidden=false;
+  // Electron exposes webkitSpeechRecognition but it cannot reach Google's service; use the recorder below there.
+  if(!btn||!prompt||!Recognition||/Electron\//.test(navigator.userAgent))return;
+  btn.hidden=false;btn.dataset.mode='browser';
   var rec=null,base='',finalText='',listening=false;
   function setState(on){listening=on;btn.classList.toggle('is-listening',on);btn.setAttribute('aria-pressed',on?'true':'false');btn.setAttribute('aria-label',on?'Stop dictation':'Dictate');}
   function write(interim){
@@ -2226,6 +2227,55 @@ window.oasisAddAttachments=addAttachmentFiles;
   });
   // Sending a message ends dictation so late words never land in the next one.
   var form=prompt.form;if(form)form.addEventListener('submit',function(){if(listening){if(rec){rec.onresult=null}stop()}},true);
+})();
+// Where the browser has no usable speech recognition (the desktop app, Firefox), record with
+// MediaRecorder and let OASIS transcribe it with your configured endpoint (/voice settings).
+(function(){
+  var btn=$('agentDictateBtn');
+  if(!btn||!prompt||btn.dataset.mode==='browser'||!window.MediaRecorder||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return;
+  var recorder=null,stream=null,chunks=[],busy=false,discard=false;
+  function auth(){return agentToken?{Authorization:'Bearer '+agentToken}:{}}
+  btn.hidden=false;btn.dataset.mode='server';btn.title='Dictate · recorded here and transcribed by your configured endpoint';
+  var ready=false;
+  function checkReady(){
+    if(ready)return Promise.resolve(true);
+    return fetch('/api/voice',{headers:auth(),cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(info){
+      if(info&&info.transcription){ready=true;return true}
+      if(window.notify)window.notify(info&&info.disabledByPolicy?'Dictation is turned off by your organization.':info?'Set up transcription first: set OPENAI_API_KEY for OASIS, or add "voice": {"transcriptionUrl": …} to your user settings (see /voice in the terminal).':'Connect to the OASIS runtime to dictate.');
+      return false;
+    }).catch(function(){return false});
+  }
+  function setState(on){btn.classList.toggle('is-listening',on);btn.setAttribute('aria-pressed',on?'true':'false');btn.setAttribute('aria-label',on?'Stop dictation':'Dictate');}
+  function release(){if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null}}
+  function insert(text){var base=prompt.value,at=typeof prompt.selectionStart==='number'?prompt.selectionStart:base.length,before=base.slice(0,at),after=base.slice(at);var add=(before&&!/\s$/.test(before)?' ':'')+text+(after&&!/^\s/.test(after)?' ':'');prompt.value=before+add+after;var c=before.length+add.length;try{prompt.setSelectionRange(c,c)}catch(e){}prompt.dispatchEvent(new Event('input',{bubbles:true}));prompt.focus()}
+  function stop(){if(recorder&&recorder.state!=='inactive')recorder.stop()}
+  window.oasisDictation={get listening(){return Boolean(recorder)},stop:stop};
+  btn.addEventListener('click',function(){
+    if(btn.dataset.mode!=='server'||busy)return;
+    if(recorder){stop();return}
+    checkReady().then(function(ok){if(!ok)return;
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){
+      stream=s;chunks=[];discard=false;
+      var type=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'].filter(function(t){return MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t)})[0]||'';
+      recorder=new MediaRecorder(s,type?{mimeType:type}:undefined);
+      recorder.ondataavailable=function(ev){if(ev.data&&ev.data.size)chunks.push(ev.data)};
+      recorder.onstop=function(){
+        var mime=(recorder.mimeType||type||'audio/webm').split(';')[0];recorder=null;release();setState(false);
+        if(discard||!chunks.length)return;
+        busy=true;btn.classList.add('is-busy');
+        fetch('/api/transcribe',{method:'POST',headers:Object.assign({'Content-Type':mime},auth()),body:new Blob(chunks,{type:mime}),cache:'no-store'})
+          .then(function(r){return r.json().catch(function(){return {error:'HTTP '+r.status}}).then(function(d){if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d})})
+          .then(function(d){if(d.text)insert(d.text);else if(window.notify)window.notify('No speech was recognised.')})
+          .catch(function(e){if(window.notify)window.notify('Dictation failed: '+e.message)})
+          .finally(function(){busy=false;btn.classList.remove('is-busy')});
+      };
+      recorder.start();setState(true);
+      setTimeout(function(){if(recorder)stop()},300000);
+    }).catch(function(){if(window.notify)window.notify('Microphone access was blocked. Allow it to dictate.')});
+    });
+  });
+  var form=prompt.form;if(form)form.addEventListener('submit',function(){if(recorder){discard=true;stop()}},true);
+  document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&recorder){discard=true;stop()}});
 })();
 window.oasisTakeAttachments=function(){
   if(!attachments.length)return [];
