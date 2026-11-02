@@ -23,9 +23,13 @@ Sources:
 | Per-edit security pattern check | Yes, built in (`OASIS_SECURITY_CHECK=0` to disable) | Plugin (security-guidance) | No | No |
 | Crash-safe atomic file writes | Yes (edits, config, credentials, state) | Not documented | Not documented | Yes (recent) |
 | Sandbox keeps package caches writable | Yes (`~/.npm`, pip, cargo, Go, Maven, Gradle…) | Configurable allow-list | Configurable writable roots | Container-based |
+| Web UI Content-Security-Policy | Hash-based `script-src` (no inline scripts), `frame-ancestors 'none'`, `connect-src 'self'` | Not applicable (no local web UI) | Not applicable | Not applicable |
+| Desktop app permission policy | Only audio for dictation, notifications, clipboard write; camera, USB, serial, HID and webviews blocked | Not documented | Not documented | Not applicable |
+| MCP OAuth issuer check (RFC 9207) | Yes, with PKCE (S256) and state | Not documented | Not documented | Not documented |
+| Proxy support that keeps TLS end to end | CONNECT tunnel, certificate verified against the real host; `fetch_url` tunnels only to the vetted IP | Yes | Yes | Yes |
 
 ## Where OASIS is behind
 
-- **Sandbox default.** Codex runs commands in a sandbox by default. OASIS's sandbox is opt-in because turning it on makes the home folder read-only, which breaks package caches (`~/.npm`, `~/.cargo`). Whether to change the default is a product decision for the maintainer.
+- **Sandbox default.** Codex runs commands in a sandbox by default. OASIS's sandbox is opt-in. Package caches (`~/.npm`, `~/.cargo` and others) are now writable inside it, which removed the main reason builds broke, and `oasis doctor` suggests `/sandbox on` when it is available. Whether to make it the default is a product decision for the maintainer.
 - **Windows sandbox.** OASIS has no native Windows sandbox. PowerShell and `cmd /c` commands go through the same model-free risk analysis.
 - **Independent evidence.** The comparison above is based on documentation, not on a live red-team run against every tool.
