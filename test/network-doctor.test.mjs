@@ -17,6 +17,10 @@ test('failures are explained in plain terms', () => {
   const cert = explainNetworkError(wrap('SELF_SIGNED_CERT_IN_CHAIN', 'self-signed certificate in certificate chain'));
   assert.equal(cert.kind, 'certificate');
   assert.match(cert.detail, /NODE_EXTRA_CA_CERTS/);
+  assert.match(explainNetworkError(wrap('UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'unable to verify the first certificate')).detail, /intermediate certificate/);
+  assert.match(explainNetworkError(wrap('CERT_HAS_EXPIRED', 'certificate has expired')).detail, /expired.*date on this computer/);
+  assert.match(explainNetworkError(wrap('ERR_TLS_CERT_ALTNAME_INVALID', "Hostname/IP does not match certificate's altnames")).detail, /does not match the host name/);
+  assert.match(explainNetworkError(wrap('CERT_NOT_YET_VALID', 'certificate is not yet valid')).detail, /not valid yet/);
   assert.equal(explainNetworkError(Object.assign(new Error('aborted'), { name: 'AbortError' })).kind, 'timeout');
   assert.equal(explainNetworkError(new Error('The proxy refused to connect to x:443: HTTP/1.1 407 Proxy Authentication Required')).kind, 'proxy-auth');
 });

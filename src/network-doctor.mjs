@@ -9,12 +9,37 @@
 import { lookup } from 'node:dns/promises';
 import { proxyForUrl, describeProxy } from './proxy.mjs';
 
-const CERT_CODES = new Set(['UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'CERT_UNTRUSTED', 'UNABLE_TO_GET_ISSUER_CERT', 'CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID']);
+const CERT_CODES = new Set(['UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'CERT_UNTRUSTED', 'UNABLE_TO_GET_ISSUER_CERT', 'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'ERR_TLS_CERT_ALTNAME_INVALID']);
 
 function rootCause(error) {
   let current = error;
   for (let depth = 0; current && current.cause && depth < 5; depth++) current = current.cause;
   return current || error;
+}
+
+const CA_FIX = 'point NODE_EXTRA_CA_CERTS at your organisation\'s root CA file (the desktop app also trusts the system certificate store)';
+
+/** The likely cause of each certificate failure, and its fix. */
+export function certificateAdvice(code) {
+  const tag = ' (' + (code || 'certificate error') + ').';
+  switch (code) {
+    case 'CERT_HAS_EXPIRED':
+      return 'The server certificate has expired' + tag + ' If the date on this computer is wrong, correct it; otherwise the server must renew its certificate.';
+    case 'CERT_NOT_YET_VALID':
+      return 'The server certificate is not valid yet' + tag + ' Check that the date and time on this computer are correct.';
+    case 'ERR_TLS_CERT_ALTNAME_INVALID':
+      return 'The certificate does not match the host name' + tag + ' Check the URL for typos; a proxy that rewrites certificates can also cause this.';
+    case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+      return 'The server certificate could not be verified' + tag + ' The server is most likely not sending its intermediate certificate (the server admin must add the full chain); if a TLS-inspecting proxy is in the way, ' + CA_FIX + '.';
+    case 'SELF_SIGNED_CERT_IN_CHAIN':
+    case 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY':
+    case 'UNABLE_TO_GET_ISSUER_CERT':
+      return 'The server certificate is not trusted' + tag + ' This usually means a TLS-inspecting corporate proxy or antivirus; ' + CA_FIX + '.';
+    case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+      return 'The server certificate is not trusted' + tag + ' The server uses a self-signed certificate; to trust it, ' + CA_FIX.replace('your organisation\'s root CA file', 'that certificate') + '.';
+    default:
+      return 'The server certificate is not trusted' + tag + ' Behind a TLS-inspecting proxy, ' + CA_FIX + '.';
+  }
 }
 
 /** Plain-language explanation of a failed request. */
@@ -29,7 +54,7 @@ export function explainNetworkError(error, { proxied = false } = {}) {
   if (code === 'ECONNREFUSED') return { kind: 'refused', detail: 'The connection was refused' + (proxied ? ' (by the proxy, or the proxy could not reach the host).' : '. Is the server running on that port?') };
   if (code === 'ECONNRESET' || code === 'EPIPE') return { kind: 'reset', detail: 'The connection was closed unexpectedly (' + code + '). A firewall or proxy may be blocking it.' };
   if (CERT_CODES.has(code) || /certificate/i.test(message)) {
-    return { kind: 'certificate', detail: 'The server certificate is not trusted (' + (code || 'certificate error') + '). Behind a TLS-inspecting proxy, point NODE_EXTRA_CA_CERTS at your organisation\'s root CA file.' };
+    return { kind: 'certificate', detail: certificateAdvice(code) };
   }
   if (/\b407\b|proxy authentication/i.test(message)) return { kind: 'proxy-auth', detail: 'The proxy requires credentials: use http://user:pass@proxy:port in HTTPS_PROXY.' };
   if (/proxy refused/i.test(message)) return { kind: 'proxy', detail: message.slice(0, 200) };

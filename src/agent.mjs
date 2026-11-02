@@ -1755,6 +1755,25 @@ export function isLoopbackProvider(config = {}) {
   } catch { return false; }
 }
 
+// A fallback caused by a transient overload shouldn't stick for the rest of the
+// session: once the cooldown has passed, the next turn goes back to the model
+// the user chose. A model the user picked since (/model) is left alone.
+export function fallbackCooldownMs(env = process.env) {
+  const minutes = Number.parseFloat(env.OASIS_FALLBACK_COOLDOWN_MINUTES);
+  return Number.isFinite(minutes) && minutes >= 0 ? Math.min(minutes, 24 * 60) * 60000 : 5 * 60000;
+}
+
+export function restorePrimaryModel(session, env = process.env, now = Date.now()) {
+  const active = session && session.fallbackActive;
+  if (!active || !session.config) return false;
+  if (session.config.model !== active.to) { session.fallbackActive = null; return false; }
+  if (now - (Number(active.at) || 0) < fallbackCooldownMs(env)) return false;
+  session.config = { ...session.config, model: active.from };
+  session.fallbackActive = null;
+  (session.hookMessages ||= []).push('[fallback] back to ' + active.from + ' after the cooldown; ' + active.to + ' will be used again only if it fails.');
+  return true;
+}
+
 const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed|stream stalled|timed out after \d+ seconds waiting/i;
 
 // --prompt-suggestions: one short guess at the user's next message, from the recent conversation.
@@ -1795,7 +1814,7 @@ async function requestCompletion(session, options = {}) {
     if (!fallback || !session.config || session.config.model === fallback || (options.signal && options.signal.aborted) || !FALLBACK_TRIGGER.test(String(error && error.message || error))) throw error;
     const previous = session.config.model;
     session.config = { ...session.config, model: fallback };
-    session.fallbackActive = { from: previous, to: fallback, reason: String(error.message || error).slice(0, 200) };
+    session.fallbackActive = { from: previous, to: fallback, reason: String(error.message || error).slice(0, 200), at: Date.now() };
     (session.hookMessages ||= []).push('[fallback] ' + previous + ' failed (' + String(error.message || error).slice(0, 120) + '); switched to ' + fallback + '.');
     if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
     return requestCompletionWithStreamRestarts(session, options);
@@ -4325,6 +4344,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     session.scratchReady = true;
     await ensureScratch(session.root, session.scratchDir.slice(SCRATCH_ROOT.length + 1));
   }
+  if (session && !options.isSubagent) restorePrimaryModel(session, env);
   const originalConfig = session && session.config;
   const originalModel = originalConfig && originalConfig.model || '';
   const routing = session && session.settings && session.settings.modelRouting || {};
