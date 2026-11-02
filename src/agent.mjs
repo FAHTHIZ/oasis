@@ -1491,10 +1491,13 @@ function parseRetryAfterMs(raw) {
   return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(0, timestamp - Date.now()));
 }
 
-function providerRetryDelayMs(retryNumber, retryAfter = null) {
+export function providerRetryDelayMs(retryNumber, retryAfter = null, random = Math.random) {
   const advertised = parseRetryAfterMs(retryAfter);
   if (advertised !== null) return advertised;
-  return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, 250 * (2 ** Math.max(0, retryNumber - 1)));
+  // Exponential backoff with jitter (50-100% of the step), so parallel subagents that hit
+  // the same rate limit do not all retry in the same instant and collide again.
+  const step = Math.min(MAX_PROVIDER_RETRY_DELAY_MS, 250 * (2 ** Math.max(0, retryNumber - 1)));
+  return Math.round(step * (0.5 + 0.5 * Math.min(1, Math.max(0, Number(random()) || 0))));
 }
 
 function waitForProviderRetry(milliseconds, signal) {
