@@ -12,7 +12,9 @@
 import { spawn } from 'node:child_process';
 import { signalProcessTree } from './process-tree.mjs';
 import { randomUUID } from 'node:crypto';
-import { closeSync, openSync } from 'node:fs';
+import { closeSync, openSync, readFileSync } from 'node:fs';
+import { appendFile, open as openFile } from 'node:fs/promises';
+import os from 'node:os';
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,9 +56,100 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
 }
 
+// Identifies the current boot so a PID recorded before a reboot or crash is not
+// mistaken for a live run when the OS reuses it. Linux exposes a boot id; other
+// platforms use the boot time rounded to a minute.
+let cachedBootId = null;
+export function currentBootId() {
+  if (cachedBootId) return cachedBootId;
+  try { cachedBootId = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(); } catch {}
+  if (!cachedBootId) cachedBootId = 'boot-' + Math.round((Date.now() - os.uptime() * 1000) / 60000);
+  return cachedBootId;
+}
+
+// A run still marked "running" whose process is gone (crash, kill -9, reboot,
+// sleep-killed laptop) never reached finishBackgroundSession. It is reported as
+// "interrupted" so it can be resumed with `oasis respawn --interrupted`.
 function refreshStatus(entry) {
-  if (entry.status === 'running' && !alive(entry.pid)) return { ...entry, status: 'exited' };
+  if (entry.status !== 'running') return entry;
+  const rebooted = entry.bootId && entry.bootId !== currentBootId();
+  if (rebooted || !alive(entry.pid)) return { ...entry, status: 'interrupted', ...(rebooted ? { interruptedBy: 'reboot' } : {}) };
   return entry;
+}
+
+// Steering a running background agent: `oasis bg send ID "message"` appends to
+// <id>.inbox.jsonl; the agent picks it up at its next step as a user message.
+export function inboxPath(id, env = process.env) {
+  return entryPath(id, env).replace(/\.json$/, '.inbox.jsonl');
+}
+
+export async function sendToBackgroundSession(id, text, env = process.env) {
+  const message = String(text == null ? '' : text).trim();
+  if (!message) throw new Error('Usage: oasis bg send ID "message"');
+  const entry = await readEntry(id, env);
+  if (entry.kind === 'exec') throw new Error(id + ' is a shell job, not an agent; it cannot take messages.');
+  if (entry.status !== 'running') throw new Error(id + ' is ' + entry.status + '. Use oasis respawn ' + id + ' to restart it, then send the message.');
+  await appendFile(inboxPath(id, env), JSON.stringify({ text: message.slice(0, 20000), at: new Date().toISOString() }) + '\n', { mode: 0o600 });
+  return entry;
+}
+
+// Atomically takes every queued message (rename, then read) so a message sent
+// while draining lands in a fresh inbox and is never lost or read twice.
+export async function drainInbox(id, env = process.env) {
+  const file = inboxPath(id, env);
+  const taking = file + '.' + process.pid + '.' + randomUUID() + '.taking';
+  try { await rename(file, taking); } catch { return []; }
+  let text = '';
+  try { text = await readFile(taking, 'utf8'); } finally { await unlink(taking).catch(() => {}); }
+  const out = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    try { const item = JSON.parse(line); if (item && typeof item.text === 'string' && item.text.trim()) out.push(item.text.trim()); } catch {}
+  }
+  return out;
+}
+
+export function watchInbox(id, onMessage, env = process.env, intervalMs = 500) {
+  let busy = false;
+  const timer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try { for (const text of await drainInbox(id, env)) onMessage(text); } catch {} finally { busy = false; }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
+// One line on what a background agent is doing now, from the tail of its log.
+export function summarizeActivity(logText) {
+  const lines = String(logText || '').split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const raw = lines[i].trim();
+    if (!raw) continue;
+    let event;
+    try { event = JSON.parse(raw); } catch { continue; }
+    if (event.type === 'result' && event.subtype !== 'turn') return (event.is_error ? 'failed' : 'done') + (event.result ? ': ' + String(event.result).replace(/\s+/g, ' ').slice(0, 70) : '');
+    if (event.type === 'tool_use') {
+      const input = event.input || {};
+      const detail = input.command || input.path || input.file_path || input.pattern || input.query || input.url || '';
+      return 'running ' + event.name + (detail ? ' ' + String(detail).replace(/\s+/g, ' ').slice(0, 60) : '');
+    }
+    if (event.type === 'assistant' && event.text) return String(event.text).replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (event.type === 'system' && event.subtype === 'steer_received') return 'received your message';
+  }
+  return '';
+}
+
+export async function readActivity(entry, maxBytes = 65536) {
+  let handle;
+  try {
+    handle = await openFile(entry.logFile, 'r');
+    const { size } = await handle.stat();
+    const start = Math.max(0, size - maxBytes);
+    const buffer = Buffer.alloc(size - start);
+    await handle.read(buffer, 0, buffer.length, start);
+    return summarizeActivity(buffer.toString('utf8'));
+  } catch { return ''; } finally { await handle?.close().catch(() => {}); }
 }
 
 export async function startBackgroundSession(options = {}) {
@@ -76,7 +169,7 @@ export async function startBackgroundSession(options = {}) {
   if (options.model) args.push('--model', options.model);
   if (options.name) args.push('--name', options.name);
   for (const extra of options.extraArgs || []) args.push(extra);
-  const entry = { id, runId, sessionId, root, prompt: prompt.slice(0, 500), status: 'running', startedAt: new Date().toISOString(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}), ...(options.permissionMode ? { permissionMode: options.permissionMode } : {}), ...(options.model ? { model: options.model } : {}), ...(options.resumeId ? { handoff: true } : {}), ...(options.respawns ? { respawns: options.respawns } : {}) };
+  const entry = { id, runId, sessionId, root, prompt: prompt.slice(0, 500), status: 'running', startedAt: new Date().toISOString(), bootId: currentBootId(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}), ...(options.permissionMode ? { permissionMode: options.permissionMode } : {}), ...(options.model ? { model: options.model } : {}), ...(options.resumeId ? { handoff: true } : {}), ...(options.respawns ? { respawns: options.respawns } : {}) };
   await writeEntry(entry, env);
   const out = openSync(logFile, 'a', 0o600);
   try {
@@ -100,7 +193,7 @@ export async function startExecJob(options = {}) {
   const id = options.id && ID.test(options.id) ? options.id : 'bg-' + randomUUID().replace(/-/g, '').slice(0, 8);
   const logFile = path.join(dir, id + '.log');
   const runId = randomUUID();
-  const entry = { id, runId, kind: 'exec', sessionId: null, root, prompt: command.slice(0, 500), command, status: 'running', startedAt: new Date().toISOString(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}) };
+  const entry = { id, runId, kind: 'exec', sessionId: null, root, prompt: command.slice(0, 500), command, status: 'running', startedAt: new Date().toISOString(), bootId: currentBootId(), logFile, pid: 0, ...(options.name ? { name: String(options.name) } : {}) };
   await writeEntry(entry, env);
   const runner = [
     "const { spawn } = require('node:child_process');",
@@ -206,6 +299,7 @@ export async function removeBackgroundSession(id, env = process.env) {
   if (entry.status === 'running') throw new Error(id + ' is still running. Stop it first with oasis bg stop ' + id + '.');
   await unlink(entryPath(id, env)).catch(() => {});
   await unlink(entry.logFile).catch(() => {});
+  await unlink(inboxPath(id, env)).catch(() => {});
   return entry;
 }
 
@@ -220,13 +314,14 @@ export function renderLog(text) {
     else if (event.type === 'assistant' && event.text) lines.push(event.text);
     else if (event.type === 'tool_use') lines.push('[tool] ' + event.name + ' ' + JSON.stringify(event.input || {}).slice(0, 160));
     else if (event.type === 'tool_result' && event.is_error) lines.push('[tool error] ' + event.name);
+    else if (event.type === 'system' && event.subtype === 'steer_received') lines.push('[message] ' + String(event.text || '').slice(0, 200));
     else if (event.type === 'result' && event.subtype === 'turn') continue;
     else if (event.type === 'result') lines.push('[' + (event.is_error ? 'failed' : 'done') + '] ' + (event.num_turns != null ? event.num_turns + ' turns, ' : '') + (event.total_cost_usd ? '$' + Number(event.total_cost_usd).toFixed(4) : '') + (event.is_error && event.result ? ' ' + event.result : ''));
   }
   return lines.join('\n');
 }
 
-export function describeEntry(entry) {
+export function describeEntry(entry, activity = '') {
   const age = Math.max(0, Math.round((Date.now() - Date.parse(entry.startedAt)) / 60000));
-  return entry.id + '  ' + entry.status.padEnd(9) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : Math.round(age / 60) + 'h') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60);
+  return entry.id + '  ' + entry.status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : Math.round(age / 60) + 'h') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
 }
