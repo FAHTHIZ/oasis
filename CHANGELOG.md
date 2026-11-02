@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- `run_shell` and `run_command` commands that reach their timeout now move to the background (output so far plus a `command_output` id, exit notice when done) instead of being killed halfway. `OASIS_TIMEOUT_TO_BACKGROUND=0` restores the old behaviour.
 - Model requests that fail to connect now say why (DNS, refused, timeout, connection reset, untrusted certificate with the NODE_EXTRA_CA_CERTS fix, proxy credentials) and point to `oasis doctor --network`, instead of a generic "Could not reach the model provider".
 - File discovery (glob, list_files, repo map, @ completion, built-in grep fallback) now honours git ignore rules, including nested .gitignore files, .git/info/exclude and core.excludesFile, via `git ls-files` with fsmonitor disabled. Explicitly targeted ignored folders are still searchable. `OASIS_RESPECT_GITIGNORE=0` restores the old walk.
 - Web UI and desktop app: MCP elicitation requests (forms and URLs) now show as an answerable card instead of being silently declined; new `POST /api/jobs/:id/elicitation` endpoint, schema sanitized before it reaches the page, 10-minute timeout.

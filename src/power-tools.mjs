@@ -350,9 +350,10 @@ export function startBackgroundProcess(registry, launch, options) {
     registry.delete(oldest.id);
   }
 
+  const child = options.adopt ? options.adopt.child : spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
   const id = 'bg_' + randomUUID().slice(0, 8);
-  const child = spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
-  const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: '', readOffset: 0, dropped: 0, startedAt: new Date().toISOString(), lastOutputAt: Date.now(), child, sandboxed: options.sandboxed };
+  const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: options.adopt ? String(options.adopt.output || '') : '', readOffset: 0, dropped: 0, startedAt: options.adopt && options.adopt.startedAt || new Date().toISOString(), lastOutputAt: Date.now(), child, sandboxed: options.sandboxed };
+  if (options.adopt) entry.readOffset = entry.output.length;
   // Optional hard cap on runtime, and a one-time notice when the process goes
   // quiet for a long time (likely stuck, or waiting on input it cannot get).
   const maxSeconds = Number.parseInt(options.maxSeconds, 10);
@@ -486,6 +487,10 @@ export function appControlRisk(command) {
   return null;
 }
 
+export function timeoutToBackground(env = process.env) {
+  return !/^(0|false|no|off)$/i.test(String(env.OASIS_TIMEOUT_TO_BACKGROUND || '').trim());
+}
+
 async function runShell(root, args, context, flavor = 'sh') {
   const command = String(args.command || '').trim();
   if (!command) throw new Error('Provide a shell command.');
@@ -563,9 +568,28 @@ async function runShell(root, args, context, flavor = 'sh') {
       cancelled = true;
       kill();
     };
+    const startedAt = new Date().toISOString();
     const timer = setTimeout(() => {
       if (settled) return;
       timedOut = true;
+      // Keep the work: hand the still-running process to the background
+      // registry (the model can read more with command_output or stop it with
+      // kill_command) instead of killing a long build or test run halfway.
+      const registry = timeoutToBackground(context.env || process.env) && context.session ? (context.session.background ||= new Map()) : null;
+      const running = registry ? [...registry.values()].filter((item) => item.status === 'running').length : Infinity;
+      if (registry && running < MAX_BACKGROUND_PROCESSES && child.exitCode === null && child.signalCode === null) {
+        settled = true;
+        cleanup();
+        child.stdout.removeAllListeners('data');
+        child.stderr.removeAllListeners('data');
+        child.removeAllListeners('close');
+        child.removeAllListeners('error');
+        import('./monitors.mjs').then(({ backgroundExitNotifier, backgroundStuckNotifier }) => {
+          const started = startBackgroundProcess(registry, null, { adopt: { child, output: stdout + (stderr ? (stdout ? '\n' : '') + stderr : ''), startedAt }, env: context.env || process.env, display: command, sandboxed: sandbox ? sandbox.kind : null, onExit: backgroundExitNotifier(context.session), onStuck: backgroundStuckNotifier(context.session) });
+          resolve({ approved: true, command, exitCode: null, stdout, stderr, timedOut: true, movedToBackground: true, background: true, id: started.id, pid: child.pid, message: 'Still running after ' + timeoutSeconds + ' seconds, so it was moved to the background instead of being stopped. Output so far is above; read more with command_output (id ' + started.id + '), stop it with kill_command, or wait for the exit notice.', ...(sandbox ? { sandboxed: sandbox.kind } : {}), ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
+        }, () => { kill(); resolve({ approved: true, command, exitCode: null, stdout, stderr, timedOut: true, cancelled: false }); });
+        return;
+      }
       kill();
     }, timeoutSeconds * 1000);
     if (context.signal) {
