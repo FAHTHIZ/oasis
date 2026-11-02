@@ -90,3 +90,40 @@ test('settings.repoMap / OASIS_REPO_MAP add a map to the first turn only', async
   assert.ok(users.slice(1).every((content) => !content.includes('<repo-map>')));
   assert.ok(requests.length >= 2);
 });
+
+test('PageRank follows real imports, not coincidental names, and focus pulls in neighbours', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-repomap-rank-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'src'), { recursive: true });
+  await mkdir(path.join(root, 'tools'), { recursive: true });
+  await mkdir(path.join(root, 'pkg'), { recursive: true });
+  // util.js is imported by three modules; decoy.js exports names that others only mention.
+  await writeFile(path.join(root, 'src', 'util.js'), 'export function formatRecordList(items) { return items; }\n');
+  await writeFile(path.join(root, 'src', 'decoy.js'), 'export function diff() {}\nexport function join() {}\nexport const toolCalls = [];\n');
+  for (const name of ['a', 'b', 'c']) {
+    await writeFile(path.join(root, 'src', name + '.js'), "import { formatRecordList } from './util.js';\nexport function " + name + "Main(toolCalls) { const diff = 1; const join = 2; return formatRecordList([diff, join, toolCalls]); }\n");
+  }
+  // A script (no exports) and a test file: their helpers are not linkable.
+  await writeFile(path.join(root, 'tools', 'script.mjs'), 'function formatRecordList() {}\nformatRecordList();\n');
+  await writeFile(path.join(root, 'src', 'a.test.js'), "import { aMain } from './a.js';\nfunction formatRecordList() {}\naMain(); assert.diff();\n");
+  // Python: relative and package imports resolve; leaf.py is only reached through them.
+  await writeFile(path.join(root, 'pkg', '__init__.py'), '');
+  await writeFile(path.join(root, 'pkg', 'leaf.py'), 'def compute_total_amount(rows):\n    return sum(rows)\n');
+  await writeFile(path.join(root, 'pkg', 'mid.py'), 'from .leaf import compute_total_amount\n\ndef report_totals(rows):\n    return compute_total_amount(rows)\n');
+  await writeFile(path.join(root, 'app.py'), 'from pkg.mid import report_totals\n\ndef main():\n    report_totals([1])\n');
+
+  const map = await buildRepoMap(root, { maxChars: 20000, includeRanking: true });
+  const order = map.ranking.map((file) => file.path);
+  assert.ok(order.indexOf('src/util.js') < order.indexOf('src/decoy.js'), order.join(' '));
+  const util = map.ranking.find((file) => file.path === 'src/util.js');
+  assert.equal(util.symbols.find((s) => s.name === 'formatRecordList').refs, 3, 'script and test helpers with the same name do not count');
+  const decoy = map.ranking.find((file) => file.path === 'src/decoy.js');
+  assert.ok(decoy.symbols.every((s) => !s.refs), 'local variables named like its exports are not uses');
+  assert.ok(order.indexOf('pkg/leaf.py') < order.indexOf('app.py'), 'the imported leaf outranks the entry point');
+
+  const focused = await buildRepoMap(root, { maxChars: 20000, focus: ['pkg/mid.py'], includeRanking: true });
+  const near = focused.ranking.slice(0, 3).map((file) => file.path);
+  assert.equal(near[0], 'pkg/mid.py');
+  assert.ok(near.includes('pkg/leaf.py'), near.join(' '));
+  assert.ok(near.includes('app.py'), 'its caller rises with it: ' + near.join(' '));
+});
