@@ -439,6 +439,17 @@ body.light .code-block .tok-str{color:#5B6F00}body.light .code-block .tok-kw{col
 .agent-question-option{text-align:left;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--panel);font-size:13px;transition:border-color .15s,background .15s}
 .agent-question-option:hover{border-color:var(--accent-line);background:var(--raised)}
 .agent-question-custom{display:flex;gap:8px}
+.agent-elicit-fields{display:grid;gap:12px;margin:8px 0}
+.agent-elicit-field{display:grid;gap:4px;font-size:13px}
+.agent-elicit-field label{font-weight:600}
+.agent-elicit-field small{color:var(--muted);font-size:12px}
+.agent-elicit-field input:not([type=checkbox]),.agent-elicit-field select{padding:8px 10px;border-radius:var(--r-md);border:1px solid var(--line-strong);background:var(--panel);color:inherit;font:inherit}
+.agent-elicit-field.is-check{grid-template-columns:auto 1fr;align-items:center}
+.agent-elicit-field.is-check label{order:2;font-weight:500}
+.agent-elicit-field [role=group]{display:grid;gap:4px;font-weight:400}
+.agent-elicit-url{word-break:break-all;font-size:13px}
+.agent-elicit-error{color:var(--danger,#c0392b);font-size:13px;margin:0}
+.agent-elicit-actions{display:flex;gap:8px;flex-wrap:wrap}
 
 /* Composer */
 .agent-compose{flex:0 0 auto;padding:4px max(20px,calc((100% - var(--chat-w))/2)) 14px;background:linear-gradient(180deg,transparent,var(--bg) 22%)}

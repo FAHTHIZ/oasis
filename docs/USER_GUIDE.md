@@ -360,7 +360,7 @@ OASIS reads a portable-format `.mcp.json` at the workspace root, so a team can s
 
 ### MCP elicitation, roots and live tool lists
 
-MCP servers can ask you for input while one of their tools runs, through MCP elicitation. OASIS shows the request in the terminal. A form request asks for each field in turn (enums as numbered choices, booleans as y/n, numbers and emails validated, defaults on Enter), and you can decline or cancel. A URL request offers to open the link in your browser. Headless runs (`-p`, SDK) decline elicitations unless a hook answers them:
+MCP servers can ask you for input while one of their tools runs, through MCP elicitation. OASIS shows the request in the terminal. A form request asks for each field in turn (enums as numbered choices, booleans as y/n, numbers and emails validated, defaults on Enter), and you can decline or cancel. A URL request offers to open the link in your browser. The web UI (`oasis web`) and the desktop app show the same requests as a card in the conversation: form fields are typed (text, number, yes/no, dropdowns for enums with a "Choose…" placeholder for required ones), required fields are checked before submitting, and URL requests show the link with an Open button. You can submit, decline or cancel; an unanswered request is cancelled after 10 minutes. Headless runs (`-p`, SDK) decline elicitations unless a hook answers them:
 
 ```json
 { "hooks": { "Elicitation": [{ "matcher": "my-server", "hooks": [{ "type": "command", "command": "./answer-elicitation.sh" }] }] } }
