@@ -79,6 +79,7 @@ function printHelp() {
     '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
     '  oasis setup                   Configure a model provider',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
+    '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
     '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
@@ -585,6 +586,17 @@ function isOmniRouteSetupIntent(text) {
 }
 
 async function doctor(args = [], root = process.cwd()) {
+  if (args.includes('--network') || args.includes('--network-only')) {
+    const { runNetworkDoctor, formatNetworkReport } = await import('./network-doctor.mjs');
+    const { loadProjectMcpServers } = await import('./mcp-project.mjs');
+    let config = {};
+    try { config = await loadConfig(); } catch {}
+    const { servers } = await loadProjectMcpServers(root).catch(() => ({ servers: [] }));
+    const results = await runNetworkDoctor({ config, mcpServers: servers });
+    stdout.write(formatNetworkReport(results));
+    if (results.some((r) => !r.ok)) process.exitCode = 1;
+    return;
+  }
   stdout.write('Oasis environment report\n');
   stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
   stdout.write('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
@@ -617,7 +629,7 @@ async function doctor(args = [], root = process.cwd()) {
         process.exitCode = 1;
       }
     } else {
-      stdout.write('  Live model/tool-call verification: not run (use oasis doctor --test-provider)\n');
+      stdout.write('  Live model/tool-call verification: not run (use oasis doctor --test-provider; oasis doctor --network checks connectivity)\n');
     }
   } catch (error) {
     stdout.write('  Provider config: invalid (' + error.message + ')\n');

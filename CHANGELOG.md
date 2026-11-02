@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- `oasis doctor --network` checks the route (direct or proxy), DNS and reachability of the model provider, remote MCP servers and GitHub, without sending credentials, and explains failures such as untrusted certificates behind TLS-inspecting proxies.
 - `OASIS_DISABLE_THINK_KEYWORDS=1` (or `CLAUDE_CODE_DISABLE_ULTRATHINK=1`) stops words like "ultrathink" and "think hard" from raising the thinking budget or reasoning effort; configured defaults still apply.
 - Corporate proxies: `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` / `NO_PROXY` now apply to every outbound request (Node's fetch ignored them, so OASIS could not reach a model from behind a proxy). HTTPS goes through a CONNECT tunnel with normal certificate checks, loopback always connects directly, redirects drop credentials across origins, and `oasis doctor` shows the proxy. Desktop app included.
 - Unattended runs can wait out rate limits: `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=N` sleeps until the provider's advertised reset (Retry-After, Anthropic or OpenAI reset headers) when it is within N minutes, then retries, instead of failing the job. Billing errors never wait; the header timeout is paused during the wait.
