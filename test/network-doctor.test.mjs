@@ -41,3 +41,28 @@ test('a bare request with no credentials proves reachability; 401 counts as reac
   assert.match(report, /FAIL X/);
   assert.ok(!report.includes('pw@'), 'proxy credentials are never printed');
 });
+
+test('a model request that cannot connect says why (refused, untrusted certificate) and points to doctor --network', async (t) => {
+  const { execFileSync } = await import('node:child_process');
+  const https = await import('node:https');
+  const { mkdtemp, readFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { testProviderConnection } = await import('../src/agent.mjs');
+  const net = await import('node:net');
+  const closed = net.createServer();
+  await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
+  const closedPort = closed.address().port;
+  await new Promise((resolve) => closed.close(resolve));
+  const config = (baseURL) => ({ protocol: 'openai-compatible', baseURL, model: 'test-model', apiKey: 'sk-test-network-key-123456' });
+  await assert.rejects(testProviderConnection(config('https://127.0.0.1:' + closedPort + '/v1')), /Could not reach the model provider: The connection was refused.*oasis doctor --network/);
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-tlsfail-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' });
+  } catch { t.diagnostic('openssl unavailable; certificate case skipped'); return; }
+  const server = https.createServer({ cert: await readFile(path.join(dir, 'c.pem')), key: await readFile(path.join(dir, 'k.pem')) }, (req, res) => res.end('{}'));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  await assert.rejects(testProviderConnection(config('https://127.0.0.1:' + server.address().port + '/v1')), /server certificate is not trusted \(DEPTH_ZERO_SELF_SIGNED_CERT\).*NODE_EXTRA_CA_CERTS/);
+});
