@@ -49,6 +49,7 @@ import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
 import { commandAvailable } from './command-lookup.mjs';
+import { installProxyFromEnv, currentProxy } from './proxy.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -603,6 +604,8 @@ async function doctor(args = [], root = process.cwd()) {
     stdout.write('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
     stdout.write('  Authentication: ' + summary.authentication + '\n');
     stdout.write('  Config: ' + summary.configPath + '\n');
+    const proxyNote = currentProxy();
+    stdout.write('  Network proxy: ' + (proxyNote ? proxyNote + ((process.env.NO_PROXY || process.env.no_proxy) ? ' (NO_PROXY: ' + (process.env.NO_PROXY || process.env.no_proxy) + ')' : '') : 'none (set HTTPS_PROXY to use one)') + (process.env.NODE_EXTRA_CA_CERTS ? '; extra CA certificates: ' + process.env.NODE_EXTRA_CA_CERTS : '') + '\n');
     if (modelConfigured && isLoopbackUrl(config.baseURL)) await doctorLocalServer(config);
     if (args.includes('--test-provider')) {
       stdout.write('  Live model/tool-call verification: testing (the inert probe will not be executed)…\n');
@@ -2938,6 +2941,8 @@ async function manageExternalExtensions(root, args, autoApprove) {
 }
 
 async function main() {
+  // HTTPS_PROXY / HTTP_PROXY / NO_PROXY for every outbound request (Node's fetch ignores them).
+  installProxyFromEnv();
   const rawArgs = process.argv.slice(2);
   // `oasis exec PROMPT` is an alias for `oasis -p PROMPT` (Codex CLI muscle memory).
   if (rawArgs[0] === 'exec') rawArgs[0] = '-p';

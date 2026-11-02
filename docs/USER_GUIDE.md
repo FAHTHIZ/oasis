@@ -242,6 +242,23 @@ OPENHANDS_AGENT_PROFILE_ID must identify an Agent Profile already configured on 
 
 Delegation always asks for explicit approval, even with --yes. The conversation requests OpenHands' AlwaysConfirm policy and a Git worktree where supported. If OpenHands pauses for its own tool confirmation, you must review and approve it in OpenHands' interface; OASIS will not accept those actions on your behalf. Non-Git workspaces can fall back to a shared directory. If a delegated task is still running when OASIS stops waiting, OASIS returns its conversation ID instead of silently resubmitting it. Review delegated changes in the OpenHands workspace before integrating them.
 
+## Corporate proxies and custom certificates
+
+OASIS reads the standard proxy variables, so model, MCP, OAuth, hook and telemetry requests work behind a corporate proxy:
+
+```bash
+export HTTPS_PROXY=http://proxy.corp.example:8080        # or http://user:pass@proxy:8080
+export NO_PROXY=internal.corp.example,.svc.local,10.0.0.0/8
+export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/corp-root.pem   # if the proxy or servers use a private CA
+```
+
+- `HTTPS_PROXY` is used for `https://` URLs, `HTTP_PROXY` for `http://` (and for `https://` when `HTTPS_PROXY` is unset), and `ALL_PROXY` as a fallback. Lower-case names work too. Only `http://` and `https://` proxy URLs are supported.
+- HTTPS traffic goes through a `CONNECT` tunnel. TLS runs end to end with the real server and its certificate is verified as usual, so the proxy never sees your prompts or API key.
+- `NO_PROXY` takes host names, `.domain` or `*.domain` suffixes, `host:port`, IP addresses, CIDR ranges, or `*`. `localhost` and loopback addresses always connect directly, so local models are never sent to the proxy.
+- `oasis doctor` shows the proxy in use (with credentials hidden) and any extra CA file.
+- `OASIS_PROXY=0` turns this off. With `NODE_USE_ENV_PROXY=1` (Node 24+), Node's own proxy support is used instead.
+- Shell commands the agent runs (git, npm, curl) get the same environment and use their own proxy support.
+
 ## Safety model
 
 OASIS is a local developer tool. Commands normally run with your operating-system user permissions. On supported Linux and macOS systems, the optional OS sandbox can restrict command writes and network access; it is disabled by default and does not provide full filesystem-read isolation. See [Command safety and OS sandbox](#command-safety-and-os-sandbox).

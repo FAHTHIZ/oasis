@@ -7,6 +7,10 @@ import { loadDesktopApiKey, saveDesktopApiKey } from './secure-secrets.mjs';
 import { crashRecoveryHtml } from './crash-screen.mjs';
 import { showErrorWithCopy } from './error-dialog.mjs';
 import { installPermissionPolicy } from './permissions.mjs';
+import { installProxyFromEnv } from '../src/proxy.mjs';
+
+// The agent runs in this process, so its model/MCP requests honour HTTPS_PROXY / NO_PROXY too.
+installProxyFromEnv();
 
 let mainWindow = null;
 let runtime = null;
