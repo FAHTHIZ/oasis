@@ -124,13 +124,18 @@ export function critiqueAutoMode(custom = null) {
   return [...new Set(notes)];
 }
 
+const INJECTED_USER_TEXT = /^(Context digest|Context from|<system-reminder>|I ran .* in a forked|CROSS-SESSION MESSAGE|\[background event\]|A \w+ hook asked you to|The tool-step budget has been reached|Summarize (this|these)|Call oasis_connection_probe|--- BEGIN (UNTRUSTED )?TRANSCRIPT|\[Tool output truncated|\[OASIS|Your previous response hit the)/;
+
 function userIntent(messages = [], limit = 6) {
   const out = [];
   for (let i = messages.length - 1; i >= 0 && out.length < limit; i--) {
     const message = messages[i];
     if (message.role !== 'user' || typeof message.content !== 'string') continue;
     // Skip injected context (digests, hook and tool notes); keep what the user wrote.
-    if (/^(Context digest|Context from|<system-reminder>|I ran .* in a forked)/.test(message.content)) continue;
+    // Notices OASIS injects as user-role text (other sessions' messages, background
+    // events, hook continuations, budget notes) are not the user's intent: a
+    // message relayed from elsewhere must not be able to authorize an action.
+    if (INJECTED_USER_TEXT.test(message.content.trimStart())) continue;
     out.unshift(message.content.slice(0, 2000));
   }
   return out;
