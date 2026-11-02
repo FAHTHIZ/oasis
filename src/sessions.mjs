@@ -92,9 +92,13 @@ export function sanitizeAgentHistory(agentTasks) {
     const status = SESSION_AGENT_STATUSES.has(record.status) ? record.status : 'interrupted';
     const worktree = record.worktree && typeof record.worktree === 'object' ? record.worktree : {};
     const worktreeInfo = record.worktreeInfo && typeof record.worktreeInfo === 'object' ? record.worktreeInfo : {};
-    const branch = String(worktree.branch || worktreeInfo.branch || '').slice(0, 160);
-    const relative = safeWorktreePath(worktree.relative || worktreeInfo.relative || worktree.path);
-    const commitSha = String(worktree.commitSha || '').toLowerCase();
+    // Live records keep worktree facts in objects; saved snapshots (re-validated on load) keep them flat.
+    const branch = String(worktree.branch || worktreeInfo.branch || record.worktreeBranch || '').slice(0, 160);
+    const relative = safeWorktreePath(worktree.relative || worktreeInfo.relative || worktree.path || record.worktreePath);
+    const commitSha = String(worktree.commitSha || record.worktreeCommit || '').toLowerCase();
+    // A worktree worker that has not finished (no commit result yet) keeps its base
+    // commit, so it can be resumed in the same checkout after a restart.
+    const openWorktree = resumableWorktree(record);
     const recentTools = Array.isArray(record.recentTools)
       ? record.recentTools.slice(-10).map((name) => String(name || '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 100)).filter(Boolean)
       : [];
@@ -118,9 +122,10 @@ export function sanitizeAgentHistory(agentTasks) {
       ...(record.sharedTaskId && /^task_[1-9]\d{0,8}$/.test(String(record.sharedTaskId)) ? { sharedTaskId: String(record.sharedTaskId) } : {}),
       ...(branch ? { worktreeBranch: branch } : {}),
       ...(relative ? { worktreePath: relative } : {}),
-      ...(worktree.changed === true ? { worktreeChanged: true } : {}),
+      ...(worktree.changed === true || record.worktreeChanged === true ? { worktreeChanged: true } : {}),
       ...( /^[0-9a-f]{40}$/.test(commitSha) ? { worktreeCommit: commitSha } : {}),
-      ...((record.transcriptSaved === true || record.transcript === true) && !branch && !(record.worktreeInfo || record.worktree) && record.workspaceIsolation !== 'worktree' ? { transcript: true } : {})
+      ...(openWorktree ? { worktreeBase: openWorktree.base } : {}),
+      ...((record.transcriptSaved === true || record.transcript === true) && (openWorktree || (!branch && !(record.worktreeInfo || record.worktree) && record.workspaceIsolation !== 'worktree')) ? { transcript: true } : {})
     };
     return [snapshot];
   });
@@ -129,8 +134,22 @@ export function sanitizeAgentHistory(agentTasks) {
 // Subagent transcripts (like Claude Code's subagents/*.jsonl): the conversation of
 // each shared-workspace worker is saved next to the session, so after a restart
 // send_message can resume the worker with its full context instead of starting
-// over. Worktree workers are not saved: their checkout may be gone.
+// over. Worktree workers are saved while they are still working in an OASIS-made
+// git worktree (not a hook-made copy, and not yet committed): the checkout is
+// re-verified before such a worker is resumed.
 const MAX_TRANSCRIPT_BYTES = 1536 * 1024;
+
+function resumableWorktree(record) {
+  if (!record || typeof record !== 'object') return null;
+  // A snapshot being re-validated on load carries the same facts as flat fields.
+  const info = record.worktreeInfo || (record.worktreeBase && !record.worktreeCommit && (record.status === 'running' || record.status === 'interrupted')
+    ? { base: record.worktreeBase, relative: record.worktreePath, branch: record.worktreeBranch } : null);
+  if (!info || typeof info !== 'object' || info.hook || record.worktree) return null;
+  const base = String(info.base || '').toLowerCase();
+  const relative = safeWorktreePath(info.relative);
+  if (!/^[0-9a-f]{40}$/.test(base) || !relative.startsWith('.oasis/worktrees/') || !info.branch) return null;
+  return { base, relative, branch: String(info.branch).slice(0, 160) };
+}
 
 export function agentTranscriptPath(root, sessionId, agentId, env = process.env) {
   if (!/^agent_[1-9]\d{0,8}$/.test(String(agentId || ''))) throw new Error('Invalid agent ID.');
@@ -146,7 +165,7 @@ function transcriptMessages(messages) {
 }
 
 function resumableRecord(record) {
-  return record && record.child && Array.isArray(record.child.messages) && !record.worktreeInfo && !record.worktree && record.status !== 'cancelled' && /^agent_[1-9]\d{0,8}$/.test(String(record.id || ''));
+  return record && record.child && Array.isArray(record.child.messages) && ((!record.worktreeInfo && !record.worktree) || resumableWorktree(record)) && record.status !== 'cancelled' && /^agent_[1-9]\d{0,8}$/.test(String(record.id || ''));
 }
 
 async function saveAgentTranscripts(session, id, env) {
