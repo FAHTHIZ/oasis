@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Every item below came from a miss in the model-free harness benchmark ([docs/BENCHMARKS.md](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01)) and has a regression test.
 
+- New `security_scan` tool: runs installed gitleaks (secrets, including git history), osv-scanner (or npm audit / pip-audit), semgrep and trivy, and merges their results into one severity-sorted list. Secret values never reach the model, every scanner runs through the normal approval and sandbox, and `/security-review` uses it first.
 - New `ast_grep` tool (offered when ast-grep is installed): structural code search across 25+ languages with `$VAR` patterns, plus a read-only rewrite preview that returns a diff and `multi_edit` edits, so writes keep every existing safeguard. CI installs a pinned ast-grep so these tests run.
 - Certificate errors now name the likely cause and its fix: a missing intermediate certificate, an expired or not-yet-valid certificate (check the computer's clock), a host-name mismatch, a self-signed server, or a TLS-inspecting proxy (NODE_EXTRA_CA_CERTS).
 - The fallback model no longer sticks for the rest of a session after one overload: after `OASIS_FALLBACK_COOLDOWN_MINUTES` (default 5) the next turn returns to the chosen model, and a model picked with `/model` in the meantime is kept.
