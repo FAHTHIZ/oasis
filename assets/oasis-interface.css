@@ -945,3 +945,6 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .toolbar .search-wrap{flex:1 1 170px;min-width:0}
 .toolbar .filter-select{flex:0 0 auto;min-width:0;max-width:44%}
 .agent-monitor-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+/* Touch screens have no hover: keep task delete visible and drop keyboard-only hints. */
+.delete-task .gi{width:14px;height:14px}
+@media (hover:none){.delete-task{opacity:.75}.msg-actions{opacity:.8}.command-palette-help{display:none}}

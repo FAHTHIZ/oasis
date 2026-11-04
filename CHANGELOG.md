@@ -7,6 +7,7 @@ This file records notable user-facing product changes. It does not imply that an
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
 - Clearer "no model configured" errors: `oasis -p` lists the three ways to connect a model (`oasis setup`, `oasis web --open`, environment variables) with a link to the install guide, and the browser workspace points to Connections, Model provider instead of only the terminal.
+- Phones and tablets: the task delete button and message Copy action are visible without hover (they were unreachable on touch screens), and the command palette hides its keyboard-only hint there.
 - Layout fixes in the browser workspace: Notes gives the editor the wide column, Projects and Tasks keep search and filter on one row with wider project cards, the Run monitor stats fill their row, project badges use sentence case, and keyboard users get a Skip to content link.
 - The Settings theme button keeps a readable label ("Use dark theme" / "Use light theme") instead of turning into a moon or sun glyph. Markdown task lists in replies show real read-only checkboxes.
 - Workspace polish: the compact New chat button shows a single plus icon, first-run cards and external links use SVG arrows instead of text glyphs, and a stray hidden input no longer adds a few pixels of page scroll.
