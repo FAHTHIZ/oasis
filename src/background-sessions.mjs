@@ -410,3 +410,18 @@ export function describeEntry(entry, activity = '') {
   if (entry.pendingApproval) activity = 'waiting for approval: ' + String(entry.pendingApproval.message || entry.pendingApproval.tool || '').slice(0, 80) + '  (oasis bg approve ' + entry.id + ' | deny ' + entry.id + ')';
   return entry.id + '  ' + status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : Math.round(age / 60) + 'h') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
 }
+
+// Shown when an interactive session starts: background runs that are waiting
+// for you, or that died without finishing (crash, reboot, sleep), so they are not
+// silently forgotten. Runs from this workspace are listed by id.
+export function backgroundStartupNotice(entries, root) {
+  const here = path.resolve(root || '.');
+  const waiting = entries.filter((entry) => entry.pendingApproval);
+  const interrupted = entries.filter((entry) => entry.status === 'interrupted' && entry.kind !== 'exec' && !entry.noticeDismissed);
+  if (!waiting.length && !interrupted.length) return '';
+  const label = (entry) => entry.id + (entry.name ? ' (' + entry.name + ')' : '') + (path.resolve(entry.root || '') === here ? '' : ' in ' + path.basename(entry.root || ''));
+  const lines = [];
+  if (waiting.length) lines.push('[background] ' + waiting.length + ' run(s) waiting for your approval: ' + waiting.slice(0, 3).map(label).join(', ') + (waiting.length > 3 ? ', ...' : '') + '. oasis bg list shows what they want; oasis bg approve ID or deny ID answers.');
+  if (interrupted.length) lines.push('[background] ' + interrupted.length + ' run(s) stopped without finishing (crash, kill or reboot): ' + interrupted.slice(0, 3).map(label).join(', ') + (interrupted.length > 3 ? ', ...' : '') + '. oasis respawn --interrupted resumes them; oasis bg rm ID clears one.');
+  return lines.join('\n');
+}
