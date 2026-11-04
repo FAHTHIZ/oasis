@@ -122,9 +122,8 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, colorScheme: 'dark', serviceWorkers: 'block', recordVideo: { dir: videoDir, size: { width: W, height: H } } });
   const page = await context.newPage();
   const t0 = Date.now();
-  await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded' });
-  await page.locator('#agentTokenInput').fill(token);
-  await page.locator('#agentConnectBtn').click();
+  // The one-click connect link the runtime prints (`oasis web`).
+  await page.goto('http://127.0.0.1:' + app.port + '/#token=' + token, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => /connected/i.test(document.querySelector('#agentRuntimeState')?.textContent || '') && !/not connected|failed/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''));
   await page.locator('#topbarProjectName').waitFor({ state: 'visible' });
   const introMs = Date.now() - t0;
