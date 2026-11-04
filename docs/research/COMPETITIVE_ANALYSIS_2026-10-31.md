@@ -18,6 +18,7 @@ This narrows the evidence gap for harness behavior. It does not change the verdi
 - **Released.** [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) is published with Windows x64, macOS arm64 and Linux x86_64 installers and `SHA256SUMS`. Quality, installer and Pages checks all passed on commit `1417117` before the release job ran.
 - **One-line install.** `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh` installs the latest stable release at its exact commit. This is comparable to the curl installers used by OpenCode and Codex. A checksum-verified bootstrap is still documented for anyone who wants to check the script first.
 - **Live container isolation in CI.** The new `docker-sandbox` job runs commands through the Docker backend against a real engine. It checks workspace-only mounts, loopback-only networking, dropped capabilities, a non-root user and the process limit.
+- **First-run ease (Claude Code desktop, Codex app).** `oasis web --open` opens the browser workspace already connected, and the printed link carries the one-time token in the URL fragment, so nobody pastes a token on the same machine. The workspace has a searchable keyboard and touch guide (Ctrl+/ or **Help**), works at phone width, and uses SVG icons throughout.
 - **Still open:** a same-model head-to-head on coding outcomes, code-signed installers, a package-manager listing (npm, Homebrew, winget) and hosted sessions.
 
 ## Executive verdict: OASIS on its own merits
@@ -278,5 +279,5 @@ The evaluation manifest now has 50 tasks. Since the November 2 update, these gap
 | Diagrams in the terminal | Mermaid flowcharts and sequence diagrams in replies are drawn as text in the terminal. |
 | Importers | Settings, MCP servers, rules and skills import from more tools. |
 
-Still open: published head-to-head results on the same model, a live-engine container test in CI, hosted cloud sessions, a published `v1.0.0` release, and signed installers.
+Still open: published head-to-head results on the same model, hosted cloud sessions, and signed installers. The live-engine container test (`docker-sandbox`) and the `v1.0.0` release have since shipped; see the November 4 update at the top.
 
