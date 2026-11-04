@@ -25,6 +25,19 @@ export function learningEnabled(settings = {}, env = process.env) {
   return !(settings && settings.autoLearning === false);
 }
 
+export function assertLearningVerification(state, issues = []) {
+  if (!state || !(state.changedPaths instanceof Set)) {
+    throw new Error('Procedural learning requires the live OASIS verification state. The proposal was not saved.');
+  }
+  if (!Array.isArray(issues)) {
+    throw new Error('Procedural learning could not validate the verification result. The proposal was not saved.');
+  }
+  if (issues.length) {
+    throw new Error('Cannot save a procedural-learning proposal until OASIS verification is complete: ' + issues.join('; ') + '. Review the complete diff and pass a relevant check after the latest code edit.');
+  }
+  return true;
+}
+
 function projectKey(root) {
   // Store a stable opaque project identifier, not the absolute workspace path.
   return createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 20);
