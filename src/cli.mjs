@@ -1563,7 +1563,17 @@ async function manageSessions(root, rest) {
     stdout.write('Deleted ' + removed.length + ' saved session(s).\n');
     return;
   }
-  throw new Error('Unknown sessions action. Use oasis sessions list, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
+  if (action === 'search') {
+    const json = rest.includes('--json');
+    const all = rest.includes('--all');
+    const query = rest.slice(1).filter((arg) => arg !== '--json' && arg !== '--all').join(' ').trim();
+    if (!query) throw new Error('Usage: oasis sessions search QUERY [--all] [--json]');
+    const { searchSessions, formatSessionSearch } = await import('./session-search.mjs');
+    const result = await searchSessions(root, query, { scope: all ? 'all' : 'workspace', limit: 20 });
+    stdout.write((json ? JSON.stringify(result, null, 2) : formatSessionSearch(result, query)) + '\n');
+    return;
+  }
+  throw new Error('Unknown sessions action. Use oasis sessions list, oasis sessions search QUERY, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
 }
 
 async function manageMcp(rest, root = process.cwd()) {

@@ -755,6 +755,10 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.toolDefinitions = session.toolDefinitions.concat(MEMORY_TOOL_DEFINITIONS);
     try { const memoryText = await memoryIndexPrompt(root, { env, compact: Boolean(smallContext) }); if (dynamicSections) dynamicSections.push(memoryText); else systemText += '\n\n' + memoryText; } catch {}
   }
+  if (!restricted && env.OASIS_SESSION_SEARCH !== '0' && loadedSettings.sessionSearch !== false) {
+    const { SESSION_SEARCH_TOOL_DEFINITION } = await import('./session-search.mjs');
+    session.toolDefinitions = session.toolDefinitions.concat([SESSION_SEARCH_TOOL_DEFINITION]);
+  }
   if (learningEnabled(loadedSettings, env)) {
     session.proceduralLearning = true;
     session.toolDefinitions = session.toolDefinitions.concat(LEARNING_TOOL_DEFINITIONS);
@@ -2395,7 +2399,7 @@ function normalizeUsage(usage = {}) {
   return out;
 }
 
-const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
+const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   name: 'exit_plan_mode',
