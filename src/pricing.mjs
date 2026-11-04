@@ -94,6 +94,11 @@ export function estimateCostUsd(model, usage = {}, options = {}) {
   if (!price) return 0;
   // Long prompts move the whole request to the long-context tier.
   if (price.long && Number(usage.inputTokens || 0) > price.long.threshold) price = { ...price, ...price.long };
+  // Claude fast mode (speed: "fast") bills Opus 5.5, Opus 5 and Opus 4.8 at 2x the
+  // base rates across the whole window; cache multipliers stack on top.
+  if (usage.speed === 'fast' && !price.custom && !price.local && /opus-(?:5(?:[-.]5)?(?![-.]?\d)|4[-.]8)/i.test(String(model || ''))) {
+    price = { ...price, input: price.input * 2, output: price.output * 2, cacheRead: (price.cacheRead || price.input) * 2, cacheWrite: (price.cacheWrite || price.input) * 2 };
+  }
   const cacheRead = Number(usage.cacheReadTokens || 0);
   const cacheWrite = Number(usage.cacheCreationTokens || 0);
   const input = Math.max(0, Number(usage.inputTokens || 0) - cacheRead - cacheWrite);
