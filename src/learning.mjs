@@ -232,7 +232,13 @@ function ensureInside(base, candidate) {
 
 async function createSkillDirectory(base, name) {
   const resolvedBase = await realpath(base);
-  const skillDirectory = path.join(base, name);
+  const basePath = path.resolve(base);
+  const skillDirectory = path.resolve(basePath, name);
+  // Reject path traversal before mkdir; checking realpath only after creation
+  // would leave an out-of-tree directory behind on a malicious local record.
+  if (skillDirectory === basePath || !ensureInside(basePath, skillDirectory)) {
+    throw new Error('Skill name resolves outside its managed directory.');
+  }
   try {
     await mkdir(skillDirectory, { mode: 0o700 });
   } catch (error) {
@@ -265,6 +271,15 @@ export async function approveSkillProposal(root, id, { env = process.env } = {})
   const proposal = await getSkillProposal(root, id, { env });
   if (!proposal) throw new Error('No learning proposal matches ' + id + '.');
   if (proposal.status !== 'pending') throw new Error('Proposal ' + id + ' is already ' + proposal.status + '.');
+  // Local proposal files are user-editable. Revalidate every field at promotion
+  // time instead of trusting that a pending JSON record is unchanged since creation.
+  const validatedName = validateName(proposal.name);
+  if (validatedName !== proposal.name) throw new Error('Stored skill name is not in canonical lowercase form.');
+  proposal.description = oneLine(validateTextWithoutSecrets('Description', proposal.description, 180), 180);
+  if (proposal.description.length < 12) throw new Error('Stored skill description is too short.');
+  proposal.body = validateSkillBody(proposal.body);
+  proposal.evidence = oneLine(validateTextWithoutSecrets('Evidence', proposal.evidence, MAX_EVIDENCE_CHARS), MAX_EVIDENCE_CHARS);
+  if (proposal.evidence.length < 12) throw new Error('Stored evidence is too short.');
   // Collision checks include bundled, imported, project, and user skills. A learned
   // skill must never silently shadow an existing skill from another source.
   const { listAvailableSkills } = await import('./tools.mjs');
