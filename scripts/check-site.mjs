@@ -190,3 +190,7 @@ assert.ok(serviceWorker.includes("request.method !== 'GET'"), 'Service worker mu
 assert.ok(serviceWorker.includes("url.pathname.startsWith('/api/')"), 'Service worker must never cache authenticated runtime API responses.');
 
 console.log('OASIS integrity checks passed: app structure, inline JavaScript syntax, PWA manifest/icon, and offline service-worker safeguards.');
+// Keyboard users get a skip link to the main area, and no visible text glyphs stand in for icons.
+assert.ok(html.includes('<a class="skip-link" href="#main">Skip to content</a>') && html.includes('<main class="main" id="main" tabindex="-1">'), 'Workspace must keep the skip-to-content link and its #main target.');
+assert.ok(interfaceCss.includes('.skip-link:focus{top:12px'), 'Skip link must become visible on focus.');
+for (const glyph of ['☾', '☼', '▤', '☐', '☑', '↗']) assert.ok(!html.includes(glyph), 'Use an SVG icon instead of the text glyph ' + glyph + ' in index.html.');

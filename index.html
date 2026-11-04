@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/assets/vendor/xterm.css">
 <script id="oasis-motion">/* Motion follows the device: lite on low-power hardware or Data Saver, off for reduced motion. Override with ?motion=full|lite|off (remembered). */(function(){try{var q=new URLSearchParams(location.search).get('motion');if(q&&/^(full|lite|off)$/.test(q))localStorage.setItem('oasis.motion',q);var pref=localStorage.getItem('oasis.motion');var n=navigator,c=n.connection||{};var low=(n.hardwareConcurrency&&n.hardwareConcurrency<=2)||(n.deviceMemory&&n.deviceMemory<=2)||c.saveData===true;var reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;var level=pref||(reduced?'off':low?'lite':'full');document.documentElement.dataset.motion=level;window.oasisMotion=level}catch(e){document.documentElement.dataset.motion='full'}})();</script>
 </head><body>
+<a class="skip-link" href="#main">Skip to content</a>
 <div class="shell">
 <aside class="sidebar" id="mainSidebar" aria-label="OASIS workspace">
   <div class="sidebar-head">
@@ -43,7 +44,7 @@
     <div class="sidebar-foot"><span class="sidebar-foot-dot" aria-hidden="true"></span><span>Local-first · Apache-2.0</span><button class="sidebar-help" id="sidebarHelpButton" type="button" title="Keyboard shortcuts and help"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/></svg><span>Help</span></button></div>
   </nav>
 </aside>
-<main class="main"><header class="topbar">
+<main class="main" id="main" tabindex="-1"><header class="topbar">
   <button class="icon-btn sidebar-menu-button" id="sidebarMenuButton" type="button" aria-label="Open chats and navigation" aria-controls="mainSidebar" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <div class="topbar-project-context">
     <div class="topbar-project-line"><strong id="topbarProjectName">Personal studio</strong><span class="topbar-branch-pill" id="topbarBranchPill">local workspace</span></div>

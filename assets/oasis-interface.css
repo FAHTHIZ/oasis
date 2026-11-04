@@ -933,3 +933,7 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .md details.md-note summary::-webkit-details-marker{display:none}
 .md details.md-note summary::before{content:"";width:12px;height:12px;background:currentColor;-webkit-mask:var(--gi-chev) center/contain no-repeat;mask:var(--gi-chev) center/contain no-repeat;transition:transform .15s}
 .md details.md-note[open] summary::before{transform:rotate(90deg)}
+/* Keyboard users can jump past the sidebar straight to the current view. */
+.skip-link{position:fixed;left:12px;top:-64px;z-index:1000;padding:10px 14px;border-radius:var(--r-md,10px);background:var(--accent);color:var(--accent-ink);font:600 13px/1.2 var(--font-ui);text-decoration:none;transition:top .15s}
+.skip-link:focus{top:12px;outline:2px solid var(--text);outline-offset:2px}
+#main:focus{outline:none}
