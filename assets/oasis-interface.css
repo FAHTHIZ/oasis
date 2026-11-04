@@ -112,7 +112,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .brand-mark img{width:30px;height:30px;display:block}
 .brand-copy{display:flex;flex-direction:column;min-width:0;line-height:1.1}
 .brand-name{font-size:15px;font-weight:750;letter-spacing:.16em}
-.brand-sub{font-size:10.5px;color:var(--faint);letter-spacing:.02em;margin-top:3px}
+.brand-sub{font-size:11.5px;color:var(--faint);letter-spacing:.02em;margin-top:3px}
 .sidebar-new-chat{display:flex;align-items:center;gap:9px;min-height:38px;padding:0 12px;border-radius:var(--r-md);background:var(--accent);color:var(--accent-ink);font-weight:650;font-size:13.5px;box-shadow:0 8px 22px -14px #9BFF55;transition:background .15s,transform .08s}
 .sidebar-new-chat:hover{background:#B0FF78}.sidebar-new-chat:active{transform:translateY(1px)}
 .sidebar-new-chat .ico{stroke-width:2.4}
@@ -123,7 +123,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .switcher:hover{background:var(--raised)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 0 3px var(--success-soft);flex:0 0 8px}
 .workspace-meta{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.25}
-.workspace-label{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.workspace-label{font-size:11.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 .workspace-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .switcher-chevron{color:var(--faint);display:grid}
 .sidebar-chats{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:6px}
@@ -214,7 +214,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .project-info{flex:1;min-width:0}
 .project-name{font-weight:650;font-size:14px;overflow-wrap:anywhere}
 .project-desc{font-size:var(--fs-sm);color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
-.project-badge{font-size:10.5px;font-weight:650;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);white-space:nowrap;text-transform:capitalize}
+.project-badge{font-size:11.5px;font-weight:650;padding:3px 8px;border-radius:var(--r-pill);background:var(--accent-soft);color:var(--accent);white-space:nowrap;text-transform:capitalize}
 .project-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;font-size:var(--fs-xs);color:var(--muted)}
 .progress-labels{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--muted);margin:14px 0 6px}
 .progress-track{height:5px;border-radius:var(--r-pill);background:var(--line);overflow:hidden}
@@ -228,7 +228,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .task-title{font-size:13.5px;font-weight:550;overflow-wrap:anywhere}
 .is-done .task-title{color:var(--faint);text-decoration:line-through}
 .task-meta{display:flex;gap:8px;align-items:center;font-size:var(--fs-xs);color:var(--muted);margin-top:2px;flex-wrap:wrap}
-.priority{font-size:10.5px;font-weight:650;padding:2px 7px;border-radius:var(--r-pill);background:var(--raised);color:var(--muted)}
+.priority{font-size:11.5px;font-weight:650;padding:2px 7px;border-radius:var(--r-pill);background:var(--raised);color:var(--muted)}
 .priority.high{background:var(--danger-soft);color:var(--danger)}
 .priority.medium{background:var(--warn-soft);color:var(--warn)}
 .priority.low{background:var(--success-soft);color:var(--success)}
@@ -364,9 +364,9 @@ body.agent-busy .agent-runtime-state::before{background:var(--accent);animation:
 .agent-message.assistant.failed{color:var(--danger)}
 .agent-message.assistant.failed::before{border-color:#FF8A8A55}
 .agent-message.shell{align-self:stretch;font:12.5px/1.5 var(--font-mono);background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:340px;overflow:auto;color:var(--text)}
-.agent-message.shell.failed{border-left:3px solid var(--danger)}
+.agent-message.shell.failed{border-color:color-mix(in srgb,var(--danger) 55%,transparent);background:color-mix(in srgb,var(--danger) 7%,var(--panel))}
 .agent-message.activity{align-self:stretch;font:12.5px/1.5 var(--font-mono);color:var(--muted);padding:6px 10px 6px 34px;margin:-10px 0 -10px 0;position:relative;white-space:pre-wrap;max-height:220px;overflow:auto;border-radius:var(--r-sm)}
-.agent-message.activity.agent-context-notice{display:grid;gap:3px;max-width:min(100%,760px);padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-md);background:var(--panel);font:12.5px/1.5 var(--font-sans);white-space:normal}
+.agent-message.activity.agent-context-notice{display:grid;gap:3px;max-width:min(100%,760px);padding:10px 12px;border:1px solid var(--accent-line);border-radius:var(--r-md);background:color-mix(in srgb,var(--accent) 5%,var(--panel));font:12.5px/1.5 var(--font-sans);white-space:normal}
 .agent-context-notice strong{font-weight:650;color:var(--text)}
 .agent-context-notice.context-success{border-left-color:var(--accent)}
 .agent-context-notice.context-warning{border-left-color:var(--danger);background:color-mix(in srgb,var(--danger) 5%,var(--panel))}
@@ -489,7 +489,7 @@ body.light .code-block .tok-str{color:#5B6F00}body.light .code-block .tok-kw{col
 .skill-command-copy{display:flex;flex-direction:column;min-width:0;flex:1}
 .skill-command-name{font:600 12.5px var(--font-mono);color:var(--accent)}
 .skill-command-description{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.skill-command-mode{font-size:10.5px;color:var(--faint);padding:2px 6px;border:1px solid var(--line);border-radius:var(--r-pill)}
+.skill-command-mode{font-size:11.5px;color:var(--faint);padding:2px 6px;border:1px solid var(--line);border-radius:var(--r-pill)}
 .skill-command-menu-footer{padding:6px 10px 2px;font-size:11px;color:var(--faint);border-top:1px solid var(--line);margin-top:4px}
 
 /* Utility column (terminal / changes / tasks) */
@@ -519,7 +519,7 @@ body.light .terminal-xterm,body.light .terminal-output,body.light .cloud-run-dif
 .cloud-run-empty{font-size:12.5px;color:var(--faint);padding:14px;border:1px dashed var(--line-strong);border-radius:var(--r-md);text-align:center}
 .cloud-run-detail{display:grid;gap:10px}
 .cloud-run-detail-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
-.cloud-run-event{font:12px/1.5 var(--font-mono);color:var(--text-2);padding:6px 10px;border-left:2px solid var(--line-strong)}
+.cloud-run-event{font:12px/1.5 var(--font-mono);color:var(--text-2);padding:6px 10px;border-radius:var(--r-sm,6px);background:var(--raised)}
 
 /* ---------- Monitor ---------- */
 .agent-monitor-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.8fr);gap:16px;align-items:start}
@@ -727,7 +727,7 @@ body.agent-busy .agent-send{display:none}
 .ws-line.note{color:var(--muted);white-space:pre-wrap}
 body.light .ws-line.add{color:#11602F;background:#198A4A14}
 body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
-.ws-section-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:4px 0 8px}
+.ws-section-label{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:4px 0 8px}
 
 /* Chat header adapts to its own width (split view, narrow windows) */
 .agent-chat-panel{container-type:inline-size;container-name:chat}
@@ -897,3 +897,6 @@ html[data-motion=full] .agent-dictate.is-listening{animation:oasis-dictate-pulse
 .setup-drawer[data-runtime="connected"] .agent-setup .agent-help{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .first-run-icon svg{display:block}
 @media(max-width:420px){.wt-long{display:none}.worktree-toggle strong{white-space:nowrap}}
+.page-date{margin:0 0 6px;font-size:13px;font-weight:500;color:var(--muted)}
+.note-sidebar-title{font-size:16px;font-weight:650;letter-spacing:-.01em;margin:0 0 8px}
+.github-panel>.agent-chat-header{padding:16px 18px 0;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px}.github-panel>.agent-chat-header>span:first-child{min-width:0;flex:1 1 180px}
