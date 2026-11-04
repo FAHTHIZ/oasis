@@ -567,6 +567,7 @@ Handler options (any type unless noted):
 - `"args": ["--strict", "${CLAUDE_PROJECT_DIR}"]` (command): run `command` directly with these arguments and no shell. `"shell": "powershell"` runs it with PowerShell.
 - `"async": true` (command): run in the background without delaying the agent. JSON `additionalContext`/`systemMessage` reaches the model on its next request. `"asyncRewake": true` also feeds a background exit-2 result back as a reminder.
 - `"onFailure": "block"`: treat a crash, timeout, or non-2 exit as a block (not for `Stop`, `SubagentStop`, or `TaskCompleted`).
+- `"statusMessage": "Running tests"`: text for the activity line while the hook runs. Without it, a hook that takes over half a second shows "Running EVENT hook".
 - `"timeout"` in seconds. Defaults: 600 for command, http and mcp_tool; 30 for prompt and for `UserPromptSubmit`; 60 for agent.
 
 Matchers follow Claude Code: a matcher made only of letters, digits, `_`, `-`, spaces, `,` and `|` is an exact name or list (`Edit|Write`; `Edit` no longer matches `MultiEdit`). Anything else is an unanchored regular expression (`mcp__memory__.*`, `^Notebook`). MCP tools are seen as `mcp__<server>__<tool>`.

@@ -1047,6 +1047,7 @@ function sessionCreateOptions() {
   const firstSessionId = SESSION_OPTIONS.sessionId || null;
   SESSION_OPTIONS.sessionId = null;
   return {
+    onHookStatus: (event) => { if (event.phase === 'start') onModelWait({ phase: 'start', label: event.label }); else stopWaitIndicator(); },
     permissionMode: SESSION_OPTIONS.permissionMode,
     allowedTools: SESSION_OPTIONS.allowedTools,
     disallowedTools: SESSION_OPTIONS.disallowedTools,
