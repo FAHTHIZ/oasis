@@ -310,7 +310,7 @@
 </section>
 <section class="view" id="view-monitor">
   <div class="intro-row"><div><h1 class="page-title">Agent run monitor</h1><p class="page-subtitle">Inspect worker activity, team coordination, run outcomes, and saved events. This view observes work; it never auto-merges branches.</p></div><button class="btn btn-secondary" id="agentMonitorRefreshBtn" type="button">Refresh</button></div>
-  <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Runs loaded</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams observed</span><strong>—</strong></div></div>
+  <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Saved runs</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams</span><strong>—</strong></div></div>
   <div class="agent-monitor-grid">
     <section class="panel panel-pad"><div class="section-head"><div><h2>Recent runs</h2><div class="section-sub" id="agentMonitorRunStatus">Connect the runtime to inspect saved runs.</div></div></div><div class="agent-monitor-runs" id="agentMonitorRunList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div></section>
     <section class="panel panel-pad"><div class="section-head"><div><h2 id="agentMonitorDetailTitle">Worker activity</h2><div class="section-sub" id="agentMonitorDetailMeta">Select a run to inspect its workers and event timeline.</div></div><div class="agent-monitor-actions"><button class="btn btn-secondary" id="agentMonitorOpenSessionBtn" type="button" aria-label="Open saved parent chat without restarting workers" hidden>Open saved chat</button><button class="btn btn-secondary" id="agentMonitorReviewRunBtn" type="button" aria-label="Review isolated changes without merging" hidden>Review isolated changes</button></div></div><div class="agent-monitor-workers" id="agentMonitorWorkers"><div class="cloud-run-empty">No run selected.</div></div><div class="section-head agent-monitor-timeline-heading"><div><h2>Activity timeline</h2><div class="section-sub">Lifecycle events only; private prompts and chat content are not shown.</div></div></div><div class="agent-monitor-events" id="agentMonitorEvents"><div class="cloud-run-empty">Select a run to inspect saved worker activity.</div></div></section>
@@ -867,9 +867,9 @@ async function agentLoadMonitor(silent){
     var totalWorkers=runs.reduce(function(n,run){return n+Number(run.runningWorkers||0)},0);
     var totalTeams=runs.reduce(function(n,run){return n+Number(run.teamCount||0)},0);
     document.getElementById('agentMonitorStats').replaceChildren(
-      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Runs loaded'),cloudRunNode('strong','',String(runs.length)));return n})(),
+      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Saved runs'),cloudRunNode('strong','',String(runs.length)));return n})(),
       (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Active workers'),cloudRunNode('strong','',String(totalWorkers)));return n})(),
-      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Teams observed'),cloudRunNode('strong','',String(totalTeams)));return n})()
+      (function(){var n=cloudRunNode('div','agent-monitor-stat');n.append(cloudRunNode('span','','Teams'),cloudRunNode('strong','',String(totalTeams)));return n})()
     );
     status.textContent=(response.total||runs.length)+' saved runs · refreshed '+new Date().toLocaleTimeString();
     list.replaceChildren();
