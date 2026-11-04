@@ -103,6 +103,7 @@ function printHelp() {
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
     '  oasis sessions list           List locally saved sessions for this workspace',
+    '  oasis sessions search QUERY [--all] [--json]  Search earlier saved conversations',
     '  oasis sessions clear ID       Delete one saved session',
     '  oasis sessions prune [--older-than DAYS]  Delete saved sessions unused for DAYS (default 30)',
     '  oasis --continue              Resume the most recent saved session and keep saving it',
@@ -122,6 +123,7 @@ function printHelp() {
     '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
+    '  oasis acp [--permission-mode MODE]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -3383,6 +3385,15 @@ async function main() {
     return;
   }
   if (command === 'sessions') return await manageSessions(workspace, rest);
+  if (command === 'acp') {
+    const { serveAcp } = await import('./acp.mjs');
+    const { oasisVersion } = await import('./version.mjs');
+    const modeAt = rest.indexOf('--permission-mode');
+    const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
+    if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis acp --permission-mode must be default, acceptEdits, plan or auto.');
+    await serveAcp({ env: process.env, version: oasisVersion(), permissionMode });
+    return;
+  }
   if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
   if (command === 'permissions') return await managePermissions(workspace, rest);
   if (command === 'trust') return await manageTrust(workspace, rest);
