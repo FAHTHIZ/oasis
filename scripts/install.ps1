@@ -68,74 +68,90 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
     exit 1
 }
 Write-Host ("npm is ready: " + (& npm --version))
-Write-Host 'Resolving the latest stable OASIS release from GitHub...'
-$apiFailure = ''
-try {
-    $release = Invoke-RestMethod -Uri "$ApiBase/releases/latest" -Headers $ApiHeaders -TimeoutSec 15
-    if ($release.draft -or $release.prerelease) { throw 'GitHub did not return a stable release.' }
-    $ReleaseTag = [string]$release.tag_name
-    if (-not [regex]::IsMatch($ReleaseTag, '\Av[0-9]+\.[0-9]+\.[0-9]+\z')) { throw 'The latest stable release has an unsupported tag.' }
-    $encodedTag = [uri]::EscapeDataString($ReleaseTag)
-    $releaseCommit = Invoke-RestMethod -Uri "$ApiBase/commits/$encodedTag" -Headers $ApiHeaders -TimeoutSec 15
-    $ReleaseCommit = ([string]$releaseCommit.sha).ToLowerInvariant()
-    if ($ReleaseCommit -notmatch '^[0-9a-f]{40}\z') { throw 'GitHub did not return a valid release commit.' }
-} catch {
-    $apiFailure = $_.Exception.Message
-}
-
-$tagApiFailure = ''
-if (-not $ReleaseCommit) {
-    try {
-        $tagList = Invoke-RestMethod -Uri "$ApiBase/tags?per_page=100" -Headers $ApiHeaders -TimeoutSec 15
-        $stableTag = Resolve-OasisStableTagFromList -Tags @($tagList)
-        $ReleaseTag = [string]$stableTag.Tag
-        $ReleaseCommit = [string]$stableTag.CommitSha
-        Write-Host "No published stable release object was available; using stable Git tag $ReleaseTag."
-    } catch {
-        $tagApiFailure = $_.Exception.Message
-    }
-}
-
-$gitTagFailure = ''
-if (-not $ReleaseCommit) {
-    try {
-        $gitCommand = Get-Command git -ErrorAction SilentlyContinue
-        if (-not $gitCommand) { throw 'Git is not installed; skipping Git transport fallback.' }
-        $gitOutput = & $gitCommand.Source ls-remote --tags 'https://github.com/FAHTHIZ/oasis.git' 'refs/tags/v*' 2>&1
-        if ($LASTEXITCODE -ne 0) { throw ([string]::Join([Environment]::NewLine, @($gitOutput))) }
-        $stableTag = Resolve-OasisStableTagFromGitOutput -Output ([string]::Join([Environment]::NewLine, @($gitOutput)))
-        $ReleaseTag = [string]$stableTag.Tag
-        $ReleaseCommit = [string]$stableTag.CommitSha
-        Write-Host "Using stable Git tag $ReleaseTag resolved to its exact commit SHA."
-    } catch {
-        $gitTagFailure = $_.Exception.Message
-    }
-}
-
-if (-not $ReleaseCommit) {
-    Write-Host "GitHub API unavailable ($apiFailure); trying the official public release page..."
-    try {
-        $releasePage = Invoke-WebRequest -Uri 'https://github.com/FAHTHIZ/oasis/releases/latest' -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'text/html' } -TimeoutSec 20 -UseBasicParsing
-        $pageHtml = [string]$releasePage.Content
-
-        $ReleaseTag = Resolve-OasisReleaseTagFromResponse -Response $releasePage
-        $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
-        if ($commitMatch.Success) {
-            $ReleaseCommit = $commitMatch.Groups[1].Value.ToLowerInvariant()
-        } else {
-            # The release page may omit commit hovercards. Resolve the immutable
-            # tag target from GitHub's public Atom feed, which does not use REST API quota.
-            $encodedTag = [uri]::EscapeDataString($ReleaseTag)
-            $atomPage = Invoke-WebRequest -Uri "https://github.com/FAHTHIZ/oasis/commits/$encodedTag.atom" -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'application/atom+xml' } -TimeoutSec 20 -UseBasicParsing
-            $ReleaseCommit = Resolve-OasisCommitFromAtom -Content ([string]$atomPage.Content)
-        }
-    } catch {
-        Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; tags API: " + $tagApiFailure + "; Git tags: " + $gitTagFailure + "; public release page: " + $_.Exception.Message)
+$SourceCommit = [string]$env:OASIS_INSTALL_COMMIT
+if ($SourceCommit) {
+    $SourceCommit = $SourceCommit.ToLowerInvariant()
+    if ($SourceCommit -notmatch '\A[0-9a-f]{40}\z') {
+        Write-Host 'OASIS_INSTALL_COMMIT must be a full 40-character Git commit SHA.'
         exit 1
+    }
+    $ReleaseCommit = $SourceCommit
+    $ReleaseTag = 'source commit ' + $ReleaseCommit.Substring(0, 12)
+    Write-Host "Installing the exact source commit: $ReleaseCommit"
+} else {
+    Write-Host 'Resolving the latest stable OASIS release from GitHub...'
+    $apiFailure = ''
+    try {
+        $release = Invoke-RestMethod -Uri "$ApiBase/releases/latest" -Headers $ApiHeaders -TimeoutSec 15
+        if ($release.draft -or $release.prerelease) { throw 'GitHub did not return a stable release.' }
+        $ReleaseTag = [string]$release.tag_name
+        if (-not [regex]::IsMatch($ReleaseTag, '\Av[0-9]+\.[0-9]+\.[0-9]+\z')) { throw 'The latest stable release has an unsupported tag.' }
+        $encodedTag = [uri]::EscapeDataString($ReleaseTag)
+        $releaseCommit = Invoke-RestMethod -Uri "$ApiBase/commits/$encodedTag" -Headers $ApiHeaders -TimeoutSec 15
+        $ReleaseCommit = ([string]$releaseCommit.sha).ToLowerInvariant()
+        if ($ReleaseCommit -notmatch '^[0-9a-f]{40}\z') { throw 'GitHub did not return a valid release commit.' }
+    } catch {
+        $apiFailure = $_.Exception.Message
+    }
+    
+    $tagApiFailure = ''
+    if (-not $ReleaseCommit) {
+        try {
+            $tagList = Invoke-RestMethod -Uri "$ApiBase/tags?per_page=100" -Headers $ApiHeaders -TimeoutSec 15
+            $stableTag = Resolve-OasisStableTagFromList -Tags @($tagList)
+            $ReleaseTag = [string]$stableTag.Tag
+            $ReleaseCommit = [string]$stableTag.CommitSha
+            Write-Host "No published stable release object was available; using stable Git tag $ReleaseTag."
+        } catch {
+            $tagApiFailure = $_.Exception.Message
+        }
+    }
+    
+    $gitTagFailure = ''
+    if (-not $ReleaseCommit) {
+        try {
+            $gitCommand = Get-Command git -ErrorAction SilentlyContinue
+            if (-not $gitCommand) { throw 'Git is not installed; skipping Git transport fallback.' }
+            $gitOutput = & $gitCommand.Source ls-remote --tags 'https://github.com/FAHTHIZ/oasis.git' 'refs/tags/v*' 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ([string]::Join([Environment]::NewLine, @($gitOutput))) }
+            $stableTag = Resolve-OasisStableTagFromGitOutput -Output ([string]::Join([Environment]::NewLine, @($gitOutput)))
+            $ReleaseTag = [string]$stableTag.Tag
+            $ReleaseCommit = [string]$stableTag.CommitSha
+            Write-Host "Using stable Git tag $ReleaseTag resolved to its exact commit SHA."
+        } catch {
+            $gitTagFailure = $_.Exception.Message
+        }
+    }
+    
+    if (-not $ReleaseCommit) {
+        Write-Host "GitHub API unavailable ($apiFailure); trying the official public release page..."
+        try {
+            $releasePage = Invoke-WebRequest -Uri 'https://github.com/FAHTHIZ/oasis/releases/latest' -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'text/html' } -TimeoutSec 20 -UseBasicParsing
+            $pageHtml = [string]$releasePage.Content
+    
+            $ReleaseTag = Resolve-OasisReleaseTagFromResponse -Response $releasePage
+            $commitMatch = [regex]::Match($pageHtml, 'data-hovercard-type="commit"[^>]*href="https://github\.com/FAHTHIZ/oasis/commit/([0-9a-f]{40})"')
+            if ($commitMatch.Success) {
+                $ReleaseCommit = $commitMatch.Groups[1].Value.ToLowerInvariant()
+            } else {
+                # The release page may omit commit hovercards. Resolve the immutable
+                # tag target from GitHub's public Atom feed, which does not use REST API quota.
+                $encodedTag = [uri]::EscapeDataString($ReleaseTag)
+                $atomPage = Invoke-WebRequest -Uri "https://github.com/FAHTHIZ/oasis/commits/$encodedTag.atom" -Headers @{ 'User-Agent' = 'oasis-installer'; Accept = 'application/atom+xml' } -TimeoutSec 20 -UseBasicParsing
+                $ReleaseCommit = Resolve-OasisCommitFromAtom -Content ([string]$atomPage.Content)
+            }
+        } catch {
+            Write-Host ("Could not resolve the latest stable OASIS release. API: " + $apiFailure + "; tags API: " + $tagApiFailure + "; Git tags: " + $gitTagFailure + "; public release page: " + $_.Exception.Message)
+            exit 1
+        }
     }
 }
 $Archive = "https://github.com/FAHTHIZ/oasis/archive/$ReleaseCommit.tar.gz"
-Write-Host "Latest stable release: $ReleaseTag ($ReleaseCommit)"
+if ($SourceCommit) {
+    Write-Host "Source commit: $ReleaseCommit"
+} else {
+    Write-Host "Latest stable release: $ReleaseTag ($ReleaseCommit)"
+}
 Write-Host 'Git is optional for this archive-based install.'
 Write-Host "OASIS will be installed for your user in: $InstallPrefix"
 if (-not (Confirm-Change "May I install OASIS $ReleaseTag in that folder using npm?")) { exit 1 }
