@@ -162,7 +162,7 @@ oasis plan "add rate limiting"          # read-only plan, nothing is changed
 oasis -w feature-x                      # work in a new git worktree on its own branch
 oasis -p "summarize this diff" --output-format json < changes.diff   # scripts and CI
 oasis --bg "upgrade the test runner"    # background session: oasis bg list | logs | send | attach
-oasis web                               # local browser workspace with a Changes panel
+oasis web --open                        # local browser workspace, opened and connected for you
 oasis doctor --test-provider            # check the setup, including live tool calling
 ```
 

@@ -80,7 +80,7 @@ function printQuickHelp() {
     ...rows([
       ['oasis', 'Chat in the terminal (this folder is the workspace)'],
       ['oasis "fix the failing test"', 'Start with a first message'],
-      ['oasis web', 'Open the browser workspace (local only)'],
+      ['oasis web --open', 'Open the browser workspace in your browser (local only)'],
       ['oasis -p "explain src/"', 'Run once without prompts (scripts and CI)'],
       ['oasis -c  |  oasis -r ID', 'Continue the last chat, or resume a saved one']
     ]),
@@ -135,7 +135,7 @@ function printHelp() {
     '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
-    '  oasis web [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace',
+    '  oasis web [--open] [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace (--open opens it in your browser)',
     '  oasis exec PROMPT [flags]  Same as oasis -p (non-interactive run)',
     '  oasis watch [--yes]       Act on code comments ending in AI! (change) or AI? (question)',
     '  oasis init                    Create OASIS.md project instructions',
@@ -711,7 +711,7 @@ async function doctor(args = [], root = process.cwd()) {
   stdout.write('  Native terminal panel (PTY): ' + (ptyAvailable ? 'available' : 'not available (optional native component)') + '\n');
   const nextStep = !nodeOK ? 'install Node.js 22 or newer, then run oasis doctor again.'
     : !modelConfigured ? 'run oasis setup to connect a model.'
-    : 'run oasis in a project folder, or oasis web for the browser workspace.';
+    : 'run oasis in a project folder, or oasis web --open for the browser workspace.';
   stdout.write('\nNext step: ' + nextStep + '\n\n');
   stdout.write(details.join(''));
   await doctorWorkspaceReport(root);
@@ -1195,7 +1195,7 @@ async function ultrareviewCommand(root, rest, autoApprove, persistence) {
     ? '\n\nWhen the review is complete, post the findings to the pull request as ONE plain comment with `gh pr comment ' + (prNumber || target.replace('#', '')) + ' --body-file -` and say that you did.'
     : '\n\nDo not post anything to GitHub and do not change files: print the findings only.';
   if (json) prompt += '\n\nRecord the confirmed findings with report_findings (pass [] when there are none); the JSON result carries them in its findings field.';
-  const timer = setTimeout(() => { stderr.write('Oasis error: ultrareview timed out after ' + minutes + ' minutes.\n'); process.exit(1); }, minutes * 60000);
+  const timer = setTimeout(() => { stderr.write('OASIS error: ultrareview timed out after ' + minutes + ' minutes.\n'); process.exit(1); }, minutes * 60000);
   timer.unref();
   try {
     if (post) SESSION_OPTIONS.allowedTools.push('Bash(gh pr comment:*)', 'Bash(gh pr view:*)', 'Bash(gh pr diff:*)');
@@ -2037,7 +2037,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       repairInterruptedHistory(session);
       stdout.write('[interrupted] Task stopped. Changes made before the interruption remain; use /rewind 1 to undo them.\n');
     } else {
-      stdout.write('\nOasis error: ' + (error.message || String(error)) + '\n');
+      stdout.write('\nOASIS error: ' + (error.message || String(error)) + '\n');
       haltAutoContinue(error);
     }
   } finally {
@@ -2801,6 +2801,7 @@ async function startWebWorkspace(root, args) {
   let tlsCertFile = null;
   let tlsKeyFile = null;
   let allowInsecureLan = false;
+  let openBrowser = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--host') {
@@ -2820,7 +2821,8 @@ async function startWebWorkspace(root, args) {
       tlsKeyFile = args[++i];
     } else if (arg.startsWith('--tls-key=')) tlsKeyFile = arg.slice(10);
     else if (arg === '--allow-insecure-lan') allowInsecureLan = true;
-    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST, --port PORT, --tls-cert FILE, --tls-key FILE, --allow-insecure-lan.');
+    else if (arg === '--open') openBrowser = true;
+    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST, --port PORT, --open, --tls-cert FILE, --tls-key FILE, --allow-insecure-lan.');
   }
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be an integer between 0 and 65535 (0 chooses an available port).');
   const normalizedHost = host.toLowerCase();
@@ -2829,12 +2831,12 @@ async function startWebWorkspace(root, args) {
   const scheme = app.secure ? 'https' : 'http';
   const urlHost = host.includes(':') ? '[' + host + ']' : host;
   const localUrl = scheme + '://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
-  stdout.write('\nOasis browser workspace is running.\n');
-  stdout.write('Workspace: ' + root + '\n');
-  stdout.write('Open on this device: ' + localUrl + '\n');
-  stdout.write('One-click connect (keep private; the token stays in the #fragment and is never sent in a request): ' + localUrl + '#token=' + app.token + '\n');
-  stdout.write('Connection token (paste into Agent → Connect; keep private):\n' + app.token + '\n');
-  stdout.write('Every agent chat action requires an in-browser approval before running a command, installing a package, deleting a file, or installing a bundle.\n');
+  const connectUrl = localUrl + '#token=' + app.token;
+  stdout.write('\nOASIS browser workspace is running for ' + root + '\n\n');
+  stdout.write('  Open this link to start: ' + connectUrl + '\n');
+  stdout.write('  It connects this browser automatically. Keep it private: anyone with the link can use this workspace.\n\n');
+  stdout.write('  Using another browser? Open ' + localUrl + ' and paste this connection token:\n  ' + app.token + '\n\n');
+  stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
     if (app.secure) {
       stdout.write('HTTPS is active. The certificate must be trusted by each client device and include the exact LAN IP in its subject alternative names.\n');
@@ -2844,9 +2846,13 @@ async function startWebWorkspace(root, args) {
       stdout.write('On your phone, open http://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
     }
   } else {
-    stdout.write('This listener is local-only. Network access requires a trusted TLS certificate, or the explicit and unsafe --allow-insecure-lan flag.\n');
+    stdout.write('Local only: other devices cannot connect. Network access requires a trusted TLS certificate, or the explicit and unsafe --allow-insecure-lan flag.\n');
   }
-  stdout.write('Press Ctrl+C to stop Oasis web.\n');
+  stdout.write('Press Ctrl+C to stop.\n');
+  if (openBrowser) {
+    const { openInBrowser } = await import('./mcp-oauth.mjs');
+    if (!openInBrowser(connectUrl)) stdout.write('Could not open a browser automatically. Open the link above instead.\n');
+  }
   let closing = false;
   const shutdown = () => {
     if (closing) return;
@@ -3559,6 +3565,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  stdout.write('Oasis error: ' + (error.message || String(error)) + '\n');
+  stdout.write('OASIS error: ' + (error.message || String(error)) + '\n');
   process.exitCode = 1;
 });

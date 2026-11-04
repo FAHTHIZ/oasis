@@ -50,3 +50,24 @@ test('oasis doctor leads with a plain summary and a next step, details after', a
   assert.ok(out.indexOf('Next step:') < out.indexOf('Environment details'), out);
   assert.ok(out.indexOf('Environment details') < out.indexOf('OS / architecture'), out);
 });
+
+test('oasis web leads with the one-click link and --open is accepted', async () => {
+  const { spawn } = await import('node:child_process');
+  const os = await import('node:os');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-web-open-'));
+  const cli = new URL('../src/cli.mjs', import.meta.url).pathname;
+  const child = spawn(process.execPath, [cli, 'web', '--port', '0', '--open'], { cwd: dir, env: { ...process.env, HOME: dir, OASIS_CONFIG_DIR: path.join(dir, 'cfg'), OASIS_NO_UPDATE_CHECK: '1', OASIS_NO_BROWSER: '1', NO_COLOR: '1' } });
+  let out = '';
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout: ' + out)), 30000);
+    child.stdout.on('data', (d) => { out += d; if (/Open the link above instead/.test(out)) { clearTimeout(timer); resolve(); } });
+    child.on('exit', () => { clearTimeout(timer); resolve(); });
+  });
+  child.kill();
+  assert.match(out, /OASIS browser workspace is running for /);
+  assert.match(out, /Open this link to start: http:\/\/127\.0\.0\.1:\d+\/#token=\S+/);
+  assert.ok(out.indexOf('Open this link to start') < out.indexOf('paste this connection token'), out);
+  assert.match(out, /Could not open a browser automatically\. Open the link above instead\./);
+});
