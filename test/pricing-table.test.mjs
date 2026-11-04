@@ -53,3 +53,15 @@ test('Gemini 3, DeepSeek V4, Kimi K3, GLM-5, MiniMax M3 and Grok 4.7 use publish
   near(per('grok-4.7', 100_000, 100_000), 0.2 + 0.6);
   near(per('grok-4.7', 250_000), 1);
 });
+
+test('Claude fast mode doubles Opus 5.5, Opus 5 and Opus 4.8 rates only', async () => {
+  const { estimateCostUsd } = await import('../src/pricing.mjs');
+  const usage = { inputTokens: 1e6, outputTokens: 1e6 };
+  const fast = { ...usage, speed: 'fast' };
+  assert.equal(estimateCostUsd('claude-opus-5-5', fast, { env: {} }), 2 * estimateCostUsd('claude-opus-5-5', usage, { env: {} }));
+  assert.equal(estimateCostUsd('claude-opus-4-8', fast, { env: {} }), 2 * estimateCostUsd('claude-opus-4-8', usage, { env: {} }));
+  assert.equal(estimateCostUsd('claude-sonnet-5-5', fast, { env: {} }), estimateCostUsd('claude-sonnet-5-5', usage, { env: {} }));
+  assert.equal(estimateCostUsd('claude-opus-4-6', fast, { env: {} }), estimateCostUsd('claude-opus-4-6', usage, { env: {} }));
+  const cached = { inputTokens: 1e6, cacheReadTokens: 1e6, outputTokens: 0, speed: 'fast' };
+  assert.ok(Math.abs(estimateCostUsd('claude-opus-5-5', cached, { env: {} }) - 0.4) < 1e-9);
+});

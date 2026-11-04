@@ -1800,7 +1800,7 @@ export function chargeAuxiliaryUsage(session, usage, { env = process.env, model 
   const config = session.config || {};
   const priced = resolveModelAlias(model || config.model, { protocol: config.protocol, env });
   const pricing = { config, overrides: session.pricing || {}, env };
-  const cost = estimateCostUsd(priced, usage, pricing);
+  const cost = estimateCostUsd(priced, session.lastRequestSpeed === 'fast' && !usage.speed ? { ...usage, speed: 'fast' } : usage, pricing);
   try { recordBudgetSpend(session, cost, { costKnown: priceFor(priced, pricing) !== null, enforce: false }); } catch { return cost; }
   return cost;
 }
@@ -2061,6 +2061,7 @@ async function requestCompletionRaw(session, options = {}) {
   const keyPool = !cloudAnthropic && !config.apiKeyHelper && (providerEnv.OASIS_API_KEY_POOL || providerEnv.OASIS_API_KEY_POOL_FILE) ? sessionKeyPool(session, providerEnv, apiKey) : null;
   if (keyPool) apiKey = keyPool.current() || apiKey;
   let fastRequest = null;
+  session.lastRequestSpeed = '';
   if (nativeAnthropic) {
     if (apiKey && !cloudAnthropic) headers['x-api-key'] = apiKey;
     if (!cloudAnthropic) headers['anthropic-version'] = '2023-06-01';
@@ -2069,6 +2070,8 @@ async function requestCompletionRaw(session, options = {}) {
     // /fast: only the first-party API supports it; other models ignore the toggle.
     fastRequest = session.fastMode && !cloudAnthropic && !/^(1|true)$/i.test(String(providerEnv.CLAUDE_CODE_DISABLE_FAST_MODE || '')) ? fastModeRequest(config.model) : null;
     if (fastRequest && fastRequest.beta) betas.push(fastRequest.beta);
+    // Cost tracking reads this to bill the response at the fast-mode rate.
+    session.lastRequestSpeed = fastRequest ? 'fast' : '';
     if (betas.length && !cloudAnthropic) headers['anthropic-beta'] = [...new Set(betas)].join(',');
   } else if (apiKey) {
     headers.authorization = 'Bearer ' + apiKey;
@@ -4993,9 +4996,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       env: options.env || process.env
     });
     const stepPricing = { config: session.config, overrides: session.pricing || {}, env: options.env || process.env };
-    const stepCost = estimateCostUsd(pricedModel, usage, stepPricing);
+    const billedUsage = session.lastRequestSpeed === 'fast' && !usage.speed ? { ...usage, speed: 'fast' } : usage;
+    const stepCost = estimateCostUsd(pricedModel, billedUsage, stepPricing);
     const costKnown = priceFor(pricedModel, stepPricing) !== null;
-    if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, costKnown, model: pricedModel, step: step + 1 });
+    if (options.onUsage) options.onUsage({ ...billedUsage, costUsd: stepCost, costKnown, model: pricedModel, step: step + 1 });
     // One ledger for the parent and every subagent it launches, so
     // --max-budget-usd caps the whole task, not only the main agent.
     const spentUsd = recordBudgetSpend(session, stepCost, { costKnown });
