@@ -24,7 +24,7 @@ test('/fast toggles speed:"fast" and the beta header on Anthropic requests and p
     let body = ''; for await (const chunk of req) body += chunk;
     seen.push({ headers: req.headers, body: JSON.parse(body) });
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }));
+    res.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 1000 } }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -34,14 +34,17 @@ test('/fast toggles speed:"fast" and the beta header on Anthropic requests and p
   t.after(() => closeSession(session));
   const on = await runBuiltinCommand('fast', '', { root, session, env });
   assert.match(on.output, /Fast mode on for claude-opus-5/);
-  await runAgentTurn(session, 'hi', { env });
+  const costs = [];
+  await runAgentTurn(session, 'hi', { env, onUsage: (u) => costs.push(u.speed || 'standard') });
   assert.equal(seen[0].body.speed, 'fast');
   assert.match(String(seen[0].headers['anthropic-beta']), /fast-mode-2026-02-01/);
   const saved = JSON.parse(await readFile(path.join(root, 'cfg', 'settings.json'), 'utf8'));
   assert.equal(saved.fastMode, true);
   assert.match((await runBuiltinCommand('fast', 'off', { root, session, env })).output, /off/);
-  await runAgentTurn(session, 'again', { env });
+  await runAgentTurn(session, 'again', { env, onUsage: (u) => costs.push(u.speed || 'standard') });
   assert.equal(seen[1].body.speed, undefined);
+  // Usage reports which responses are billed at the fast-mode rate.
+  assert.deepEqual(costs, ['fast', 'standard']);
 });
 
 test('/install-github-app writes a workflow from the repo and provider', async (t) => {
