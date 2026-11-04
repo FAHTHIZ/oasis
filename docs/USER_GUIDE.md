@@ -1051,6 +1051,14 @@ Enable the optional OS sandbox to restrict command writes and, by default, netwo
 
 On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is read-only, the workspace is writable, `/tmp` is private, and the network is unshared unless `network` is true. On macOS it uses `sandbox-exec`. Inside the sandbox, normal (not high-risk) commands run without a prompt; set `autoAllowCommands: false` to keep prompting. `OASIS_SANDBOX=1` enables it for one run. Existing package-manager caches in your home directory (`~/.npm`, `~/.cache/pip`, `~/.cargo/registry`, `~/go/pkg/mod`, `~/.m2/repository`, `~/.gradle/caches` and similar) stay writable so installs and builds don't fail on a read-only cache; the rest of home stays read-only and credential paths stay hidden. Set `"writableCaches": false` to make them read-only too.
 
+### Container backend (Docker or Podman, any OS)
+
+~~~json
+{ "sandbox": { "enabled": true, "backend": "docker", "image": "node:22-bookworm", "network": false, "memory": "2g", "cpus": "2" } }
+~~~
+
+With `"backend": "docker"` (or `"podman"`) each command runs in a fresh `--rm` container from `image` (default `node:22-bookworm`; pick one with your toolchain). Only the workspace and `permissions.additionalDirectories` are mounted read-write, so nothing else on the host, including your home directory and credentials, is visible. Containers drop all Linux capabilities, set `no-new-privileges`, cap processes at 512 and use `--network none` unless `network` is true. On Linux with Docker the container runs as your UID so files stay yours; Podman uses `--userns keep-id`. On Windows (Docker Desktop) drive paths are mounted under `/host/<drive>/...`. Switch for one session with `/sandbox docker [IMAGE]`, `/sandbox podman` or `/sandbox os`, or for one run with `OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker OASIS_SANDBOX_IMAGE=python:3.12`. `oasis doctor` reports whether the engine is reachable. Package caches are not shared with the container, so first installs download again.
+
 ## Agent guardrails and token savers
 
 These are on by default and each can be switched off.
@@ -1245,7 +1253,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 ## Known limitations — not claimed as finished
 
 - The built-in OASIS capability-bundle catalog contains reviewed workflow-skill bundles. Separately, OASIS supports external Agent Skills, reviewed GitHub extension imports, and Claude Code-compatible plugin marketplaces through the `oasis plugin marketplace` / `oasis plugin install` commands described above. Compatibility is feature-specific: signed publisher manifests and complete support for every plugin lifecycle feature are not implemented.
-- The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default, and there is no Windows sandbox or container isolation yet.
+- The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default. There is no native Windows OS sandbox; the opt-in container backend (Docker or Podman) is available on every OS.
 - Checkpoints only track changes made through OASIS's file tools, and they live in memory for the current session; they are not saved with resumed sessions.
 - Saved conversations are on by default and workspace-scoped. OASIS provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.

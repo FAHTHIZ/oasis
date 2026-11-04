@@ -31,5 +31,5 @@ Sources:
 ## Where OASIS is behind
 
 - **Sandbox default.** Codex runs commands in a sandbox by default. OASIS's sandbox is opt-in. Package caches (`~/.npm`, `~/.cargo` and others) are now writable inside it, which removed the main reason builds broke, and `oasis doctor` suggests `/sandbox on` when it is available. Whether to make it the default is a product decision for the maintainer.
-- **Windows sandbox.** OASIS has no native Windows sandbox. PowerShell and `cmd /c` commands go through the same model-free risk analysis.
+- **Windows sandbox.** OASIS has no native Windows sandbox; set `"sandbox": {"enabled": true, "backend": "docker"}` to run commands in a container through Docker Desktop. PowerShell and `cmd /c` commands go through the same model-free risk analysis.
 - **Independent evidence.** The comparison above is based on documentation, not on a live red-team run against every tool.
