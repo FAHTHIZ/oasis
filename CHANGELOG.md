@@ -6,6 +6,9 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- ACP: file edits are reported as inline `diff` content, and editors that offer `fs/read_text_file` / `fs/write_text_file` (Zed) now have unsaved buffers read and open buffers updated by `read_file`, `edit_file` and `write_file`.
+- Memory write approval: `"memoryWriteApproval": "ask"` prompts before every agent `memory_save` / `memory_delete`; `"queue"` holds them for `/memory pending`, `/memory approve ID|all` and `/memory reject ID|all`. Headless runs in ask mode queue instead of saving.
+- Fixed: the documented `"autoCommit": true`, `"executeCode": false`, `"sessionSearch": false` and `"imageGeneration"` settings were dropped by the settings loader and had no effect.
 - SSH execution backend: `"sandbox": { "backend": "ssh", "ssh": { "host": ... } }`, `/sandbox ssh HOST` or `OASIS_SANDBOX_BACKEND=ssh` runs commands, background jobs and PTY sessions on a remote machine, with rsync push before and `--update` pull after each command (or `sync: none` for shared disks). Hosts, paths and excludes are validated against option injection; `oasis doctor` checks login and rsync.
 - Mermaid diagrams render in the terminal: ```mermaid fences with flowcharts (TD/LR, shapes, labeled, chained and grouped edges; cycles listed) and sequence diagrams (lifelines, messages, self calls, notes, loop/alt blocks) are drawn with box characters, falling back to an edge list when too wide and to the source for other diagram types or without color. `OASIS_MERMAID=0` turns it off.
 - Bundled `grill-me` skill: a one-question-at-a-time interview that turns a vague idea into a written brief with decisions, non-goals and acceptance criteria before any code is written.
