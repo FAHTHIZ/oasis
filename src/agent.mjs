@@ -764,6 +764,14 @@ export async function createSession({ root, config, restore = null, permissionMo
     const { SESSION_SEARCH_TOOL_DEFINITION } = await import('./session-search.mjs');
     session.toolDefinitions = session.toolDefinitions.concat([SESSION_SEARCH_TOOL_DEFINITION]);
   }
+  if (!restricted && !(Array.isArray(tools) || typeof tools === 'string')) {
+    const { imageGenerationConfig, GENERATE_IMAGE_TOOL_DEFINITION } = await import('./image-gen.mjs');
+    const imageConfig = imageGenerationConfig(env, loadedSettings);
+    if (imageConfig) {
+      session.imageGeneration = imageConfig;
+      session.toolDefinitions = session.toolDefinitions.concat([GENERATE_IMAGE_TOOL_DEFINITION]);
+    }
+  }
   if (learningEnabled(loadedSettings, env)) {
     session.proceduralLearning = true;
     session.toolDefinitions = session.toolDefinitions.concat(LEARNING_TOOL_DEFINITIONS);

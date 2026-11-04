@@ -2054,6 +2054,18 @@ export async function executeTool(name, args = {}, context = {}) {
       const { runLearningTool } = await import('./learning.mjs');
       return await runLearningTool(name, args, { root, env: context.env || process.env, session: context.session });
     }
+    case 'generate_image': {
+      const { generateImage, imageGenerationConfig } = await import('./image-gen.mjs');
+      const session = context.session || {};
+      const config = session.imageGeneration || imageGenerationConfig(context.env || process.env, session.settings || {});
+      return await generateImage(args, {
+        config, approval: context.approval, autoApprove: Boolean(context.autoApprove), signal: context.signal,
+        resolvePath: (rel) => resolveWorkspacePath(root, rel, { rejectSymlinks: true }),
+        beforeWrite: async (target) => {
+          try { if ((await lstat(target.absolute)).isFile()) await snapshotFile(target.root, target.absolute, 'before-agent-write'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        }
+      });
+    }
     case 'session_search': {
       const { runSessionSearchTool } = await import('./session-search.mjs');
       return await runSessionSearchTool(args, { root, env: context.env || process.env, session: context.session });
