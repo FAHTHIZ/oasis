@@ -304,7 +304,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .first-run-choice strong{display:block;font-size:13.5px;margin-bottom:3px}
 .first-run-choice small{display:block;font-size:12px;color:var(--muted);line-height:1.45}
 .first-run-icon{width:30px;height:30px;flex:0 0 30px;border-radius:var(--r-md);display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:15px}
-.first-run-arrow{margin-left:auto;color:var(--faint)}
+.first-run-arrow{margin-left:auto;color:var(--faint);width:14px;height:14px}
 .first-run-status{font-size:12.5px;color:var(--muted)}
 .first-run-install{font-size:12.5px;display:inline-block;margin-top:6px}
 
@@ -741,7 +741,7 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
   .agent-chat-label{display:none}
   #agentRuntimeState{max-width:22px;font-size:0}
   #newAgentSessionBtn{font-size:0;width:32px;padding:0}
-  #newAgentSessionBtn::before{content:"+";font-size:18px;line-height:1}
+  #newAgentSessionBtn .gi{width:17px;height:17px;margin:0;vertical-align:middle}
   .agent-session-tools select{max-width:132px}
 }
 

@@ -377,7 +377,13 @@ try {
   assert.equal(await page.locator('#agentAttachments').isHidden(), true);
   await assertAgentContrast(page, 'Agent workspace · desktop');
   await page.locator('#agentModelButton').click();
-  await page.waitForFunction(() => window.scrollY > 0, null, { timeout: timeoutMs });
+  // The model pill brings provider settings into view (it may already be visible).
+  await page.waitForFunction(() => {
+    const target = document.querySelector('.provider-setup') || document.getElementById('provider-setup');
+    if (!target) return false;
+    const box = target.getBoundingClientRect();
+    return box.top < window.innerHeight && box.bottom > 0;
+  }, null, { timeout: timeoutMs });
   await assertAgentContrast(page, 'Agent provider settings · desktop');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-provider-settings-desktop.png'), fullPage: true });
   const perfCdp = await context.newCDPSession(page);
