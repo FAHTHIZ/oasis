@@ -1201,6 +1201,20 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 With `"backend": "docker"` (or `"podman"`) each command runs in a fresh `--rm` container from `image` (default `node:22-bookworm`; pick one with your toolchain). Only the workspace and `permissions.additionalDirectories` are mounted read-write, so nothing else on the host, including your home directory and credentials, is visible. Containers drop all Linux capabilities, set `no-new-privileges`, cap processes at 512 and use `--network none` unless `network` is true. On Linux with Docker the container runs as your UID so files stay yours; Podman uses `--userns keep-id`. On Windows (Docker Desktop) drive paths are mounted under `/host/<drive>/...`. Switch for one session with `/sandbox docker [IMAGE]`, `/sandbox podman` or `/sandbox os`, or for one run with `OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker OASIS_SANDBOX_IMAGE=python:3.12`. `oasis doctor` reports whether the engine is reachable. Package caches are not shared with the container, so first installs download again.
 
+### Remote backend (SSH)
+
+Commands can run on another machine, such as a bigger build box, a GPU server or a throwaway VM:
+
+```json
+{ "sandbox": { "enabled": true, "backend": "ssh", "ssh": { "host": "me@gpu-box", "remoteRoot": "~/work/app", "port": 22, "identityFile": "~/.ssh/id_ed25519", "sync": "rsync", "exclude": ["node_modules/", ".venv/"] } } }
+```
+
+`run_command`, `run_shell`, background jobs and interactive PTY sessions all run on `host` over `ssh` (key-based login only: `BatchMode=yes`, so a password prompt fails fast instead of hanging). Every argument is shell-quoted on the remote side, and `host`, `remoteRoot` and `exclude` are validated so they cannot inject `ssh` or `rsync` options. File tools keep reading and editing the local copy.
+
+With `"sync": "rsync"` (the default), OASIS pushes the workspace with `rsync --delete` before each command and pulls changed files back afterwards with `--update`, so a local file that is newer is never overwritten and remote deletions are not mirrored. Excluded paths (by default dependency and cache folders such as `node_modules/`, `.venv/`, `target/`) are neither pushed nor pulled, so the remote keeps its own installed dependencies. The exit code of the remote command is returned unchanged. With `"sync": "none"` the remote directory is used as it is (a shared disk, sshfs, or a checkout you manage). `remoteRoot` defaults to `~/oasis-workspaces/<folder>-<hash>`; `port`, `identityFile` and anything in `~/.ssh/config` apply.
+
+Try it for one session with `/sandbox ssh me@gpu-box [REMOTE_DIR]`, or for one run with `OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=ssh OASIS_SSH_HOST=me@gpu-box` (also `OASIS_SSH_REMOTE_ROOT`, `OASIS_SSH_PORT`, `OASIS_SSH_SYNC`). `oasis doctor` checks that login works and that rsync is installed on both ends. This protects your own machine the same way a container does, but the remote host itself is not sandboxed, and the pushed workspace includes files such as `.env`; only use hosts you trust with the project. Rsync sync needs a POSIX shell, so on Windows use `"sync": "none"` or run OASIS in WSL.
+
 ## Agent guardrails and token savers
 
 These are on by default and each can be switched off.
@@ -1396,7 +1410,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 ## Known limitations — not claimed as finished
 
 - The built-in OASIS capability-bundle catalog contains reviewed workflow-skill bundles. Separately, OASIS supports external Agent Skills, reviewed GitHub extension imports, and Claude Code-compatible plugin marketplaces through the `oasis plugin marketplace` / `oasis plugin install` commands described above. Compatibility is feature-specific: signed publisher manifests and complete support for every plugin lifecycle feature are not implemented.
-- The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default. There is no native Windows OS sandbox; the opt-in container backend (Docker or Podman) is available on every OS.
+- The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default. There is no native Windows OS sandbox; the opt-in container backend (Docker or Podman) is available on every OS, and the SSH backend runs commands on another machine.
 - Checkpoints only track changes made through OASIS's file tools, and they live in memory for the current session; they are not saved with resumed sessions.
 - Saved conversations are on by default and workspace-scoped. OASIS provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
