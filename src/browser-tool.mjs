@@ -338,9 +338,17 @@ export async function executeBrowserTool(args, context = {}) {
     }
     case 'click': {
       const box = await center(page, args);
+      const before = box.tag === 'a' ? await evaluate(page, 'location.href') : null;
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
       await waitForNavigationApprovals(tab);
       await settle(400);
+      // Slow hosts can start a link navigation after the first settle; give a followed link a short grace period.
+      for (let waited = 0; before !== null && waited < 2000 && !tab.blockedNavigations.length; waited += 100) {
+        const now = await evaluate(page, 'location.href').catch(() => before);
+        if (now !== before) break;
+        await settle(100);
+        await waitForNavigationApprovals(tab);
+      }
       await waitForLoad(page, 5000);
       await waitForNavigationApprovals(tab);
       const blockedNavigations = tab.blockedNavigations.splice(0);

@@ -2770,6 +2770,7 @@ async function startWebWorkspace(root, args) {
   stdout.write('\nOasis browser workspace is running.\n');
   stdout.write('Workspace: ' + root + '\n');
   stdout.write('Open on this device: ' + localUrl + '\n');
+  stdout.write('One-click connect (keep private; the token stays in the #fragment and is never sent in a request): ' + localUrl + '#token=' + app.token + '\n');
   stdout.write('Connection token (paste into Agent → Connect; keep private):\n' + app.token + '\n');
   stdout.write('Every agent chat action requires an in-browser approval before running a command, installing a package, deleting a file, or installing a bundle.\n');
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
