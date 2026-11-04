@@ -47,7 +47,8 @@
     "desktop:dist": "electron-builder --publish never",
     "bench:search": "node scripts/bench-web-search.mjs",
     "bench:harness": "node bench/harness/run.mjs",
-    "bench:live": "node scripts/bench-live.mjs"
+    "bench:live": "node scripts/bench-live.mjs",
+    "bench:startup": "node scripts/measure-startup.mjs"
   },
   "repository": {
     "type": "git",

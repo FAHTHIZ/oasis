@@ -575,7 +575,10 @@ export async function compareEvalReports(paths, options = {}) {
       mismatchedFingerprints.push(taskId);
       return false;
     }
-    if (!leftFingerprint || !rightFingerprint) unverifiedFingerprints.push(taskId);
+    if (!leftFingerprint || !rightFingerprint) {
+      unverifiedFingerprints.push(taskId);
+      return false;
+    }
     return true;
   });
   if (!commonIds.length) {
@@ -703,7 +706,7 @@ export async function compareEvalReports(paths, options = {}) {
     'A: ' + left.label + ' [' + path.basename(left.source) + ']' + (left.sourceRevision ? ' (revision ' + left.sourceRevision + ')' : ' (revision unavailable)'),
     'B: ' + right.label + ' [' + path.basename(right.source) + ']' + (right.sourceRevision ? ' (revision ' + right.sourceRevision + ')' : ' (revision unavailable)'),
     'Common tasks: ' + commonIds.length + ' | A-only: ' + comparison.onlyInA.length + ' | B-only: ' + comparison.onlyInB.length,
-    'Task fingerprints: ' + taskRows.filter((row) => row.fingerprintStatus === 'verified').length + '/' + taskRows.length + ' verified; ' + mismatchedFingerprints.length + ' fingerprint-mismatched task(s) excluded; ' + mismatchedMetadata.length + ' metadata-mismatched task(s) excluded; ' + unverifiedFingerprints.length + ' legacy/unfingerprinted task(s) compared by ID only.',
+    'Task fingerprints: ' + taskRows.filter((row) => row.fingerprintStatus === 'verified').length + '/' + taskRows.length + ' verified; ' + mismatchedFingerprints.length + ' fingerprint-mismatched task(s) excluded; ' + mismatchedMetadata.length + ' metadata-mismatched task(s) excluded; ' + unverifiedFingerprints.length + ' legacy/unfingerprinted task(s) excluded from headline metrics.',
     'Task-balanced pass rate: A ' + pct(leftMetrics.taskBalancedPassRate) + ' | B ' + pct(rightMetrics.taskBalancedPassRate) +
       ' | Delta ' + (deltaPp >= 0 ? '+' : '') + deltaPp.toFixed(1) + ' percentage points',
     'Category-balanced pass rate: A ' + pct(leftMetrics.categoryBalancedPassRate) + ' | B ' + pct(rightMetrics.categoryBalancedPassRate),

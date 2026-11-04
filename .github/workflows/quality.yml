@@ -37,6 +37,20 @@ jobs:
         run: npm run check
       - name: Verify installable CLI package contents
         run: npm pack --dry-run
+      - name: Generate current model-free harness benchmark report
+        run: node bench/harness/run.mjs --json "$RUNNER_TEMP/oasis-harness-node-${{ matrix.node-version }}.json"
+      - name: Smoke-check benchmark entrypoints without external provider access
+        run: |
+          node scripts/bench-live.mjs --help
+          node scripts/bench-web-search.mjs --help
+          node scripts/measure-startup.mjs --help
+      - name: Upload model-free harness report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oasis-harness-benchmark-node-${{ matrix.node-version }}
+          path: ${{ runner.temp }}/oasis-harness-node-${{ matrix.node-version }}.json
+          if-no-files-found: error
+          retention-days: 90
 
   cross-platform-security:
     name: Security and runtime regression tests (${{ matrix.os }})

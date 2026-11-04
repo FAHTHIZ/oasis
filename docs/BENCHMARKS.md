@@ -1,12 +1,24 @@
 # OASIS coding-agent benchmarks
 
-**Status: model-free harness benchmark published (below); 50-task agent suite (including 17 repository-level tasks) and runners ready. No same-model head-to-head against Claude Code has been published yet.**
+**Status (2026-11-05):** the model-free harness microbenchmark exists; the agent fixture suite has 51 tasks (18 `taskflow-*` tasks); runner code exists for live comparisons. No public live same-model head-to-head against Claude Code has been published.
 
-The first task taxonomy is an explicit, reviewable estimate in `evals/tasks/metadata.json`; the difficulty labels are not calibrated benchmarks, and the current suite still lacks large repository-level tasks.
+The classifications in `evals/tasks/metadata.json` currently say 19 small, 28 medium, and 4 large. These labels are maintainer-authored estimates, not calibrated difficulty scores. All four `large` labels are concentrated in one small Taskflow repository snapshot, so they do not establish broad large-repository coverage.
 
-This page records how to produce a reproducible, auditable comparison. It deliberately does not claim OASIS is faster, cheaper, or more accurate than Claude Code without completed runs on the same tasks.
+This page separates what is implemented, what has actually been measured, and what is only a proposed protocol. It does not claim OASIS is faster, cheaper, or more accurate than another agent without controlled completed runs.
 
-## Model-free harness benchmark (2026-11-01)
+## Benchmark inventory and evidence status (2026-11-05)
+
+| Measurement | What it actually measures | Evidence status | What it does not establish |
+|---|---|---|---|
+| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Historical report from 2026-11-01 at source revision `4541f1d`; CI is being updated to publish fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
+| `evals/tasks/` | 51 frozen task fixtures with disposable snapshots, reference patches, and independent verifiers | Validator is in `npm run check`; the exact 2026-11-04 HEAD quality workflow passed | Model pass rate; broad SWE-bench-scale coverage; statistically reliable performance |
+| `scripts/bench-live.mjs` | Runs selected agent CLIs on identical task fixtures and summarizes verified matched trials | Runner and fake-CLI tests exist; no live public head-to-head result is published | Same-model harness isolation unless actual routed model/version and policy differences are verified |
+| `scripts/bench-web-search.mjs` | Expected-domain retrieval, reciprocal rank, result counts, provider errors, and sequential latency on 10 fixed queries | Diagnostic utility; supports repeated counterbalanced trials | Factual correctness, completeness, source credibility, or research-answer quality |
+| `scripts/measure-startup.mjs` | Repeated launch time for the locally installed `oasis --version` command | Local diagnostic; reports samples and median | Model-request latency, interactive responsiveness, or controlled cold-start performance |
+| Five-track protocol below | Proposed context durability, token efficiency, task-list fidelity, ambiguity safety, and long-horizon completion measurements | Design only; no frozen five-track task sets, scorers, controls, or results are published | Any measured OASIS score against the proposed targets |
+
+A green fixture validator means the fixture/reference-patch/verifier contract is internally consistent. A passing synthetic harness case means the specific hand-authored input received the expected runtime outcome. Neither is a real agent benchmark. Keep raw reports, revisions, model identities, configuration, and failures alongside every public comparison.
+## Model-free harness benchmark (historical report dated 2026-11-01)
 
 A coding agent is a model plus a harness. This benchmark measures the harness alone: it feeds OASIS the outputs that real models actually produce (malformed tool calls, drifting edits, dangerous commands, placeholder rewrites, weakened tests, leaked credentials) and checks what the runtime does with them. No model, network or API key is needed, so anyone can reproduce it in a few seconds:
 
@@ -46,18 +58,18 @@ Notes:
 
 | Profile | Tools sent | System prompt | Tool schemas | First request | Time to first model request | End to end |
 | --- | --- | --- | --- | --- | --- | --- |
-| Default | 64 | ~4,232 tok | ~11,198 tok | ~15,430 tok | ~246 ms | ~323 ms |
-| Small-context (windows of 16K or less) | 13 | ~1,576 tok | ~2,161 tok | ~3,737 tok | ~252 ms | ~339 ms |
+| Default | 64 | ~4,232 tok | ~11,198 tok | ~15,430 tok | ~266 ms | ~348 ms |
+| Small-context (windows of 16K or less) | 13 | ~1,576 tok | ~2,161 tok | ~3,737 tok | ~264 ms | ~344 ms |
 
-Tokens are estimated as characters / 4. Times are medians of 5 cold `oasis -p` runs against a local fixture server on a 2-CPU machine. Rarely used tools in the small-context profile stay reachable through `tool_search`.
+Tokens are estimated as characters / 4. Times are medians of five sequential `oasis -p` runs against a local fixture server on a 2-CPU machine; they are host-specific measurements, not a general startup claim. Rarely used tools in the small-context profile stay reachable through `tool_search`.
 
 ### What this benchmark does not show
 
 It does not measure task success with a real model, and it does not compare OASIS with Claude Code, Codex CLI or any other product. It shows that, for the same model output, the OASIS runtime recovers more calls, applies more edits correctly and stops more damage than a harness without these layers. Task success needs the agent suite below, run with the same model in each harness.
 
-## What the current 50-task suite proves
+## What the current 51-task fixture suite proves (and does not prove)
 
-The repository has 50 deterministic evaluation fixtures under **evals/tasks/**. Seventeen of them (`taskflow-*`) are repository-level tasks on a small multi-module CLI project (`evals/snapshots/taskflow`: store, query, dates, format, CLI and event modules with its own 19-test suite): eight are bug reports in which the agent must find a defect from a user-style symptom description and add a regression test, and nine are multi-file features (search, weekday due dates, unsubscribe, an urgent priority, stats, export with secret redaction, undo, recurring tasks, atomic bulk completion). Their verifiers run the project's whole test suite, require new tests to be added, and then check behaviour with hidden assertions that the agent never sees. Eight recently added fixtures broaden coverage into network boundary validation, retry policy, credential hygiene, bounded data handling, and cache behavior. The `config-strict-integer-bounds` task is the first multi-file project regression: it fixes permissive configuration parsing and requires a dedicated regression-test file. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks both that the untouched baseline fails and that the reference patch passes.
+The repository has 51 deterministic evaluation fixtures under **evals/tasks/**. Eighteen `taskflow-*` fixtures share one small multi-module CLI project snapshot (`evals/snapshots/taskflow`), whose `test/` directory contains seven test files. Four tasks are labelled `large` (`taskflow-dependencies`, `taskflow-recurring`, `taskflow-undo`, and `taskflow-urgent-priority`); all four still exercise that same project snapshot, not four independent large repositories. Two other coordinated regression tasks (`config-strict-integer-bounds` and `session-history-truncation`) target the shared OASIS source snapshot. Most remaining fixtures focus on bounded helpers, parsing, validation, configuration, or security utilities. The fixture catalogue below lists nine added helper/regression tasks. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks that the untouched baseline fails and the reference patch passes; it does not execute an agent or score model quality.
 
 ### Added fixture catalogue
 
@@ -83,7 +95,7 @@ The evaluator fingerprints the snapshot contents alongside the task prompt, refe
 
 ### Task statements name the exact signature (2026-11-02)
 
-The 20 "Create `src/lib.mjs` exporting `name(...)`" tasks used to hide the parameter list, so a multi-argument helper such as `clampInteger` could be correct and still fail because the model chose a different argument order. Each statement now gives the signature from its reference patch, for example `clampInteger(value, fallback, min, max)`. Verifiers, reference patches and snapshots are unchanged and `oasis eval --validate` still passes all 50 tasks, but the task fingerprints changed, so the comparator will not pair results recorded before and after this change. The field runs below that predate it are marked.
+The 20 "Create `src/lib.mjs` exporting `name(...)`" tasks used to hide the parameter list, so a multi-argument helper such as `clampInteger` could be correct and still fail because the model chose a different argument order. Each statement now gives the signature from its reference patch, for example `clampInteger(value, fallback, min, max)`. At the time of that November 2, 2026 wording change, the validators passed all 50 then-existing tasks. The task fingerprints changed, so the comparator will not pair results recorded before and after the change. The field runs below that predate it are marked.
 
 Each trial row in a result file also has `changes`: the files the agent added, modified or deleted relative to the snapshot, with contents capped at 6,000 characters per file and 24,000 per trial, so a failure can be traced to the code that caused it.
 
@@ -211,15 +223,15 @@ The comparator now fingerprints each task's prompt, shared repository snapshot, 
 4. Treat deterministic verifier outcomes as the success signal. Do not use a model to judge itself and do not count a task as passed just because the agent says done.
 5. Run three trials at minimum and publish every failure and timeout. Report task-balanced, category-balanced, and difficulty-balanced pass rates plus total trial counts.
 6. Report cost only when supported by per-run usage metadata or documented token rates. Subscription usage with no per-run dollar amount is **unknown**, not zero. OASIS's token-price setting produces an estimate and does not account for every cache/billing modifier; label it as an estimate.
-7. Do not claim "90%" or "at the same level as Claude Code" from this 50-task suite alone. A credible public claim needs a larger set of repository-level bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
+7. Do not claim "90%" or "at the same level as Claude Code" from this 51-fixture suite alone. A credible public claim needs more independent repositories, larger bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
 
 ## Coverage audit and result limits
 
-The checked-in evaluator currently has **50 deterministic task fixtures**: 19 labelled small, 28 medium and 3 large. The original 33 mostly exercise bounded helper logic, parsing, validation, storage and security/configuration cases; the 17 `taskflow-*` tasks add repository-level bug diagnosis and multi-file features with hidden verifier assertions. All 50 pass the validator (baseline fails, reference patch passes). This is stronger regression coverage, but one small project is still not a representative SWE-bench-scale benchmark.
+The checked-in evaluator currently has **51 deterministic task fixtures**: 19 labelled small, 28 medium and 4 large. The 18 `taskflow-*` tasks share one small repository snapshot; the four large labels all come from that same snapshot. Two additional tasks require coordinated production-code and regression-test changes on the OASIS snapshot. All 51 passed the suite validator in the successful quality workflow for source revision `d4999691770fd0e28f4150c67c0073b7a4124077`. That proves fixture integrity at that revision, not agent success. One shared project and many utility-focused tasks are not representative SWE-bench-scale coverage.
 
 The static audit identified these priorities:
 
-1. Done (November 1, 2026): 17 repository-level tasks added to reach 50. Still open: more pinned repositories, covering multi-file features, real bug fixes, failing-test diagnosis/recovery, context continuity, permission denial, cancellation and unrelated-change preservation.
+1. Done (November 1, 2026): 17 `taskflow-*` fixtures were added, bringing the suite to 50. Added November 4, 2026: `taskflow-dependencies`, bringing the total to 51 and the Taskflow group to 18. Still open: more independent pinned repositories, broader multi-file features, real bug fixes, failing-test diagnosis/recovery, context continuity, permission denial, cancellation, and unrelated-change preservation.
 2. Pin source revision, task and snapshot fingerprints, model/provider, prompt, permission policy, budget, timeout and environment for every run.
 3. Run stochastic tasks at least three times and retain raw results, including all failures and timeouts.
 4. Keep independent deterministic acceptance separate from blinded human diff review for correctness, regressions and maintainability.
@@ -229,7 +241,7 @@ No authenticated live Claude Code head-to-head result is published. Do not claim
 
 ## Result status
 
-No live head-to-head results are published yet. The runners for Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider, and `npm run bench:live`, are covered by tests with fake CLIs. A live run needs model access from the machine running the benchmark (the 2026-11-04 attempt from a cloud sandbox could not reach the maintainer's local gateway, so no numbers were recorded). Before publishing head-to-head numbers, run both agents against identical task fingerprints, use the same model when comparing harnesses, publish every trial and failure, and retain the complete machine-readable reports.
+No live head-to-head results are published yet. The runners for Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider, and `npm run bench:live`, are covered by tests with fake CLIs. A live run needs working model access from the machine running the benchmark (the 2026-11-04 attempt from a cloud sandbox could not reach the maintainer's local gateway, so no numbers were recorded). The live summarizer now requires identical valid SHA-256 task fingerprints, classification metadata, and the requested number of trials across completed agents. Before making a same-model harness claim, verify the actual served model/version in gateway logs, disclose differences in agent permission/sandbox behavior, publish every trial and failure, and retain complete machine-readable reports.
 
 ## Small local model field runs (2026-11-01)
 
@@ -289,9 +301,9 @@ The default classifier sends only short, clearly read-only prompts to the easy m
 
 ---
 
-## Five-track measurement contract
+## Five-track measurement contract (design only; no implemented scores)
 
-The five-track work measures narrow failure modes—context durability, token efficiency, task-list fidelity, ambiguity safety and long-horizon completion. It is separate from the existing 50-task regression evaluator and is not a training system; it does not train, tune or modify a model. A track is publishable only after frozen tasks, hash validation, a deterministic scorer, a negative control, at least three seeds, CI and a raw result artifact all exist.
+The five-track work measures narrow failure modes—context durability, token efficiency, task-list fidelity, ambiguity safety and long-horizon completion. It is separate from the existing 51-task regression evaluator and is not a training system; it does not train, tune or modify a model. A track is publishable only after frozen tasks, hash validation, a deterministic scorer, a negative control, at least three seeds, CI and a raw result artifact all exist. None of these five track implementations or results currently exists.
 
 **Status: benchmark infrastructure is being built in gated stages. No five-track result has been published.**
 
@@ -301,7 +313,7 @@ The five-track work measures narrow failure modes—context durability, token ef
 
 This suite measures five narrow, falsifiable behaviors: context durability, token efficiency, task-list fidelity, ambiguity safety, and long-horizon completion. It is not a training system and it does not train, tune, or modify a model.
 
-The existing `evals/tasks/` suite remains a separate utility-focused regression suite. Its 50 fixtures, disposable snapshots, reference patches, external verifiers, snapshot fingerprints, validator, Claude Code runner, and JSON/HTML comparison reports are reused rather than rebuilt. The fixtures must not be presented as a representative coding-quality score.
+The existing `evals/tasks/` suite remains a separate utility-focused regression suite. Its 51 fixtures, disposable snapshots, reference patches, external verifiers, snapshot fingerprints, validator, Claude Code runner, and JSON/HTML comparison reports are reused rather than rebuilt. The fixtures must not be presented as a representative coding-quality score.
 
 ## Measurement rules
 
@@ -319,7 +331,7 @@ A track is not complete because its runner starts or its scorer emits a number. 
 
 ## Tracks and targets
 
-The values in this table are the planning baselines and targets from the benchmark build contract. They are not OASIS measurements. Primary-source references for each external baseline must be recorded alongside the relevant task design before making a public claim that the target beats that baseline.
+The values in this table are planning baselines and targets from the benchmark build contract. They are not OASIS measurements, and the five-track implementation has not started. Primary-source references for each external baseline must be recorded alongside the relevant task design before making a public claim that the target beats that baseline.
 
 | Track | Failure measured | Contract baseline | Initial target |
 |---|---|---:|---:|
@@ -405,7 +417,7 @@ bench/
 
 ## Build order and gates
 
-1. **Infrastructure reuse audit:** validate the existing 50 fixtures on current HEAD, inspect quarantine CI, verify the Claude Code runner's minimum version and restricted mode, and keep this document linked from the root README.
+1. **Infrastructure reuse audit:** validate the existing 51 fixtures on current HEAD, inspect quarantine CI, verify the Claude Code runner's minimum version and restricted mode, and keep this document linked from the root README.
 2. **Existing-suite negative control:** add `--negative-control` to the existing eval runner. It must substitute no-op or random predictions and assert a pass rate strictly below the configured threshold.
 3. **FRR:** do not begin the next track until the FRR negative control passes and checkpoint scores are reported.
 4. **Staleness:** proceed only after its frozen-list control proves the metric moves in the expected direction.
@@ -429,4 +441,4 @@ The README summary must distinguish wins, ties, and losses. Missing runs and una
 
 ## Five-track implementation status
 
-As of October 31, 2026, the five-track protocol and required layout are documented, but no five-track result or OASIS-vs-Claude Code score has been published. External issue reports and paper figures in the design are hypotheses for constructing falsifiable tasks, not population baselines. The current 50-task evaluator and its report comparator remain distinct from these future track-specific runners and scorers.
+As of November 5, 2026, the five-track protocol and required layout are design documentation only: the frozen inputs, hashes, runners, scorers, negative controls, CI gates, and results do not exist, and no five-track result or OASIS-vs-Claude Code score has been published. External issue reports and paper figures in the design are hypotheses for constructing falsifiable tasks, not population baselines. The current 51-task evaluator and its report comparator remain distinct from these future track-specific runners and scorers.
