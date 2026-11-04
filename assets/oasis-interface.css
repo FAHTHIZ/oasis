@@ -923,3 +923,8 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .provider-tips>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .provider-tips ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px;line-height:1.5}
 .agent-message.activity code,.turn-work code{font:12px/1.4 var(--font-mono)}
+
+/* Markdown task lists render real (read-only) checkboxes instead of glyphs. */
+.md-task{list-style:none;margin-left:-1.1em}
+.md-check{width:14px;height:14px;margin:0 6px 0 0;vertical-align:-2px;accent-color:var(--accent,#7CFF6B)}
+.activity-artifact-icon .gi{width:14px;height:14px;vertical-align:-2px}
