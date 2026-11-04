@@ -44,7 +44,9 @@ export function estimateTokens(messages) {
 const MODEL_WINDOWS = [
   [/claude/, 200_000],
   [/gpt-4\.1/, 1_000_000],
-  [/gpt-5/, 400_000],
+  // GPT-5.5+ and GPT-6 serve 1.05M, but prompts over 272K bill at 2x input and
+  // 1.5x output, so they keep the 400K working window (override with contextWindow).
+  [/gpt-5|gpt-6/, 400_000],
   [/(^|[^a-z])o[134](-|$)|o[34]-mini/, 200_000],
   [/gpt-4o|gpt-4-turbo|chatgpt-4o/, 128_000],
   [/gemini/, 1_000_000],
