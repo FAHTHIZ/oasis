@@ -123,6 +123,7 @@ function printHelp() {
     '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
+    '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis acp [--permission-mode MODE]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
@@ -3385,6 +3386,11 @@ async function main() {
     return;
   }
   if (command === 'sessions') return await manageSessions(workspace, rest);
+  if (command === 'gateway') {
+    const { runGateway } = await import('./gateway-telegram.mjs');
+    await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
+    return;
+  }
   if (command === 'acp') {
     const { serveAcp } = await import('./acp.mjs');
     const { oasisVersion } = await import('./version.mjs');
