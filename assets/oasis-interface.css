@@ -942,6 +942,6 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .note-sidebar>p{margin:0 0 6px;color:var(--muted);font-size:13.5px;line-height:1.55}.note-sidebar .section-head h2{font-size:14px}
 /* Search and filter share one row; the filter drops below only when space runs out. */
 .toolbar{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px}
-.toolbar .search-wrap{flex:1 1 260px;min-width:0}
-.toolbar .filter-select{flex:0 0 auto}
+.toolbar .search-wrap{flex:1 1 170px;min-width:0}
+.toolbar .filter-select{flex:0 0 auto;min-width:0;max-width:44%}
 .agent-monitor-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important}
