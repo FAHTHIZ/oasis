@@ -35,9 +35,9 @@ test('runBenchmark scores agents only on shared, identical tasks and never write
     const external = args[0] && args[0].startsWith('--') && args[0] !== '--trials';
     if (args[0] === '--codex') throw new Error('Could not start the Codex CLI (codex). Install it.');
     const rows = [
-      { taskId: 'a', taskFingerprint: 'fa', status: 'passed', wallTimeMs: 1000, totalTokens: 10, costUSD: 0.01 },
-      { taskId: 'b', taskFingerprint: external ? 'fb' : 'fb', status: external ? 'failed' : 'passed', wallTimeMs: 3000, totalTokens: 20, costUSD: 0.02 },
-      ...(external ? [] : [{ taskId: 'only-oasis', taskFingerprint: 'fx', status: 'passed', wallTimeMs: 5, totalTokens: 1, costUSD: 0 }])
+      { taskId: 'a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', trial: 1, status: 'passed', wallTimeMs: 1000, totalTokens: 10, costUSD: 0.01 },
+      { taskId: 'b', taskFingerprint: 'b'.repeat(64), category: 'configuration-integration', difficulty: 'large', trial: 1, status: external ? 'failed' : 'passed', wallTimeMs: 3000, totalTokens: 20, costUSD: 0.02 },
+      ...(external ? [] : [{ taskId: 'only-oasis', taskFingerprint: 'c'.repeat(64), category: 'utility-logic', difficulty: 'small', trial: 1, status: 'passed', wallTimeMs: 5, totalTokens: 1, costUSD: 0 }])
     ];
     const file = path.join(resultsDir, 'run-' + calls.length + '.json');
     await writeFile(file, JSON.stringify({ results: rows }));
