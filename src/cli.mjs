@@ -104,6 +104,8 @@ function printHelp() {
     '  oasis install pnpm            Install a tool using a detected manager',
     '  oasis sessions list           List locally saved sessions for this workspace',
     '  oasis sessions search QUERY [--all] [--json]  Search earlier saved conversations',
+    '  oasis sessions export ID...|--all [--format sharegpt|openai] [--out FILE]  Export trajectories as JSONL',
+    '  oasis batch PROMPTS.jsonl [--out FILE] [--concurrency N]  Run many prompts, one fresh session each, and save trajectories',
     '  oasis sessions clear ID       Delete one saved session',
     '  oasis sessions prune [--older-than DAYS]  Delete saved sessions unused for DAYS (default 30)',
     '  oasis --continue              Resume the most recent saved session and keep saving it',
@@ -1564,6 +1566,12 @@ async function manageSessions(root, rest) {
     if (!(await approve('Delete these ' + stale.length + ' saved conversation(s)? This removes their history files.', true, false))) { stdout.write('Nothing deleted.\n'); return; }
     const removed = await pruneSessions(root, days);
     stdout.write('Deleted ' + removed.length + ' saved session(s).\n');
+    return;
+  }
+  if (action === 'export') {
+    const { exportSessions } = await import('./trajectories.mjs');
+    const count = await exportSessions(root, rest.slice(1));
+    if (rest.includes('--out')) stdout.write('Exported ' + count + ' session(s).\n');
     return;
   }
   if (action === 'search') {
@@ -3386,6 +3394,12 @@ async function main() {
     return;
   }
   if (command === 'sessions') return await manageSessions(workspace, rest);
+  if (command === 'batch') {
+    const { runBatch } = await import('./trajectories.mjs');
+    const result = await runBatch(workspace, rest, { env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
+    if (result.failed) process.exitCode = 1;
+    return;
+  }
   if (command === 'gateway') {
     const { runGateway } = await import('./gateway-telegram.mjs');
     await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
