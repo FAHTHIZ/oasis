@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- Gateways accept photos and files: Telegram photos/documents/audio, Discord attachments and Slack files are saved to `.oasis/inbox/`, images go to the model inline, and the prompt lists the saved paths (5 files, 20 MB each).
 - Other agents' rule folders load natively, no import needed: `.cursor/rules/*.mdc`, `.windsurf/rules/`, Antigravity's `.agent/rules/` and `.agents/rules/`, Copilot's `.github/instructions/`, Kiro's `.kiro/steering/`, `.clinerules/` and `.roo/rules/`, honoring always-on, glob-scoped, on-request (listed by description) and manual triggers.
 - ACP: file edits are reported as inline `diff` content, and editors that offer `fs/read_text_file` / `fs/write_text_file` (Zed) now have unsaved buffers read and open buffers updated by `read_file`, `edit_file` and `write_file`.
 - Memory write approval: `"memoryWriteApproval": "ask"` prompts before every agent `memory_save` / `memory_delete`; `"queue"` holds them for `/memory pending`, `/memory approve ID|all` and `/memory reject ID|all`. Headless runs in ask mode queue instead of saving.

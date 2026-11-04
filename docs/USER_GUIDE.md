@@ -276,6 +276,8 @@ oasis -C ~/code/my-app gateway telegram
 
 Only allowlisted chats reach the agent; any other chat just gets its ID once so you can add it. Each chat has its own session, saved like terminal sessions (so `/recall` and `oasis --resume` see them). Anything that needs approval shows **Allow / Always / Reject** buttons; unanswered approvals are rejected after 10 minutes, and buttons only work in the chat that asked. Chat commands: `/new`, `/stop`, `/status`, `/mode default|acceptEdits|plan|auto`, `/help`. The gateway long-polls Telegram (no public URL or webhook needed) and backs off on network errors. Text messages only for now; voice and files are not handled yet. Pair it with the container sandbox (`OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker`) when you approve commands remotely.
 
+Photos and files work too: send a screenshot, a log file or a PDF (with or without a caption) and it is saved under `.oasis/inbox/` in the workspace, images are also shown to the model directly, and the prompt lists the saved paths so the agent can read them. Up to 5 files per message and 20 MB each (the Telegram Bot API limit); file contents are treated as data, not instructions. The same applies to Discord attachments and to Slack files (add the `files:read` bot scope).
+
 ### Discord and Slack
 
 The same agent runs as a Discord bot or a Slack app, with the same per-chat sessions, approval buttons, 10-minute approval timeout and chat commands. Neither needs a public URL.
@@ -289,7 +291,7 @@ export OASIS_DISCORD_CHANNELS=234567890123456789        # optional: channels whe
 oasis -C ~/code/my-app gateway discord
 
 # Slack: create an app, enable Socket Mode, add an app-level token with
-# connections:write and bot scopes chat:write, app_mentions:read, im:history;
+# connections:write and bot scopes chat:write, app_mentions:read, im:history (and files:read for attachments);
 # subscribe to app_mention and message.im events and turn on Interactivity, then:
 export OASIS_SLACK_APP_TOKEN=xapp-...
 export OASIS_SLACK_BOT_TOKEN=xoxb-...
