@@ -27,7 +27,7 @@ This document is the canonical record for repository layout, intentional copies,
 
 ## Release handling
 
-The package version is `1.0.0` with `oasisRelease.channel` set to `stable`. The stable installer ignores prerelease tags and resolves the latest stable semantic-version tag.
+The package version is `1.0.0` with `oasisRelease.channel` set to `stable`. The stable installer ignores prerelease tags and resolves the latest stable semantic-version tag. As of November 4, 2026 no `v*` tag or GitHub Release exists (the only tag is `0.6.7`), so the stable installer and `oasis update` cannot resolve a release until the first publish run below completes.
 
 The desktop workflow builds artifacts on normal pushes, but publishing requires an explicit workflow dispatch with `publish_release: true` and, for a stable version, `confirm_stable_release: true`. The publish job waits for same-commit quality, site and installer workflows and refuses if `main` moved. Do not push to `main` while a publish job is running.
 
@@ -135,9 +135,9 @@ The intended public identity is:
 - Product name: **OASIS**
 - Primary tagline: **Code. Automate. Flourish.**
 - Description: Open-source, local-first agentic development workspace for coding, automation, agent orchestration, and verification.
-- Current package version: `1.0.0` (stable).
-- Lifecycle: Stable.
-- Previous release: `v0.4.0` (historical Beta).
+- Current package version: `1.0.0` (stable channel; not yet published as a GitHub Release).
+- Lifecycle: Stable channel.
+- Previous release: `v0.4.0` (historical Beta; tag and release no longer present).
 - License: Apache-2.0.
 
 Keep release, download, quality and benchmark badges tied to real published artifacts or current evidence. Search metadata and social previews do not guarantee indexing, traffic or ranking. Repository administration credentials belong only in GitHub Actions secrets; never commit or paste them into documentation.

@@ -3,7 +3,7 @@ const token = process.env.OASIS_REPO_ADMIN_TOKEN;
 const homepage = process.env.OASIS_PUBLIC_URL;
 
 if (!ownerRepo || ownerRepo.toLowerCase() !== 'fahthiz/oasis') throw new Error('Refusing to edit repository metadata outside FAHTHIZ/oasis.');
-if (!token) throw new Error('OASIS_REPO_ADMIN_TOKEN is not set. See docs/PUBLIC_LAUNCH.md.');
+if (!token) throw new Error('OASIS_REPO_ADMIN_TOKEN is not set. See docs/REPOSITORY_MAINTENANCE.md.');
 if (!homepage || !homepage.startsWith('https://') || !homepage.endsWith('/')) throw new Error('A verified HTTPS GitHub Pages URL was not provided by the deployment step.');
 
 const description = 'Open-source, local-first agentic development workspace for coding, automation, agent orchestration, and verification.';

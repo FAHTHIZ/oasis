@@ -4,10 +4,10 @@ This is the canonical navigation hub for OASIS. The root [README](../README.md) 
 
 ## Current product status
 
-OASIS **1.0 is the current stable release.** Work after 1.0 focuses on strengthening existing agents and workflows, reliability, security boundaries, accessibility and platform coverage.
+OASIS **1.0 is the stable-channel version on `main`.** The `v1.0.0` tag and GitHub Release have not been published yet. Work after 1.0 focuses on strengthening existing agents and workflows, reliability, security boundaries, accessibility and platform coverage.
 
-- Current release: `1.0.0` (stable)
-- Previous release: `v0.4.0` (historical Beta)
+- Version on `main`: `1.0.0` (stable channel, release not yet published)
+- Published releases: none on GitHub; the only tag is `0.6.7` (no `v` prefix, not used by the installer). The `v0.4.0` Beta documented in [its notes](releases/v0.4.0.md) is no longer present as a tag or release.
 - Installers are unsigned (SHA-256 checksums are published); see the [project plan](PROJECT_PLAN.md) for the 1.0 gates and decisions.
 
 The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for release gates and known limits.

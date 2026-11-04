@@ -66,7 +66,7 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Homepage deployment and About metadata were skipped because OASIS_REPO_ADMIN_TOKEN is not configured. Follow docs/PUBLIC_LAUNCH.md, then rerun this workflow on main."
+            echo "::warning::Homepage deployment and About metadata were skipped because OASIS_REPO_ADMIN_TOKEN is not configured. Follow docs/REPOSITORY_MAINTENANCE.md, then rerun this workflow on main."
           fi
       - name: Enable and configure GitHub Pages
         if: ${{ steps.launch-auth.outputs.ready == 'true' }}
@@ -108,7 +108,7 @@ jobs:
               echo "## OASIS public launch: setup still required"
               echo
               echo "Validation passed, but deployment and repository metadata were skipped."
-              echo 'Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret using the instructions in [docs/PUBLIC_LAUNCH.md](https://github.com/FAHTHIZ/oasis/blob/main/docs/PUBLIC_LAUNCH.md), then run this workflow again on `main`.'
+              echo 'Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret using the instructions in [docs/REPOSITORY_MAINTENANCE.md](https://github.com/FAHTHIZ/oasis/blob/main/docs/REPOSITORY_MAINTENANCE.md), then run this workflow again on `main`.'
             } >> "$GITHUB_STEP_SUMMARY"
           elif [ "$DEPLOYMENT_OUTCOME" = "success" ] && [ "$METADATA_OUTCOME" = "success" ]; then
             {

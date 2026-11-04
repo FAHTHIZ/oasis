@@ -1,6 +1,6 @@
 # OASIS user guide
 
-**Version channel:** OASIS `1.0.0`, stable. The installer resolves the latest stable tag. See [the project plan](PROJECT_PLAN.md) for the release gates and known limits.
+**Version channel:** OASIS `1.0.0`, stable channel. The installer resolves the latest stable `v*` tag; none has been published yet, so install from source until `v1.0.0` is released. See [the project plan](PROJECT_PLAN.md) for the release gates and known limits.
 
 Need a topic-first overview? Start with the [user-guide map](USER_GUIDE_MAP.md). For the project overview and quickest start, see the [main README](../README.md). For the system map and component boundaries, see the [architecture guide](ARCHITECTURE.md). For the implementation inventory and known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 
@@ -1124,7 +1124,7 @@ A post-edit result distinguishes diagnostics from server availability. If a conf
 - `MessageDisplay` hooks (no matcher) see each assistant message before it is shown (`turn_id`, `message_id`, `index`, `final`, `delta`) and can return `hookSpecificOutput.displayContent` to change what appears on screen, for example to redact secrets. The transcript and what the model sees stay unchanged. OASIS sends one batch per message (`index: 0`, `final: true`) and turns off token streaming while such a hook is configured; the default timeout is 10 seconds.
 
 - `/fast [on|off]` toggles fast mode: on Opus 5.5, Opus 5 and Opus 4.8 through the Anthropic API, requests carry `speed: "fast"` (plus the `fast-mode-2026-02-01` beta for Opus 5 / 4.8) for faster output at the higher fast-mode price. The choice is saved as `fastMode` in user settings; other models and cloud providers ignore it, and `CLAUDE_CODE_DISABLE_FAST_MODE=1` turns it off.
-- `/install-github-app [@trigger] [save|force]` (alias `/install-github-action`) writes `.github/workflows/oasis.yml` for the OASIS GitHub Action using your current provider and model, pre-allows your project's test/lint/build commands, and prints the `gh secret set OASIS_API_KEY` step. `/share` is an alias for `/bug`.
+- `/install-github-app [@trigger] [save|force]` (alias `/install-github-action`) writes `.github/workflows/oasis.yml` for the OASIS GitHub Action using your current provider and model, pre-allows your project's test/lint/build commands, and prints the `gh secret set OASIS_API_KEY` step. `/share` is an alias for `/export` (it saves the conversation as Markdown); `/feedback` is the alias for `/bug`.
 
 - Agent teams in tmux: with `--teammate-mode tmux` (or the default `auto` when OASIS runs inside tmux; also the `teammateMode` setting or `OASIS_TEAMMATE_MODE`), each team member launched with `team_id` gets its own tiled tmux pane showing its prompt, messages, tool calls and final status. Teammates still run inside the lead process, so messaging and permissions are unchanged. Use `--teammate-mode in-process` to turn panes off.
 
@@ -1253,7 +1253,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 - The browser's GitHub repository browser reuses host-side GitHub CLI authentication (`gh auth login`); it does not provide embedded GitHub OAuth, organization-wide discovery beyond the first 30 API results, repository creation, or browser-based branch/push/PR management. The separate OASIS GitHub Action does support issue and pull-request automation; see [the GitHub Action guide](github-action.md). Fine-grained GitHub App scopes are not implemented.
 - The browser Terminal panel supports a PTY-backed interactive path with bundled xterm.js rendering when the optional native dependency is available. The lifecycle is not yet validated across all operating systems, and Termux/native PTY support remains experimental; see [the project plan](PROJECT_PLAN.md).
 - Browser projects/tasks/notes still use browser local storage and do not sync with the CLI workspace. Agent sessions are stored separately in the user-level OASIS session directory.
-- GitHub Pages validation runs in CI, but public deployment is opt-in. A repository owner must enable Pages and set the repository variable `OASIS_ENABLE_PAGES` to `true`; a passing workflow does not prove the site is live.
+- GitHub Pages validation runs in CI, but public deployment is opt-in. Deployment and repository-metadata updates run only when the `OASIS_REPO_ADMIN_TOKEN` Actions secret is configured (see [Repository maintenance](REPOSITORY_MAINTENANCE.md)); a passing workflow does not prove the site is live. As of November 4, 2026, Pages is not enabled for the repository.
 
 ## Contributing
 
