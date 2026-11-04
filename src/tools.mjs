@@ -2054,11 +2054,11 @@ export async function executeTool(name, args = {}, context = {}) {
       const { runLearningTool } = await import('./learning.mjs');
       return await runLearningTool(name, args, { root, env: context.env || process.env, session: context.session });
     }
-    case 'memory_save':
     case 'session_search': {
       const { runSessionSearchTool } = await import('./session-search.mjs');
       return await runSessionSearchTool(args, { root, env: context.env || process.env, session: context.session });
     }
+    case 'memory_save':
     case 'memory_search':
     case 'memory_read':
     case 'memory_delete': {
