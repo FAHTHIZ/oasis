@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- MCP servers added from chat (`configure_mcp_server`) now share the session's MCP host, so their `tools/list_changed`, elicitation and roots requests reach the session the same way startup servers do.
 - Security: `Read(...)` and `Edit(...)` deny/ask rules now also apply to shell commands. Arguments of common file commands (cat, head, grep, sed, base64, cp, rm, mv, tee, `sed -i`, dd, ...) and `<`/`>` redirection targets are checked, including through wrappers and `bash -c`, so `cat .env` or `echo x > secrets/key` no longer gets around the rule. Variables and globs are not expanded.
 - Security: path deny/ask rules (`Read(.env)`, `Edit(secrets/**)`) now follow symlinks, including links to parent folders and new files inside linked folders, so a link named `innocent.txt` that points at `.env` is denied.
 - Security: user deny/ask rules for shell commands now match every spelling of a command. `Bash(git push:*)` previously missed `git  push`, `"git" push`, `\git push`, `env git push`, `sudo git push`, `nice`/`timeout`/`xargs`/`exec`/`eval` wrappers, `bash -c "git push"`, `/usr/bin/git push`, and `git -C . push`, so in auto or bypass modes those ran. Allow rules stay literal, so wrappers never widen them.
