@@ -595,7 +595,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, systemPromptSnapshot = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, onHookStatus = null, systemPromptSnapshot = null }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   // --restricted: only managed settings and --settings load; bypassPermissions is refused.
@@ -715,6 +715,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     background: new Map(),
     hookMessages: []
   };  if (typeof onHookEvent === 'function') session.onHookEvent = onHookEvent;
+  if (typeof onHookStatus === 'function') session.onHookStatus = onHookStatus;
   if (restore && Array.isArray(restore.agents) && restore.agents.length) restoreAgentHistory(session, restore.agents);
 
   if (restore && restore.workflowCheckpoint && restore.workflowCheckpoint.active === true) {
@@ -1724,6 +1725,7 @@ export function hookOptions(session, env) {
     root: session.root,
     env: env || process.env,
     onHookEvent: session.onHookEvent || null,
+    onHookStatus: session.onHookStatus || null,
     evaluatePrompt: async ({ system, prompt, model, signal }) => {
       const config = model ? { ...session.config, model } : session.config;
       const completion = await requestCompletion({ config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal });
