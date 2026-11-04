@@ -328,13 +328,26 @@ export async function runHooks(event, payload, options = {}) {
   // Claude Code runs matching hooks in parallel.
   const observe = typeof options.onHookEvent === 'function' ? options.onHookEvent : null;
   const hookName = event + (target ? ':' + target : '');
+  // A spinner line while foreground hooks run: the first hook's statusMessage at
+  // once, or "Running EVENT hook" if they take more than half a second, so a slow
+  // hook (tests on Stop, a linter on PostToolUse) does not look like a hang.
+  const status = typeof options.onHookStatus === 'function' && commands.length ? options.onHookStatus : null;
+  let statusShown = false, statusTimer = null;
+  if (status) {
+    const custom = commands.map((hook) => typeof hook.statusMessage === 'string' ? hook.statusMessage.replace(/\s+/g, ' ').trim().slice(0, 120) : '').find(Boolean);
+    const show = () => { statusShown = true; try { status({ phase: 'start', event, label: custom || 'Running ' + event + ' hook' + (commands.length > 1 ? 's' : '') }); } catch {} };
+    if (custom) show(); else { statusTimer = setTimeout(show, Number(options.hookStatusDelayMs ?? 500)); statusTimer.unref?.(); }
+  }
   const outputs = await Promise.all(commands.map(async (hook, index) => {
     const hookId = observe ? 'hook_' + Date.now().toString(36) + '_' + index + Math.random().toString(36).slice(2, 6) : null;
     if (observe) { try { observe({ subtype: 'hook_started', hook_id: hookId, hook_name: hookName, hook_event: event }); } catch {} }
     const out = await runOneHook(hook, fullPayload, options);
     if (observe) { try { observe({ subtype: 'hook_response', hook_id: hookId, hook_name: hookName, hook_event: event, output: String(out.stdout || '').slice(0, 4000), stdout: String(out.stdout || '').slice(0, 4000), stderr: String(out.stderr || '').slice(0, 4000), exit_code: out.exitCode, outcome: out.exitCode === 0 ? 'success' : out.timedOut ? 'cancelled' : 'error' }); } catch {} }
     return out;
-  }));
+  })).finally(() => {
+    if (statusTimer) clearTimeout(statusTimer);
+    if (statusShown) { try { status({ phase: 'end', event }); } catch {} }
+  });
   for (let i = 0; i < outputs.length; i++) {
     let out = outputs[i];
     result.ran++;
