@@ -15,7 +15,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 | Safety and configuration | [Safety model](#safety-model) · [Permissions](#permission-rules-and-modes) · [MCP servers](#project-mcp-servers-mcpjson) · [Hooks](#hooks) · [Settings](#settings-pane) |
 | Terminal and sessions | [Interactive terminal](#the-interactive-terminal) · [PTY sessions](#interactive-pty-terminal-sessions) · [Slash commands](#slash-commands-mentions-and-memory) · [Auto memory](#auto-memory) · [Clear local data](#clearing-local-data) |
 | Automation and developer tools | [Headless mode](#headless-mode-for-scripts-and-ci) · [GitHub Action](#github-mention-oasis) · [SDK](#sdk-build-on-oasis-from-node) · [OpenTelemetry](#opentelemetry) · [Subagents](#subagents) · [Workflows](#dynamic-workflows) · [Agent tools](#extra-agent-tools) · [LSP and diagnostics](#lsp-verification-and-context-estimates) · [Watch mode](#watch-mode-ai-comments-in-your-editor) · [Auto-test](#auto-test-after-edits) · [Weakened-test detection](#weakened-test-detection) |
-| Browser workspace | [Static dashboard](#static-browser-dashboard) · [Run monitor](#monitor-agent-runs-and-worker-activity) |
+| Browser workspace | [Keyboard shortcuts and help](#browser-workspace-keyboard-shortcuts) · [Static dashboard](#static-browser-dashboard) · [Run monitor](#monitor-agent-runs-and-worker-activity) |
 | Evaluation and project upkeep | [Coding-agent evaluations](#coding-agent-evaluations) · [Development checks](#development-and-verification) · [Known limitations](#known-limitations--not-claimed-as-finished) · [Contributing](#contributing) · [License](#license) |
 
 ---
@@ -75,6 +75,28 @@ OASIS does not include an API subscription or a model. A provider must be reacha
 The interactive terminal footer shows the connected model, a rough context-window percentage, and the session cost when OASIS has pricing information for that model. If the model has no known price, the cost is shown as unknown rather than guessed. When a budget limit is configured, the footer warns when estimated usage reaches 50% and 90%. Use `/cost` for the detailed usage view, `/context` for context details, and `/help` for commands grouped into Getting started, Working, Safety, Settings, and More commands.
 
 A rotating startup tip is shown on launch. Set `OASIS_TIP=off` or `OASIS_NO_TIPS=1` to turn it off. Set `NO_COLOR` for plain terminal output, or use `--ax-screen-reader` for the accessible plain-text mode. Read approval prompts carefully: OASIS runs approved commands with the permissions of your operating-system account.
+
+## Browser workspace keyboard shortcuts
+
+You never need a shortcut: every action also has a button. To see them all, click **Help** at the bottom of the sidebar, press **Ctrl + /** (**⌘ + /** on a Mac), or search for "shortcuts" in the command palette. The guide explains each key in plain words, has a search box, and on phones lists the buttons to tap instead.
+
+"+" means hold the first key, then press the next one. On a Mac, use ⌘ (Command) in place of Ctrl and ⌥ (Option) in place of Alt.
+
+| Keys | What it does |
+|---|---|
+| Ctrl + K, or ? when not typing | Open the command palette: search every page, chat and action |
+| Ctrl + / | Open the keyboard shortcuts and help guide |
+| Ctrl + Shift + O | Start a new chat (old chats stay in the sidebar) |
+| Ctrl + ` | Show or hide the terminal |
+| Ctrl + \ | Collapse or expand the sidebar |
+| Enter | Send your message (or Ctrl + Enter if you chose that in Settings) |
+| Shift + Enter | Add a new line without sending |
+| ↑ in an empty message box | Bring back your last message |
+| / when not typing | Jump to the message box and start a slash command |
+| Enter while OASIS is working | Steer the current task with a correction |
+| Alt + Enter while OASIS is working | Queue a message for after the current task |
+| Esc in an empty message box | Stop the running task |
+| ↑ / ↓, Enter, Esc in the palette | Move, choose, close |
 
 ## Settings pane
 

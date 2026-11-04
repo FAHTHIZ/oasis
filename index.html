@@ -40,7 +40,7 @@
     <button class="nav-btn sidebar-nav-item" type="button" data-nav="integrations"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg><span>Integrations</span></button>
     <button class="nav-btn sidebar-nav-item" type="button" data-nav="home"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Projects &amp; notes</span></button>
     <button class="nav-btn sidebar-nav-item sidebar-settings-button" id="sidebarSettingsButton" type="button" data-nav="settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span>Settings</span></button>
-    <div class="sidebar-foot"><span class="sidebar-foot-dot" aria-hidden="true"></span>Local-first · Apache-2.0</div>
+    <div class="sidebar-foot"><span class="sidebar-foot-dot" aria-hidden="true"></span><span>Local-first · Apache-2.0</span><button class="sidebar-help" id="sidebarHelpButton" type="button" title="Keyboard shortcuts and help"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/></svg><span>Help</span></button></div>
   </nav>
 </aside>
 <main class="main"><header class="topbar">
@@ -388,6 +388,7 @@
   </div>
 </section>
 </div><footer class="footer-note"><span>Made for focus, not noise.</span><span>OASIS · Your data stays in this browser.</span></footer></main></div>
+<dialog class="modal shortcuts-dialog" id="shortcutsDialog" aria-labelledby="shortcutsTitle" aria-describedby="shortcutsIntro"><div class="modal-card shortcuts-card"><div class="shortcuts-head"><div><h2 class="modal-heading" id="shortcutsTitle">Keyboard shortcuts and help</h2><p class="shortcuts-intro" id="shortcutsIntro">Everything you can do with a key press, explained in plain words. You never need shortcuts: every action here also has a button.</p></div><button class="btn btn-secondary" type="button" id="shortcutsClose">Close</button></div><label class="shortcuts-search"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="sr-only">Search shortcuts</span><input id="shortcutsFilter" type="search" placeholder="Search: send, stop, terminal…" autocomplete="off"></label><div class="shortcuts-body" id="shortcutsList"></div><p class="shortcuts-empty" id="shortcutsEmpty" hidden>No shortcut matches that search. Try a simpler word like "chat" or "stop".</p></div></dialog>
 <dialog class="modal command-palette-dialog" id="commandPaletteDialog" aria-labelledby="commandPaletteTitle" aria-describedby="commandPaletteHelp">
   <div class="modal-card command-palette-card">
     <div class="command-palette-heading"><div><h2 class="modal-heading" id="commandPaletteTitle">Command palette</h2><p class="modal-help">Search pages, workspace actions, model setup and agent starters.</p></div><span class="command-palette-badge">Ctrl+K</span></div>
@@ -515,7 +516,7 @@ function commandPaletteItems(){
     {id:'starter-explain',label:'Explain this project',description:'Fill the agent prompt with a read-first request',category:'Agent starters',keywords:'understand repository code walkthrough',run:function(){prepareAgentPrompt('Explain this project')}},
     {id:'starter-find-bug',label:'Find a bug',description:'Ask for an inspection and a suggested fix before editing',category:'Agent starters',keywords:'debug error defect bugfix',run:function(){prepareAgentPrompt('Find a bug')}},
     {id:'starter-tests',label:'Write tests',description:'Ask for missing test coverage without running the task yet',category:'Agent starters',keywords:'testing coverage regression',run:function(){prepareAgentPrompt('Write tests')}},
-    {id:'keyboard-help',label:'Keyboard shortcuts',description:'Ctrl+K or ? opens this palette; arrows move and Enter selects',category:'Help',keywords:'help keys keyboard shortcuts',run:function(){notify('Palette: Ctrl+K or ? opens search · ↑/↓ moves · Enter selects · Esc closes. Selection only navigates or fills a prompt.');}}
+    {id:'keyboard-help',label:'Keyboard shortcuts and help',description:'Every shortcut in one place (Ctrl+/)',category:'Help',keywords:'help keys keyboard shortcuts',run:function(){if(window.oasisShowShortcuts)window.oasisShowShortcuts();else notify('Palette: Ctrl+K or ? opens search · ↑/↓ moves · Enter selects · Esc closes.');}}
   ];
 }
 function prepareAgentPrompt(prompt){
@@ -2331,12 +2332,60 @@ if(prompt){
   autosize();syncSend();
 }
 /* ---------- Global shortcuts ---------- */
+(function(){
+  var dlg=$('shortcutsDialog'),list=$('shortcutsList'),filter=$('shortcutsFilter'),empty=$('shortcutsEmpty');if(!dlg||!list)return;
+  var mac=/mac|iphone|ipad/i.test((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'');
+  var M=mac?'⌘':'Ctrl',A=mac?'⌥':'Alt',E=mac?'Return':'Enter';
+  function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function groups(){var sm=typeof sendWithMod==='function'&&sendWithMod();return [
+    {t:'Getting around',d:'These work anywhere in the workspace.',r:[
+      [[M,'K'],'Open the command palette','A search box for every page, chat and action. Type a few letters, for example "settings", then press '+E+'.'],
+      [['?'],'Open the command palette (quick key)','Same as above. Works when you are not typing in a box.'],
+      [[M,'/'],'Open this help','Shows this list again whenever you forget a shortcut.'],
+      [[M,'Shift','O'],'Start a new chat','Clears the screen for a new conversation. Your old chats stay saved in the sidebar.'],
+      [[M,'`'],'Show or hide the terminal','The terminal is where you can type commands yourself. The ` key is usually just below Esc.'],
+      [[M,'\\'],'Collapse or expand the sidebar','Gives the chat more room. Press it again to bring the sidebar back.']]},
+    {t:'Writing a message',d:'These work while your cursor is in the message box at the bottom.',r:[
+      [sm?[M,E]:[E],'Send your message',sm?'You chose '+M+' + '+E+' to send in Settings, so '+E+' on its own adds a new line.':'Sends what you typed to OASIS. You can change this to '+M+' + '+E+' in Settings.'],
+      [['Shift',E],'Add a new line','Starts a new line without sending, useful for longer instructions.'],
+      [['↑'],'Bring back your last message','When the box is empty, this fills in the message you sent before so you can fix or resend it.'],
+      [['/'],'Slash commands','When you are not typing anywhere, / jumps to the message box and starts a command, for example /help.']]},
+    {t:'While OASIS is working',d:'OASIS can take a while on big tasks. You stay in control.',r:[
+      [[E],'Steer the current task','Type a correction and send it. OASIS reads it right away and changes course.'],
+      [[A,E],'Queue a message for later','Saves your message and sends it once the current task finishes.'],
+      [['Esc'],'Stop the task','With an empty message box, Esc stops OASIS immediately. The Stop button does the same.']]},
+    {t:'Command palette and windows',d:'Inside the palette and in pop-up windows like this one.',r:[
+      [['↑','↓'],'Move between results','Highlights the next or previous item in the list.',1],
+      [[E],'Choose the highlighted item','Opens the page or runs the action.'],
+      [['Esc'],'Close','Closes the palette or pop-up window without changing anything.'],
+      [['Tab'],'Move to the next button','Moves between buttons and fields, one at a time. Shift + Tab goes back.']]},
+    {t:'On a phone or tablet',d:'No keyboard needed. Every shortcut in this guide also has a button.',touch:1,r:[
+      [['Menu'],'Open chats and pages','Tap the menu button at the top left to see saved chats, Settings and other pages.'],
+      [['Search'],'Find anything','Tap the search icon at the top to open the command palette.'],
+      [['Send'],'Send or steer','Tap Send. While OASIS is working, tap Stop to end the task.'],
+      [['Mic'],'Speak instead of typing','Tap the microphone in the message box to dictate.'],
+      [['Clip'],'Add pictures','Tap the paper clip to attach screenshots or photos.']]}
+  ]}
+  function keys(r){return r[0].map(function(k){return '<kbd>'+esc(k)+'</kbd>'}).join('<span class="kbd-plus" aria-hidden="true">'+(r[3]?'/':'+')+'</span>')}
+  function render(q){q=(q||'').trim().toLowerCase();var n=0;
+    list.innerHTML=groups().map(function(g){var rows=g.r.filter(function(r){return !q||(r[1]+' '+r[2]+' '+r[0].join(' ')+' '+g.t).toLowerCase().indexOf(q)>=0});n+=rows.length;if(!rows.length)return '';
+      return '<section class="shortcuts-group'+(g.touch?' is-touch':'')+'"><h3>'+esc(g.t)+'</h3><p class="shortcuts-group-desc">'+esc(g.d)+'</p><ul>'+rows.map(function(r){return '<li><div class="shortcuts-keys">'+(g.touch?'<span class="shortcuts-tap">'+esc(r[0][0])+'</span>':keys(r))+'</div><div class="shortcuts-text"><strong>'+esc(r[1])+'</strong><span>'+esc(r[2])+'</span></div></li>'}).join('')+'</ul></section>'}).join('')+
+      (q?'':'<section class="shortcuts-group shortcuts-legend"><h3>What the key names mean</h3><p class="shortcuts-group-desc">"+" means hold the first key, then press the next one.</p><ul>'+
+      [[M,mac?'Command key, next to the space bar.':'Control key, bottom-left corner of the keyboard.'],['Shift','The key with an up arrow, above Ctrl.'],[A,mac?'Option key, between Control and Command.':'Alt key, next to the space bar.'],[E,'The big key that starts a new line, on the right side.'],['Esc','Escape, top-left corner. It cancels or closes things.'],['Tab','Above Caps Lock, on the left side.']].map(function(k){return '<li><div class="shortcuts-keys"><kbd>'+esc(k[0])+'</kbd></div><div class="shortcuts-text"><span>'+esc(k[1])+'</span></div></li>'}).join('')+'</ul></section>');
+    if(empty)empty.hidden=n>0}
+  window.oasisShowShortcuts=function(){var pal=$('commandPaletteDialog');if(pal&&pal.open)pal.close();if(filter)filter.value='';render('');if(!dlg.open)dlg.showModal();(filter||$('shortcutsClose')).focus()};
+  if(filter){filter.addEventListener('input',function(){render(filter.value)});filter.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();if(filter.value){filter.value='';render('')}else dlg.close()}})}
+  $('shortcutsClose').addEventListener('click',function(){dlg.close()});
+  dlg.addEventListener('click',function(e){if(e.target===dlg)dlg.close()});
+  var help=$('sidebarHelpButton');if(help)help.addEventListener('click',function(){window.oasisShowShortcuts()});
+})();
 document.addEventListener('keydown',function(e){
   var typingField=/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||'')||(e.target&&e.target.isContentEditable);
   var mod=e.ctrlKey||e.metaKey;
   if(mod&&e.key==='`'){e.preventDefault();$('topbarTerminalBtn').click();return}
   if(mod&&e.shiftKey&&(e.key==='O'||e.key==='o')){e.preventDefault();$('sidebarNewChatBtn').click();setTimeout(function(){prompt&&prompt.focus()},50);return}
   if(mod&&e.key==='\\'){e.preventDefault();document.body.classList.toggle('sidebar-collapsed');return}
+  if(mod&&e.key==='/'){e.preventDefault();window.oasisShowShortcuts&&window.oasisShowShortcuts();return}
   if(!typingField&&!mod&&e.key==='/'&&prompt&&document.querySelector('#view-agent.active')){e.preventDefault();prompt.focus();prompt.value='/';prompt.dispatchEvent(new Event('input',{bubbles:true}))}
 });
 var search=$('sidebarSearchBtn');if(search)search.addEventListener('click',function(){$('commandPaletteButton').click()});
