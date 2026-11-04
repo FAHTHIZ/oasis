@@ -20,7 +20,7 @@ The groups below describe primary responsibility. A module may be used across mo
 
 | Domain | Representative modules |
 |---|---|
-| Agent runtime and context | `agent.mjs`, `context.mjs`, `memory.mjs`, `auto-memory.mjs`, `rule-refresh.mjs`, `standing-corrections.mjs`, `reply-language.mjs`, `style-rules.mjs` |
+| Agent runtime and context | `agent.mjs`, `context.mjs`, `memory.mjs`, `auto-memory.mjs`, `learning.mjs`, `rule-refresh.mjs`, `standing-corrections.mjs`, `reply-language.mjs`, `style-rules.mjs` |
 | Sessions and recovery | `sessions.mjs`, `session-tools.mjs`, `session-messaging.mjs`, `session-notes.mjs`, `checkpoints.mjs`, `backups.mjs`, `followups.mjs`, `read-dedup.mjs`, `purge.mjs` |
 | Tools and workspace operations | `tools.mjs`, `power-tools.mjs`, `shell-risk.mjs`, `power-tool-definitions.mjs`, `file-state.mjs`, `edit-match.mjs`, `inplace-edit-check.mjs`, `change-guard.mjs`, `repo-map.mjs`, `file-watch.mjs`, `scratch.mjs`, `notebook.mjs`, `pdf.mjs`, `artifacts.mjs` |
 | Git and isolation | `git-tools.mjs`, `git-safety.mjs`, `auto-commit.mjs`, `worktrees.mjs`, `branch-names.mjs`, `protected-paths.mjs`, `scope-lock.mjs` |
