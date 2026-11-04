@@ -11,6 +11,7 @@
 // Chat commands: /new (fresh session), /stop (cancel the running turn),
 // /status, /mode default|acceptEdits|plan|auto, /help.
 import path from 'node:path';
+import { receiveAttachments } from './gateway-core.mjs';
 
 const API = 'https://api.telegram.org';
 const MAX_MESSAGE = 4000;
@@ -81,7 +82,7 @@ export function createTelegramGateway(options = {}) {
     return { inline_keyboard: [[{ text: 'Allow', callback_data: 'a:' + id }, ...(canAlways ? [{ text: 'Always', callback_data: 'A:' + id }] : []), { text: 'Reject', callback_data: 'r:' + id }]] };
   }
 
-  async function runPrompt(chatId, text) {
+  async function runPrompt(chatId, text, extra = {}) {
     const state = await chatState(chatId);
     if (state.controller) { await say(chatId, 'Still working on the previous request. Send /stop to cancel it.'); return; }
     const { runAgentTurn } = deps.agent || await import('./agent.mjs');
@@ -93,6 +94,7 @@ export function createTelegramGateway(options = {}) {
       const turn = await runAgentTurn(state.session, text, {
         env,
         signal: controller.signal,
+        ...(extra.images && extra.images.length ? { images: extra.images } : {}),
         onToolStart: ({ name }) => { tools.push(name); },
         approval: (message, _force = false, meta = {}) => new Promise((resolve) => {
           const id = String(++approvalCounter);
@@ -167,9 +169,35 @@ export function createTelegramGateway(options = {}) {
       return;
     }
     const text = typeof message.text === 'string' ? message.text : typeof message.caption === 'string' ? message.caption : '';
-    if (!text.trim()) { await say(chatId, 'Only text messages are supported for now.'); return; }
-    if (text.startsWith('/') && await command(chatId, text)) return;
-    runPrompt(chatId, text).catch((error) => log(error.message));
+    const files = telegramFiles(message);
+    if (!text.trim() && !files.length) { await say(chatId, 'Send text, a photo or a file.'); return; }
+    if (!files.length && text.startsWith('/') && await command(chatId, text)) return;
+    let prompt = text, images = [];
+    if (files.length) ({ text: prompt, images } = await receiveAttachments(root, text, files, { log }));
+    runPrompt(chatId, prompt, { images }).catch((error) => log(error.message));
+  }
+
+  // Photos (largest size), documents, videos and audio; the Bot API serves files up to 20 MB.
+  function telegramFiles(message) {
+    const items = [];
+    if (Array.isArray(message.photo) && message.photo.length) {
+      const best = message.photo[message.photo.length - 1];
+      items.push({ fileId: best.file_id, name: 'photo-' + String(best.file_unique_id || best.file_id).slice(0, 16) + '.jpg', mime: 'image/jpeg', size: best.file_size });
+    }
+    for (const key of ['document', 'video', 'audio', 'voice']) {
+      const item = message[key];
+      if (item && item.file_id) items.push({ fileId: item.file_id, name: item.file_name || key + '-' + String(item.file_unique_id || item.file_id).slice(0, 16) + (key === 'voice' ? '.ogg' : ''), mime: item.mime_type, size: item.file_size });
+    }
+    return items.map((item) => ({
+      ...item,
+      download: async () => {
+        const info = await api('getFile', { file_id: item.fileId });
+        if (!info || !info.file_path || /\.\./.test(info.file_path)) throw new Error('Telegram did not return a file path');
+        const response = await fetchImpl(base + '/file/bot' + token + '/' + info.file_path, { signal: AbortSignal.timeout(60000) });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return Buffer.from(await response.arrayBuffer());
+      }
+    }));
   }
 
   async function pollOnce(timeout = 30) {

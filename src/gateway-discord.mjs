@@ -74,8 +74,12 @@ export function createDiscordGateway(options = {}) {
       return;
     }
     const text = stripMention(message.content, botId);
-    if (!text) { if (!(message.attachments || []).length) return; await send(message.channel_id, 'Only text messages are supported for now.'); return; }
-    await core.handleText(String(message.channel_id), text);
+    const files = (Array.isArray(message.attachments) ? message.attachments : []).filter((item) => item && /^https:\/\//.test(String(item.url || ''))).map((item) => ({
+      name: item.filename, mime: item.content_type, size: item.size,
+      download: async () => { const response = await fetchImpl(item.url, { signal: AbortSignal.timeout(60000) }); if (!response.ok) throw new Error('HTTP ' + response.status); return Buffer.from(await response.arrayBuffer()); }
+    }));
+    if (!text && !files.length) return;
+    await core.handleText(String(message.channel_id), text, files);
   }
 
   async function handleInteraction(interaction) {
