@@ -1,6 +1,6 @@
 # OASIS user-guide map
 
-OASIS `1.0.0` is the current stable release. The [project plan](PROJECT_PLAN.md) owns support status and release gates.
+OASIS `1.0.0` is the stable-channel version on `main`; the `v1.0.0` GitHub Release has not been published yet. The [project plan](PROJECT_PLAN.md) owns support status and release gates.
 
 The [full user guide](USER_GUIDE.md) is the comprehensive behavior reference. It remains at its existing path so older links stay valid. This map groups the manual by the task a reader is trying to complete; it does not duplicate the instructions.
 

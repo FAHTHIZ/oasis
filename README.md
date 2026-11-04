@@ -94,8 +94,8 @@ That installs the current `main`. Other ways in:
 
 | Option | How |
 | --- | --- |
-| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable tag (currently `v1.0.0`) to an immutable commit. |
-| **Desktop app** | Windows x64, macOS arm64 and Linux x86_64 installers on the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest), with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. |
+| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable `v*` tag to an immutable commit. No stable tag has been published yet (see [Status](#status-and-boundaries)), so it stops with an error until `v1.0.0` is released; use the source install above meanwhile. |
+| **Desktop app** | Windows x64, macOS arm64 and Linux x86_64 installers are built by CI and attached to the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) with `SHA256SUMS` once one is published (none yet). Until then, build locally with `npm run desktop:dist`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. |
 | **Local model, no API key** | `llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080`, then `OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis`. OASIS reads the loaded context window and picks the right profile. Ollama and LM Studio work the same way. |
 | **Coming from another agent** | `oasis import codex`, `oasis import gemini` or `oasis import cursor` (add `--dry-run` to preview). Existing `CLAUDE.md` / `AGENTS.md` files are picked up as they are. |
 | **Android** | The CLI runs in Termux; see the [Termux guide](docs/TERMUX.md) for what is and isn't supported. |
@@ -229,7 +229,7 @@ The model reasons and requests tools. OASIS owns the tool contracts, workspace c
 
 ## Status and boundaries
 
-> **Current lifecycle — OASIS 1.0, stable.** The 1.0 release gates in the [project plan](docs/PROJECT_PLAN.md) are met on one commit: full Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. Released as [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0).
+> **Current lifecycle — OASIS 1.0, stable channel, not yet published.** `main` carries version `1.0.0` on the stable channel, and CI runs the 1.0 gates in the [project plan](docs/PROJECT_PLAN.md): Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. The `v1.0.0` tag and GitHub Release have not been created yet (checked November 4, 2026: no releases and no `v*` tags), so the release links and the stable installer will not work until a maintainer runs the manual release job.
 
 What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums are provided), clean-machine install, update and uninstall are verified on CI runners rather than by hand on physical machines, and the 50-task evaluator runs on small projects, so it is a regression suite rather than a broad benchmark.
 
