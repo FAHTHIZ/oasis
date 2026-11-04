@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><strong>Download</strong></a> ·
   <a href="https://fahthiz.github.io/oasis/"><strong>Website</strong></a> ·
   <a href="#install"><strong>Install</strong></a> ·
   <a href="#terminal-or-browser">Web UI</a> ·
