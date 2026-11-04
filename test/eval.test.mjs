@@ -634,7 +634,7 @@ test('comparison artifact refuses symlink outputs without changing the target', 
   const bPath = path.join(tmp, 'b.json');
   const target = path.join(tmp, 'protected.html');
   const linkedOutput = path.join(reports, 'comparison.html');
-  const run = { results: [{ taskId: 'task-one', status: 'passed' }] };
+  const run = { results: [{ taskId: 'task-one', status: 'passed', taskFingerprint: 'd'.repeat(64) }] };
   await writeFile(aPath, JSON.stringify({ ...run, label: 'A' }));
   await writeFile(bPath, JSON.stringify({ ...run, label: 'B' }));
   await writeFile(target, 'do not overwrite\\n');
