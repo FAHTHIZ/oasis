@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-8A7CFF.svg?style=flat" alt="Version 1.0.0" /></a>
   <img src="https://img.shields.io/badge/stage-stable-2EA44F.svg?style=flat" alt="Stable" />
   <img src="https://img.shields.io/badge/node-%E2%89%A522-339933.svg?style=flat&logo=node.js&logoColor=white" alt="Node.js 22 or newer" />
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555.svg?style=flat" alt="macOS, Linux and Windows" />
@@ -22,7 +22,8 @@
   <a href="#measured-not-claimed">Benchmarks</a> ·
   <a href="#a-one-minute-tour">Tour</a> ·
   <a href="docs/USER_GUIDE_MAP.md">User guide</a> ·
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Downloads</a>
+  <a href="docs/INSTALL.md">Install guide</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
@@ -57,7 +58,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 </td>
 <td valign="top">
 
-**Your workflow, kept.** Accepts Claude Code's CLI flags (`-p`, `--output-format stream-json`, `--allowedTools`, `--mcp-config`) and Codex and Gemini CLI ones (`exec`, `--full-auto`, `--sandbox`, `--yolo`, `--output-schema`) and Aider's (`--message`, `--test-cmd --auto-test`, `--auto-commits`), reads `AGENTS.md` and `CLAUDE.md`, loads Claude Code plugins, and imports MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Hermes Agent, OpenCode, Antigravity, Windsurf, Cline and Claude Code auto memory (`oasis import`).
+**Your workflow, kept.** Accepts Claude Code's CLI flags (`-p`, `--output-format stream-json`, `--allowedTools`, `--mcp-config`) and Codex and Gemini CLI ones (`exec`, `--full-auto`, `--sandbox`, `--yolo`, `--output-schema`) and Aider's (`--message`, `--test-cmd --auto-test`, `--auto-commits`), reads `AGENTS.md`, `CLAUDE.md` and the rule folders of Cursor, Windsurf, Antigravity, Copilot, Kiro, Cline and Roo as they are, loads Claude Code plugins, and imports MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Hermes Agent, OpenCode, Antigravity, Windsurf, Cline and Claude Code auto memory (`oasis import`).
 
 </td>
 </tr>
@@ -201,11 +202,11 @@ Project proposals stay with one workspace; user-scope proposals are reserved for
 | **Workspace** | File search, read, write and edit; Git tools; snapshots, backups, diffs, checkpoints and rewind; isolated worktrees. |
 | **Safety** | Permission modes and rules, shell-risk analysis, protected paths, secret shield, bounded output, process cleanup, optional OS sandbox on Linux and macOS, a Docker/Podman container sandbox on any OS, or remote execution over SSH. |
 | **Verification** | Project checks, diagnostics and language servers, diff review, weakened-test and placeholder detection, auto-test, claim checks. |
-| **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, memory, compaction with must-keep context, rule refresh, cross-session search (`/recall`, `session_search`). |
+| **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, other agents' rule folders with their always/glob/on-request triggers, memory with optional write approval, compaction with must-keep context, rule refresh, cross-session search (`/recall`, `session_search`), separate agent profiles (`--profile`). |
 | **Learning** | Verified-work skill proposals, user/project scope, review-before-promotion, secret screening, and collision-safe portable skill creation. |
 | **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows, `oasis batch` runs with ShareGPT/OpenAI trajectory export, and `oasis plugin eval` for scoring plugins and skills against a baseline. |
-| **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, image generation (`generate_image`), GitHub Action, VS Code / Cursor / Windsurf bridge, [Telegram, Discord and Slack gateways](docs/USER_GUIDE.md#telegram-gateway-your-agent-from-your-phone) (`oasis gateway telegram`, `discord`, `slack`), and an [Agent Client Protocol](docs/USER_GUIDE.md#zed-jetbrains-neovim-and-other-acp-editors) server (`oasis acp`) for Zed, JetBrains, Neovim and Emacs. |
-| **Surfaces** | Terminal CLI, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. |
+| **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, image generation (`generate_image`), GitHub Action, VS Code / Cursor / Windsurf bridge, [Telegram, Discord and Slack gateways](docs/USER_GUIDE.md#telegram-gateway-your-agent-from-your-phone) (`oasis gateway telegram`, `discord`, `slack`) that take text, photos and files, and an [Agent Client Protocol](docs/USER_GUIDE.md#zed-jetbrains-neovim-and-other-acp-editors) server (`oasis acp`) for Zed, JetBrains, Neovim and Emacs with inline diffs and editor-buffer reads and writes. |
+| **Surfaces** | Terminal CLI with Markdown, syntax highlighting and Mermaid flowcharts and sequence diagrams drawn in the terminal, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. |
 | **Accessibility** | Screen-reader mode (`--ax-screen-reader`), reduced motion, `NO_COLOR`, colorblind-friendly and light themes, `--calm` output. |
 
 Capabilities are shared across surfaces but not identical on every OS, provider or editor; check the [support matrix](docs/PROJECT_PLAN.md#support-and-qualification-matrix) before relying on a platform-specific path.
@@ -242,7 +243,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 | **Browser workspace** | Local, authenticated, backed by the shared runtime; not a hosted service. Some browser-side project, task and note state is separate from CLI state. |
 | **Desktop** | Windows x64, macOS arm64 and Linux x86_64, built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums. |
 | **VS Code-family editors** | Supported integration; not every editor extension ecosystem is covered. |
-| **ACP editors (Zed, JetBrains, Neovim, Emacs)** | `oasis acp` implements the core Agent Client Protocol; editor-side `fs/*` and terminal capabilities are not used yet. |
+| **ACP editors (Zed, JetBrains, Neovim, Emacs)** | `oasis acp` implements the core Agent Client Protocol, inline edit diffs and editor `fs/*` (unsaved buffers are read, open buffers are updated). Editor terminals (`terminal/*`) are not used; commands run in OASIS's own sandbox and approval flow. |
 | **SDK and GitHub Action** | Programmatic and repository automation; unattended use still needs deliberate permissions and isolation. |
 | **Android / Termux** | The CLI can be tried in Termux; Android is not a fully qualified platform and there is no native APK. |
 
@@ -254,7 +255,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 OASIS provides layered controls, not a guarantee that arbitrary model output, repository code, commands, packages, MCP servers, hooks, skills or plugins are safe.
 
 - Approved commands run with the operating-system permissions of the user who launched OASIS.
-- Optional Linux/macOS OS sandboxing is off by default and does not isolate filesystem reads. Native Windows OS sandboxing is not implemented. An optional container backend (`"backend": "docker"` or `"podman"`) runs commands in a throwaway container with only the workspace mounted, on any OS including Windows (Docker Desktop); it has unit coverage for the generated arguments but has not yet been exercised against a live engine in CI.
+- Optional Linux/macOS OS sandboxing is off by default and does not isolate filesystem reads. Native Windows OS sandboxing is not implemented. An optional container backend (`"backend": "docker"` or `"podman"`) runs commands in a throwaway container with only the workspace mounted, on any OS including Windows (Docker Desktop); it has unit coverage for the generated arguments but has not yet been exercised against a live engine in CI. The SSH backend (`"backend": "ssh"`) runs commands on another machine you choose; it protects this machine but does not sandbox the remote host, and it copies the workspace (including files such as `.env`) there.
 - Approval prompts and workspace checks are not operating-system isolation.
 - Third-party integrations can run code with your permissions. Enable only sources you trust.
 - The browser workspace keeps some local data in browser storage, unencrypted by OASIS.

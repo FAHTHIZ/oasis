@@ -199,6 +199,10 @@ async function saveAgentTranscripts(session, id, env) {
   return saved;
 }
 
+export function checkpointDirectory(root, sessionId, env = process.env) {
+  return path.join(getSessionDirectory(root, env), validateId(sessionId) + '.checkpoints');
+}
+
 export async function loadAgentTranscript(root, sessionId, agentId, env = process.env) {
   const file = agentTranscriptPath(root, sessionId, agentId, env);
   const data = JSON.parse(await readBoundedRegularFile(file, MAX_TRANSCRIPT_BYTES + 4096, { label: 'Agent transcript', tooLargeMessage: 'Agent transcript is too large.' }));
@@ -257,6 +261,12 @@ export async function saveSession(session, options = {}) {
     throw error;
   }
   session.sessionId = id;
+  if (session.checkpoints && options.checkpoints !== false) {
+    try {
+      const { saveCheckpoints, checkpointPersistenceEnabled } = await import('./checkpoints.mjs');
+      if (checkpointPersistenceEnabled(env)) await saveCheckpoints(session, checkpointDirectory(session.root, id, env));
+    } catch { /* checkpoints are a convenience; never fail the session save for them */ }
+  }
   return { id, path: destination, updatedAt: payload.updatedAt };
 }
 
@@ -277,7 +287,8 @@ export async function loadSession(root, id, options = {}) {
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
     agents: sanitizeAgentHistory(payload.agents),
-    workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint)
+    workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint),
+    checkpointsDir: checkpointDirectory(root, payload.id, env)
   };
 }
 
@@ -311,6 +322,7 @@ export async function deleteSession(root, id, options = {}) {
   const data = await loadSession(root, id, options);
   await unlink(target);
   await rm(target.replace(/\.json$/, '.agents'), { recursive: true, force: true }).catch(() => {});
+  await rm(target.replace(/\.json$/, '.checkpoints'), { recursive: true, force: true }).catch(() => {});
   return { id: data.id, deleted: true };
 }
 
