@@ -1640,7 +1640,7 @@ function highlight(code,lang){
 }
 function renderMarkdown(src){
   var lines=String(src||'').replace(/\r\n?/g,'\n').split('\n'),html='',i=0,para=[];
-  function flush(){if(para.length){html+='<p>'+para.map(inline).join('<br>')+'</p>';para=[]}}
+  function flush(){if(para.length){var body='<p>'+para.map(inline).join('<br>')+'</p>';if(/^LSP verification unavailable/.test(para[0]))body='<details class="md-note"><summary>One extra code check was skipped. Show why</summary>'+body+'</details>';html+=body;para=[]}}
   while(i<lines.length){
     var line=lines[i],m;
     if((m=line.match(/^\s*(```+|~~~+)\s*([\w+#.-]*)/))){

@@ -32,3 +32,8 @@ test('guide is full screen on phones and documented in the user guide', () => {
   assert.match(guide, /## Browser workspace keyboard shortcuts/);
   assert.match(guide, /\(#browser-workspace-keyboard-shortcuts\)/);
 });
+
+test('language-server notices render as a quiet, expandable note in the browser', () => {
+  assert.match(html, /if\(\/\^LSP verification unavailable\/\.test\(para\[0\]\)\)body='<details class="md-note"><summary>One extra code check was skipped\. Show why<\/summary>'\+body\+'<\/details>'/);
+  assert.match(css, /\.md details\.md-note\{/);
+});
