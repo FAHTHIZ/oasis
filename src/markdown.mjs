@@ -2,6 +2,7 @@
 // diffs for file edits. Line-oriented so it works while text streams in: the
 // partial line is shown raw and replaced by its rendered form once complete.
 import { stringWidth } from './line-editor.mjs';
+import { renderMermaid } from './mermaid-ascii.mjs';
 
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m', italic: '\x1b[3m', underline: '\x1b[4m',
@@ -57,12 +58,29 @@ export function renderInline(text, { color = true } = {}) {
 
 // Renders one complete markdown line given fence state; returns null when the
 // line should be hidden (fence markers).
-export function renderMarkdownLine(line, state, { color = true, columns = 80 } = {}) {
+export function renderMarkdownLine(line, state, options = {}) {
+  const { color = true, columns = 80 } = options;
   const fence = line.match(/^\s*(```|~~~)\s*([\w+#.-]*)\s*$/);
+  const diagrams = options.diagrams ?? (color && process.env.OASIS_MERMAID !== '0');
   if (fence) {
-    if (!state.fence) { state.fence = fence[1]; state.lang = fence[2] || ''; return color ? C.dim + '  ' + (state.lang || 'code') + C.noBold : null; }
-    if (fence[1] === state.fence) { state.fence = null; state.lang = ''; return null; }
+    if (!state.fence) {
+      state.fence = fence[1]; state.lang = fence[2] || '';
+      if (diagrams && state.lang.toLowerCase() === 'mermaid') { state.mermaid = []; return null; }
+      return color ? C.dim + '  ' + (state.lang || 'code') + C.noBold : null;
+    }
+    if (fence[1] === state.fence) {
+      const source = state.mermaid;
+      state.fence = null; state.lang = ''; state.mermaid = null;
+      if (source) {
+        const drawn = renderMermaid(source.join('\n'), { columns: Math.max(40, columns - 2) });
+        const body = drawn !== null ? drawn : source.map((row) => highlightCode(row, 'mermaid')).join('\n');
+        const title = color ? C.dim + '  ' + (drawn !== null ? 'diagram' : 'mermaid') + C.noBold + '\n' : '';
+        return title + body.split('\n').map((row) => '  ' + row).join('\n');
+      }
+      return null;
+    }
   }
+  if (state.fence && state.mermaid) { state.mermaid.push(line); return null; }
   if (state.fence) return '  ' + (color ? highlightCode(line, state.lang) : line);
   if (!color) return line;
   const heading = line.match(/^(#{1,6})\s+(.*)$/);
@@ -88,7 +106,9 @@ export function renderMarkdownLine(line, state, { color = true, columns = 80 } =
 
 export function renderMarkdown(text, options = {}) {
   const state = { fence: null, lang: '' };
-  return String(text || '').split('\n').map((line) => renderMarkdownLine(line, state, options)).filter((line) => line !== null).join('\n');
+  const out = String(text || '').split('\n').map((line) => renderMarkdownLine(line, state, options)).filter((line) => line !== null);
+  if (state.mermaid && state.mermaid.length) out.push(...state.mermaid.map((row) => '  ' + row));
+  return out.join('\n');
 }
 
 // Word-wrap a rendered (possibly colored) line so words never split at the
@@ -203,6 +223,8 @@ export class MarkdownStream {
       const rendered = renderMarkdownLine(this.partial, this.state, { color: this.color, columns: this.columns() });
       if (rendered !== null) this.write(prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered);
     }
+    // An unclosed mermaid fence: show what was buffered instead of dropping it.
+    if (this.state.mermaid && this.state.mermaid.length) this.write('\n' + this.state.mermaid.map((row) => '  ' + row).join('\n'));
     this.write('\n');
     this.partial = '';
     this.shownPartialWidth = 0;
