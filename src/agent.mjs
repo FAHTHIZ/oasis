@@ -24,7 +24,7 @@ import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
-import { priceFor, estimateCostUsd, BudgetExceededError } from './pricing.mjs';
+import { priceFor, estimateCostUsd, BudgetExceededError, recordBudgetSpend, formatUsd } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
@@ -226,6 +226,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   ].join('\n');
   let summary = '';
   let tokensUsed = 0;
+  let costUsd = 0;
   const deadline = compactionDeadline(options);
   try {
     const summarySession = {
@@ -244,6 +245,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
+    costUsd += chargeAuxiliaryUsage(session, completion.usage, { env: options.env });
   } catch (error) {
     if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
   }
@@ -273,7 +275,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     summaryChars: summary.length,
     usedModelSummary: Boolean(tokensUsed)
   });
-  return { compacted: true, tokensUsed };
+  return { compacted: true, tokensUsed, costUsd };
 }
 
 
@@ -409,6 +411,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
 
   let summary = '';
   let tokensUsed = 0;
+  let costUsd = 0;
   const deadline = compactionDeadline(options);
   try {
     const summarySession = {
@@ -427,6 +430,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     });
     summary = String(completion.content || '').trim();
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
+    costUsd += chargeAuxiliaryUsage(session, completion.usage, { env: options.env });
   } catch (error) {
     if (options.signal && options.signal.aborted) throw error;
     if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
@@ -462,7 +466,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
       after: Math.ceil(afterChars / 4)
     });
   }
-  return { compacted: true, tokensUsed };
+  return { compacted: true, tokensUsed, costUsd };
 }
 
 // A short snapshot of the environment, like Claude Code's <env> block: platform,
@@ -1411,6 +1415,19 @@ function parseProviderEvent(raw) {
   catch { throw new Error('The model provider sent an invalid server-sent event payload.'); }
 }
 
+const ANTHROPIC_USAGE_FIELDS = ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'];
+// Keeps every token count an Anthropic stream reports (message_start and the
+// cumulative message_delta), including prompt-cache reads and writes, which
+// dominate cost on long sessions.
+export function mergeAnthropicUsage(target, source) {
+  if (!source || typeof source !== 'object') return target;
+  for (const field of ANTHROPIC_USAGE_FIELDS) {
+    const value = Number(source[field]);
+    if (Number.isFinite(value) && value >= 0 && (value > 0 || target[field] === undefined)) target[field] = value;
+  }
+  return target;
+}
+
 async function readProviderStream(response, protocol, onDelta, onProgress) {
   if (isAnthropicFamily(protocol)) {
     const blocks = new Map();
@@ -1429,7 +1446,7 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
         const message = event.message || {};
         messageId = message.id;
         model = message.model;
-        if (message.usage) usage.input_tokens = Number(message.usage.input_tokens || 0);
+        if (message.usage) mergeAnthropicUsage(usage, message.usage);
       } else if (type === 'content_block_start') {
         const block = { ...(event.content_block || {}), partialJson: '' };
         if (block.type === 'text') block.text = String(block.text || '');
@@ -1451,7 +1468,8 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
         }
       } else if (type === 'message_delta') {
         if (event.delta) stopReason = event.delta.stop_reason || stopReason;
-        if (event.usage) usage.output_tokens = Number(event.usage.output_tokens || usage.output_tokens);
+        // message_delta usage is cumulative; newer APIs also repeat input and cache counts here.
+        if (event.usage) mergeAnthropicUsage(usage, event.usage);
       }
     });
     const content = [...blocks.entries()].sort((a, b) => a[0] - b[0]).map(([, block]) => {
@@ -1648,6 +1666,7 @@ export function hookOptions(session, env) {
     evaluatePrompt: async ({ system, prompt, model, signal }) => {
       const config = model ? { ...session.config, model } : session.config;
       const completion = await requestCompletion({ config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal });
+      chargeAuxiliaryUsage(session, completion.usage, { env, model: config.model });
       return completion.content;
     },
     evaluateAgent: async ({ system, prompt, model, signal }) => {
@@ -1710,6 +1729,39 @@ async function emitDisplayText(session, options, text) {
     } catch {}
   }
   options.onText(shown);
+}
+
+// Charges a side request (compaction summary, advisor, review) to the shared
+// budget ledger. It never throws: the next main-model step enforces the limit,
+// so a summary or advice already paid for is not thrown away.
+export function chargeAuxiliaryUsage(session, usage, { env = process.env, model } = {}) {
+  if (!session || !usage) return 0;
+  const config = session.config || {};
+  const priced = resolveModelAlias(model || config.model, { protocol: config.protocol, env });
+  const pricing = { config, overrides: session.pricing || {}, env };
+  const cost = estimateCostUsd(priced, usage, pricing);
+  try { recordBudgetSpend(session, cost, { costKnown: priceFor(priced, pricing) !== null, enforce: false }); } catch { return cost; }
+  return cost;
+}
+
+// Tells the model once when 75% and once when 90% of --max-budget-usd is
+// spent, so it can wrap up and report instead of being cut off mid-change.
+export function budgetNotice(session, spentUsd) {
+  const limit = Number(session && session.maxBudgetUsd) || 0;
+  if (!(limit > 0)) return '';
+  const ratio = spentUsd / limit;
+  const level = ratio >= 0.9 ? 90 : ratio >= 0.75 ? 75 : 0;
+  if (!level || (session.budgetNoticeLevel || 0) >= level) return '';
+  session.budgetNoticeLevel = level;
+  const left = formatUsd(Math.max(0, limit - spentUsd));
+  return '<system-reminder>Cost budget: about ' + formatUsd(spentUsd) + ' of the ' + formatUsd(limit) + ' --max-budget-usd limit is spent (' + left + ' left, including any subagents). ' + (level >= 90
+    ? 'The run stops when the limit is reached. Finish the current change now, run one relevant check, and give your final report. Do not start new work or launch subagents.'
+    : 'Prefer the most direct path: avoid broad exploration and new subagents, and leave time to verify and report.') + '</system-reminder>';
+}
+
+function queueBudgetNotice(session, spentUsd) {
+  const note = budgetNotice(session, spentUsd);
+  if (note) (session.asyncHookFeedback ||= []).push(note.replace(/^<system-reminder>|<\/system-reminder>$/g, ''));
 }
 
 // Delivers finished background-hook results to the model before its next request.
@@ -1833,6 +1885,7 @@ export async function suggestNextPrompt(session, options = {}) {
       { role: 'system', content: 'Predict the single most likely next message the user will type to this coding agent. Reply with only that message: under 15 words, imperative, no quotes. Reply with nothing if there is no clear next step.' },
       { role: 'user', content: '--- BEGIN UNTRUSTED TRANSCRIPT ---\n' + tail + '\n--- END UNTRUSTED TRANSCRIPT ---' }
     ] }, { noTools: true, signal: options.signal });
+    chargeAuxiliaryUsage(session, completion.usage, { env: options.env });
     return String(completion.content || '').trim().replace(/^["']|["']$/g, '').split('\n')[0].slice(0, 200);
   } catch { return ''; }
 }
@@ -2034,6 +2087,9 @@ async function requestCompletionRaw(session, options = {}) {
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
+      // Without include_usage, OpenAI-compatible streams report no token counts,
+      // so cost, /cost and --max-budget-usd silently read zero.
+      ...(typeof options.onDelta === 'function' && !session.streamUsageUnsupported && providerEnv.OASIS_STREAM_USAGE !== '0' ? { stream_options: { include_usage: true } } : {}),
       // llama-server can report how far it has read a long prompt; only asked of a server identified as llama.cpp.
       ...(typeof options.onDelta === 'function' && typeof options.onPromptProgress === 'function' && session.localContext && session.localContext.server === 'llama.cpp' ? { return_progress: true } : {})
     };
@@ -2112,6 +2168,13 @@ async function requestCompletionRaw(session, options = {}) {
         attempt = -1;
         continue;
       }
+      if (bodyObject && bodyObject.stream_options && (status === 400 || status === 422) && /stream_options|include_usage/i.test(errorBody)) {
+        // An older gateway rejected stream_options; remember and retry without it.
+        session.streamUsageUnsupported = true;
+        clearTimeout(timer);
+        if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
+        return requestCompletionRaw(session, options);
+      }
       const cap = outputLimit && !options.outputCapRetried ? outputCapFromError(status, errorBody) : 0;
       if (cap && cap < outputLimit + Number(session.thinkingBudget || 0)) {
         session.outputTokenCap = cap;
@@ -2177,7 +2240,7 @@ async function requestCompletionRaw(session, options = {}) {
     if (!message) throw new Error('The model provider returned no assistant message.');
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     const chatTruncated = data.choices[0].finish_reason === 'length';
-    return { ...message, usage: normalizeUsage(data.usage), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
+    return { ...message, usage: usageOrEstimate(data.usage, bodyText, message), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
   } catch (error) {
     if (options.signal && options.signal.aborted) {
       const cancelled = new Error('Agent task cancelled by the user.');
@@ -2422,6 +2485,23 @@ function serializableResult(value) {
   try { text = JSON.stringify(value); } catch { text = String(value); }
   if (text.length > MAX_REPLY_CHARS) return text.slice(0, MAX_REPLY_CHARS) + '\n[Tool result truncated.]';
   return text;
+}
+
+// Some OpenAI-compatible gateways never report usage, even with include_usage.
+// Estimate from characters (about 4 per token) so spend tracking and
+// --max-budget-usd still work; the estimate is marked so it is never mistaken
+// for provider-reported counts.
+export function usageOrEstimate(rawUsage, requestText, message = {}) {
+  const usage = normalizeUsage(rawUsage || {});
+  // A usage object with any token field is the provider's own report, even if zero.
+  const reported = rawUsage && typeof rawUsage === 'object' && ['prompt_tokens', 'completion_tokens', 'total_tokens', 'input_tokens', 'output_tokens'].some((key) => rawUsage[key] !== undefined && rawUsage[key] !== null);
+  if (reported || usage.totalTokens > 0) return usage;
+  let replyChars = typeof message.content === 'string' ? message.content.length : 0;
+  for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) replyChars += String(call && call.function && call.function.arguments || '').length + String(call && call.function && call.function.name || '').length;
+  const inputTokens = Math.ceil(String(requestText || '').length / 4);
+  const outputTokens = Math.ceil(replyChars / 4);
+  if (!inputTokens && !outputTokens) return usage;
+  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, estimated: true };
 }
 
 function normalizeUsage(usage = {}) {
@@ -3061,7 +3141,12 @@ async function runSpecialistReview(parentSession, args, context, options, budget
     mcpClients: new Map(),
     mcpToolMap: new Map(),
     toolDefinitions: TOOL_DEFINITIONS.filter((tool) => SPECIALIST_REVIEW_TOOLS.has(tool && tool.function && tool.function.name)),
-    toolCallsThisSession: 0
+    toolCallsThisSession: 0,
+    // Review spend counts toward the parent's --max-budget-usd.
+    maxBudgetUsd: Number(parentSession.maxBudgetUsd) || 0,
+    pricing: parentSession.pricing || null,
+    costUsd: 0,
+    budgetLedger: parentSession.budgetLedger ||= { spentUsd: Math.max(0, Number(parentSession.costUsd) || 0), unknownRequests: 0 }
   };
   const reviewPrompt = [
     'Perform this bounded ' + specialist + ' review.',
@@ -3265,6 +3350,11 @@ async function runSubagent(parent, args, context, options) {
     intentMessages: parent.intentMessages || parent.messages,
     // Rewind checkpoints are keyed to the parent root; a worktree is its own undo.
     checkpoints: worktree ? null : parent.checkpoints,
+    // Subagent spend counts toward the parent's --max-budget-usd.
+    maxBudgetUsd: Number(parent.maxBudgetUsd) || 0,
+    pricing: parent.pricing || null,
+    costUsd: 0,
+    budgetLedger: parent.budgetLedger ||= { spentUsd: Math.max(0, Number(parent.costUsd) || 0), unknownRequests: 0 },
     agents: {}
   };
   child.stopBackgroundProcesses = () => killAllBackground(child.background);
@@ -4249,7 +4339,7 @@ async function executeOneCallRaw(session, call, context, options) {
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
     if (name === 'advisor' && session.advisorModel) {
-      result = await consultAdvisor(session, args, { signal: options.signal, env: context.env });
+      result = await consultAdvisor(session, args, { signal: options.signal, env: context.env, onUsage: options.onUsage });
       if (options.onToolResult) options.onToolResult({ name, result, call });
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
@@ -4559,7 +4649,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   }
   throwIfCancelled(options.signal);
   const compaction = await compactHistoryIfNeeded(session, options);
-  if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction' });
+  if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction', costUsd: Number(compaction.costUsd) || 0 });
   let userContent = request;
   session.currentRequest = request;
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
@@ -4738,7 +4828,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     tokensUsed += Number(midTurnCompaction.tokensUsed || 0);
     if (midTurnCompaction.tokensUsed && options.onUsage) {
-      options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: midTurnCompaction.tokensUsed, step: step + 1, phase: 'mid-turn-compaction' });
+      options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: midTurnCompaction.tokensUsed, step: step + 1, phase: 'mid-turn-compaction', costUsd: Number(midTurnCompaction.costUsd) || 0 });
     }
     throwIfCancelled(options.signal);
     const compacted = microcompact(session.messages, {
@@ -4815,9 +4905,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const stepPricing = { config: session.config, overrides: session.pricing || {}, env: options.env || process.env };
     const stepCost = estimateCostUsd(pricedModel, usage, stepPricing);
     const costKnown = priceFor(pricedModel, stepPricing) !== null;
-    session.costUsd = (session.costUsd || 0) + stepCost;
     if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, costKnown, model: pricedModel, step: step + 1 });
-    if (session.maxBudgetUsd > 0 && session.costUsd >= session.maxBudgetUsd) throw new BudgetExceededError(session.costUsd, session.maxBudgetUsd);
+    // One ledger for the parent and every subagent it launches, so
+    // --max-budget-usd caps the whole task, not only the main agent.
+    const spentUsd = recordBudgetSpend(session, stepCost, { costKnown });
+    queueBudgetNotice(session, spentUsd);
     let truncationNotice = '';
     if (assistant.truncated) {
       outputRecoveries++;
@@ -5394,7 +5486,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     tokensUsed += Number(final.usage && final.usage.totalTokens || 0);
-    if (options.onUsage && final.usage) options.onUsage({ ...final.usage, step: maxSteps + 1 });
+    const finalCost = chargeAuxiliaryUsage(session, final.usage, { env: options.env });
+    if (options.onUsage && final.usage) options.onUsage({ ...final.usage, costUsd: finalCost, step: maxSteps + 1 });
   } catch (error) {
     const text = 'Oasis reached its tool-step limit and could not get a final provider summary: ' + error.message;
     pruneHistory(session);
@@ -5469,14 +5562,19 @@ export async function consultAdvisor(session, args = {}, options = {}) {
       { role: 'user', content: '--- BEGIN TRANSCRIPT ---\n' + transcript + '\n--- END TRANSCRIPT ---\n\n' + (question ? 'The agent asks: ' + question : 'What should the agent do next?') }
     ]
   }, { noTools: true, signal: options.signal });
+  // requestCompletion returns normalized usage ({ inputTokens, outputTokens }).
   const usage = completion.usage || {};
-  session.advisorUsage = { calls: ((session.advisorUsage && session.advisorUsage.calls) || 0) + 1, input: ((session.advisorUsage && session.advisorUsage.input) || 0) + (usage.prompt_tokens || 0), output: ((session.advisorUsage && session.advisorUsage.output) || 0) + (usage.completion_tokens || 0) };
+  const costUsd = chargeAuxiliaryUsage(session, usage, { env: options.env, model: session.advisorModel });
+  const previous = session.advisorUsage || {};
+  session.advisorUsage = { calls: (previous.calls || 0) + 1, input: (previous.input || 0) + (Number(usage.inputTokens) || 0), output: (previous.output || 0) + (Number(usage.outputTokens) || 0), costUsd: (previous.costUsd || 0) + costUsd };
+  if (typeof options.onUsage === 'function') { try { options.onUsage({ ...usage, costUsd, model: session.advisorModel, phase: 'advisor' }); } catch {} }
   return { advisor: session.advisorModel, advice: String(completion.content || '').trim() || '(the advisor returned no advice)' };
 }
 
 // One tool-free completion with the session's provider (used by /insights narration).
 export async function completeText(session, system, prompt, options = {}) {
   const completion = await requestCompletion({ config: session.config, toolDefinitions: [], providerEnv: session.providerEnv, messages: [{ role: 'system', content: system }, { role: 'user', content: String(prompt).slice(0, 60000) }] }, { noTools: true, signal: options.signal });
+  chargeAuxiliaryUsage(session, completion.usage, { env: options.env });
   return String(completion.content || '').trim();
 }
 
@@ -5494,7 +5592,8 @@ export async function askSideQuestion(session, question, options = {}) {
     ]
   }, { noTools: true, signal: options.signal });
   const usage = completion.usage || {};
-  if (options.onUsage) options.onUsage(usage);
+  const costUsd = chargeAuxiliaryUsage(session, usage, { env: options.env });
+  if (options.onUsage) options.onUsage({ ...usage, costUsd });
   return String(completion.content || '').trim();
 }
 

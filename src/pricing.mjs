@@ -92,6 +92,6 @@ export function recordBudgetSpend(session, amount, options = {}) {
   if (!Number.isSafeInteger(ledger.unknownRequests) || ledger.unknownRequests < 0) ledger.unknownRequests = 0;
   if (options.costKnown === false) ledger.unknownRequests += 1;
   const limit = Math.max(0, Number(session.maxBudgetUsd) || 0);
-  if (limit > 0 && ledger.spentUsd >= limit) throw new BudgetExceededError(ledger.spentUsd, limit);
+  if (options.enforce !== false && limit > 0 && ledger.spentUsd >= limit) throw new BudgetExceededError(ledger.spentUsd, limit);
   return ledger.spentUsd;
 }
