@@ -616,7 +616,7 @@ export function createOasisWebServer(options = {}) {
   async function getConfig() {
     try { return await loadConfig({ env }); }
     catch (error) {
-      throw Object.assign(new Error((error && error.message || 'No model provider is configured.') + ' Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
+      throw Object.assign(new Error((error && error.message || 'No model provider is configured.') + ' Choose a model under Connections, Model provider, or run oasis setup in the terminal, then retry.'), { statusCode: 503 });
     }
   }
 
@@ -687,7 +687,7 @@ export function createOasisWebServer(options = {}) {
 
       const config = await getConfig();
     if (!config.configured) {
-      throw Object.assign(new Error('No model provider is configured. Run oasis setup in the terminal for this workspace, then retry.'), { statusCode: 503 });
+      throw Object.assign(new Error('No model provider is configured. Choose a model under Connections, Model provider, or run oasis setup in the terminal, then retry.'), { statusCode: 503 });
     }
     let session = sessionId ? activeSessions.get(sessionId) : null;
     if (session && path.resolve(session.root) !== taskRoot) session = null;
