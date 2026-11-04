@@ -124,4 +124,4 @@ The CLI path can be tried in Termux. There is no native Android APK, and native 
 
 ## Safety and support boundaries
 
-OASIS runs approved commands with the current OS user's permissions. Approval prompts are not an operating-system sandbox. The optional OS sandbox is disabled by default and currently targets Linux and macOS; it is not full filesystem-read isolation. Windows OS isolation is not implemented. See [Security](../SECURITY.md), [Privacy](PRIVACY.md) and the [project plan](PROJECT_PLAN.md).
+OASIS runs approved commands with the current OS user's permissions. Approval prompts are not an operating-system sandbox. The optional OS sandbox is disabled by default and currently targets Linux and macOS (an opt-in Docker/Podman container backend covers every OS, including Windows); it is not full filesystem-read isolation. Windows OS isolation is not implemented. See [Security](../SECURITY.md), [Privacy](PRIVACY.md) and the [project plan](PROJECT_PLAN.md).
