@@ -49,10 +49,10 @@ The authenticated browser runtime and extension hub are included in the default 
 ~~~bash
 oasis setup
 cd /path/to/your/project
-oasis web
+oasis web --open
 ~~~
 
-Open the local URL printed by OASIS, paste its one-time connection token into **Agent → Connect runtime**, and describe your task in plain English. The token is generated for that running server and is not your model API key. The **Model provider** panel can test and save a provider; provider keys are accepted only from the same device over localhost. For a phone-to-computer connection, configure model credentials in the host terminal with `oasis setup` instead. GitHub browsing and cloning reuse the host's GitHub CLI login: install `gh`, run `gh auth login`, then use **Check connection** and **Refresh repositories**. Repository cloning requires approval and switches new agent tasks to the clone under `.oasis/workspaces/`.
+`--open` opens the workspace in your default browser and connects it for you. Without it, open the "Open this link to start" link that OASIS prints; it carries the one-time connection token in the `#fragment`, so the browser connects without pasting anything. In another browser, open the plain local URL and paste the printed token into **Agent → Connect runtime**. Then describe your task in plain English. The token is generated for that running server and is not your model API key. The **Model provider** panel can test and save a provider; provider keys are accepted only from the same device over localhost. For a phone-to-computer connection, configure model credentials in the host terminal with `oasis setup` instead. GitHub browsing and cloning reuse the host's GitHub CLI login: install `gh`, run `gh auth login`, then use **Check connection** and **Refresh repositories**. Repository cloning requires approval and switches new agent tasks to the clone under `.oasis/workspaces/`.
 
 For access from another device, prefer HTTPS with a certificate trusted by the phone and with a subject alternative name matching the computer's LAN IP. OASIS supports `oasis web --host 0.0.0.0 --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem`. Non-loopback plaintext requires an explicit `--allow-insecure-lan` opt-in, which exposes traffic and bearer tokens to network observation. Do not port-forward the bridge or expose it to the public Internet. Real Android/Termux and device-trust workflows still need additional platform testing.
 
