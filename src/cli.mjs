@@ -662,9 +662,12 @@ async function doctor(args = [], root = process.cwd()) {
     if (results.some((r) => !r.ok)) process.exitCode = 1;
     return;
   }
-  stdout.write('Oasis environment report\n');
-  stdout.write('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
-  stdout.write('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
+  // Plain summary first; the full environment list follows under Details.
+  const details = [];
+  const detail = (line) => { details.push(line); };
+  detail('Environment details\n');
+  detail('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
+  detail('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
   const probes = ['git', 'npm', 'python3', 'python', 'pipx', 'pkg', 'apt-get', 'dnf', 'pacman', 'brew', 'winget', 'ollama'];
   const nodeOK = isNodeVersionSupported();
   const gitOK = commandAvailable('git');
@@ -672,40 +675,45 @@ async function doctor(args = [], root = process.cwd()) {
   const statusLabel = (ok) => colorEnabled(stdout)
     ? (ok ? '\x1b[32mOK\x1b[0m' : '\x1b[31mCHECK\x1b[0m')
     : (ok ? 'OK' : 'CHECK');
-  for (const item of probes) stdout.write('  ' + item + ': ' + (commandAvailable(item) ? 'available' : 'not found') + '\n');
+  for (const item of probes) detail('  ' + item + ': ' + (commandAvailable(item) ? 'available' : 'not found') + '\n');
   try {
     const config = await loadConfig();
     modelConfigured = Boolean(config.configured);
     const summary = getProviderSummary(config);
-    stdout.write('  Model provider: ' + (modelConfigured ? summary.provider + ' (' + summary.protocol + ')' : 'not set yet — run oasis setup') + '\n');
-    stdout.write('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
-    stdout.write('  Authentication: ' + summary.authentication + '\n');
-    stdout.write('  Config: ' + summary.configPath + '\n');
+    detail('  Model provider: ' + (modelConfigured ? summary.provider + ' (' + summary.protocol + ')' : 'not set yet — run oasis setup') + '\n');
+    detail('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
+    detail('  Authentication: ' + summary.authentication + '\n');
+    detail('  Config: ' + summary.configPath + '\n');
     const proxyNote = currentProxy();
-    stdout.write('  Network proxy: ' + (proxyNote ? proxyNote + ((process.env.NO_PROXY || process.env.no_proxy) ? ' (NO_PROXY: ' + (process.env.NO_PROXY || process.env.no_proxy) + ')' : '') : 'none (set HTTPS_PROXY to use one)') + (process.env.NODE_EXTRA_CA_CERTS ? '; extra CA certificates: ' + process.env.NODE_EXTRA_CA_CERTS : '') + '\n');
-    if (modelConfigured && isLoopbackUrl(config.baseURL)) await doctorLocalServer(config);
+    detail('  Network proxy: ' + (proxyNote ? proxyNote + ((process.env.NO_PROXY || process.env.no_proxy) ? ' (NO_PROXY: ' + (process.env.NO_PROXY || process.env.no_proxy) + ')' : '') : 'none (set HTTPS_PROXY to use one)') + (process.env.NODE_EXTRA_CA_CERTS ? '; extra CA certificates: ' + process.env.NODE_EXTRA_CA_CERTS : '') + '\n');
+    if (modelConfigured && isLoopbackUrl(config.baseURL)) await doctorLocalServer(config, detail);
     if (args.includes('--test-provider')) {
-      stdout.write('  Live model/tool-call verification: testing (the inert probe will not be executed)…\n');
+      detail('Checking the model connection (up to 30 seconds)…\n');
       try {
         const result = await testProviderConnection(config, { timeoutMs: 30000 });
-        stdout.write('  Live model/tool-call verification: passed (' + result.provider + ' / ' + result.model + ')\n');
+        detail('  Live model/tool-call verification: passed (' + result.provider + ' / ' + result.model + ')\n');
       } catch (error) {
-        stdout.write('  Live model/tool-call verification: FAILED — ' + String(error && error.message || error) + '\n');
+        detail('  Live model/tool-call verification: FAILED — ' + String(error && error.message || error) + '\n');
         process.exitCode = 1;
       }
     } else {
-      stdout.write('  Live model/tool-call verification: not run (use oasis doctor --test-provider; oasis doctor --network checks connectivity)\n');
+      detail('  Live model/tool-call verification: not run (use oasis doctor --test-provider; oasis doctor --network checks connectivity)\n');
     }
   } catch (error) {
-    stdout.write('  Provider config: invalid (' + error.message + ')\n');
+    detail('  Provider config: invalid (' + error.message + ')\n');
     if (args.includes('--test-provider')) process.exitCode = 1;
   }
   const ptyAvailable = await import('node-pty').then(() => true).catch(() => false);
-  stdout.write('\nQuick summary\n');
+  stdout.write('OASIS check\n');
   stdout.write('  Node.js 22+: ' + statusLabel(nodeOK) + '\n');
   stdout.write('  Git: ' + (gitOK ? 'available (optional)' : 'not found (optional)') + '\n');
   stdout.write('  Model connection: ' + (modelConfigured ? statusLabel(true) : statusLabel(false) + ' — run oasis setup') + '\n');
   stdout.write('  Native terminal panel (PTY): ' + (ptyAvailable ? 'available' : 'not available (optional native component)') + '\n');
+  const nextStep = !nodeOK ? 'install Node.js 22 or newer, then run oasis doctor again.'
+    : !modelConfigured ? 'run oasis setup to connect a model.'
+    : 'run oasis in a project folder, or oasis web for the browser workspace.';
+  stdout.write('\nNext step: ' + nextStep + '\n\n');
+  stdout.write(details.join(''));
   await doctorWorkspaceReport(root);
 }
 
@@ -782,24 +790,24 @@ async function uninstallOasis(args = []) {
 
 // Local servers: which one, its loaded window, and the tool profile OASIS will use.
 // doctor is user-invoked, so it may probe any loopback port.
-async function doctorLocalServer(config) {
+async function doctorLocalServer(config, write = (line) => stdout.write(line)) {
   try {
     const probe = await probeLocalContext(config, { env: { ...process.env, OASIS_LOCAL_CONTEXT_PROBE: '1' }, cache: false });
     const names = { ollama: 'Ollama', lmstudio: 'LM Studio', 'llama.cpp': 'llama-server' };
     if (!probe || !probe.contextLength) {
-      stdout.write('  Local model server: no context window reported (the server is not running, or it does not publish one; set contextWindow in config if replies get cut off)\n');
+      write('  Local model server: no context window reported (the server is not running, or it does not publish one; set contextWindow in config if replies get cut off)\n');
       return;
     }
     const window = Number(probe.contextLength);
     const server = names[probe.server] || 'local server';
-    stdout.write('  Local model server: ' + server + ', ' + window.toLocaleString('en-US') + '-token context window\n');
-    stdout.write('  Tool profile for this window: ' + (window <= SMALL_CONTEXT_TOKENS
+    write('  Local model server: ' + server + ', ' + window.toLocaleString('en-US') + '-token context window\n');
+    write('  Tool profile for this window: ' + (window <= SMALL_CONTEXT_TOKENS
       ? 'small (essential tools up front, the rest behind tool_search) because the window is ' + SMALL_CONTEXT_TOKENS.toLocaleString('en-US') + ' tokens or less'
       : 'full') + '\n');
-    if (!isLocalModelEndpoint(config, process.env)) stdout.write('  Note: OASIS reads this window during work only on default ports (Ollama 11434, LM Studio 1234, llama-server 8080). Set OASIS_LOCAL_CONTEXT_PROBE=1 for this server; otherwise the first request may overflow once and then resize itself.\n');
-    if (window < RECOMMENDED_LOCAL_CONTEXT) stdout.write('  Advice: ' + localContextAdvice(config.model, window, probe.server) + '\n');
+    if (!isLocalModelEndpoint(config, process.env)) write('  Note: OASIS reads this window during work only on default ports (Ollama 11434, LM Studio 1234, llama-server 8080). Set OASIS_LOCAL_CONTEXT_PROBE=1 for this server; otherwise the first request may overflow once and then resize itself.\n');
+    if (window < RECOMMENDED_LOCAL_CONTEXT) write('  Advice: ' + localContextAdvice(config.model, window, probe.server) + '\n');
   } catch (error) {
-    stdout.write('  Local model server: not reachable (' + String(error && error.message || error).slice(0, 160) + ')\n');
+    write('  Local model server: not reachable (' + String(error && error.message || error).slice(0, 160) + ')\n');
   }
 }
 

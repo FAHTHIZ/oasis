@@ -34,3 +34,19 @@ test('every command in the quick help exists in the full reference', () => {
   }
   assert.ok(quick.includes('oasis -p'));
 });
+
+test('oasis doctor leads with a plain summary and a next step, details after', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-doctor-order-'));
+  const cli = new URL('../src/cli.mjs', import.meta.url).pathname;
+  const env = { ...process.env, HOME: dir, OASIS_CONFIG_DIR: path.join(dir, 'cfg'), OASIS_NO_UPDATE_CHECK: '1', NO_COLOR: '1' };
+  for (const k of Object.keys(env)) if (/^OASIS_(BASE_URL|MODEL|PROVIDER|API_KEY)$/.test(k) || /_API_KEY$/.test(k)) delete env[k];
+  const out = spawnSync(process.execPath, [cli, 'doctor'], { cwd: dir, env, encoding: 'utf8', timeout: 60000 }).stdout;
+  assert.match(out, /^OASIS check\n/);
+  assert.match(out, /Next step: run oasis setup to connect a model\./);
+  assert.ok(out.indexOf('Next step:') < out.indexOf('Environment details'), out);
+  assert.ok(out.indexOf('Environment details') < out.indexOf('OS / architecture'), out);
+});
