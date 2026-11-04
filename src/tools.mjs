@@ -512,6 +512,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let terminationRequested = false;
     const launch = wrapCommand(command, args, sandbox, root);
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+    if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     const append = (target, chunk) => {
       (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(chunk);
       if (outputLog) outputLog.append(target, chunk);

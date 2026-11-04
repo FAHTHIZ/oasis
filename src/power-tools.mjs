@@ -358,6 +358,8 @@ export function startBackgroundProcess(registry, launch, options) {
   }
 
   const child = options.adopt ? options.adopt.child : spawn(launch.command, launch.args, { cwd: options.cwd, env: options.env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+  // Sandbox placeholders (read-only mount points for missing protected files) go once it exits.
+  if (launch && typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
   const id = 'bg_' + randomUUID().slice(0, 8);
   const entry = { id, command: options.display, pid: child.pid, status: 'running', exitCode: null, output: options.adopt ? String(options.adopt.output || '') : '', readOffset: 0, dropped: 0, startedAt: options.adopt && options.adopt.startedAt || new Date().toISOString(), lastOutputAt: Date.now(), child, sandboxed: options.sandboxed };
   if (options.adopt) entry.readOffset = entry.output.length;
@@ -565,6 +567,7 @@ async function runShell(root, args, context, flavor = 'sh') {
     let cancelled = false;
     let settled = false;
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
+    if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     const cleanup = () => {
       clearTimeout(timer);
       if (context.signal) context.signal.removeEventListener('abort', onAbort);
