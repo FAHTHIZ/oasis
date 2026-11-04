@@ -126,6 +126,7 @@ function printHelp() {
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
+    '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
     '  oasis acp [--permission-mode MODE]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
