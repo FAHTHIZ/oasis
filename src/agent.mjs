@@ -756,6 +756,10 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.toolDefinitions = session.toolDefinitions.concat(MEMORY_TOOL_DEFINITIONS);
     try { const memoryText = await memoryIndexPrompt(root, { env, compact: Boolean(smallContext) }); if (dynamicSections) dynamicSections.push(memoryText); else systemText += '\n\n' + memoryText; } catch {}
   }
+  if (!restricted && env.OASIS_EXECUTE_CODE !== '0' && loadedSettings.executeCode !== false && !(Array.isArray(tools) || typeof tools === 'string')) {
+    const { EXECUTE_CODE_TOOL_DEFINITION } = await import('./code-mode.mjs');
+    session.toolDefinitions = session.toolDefinitions.concat([EXECUTE_CODE_TOOL_DEFINITION]);
+  }
   if (!restricted && env.OASIS_SESSION_SEARCH !== '0' && loadedSettings.sessionSearch !== false) {
     const { SESSION_SEARCH_TOOL_DEFINITION } = await import('./session-search.mjs');
     session.toolDefinitions = session.toolDefinitions.concat([SESSION_SEARCH_TOOL_DEFINITION]);
@@ -4248,6 +4252,16 @@ async function executeOneCallRaw(session, call, context, options) {
       result = await runSpecialistReview(session, args, callContext, options, budget);
     } else if (name === 'task') {
       result = await runSubagent(session, args, callContext, { ...options, parentToolUseId: call.id });
+    } else if (name === 'execute_code') {
+      const { runExecuteCode } = await import('./code-mode.mjs');
+      let nested = 0;
+      result = await runExecuteCode(args, {
+        signal: options.signal,
+        runTool: async (toolName, input) => {
+          const message = await executeOneCall(session, { id: String(call.id || 'code') + '_' + (++nested), type: 'function', function: { name: toolName, arguments: JSON.stringify(input || {}) } }, callContext || context, options);
+          return message && message.result !== undefined ? message.result : message && message.content;
+        }
+      });
     } else if (name === 'workflow') {
       if (options.isSubagent) throw new Error('Subagents cannot start workflows.');
       result = await runWorkflowTool(session, args, callContext, { ...options, parentToolUseId: call.id });
