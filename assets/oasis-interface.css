@@ -928,3 +928,8 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .md-task{list-style:none;margin-left:-1.1em}
 .md-check{width:14px;height:14px;margin:0 6px 0 0;vertical-align:-2px;accent-color:var(--accent,#7CFF6B)}
 .activity-artifact-icon .gi{width:14px;height:14px;vertical-align:-2px}
+/* Skipped-check note in replies: same chevron disclosure as the rest of the workspace. */
+.md details.md-note summary{list-style:none;display:inline-flex;align-items:center;gap:6px}
+.md details.md-note summary::-webkit-details-marker{display:none}
+.md details.md-note summary::before{content:"";width:12px;height:12px;background:currentColor;-webkit-mask:var(--gi-chev) center/contain no-repeat;mask:var(--gi-chev) center/contain no-repeat;transition:transform .15s}
+.md details.md-note[open] summary::before{transform:rotate(90deg)}
