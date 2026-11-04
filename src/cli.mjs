@@ -137,6 +137,8 @@ function printHelp() {
     '  oasis plugins list             Browse built-in capability bundles',
     '  oasis plugins install NAME    Install a reviewed capability bundle',
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
+    '  oasis plugin eval DIR [--runs N] [--no-baseline] [--json]  Score a plugin or skill on its evals/evals.json cases against a no-plugin baseline',
+    '  oasis plugin eval init DIR     Draft eval cases for a plugin or skill',
     '  oasis extensions list         List imported GitHub agent/skill collections',
     '  oasis extensions inspect URL  Review importable prompts and pinned commit',
     '  oasis extensions mcp-import URL [--servers name1,name2]  Import reviewed MCP configs disabled',
@@ -3383,6 +3385,12 @@ async function main() {
     // Claude Code plugins and marketplaces; the bundled capability catalog stays under
     // `oasis plugins list|install|remove NAME` for its built-in names.
     const sub = String(rest[0] || 'list').toLowerCase();
+    if (sub === 'eval') {
+      const { pluginEvalCli } = await import('./plugin-eval.mjs');
+      const result = await pluginEvalCli(rest.slice(1), { env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
+      if (!result.ok || (result.report && result.report.summary.passRate < 1)) process.exitCode = 1;
+      return;
+    }
     const builtIn = ['install', 'remove'].includes(sub) && rest[1] && !String(rest[1]).includes('@') && await (await import('./plugins.mjs')).isBuiltInPlugin(rest[1]);
     if (sub === 'catalog' || sub === 'browse' || builtIn) return await managePlugins(workspace, sub === 'catalog' ? ['list', ...rest.slice(1)] : rest);
     const { pluginCli } = await import('./claude-plugins.mjs');
@@ -3412,6 +3420,12 @@ async function main() {
     const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis acp --permission-mode must be default, acceptEdits, plan or auto.');
     await serveAcp({ env: process.env, version: oasisVersion(), permissionMode });
+    return;
+  }
+  if (command === 'skills' && rest[0] === 'eval') {
+    const { pluginEvalCli } = await import('./plugin-eval.mjs');
+    const result = await pluginEvalCli(rest.slice(1), { env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
+    if (!result.ok || (result.report && result.report.summary.passRate < 1)) process.exitCode = 1;
     return;
   }
   if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
