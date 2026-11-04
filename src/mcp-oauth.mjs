@@ -427,6 +427,14 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
   const callback = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname !== '/callback') { res.writeHead(404).end(); return; }
+    // Only the browser round-trip we started carries our state. Anything else (a
+    // stray tab, or another local page poking this port) is answered and ignored
+    // instead of ending the sign-in.
+    if (url.searchParams.get('state') !== state) {
+      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+      res.end('<!doctype html><title>Oasis</title><body style="font-family:sans-serif;padding:2rem">This sign-in link is not the one Oasis is waiting for. Return to Oasis and use the latest link.</body>');
+      return;
+    }
     const error = url.searchParams.get('error');
     // RFC 9207 mix-up defence: a response naming a different issuer (or none, when the
     // server promised to send one) came from the wrong authorization server.
@@ -437,7 +445,6 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
     res.writeHead(ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
     res.end('<!doctype html><title>Oasis</title><body style="font-family:sans-serif;padding:2rem">' + (ok ? 'Signed in to ' + server.name.replace(/[<>&]/g, '') + '. You can close this tab and return to Oasis.' : 'Sign-in failed. Return to Oasis and try again.') + '</body>');
     if (error) fail(new Error('The server refused sign-in: ' + error + (url.searchParams.get('error_description') ? ' - ' + url.searchParams.get('error_description') : '')));
-    else if (url.searchParams.get('state') !== state) fail(new Error('Sign-in state did not match; try again.'));
     else if (issProblem) fail(new Error('Sign-in response came from a different authorization server (' + (iss || 'no issuer') + ', expected ' + expectedIss + '); refusing it.'));
     else if (ok) finish(url.searchParams.get('code'));
   });

@@ -338,3 +338,24 @@ test('RFC 9207: sign-in checks the iss parameter against the discovered issuer',
     await assert.rejects(mcpLogin(root, 'remote', { env, print: () => {}, open: browser, timeoutMs: 5000 }), /different authorization server/);
   }
 });
+
+test('a stray callback with the wrong state or a forged error does not end sign-in', async (t) => {
+  const { base } = await fakeServer(t);
+  const { root, env } = await workspace(t, base);
+  const strays = [];
+  const open = (url) => {
+    const redirect = new URL(new URL(url).searchParams.get('redirect_uri'));
+    // Another local page pokes the callback first; the real browser round-trip follows.
+    (async () => {
+      for (const query of ['?state=wrong&code=evil', '?error=access_denied', '?code=nostate']) {
+        const response = await fetch(redirect.toString() + query).catch(() => null);
+        strays.push(response && response.status);
+      }
+      await fetch(url, { redirect: 'follow' }).catch(() => {});
+    })();
+    return true;
+  };
+  await mcpLogin(root, 'remote', { env, open });
+  assert.deepEqual(strays, [400, 400, 400]);
+  assert.ok(await getStoredToken(base + '/mcp', env));
+});
