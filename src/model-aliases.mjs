@@ -4,9 +4,12 @@
 // ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU,FABLE}_MODEL variables.
 const FAMILY_DEFAULTS = {
   anthropic: { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' },
-  vertex: { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-4-5', haiku: 'claude-haiku-4-5', fable: 'claude-fable-5-1' },
-  bedrock: { opus: 'us.anthropic.claude-opus-5-5', sonnet: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', haiku: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', fable: 'us.anthropic.claude-fable-5-1' },
-  foundry: { opus: 'claude-opus-4-6', sonnet: 'claude-sonnet-4-5', haiku: 'claude-haiku-4-5', fable: 'claude-fable-5-1' }
+  // Sonnet 5.5 and Haiku 5.5 are on Bedrock, Google Cloud and Foundry under these ids
+  // (platform.claude.com/docs/en/about-claude/models/overview). Foundry's opus alias
+  // stays on 4.6, as in Claude Code's model catalog.
+  vertex: { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' },
+  bedrock: { opus: 'us.anthropic.claude-opus-5-5', sonnet: 'us.anthropic.claude-sonnet-5-5', haiku: 'us.anthropic.claude-haiku-5-5', fable: 'us.anthropic.claude-fable-5-1' },
+  foundry: { opus: 'claude-opus-4-6', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' }
 };
 export const MODEL_ALIASES = ['default', 'best', 'fable', 'opus', 'sonnet', 'haiku', 'opusplan', 'opus[1m]', 'sonnet[1m]', 'opusplan[1m]'];
 

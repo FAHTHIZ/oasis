@@ -10,8 +10,8 @@ import { updateUserSettings, userSettingsPath } from './settings.mjs';
 
 const PIN_KEYS = { opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL', sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL', haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL' };
 const DEFAULT_PINS = {
-  bedrock: { sonnet: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', haiku: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' },
-  vertex: { sonnet: 'claude-sonnet-4-5@20250929', haiku: 'claude-haiku-4-5@20251001' }
+  bedrock: { sonnet: 'us.anthropic.claude-sonnet-5-5', haiku: 'us.anthropic.claude-haiku-5-5' },
+  vertex: { sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' }
 };
 
 export function parseSetupArgs(argument = '') {
