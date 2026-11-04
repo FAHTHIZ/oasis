@@ -276,6 +276,29 @@ oasis -C ~/code/my-app gateway telegram
 
 Only allowlisted chats reach the agent; any other chat just gets its ID once so you can add it. Each chat has its own session, saved like terminal sessions (so `/recall` and `oasis --resume` see them). Anything that needs approval shows **Allow / Always / Reject** buttons; unanswered approvals are rejected after 10 minutes, and buttons only work in the chat that asked. Chat commands: `/new`, `/stop`, `/status`, `/mode default|acceptEdits|plan|auto`, `/help`. The gateway long-polls Telegram (no public URL or webhook needed) and backs off on network errors. Text messages only for now; voice and files are not handled yet. Pair it with the container sandbox (`OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker`) when you approve commands remotely.
 
+### Discord and Slack
+
+The same agent runs as a Discord bot or a Slack app, with the same per-chat sessions, approval buttons, 10-minute approval timeout and chat commands. Neither needs a public URL.
+
+~~~sh
+# Discord: create an application and bot at discord.com/developers, enable the
+# Message Content intent, invite it with the bot scope, then:
+export OASIS_DISCORD_BOT_TOKEN=...
+export OASIS_DISCORD_ALLOWED_USERS=123456789012345678   # Discord user IDs, comma-separated
+export OASIS_DISCORD_CHANNELS=234567890123456789        # optional: channels where it answers without a mention
+oasis -C ~/code/my-app gateway discord
+
+# Slack: create an app, enable Socket Mode, add an app-level token with
+# connections:write and bot scopes chat:write, app_mentions:read, im:history;
+# subscribe to app_mention and message.im events and turn on Interactivity, then:
+export OASIS_SLACK_APP_TOKEN=xapp-...
+export OASIS_SLACK_BOT_TOKEN=xoxb-...
+export OASIS_SLACK_ALLOWED_USERS=U012ABCDEF              # Slack member IDs
+oasis -C ~/code/my-app gateway slack
+~~~
+
+Discord answers direct messages and messages that mention the bot; each channel has one session. Slack answers direct messages and @mentions; each DM and each channel thread is its own session and replies go to the thread. Only allowlisted users reach the agent or can press approval buttons; anyone else gets their ID once. Slack reserves `/`, so use `!new`, `!stop`, `!status` and `!mode` there (the `!` form works everywhere). Both reconnect with backoff. Text only for now.
+
 ## Optional OpenHands delegation
 
 OASIS can delegate a bounded task to an already-running OpenHands Agent Server. This is an optional bridge, not an OpenHands installation wizard or a replacement for OASIS's own runtime. Set the connection details in the environment used to start OASIS:
