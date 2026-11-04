@@ -121,3 +121,16 @@ test('oasis bg list and bg approve answer a waiting run from the command line', 
   assert.match(approved.stdout, /Approved: Run npm publish\?/);
   assert.equal(await asked, 'allow');
 });
+
+test('startup notice lists runs that wait for approval or died unfinished', async () => {
+  const { backgroundStartupNotice } = await import('../src/background-sessions.mjs');
+  assert.equal(backgroundStartupNotice([{ id: 'bg-a', status: 'completed', root: '/w' }], '/w'), '');
+  const notice = backgroundStartupNotice([
+    { id: 'bg-a', status: 'running', root: '/w', pendingApproval: { requestId: 'x' } },
+    { id: 'bg-b', status: 'interrupted', root: '/other/proj', name: 'refactor' },
+    { id: 'bg-c', status: 'interrupted', kind: 'exec', root: '/w' }
+  ], '/w');
+  assert.match(notice, /1 run\(s\) waiting for your approval: bg-a\./);
+  assert.match(notice, /1 run\(s\) stopped without finishing.*bg-b \(refactor\) in proj/);
+  assert.doesNotMatch(notice, /bg-c/);
+});
