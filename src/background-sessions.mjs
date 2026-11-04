@@ -120,6 +120,80 @@ export function watchInbox(id, onMessage, env = process.env, intervalMs = 500) {
   return () => clearInterval(timer);
 }
 
+// Approval relay: a background agent that hits an action needing approval writes
+// <id>.approval.json and waits; `oasis bg approve ID` / `oasis bg deny ID` answer
+// it through <id>.decision.json (matched by requestId, so a stale answer never
+// approves a later request). Unanswered requests are denied after the timeout.
+export function approvalPath(id, env = process.env) {
+  return entryPath(id, env).replace(/\.json$/, '.approval.json');
+}
+
+function decisionPath(id, env) {
+  return entryPath(id, env).replace(/\.json$/, '.decision.json');
+}
+
+async function writeAtomic(file, value) {
+  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
+  try {
+    await writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    await rename(temp, file);
+  } finally { await unlink(temp).catch(() => {}); }
+}
+
+export async function pendingApproval(id, env = process.env) {
+  try {
+    const value = JSON.parse(await readFile(approvalPath(id, env), 'utf8'));
+    return value && value.requestId ? value : null;
+  } catch { return null; }
+}
+
+let approvalChain = Promise.resolve();
+
+// Resolves to 'allow', 'always', 'deny' or 'timeout'. Requests from one process
+// are asked one at a time, so parallel tool calls queue instead of overwriting.
+export function requestBackgroundApproval(id, request = {}, env = process.env, options = {}) {
+  const run = approvalChain.then(() => askOnce(id, request, env, options));
+  approvalChain = run.catch(() => {});
+  return run;
+}
+
+async function askOnce(id, request, env, options) {
+  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 30 * 60 * 1000;
+  const pollMs = Number(options.pollMs) > 0 ? Number(options.pollMs) : 500;
+  const requestId = randomUUID();
+  const pending = { requestId, tool: request.tool || null, message: String(request.message || '').replace(/\s+/g, ' ').trim().slice(0, 2000), canAlways: Boolean(request.canAlways), at: new Date().toISOString(), expiresAt: new Date(Date.now() + timeoutMs).toISOString() };
+  await unlink(decisionPath(id, env)).catch(() => {});
+  await writeAtomic(approvalPath(id, env), pending);
+  if (options.onRequest) { try { options.onRequest(pending); } catch {} }
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (Date.now() < deadline) {
+      if (options.signal && options.signal.aborted) return 'deny';
+      let decision = null;
+      try { decision = JSON.parse(await readFile(decisionPath(id, env), 'utf8')); } catch {}
+      if (decision && decision.requestId === requestId) {
+        await unlink(decisionPath(id, env)).catch(() => {});
+        if (decision.behavior === 'allow') return decision.always && pending.canAlways ? 'always' : 'allow';
+        return 'deny';
+      }
+      await new Promise((resolve) => { setTimeout(resolve, Math.min(pollMs, Math.max(1, deadline - Date.now()))); });
+    }
+    return 'timeout';
+  } finally {
+    const current = await pendingApproval(id, env);
+    if (current && current.requestId === requestId) await unlink(approvalPath(id, env)).catch(() => {});
+  }
+}
+
+export async function answerBackgroundApproval(id, behavior, env = process.env, options = {}) {
+  if (behavior !== 'allow' && behavior !== 'deny') throw new Error('behavior must be allow or deny');
+  const entry = await readEntry(id, env);
+  const pending = await pendingApproval(id, env);
+  if (!pending || entry.status !== 'running') throw new Error(id + ' has no pending approval' + (entry.status !== 'running' ? ' (it is ' + entry.status + ').' : '.'));
+  await writeAtomic(decisionPath(id, env), { requestId: pending.requestId, behavior, ...(options.always ? { always: true } : {}), ...(options.reason ? { reason: String(options.reason).slice(0, 500) } : {}), at: new Date().toISOString() });
+  return pending;
+}
+
 // One line on what a background agent is doing now, from the tail of its log.
 export function summarizeActivity(logText) {
   const lines = String(logText || '').split('\n');
@@ -136,6 +210,8 @@ export function summarizeActivity(logText) {
     }
     if (event.type === 'assistant' && event.text) return String(event.text).replace(/\s+/g, ' ').trim().slice(0, 80);
     if (event.type === 'system' && event.subtype === 'steer_received') return 'received your message';
+    if (event.type === 'system' && event.subtype === 'permission_request') return 'needs approval: ' + String(event.message || event.tool || '').replace(/\s+/g, ' ').slice(0, 70);
+    if (event.type === 'system' && event.subtype === 'permission') return (event.allowed ? 'approved ' : 'denied ') + (event.tool || 'action');
   }
   return '';
 }
@@ -277,7 +353,12 @@ export async function listBackgroundSessions(env = process.env) {
   const out = [];
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
-    try { out.push(refreshStatus(JSON.parse(await readFile(path.join(backgroundDirectory(env), name), 'utf8')))); } catch {}
+    if (name.endsWith('.approval.json') || name.endsWith('.decision.json')) continue;
+    try {
+      const entry = refreshStatus(JSON.parse(await readFile(path.join(backgroundDirectory(env), name), 'utf8')));
+      const pending = entry.status === 'running' ? await pendingApproval(entry.id, env) : null;
+      out.push(pending ? { ...entry, pendingApproval: pending } : entry);
+    } catch {}
   }
   return out.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
 }
@@ -300,6 +381,8 @@ export async function removeBackgroundSession(id, env = process.env) {
   await unlink(entryPath(id, env)).catch(() => {});
   await unlink(entry.logFile).catch(() => {});
   await unlink(inboxPath(id, env)).catch(() => {});
+  await unlink(approvalPath(id, env)).catch(() => {});
+  await unlink(decisionPath(id, env)).catch(() => {});
   return entry;
 }
 
@@ -323,5 +406,7 @@ export function renderLog(text) {
 
 export function describeEntry(entry, activity = '') {
   const age = Math.max(0, Math.round((Date.now() - Date.parse(entry.startedAt)) / 60000));
-  return entry.id + '  ' + entry.status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : Math.round(age / 60) + 'h') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
+  const status = entry.pendingApproval ? 'needs-input' : entry.status;
+  if (entry.pendingApproval) activity = 'waiting for approval: ' + String(entry.pendingApproval.message || entry.pendingApproval.tool || '').slice(0, 80) + '  (oasis bg approve ' + entry.id + ' | deny ' + entry.id + ')';
+  return entry.id + '  ' + status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : Math.round(age / 60) + 'h') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
 }
