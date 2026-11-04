@@ -50,6 +50,8 @@ const MODEL_WINDOWS = [
   [/(^|[^a-z])o[134](-|$)|o[34]-mini/, 200_000],
   [/gpt-4o|gpt-4-turbo|chatgpt-4o/, 128_000],
   [/gemini/, 1_000_000],
+  // Grok 4.7+ and Grok 5 serve 500K (docs.x.ai); earlier Grok 3/4 were 256K.
+  [/grok-(?:4\.[7-9]|[5-9])/, 500_000],
   [/grok-[34]/, 256_000],
   [/grok/, 128_000],
   [/qwen3-coder|qwen3-max/, 256_000],
@@ -59,8 +61,17 @@ const MODEL_WINDOWS = [
   // DeepSeek V4 (deepseek-v4-pro, deepseek-flash) serves 1M by default; V3.x was 128K.
   [/deepseek-(?:v4|flash)/, 1_048_576],
   [/deepseek/, 128_000],
+  // Kimi K3 series: 1,048,576 with flat pricing; K2 series: 262,144 (platform.kimi.ai).
+  [/kimi-k[3-9]/, 1_048_576],
+  [/kimi-k2/, 262_144],
   [/kimi|moonshot/, 128_000],
-  [/glm-4\.[5-9]|glm-[5-9]/, 128_000],
+  // GLM-5.3 (and Flash) serve 1M; GLM-4.6 through GLM-5.2 serve 200K (docs.z.ai).
+  [/glm-5\.[3-9]|glm-[6-9]/, 1_000_000],
+  [/glm-4\.[6-9]|glm-5/, 200_000],
+  [/glm-4\.5/, 128_000],
+  // MiniMax M3 guarantees 512K (up to 1M, but input over 512K bills at 2x); M2.x 196K.
+  [/minimax-m[3-9]/, 512_000],
+  [/minimax-m2|minimax/, 196_608],
   [/llama-?3\.[1-3]|llama-?4/, 128_000]
 ];
 
