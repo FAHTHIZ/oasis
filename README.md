@@ -85,15 +85,23 @@ Same agent, same safety policy, two front ends. `oasis web` opens a local browse
 
 ## Install
 
-**Requirements:** Node.js 22 or newer and Git.
+**Requirements:** Node.js 22 or newer and Git. Or skip both with the [desktop app](https://github.com/FAHTHIZ/oasis/releases/latest).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh
+cd ~/your-project && oasis
+```
+
+The script comes from the immutable `v1.0.0` tag. It installs the latest stable release at its exact commit, asks before changing anything, runs `oasis doctor` and opens provider setup. To check its SHA-256 before running it, or to install on Windows, see the [install guide](docs/INSTALL.md#command-line-installation).
+
+Want the current `main` instead?
 
 ```bash
 git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install -g .
 oasis setup                 # pick a provider, or point it at a local model
-cd ~/your-project && oasis
 ```
 
-That installs the current `main`. Other ways in:
+Other ways in:
 
 | Option | How |
 | --- | --- |
