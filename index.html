@@ -260,7 +260,7 @@
   <div class="intro-row"><div><h1 class="page-title">Settings</h1><p class="page-subtitle">Everything outside the conversation stays one click away.</p></div></div>
   <div class="settings-grid">
     <section class="panel panel-pad settings-group">
-      <div class="section-head"><div><h2>Workspace</h2><div class="section-sub">Your existing workspace pages are still here.</div></div></div>
+      <div class="section-head"><div><h2>Workspace</h2><div class="section-sub">Your local projects, tasks, notes and runs.</div></div></div>
       <button class="settings-row" type="button" data-nav="home"><span><strong>Overview</strong><small>Projects in motion and next steps</small></span><span>›</span></button>
       <button class="settings-row" type="button" data-nav="projects"><span><strong>Projects</strong><small>Manage your local project list</small></span><span>›</span></button>
       <button class="settings-row" type="button" data-nav="tasks"><span><strong>Tasks</strong><small>Local tasks and priorities</small></span><span>›</span></button>
@@ -292,7 +292,7 @@
   </div>
 </section>
 <section class="view" id="view-monitor">
-  <div class="intro-row"><div><h1 class="page-title">Agent run monitor</h1><p class="page-subtitle">Inspect worker activity, team coordination, run outcomes, and saved events. This view observes work; it never auto-merges branches.</p></div><button class="btn btn-secondary" id="agentMonitorRefreshBtn" type="button">↻ Refresh</button></div>
+  <div class="intro-row"><div><h1 class="page-title">Agent run monitor</h1><p class="page-subtitle">Inspect worker activity, team coordination, run outcomes, and saved events. This view observes work; it never auto-merges branches.</p></div><button class="btn btn-secondary" id="agentMonitorRefreshBtn" type="button">Refresh</button></div>
   <div class="agent-monitor-stats" id="agentMonitorStats"><div class="agent-monitor-stat"><span>Runs loaded</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Active workers</span><strong>—</strong></div><div class="agent-monitor-stat"><span>Teams observed</span><strong>—</strong></div></div>
   <div class="agent-monitor-grid">
     <section class="panel panel-pad"><div class="section-head"><div><h2>Recent runs</h2><div class="section-sub" id="agentMonitorRunStatus">Connect the runtime to inspect saved runs.</div></div></div><div class="agent-monitor-runs" id="agentMonitorRunList"><div class="cloud-run-empty">Connect the runtime to load task history.</div></div></section>
@@ -302,18 +302,18 @@
 
 <section class="view" id="view-extensions">
   <div class="intro-row"><div><h1 class="page-title">Bring new specialists into Oasis.</h1><p class="page-subtitle">Inspect agent-tooling, model-CLI, and portable Agent Skills repositories. Oasis identifies reusable instructions, integrations, and components, and reports where a native adapter is still required.</p></div></div>
-  <div class="extension-hero"><div><div class="section-kicker">IMPORT FROM GITHUB</div><h2>One link. A new capability.</h2><p>Paste a repository such as msitarzewski/agency-agents. Oasis inspects the pinned commit, finds Markdown agent or skill prompts, and shows what it plans to import before making changes.</p></div><div class="workspace-banner-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4v2a2 2 0 1 0 4 0V3h3v7h-2a2 2 0 1 0 0 4h2v7h-7v-2a2 2 0 1 0-4 0v2H3v-7h2a2 2 0 1 0 0-4H3V3z"/></svg></div></div>
+  <div class="extension-hero"><div><h2>One link. A new capability.</h2><p>Paste a repository such as msitarzewski/agency-agents. Oasis inspects the pinned commit, finds Markdown agent or skill prompts, and shows what it plans to import before making changes.</p></div><div class="workspace-banner-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4v2a2 2 0 1 0 4 0V3h3v7h-2a2 2 0 1 0 0 4h2v7h-7v-2a2 2 0 1 0-4 0v2H3v-7h2a2 2 0 1 0 0-4H3V3z"/></svg></div></div>
   <div class="panel panel-pad">
     <form id="extensionInspectForm">
       <div class="extension-form">
         <label class="form-field" for="extensionUrl">GitHub repository URL<input id="extensionUrl" type="url" maxlength="800" required placeholder="https://github.com/msitarzewski/agency-agents" autocomplete="url"></label>
         <label class="form-field" for="extensionScope">Install destination<select id="extensionScope"><option value="both" selected>Oasis + current project</option><option value="self">Oasis itself · all projects</option><option value="project">Current project only</option></select></label>
-        <button class="btn btn-primary" id="extensionInspectBtn" type="submit">Inspect repository ↗</button>
+        <button class="btn btn-primary" id="extensionInspectBtn" type="submit">Inspect repository</button>
       </div>
     </form>
     <div class="extension-warning">Safety by default: external repositories are untrusted. This importer accepts Markdown prompt files only. It does not run scripts, install packages, enable MCP servers, or copy executable source code. Dependencies and integrations are separate explicit setup steps.</div>
     <div class="extension-summary" id="extensionSummary" hidden>
-      <div class="section-kicker">REPOSITORY REVIEW</div><h2 id="extensionRepoTitle" style="font-size:18px;margin:6px 0">Repository</h2><p id="extensionRepoDescription" class="section-sub"></p>
+      <h2 id="extensionRepoTitle" style="font-size:18px;margin:6px 0">Repository</h2><p id="extensionRepoDescription" class="section-sub"></p>
       <div class="extension-summary-grid">
         <div class="extension-metric"><strong id="extensionCount">0</strong><span>Importable prompt files</span></div>
         <div class="extension-metric"><strong id="extensionExecutableCount">0</strong><span>Executable/source files detected · not imported</span></div>
@@ -327,7 +327,7 @@
     </div>
     <p id="extensionInstallStatus" class="section-sub" role="status" aria-live="polite" style="margin-top:12px"></p>
   </div>
-  <div class="section-head"><div><h2>Installed extensions</h2><div class="section-sub">Tracked by source commit and destination. Uninstall refuses to delete edited files.</div></div><button class="btn btn-secondary" id="extensionRefreshBtn" type="button">↻ Refresh</button></div>
+  <div class="section-head"><div><h2>Installed extensions</h2><div class="section-sub">Tracked by source commit and destination. Uninstall refuses to delete edited files.</div></div><button class="btn btn-secondary" id="extensionRefreshBtn" type="button">Refresh</button></div>
   <div class="extension-list" id="installedExtensions"><div class="integration-empty">Connect the Oasis runtime to view managed extensions.</div></div>
 </section>
 
@@ -350,7 +350,7 @@
     </div>
   </div>
   <div class="integration-pane" id="integration-pane-mcp" role="tabpanel" hidden>
-    <div class="section-head"><div><h2>Model Context Protocol</h2><div class="section-sub">Configure stdio MCP servers for the next coding session.</div></div><button class="btn btn-secondary" id="mcpRefreshBtn" type="button">↻ Refresh</button></div>
+    <div class="section-head"><div><h2>Model Context Protocol</h2><div class="section-sub">Configure stdio MCP servers for the next coding session.</div></div><button class="btn btn-secondary" id="mcpRefreshBtn" type="button">Refresh</button></div>
     <p class="extension-warning">Adding an MCP server permits Oasis to launch the configured executable in your workspace when a new session starts. Use trusted commands only. API tokens should be provided through named environment variables, never placed in arguments. Save changes explicitly; this panel does not launch servers immediately.</p>
     <div class="integration-list" id="mcpServerList"><div class="integration-empty">Connect Oasis to load MCP configuration.</div></div>
     <form id="mcpAddForm" class="mcp-add-form">
