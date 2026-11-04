@@ -1122,6 +1122,25 @@ return sizes.sort((a, b) => b.lines - a.lines).slice(0, 5)
 
 Intermediate tool output stays inside the script, so a ten-step read-and-filter job costs one model turn and only the returned value enters the context. Every nested call takes the normal path: permission rules, plan mode, hooks, approvals and the sandbox apply as if the model had called the tool itself. Scripts run in the same QuickJS sandbox as workflows (no imports, filesystem, network, clock or randomness of their own; 16 MB heap), may make at most 60 tool calls, and cannot call `execute_code`, `task`, `workflow`, `ask_user_question` or memory-writing tools. Results larger than 30,000 characters are truncated. Turn it off with `"executeCode": false` or `OASIS_EXECUTE_CODE=0`; it is also left out when `--tools` restricts the tool list.
 
+## Mermaid diagrams in the terminal
+
+When a reply contains a fenced `mermaid` block, the terminal draws it instead of printing the source. Flowcharts (`graph`/`flowchart` TD, TB, LR, RL; box, round, diamond and circle nodes; `-->`, `---`, `-.->`, `==>`, `-->|label|`, `-- label -->`, chains like `A --> B --> C`, and `A & B --> C`) get a layered layout with arrows and edge labels; edges that close a cycle are listed below the drawing with ↺. Sequence diagrams show participants and actors, lifelines, solid and dashed messages, self calls, notes and `loop`/`alt`/`opt`/`par` blocks. A diagram wider than the terminal becomes a plain edge list, and other diagram types (class, gantt, pie, ...) show their source. Output without color (pipes, `NO_COLOR`, headless JSON) keeps the original Mermaid text. Set `OASIS_MERMAID=0` to always show the source.
+
+## Image generation (generate_image)
+
+When an image key is available, the model gets a `generate_image` tool. It creates a picture from a text prompt, or edits existing workspace images passed as `input_images`, and saves the PNG, JPEG or WebP file in the workspace (by default `images/<prompt-slug>-<id>.png`, or any workspace `path`). Use it for app icons, illustrations, placeholder art and UI mockups; the model can then open the result with `read_file`.
+
+It speaks the OpenAI-compatible Images API (`/images/generations` and `/images/edits`), so it works with OpenAI `gpt-image-1` and `dall-e-3`, Google's OpenAI-compatible Gemini endpoint, LocalAI and proxies such as LiteLLM or OmniRoute:
+
+| Setting | Default |
+| --- | --- |
+| `OASIS_IMAGE_API_KEY` | falls back to `OPENAI_API_KEY` when the base URL is OpenAI's |
+| `OASIS_IMAGE_MODEL` or `"imageGeneration": { "model": "..." }` | `gpt-image-1` |
+| `OASIS_IMAGE_BASE_URL` or `"imageGeneration": { "baseUrl": "..." }` | `https://api.openai.com/v1` |
+| `"imageGeneration": { "size": "1536x1024" }` | `auto` |
+
+A loopback base URL (`http://localhost:...`) needs no key. Every call asks first, because the prompt (and any input images) go to the provider and may cost money; an `allow` permission rule for `generate_image` skips the question. Saved files are checkpointed like other edits, paths outside the workspace are refused, and plan mode does not offer the tool. Turn it off with `"imageGeneration": false` or `OASIS_IMAGE_GENERATION=0`.
+
 ## Longer tasks
 
 OASIS knows the context window of common models (Claude 200K, GPT-4.1 and Gemini 1M, GPT-5 400K, o-series 200K, GPT-4o 128K, DeepSeek V4 1M, and others) and compacts history at about 60% full. For a model it does not know, OASIS reads the provider's `GET /models` listing once per session (DeepSeek `context_window`, OpenRouter `context_length`, vLLM `max_model_len`). Loopback servers are only asked with `OASIS_LOCAL_CONTEXT_PROBE=1`, and `OASIS_MODEL_INFO_PROBE=0` turns the lookup off. Models that still cannot be matched use a conservative 32K. Set `"contextWindow"` in the provider config or `OASIS_CONTEXT_WINDOW` to override it, and `OASIS_COMPACT_THRESHOLD_CHARS` to change when compaction starts.
