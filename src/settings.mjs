@@ -268,11 +268,18 @@ export async function loadSettings(root, options = {}) {
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (settings.autoLearning === false) result.autoLearning = false;
+    // Memory write approval only tightens, so it applies before trust too.
+    const writeApproval = String(settings.memoryWriteApproval || (settings.memory && settings.memory.writeApproval) || '').toLowerCase();
+    if (['ask', 'queue'].includes(writeApproval)) result.memoryWriteApproval = writeApproval;
+    if (writeApproval === 'off' && trusted) result.memoryWriteApproval = 'off';
+    // Turning optional tools off never loosens anything either.
+    for (const key of ['executeCode', 'sessionSearch']) if (settings[key] === false) result[key] = false;
+    if (settings.imageGeneration === false) result.imageGeneration = false;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
@@ -315,6 +322,16 @@ export async function loadSettings(root, options = {}) {
     if (settings.defaultShell === 'powershell' || settings.defaultShell === 'bash') result.defaultShell = settings.defaultShell;
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
     if (settings.autoMemory === true) result.autoMemory = true;
+    for (const key of ['executeCode', 'sessionSearch']) if (settings[key] === true) result[key] = true;
+    // "autoCommit": true commits each turn's changed files (documented; previously dropped here).
+    if (typeof settings.autoCommit === 'boolean') result.autoCommit = settings.autoCommit;
+    // "imageGeneration": { "model", "baseUrl", "size" } for the generate_image tool (the key itself comes from the environment).
+    if (settings.imageGeneration && typeof settings.imageGeneration === 'object' && !Array.isArray(settings.imageGeneration)) {
+      const image = {};
+      for (const key of ['model', 'size']) if (typeof settings.imageGeneration[key] === 'string' && settings.imageGeneration[key].trim()) image[key] = settings.imageGeneration[key].trim().slice(0, 200);
+      if (typeof settings.imageGeneration.baseUrl === 'string' && /^https?:\/\/[^\s]+$/.test(settings.imageGeneration.baseUrl.trim())) image.baseUrl = settings.imageGeneration.baseUrl.trim().slice(0, 500);
+      result.imageGeneration = image;
+    }
     if (typeof settings.verbose === 'boolean') result.verbose = settings.verbose;
     // Session behavior switches read by createSession (previously dropped here, so they never applied).
     for (const key of ['fastMode', 'ultracode', 'mcpNonBlocking', 'workflowsEnabled', 'leanTools']) if (typeof settings[key] === 'boolean') result[key] = settings[key];
