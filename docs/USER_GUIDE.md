@@ -165,6 +165,22 @@ Use `/plugin-package validate ./my-plugin` to inspect a local package without in
 
 Updates require a higher plugin version. Any change to requested or granted capabilities is displayed and must be explicitly accepted using `--accept-permission-diff`. Commands are namespaced as `/plugin-name:command`; conflicting plugin names are rejected. Use `/plugin-package list` and `/plugin-package uninstall NAME` to inspect or remove installed native packages. A package listing is not a security certification; inspect code before granting hooks or MCP access.
 
+## Evaluating a plugin or skill
+
+`oasis plugin eval DIR` (also `oasis skills eval DIR`) measures whether a plugin or skill actually improves results. DIR is a plugin directory (loaded as with `--plugin-dir`) or a skill directory containing `SKILL.md` (copied into each case's `.oasis/skills`). Cases live in `DIR/evals/evals.json`:
+
+```json
+{ "cases": [ {
+  "id": "release-notes",
+  "prompt": "Write release notes for 1.2.0",
+  "files": { "CHANGELOG.md": "# Changelog\n" },
+  "checks": { "contains": ["1.2.0"], "files": { "NOTES.md": "## 1\\.2\\.0" }, "toolsUsed": ["write_file"] },
+  "rubric": "NOTES.md has a version heading and groups fixes and features."
+} ] }
+```
+
+Every case runs in a fresh temporary workspace holding only its `files`, once with the plugin and once without (the baseline). Checks are `contains`, `notContains`, `regex` (on the final answer), `files` (path to a regex, `true` for exists or `false` for absent), `toolsUsed` and `toolsNotUsed`. A `rubric` is graded by the configured model, which sees the task, the answer and the resulting files. Anthropic skill-creator files (`evals` with `expected_output` and `expectations`) and JSONL work too. The report shows each case's score next to the baseline and the overall delta, tool calls and time. Use `--runs N` to repeat noisy cases, `--no-baseline` to skip the comparison, `--cases FILE` for another case file, and `--json` or `--out FILE` for machine-readable results; the exit code is non-zero unless every case passes. `oasis plugin eval init DIR [--count N]` asks the model to draft cases from the plugin's skills (or writes a template without a model). Case runs default to `acceptEdits` and deny any other approval.
+
 ## Plugins, integrations, and installation
 
 OASIS separates three things that are often all called “plugins”:
