@@ -128,7 +128,7 @@ The repository is feature-rich, but several implementation files are large enoug
 
 ## Public site and repository identity
 
-The static public landing page lives in `site/`. The root `index.html` is the local browser workspace; these two files have different owners and must not be merged. The Pages workflow in `.github/workflows/pages.yml` validates the site and deploys only `site/`. Deployment and repository-metadata updates are separate from pull-request validation and may be skipped when the required repository secret is absent.
+The static public landing page lives in `site/`. The root `index.html` is the local browser workspace; these two files have different owners and must not be merged. The Pages workflow in `.github/workflows/pages.yml` validates the site and deploys only `site/`. Every push to `main` deploys `site/` with the workflow's built-in `GITHUB_TOKEN` (Pages source: GitHub Actions); `.github/scripts/stamp-site.mjs` first fills the homepage's `OASIS:CHANGES` and `OASIS:BUILD` regions from `git log`. Only the repository-metadata update is skipped when the optional admin secret is absent.
 
 The intended public identity is:
 
@@ -149,7 +149,7 @@ For the logo, color tokens and interface rules, see [Brand](BRAND.md). For user-
 
 The static public landing page is in `site/`. The root `index.html` is the local browser workspace. The Pages workflow validates the application/site, deploys only `site/`, and can update the repository homepage, About description, and topic list. Pull-request runs validate only; repository administration changes require the configured secret.
 
-To authorize publishing, create a fine-grained personal access token scoped only to `FAHTHIZ/oasis` with **Administration: Read and write** (repository About metadata) and **Pages: Read and write** (Pages settings/deployment). Store it in the repository Actions secrets as `OASIS_REPO_ADMIN_TOKEN`; never commit it or paste it into chat, an issue, or a log. The workflow skips privileged updates when the secret is absent and records the skip in its summary.
+To let the workflow also maintain the repository About metadata, create a fine-grained personal access token scoped only to `FAHTHIZ/oasis` with **Administration: Read and write** (repository About metadata) and **Pages: Read and write** (Pages settings/deployment). Store it in the repository Actions secrets as `OASIS_REPO_ADMIN_TOKEN`; never commit it or paste it into chat, an issue, or a log. The workflow skips privileged updates when the secret is absent and records the skip in its summary.
 
 Run [Publish OASIS homepage and repository metadata](https://github.com/FAHTHIZ/oasis/actions/workflows/pages.yml) on `main` after the site and metadata are ready. Verify the actual deployment URL and repository About fields after the run. A passing validation without a successful deployment is not proof that the public site is live.
 

@@ -52,41 +52,34 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 20
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Check the one-time repository admin secret
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        id: configure-pages
+      - name: Copy demo videos into the homepage
+        run: mkdir -p site/assets/demo && cp assets/demo/*.mp4 assets/demo/*-poster.png site/assets/demo/
+      - name: Stamp the homepage with this commit
+        env:
+          SHA: ${{ github.sha }}
+        run: node .github/scripts/stamp-site.mjs
+      - name: Upload public landing page
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - name: Deploy public landing page
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deployment
+      - name: Check the optional repository admin secret
         id: launch-auth
         env:
           OASIS_REPO_ADMIN_TOKEN: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
         shell: bash
         run: |
-          if [ -n "$OASIS_REPO_ADMIN_TOKEN" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Homepage deployment and About metadata were skipped because OASIS_REPO_ADMIN_TOKEN is not configured. Follow docs/REPOSITORY_MAINTENANCE.md, then rerun this workflow on main."
-          fi
-      - name: Enable and configure GitHub Pages
-        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-        id: configure-pages
-        with:
-          token: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
-          enablement: true
-      - name: Copy demo videos into the homepage
-        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
-        run: mkdir -p site/assets/demo && cp assets/demo/*.mp4 assets/demo/*-poster.png site/assets/demo/
-      - name: Upload public landing page
-        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: site
-      - name: Deploy public landing page
-        if: ${{ steps.launch-auth.outputs.ready == 'true' }}
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
-        id: deployment
+          if [ -n "$OASIS_REPO_ADMIN_TOKEN" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else echo "ready=false" >> "$GITHUB_OUTPUT"; fi
       - name: Update repository description, homepage, and topics
         id: apply-metadata
         if: ${{ steps.launch-auth.outputs.ready == 'true' }}
@@ -98,30 +91,11 @@ jobs:
       - name: Write launch status
         if: always()
         env:
-          LAUNCH_READY: ${{ steps.launch-auth.outputs.ready }}
           DEPLOYED_URL: ${{ steps.deployment.outputs.page_url }}
           DEPLOYMENT_OUTCOME: ${{ steps.deployment.outcome }}
-          METADATA_OUTCOME: ${{ steps.apply-metadata.outcome }}
         run: |
-          if [ "$LAUNCH_READY" != "true" ]; then
-            {
-              echo "## OASIS public launch: setup still required"
-              echo
-              echo "Validation passed, but deployment and repository metadata were skipped."
-              echo 'Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret using the instructions in [docs/REPOSITORY_MAINTENANCE.md](https://github.com/FAHTHIZ/oasis/blob/main/docs/REPOSITORY_MAINTENANCE.md), then run this workflow again on `main`.'
-            } >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$DEPLOYMENT_OUTCOME" = "success" ] && [ "$METADATA_OUTCOME" = "success" ]; then
-            {
-              echo "## OASIS public launch: complete"
-              echo
-              echo "Homepage deployed: $DEPLOYED_URL"
-              echo
-              echo "Repository description, homepage field, and 20 topics were updated and verified."
-            } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DEPLOYMENT_OUTCOME" = "success" ]; then
+            printf '## OASIS homepage deployed\n\n%s (commit %s)\n' "$DEPLOYED_URL" "${GITHUB_SHA::7}" >> "$GITHUB_STEP_SUMMARY"
           else
-            {
-              echo "## OASIS public launch: incomplete"
-              echo
-              echo "Inspect deployment and metadata logs. The workflow does not claim success unless both steps complete."
-            } >> "$GITHUB_STEP_SUMMARY"
+            printf '## OASIS homepage deployment failed\n\nInspect the deploy step logs.\n' >> "$GITHUB_STEP_SUMMARY"
           fi
