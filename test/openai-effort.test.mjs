@@ -38,3 +38,16 @@ test('GPT-6.1 Sol and Astra bill long prompts at the long-context rate', () => {
   const astra = estimateCostUsd('gpt-6-astra', { inputTokens: 300_000, outputTokens: 1000 });
   assert.ok(Math.abs(astra - (6 + 0.075)) < 1e-9, String(astra));
 });
+
+test('current open and xAI models get their published context windows', () => {
+  assert.equal(modelContextWindow('kimi-k3'), 1_048_576);
+  assert.equal(modelContextWindow('moonshotai/kimi-k3.1-pro'), 1_048_576);
+  assert.equal(modelContextWindow('kimi-k2.6'), 262_144);
+  assert.equal(modelContextWindow('glm-5'), 200_000);
+  assert.equal(modelContextWindow('z-ai/glm-5.3'), 1_000_000);
+  assert.equal(modelContextWindow('glm-4.5-air'), 128_000);
+  assert.equal(modelContextWindow('MiniMax-M3'), 512_000);
+  assert.equal(modelContextWindow('minimax/minimax-m2.7'), 196_608);
+  assert.equal(modelContextWindow('grok-4.7'), 500_000);
+  assert.equal(modelContextWindow('grok-4'), 256_000);
+});

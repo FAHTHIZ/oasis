@@ -42,12 +42,27 @@ const TABLE = [
   [/gpt-4o/i, { input: 2.5, output: 10, cacheRead: 1.25 }],
   [/\bo4-mini|\bo3-mini/i, { input: 1.1, output: 4.4, cacheRead: 0.275 }],
   [/\bo3\b/i, { input: 2, output: 8, cacheRead: 0.5 }],
-  [/gemini-2\.5-pro|gemini-3.*pro/i, { input: 1.25, output: 10, cacheRead: 0.31 }],
-  [/gemini.*flash-lite/i, { input: 0.1, output: 0.4, cacheRead: 0.025 }],
-  [/gemini.*flash/i, { input: 0.3, output: 2.5, cacheRead: 0.075 }],
+  // Gemini (ai.google.dev/gemini-api/docs/pricing, standard paid tier). The 3.6/3.8
+  // Flash rates are the 2026 launch prices; Google doubles them on 2027-01-01.
+  [/gemini-3.*pro/i, { input: 2, output: 12, cacheRead: 0.2, long: { threshold: 200000, input: 4, output: 18, cacheRead: 0.4 } }],
+  [/gemini-2\.5-pro/i, { input: 1.25, output: 10, cacheRead: 0.125, long: { threshold: 200000, input: 2.5, output: 15, cacheRead: 0.25 } }],
+  [/gemini-3\.5-flash-lite/i, { input: 0.3, output: 2.5, cacheRead: 0.03 }],
+  [/gemini-3(?:\.\d)?-flash-lite/i, { input: 0.25, output: 1.5, cacheRead: 0.025 }],
+  [/gemini.*flash-lite/i, { input: 0.1, output: 0.4, cacheRead: 0.01 }],
+  [/gemini-3\.[6-9]-flash/i, { input: 0.75, output: 3.75, cacheRead: 0.075 }],
+  [/gemini-3(?:\.\d)?-flash/i, { input: 0.5, output: 3, cacheRead: 0.05 }],
+  [/gemini.*flash/i, { input: 0.3, output: 2.5, cacheRead: 0.03 }],
+  // DeepSeek V4 bills peak and off-peak hours; the peak rate is used so budgets stay safe.
+  [/deepseek-v4-pro/i, { input: 1.32, output: 3.96, cacheRead: 0.044 }],
+  [/deepseek-flash/i, { input: 0.3, output: 1.2, cacheRead: 0.006 }],
   [/deepseek/i, { input: 0.28, output: 0.42, cacheRead: 0.028 }],
+  [/kimi-k3/i, { input: 3, output: 15, cacheRead: 0.3 }],
+  [/^(?:[\w.-]+\/)?glm-5$/i, { input: 1, output: 3.2, cacheRead: 0.2 }],
+  [/minimax-m3/i, { input: 0.3, output: 1.2, cacheRead: 0.06, long: { threshold: 512000, input: 0.6, output: 2.4, cacheRead: 0.12 } }],
   [/qwen.*coder/i, { input: 0.3, output: 1.2 }],
   [/grok-code/i, { input: 0.2, output: 1.5 }],
+  // Grok 4.7 (docs.x.ai): prompts of 200K+ tokens bill every token at the higher rate.
+  [/grok-4\.7/i, { input: 2, output: 6, cacheRead: 0.5, long: { threshold: 200000, input: 4, output: 12, cacheRead: 1 } }],
   [/grok/i, { input: 3, output: 15 }]
 ];
 

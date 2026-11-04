@@ -34,3 +34,22 @@ test('current OpenAI list prices (developers.openai.com pricing, 2026-11)', () =
   assert.equal(priceFor('gpt-5.5', { env }).output, 30);
   assert.equal(priceFor('gpt-5', { env }).input, 1.25);
 });
+
+test('Gemini 3, DeepSeek V4, Kimi K3, GLM-5, MiniMax M3 and Grok 4.7 use published prices', async () => {
+  const { estimateCostUsd } = await import('../src/pricing.mjs');
+  const per = (model, inputTokens, outputTokens = 0) => estimateCostUsd(model, { inputTokens, outputTokens });
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, a + ' != ' + b);
+  near(per('gemini-3.1-pro-preview', 1e6 / 10, 1e6 / 10), 0.2 + 1.2);
+  near(per('gemini-3.1-pro-preview', 300_000), 1.2);
+  near(per('gemini-3.8-flash', 1e6), 0.75);
+  near(per('gemini-3-flash-preview', 1e6), 0.5);
+  near(per('gemini-3.1-flash-lite', 1e6), 0.25);
+  near(per('gemini-2.5-flash-lite', 1e6), 0.1);
+  near(per('deepseek-v4-pro', 1e6), 1.32);
+  near(per('deepseek-flash', 0, 1e6), 1.2);
+  near(per('kimi-k3', 1e6, 1e6), 18);
+  near(per('z-ai/glm-5', 1e6), 1);
+  near(per('MiniMax-M3', 600_000), 0.36);
+  near(per('grok-4.7', 100_000, 100_000), 0.2 + 0.6);
+  near(per('grok-4.7', 250_000), 1);
+});
