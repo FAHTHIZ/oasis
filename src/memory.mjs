@@ -126,12 +126,21 @@ export async function loadMemory(root, options = {}) {
   }
   const env = options.env || process.env;
   const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
-  const rules = [...await loadRules(path.join(claudeHome, 'rules'), 'user', null, notices), ...await loadRules(path.join(path.resolve(root), '.claude', 'rules'), 'project', path.resolve(root), notices)];
+  const rules = await projectRules(root, { env, notices, home: options.home });
   // Scoped instructions are deliberately excluded from base memory to keep the prompt small.
+  const requested = [];
   for (const rule of rules) {
-    if (rule.paths.length || seen.has(rule.real)) continue;
+    if (rule.mode === 'scoped' || rule.mode === 'manual' || seen.has(rule.real)) continue;
     seen.add(rule.real);
-    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + rule.name + ' ---\n' + clipInstruction('rule ' + rule.name, cleanInstructionText('rule ' + rule.name, rule.body, notices), notices));
+    if (rule.mode === 'requested') { requested.push(rule); continue; }
+    const fingerprint = rule.body.replace(/\s+/g, ' ').trim();
+    if (!fingerprint || seen.has('content:' + fingerprint)) continue;
+    seen.add('content:' + fingerprint);
+    const shown = rule.label.startsWith('.claude/rules/') || rule.label.startsWith('~/') ? rule.name : rule.label;
+    parts.push('--- ' + (rule.scope === 'user' ? 'User rule' : 'Project rule') + ': ' + shown + ' ---\n' + clipInstruction('rule ' + shown, cleanInstructionText('rule ' + shown, rule.body, notices), notices));
+  }
+  if (requested.length) {
+    parts.push('--- Rules available on request ---\nRead a rule with read_file when its description fits the task:\n' + requested.slice(0, 40).map((rule) => '- ' + rule.label + (rule.description ? ': ' + cleanInstructionText('rule ' + rule.label, rule.description, notices).replace(/\s+/g, ' ') : '')).join('\n'));
   }
   const imported = await claudeAutoMemoryBlock(root, { env, home: options.home, notices });
   if (imported) parts.push(imported);
@@ -161,8 +170,36 @@ export function readmeText(content) {
 }
 
 // Claude Code rules: every .md file under a rules/ directory (recursive, sorted).
-async function loadRules(dir, scope, workspace = null, notices = null) {
+// Other agents' rule folders, read natively with their own trigger semantics:
+// always-on, glob-scoped (loaded when a matching file is touched), on request
+// (listed by description; the model reads the file when relevant) or manual (skipped).
+export const OTHER_AGENT_RULE_DIRS = [
+  { dir: '.cursor/rules', ext: ['.mdc', '.md'], tool: 'Cursor' },
+  { dir: '.windsurf/rules', ext: ['.md'], tool: 'Windsurf' },
+  { dir: '.agent/rules', ext: ['.md'], tool: 'Antigravity' },
+  { dir: '.agents/rules', ext: ['.md'], tool: 'Antigravity' },
+  { dir: '.github/instructions', ext: ['.instructions.md'], tool: 'Copilot' },
+  { dir: '.kiro/steering', ext: ['.md'], tool: 'Kiro' },
+  { dir: '.clinerules', ext: ['.md', '.txt'], tool: 'Cline' },
+  { dir: '.roo/rules', ext: ['.md', '.txt'], tool: 'Roo Code' }
+];
+
+export async function projectRules(root, { env = process.env, notices = null, home = null } = {}) {
+  const workspace = path.resolve(root);
+  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(home || env.HOME || os.homedir(), '.claude');
+  const rules = [
+    ...await loadRules(path.join(claudeHome, 'rules'), 'user', null, notices),
+    ...await loadRules(path.join(workspace, '.claude', 'rules'), 'project', workspace, notices, { prefix: '.claude/rules/' })
+  ];
+  if (env.OASIS_OTHER_AGENT_RULES !== '0') {
+    for (const spec of OTHER_AGENT_RULE_DIRS) rules.push(...await loadRules(path.join(workspace, ...spec.dir.split('/')), 'project', workspace, notices, { ext: spec.ext, prefix: spec.dir + '/' }));
+  }
+  return rules;
+}
+
+async function loadRules(dir, scope, workspace = null, notices = null, { ext = ['.md'], prefix = '' } = {}) {
   const out = [];
+  try { if (!(await lstat(dir)).isDirectory()) return out; } catch { return out; }
   const walk = async (current, depth) => {
     if (depth > 4 || out.length >= 60) return;
     let entries;
@@ -170,7 +207,7 @@ async function loadRules(dir, scope, workspace = null, notices = null) {
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) await walk(full, depth + 1);
-      else if (entry.isFile() && entry.name.endsWith('.md')) {
+      else if (entry.isFile() && ext.some((suffix) => entry.name.endsWith(suffix))) {
         try {
           const info = await lstat(full);
           if (info.size > MAX_MEMORY_FILE) { if (notices) notices.push((scope === 'user' ? 'User' : 'Project') + ' rule ' + path.relative(dir, full).split(path.sep).join('/') + ' (' + info.size + ' bytes) is over the ' + MAX_MEMORY_FILE + '-byte limit and was not loaded.'); continue; }
@@ -181,8 +218,9 @@ async function loadRules(dir, scope, workspace = null, notices = null) {
           }
           const text = await readFile(real, 'utf8');
           if (!text.trim() || text.includes('\0')) continue;
-          const { paths, body } = splitRuleFrontMatter(text);
-          out.push({ scope, real, name: path.relative(dir, full).split(path.sep).join('/'), paths, body: workspace ? await readImports(workspace, body) : body });
+          const { paths, body, mode, description } = splitRuleFrontMatter(text);
+          const name = path.relative(dir, full).split(path.sep).join('/');
+          out.push({ scope, real, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, body: workspace ? await readImports(workspace, body) : body });
         } catch {}
       }
     }
@@ -191,20 +229,48 @@ async function loadRules(dir, scope, workspace = null, notices = null) {
   return out;
 }
 
+function frontMatterFields(block) {
+  const fields = {};
+  const lines = block.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    const inline = m[2].trim();
+    const unquote = (value) => value.trim().replace(/^['"]|['"]$/g, '');
+    if (inline.startsWith('[')) fields[key] = inline.replace(/^\[|\]$/g, '').split(',').map(unquote).filter(Boolean);
+    else if (inline) fields[key] = unquote(inline);
+    else {
+      const list = [];
+      for (let j = i + 1; j < lines.length && /^\s*-\s+/.test(lines[j]); j++) list.push(unquote(lines[j].replace(/^\s*-\s+/, '')));
+      fields[key] = list;
+    }
+  }
+  return fields;
+}
+
+const listOf = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : []).map((item) => String(item).trim()).filter(Boolean);
+
+// Front matter of Claude (paths), Cursor (alwaysApply, globs, description), Windsurf and
+// Antigravity (trigger: always_on | glob | model_decision | manual, globs), Copilot
+// (applyTo) and Kiro (inclusion: always | fileMatch | manual, fileMatchPattern).
 function splitRuleFrontMatter(text) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
-  if (!match) return { paths: [], body: text };
-  const paths = [];
-  const lines = match[1].split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^paths\s*:\s*(.*)$/.exec(lines[i]);
-    if (!m) continue;
-    const inline = m[1].trim();
-    if (inline.startsWith('[')) paths.push(...inline.replace(/^\[|\]$/g, '').split(',').map((p) => p.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean));
-    else if (inline) paths.push(...inline.split(',').map((p) => p.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean));
-    else for (let j = i + 1; j < lines.length && /^\s*-\s+/.test(lines[j]); j++) paths.push(lines[j].replace(/^\s*-\s+/, '').trim().replace(/^['"]|['"]$/g, ''));
-  }
-  return { paths: paths.slice(0, 20), body: text.slice(match[0].length) };
+  if (!match) return { paths: [], body: text, mode: 'always', description: '' };
+  const f = frontMatterFields(match[1]);
+  const body = text.slice(match[0].length);
+  const description = typeof f.description === 'string' ? f.description.slice(0, 300) : '';
+  let paths = [...listOf(f.paths), ...listOf(f.globs), ...listOf(f.applyto), ...listOf(f.filematchpattern)];
+  const trigger = String(f.trigger || f.inclusion || '').toLowerCase().replace(/[\s-]/g, '_');
+  let mode;
+  if (String(f.alwaysapply).toLowerCase() === 'true' || ['always_on', 'always'].includes(trigger)) { mode = 'always'; paths = []; }
+  else if (['manual'].includes(trigger)) mode = 'manual';
+  else if (['model_decision', 'agent_requested', 'auto'].includes(trigger) && !paths.length) mode = 'requested';
+  else if (paths.length) mode = 'scoped';
+  else if (String(f.alwaysapply).toLowerCase() === 'false') mode = description ? 'requested' : 'manual';
+  else mode = 'always';
+  if (paths.some((p) => p === '**' || p === '**/*')) { mode = 'always'; paths = []; }
+  return { paths: mode === 'scoped' ? paths.slice(0, 20) : [], body, mode, description };
 }
 
 // "# note" in the prompt: append a bullet to the project memory file.
@@ -276,16 +342,14 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
   // Load path-frontmatter rules only for a specific matching file, never globally.
   const envHome = options.home || env.HOME || os.homedir();
   const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(envHome, '.claude');
-  const scoped = [
-    ...await loadRules(path.join(claudeHome, 'rules'), 'user'),
-    ...await loadRules(path.join(workspace, '.claude', 'rules'), 'project', workspace)
-  ].filter((rule) => rule.paths.length && rule.paths.some((pattern) => rulePathMatches(pattern, targetRelative)));
+  const scoped = (await projectRules(workspace, { env, home: options.home }))
+    .filter((rule) => rule.mode === 'scoped' && rule.paths.length && rule.paths.some((pattern) => rulePathMatches(pattern, targetRelative)));
   scoped.sort((a, b) => ruleSpecificity(a) - ruleSpecificity(b) || (a.scope === b.scope ? a.name.localeCompare(b.name) : a.scope === 'user' ? -1 : 1));
   for (const rule of scoped) {
     const key = 'scoped-rule:' + rule.real + ':' + targetRelative;
     if (loaded.has(key)) continue;
     loaded.add(key);
-    found.push({ path: '.claude/rules/' + rule.name, text: '[Path-scoped ' + rule.scope + ' rule matching ' + targetRelative + ']\n' + rule.body.slice(0, PER_FILE_LIMIT) });
+    found.push({ path: rule.label, text: '[Path-scoped ' + rule.scope + ' rule matching ' + targetRelative + ']\n' + rule.body.slice(0, PER_FILE_LIMIT) });
   }
   return found;
 }
