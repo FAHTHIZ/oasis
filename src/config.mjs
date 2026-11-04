@@ -208,10 +208,43 @@ export async function loadConfig(options = {}) {
   };
 }
 
+const PROVIDER_IDENTITY_KEYS = new Set(['protocol', 'baseURL', 'model', 'apiKey']);
+// Computed by loadConfig or taken from the environment; never written back.
+const RUNTIME_CONFIG_KEYS = new Set(['configPath', 'configured', 'apiKeyHelper']);
+const ENDPOINT_CONFIG_KEYS = new Set(['customHeaders', 'customHeadersHelper', 'betas']);
+const MODEL_CONFIG_KEYS = new Set(['contextWindow', 'maxOutputTokens', 'thinkingBudget', 'vision', 'visionCapability']);
+// saveConfig validates these itself and drops invalid values rather than copying them.
+const VALIDATED_CONFIG_KEYS = new Set(['maxSteps', 'maxToolCalls', 'maxTokens', 'maxCommandSeconds', 'contextWindow', 'vision', 'promptCache', 'readDedup', 'maxQuestionsPerTurn', 'leanTools', 'followups', 'secretShield', 'parallelToolCalls', 'thinkingBudget', 'requireReadBeforeEdit', 'maxOutputTokens', 'reasoningEffort']);
+
 export async function saveConfig(config, options = {}) {
   const env = options.env || process.env;
   const configPath = options.configPath || getConfigPath(env);
   await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  // Merge with what is already saved so a provider change (setup, auth login,
+  // connecting from chat or the web UI) does not erase your other settings:
+  // preferences always carry over, gateway headers and betas only for the same
+  // endpoint, and model limits (context window, output cap) only for the same model.
+  let existing = {};
+  if (options.preserve !== false) {
+    try {
+      const parsed = JSON.parse(await readFile(configPath, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed;
+    } catch {}
+  }
+  const defined = Object.fromEntries(Object.entries(config || {}).filter(([key, value]) => value !== undefined && !RUNTIME_CONFIG_KEYS.has(key)));
+  const nextProtocol = validateProtocol(defined.protocol || DEFAULT_PROTOCOL);
+  let nextBase = '';
+  try { nextBase = validateBaseUrl(defined.baseURL || ''); } catch {}
+  const sameEndpoint = existing.protocol === nextProtocol && stripTrailingSlashes(String(existing.baseURL || '')) === stripTrailingSlashes(nextBase);
+  const sameModel = sameEndpoint && String(existing.model || '').trim() === String(defined.model || '').trim();
+  const carried = {};
+  for (const [key, value] of Object.entries(existing)) {
+    if (PROVIDER_IDENTITY_KEYS.has(key) || RUNTIME_CONFIG_KEYS.has(key)) continue;
+    if (ENDPOINT_CONFIG_KEYS.has(key) && !sameEndpoint) continue;
+    if (MODEL_CONFIG_KEYS.has(key) && !sameModel) continue;
+    carried[key] = value;
+  }
+  config = { ...carried, ...defined };
   const protocol = validateProtocol(config.protocol || DEFAULT_PROTOCOL);
   const safe = {
     protocol,
@@ -240,6 +273,14 @@ export async function saveConfig(config, options = {}) {
   if (maxOutputTokens !== null && maxOutputTokens >= 1024 && maxOutputTokens <= 128000) safe.maxOutputTokens = maxOutputTokens;
   if (['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
   if (!safe.model) throw new Error('The model name cannot be empty.');
+  // Keys validated where they are used (customHeaders, temperature, betas,
+  // autoCompactPercent, ...) are kept as plain JSON values.
+  for (const [key, value] of Object.entries(config)) {
+    if (Object.hasOwn(safe, key) || VALIDATED_CONFIG_KEYS.has(key) || PROVIDER_IDENTITY_KEYS.has(key) || RUNTIME_CONFIG_KEYS.has(key)) continue;
+    if (value === null || ['string', 'number', 'boolean'].includes(typeof value) || (typeof value === 'object' && !(value instanceof Date))) {
+      try { safe[key] = JSON.parse(JSON.stringify(value)); } catch {}
+    }
+  }
   // Atomic so a crash or full disk mid-save can't leave a truncated config.
   await atomicWriteFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
   try { await chmod(configPath, 0o600); } catch { /* POSIX mode bits are unavailable on some filesystems. */ }
