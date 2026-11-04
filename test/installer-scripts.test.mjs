@@ -26,6 +26,19 @@ test('published installer checksums match the exact checked-in scripts', async (
   assert.ok(installGuide.includes('$helperExpected='), 'Windows install guide must verify the companion helper checksum before running.');
 });
 
+test('installer CI pins the exact source commit without changing public stable-release resolution', async () => {
+  const [shell, powershell, workflow] = await Promise.all([
+    read('scripts/install.sh'),
+    read('scripts/install.ps1'),
+    read('.github/workflows/installer-checks.yml')
+  ]);
+  assert.match(shell, /OASIS_INSTALL_COMMIT/);
+  assert.match(powershell, /OASIS_INSTALL_COMMIT/);
+  assert.match(workflow, /OASIS_INSTALL_COMMIT:\s*\$\{\{ github\.sha \}\}/);
+  assert.match(shell, /Resolving the latest stable OASIS release from GitHub/);
+  assert.match(powershell, /Resolving the latest stable OASIS release from GitHub/);
+});
+
 test('installers resolve the latest stable versioned Git tag to an immutable commit SHA', async () => {
   const [shell, powershell, termux, install] = await Promise.all([
     read('scripts/install.sh'), read('scripts/install.ps1'), read('docs/TERMUX.md'), read('docs/INSTALL.md')

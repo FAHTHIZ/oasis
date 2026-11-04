@@ -39,6 +39,8 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 
 The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. Once `v1.0.0` is published it is the install and update target. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
+Maintainer and CI smoke tests may set `OASIS_INSTALL_COMMIT` to a full 40-character Git SHA to install one exact source revision. This override is intended for validating the installer against the commit under test; normal installations should leave it unset so the installer resolves the latest stable release.
+
 ### macOS, Linux and Android/Termux
 
 Use the checksum-verified shell installer bootstrap:
