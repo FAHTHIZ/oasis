@@ -6,6 +6,20 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- Install in one line: `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh` uses the installer from the immutable `v1.0.0` tag. The checksum-verified bootstrap is still documented.
+- `oasis --help` is now one grouped screen (Start, Set up and check, Extend, Safety, More). `oasis help all` prints the full reference. `--version` and the banners say OASIS.
+- First run in the terminal: an invalid choice asks again instead of skipping setup, and `quit` or `/exit` skip it. The startup banner says the model is not set up yet instead of showing a default model that is not connected.
+- Browser workspace:
+  - The runtime prints a one-click connect link (`#token=`), which is read once and removed from the address bar.
+  - Once connected, the runtime card shrinks to one status row and model setup moves to the top.
+  - The setup drawer folds away when a chat starts and setup is complete.
+  - The empty state stays readable in short windows, and messages fade out under the composer.
+  - On phones, the model picker fills the toolbar.
+  - Kicker labels and text-glyph icons were replaced with real headings and SVG icons.
+- Live container isolation in CI: a `docker-sandbox` job runs the Docker backend against a real engine. It checks workspace-only mounts, loopback-only networking, dropped capabilities with `NoNewPrivs`, a non-root user with a scratch home, and the 512-process limit.
+- Browser tool: clicking a link waits briefly for slow hosts to start the navigation before reporting the URL. This fixes an intermittent Windows CI failure.
+- Website: the install box shows the stable one-liner, and the "Latest changes" feed updates on every commit to `main`.
+
 - `text_to_speech` tool: saves speech from text as mp3/wav/opus/aac/flac/pcm through any OpenAI-compatible `/audio/speech` endpoint (OpenAI, Kokoro-FastAPI, openedai-speech, LiteLLM), with voice, speed and delivery instructions. Asks before each call, checkpoints overwritten files, and is configured with `OASIS_TTS_*` or `"textToSpeech"` settings.
 - ACP editor terminals: `oasis acp --editor-terminal` (or `OASIS_ACP_TERMINAL=1`) runs approved `run_command` calls in the editor's terminal through `terminal/create`, `wait_for_exit`, `output`, `kill` and `release`, and embeds the live terminal in the tool call. All command checks and approvals still apply; with OASIS's sandbox on, commands stay in the sandbox. ACP edit diffs now use the editor buffer the agent read as the "before" text, and `multi_edit` reads and updates editor buffers like `edit_file`.
 - Gateway voice notes: Telegram voice notes, Discord voice messages and Slack audio clips are transcribed with the `/voice` endpoint (opt-in via voice settings, `OASIS_VOICE=1` or `OASIS_GATEWAY_TRANSCRIBE=1`). A voice note on its own becomes the request; other audio is attached as a transcript. Telegram can also reply with voice messages (`OASIS_GATEWAY_VOICE_REPLY=auto|always`, or `/voice on|off|auto` per chat), speaking a cleaned-up version of the reply through the `text_to_speech` endpoint.

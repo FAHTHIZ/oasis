@@ -624,19 +624,20 @@ async function ensureModelProviderSetup(root, options = {}) {
   stdout.write('  2. Use a free gateway (OmniRoute; it can be slow or limited)\n');
   stdout.write('  3. Use a model on this computer (Ollama; smaller models may be weaker)\n');
   stdout.write('  4. Set this up later\n');
-  let answer;
-  try { answer = (await askLine('Choose [1/2/3/4] (default 2): ')).trim().toLowerCase() || '2'; }
-  catch { return false; }
-  if (['4', 'later', 'n', 'no', 'skip'].includes(answer)) {
-    stdout.write('Setup skipped. Run oasis setup when you are ready.\n');
-    return false;
-  }
   const choices = { '1': 'openai', '2': 'omniroute', '3': 'ollama' };
-  const preset = choices[answer];
-  if (!preset) {
-    stdout.write('Choose 1, 2, 3, or 4. No setup was run. Start Oasis again or run oasis setup.\n');
-    return false;
+  let preset = null;
+  for (let attempt = 0; attempt < 3 && !preset; attempt++) {
+    let answer;
+    try { answer = (await askLine('Choose [1/2/3/4] (default 2): ')).trim().toLowerCase() || '2'; }
+    catch { return false; }
+    if (['4', 'later', 'n', 'no', 'skip', 'q', 'quit', 'exit', '/exit', '/quit'].includes(answer)) {
+      stdout.write('Setup skipped. Run oasis setup when you are ready.\n');
+      return false;
+    }
+    preset = choices[answer] || null;
+    if (!preset) stdout.write(attempt < 2 ? 'Type 1, 2, 3 or 4 and press Enter (4 sets this up later).\n' : 'No setup was run. Run oasis setup when you are ready.\n');
   }
+  if (!preset) return false;
   try {
     await configureProvider(root, { defaultPreset: preset, skipPresetPrompt: true, chooseKeyProvider: preset === 'openai' });
   } catch (error) {
@@ -2530,7 +2531,7 @@ async function interactive(root, autoApprove, persistence = {}) {
   if (stdout.isTTY && process.env.OASIS_DISABLE_THEME_RELOAD !== '1') {
     import('./themes.mjs').then(({ watchThemes }) => watchThemes({ env: process.env, plugins: (startupSettings && startupSettings.pluginThemeSources) || [], onReload: (theme) => stdout.write('\n[theme] reloaded ' + theme.name + '\n') })).catch(() => {});
   }
-  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || bannerConfig.model || '', provider: bannerConfig.protocol || '', mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
+  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · exit and run oasis setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : (bannerConfig.protocol || ''), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOASIS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   if (SESSION_OPTIONS.devChannels.length) {
     stdout.write('\n\x1b[1mWARNING: loading development channels\x1b[22m\n  ' + SESSION_OPTIONS.devChannels.join('\n  ') + '\nAnything that can reach these servers can put text in front of the agent' + '. Only use channels you trust.\n');
