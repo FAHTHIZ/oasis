@@ -10,6 +10,7 @@
 // Precedence: deny > ask > allow > mode default.
 import { discardReason } from './git-safety.mjs';
 import path from 'node:path';
+import fs from 'node:fs';
 import { normalizePermissionMode } from './permission-modes.mjs';
 
 const TOOL_ALIASES = {
@@ -373,9 +374,48 @@ export function ruleMatches(rule, toolName, args = {}, options = {}) {
     return String(args.url || '') === rule.specifier;
   }
   const root = options.root || process.cwd();
-  const candidate = normalizeRelative(args.path || args.pattern || '', root);
+  const raw = args.path || args.pattern || '';
+  const candidate = normalizeRelative(raw, root);
   if (!candidate) return false;
-  return globToRegExp(normalizeRelative(rule.specifier, root)).test(candidate);
+  const pattern = globToRegExp(normalizeRelative(rule.specifier, root));
+  if (pattern.test(candidate)) return true;
+  // Deny/ask rules also follow symlinks: a link (or a link to a parent folder)
+  // pointing at .env must not dodge Read(.env).
+  if (options.requireEveryCommand === false) {
+    const real = resolvedRealPath(raw, root);
+    if (real) return pattern.test(normalizeRelative(real.path, real.root));
+  }
+  return false;
+}
+
+function realpathOrNull(target) {
+  try { return fs.realpathSync.native(target); } catch { return null; }
+}
+
+// Real location of a path, resolving symlinks in the deepest existing ancestor so
+// a not-yet-created file under a linked folder still resolves. Null when nothing
+// changes.
+export function resolvedRealPath(value, root = process.cwd()) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const workspace = path.resolve(root);
+  const absolute = path.resolve(workspace, text.replace(/\\/g, path.sep));
+  let existing = absolute;
+  const rest = [];
+  let real = null;
+  for (let guard = 0; guard < 64; guard++) {
+    real = realpathOrNull(existing);
+    if (real) break;
+    const parent = path.dirname(existing);
+    if (parent === existing) return null;
+    rest.unshift(path.basename(existing));
+    existing = parent;
+  }
+  if (!real) return null;
+  const resolved = rest.length ? path.join(real, ...rest) : real;
+  const realRoot = realpathOrNull(workspace) || workspace;
+  if (resolved === absolute && realRoot === workspace) return null;
+  return { path: resolved, root: realRoot };
 }
 
 export class PermissionPolicy {
