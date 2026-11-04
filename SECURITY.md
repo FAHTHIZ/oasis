@@ -25,7 +25,7 @@ Command, path, URL and approval checks are defense in depth, not a substitute fo
 
 ## Reporting a vulnerability
 
-Please do not publish exploitable details in a public issue. Contact the repository owner privately through GitHub's available private reporting/contact options and include the affected version, reproduction steps, expected behavior, and potential impact. Do not include real secrets or another person's private data in a report.
+Please do not publish exploitable details in a public issue. Report it privately through [GitHub private vulnerability reporting](https://github.com/FAHTHIZ/oasis/security/advisories/new) and include the affected version, reproduction steps, expected behavior, and potential impact. Do not include real secrets or another person's private data in a report.
 
 ## Supported versions
 
