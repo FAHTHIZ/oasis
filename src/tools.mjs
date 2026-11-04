@@ -448,7 +448,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') +
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
       '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.' +
-      (sandbox && sandbox.available ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : ''), Boolean(highRisk));
+      (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + sandbox.ssh.host + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk));
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
@@ -457,7 +457,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.interactive) {
     if (options.background) throw new Error('Choose either interactive=true or run_in_background=true, not both.');
     if (!options.ptyManager) throw new Error('Interactive terminal sessions are not available in this context.');
-    const launch = wrapCommand(command, args, sandbox, root);
+    const launch = wrapCommand(command, args, sandbox, root, { tty: true });
     return await options.ptyManager.start(launch.command, launch.args, {
       cwd: root, env, cols: options.cols, rows: options.rows,
       display: String(command).split(/[\\/]/).pop(),

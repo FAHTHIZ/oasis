@@ -14,6 +14,7 @@
 //   is enabled. Nothing else from the host filesystem is visible.
 // Other platforms report the OS sandbox as unavailable; Oasis then falls back to
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
+import { normalizeSshSettings, detectSshRuntime, sshWrap } from './ssh-backend.mjs';
 import { spawnSync } from 'node:child_process';
 import { realpathSync, statSync } from 'node:fs';
 import os from 'node:os';
@@ -171,8 +172,9 @@ export function detectSandbox(force = false) {
 export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
-  const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) ? settings.sandbox.backend : 'os';
-  const probe = backend === 'os' ? detectSandbox(force) : detectContainerRuntime(backend, force);
+  const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) || settings.sandbox.backend === 'ssh' ? settings.sandbox.backend : 'os';
+  const ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
+  const probe = backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
   const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
   const writable = [root, ...additionalWritable, ...caches.filter((dir) => !pathContains(root, dir))];
@@ -191,7 +193,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     writable: backend === 'os' ? writable : [root, ...additionalWritable],
     writableCaches: backend === 'os' ? caches : [],
     backend,
-    ...(backend === 'os' ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '' })
+    ...(backend === 'ssh' ? { ssh, network: true } : {}),
+    ...(backend === 'os' || backend === 'ssh' ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '' })
   };
 }
 
@@ -266,9 +269,10 @@ export function tmpToolchainMounts(command, env = process.env) {
 }
 
 // Returns { command, args } that runs the requested argv inside the sandbox.
-export function wrapCommand(command, args, sandbox, cwd) {
+export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   assertSandboxAvailable(sandbox);
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
+  if (sandbox.kind === 'ssh') return sshWrap(command, args, sandbox, cwd, { tty: Boolean(options.tty) });
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
     for (const dir of tmpToolchainMounts(command)) wrapped.push('--ro-bind', dir, dir);
