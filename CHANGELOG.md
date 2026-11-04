@@ -10,6 +10,7 @@ Changes after 1.0.0. Entries include feature work, reliability improvements, and
 - `oasis --help` is now one grouped screen (Start, Set up and check, Extend, Safety, More). `oasis help all` prints the full reference. `--version` and the banners say OASIS.
 - First run in the terminal: an invalid choice asks again instead of skipping setup, and `quit` or `/exit` skip it. The startup banner says the model is not set up yet instead of showing a default model that is not connected.
 - Demo videos re-recorded from the current build (terminal and browser workspace, MP4, GIF and posters). The web demo now connects with the one-click link.
+- `oasis doctor` starts with a short plain summary and one next step (for example "run oasis setup to connect a model"). The full environment list follows under Environment details.
 - Browser workspace:
   - When a language server could not check a change, the reply shows one quiet, expandable note instead of a paragraph of technical detail. The full notice is still there when you open it.
   - Keyboard shortcuts and help guide: click Help in the sidebar or press Ctrl + / (⌘ + / on a Mac). Each shortcut is explained in plain words, the guide has a search box and a key-name glossary, and phones get a full-screen version that lists the buttons to tap.
