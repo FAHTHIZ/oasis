@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { parseBenchArgs, agentEnvironment, runBenchmark } from '../scripts/bench-live.mjs';
+import { parseBenchArgs, agentEnvironment, runBenchmark, summarize, renderSummary } from '../scripts/bench-live.mjs';
 import { parseAiderOutput, parseOpenCodeOutput, buildAiderArgs, buildOpenCodeArgs, EXTERNAL_AGENTS } from '../src/eval.mjs';
 
 test('bench:live parses options and refuses unknown agents', () => {
@@ -54,7 +54,9 @@ test('runBenchmark scores agents only on shared, identical tasks and never write
     assert.equal(calls[0].env.OASIS_MODEL, 'opus');
     assert.ok(calls[1].args.includes('--claude-code') && calls[1].args.includes('opus'));
     const markdown = await readFile(path.join(out, 'SUMMARY.md'), 'utf8');
-    assert.match(markdown, /\| OASIS 1\.0\.0 \(opus\) \| 100% \| 2\/2 \|/);
+    assert.match(markdown, /\| OASIS 1\.0\.0 \(opus\).*100%.*2\/2/);
+    assert.match(markdown, /complete matching SHA-256 task fingerprints/);
+    assert.match(markdown, /not a confidence interval or significance test/);
     assert.match(markdown, /Codex CLI: Could not start/);
     for (const name of ['SUMMARY.md', 'summary.json', 'oasis.json', 'claude.json']) {
       assert.doesNotMatch(await readFile(path.join(out, name), 'utf8'), /sk-secret-value/);
@@ -94,4 +96,40 @@ test('OpenCode and Aider adapters build non-interactive commands and tolerate an
   assert.equal(aider.inputTokens, 4200);
   assert.equal(aider.costUSD, 0.03);
   assert.equal(aider.model, 'gpt-4o');
+});
+
+
+test('live summary excludes missing, mismatched, and incomplete task fingerprints from headline scores', () => {
+  const options = parseBenchArgs(['--agents', 'oasis,claude', '--model', 'same-model', '--trials', '2']);
+  const make = (agent, rows) => ({ agent, name: agent, summary: { label: agent, sourceRevision: 'd'.repeat(40), provider: { model: 'same-model' }, runtime: { node: 'v22', platform: 'linux', arch: 'x64' } }, results: rows });
+  const rows = (id, fingerprint, trialCount = 2) => Array.from({ length: trialCount }, (_, index) => ({
+    taskId: id, taskFingerprint: fingerprint, category: 'configuration-integration', difficulty: 'large', trial: index + 1,
+    status: 'passed', wallTimeMs: 100, totalTokens: 50, costUSD: 0.01
+  }));
+  const a = [...rows('verified', 'a'.repeat(64)), ...rows('legacy', undefined).map(({ taskFingerprint, ...row }) => row), ...rows('changed', 'b'.repeat(64)), ...rows('short', 'c'.repeat(64))];
+  const b = [...rows('verified', 'a'.repeat(64)), ...rows('legacy', undefined).map(({ taskFingerprint, ...row }) => row), ...rows('changed', 'e'.repeat(64)), ...rows('short', 'c'.repeat(64), 1)];
+  const summary = summarize([make('oasis', a), make('claude', b)], options, new Date('2026-11-05T00:00:00Z'));
+  assert.deepEqual(summary.sharedTasks, ['verified']);
+  assert.deepEqual(summary.unverifiedTasks, ['legacy']);
+  assert.deepEqual(summary.fingerprintMismatchTasks, ['changed']);
+  assert.deepEqual(summary.incompleteTasks, ['short']);
+  assert.equal(summary.agents[0].passRate, 1);
+  const rendered = renderSummary(summary);
+  assert.match(rendered, /Only 1 task\(s\) have complete, identical SHA-256/);
+  assert.match(rendered, /Excluded task IDs: changed, legacy, short/);
+  assert.doesNotMatch(rendered, /about 10 points are noise/);
+});
+
+test('live summary records provenance and does not call one agent a head-to-head', () => {
+  const options = parseBenchArgs(['--agents', 'oasis']);
+  const summary = summarize([{ agent: 'oasis', name: 'OASIS', summary: { label: 'OASIS fixture', sourceRevision: 'a'.repeat(40), provider: { model: 'fixture-model' }, runtime: { node: 'v22', platform: 'linux', arch: 'x64' } }, results: [] }], options);
+  assert.ok(summary.caveats.some((item) => item.includes('not a head-to-head')));
+  assert.equal(summary.agents[0].reportedModel, 'fixture-model');
+  assert.equal(summary.agents[0].sourceRevision, 'a'.repeat(40));
+});
+
+test('live benchmark enforces eval-compatible trial limits and valid router URLs', () => {
+  assert.throws(() => parseBenchArgs(['--trials', '11']), /matching oasis eval/);
+  assert.throws(() => parseBenchArgs(['--agents', '']), /at least one agent/);
+  assert.throws(() => parseBenchArgs(['--router', 'file:///tmp/gateway']), /HTTP\(S\) URL/);
 });

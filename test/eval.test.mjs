@@ -532,21 +532,21 @@ test('eval comparison reports matched-task pass rate, median time, and cost', as
     sourceRevision: 'c'.repeat(40),
     provider: { model: 'fixture-model-a' },
     results: [
-      { taskId: 'fix-a', status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
-      { taskId: 'fix-a', status: 'failed', wallTimeMs: 120, costUSD: 0.02 },
-      { taskId: 'fix-b', status: 'passed', wallTimeMs: 200, costUSD: 0.01 },
+      { taskId: 'fix-a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 100, costUSD: 0.01 },
+      { taskId: 'fix-a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'failed', wallTimeMs: 120, costUSD: 0.02 },
+      { taskId: 'fix-b', taskFingerprint: 'b'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 200, costUSD: 0.01 },
       { taskId: 'only-a', status: 'passed', wallTimeMs: 50, costUSD: 0.01 }
     ]
   }));
   await writeFile(bPath, JSON.stringify({
     label: 'Claude Code baseline',
     results: [
-      { taskId: 'fix-a', status: 'passed', wallTimeMs: 90, costUSD: 0.02 },
-      { taskId: 'fix-a', status: 'passed', wallTimeMs: 95, costUSD: 0.02 },
-      { taskId: 'fix-a', status: 'passed', wallTimeMs: 100, costUSD: 0.02 },
-      { taskId: 'fix-b', status: 'failed', wallTimeMs: 300, costUSD: 0.02 },
-      { taskId: 'fix-b', status: 'failed', wallTimeMs: 310, costUSD: 0.02 },
-      { taskId: 'fix-b', status: 'passed', wallTimeMs: 320, costUSD: 0.02 },
+      { taskId: 'fix-a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 90, costUSD: 0.02 },
+      { taskId: 'fix-a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 95, costUSD: 0.02 },
+      { taskId: 'fix-a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 100, costUSD: 0.02 },
+      { taskId: 'fix-b', taskFingerprint: 'b'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'failed', wallTimeMs: 300, costUSD: 0.02 },
+      { taskId: 'fix-b', taskFingerprint: 'b'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'failed', wallTimeMs: 310, costUSD: 0.02 },
+      { taskId: 'fix-b', taskFingerprint: 'b'.repeat(64), category: 'utility-logic', difficulty: 'small', status: 'passed', wallTimeMs: 320, costUSD: 0.02 },
       { taskId: 'only-b', status: 'passed', wallTimeMs: 1, costUSD: 0.001 }
     ]
   }));
@@ -727,14 +727,14 @@ test('eval comparison excludes matching task IDs with incompatible task fingerpr
   });
 
   assert.equal(result.ok, true, output.text);
-  assert.equal(result.comparison.commonTaskCount, 2);
+  assert.equal(result.comparison.commonTaskCount, 1);
   assert.deepEqual(result.comparison.mismatchedFingerprints, ['changed-task']);
   assert.deepEqual(result.comparison.unverifiedFingerprints, ['legacy-task']);
   assert.equal(result.comparison.tasks.find((row) => row.taskId === 'same-task').fingerprintStatus, 'verified');
-  assert.equal(result.comparison.tasks.find((row) => row.taskId === 'legacy-task').fingerprintStatus, 'unverified-legacy');
-  assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 0.5);
+  assert.equal(result.comparison.tasks.some((row) => row.taskId === 'legacy-task'), false);
+  assert.equal(result.comparison.metrics.a.taskBalancedPassRate, 1);
   assert.equal(result.comparison.metrics.b.taskBalancedPassRate, 1);
-  assert.match(output.text, /1\/2 verified; 1 fingerprint-mismatched task\(s\) excluded; 0 metadata-mismatched task\(s\) excluded; 1 legacy\/unfingerprinted task\(s\) compared by ID only/);
+  assert.match(output.text, /1\/1 verified; 1 fingerprint-mismatched task\(s\) excluded; 0 metadata-mismatched task\(s\) excluded; 1 legacy\/unfingerprinted task\(s\) excluded from headline metrics/);
 });
 
 test('eval comparison refuses unsafe files, invalid result rows and disjoint task sets', async (t) => {
