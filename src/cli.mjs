@@ -12,7 +12,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL, carryLearnedContextWindow } from './config.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, steerSession, takeSteering } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
@@ -1881,7 +1881,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     else { session.hookWatchPaths = persistence.watchPaths; try { session.fileWatchers = startHookWatchers(session, { liveReload: true, hookOptions: () => hookOpts(session), reload: reloadSessionSettings }); } catch {} }
     persistence.watchPaths = null;
   }
-  session.config = config;
+  session.config = carryLearnedContextWindow(session.config, config);
   // Auto-connect to the IDE when launched from a VS Code (or fork) integrated terminal.
   if (!session.ideChecked) {
     session.ideChecked = true;
@@ -2424,7 +2424,7 @@ async function readMainInput(root, session, state) {
       const contextPercent = session && Array.isArray(session.messages)
         ? estimateTokens(session.messages) / Math.max(1, contextWindowSize(session.config, process.env)) * 100
         : null;
-      const spentUsd = session && typeof session.costUsd === 'number' ? session.costUsd : null;
+      const spentUsd = session && session.budgetLedger ? session.budgetLedger.spentUsd : (session && typeof session.costUsd === 'number' ? session.costUsd : null);
       const budgetUsd = session && Number(session.maxBudgetUsd) > 0 ? Number(session.maxBudgetUsd) : Number(SESSION_OPTIONS.maxBudgetUsd) || 0;
       const priced = session && session.config ? priceFor(model, { config: session.config, overrides: session.pricing || {}, env: process.env }) : null;
       const costLabel = session ? (priced ? formatUsd(spentUsd == null ? 0 : spentUsd) : 'unknown') : '';

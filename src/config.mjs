@@ -257,3 +257,15 @@ export function getProviderSummary(config) {
     configPath: config.configPath || getConfigPath()
   };
 }
+
+// The session learns the real context window from the local server, the
+// provider's model list, or an overflow error. Reloading config each turn must
+// not forget it while the provider and model are unchanged, or compaction
+// thresholds snap back to the model default and a small local window overflows.
+export function carryLearnedContextWindow(previous, next) {
+  if (!previous || !next || next.contextWindow) return next;
+  const learned = Number(previous.contextWindow) || 0;
+  if (!learned) return next;
+  const same = previous.protocol === next.protocol && String(previous.baseURL || '') === String(next.baseURL || '') && previous.model === next.model;
+  return same ? { ...next, contextWindow: learned } : next;
+}

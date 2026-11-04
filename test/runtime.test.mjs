@@ -310,7 +310,8 @@ test('chat configures and activates an approved MCP server in the current sessio
     "  }",
     "});"
   ].join('\n');
-  const session = { root, mcpClients: new Map(), mcpToolMap: new Map(), toolDefinitions: [] };
+  // A session restricted to read_file plus the session-only task tool.
+  const session = { root, mcpClients: new Map(), mcpToolMap: new Map(), toolDefinitions: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }, { type: 'function', function: { name: 'task', parameters: { type: 'object' } } }], allowedToolNames: new Set(['read_file', 'task']) };
   t.after(() => closeMcpClients(session.mcpClients));
   const approvals = [];
   const result = await executeTool('configure_mcp_server', {
@@ -333,6 +334,10 @@ test('chat configures and activates an approved MCP server in the current sessio
   assert.equal(approvals[0].forceInteractive, true);
   assert.match(approvals[0].prompt, /third-party process/i);
   assert.ok(session.toolDefinitions.some((definition) => definition.function.name === 'mcp_chatfixture_echo'));
+  // Adding a server only adds its tools: session tools stay and filtered-out built-ins stay out.
+  const names = session.toolDefinitions.map((definition) => definition.function.name);
+  assert.deepEqual(names, ['read_file', 'task', 'mcp_chatfixture_echo']);
+  assert.ok(session.allowedToolNames.has('mcp_chatfixture_echo'));
   const call = await callMappedMcpTool(session, 'mcp_chatfixture_echo', { message: 'same-session' }, { approval: async () => true });
   assert.equal(call.content, 'pong same-session');
 

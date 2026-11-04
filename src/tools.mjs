@@ -43,7 +43,7 @@ import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, background
 import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
 import { isPdfPath, readPdf } from './pdf.mjs';
 import { GIT_TOOL_DEFINITIONS, GIT_TOOL_NAMES, runGitTool } from './git-tools.mjs';
-import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, mcpToolDefinitions } from './mcp.mjs';
+import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, refreshSessionMcpTools } from './mcp.mjs';
 import { createCommandOutputLog } from './command-output-log.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
@@ -993,9 +993,10 @@ async function configureMcpServer(args, context, root) {
   }
 
   context.session.mcpClients.set(candidate.name, client);
-  const dynamic = mcpToolDefinitions(context.session.mcpClients, { pins: context.session.mcpPins });
-  context.session.mcpToolMap = dynamic.map;
-  context.session.toolDefinitions = TOOL_DEFINITIONS.concat(dynamic.definitions);
+  // Only swap the MCP part of the tool list. Rebuilding from TOOL_DEFINITIONS
+  // dropped session tools (task, memory, advisor, browser, ...) and brought
+  // back tools that --tools or --restricted had removed.
+  refreshSessionMcpTools(context.session);
   return {
     configured: true,
     activated: true,
