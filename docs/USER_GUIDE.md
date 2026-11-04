@@ -70,6 +70,8 @@ OASIS does not include an API subscription or a model. A provider must be reacha
 
 ## Terminal help and status
 
+`oasis --help` prints a one-screen overview grouped into Start, Set up and check, Extend, Safety and More. `oasis help all` (or `oasis --help --all`) prints every command and option.
+
 The interactive terminal footer shows the connected model, a rough context-window percentage, and the session cost when OASIS has pricing information for that model. If the model has no known price, the cost is shown as unknown rather than guessed. When a budget limit is configured, the footer warns when estimated usage reaches 50% and 90%. Use `/cost` for the detailed usage view, `/context` for context details, and `/help` for commands grouped into Getting started, Working, Safety, Settings, and More commands.
 
 A rotating startup tip is shown on launch. Set `OASIS_TIP=off` or `OASIS_NO_TIPS=1` to turn it off. Set `NO_COLOR` for plain terminal output, or use `--ax-screen-reader` for the accessible plain-text mode. Read approval prompts carefully: OASIS runs approved commands with the permissions of your operating-system account.

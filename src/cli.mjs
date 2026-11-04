@@ -68,6 +68,59 @@ let settingsWarningShown = false;
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL_URL = 'https://github.com/FAHTHIZ/oasis/archive/';
 
+function printQuickHelp() {
+  const rows = (items) => items.map(([cmd, text]) => '  ' + cmd.padEnd(34) + text);
+  stdout.write([
+    'OASIS — a plain-English coding agent',
+    '',
+    'Usage:',
+    '  oasis [options] [command]',
+    '',
+    'Start',
+    ...rows([
+      ['oasis', 'Chat in the terminal (this folder is the workspace)'],
+      ['oasis "fix the failing test"', 'Start with a first message'],
+      ['oasis web', 'Open the browser workspace (local only)'],
+      ['oasis -p "explain src/"', 'Run once without prompts (scripts and CI)'],
+      ['oasis -c  |  oasis -r ID', 'Continue the last chat, or resume a saved one']
+    ]),
+    '',
+    'Set up and check',
+    ...rows([
+      ['oasis setup', 'Choose a model provider or a local model'],
+      ['oasis doctor', 'Check Node, Git, provider, sandbox and config'],
+      ['oasis update', 'Update to the latest stable release'],
+      ['oasis init', 'Create OASIS.md project instructions']
+    ]),
+    '',
+    'Extend',
+    ...rows([
+      ['oasis mcp list|add|remove', 'Model Context Protocol servers'],
+      ['oasis skills | oasis plugins', 'Agent Skills and native plugins'],
+      ['oasis ide | oasis acp', 'VS Code, Cursor, Zed, JetBrains and other editors'],
+      ['oasis gateway', 'Chat with OASIS from Telegram, Slack or Discord']
+    ]),
+    '',
+    'Safety',
+    ...rows([
+      ['--permission-mode <mode>', 'manual (default), accept-edits, plan, auto'],
+      ['--safe-mode', 'Start with skills, hooks, MCP and plugins off'],
+      ['--restricted', 'No command or network tools; managed settings only'],
+      ['-w, --worktree [name]', 'Work on an isolated Git worktree branch'],
+      ['/rewind (in chat, or Esc Esc)', 'Undo file changes from earlier turns']
+    ]),
+    '',
+    'More',
+    ...rows([
+      ['oasis help all', 'Every command and option'],
+      ['oasis --version', 'Print the version']
+    ]),
+    '',
+    'Docs: https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md',
+    ''
+  ].join('\n'));
+}
+
 function printHelp() {
   stdout.write([
     'OASIS — a plain-English coding agent',
@@ -3369,7 +3422,7 @@ async function main() {
   }
   if (headless.enabled) return await printMode(workspace, headless, args, autoApprove, persistence);
   if (!command || command === '--interactive') return await interactive(workspace, autoApprove, persistence);
-  if (command === '--help' || command === '-h' || command === 'help') return printHelp();
+  if (command === '--help' || command === '-h' || command === 'help') return (args.includes('all') || args.includes('--all')) ? printHelp() : printQuickHelp();
   if (command === '--version' || command === '-v') {
     const pkg = JSON.parse(await readFile(path.join(APP_ROOT, 'package.json'), 'utf8'));
     stdout.write('OASIS ' + pkg.version + '\n');
