@@ -83,3 +83,22 @@ test('run_shell through the sandbox cleans up placeholders when the command ends
   assert.match(String(result.stdout || result.output || JSON.stringify(result)), /done/);
   assert.ok(!existsSync(path.join(root, '.mcp.json')));
 });
+
+test('only your own settings can turn off project-config protection', async (t) => {
+  const { mkdtemp, mkdir: mk, writeFile: wf, rm: rmr } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const p = await import('node:path');
+  const { loadSettings, setWorkspaceTrust, userSettingsPath } = await import('../src/settings.mjs');
+  const home = await mkdtemp(p.join(os.tmpdir(), 'oasis-protect-home-'));
+  const root = await mkdtemp(p.join(os.tmpdir(), 'oasis-protect-root-'));
+  t.after(() => Promise.all([rmr(home, { recursive: true, force: true }), rmr(root, { recursive: true, force: true })]));
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: p.join(home, 'cfg'), OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
+  await mk(p.join(root, '.oasis'), { recursive: true });
+  await wf(p.join(root, '.oasis', 'settings.json'), JSON.stringify({ sandbox: { enabled: true, protectProjectConfig: false } }));
+  await setWorkspaceTrust(root, true, env);
+  assert.notEqual((await loadSettings(root, { env })).sandbox.protectProjectConfig, false);
+  const userFile = userSettingsPath(env);
+  const user = JSON.parse(await (await import('node:fs/promises')).readFile(userFile, 'utf8'));
+  await wf(userFile, JSON.stringify({ ...user, sandbox: { protectProjectConfig: false } }));
+  assert.equal((await loadSettings(root, { env })).sandbox.protectProjectConfig, false);
+});

@@ -1216,6 +1216,8 @@ async function backgroundCommand(root, rest) {
     const activity = await Promise.all(entries.map((entry) => (entry.status === 'running' ? bg.readActivity(entry) : Promise.resolve(''))));
     const interrupted = entries.filter((entry) => entry.status === 'interrupted').length;
     if (interrupted) stdout.write(interrupted + ' run(s) stopped unexpectedly (crash, kill or reboot). oasis respawn --interrupted resumes them with their conversations.\n');
+    const waiting = entries.filter((entry) => entry.pendingApproval).length;
+    if (waiting) stdout.write(waiting + ' run(s) are waiting for your approval. oasis bg approve ID [--always] or oasis bg deny ID [reason] answers.\n');
     stdout.write(entries.length ? entries.map((entry, index) => bg.describeEntry(entry, activity[index])).join('\n') + '\n' : 'No background sessions. Start one with oasis --bg "task" or /background in a session.\n');
     return;
   }
@@ -1231,7 +1233,7 @@ async function backgroundCommand(root, rest) {
     if (!interrupted.length) stdout.write('No interrupted background sessions.\n');
     return;
   }
-  if (!query) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | send ID "message" | attach ID | stop ID | rm ID | respawn ID|--all|--interrupted');
+  if (!query) throw new Error('Usage: oasis bg [list] | logs ID [--follow] | send ID "message" | approve ID [--always] | deny ID [reason] | attach ID | stop ID | rm ID | respawn ID|--all|--interrupted');
   const id = await bg.resolveBackgroundId(query, process.env);
   if (sub === 'respawn') {
     const entry = await bg.respawnBackgroundSession(id, process.env);
@@ -1258,6 +1260,15 @@ async function backgroundCommand(root, rest) {
     stdout.write('Sent to ' + id + '. It reads the message at its next step; oasis bg logs ' + id + ' --follow shows the reply.\n');
     return;
   }
+  if (sub === 'approve' || sub === 'allow' || sub === 'deny' || sub === 'reject') {
+    const allow = sub === 'approve' || sub === 'allow';
+    const always = more.includes('--always');
+    const reason = more.filter((word) => word !== '--always').join(' ').trim();
+    const pending = await bg.answerBackgroundApproval(id, allow ? 'allow' : 'deny', process.env, { always, reason });
+    stdout.write((allow ? 'Approved' : 'Denied') + (always && allow ? ' (and allowed for the rest of that run)' : '') + ': ' + (pending.message || pending.tool || 'action').slice(0, 160) + '\n');
+    if (!allow && reason) await bg.sendToBackgroundSession(id, 'I denied that action: ' + reason, process.env).catch(() => {});
+    return;
+  }
   if (sub === 'stop' || sub === 'kill') { const result = await bg.stopBackgroundSession(id, process.env); stdout.write(result.stopped ? 'Stopped ' + id + '.\n' : id + ' is not running (' + result.status + ').\n'); return; }
   if (sub === 'rm') { await bg.removeBackgroundSession(id, process.env); stdout.write('Removed ' + id + '.\n'); return; }
   if (sub === 'attach') {
@@ -1274,7 +1285,7 @@ async function backgroundCommand(root, rest) {
     try { process.chdir(entry.root); } catch {}
     return await interactive(entry.root, false, { enabled: true, resumeId: entry.sessionId });
   }
-  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | send ID "message" | attach ID | stop ID | rm ID | respawn ID|--all|--interrupted');
+  throw new Error('Unknown bg command ' + sub + '. Usage: oasis bg [list] | logs ID [--follow] | send ID "message" | approve ID [--always] | deny ID [reason] | attach ID | stop ID | rm ID | respawn ID|--all|--interrupted');
 }
 
 // oasis auto-mode defaults [--label PREFIX] | config | critique | reset [--yes]  (claude auto-mode ...)
