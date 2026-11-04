@@ -301,6 +301,8 @@ npm run check          # everything CI runs: site checks, tests, harness benchma
 
 Use `npm test` rather than bare `node --test`, which also picks up helper servers and archived fixtures. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [test map](test/README.md). Bug reports with a failing case are the most useful kind; harness misses become regression tests.
 
+Questions and ideas go to [Discussions](https://github.com/FAHTHIZ/oasis/discussions); [SUPPORT.md](SUPPORT.md) lists every way to get help.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
