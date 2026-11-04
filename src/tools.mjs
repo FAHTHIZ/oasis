@@ -2099,6 +2099,18 @@ export async function executeTool(name, args = {}, context = {}) {
         }
       });
     }
+    case 'text_to_speech': {
+      const { textToSpeech, textToSpeechConfig } = await import('./tts.mjs');
+      const session = context.session || {};
+      const config = session.textToSpeech || textToSpeechConfig(context.env || process.env, session.settings || {});
+      return await textToSpeech(args, {
+        config, approval: context.approval, autoApprove: Boolean(context.autoApprove), signal: context.signal,
+        resolvePath: (rel) => resolveWorkspacePath(root, rel, { rejectSymlinks: true }),
+        beforeWrite: async (target) => {
+          try { if ((await lstat(target.absolute)).isFile()) await snapshotFile(target.root, target.absolute, 'before-agent-write'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        }
+      });
+    }
     case 'session_search': {
       const { runSessionSearchTool } = await import('./session-search.mjs');
       return await runSessionSearchTool(args, { root, env: context.env || process.env, session: context.session });

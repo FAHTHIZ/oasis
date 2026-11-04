@@ -276,15 +276,17 @@ export OASIS_TELEGRAM_ALLOWED_CHATS=123456789        # comma-separated; group ID
 oasis -C ~/code/my-app gateway telegram
 ~~~
 
-Only allowlisted chats reach the agent; any other chat just gets its ID once so you can add it. Each chat has its own session, saved like terminal sessions (so `/recall` and `oasis --resume` see them). Anything that needs approval shows **Allow / Always / Reject** buttons; unanswered approvals are rejected after 10 minutes, and buttons only work in the chat that asked. Chat commands: `/new`, `/stop`, `/status`, `/mode default|acceptEdits|plan|auto`, `/help`. The gateway long-polls Telegram (no public URL or webhook needed) and backs off on network errors. Text messages only for now; voice and files are not handled yet. Pair it with the container sandbox (`OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker`) when you approve commands remotely.
+Only allowlisted chats reach the agent; any other chat just gets its ID once so you can add it. Each chat has its own session, saved like terminal sessions (so `/recall` and `oasis --resume` see them). Anything that needs approval shows **Allow / Always / Reject** buttons; unanswered approvals are rejected after 10 minutes, and buttons only work in the chat that asked. Chat commands: `/new`, `/stop`, `/status`, `/mode default|acceptEdits|plan|auto`, `/voice on|off|auto`, `/help`. The gateway long-polls Telegram (no public URL or webhook needed) and backs off on network errors. Photos, documents and voice notes are handled too (see below). Pair it with the container sandbox (`OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker`) when you approve commands remotely.
 
 Photos and files work too: send a screenshot, a log file or a PDF (with or without a caption) and it is saved under `.oasis/inbox/` in the workspace, images are also shown to the model directly, and the prompt lists the saved paths so the agent can read them. Up to 5 files per message and 20 MB each (the Telegram Bot API limit); file contents are treated as data, not instructions. The same applies to Discord attachments and to Slack files (add the `files:read` bot scope).
 
 Voice notes can be transcribed. Turn it on with voice settings (`"voice": { "enabled": true }`, or `OASIS_VOICE=1`) or with `OASIS_GATEWAY_TRANSCRIBE=1`. A voice note sent on its own then becomes your request, so you can talk to the agent from your phone. Audio sent with text or other files is added as a transcript. Transcription uses the same OpenAI-compatible endpoint as [`/voice`](#voice-dictation) (`OASIS_VOICE_TRANSCRIPTION_URL`, a local Whisper server, Groq or OpenAI), handles Telegram voice notes, Discord voice messages and Slack audio clips (OGG/Opus, MP3, M4A, WAV, WebM, FLAC), and keeps the audio in `.oasis/inbox/`. It is off by default because it uploads audio; `OASIS_GATEWAY_TRANSCRIBE=0` forces it off.
 
+On Telegram the agent can also answer out loud. With [text to speech](#text-to-speech-text_to_speech) configured, `OASIS_GATEWAY_VOICE_REPLY=auto` answers voice notes with a voice message as well as the text reply, and `always` speaks every reply. In a chat, `/voice on`, `/voice off` and `/voice auto` change it for that chat. The spoken version leaves out code blocks, tables and link addresses, and stops at about 1,500 characters; the full answer is always in the text message.
+
 ### Discord and Slack
 
-The same agent runs as a Discord bot or a Slack app, with the same per-chat sessions, approval buttons, 10-minute approval timeout and chat commands. Neither needs a public URL.
+The same agent runs as a Discord bot or a Slack app, with the same per-chat sessions, approval buttons, 10-minute approval timeout and chat commands (except `/voice`: spoken replies are Telegram-only for now). Neither needs a public URL.
 
 ~~~sh
 # Discord: create an application and bot at discord.com/developers, enable the
@@ -1147,6 +1149,22 @@ It speaks the OpenAI-compatible Images API (`/images/generations` and `/images/e
 | `"imageGeneration": { "size": "1536x1024" }` | `auto` |
 
 A loopback base URL (`http://localhost:...`) needs no key. Every call asks first, because the prompt (and any input images) go to the provider and may cost money; an `allow` permission rule for `generate_image` skips the question. Saved files are checkpointed like other edits, paths outside the workspace are refused, and plan mode does not offer the tool. Turn it off with `"imageGeneration": false` or `OASIS_IMAGE_GENERATION=0`.
+
+## Text to speech (text_to_speech)
+
+When a speech key or a local speech server is available, the model gets a `text_to_speech` tool. It turns up to 4,096 characters of text into an audio file in the workspace (by default `audio/<text-slug>-<id>.mp3`, or any workspace `path`). Use it for narration, voice-overs, spoken summaries and app sound prompts. The model can choose the `voice`, the `format` (`mp3`, `wav`, `opus`, `aac`, `flac`, `pcm`), the `speed` (0.25 to 4.0), and delivery `instructions` for models that support them.
+
+It speaks the OpenAI-compatible speech API (`/audio/speech`), so it works with OpenAI `gpt-4o-mini-tts`, `tts-1` and `tts-1-hd`, local servers such as Kokoro-FastAPI and openedai-speech, and proxies such as LiteLLM:
+
+| Setting | Default |
+| --- | --- |
+| `OASIS_TTS_API_KEY` | falls back to `OPENAI_API_KEY` when the base URL is OpenAI's |
+| `OASIS_TTS_MODEL` or `"textToSpeech": { "model": "..." }` | `gpt-4o-mini-tts` |
+| `OASIS_TTS_BASE_URL` or `"textToSpeech": { "baseUrl": "..." }` | `https://api.openai.com/v1` |
+| `OASIS_TTS_VOICE` or `"textToSpeech": { "voice": "..." }` | `alloy` |
+| `"textToSpeech": { "format": "wav" }` | `mp3` |
+
+A loopback base URL (for example Kokoro at `http://localhost:8880/v1`) needs no key. Every call asks first, because the text goes to the provider and may cost money; an `allow` permission rule for `text_to_speech` skips the question. Overwriting an existing file is covered by checkpoints and `/rewind`. Turn the tool off with `OASIS_TTS=0` or `"textToSpeech": false`. As with image settings, a repository's own settings cannot change the endpoint until you trust the workspace.
 
 ## Longer tasks
 

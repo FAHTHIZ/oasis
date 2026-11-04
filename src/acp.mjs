@@ -24,7 +24,7 @@ const MODE_INFO = [
 
 const KIND_BY_TOOL = {
   read_file: 'read', list_files: 'read', glob_files: 'search', search_files: 'search', grep: 'search', ast_grep: 'search', repo_map: 'search', session_search: 'search', memory_search: 'search',
-  edit_file: 'edit', multi_edit: 'edit', write_file: 'edit', apply_patch: 'edit', notebook_edit: 'edit',
+  edit_file: 'edit', multi_edit: 'edit', write_file: 'edit', apply_patch: 'edit', notebook_edit: 'edit', generate_image: 'edit', text_to_speech: 'edit',
   delete_file: 'delete', move_file: 'move',
   run_command: 'execute', run_shell: 'execute', powershell: 'execute', monitor_command: 'execute',
   fetch_url: 'fetch', web_search: 'fetch',
