@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -43,7 +44,11 @@ assert.ok(
 assert.ok(!/release candidate|\bRC1\b|1\.0 RC/i.test(html), 'Homepage must not describe 1.0 as a release candidate.');
 assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the Pages URL.');
 assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta description must match the approved concise description.');
-assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.svg"'), 'Homepage must point Open Graph at the social preview image.');
+assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.png"') && html.includes('name="twitter:image" content="' + expectedUrl + 'assets/oasis-social-preview.png"'), 'Open Graph and Twitter must use the PNG social preview: most link previews do not render SVG.');
+{
+  const png = readFileSync(new URL('../../site/assets/oasis-social-preview.png', import.meta.url));
+  assert.ok(png.subarray(1, 4).toString() === 'PNG' && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630, 'Social preview PNG must be 1200x630.');
+}
 assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.includes('<svg'), 'Social preview must be a 1200x630 SVG image.');
 assert.ok(socialPreview.includes('OASIS') && !socialPreview.includes('OASIS OSS') && socialPreview.includes('CODE. AUTOMATE.') && socialPreview.includes('local-first workspace'), 'Social preview must use the current OASIS-only product identity and descriptor.');
 assert.ok(html.includes('OASIS 1.0 · Stable · Open source · Apache-2.0'), 'Public homepage must show the stable 1.0 lifecycle.');
