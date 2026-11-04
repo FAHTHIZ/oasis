@@ -13,6 +13,7 @@ Changes after 1.0.0. Entries include feature work, reliability improvements, and
 - `oasis doctor` starts with a short plain summary and one next step (for example "run oasis setup to connect a model"). The full environment list follows under Environment details.
 - Website link previews: shared links now show the OASIS preview image on X, Facebook, LinkedIn, Slack, Discord and WhatsApp (PNG instead of SVG, regenerated with `scripts/render-social-preview.mjs`).
 - Browser workspace:
+  - The product name is spelled OASIS everywhere in the workspace and user guide, matching the app, website and CLI.
   - When a language server could not check a change, the reply shows one quiet, expandable note instead of a paragraph of technical detail. The full notice is still there when you open it.
   - Keyboard shortcuts and help guide: click Help in the sidebar or press Ctrl + / (⌘ + / on a Mac). Each shortcut is explained in plain words, the guide has a search box and a key-name glossary, and phones get a full-screen version that lists the buttons to tap.
   - The runtime prints a one-click connect link (`#token=`), which is read once and removed from the address bar.
