@@ -86,6 +86,7 @@ export const BUILTIN_COMMANDS = {
   fork: 'Fork the conversation: keep the original saved and continue in a copy (alias /branch)',
   branch: 'Fork the conversation (same as /fork)',
   skills: 'List available skills',
+  recall: 'Search earlier saved conversations for this project (/recall QUERY, /recall --all QUERY for every project)',
   remember: 'Save what is worth keeping from this conversation to auto memory (/remember [focus])',
   learning: 'Review reusable skill proposals learned from verified work (/learning [list|show ID|approve ID|reject ID])',
   loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT); omit the interval to let the model pace itself',
@@ -1760,6 +1761,13 @@ export async function runBuiltinCommand(name, argument, state) {
         } catch (error) { return { output: error.message }; }
       }
       return { output: 'Usage: /learning [list|show ID|approve ID|reject ID [reason]]' };
+    }
+    case 'recall': {
+      const all = /^--all\b/.test(argument || '');
+      const query = String(argument || '').replace(/^--all\b\s*/, '').trim();
+      if (!query) return { output: 'Usage: /recall QUERY   (add --all to search every project)' };
+      const { searchSessions, formatSessionSearch } = await import('./session-search.mjs');
+      return { output: formatSessionSearch(await searchSessions(root, query, { env, scope: all ? 'all' : 'workspace', limit: 10, excludeId: session && session.sessionId }), query) };
     }
     case 'remember': {
       return {
