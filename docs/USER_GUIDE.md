@@ -912,6 +912,17 @@ Aider users can keep theirs too:
 - **Two-way control (stream-json in and out):** with `--input-format stream-json`, each stdin line is a `{"type":"user","message":{...}}` turn in one session. Add `--permission-prompt-tool stdio` and approvals are sent to you as `{"type":"control_request","request_id":"oasis-1","request":{"subtype":"can_use_tool","tool_name":...,"input":...,"message":...,"permission_suggestions":[...]}}`; answer with `{"type":"control_response","response":{"subtype":"success","request_id":"oasis-1","response":{"behavior":"allow"}}}` (`"deny"`, or add `"always":true` to save the suggested rule). Send `{"type":"control_request","request_id":"x","request":{"subtype":"interrupt"}}` to stop the current turn. To steer a running turn instead of queuing a new one, add `"steer":true` to the user line: Oasis answers `{"type":"system","subtype":"steer_queued"}` and the agent reads it at its next step (if no turn is running it simply becomes the next turn). The VS Code chat panel does this when you send while Oasis works. This is the same protocol compatible-format SDK uses, and it is what the VS Code chat panel runs on.
 - The exit code is 1 when the run fails, so CI steps fail too. Add `--continue` (`-c`) or `--resume ID` to keep a conversation across runs.
 
+## Batch runs and trajectory export
+
+For evaluation sets and fine-tuning data:
+
+~~~sh
+oasis sessions export --all --format sharegpt --out sessions.jsonl   # or list session IDs; --format openai (default)
+oasis batch prompts.jsonl --out results.jsonl --format sharegpt --concurrency 2
+~~~
+
+`prompts.jsonl` has one task per line, either JSON (`{"id": "t1", "prompt": "...", "metadata": {...}}`) or plain text; `//` lines are comments. Each prompt runs in a fresh session in the current workspace, and each output line holds `id`, `ok`, the final `text`, `toolCalls`, `durationMs` and the full `trajectory`. The `openai` format keeps chat-completions messages (with `tool_calls` and `tool` results) plus the tool schemas; `sharegpt` maps turns to `system`, `human`, `gpt`, `function_call` and `observation`. Secrets are redacted with the auto-memory patterns, and output files are created with mode `600`. Batch runs cannot prompt, so anything that needs approval is denied; pass `--permission-mode acceptEdits` (or run inside the container sandbox) when tasks must edit or run commands. Concurrency is capped at 8, and parallel prompts share one working tree, so keep it at 1 for tasks that edit the same files.
+
 ## GitHub: mention @oasis
 
 Add [the workflow](examples/oasis-github.yml) to your repository and comment `@oasis fix the flaky login test` on an issue. OASIS makes the change, runs your tests, pushes an `oasis/issue-N-*` branch, opens a pull request that closes the issue, and replies in the thread. On a pull request, it commits to the PR branch. It works with any provider and uses `auto` permission mode by default. Only owners, members, and collaborators can trigger it. Details are in [docs/github-action.md](github-action.md).
