@@ -162,6 +162,11 @@
       "difficulty": "medium",
       "rationale": "All-or-nothing batch command with validation before any write."
     },
+    "taskflow-dependencies": {
+      "category": "data-structures",
+      "difficulty": "large",
+      "rationale": "Multi-file feature: task dependencies across store, query, format and CLI, with cycle detection, completion guards, reference cleanup and legacy-file compatibility."
+    },
     "taskflow-emitter-unsubscribe": {
       "category": "agent-operations",
       "difficulty": "medium",

@@ -1,0 +1,298 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..27b3a30 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -60,7 +60,7 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       const filtered = filterTasks(store.all(), { status: flags.status || 'open', tag: flags.tags && flags.tags[0], priority: flags.priority, overdue: flags.overdue, now: clock });
+       const sorted = sortTasks(filtered, flags.sort || 'id');
+       const page = paginate(sorted, flags.page ? Number(flags.page) : 1, flags.size ? Number(flags.size) : 20);
+-      print(formatList(page.items, { now: clock }));
++      print(formatList(page.items, { now: clock, all: store.all() }));
+       if (page.pages > 1) print(`Page ${page.page} of ${page.pages} (${page.total} tasks)`);
+       return 0;
+     }
+@@ -85,8 +85,22 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       print(`Removed ${args.length} task(s).`);
+       return 0;
+     }
++    case 'block': {
++      const [id, ...blockers] = args;
++      if (!blockers.length) throw new Error('block needs a task ID and at least one blocker ID');
++      const task = await store.block(parseId(id), blockers.map(parseId));
++      print(`Task ${task.id} is blocked by ${task.blockedBy.join(', ')}.`);
++      return 0;
++    }
++    case 'unblock': {
++      const [id, ...blockers] = args;
++      if (!blockers.length) throw new Error('unblock needs a task ID and at least one blocker ID');
++      const task = await store.unblock(parseId(id), blockers.map(parseId));
++      print(task.blockedBy.length ? `Task ${task.id} is blocked by ${task.blockedBy.join(', ')}.` : `Task ${task.id} is no longer blocked.`);
++      return 0;
++    }
+     default:
+-      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');
++      print('Usage: taskflow <add|list|done|reopen|tag|rm|block|unblock> [options]');
+       return command ? 2 : 0;
+   }
+ }
+diff --git a/src/deps.mjs b/src/deps.mjs
+new file mode 100644
+index 0000000..d5108b2
+--- /dev/null
++++ b/src/deps.mjs
+@@ -0,0 +1,37 @@
++// Task dependencies. A task's `blockedBy` lists the IDs of tasks that must be
++// done first; files written before dependencies existed have no such field.
++export function blockersOf(task) {
++  return Array.isArray(task.blockedBy) ? task.blockedBy : [];
++}
++
++// Open blockers of `task`, ascending. Done or missing blockers do not count.
++export function openBlockers(task, tasks) {
++  const open = new Set(tasks.filter((t) => t.status !== 'done').map((t) => t.id));
++  return blockersOf(task).filter((id) => open.has(id)).sort((a, b) => a - b);
++}
++
++export function isBlocked(task, tasks) {
++  return task.status !== 'done' && openBlockers(task, tasks).length > 0;
++}
++
++// Path from `start` back to `target` following blockedBy edges, or null.
++// Neighbours are visited in ascending order so the reported path is stable.
++function findPath(start, target, byId, seen = new Set()) {
++  if (start === target) return [start];
++  if (seen.has(start)) return null;
++  seen.add(start);
++  const task = byId.get(start);
++  if (!task) return null;
++  for (const next of [...blockersOf(task)].sort((a, b) => a - b)) {
++    const rest = findPath(next, target, byId, seen);
++    if (rest) return [start, ...rest];
++  }
++  return null;
++}
++
++// Throws when making `id` wait on `blocker` would close a loop.
++export function assertNoCycle(id, blocker, tasks) {
++  const byId = new Map(tasks.map((t) => [t.id, t]));
++  const loop = findPath(blocker, id, byId);
++  if (loop) throw new Error(`Dependency cycle: ${[id, ...loop].join(' -> ')}`);
++}
+diff --git a/src/format.mjs b/src/format.mjs
+index 87286b2..83744ef 100644
+--- a/src/format.mjs
++++ b/src/format.mjs
+@@ -1,4 +1,5 @@
+ import { daysUntil, isOverdue } from './dates.mjs';
++import { openBlockers } from './deps.mjs';
+ 
+ // Truncates to at most `max` user-visible characters, adding an ellipsis.
+ // Works on code points so emoji and other astral characters are never split.
+@@ -19,14 +20,18 @@ export function relativeDue(task, now = new Date()) {
+ 
+ const MARK = { low: ' ', normal: '·', high: '!' };
+ 
+-export function formatTask(task, { now = new Date(), width = 40 } = {}) {
++// `blockers` lists the task's open blockers (see deps.openBlockers).
++export function formatTask(task, { now = new Date(), width = 40, blockers = [] } = {}) {
+   const box = task.status === 'done' ? '[x]' : '[ ]';
+   const tags = task.tags.length ? ' ' + task.tags.map((t) => '#' + t).join(' ') : '';
+   const due = relativeDue(task, now);
+-  return `${String(task.id).padStart(3)} ${box} ${MARK[task.priority]} ${truncate(task.title, width)}${tags}${due ? ` (${due})` : ''}`;
++  const waiting = task.status !== 'done' && blockers.length ? ` (blocked by ${blockers.map((id) => '#' + id).join(', ')})` : '';
++  return `${String(task.id).padStart(3)} ${box} ${MARK[task.priority]} ${truncate(task.title, width)}${tags}${due ? ` (${due})` : ''}${waiting}`;
+ }
+ 
+-export function formatList(tasks, options) {
++// options.all is the full task list, used to show which tasks are still blocked.
++export function formatList(tasks, options = {}) {
+   if (!tasks.length) return 'No tasks.';
+-  return tasks.map((task) => formatTask(task, options)).join('\n');
++  const all = options.all || tasks;
++  return tasks.map((task) => formatTask(task, { ...options, blockers: openBlockers(task, all) })).join('\n');
+ }
+diff --git a/src/query.mjs b/src/query.mjs
+index a5ab571..ec2443f 100644
+--- a/src/query.mjs
++++ b/src/query.mjs
+@@ -1,10 +1,13 @@
+ import { isOverdue } from './dates.mjs';
+ import { PRIORITIES, normalizeTag } from './task.mjs';
++import { isBlocked } from './deps.mjs';
+ 
+ export function filterTasks(tasks, { status, tag, priority, overdue, now = new Date() } = {}) {
+   const wanted = tag ? normalizeTag(tag) : null;
+   return tasks.filter((task) => {
+-    if (status && status !== 'all' && task.status !== status) return false;
++    if (status === 'blocked' || status === 'ready') {
++      if (task.status !== 'open' || isBlocked(task, tasks) !== (status === 'blocked')) return false;
++    } else if (status && status !== 'all' && task.status !== status) return false;
+     if (wanted && !task.tags.includes(wanted)) return false;
+     if (priority && task.priority !== priority) return false;
+     if (overdue && !isOverdue(task, now)) return false;
+diff --git a/src/store.mjs b/src/store.mjs
+index c501ef5..fcd337d 100644
+--- a/src/store.mjs
++++ b/src/store.mjs
+@@ -2,6 +2,7 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
+ import { createEmitter } from './events.mjs';
+ import { createTask, updateTask } from './task.mjs';
+ import { nextId } from './ids.mjs';
++import { blockersOf, openBlockers, assertNoCycle } from './deps.mjs';
+ 
+ // The task file holds { version: 1, tasks: [...] }. Writes go to a temporary
+ // file first and are renamed into place, so a crash never leaves half a file.
+@@ -22,6 +23,8 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+     await rename(tmp, file);
+   }
+ 
++  const copy = (t) => ({ ...t, tags: [...t.tags], blockedBy: [...blockersOf(t)] });
++
+   function find(id) {
+     const task = tasks.find((t) => t.id === id);
+     if (!task) throw new Error(`No task with ID ${id}`);
+@@ -30,8 +33,8 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+ 
+   return {
+     events,
+-    all: () => tasks.map((t) => ({ ...t, tags: [...t.tags] })),
+-    get: (id) => { const t = find(id); return { ...t, tags: [...t.tags] }; },
++    all: () => tasks.map(copy),
++    get: (id) => copy(find(id)),
+     async add(fields) {
+       const task = createTask(fields, { id: nextId(tasks), now: now() });
+       tasks = [...tasks, task];
+@@ -41,6 +44,10 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+     },
+     async update(id, changes) {
+       const before = find(id);
++      if (changes.status === 'done' && before.status !== 'done') {
++        const waiting = openBlockers(before, tasks);
++        if (waiting.length) throw new Error(`Task ${id} is blocked by ${waiting.join(', ')}`);
++      }
+       const after = updateTask(before, changes, { now: now() });
+       tasks = tasks.map((t) => (t.id === id ? after : t));
+       await save();
+@@ -49,10 +56,35 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+     },
+     async remove(id) {
+       const task = find(id);
+-      tasks = tasks.filter((t) => t.id !== id);
++      tasks = tasks.filter((t) => t.id !== id).map((t) => (blockersOf(t).includes(id) ? { ...t, blockedBy: blockersOf(t).filter((b) => b !== id) } : t));
+       await save();
+       events.emit('removed', task);
+       return task;
++    },
++    async block(id, blockerIds) {
++      const task = find(id);
++      const blockedBy = new Set(blockersOf(task));
++      let working = tasks;
++      for (const blocker of blockerIds) {
++        if (blocker === id) throw new Error('A task cannot block itself');
++        find(blocker);
++        if (blockedBy.has(blocker)) continue;
++        assertNoCycle(id, blocker, working);
++        blockedBy.add(blocker);
++        working = working.map((t) => (t.id === id ? { ...t, blockedBy: [...blockedBy] } : t));
++      }
++      const after = { ...task, blockedBy: [...blockedBy].sort((a, b) => a - b) };
++      tasks = tasks.map((t) => (t.id === id ? after : t));
++      await save();
++      return copy(after);
++    },
++    async unblock(id, blockerIds) {
++      const task = find(id);
++      const remove = new Set(blockerIds);
++      const after = { ...task, blockedBy: blockersOf(task).filter((b) => !remove.has(b)) };
++      tasks = tasks.map((t) => (t.id === id ? after : t));
++      await save();
++      return copy(after);
+     }
+   };
+ }
+diff --git a/src/task.mjs b/src/task.mjs
+index 443e2d1..9277321 100644
+--- a/src/task.mjs
++++ b/src/task.mjs
+@@ -24,6 +24,7 @@ export function createTask(fields, { id, now = new Date() }) {
+     due: fields.due ? parseDue(fields.due, now) : null,
+     tags,
+     notes: fields.notes ? String(fields.notes) : '',
++    blockedBy: [],
+     created: now.toISOString()
+   };
+ }
+diff --git a/test/deps.test.mjs b/test/deps.test.mjs
+new file mode 100644
+index 0000000..a31d6e8
+--- /dev/null
++++ b/test/deps.test.mjs
+@@ -0,0 +1,68 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { readFile, writeFile } from 'node:fs/promises';
++import { openStore } from '../src/store.mjs';
++import { run } from '../src/cli.mjs';
++import { NOW, tempFile, sink } from './helpers.mjs';
++
++const now = () => NOW;
++
++test('block, unblock and cycle detection', async (t) => {
++  const store = await openStore(await tempFile(t), { now });
++  for (const title of ['a', 'b', 'c']) await store.add({ title });
++  assert.deepEqual((await store.block(3, [2, 1, 2])).blockedBy, [1, 2]);
++  await store.block(2, [1]);
++  await assert.rejects(store.block(1, [3]), { message: 'Dependency cycle: 1 -> 3 -> 1' });
++  await assert.rejects(store.block(1, [1]), /cannot block itself/);
++  await assert.rejects(store.block(1, [9]), /No task with ID 9/);
++  assert.deepEqual(store.get(1).blockedBy, []);
++  assert.deepEqual((await store.unblock(3, [1, 7])).blockedBy, [2]);
++});
++
++test('blocked tasks cannot be completed until their blockers are done', async (t) => {
++  const store = await openStore(await tempFile(t), { now });
++  await store.add({ title: 'a' });
++  await store.add({ title: 'b' });
++  await store.block(2, [1]);
++  await assert.rejects(store.update(2, { status: 'done' }), { message: 'Task 2 is blocked by 1' });
++  await store.update(1, { status: 'done' });
++  assert.equal((await store.update(2, { status: 'done' })).status, 'done');
++});
++
++test('removing a task drops it from blockedBy lists', async (t) => {
++  const file = await tempFile(t);
++  const store = await openStore(file, { now });
++  await store.add({ title: 'a' });
++  await store.add({ title: 'b' });
++  await store.block(2, [1]);
++  await store.remove(1);
++  assert.deepEqual(store.get(2).blockedBy, []);
++  const saved = JSON.parse(await readFile(file, 'utf8'));
++  assert.deepEqual(saved.tasks[0].blockedBy, []);
++});
++
++test('old files without blockedBy still load and list', async (t) => {
++  const file = await tempFile(t);
++  await writeFile(file, JSON.stringify({ version: 1, tasks: [{ id: 1, title: 'old', priority: 'normal', status: 'open', due: null, tags: [], notes: '', created: NOW.toISOString() }] }));
++  const out = sink();
++  await run(['list', '--status', 'ready'], { stdout: out, env: { TASKFLOW_FILE: file }, now });
++  assert.match(out.text, /old/);
++  const store = await openStore(file, { now });
++  assert.deepEqual(store.get(1).blockedBy, []);
++});
++
++test('CLI block/unblock, blocked and ready filters, and list markers', async (t) => {
++  const env = { TASKFLOW_FILE: await tempFile(t) };
++  const say = async (...args) => { const out = sink(); await run(args, { stdout: out, env, now }); return out.text; };
++  await say('add', 'design');
++  await say('add', 'build');
++  await say('add', 'ship');
++  assert.equal(await say('block', '3', '2', '1'), 'Task 3 is blocked by 1, 2.\n');
++  assert.equal(await say('list', '--status', 'blocked'), '  3 [ ] · ship (blocked by #1, #2)\n');
++  assert.equal(await say('list', '--status', 'ready'), '  1 [ ] · design\n  2 [ ] · build\n');
++  await say('done', '1');
++  assert.match(await say('list'), / {2}3 \[ \] · ship \(blocked by #2\)\n$/);
++  assert.equal(await say('unblock', '3', '1'), 'Task 3 is blocked by 2.\n');
++  assert.equal(await say('unblock', '3', '2'), 'Task 3 is no longer blocked.\n');
++  await assert.rejects(run(['block', '1'], { stdout: sink(), env, now }), /at least one blocker/);
++});
