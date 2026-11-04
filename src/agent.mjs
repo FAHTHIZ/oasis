@@ -1287,10 +1287,32 @@ function subagentEffortConfig(parent, agent, env, config) {
   return Number.isInteger(pct) && pct >= 0 && pct <= 100 ? { ...withEffort, autoCompactPercent: pct } : withEffort;
 }
 const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
+// OpenAI reasoning effort a model accepts. `max` exists on GPT-5.6+ and GPT-6,
+// `xhigh` from GPT-5.2; GPT-6 models reject `none` and `minimal` with HTTP 400.
+// Unknown models pass through unchanged.
+export function openaiEffortFor(model, effort) {
+  const value = String(effort || '').toLowerCase();
+  if (!value) return '';
+  const name = String(model || '').toLowerCase();
+  const gpt6 = /gpt-6/.test(name);
+  const gpt5 = name.match(/gpt-5(?:\.(\d+))?/);
+  const minor = gpt5 ? Number(gpt5[1] || 0) : -1;
+  const oSeries = /(?:^|\/)o\d/.test(name);
+  if (!gpt6 && !gpt5 && !oSeries) return value;
+  const top = gpt6 || minor >= 6 ? 'max' : minor >= 2 ? 'xhigh' : 'high';
+  const order = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  let index = order.indexOf(value);
+  if (index < 0) return value;
+  if (index > order.indexOf(top)) index = order.indexOf(top);
+  if (gpt6 && index < order.indexOf('low')) index = order.indexOf('low');
+  return order[index];
+}
 export function applyEffort(config = {}, level, base = {}) {
   const next = { ...config };
   const chosen = level && EFFORT_SETTINGS[level];
-  const [reasoningEffort, thinkingBudget] = chosen || [base.reasoningEffort, base.thinkingBudget];
+  let [reasoningEffort, thinkingBudget] = chosen || [base.reasoningEffort, base.thinkingBudget];
+  // `max` asks for the deepest reasoning the OpenAI model offers.
+  if (chosen && level === 'max') reasoningEffort = openaiEffortFor(config.model || base.model, 'max') || reasoningEffort;
   if (reasoningEffort) next.reasoningEffort = reasoningEffort; else delete next.reasoningEffort;
   if (thinkingBudget) next.thinkingBudget = thinkingBudget; else delete next.thinkingBudget;
   // Claude models with adaptive thinking take the level itself (output_config.effort).
@@ -1339,14 +1361,15 @@ export function claudeEffortFor(model, { level = '', budget = 0 } = {}) {
 export function reasoningEffortFor(prompt, config = {}, env = process.env) {
   if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return '';
   // none/xhigh exist on newer OpenAI reasoning models; they are only sent when configured.
-  const valid = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+  const valid = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
   const configured = String(env.OASIS_REASONING_EFFORT || config.reasoningEffort || '').toLowerCase();
   const explicit = valid.includes(configured);
-  if (!explicit && !/^(?:[\w.-]+\/)?(?:o\d|gpt-5)/i.test(String(config.model || ''))) return '';
+  if (!explicit && !/^(?:[\w.-]+\/)?(?:o\d|gpt-[5-9])/i.test(String(config.model || ''))) return '';
   const budget = thinkingBudgetFor(prompt, { ...config, thinkingBudget: 0 }, { ...env, OASIS_THINKING_BUDGET: '', MAX_THINKING_TOKENS: '' });
   const fromPrompt = budget >= 31999 ? 'high' : budget >= 10000 ? 'medium' : budget ? 'low' : '';
-  if (!fromPrompt) return explicit ? configured : '';
-  return explicit && valid.indexOf(configured) > valid.indexOf(fromPrompt) ? configured : fromPrompt;
+  const chosen = !fromPrompt ? (explicit ? configured : '')
+    : explicit && valid.indexOf(configured) > valid.indexOf(fromPrompt) ? configured : fromPrompt;
+  return openaiEffortFor(config.model, chosen);
 }
 
 export function promptCachingEnabled(config = {}, env = process.env) {

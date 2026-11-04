@@ -238,7 +238,7 @@ export async function saveConfig(config, options = {}) {
   if (config.requireReadBeforeEdit === false || config.requireReadBeforeEdit === 'strict') safe.requireReadBeforeEdit = config.requireReadBeforeEdit;
   const maxOutputTokens = strictInteger(config.maxOutputTokens);
   if (maxOutputTokens !== null && maxOutputTokens >= 1024 && maxOutputTokens <= 128000) safe.maxOutputTokens = maxOutputTokens;
-  if (['none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
+  if (['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(String(config.reasoningEffort || '').toLowerCase())) safe.reasoningEffort = String(config.reasoningEffort).toLowerCase();
   if (!safe.model) throw new Error('The model name cannot be empty.');
   // Atomic so a crash or full disk mid-save can't leave a truncated config.
   await atomicWriteFile(configPath, JSON.stringify(safe, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
