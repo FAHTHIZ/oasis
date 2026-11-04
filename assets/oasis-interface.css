@@ -175,7 +175,7 @@ body.light .btn-primary:hover{background:#287A0F}
 
 /* ---------- Page scaffolding ---------- */
 .intro-row{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:24px;flex-wrap:wrap}
-.eyebrow,.section-kicker,.agent-setup-kicker,.agent-chat-label{font-size:11px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.eyebrow,.section-kicker{font-size:11px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
 .page-title{font-size:var(--fs-2xl);font-weight:700;letter-spacing:-.025em;margin:6px 0 6px}
 .page-subtitle{color:var(--muted);max-width:640px;font-size:var(--fs-md)}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
@@ -276,7 +276,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .setup-drawer[data-runtime="connected"] .agent-setup .agent-connect-row{order:3;margin:0 0 0 auto}
 .setup-drawer[data-runtime="connected"] .agent-setup .agent-help{order:2;flex:1 1 260px;margin:0;font-size:12.5px}
 .setup-drawer[data-runtime="connected"] .agent-setup-heading{margin:0}
-.setup-drawer[data-runtime="connected"] .agent-setup-kicker::after{content:" · CONNECTED";color:var(--accent,#9bff55)}
+.setup-drawer[data-runtime="connected"] .agent-setup-title::after{content:" · Connected";font-weight:600;color:var(--accent,#9bff55)}
 .agent-setup-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .agent-setup-local{font-size:11.5px;color:var(--muted)}
 .agent-connect-row{display:grid;gap:10px}
@@ -330,7 +330,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .agent-chat-panel>.agent-chat-header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 18px;border-bottom:1px solid var(--line-soft)}
 .agent-model-summary{display:flex;align-items:center;gap:12px;min-width:0}
 .agent-chat-identity{display:flex;align-items:center;gap:10px;min-width:0}
-.agent-chat-label{display:none}
+
 .agent-runtime-state{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);white-space:nowrap}
 .agent-runtime-state::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}
 .agent-runtime-state[data-connected="true"]::before{background:var(--accent-2);box-shadow:0 0 0 3px var(--success-soft)}
@@ -914,3 +914,5 @@ dialog.shortcuts-dialog{max-width:min(960px,calc(100vw - 32px));max-height:calc(
 .activity-tool-details>summary::after{margin-left:4px}
 .activity-step.is-complete .activity-step-label::before{content:"";display:inline-block;width:1em;height:1em;vertical-align:-0.125em;background:currentColor;-webkit-mask:var(--gi) center/contain no-repeat;mask:var(--gi) center/contain no-repeat;flex:none;--gi:var(--gi-check);width:.95em;height:.95em}
 .search-wrap .gi{width:14px;height:14px}
+.agent-setup-title{font-size:14px;font-weight:650;margin:0;letter-spacing:0}
+.agent-setup>.agent-help{margin-top:10px}
