@@ -338,6 +338,10 @@ test('chat configures and activates an approved MCP server in the current sessio
   const names = session.toolDefinitions.map((definition) => definition.function.name);
   assert.deepEqual(names, ['read_file', 'task', 'mcp_chatfixture_echo']);
   assert.ok(session.allowedToolNames.has('mcp_chatfixture_echo'));
+  // The new client reports list_changed and server requests to this session.
+  const added = session.mcpClients.get('chatfixture');
+  assert.equal(added.host.session, session);
+  assert.equal(typeof added.host.onToolsChanged, 'function');
   const call = await callMappedMcpTool(session, 'mcp_chatfixture_echo', { message: 'same-session' }, { approval: async () => true });
   assert.equal(call.content, 'pong same-session');
 
