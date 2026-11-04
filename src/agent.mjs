@@ -1,4 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
 import { explainNetworkError } from './network-doctor.mjs';
 import { proxyForUrl } from './proxy.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
@@ -1920,6 +1921,9 @@ async function requestCompletionRaw(session, options = {}) {
     const { apiKeyFromHelper } = await import('./api-key-helper.mjs');
     apiKey = await apiKeyFromHelper(config.apiKeyHelper, { env: providerEnv, cwd: session.root, refresh: Boolean(options.refreshApiKey) });
   }
+  // OASIS_API_KEY_POOL / OASIS_API_KEY_POOL_FILE: rotate across keys on 429/401/402/403.
+  const keyPool = !cloudAnthropic && !config.apiKeyHelper && (providerEnv.OASIS_API_KEY_POOL || providerEnv.OASIS_API_KEY_POOL_FILE) ? sessionKeyPool(session, providerEnv, apiKey) : null;
+  if (keyPool) apiKey = keyPool.current() || apiKey;
   let fastRequest = null;
   if (nativeAnthropic) {
     if (apiKey && !cloudAnthropic) headers['x-api-key'] = apiKey;
@@ -2037,6 +2041,7 @@ async function requestCompletionRaw(session, options = {}) {
     const bodyText = JSON.stringify(bodyObject);
     const requestHeaders = cloudAnthropic ? await cloudHeaders(config, providerEnv, endpoint, bodyText, headers) : headers;
     let limitWaits = 0;
+    let keyRotations = 0;
     for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
       try {
         response = await fetchImpl(endpoint, {
@@ -2057,6 +2062,17 @@ async function requestCompletionRaw(session, options = {}) {
       const status = response.status;
       let errorBody = '';
       try { errorBody = await response.text(); } catch {}
+      if (keyPool && ROTATE_STATUSES.has(status) && keyRotations < keyPool.size - 1 && requestHeaders === headers) {
+        const next = keyPool.fail(apiKey, status, rateLimitResetMs(response.headers));
+        if (next) {
+          keyRotations++;
+          apiKey = next;
+          if (headers['x-api-key']) headers['x-api-key'] = next; else headers.authorization = 'Bearer ' + next;
+          (session.hookMessages ||= []).push('[key-pool] provider returned ' + status + '; switched to the next API key (' + keyRotations + ' of ' + (keyPool.size - 1) + ' spare).');
+          attempt--;
+          continue;
+        }
+      }
       if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody)) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
         continue;
