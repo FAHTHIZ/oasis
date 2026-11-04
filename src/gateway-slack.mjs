@@ -71,7 +71,7 @@ export function createSlackGateway(options = {}) {
   const core = createChatCore({ ...options, env, log, send });
 
   async function handleEvent(event) {
-    if (!event || event.bot_id || event.subtype || (botUserId && event.user === botUserId)) return;
+    if (!event || event.bot_id || (event.subtype && event.subtype !== 'file_share') || (botUserId && event.user === botUserId)) return;
     const isDm = event.channel_type === 'im';
     if (event.type === 'message' && !isDm) return; // channel messages arrive as app_mention
     if (event.type !== 'message' && event.type !== 'app_mention') return;
@@ -86,8 +86,13 @@ export function createSlackGateway(options = {}) {
       return;
     }
     const text = stripSlackMention(event.text, botUserId);
-    if (!text) { if ((event.files || []).length) await send(chatKey, 'Only text messages are supported for now.'); return; }
-    await core.handleText(chatKey, text);
+    // Files need the files:read scope; Slack serves them only with the bot token.
+    const files = (Array.isArray(event.files) ? event.files : []).filter((item) => item && /^https:\/\/files\.slack\.com\//.test(String(item.url_private_download || item.url_private || ''))).map((item) => ({
+      name: item.name, mime: item.mimetype, size: item.size,
+      download: async () => { const response = await fetchImpl(item.url_private_download || item.url_private, { headers: { authorization: 'Bearer ' + botToken }, signal: AbortSignal.timeout(60000) }); if (!response.ok) throw new Error('HTTP ' + response.status); const type = response.headers.get('content-type') || ''; if (/text\/html/.test(type) && !/html/.test(String(item.mimetype || ''))) throw new Error('Slack returned a login page; add the files:read scope'); return Buffer.from(await response.arrayBuffer()); }
+    }));
+    if (!text && !files.length) return;
+    await core.handleText(chatKey, text, files);
   }
 
   async function handleInteractive(payload) {
