@@ -185,11 +185,18 @@ export function recordUsage(tracker, usage = {}) {
   tracker.inputTokens += Number(usage.inputTokens || 0);
   tracker.outputTokens += Number(usage.outputTokens || 0);
   tracker.totalTokens += Number(usage.totalTokens || 0);
+  tracker.cacheReadTokens = Number(tracker.cacheReadTokens || 0) + Number(usage.cacheReadTokens || 0);
+  tracker.cacheCreationTokens = Number(tracker.cacheCreationTokens || 0) + Number(usage.cacheCreationTokens || 0);
+  if (usage.estimated) tracker.estimatedRequests = Number(tracker.estimatedRequests || 0) + 1;
   if (usage.phase === undefined) {
     tracker.requests += 1;
     tracker.costRequests = (tracker.costRequests || 0) + 1;
     if (usage.costKnown === false) tracker.costKnown = false;
     else tracker.costUSD = Number(tracker.costUSD || 0) + Number(usage.costUsd || 0);
+  } else if (Number(usage.costUsd) > 0) {
+    // Side requests (compaction summaries, the advisor) cost money too.
+    tracker.costUSD = Number(tracker.costUSD || 0) + Number(usage.costUsd);
+    tracker.sideCostUSD = Number(tracker.sideCostUSD || 0) + Number(usage.costUsd);
   }
 }
 
@@ -744,7 +751,9 @@ export async function runBuiltinCommand(name, argument, state) {
       const hasTrackedRequests = Number(u.costRequests || 0) > 0;
       const trackingUnknown = hasTrackedRequests && u.costKnown === false;
       const trackedCost = hasTrackedRequests && !trackingUnknown;
-      const spent = trackedCost ? u.costUSD : (session && typeof session.costUsd === 'number' ? session.costUsd : 0);
+      // The shared ledger also counts background subagents, which do not stream usage.
+      const ledgerSpent = session && session.budgetLedger ? Number(session.budgetLedger.spentUsd) || 0 : 0;
+      const spent = Math.max(trackedCost ? u.costUSD : (session && typeof session.costUsd === 'number' ? session.costUsd : 0), ledgerSpent);
       const money = trackingUnknown
         ? ' Estimated cost: unknown (one or more requests used a model without configured pricing).'
         : trackedCost
@@ -756,7 +765,14 @@ export async function runBuiltinCommand(name, argument, state) {
           ? ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); net savings are unknown because at least one model price is unavailable.'
           : ' Auto-routing used the cheaper model for ' + formatNumber(u.routingTasks) + ' easy task(s); estimated net savings versus the strong model: ' + formatUsd(u.routingSavingsUSD || 0) + '.')
         : '';
-      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money + routingNote };
+      const cacheRead = Number(u.cacheReadTokens || 0);
+      const cacheWrite = Number(u.cacheCreationTokens || 0);
+      const cacheNote = cacheRead || cacheWrite
+        ? ' Prompt cache: ' + formatNumber(cacheRead) + ' input tokens read from cache' + (cacheWrite ? ', ' + formatNumber(cacheWrite) + ' written' : '') + (u.inputTokens ? ' (' + Math.round(cacheRead / Math.max(1, u.inputTokens) * 100) + '% of input).' : '.')
+        : '';
+      const sideNote = Number(u.sideCostUSD || 0) > 0 ? ' Includes ' + formatUsd(u.sideCostUSD) + ' for compaction summaries and advisor calls.' : '';
+      const estimatedNote = Number(u.estimatedRequests || 0) > 0 ? ' ' + formatNumber(u.estimatedRequests) + ' request(s) had no provider usage report, so their tokens are estimated from text length.' : '';
+      return { output: 'Session usage: ' + formatNumber(u.totalTokens) + ' tokens (' + formatNumber(u.inputTokens) + ' input, ' + formatNumber(u.outputTokens) + ' output) across ' + u.requests + ' model requests and ' + u.turns + ' turns.' + money + cacheNote + sideNote + estimatedNote + routingNote };
     }
 
     case 'routing': {
