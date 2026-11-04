@@ -204,7 +204,8 @@ The OS sandbox is implemented in `src/sandbox.mjs` and is disabled by default.
 |---|---|---|
 | Linux | bubblewrap (`bwrap`) | Read-only host view, writable workspace and explicitly configured additional directories, private temporary area, and network namespace disabled unless enabled. Requires a working bubblewrap/user-namespace setup. |
 | macOS | `sandbox-exec` profile | Restricts writes outside permitted workspace/temp paths and can deny network access unless enabled. |
-| Windows / other unsupported hosts | No OASIS-native OS sandbox | Approval and command controls remain available, but they are not equivalent to OS isolation. |
+| Windows / other unsupported hosts | No OASIS-native OS sandbox | Approval and command controls remain available, but they are not equivalent to OS isolation. Use the container backend for isolation. |
+| Any host with Docker or Podman (`sandbox.backend`) | Throwaway container per command | Only the workspace and extra directories are bind-mounted read-write; nothing else from the host is visible. All capabilities dropped, `no-new-privileges`, PID limit, `--network none` unless `network` is true; optional `memory` and `cpus` limits. |
 
 If the user explicitly enables the OS sandbox and the required mechanism is unavailable, OASIS refuses to run the command without the requested isolation. The sandbox is not full filesystem-read isolation. It should not be described as a hardened container or a guarantee that arbitrary project code is safe.
 
@@ -353,7 +354,7 @@ CI passing is evidence for the exact commit and jobs that ran. A green older run
 ## Current architectural limits
 
 - OASIS 1.0 is a stable release. That does not imply security certification or that every platform configuration has been qualified.
-- The optional OS sandbox is Linux/macOS only, disabled by default, and not full filesystem-read isolation. There is no native Windows OS sandbox.
+- The optional OS sandbox is Linux/macOS only, disabled by default, and not full filesystem-read isolation. There is no native Windows OS sandbox; the opt-in Docker/Podman backend is the isolation path there.
 - Android has no native APK release. The CLI can be tried through Termux; native PTY and background behavior are not guaranteed.
 - Browser Projects/Tasks/Notes data does not synchronize with CLI task/session state. There is no hosted account or cloud synchronization layer.
 - Browser job records and task checkpoints can survive a runtime restart, but the live worker processes, in-memory team registry, PTY sessions and pending approvals do not.

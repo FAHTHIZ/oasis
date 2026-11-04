@@ -1427,19 +1427,22 @@ export async function runBuiltinCommand(name, argument, state) {
       const describe = (box) => box && box.enabled ? (box.available ? 'on (' + box.kind + (box.network ? ', network on' : ', network off') + ')' : 'on but unavailable - ' + box.reason) : 'off';
       if (!argument) {
         const probe = detectSandbox();
-        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.\nUsage: /sandbox on | off | network on | network off. Make it permanent with "sandbox": {"enabled": true} in settings.' };
+        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE]. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
       }
       if (!session) return { output: 'Start a task first; /sandbox changes the running session.' };
       const words = argument.toLowerCase().split(/\s+/);
       let enabled = Boolean(current && current.enabled);
       let network = Boolean(current && current.network);
+      let backend = current && current.backend || (session.settings && session.settings.sandbox && session.settings.sandbox.backend) || 'os';
+      let image = current && current.image || (session.settings && session.settings.sandbox && session.settings.sandbox.image) || undefined;
       if (words[0] === 'on') enabled = true;
       else if (words[0] === 'off') enabled = false;
       else if (words[0] === 'network' && ['on', 'off'].includes(words[1])) { enabled = true; network = words[1] === 'on'; }
-      else return { output: 'Usage: /sandbox on | off | network on | network off' };
+      else if (['os', 'docker', 'podman'].includes(words[0])) { enabled = true; backend = words[0]; if (words[1]) image = words[1]; }
+      else return { output: 'Usage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE]' };
       const writable = current && current.writable || [root];
-      session.sandbox = resolveSandbox({ sandbox: { enabled, network, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
-      if (session.sandbox.enabled) session.sandbox.writable = writable;
+      session.sandbox = resolveSandbox({ sandbox: { enabled, network, backend, image, memory: current && current.memory, cpus: current && current.cpus, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
+      if (session.sandbox.enabled && session.sandbox.backend === (current && current.backend || 'os')) session.sandbox.writable = writable;
       return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
     }
     case 'language': {

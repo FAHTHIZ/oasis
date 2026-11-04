@@ -1,6 +1,6 @@
 // /doctor inside a session: a compact health report for the current workspace.
 import { loadSettings } from './settings.mjs';
-import { detectSandbox } from './sandbox.mjs';
+import { detectSandbox, detectContainerRuntime } from './sandbox.mjs';
 import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
@@ -22,10 +22,11 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     const settings = await loadSettings(root, { env });
     lines.push('  Trusted: ' + (settings.trusted ? 'yes' : 'no') + '; settings files: ' + (settings.sources.length || 'none'));
     if (settings.ignoredUntrusted.length) problems.push('Ignored until you run oasis trust: ' + settings.ignoredUntrusted.join(', '));
-    const sandbox = detectSandbox();
+    const backend = settings.sandbox.backend || 'os';
+    const sandbox = backend === 'os' ? detectSandbox() : detectContainerRuntime(backend);
     lines.push('  Sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'off') + ' (' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable: ' + sandbox.reason) + ')');
     lines.push('  Command isolation: ' + (settings.sandbox.enabled && sandbox.available
-      ? 'OS sandbox active'
+      ? (backend === 'os' ? 'OS sandbox active' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
       : 'not active; approval controls are not OS isolation'));
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
     else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');

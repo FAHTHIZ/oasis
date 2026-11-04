@@ -253,7 +253,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 OASIS provides layered controls, not a guarantee that arbitrary model output, repository code, commands, packages, MCP servers, hooks, skills or plugins are safe.
 
 - Approved commands run with the operating-system permissions of the user who launched OASIS.
-- Optional Linux/macOS sandboxing is off by default and does not isolate filesystem reads. Native Windows sandboxing is not implemented.
+- Optional Linux/macOS OS sandboxing is off by default and does not isolate filesystem reads. Native Windows OS sandboxing is not implemented. An optional container backend (`"backend": "docker"` or `"podman"`) runs commands in a throwaway container with only the workspace mounted, on any OS including Windows (Docker Desktop); it has unit coverage for the generated arguments but has not yet been exercised against a live engine in CI.
 - Approval prompts and workspace checks are not operating-system isolation.
 - Third-party integrations can run code with your permissions. Enable only sources you trust.
 - The browser workspace keeps some local data in browser storage, unencrypted by OASIS.

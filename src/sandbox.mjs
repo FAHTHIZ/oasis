@@ -7,7 +7,12 @@
 //   not complete filesystem-read isolation.
 // macOS: sandbox-exec with a profile that denies file writes outside the
 //   workspace and temp folders and, unless enabled, denies network access.
-// Other platforms report the sandbox as unavailable; Oasis then falls back to
+// Container backend (any platform, including Windows): "backend": "docker" or
+//   "podman" runs each command in a throwaway container from "image" with only
+//   the workspace (and extra directories) bind-mounted, all capabilities
+//   dropped, no-new-privileges, a PID limit, and --network none unless network
+//   is enabled. Nothing else from the host filesystem is visible.
+// Other platforms report the OS sandbox as unavailable; Oasis then falls back to
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { spawnSync } from 'node:child_process';
 import { realpathSync, statSync } from 'node:fs';
@@ -71,6 +76,67 @@ export function collectCacheDirectories(env = process.env) {
 }
 
 let cachedProbe = null;
+const containerProbes = new Map();
+
+export const CONTAINER_BACKENDS = ['docker', 'podman'];
+export const DEFAULT_CONTAINER_IMAGE = 'node:22-bookworm';
+
+// Checks that the container CLI exists and its engine answers.
+export function detectContainerRuntime(backend, force = false, run = spawnSync) {
+  if (!CONTAINER_BACKENDS.includes(backend)) return { available: false, kind: 'none', reason: 'Unknown sandbox backend ' + backend + '. Use os, docker or podman.' };
+  if (containerProbes.has(backend) && !force) return containerProbes.get(backend);
+  let probe;
+  try {
+    const result = run(backend, ['version', '--format', '{{.Server.Version}}'], { timeout: 10000, encoding: 'utf8', windowsHide: true });
+    probe = result && result.status === 0
+      ? { available: true, kind: backend }
+      : { available: false, kind: 'none', reason: backend + ' is installed but its engine is not responding' + (result && result.stderr ? ': ' + String(result.stderr).trim().split('\n')[0].slice(0, 200) : '.') + ' Start ' + (backend === 'docker' ? 'Docker Desktop or the docker daemon' : 'the podman machine') + ' and retry.' };
+  } catch {
+    probe = { available: false, kind: 'none', reason: backend + ' is not installed. Install ' + (backend === 'docker' ? 'Docker Desktop (Windows/macOS) or Docker Engine (Linux)' : 'Podman') + ', or set "backend": "os".' };
+  }
+  containerProbes.set(backend, probe);
+  return probe;
+}
+
+// Inside the container the workspace keeps its host path on POSIX so absolute
+// paths in arguments still work; Windows drive paths map under /host/<drive>/.
+export function containerPath(hostPath, platform = process.platform) {
+  const resolved = platform === 'win32' ? path.win32.resolve(hostPath) : path.posix.resolve(hostPath);
+  if (platform !== 'win32') return resolved;
+  const match = /^([A-Za-z]):[\\/]?(.*)$/.exec(resolved);
+  if (!match) throw new Error('Cannot map ' + hostPath + ' into the container.');
+  return '/host/' + match[1].toLowerCase() + '/' + match[2].replace(/\\/g, '/');
+}
+
+function safeContainerValue(value, label) {
+  const text = String(value);
+  if (!text || /[\u0000-\u001f\u007f]/.test(text)) throw new Error('Sandbox ' + label + ' contains invalid characters.');
+  return text;
+}
+
+export function containerArgs(command, args, sandbox, cwd, platform = process.platform) {
+  const image = safeContainerValue(sandbox.image || DEFAULT_CONTAINER_IMAGE, 'image');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(image)) throw new Error('Sandbox image name is not valid: ' + image);
+  const wrapped = ['run', '--rm', '-i', '--init',
+    '--network', sandbox.network ? 'bridge' : 'none',
+    '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+    '--pids-limit', String(sandbox.pidsLimit || 512),
+    '--label', 'dev.oasis.sandbox=1',
+    '--env', 'HOME=/tmp', '--env', 'CI=1', '--env', 'OASIS_SANDBOXED=1'];
+  if (sandbox.memory) wrapped.push('--memory', safeContainerValue(sandbox.memory, 'memory'));
+  if (sandbox.cpus) wrapped.push('--cpus', safeContainerValue(sandbox.cpus, 'cpus'));
+  if (platform !== 'win32' && typeof process.getuid === 'function' && sandbox.kind === 'docker') wrapped.push('--user', process.getuid() + ':' + process.getgid());
+  if (sandbox.kind === 'podman') wrapped.push('--userns', 'keep-id');
+  const seen = new Set();
+  for (const dir of sandbox.writable || []) {
+    const inside = containerPath(dir, platform);
+    if (seen.has(inside)) continue;
+    seen.add(inside);
+    wrapped.push('--volume', safeContainerValue(dir, 'path') + ':' + inside + ':rw');
+  }
+  wrapped.push('--workdir', containerPath(cwd, platform), image, command, ...args);
+  return wrapped;
+}
 
 function probeBubblewrap() {
   try {
@@ -105,7 +171,8 @@ export function detectSandbox(force = false) {
 export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
-  const probe = detectSandbox(force);
+  const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) ? settings.sandbox.backend : 'os';
+  const probe = backend === 'os' ? detectSandbox(force) : detectContainerRuntime(backend, force);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
   const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
   const writable = [root, ...additionalWritable, ...caches.filter((dir) => !pathContains(root, dir))];
@@ -121,8 +188,10 @@ export function resolveSandbox(settings = {}, root, force = false) {
     autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
     maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
-    writable,
-    writableCaches: caches
+    writable: backend === 'os' ? writable : [root, ...additionalWritable],
+    writableCaches: backend === 'os' ? caches : [],
+    backend,
+    ...(backend === 'os' ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '' })
   };
 }
 
@@ -217,6 +286,9 @@ export function wrapCommand(command, args, sandbox, cwd) {
   }
   if (sandbox.kind === 'sandbox-exec') {
     return { command: 'sandbox-exec', args: ['-p', macProfile(sandbox), command, ...args] };
+  }
+  if (CONTAINER_BACKENDS.includes(sandbox.kind)) {
+    return { command: sandbox.kind, args: containerArgs(command, args, sandbox, cwd) };
   }
   return { command, args };
 }

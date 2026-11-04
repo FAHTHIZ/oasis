@@ -76,7 +76,7 @@ Implementation presence does not mean every feature works identically across all
 | Android / Termux | Experimental use path | No native APK. PTY, background behavior, and real-device reliability are not fully qualified. |
 | Remote access / phone pairing | Not in 1.0 scope | No shipped trusted-device enrollment or secure remote pairing service. |
 | Tor/onion access | Not in 1.0 scope | Not a shipped capability. |
-| Native Windows OS sandbox | Not implemented | Approval checks are not equivalent to OS isolation. |
+| Native Windows OS sandbox | Not implemented | Approval checks are not equivalent to OS isolation. The opt-in Docker/Podman container backend (`sandbox.backend`) works on Windows with Docker Desktop. |
 
 ## 5. Operational and security boundaries
 
