@@ -1046,6 +1046,20 @@ Runs can go to the background (`run_in_background`); you get a notice when they 
 
 `/workflows save ID` saves a run's script to `.claude/workflows/` (add `--user` for your personal folder). Saved workflows from `.claude/workflows`, `.oasis/workflows`, your personal workflows folder, and enabled plugins become commands: `/audit-routes`. The built-in `/deep-research QUESTION` plans sub-questions, researches them in parallel, cross-checks the claims, and writes a cited report. Permission rules can name the tool: `Workflow` or `Workflow(deep-research)`. Set `"workflowsEnabled": false` or `OASIS_DISABLE_WORKFLOWS=1` to turn the tool off.
 
+## Programmatic tool calling (execute_code)
+
+The `execute_code` tool lets the model write a short JavaScript program that calls OASIS tools directly and returns only the final answer:
+
+```js
+const hits = await tools.grep({ pattern: 'TODO', path: 'src' })
+const files = [...new Set(String(hits.output || '').split('\n').map((line) => line.split(':')[0]).filter(Boolean))]
+const sizes = []
+for (const file of files) sizes.push({ file, lines: String((await tools.read_file({ path: file })).content || '').split('\n').length })
+return sizes.sort((a, b) => b.lines - a.lines).slice(0, 5)
+```
+
+Intermediate tool output stays inside the script, so a ten-step read-and-filter job costs one model turn and only the returned value enters the context. Every nested call takes the normal path: permission rules, plan mode, hooks, approvals and the sandbox apply as if the model had called the tool itself. Scripts run in the same QuickJS sandbox as workflows (no imports, filesystem, network, clock or randomness of their own; 16 MB heap), may make at most 60 tool calls, and cannot call `execute_code`, `task`, `workflow`, `ask_user_question` or memory-writing tools. Results larger than 30,000 characters are truncated. Turn it off with `"executeCode": false` or `OASIS_EXECUTE_CODE=0`; it is also left out when `--tools` restricts the tool list.
+
 ## Longer tasks
 
 OASIS knows the context window of common models (Claude 200K, GPT-4.1 and Gemini 1M, GPT-5 400K, o-series 200K, GPT-4o 128K, DeepSeek V4 1M, and others) and compacts history at about 60% full. For a model it does not know, OASIS reads the provider's `GET /models` listing once per session (DeepSeek `context_window`, OpenRouter `context_length`, vLLM `max_model_len`). Loopback servers are only asked with `OASIS_LOCAL_CONTEXT_PROBE=1`, and `OASIS_MODEL_INFO_PROBE=0` turns the lookup off. Models that still cannot be matched use a conservative 32K. Set `"contextWindow"` in the provider config or `OASIS_CONTEXT_WINDOW` to override it, and `OASIS_COMPACT_THRESHOLD_CHARS` to change when compaction starts.
