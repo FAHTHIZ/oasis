@@ -12,6 +12,7 @@ Changes after 1.0.0. Entries include feature work, reliability improvements, and
 - Demo videos re-recorded from the current build (terminal and browser workspace, MP4, GIF and posters). The web demo now connects with the one-click link.
 - `oasis doctor` starts with a short plain summary and one next step (for example "run oasis setup to connect a model"). The full environment list follows under Environment details.
 - Website link previews: shared links now show the OASIS preview image on X, Facebook, LinkedIn, Slack, Discord and WhatsApp (PNG instead of SVG, regenerated with `scripts/render-social-preview.mjs`).
+- `oasis completion bash|zsh|fish|powershell` prints a Tab-completion script for commands, subcommands and options. See [Tab completion](docs/INSTALL.md#tab-completion).
 - `oasis web --open` opens the browser workspace in your default browser and connects it. The startup message now leads with one "Open this link to start" link in plain words, with the paste-a-token option for other browsers below it.
 - Browser workspace:
   - The product name is spelled OASIS everywhere in the workspace and user guide, matching the app, website and CLI.
