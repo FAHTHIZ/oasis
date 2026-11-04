@@ -9,6 +9,7 @@ Changes after 1.0.0. Entries include feature work, reliability improvements, and
 - Install in one line: `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh` uses the installer from the immutable `v1.0.0` tag. The checksum-verified bootstrap is still documented.
 - `oasis --help` is now one grouped screen (Start, Set up and check, Extend, Safety, More). `oasis help all` prints the full reference. `--version` and the banners say OASIS.
 - First run in the terminal: an invalid choice asks again instead of skipping setup, and `quit` or `/exit` skip it. The startup banner says the model is not set up yet instead of showing a default model that is not connected.
+- Demo videos re-recorded from the current build (terminal and browser workspace, MP4, GIF and posters). The web demo now connects with the one-click link.
 - Browser workspace:
   - Keyboard shortcuts and help guide: click Help in the sidebar or press Ctrl + / (⌘ + / on a Mac). Each shortcut is explained in plain words, the guide has a search box and a key-name glossary, and phones get a full-screen version that lists the buttons to tap.
   - The runtime prints a one-click connect link (`#token=`), which is read once and removed from the address bar.
