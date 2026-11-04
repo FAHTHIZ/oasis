@@ -2360,6 +2360,9 @@ function syncChips(){
   if(hint)hint.textContent=connected?(modelOk?'Ready · '+model.textContent:'Runtime connected · choose a model'):'Connect the local runtime to start';
   if(drawer&&!userToggled){if(connected&&modelOk&&!autoClosed){drawer.open=false;autoClosed=true}else if(!connected){drawer.open=true;autoClosed=false}}
 }
+/* Starting work is the clearest signal that setup is done: fold the drawer away so the conversation gets the room. */
+var composeForm=document.querySelector('.agent-compose-form');
+if(composeForm&&drawer)composeForm.addEventListener('submit',function(){var rt=$('agentRuntimeState'),model=$('agentModelName');var ready=!!C.token&&rt&&!/not connected|paste|failed|unavailable|could not/i.test(rt.textContent)&&model&&!/choose a model/i.test(model.textContent);if(ready&&drawer.open){drawer.open=false;userToggled=false;autoClosed=true}},true);
 ['agentRuntimeState','agentModelName','githubStatus'].forEach(function(id){var n=$(id);if(n)new MutationObserver(syncChips).observe(n,{childList:true,characterData:true,subtree:true,attributes:true})});
 syncChips();
 })();
