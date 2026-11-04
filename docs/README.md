@@ -32,6 +32,7 @@ The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for
 | [Test suite map](../test/README.md) | Test domains, exact runner commands, fixtures, and discovery conventions. |
 | [Repository maintenance](REPOSITORY_MAINTENANCE.md) | Canonical file ownership, intentional copies, main-only maintainer workflow, and modularization discipline. |
 | [Workflows and skills](WORKFLOWS_AND_SKILLS.md) | Reusable workflows, command surface, skills, and plugin behavior. |
+| [Learning from experience](LEARNING.md) | Skill-proposal lifecycle, storage, privacy controls, explicit promotion, and design references. |
 | [Keyboard shortcuts](KEYS.md) | Terminal and editor shortcuts. |
 | [Brand guide](BRAND.md) | OASIS name, portal mark, color tokens, and interface identity. |
 

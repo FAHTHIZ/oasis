@@ -32,6 +32,7 @@ Representative files are listed to help contributors find existing coverage. Thi
 | MCP, hooks, plugins, and extensions | `mcp-project.test.mjs`, `mcp-oauth.test.mjs`, `hooks-v3.test.mjs`, `native-plugins.test.mjs`, `extensions.test.mjs`, `claude-plugins.test.mjs` |
 | Browser workspace and editor bridges | `web.test.mjs`, `web-pty.test.mjs`, `web-file-preview.test.mjs`, `browser-tool.test.mjs`, `browser-navigation-e2e.test.mjs`, `ide.test.mjs`, `vscode-chat.test.mjs` |
 | Verification, evaluation, and reporting | `auto-test.test.mjs`, `test-tamper.test.mjs`, `claim-check.test.mjs`, `eval.test.mjs`, `eval-quarantine.test.mjs`, `diagnostics.test.mjs` |
+| Memory and procedural learning | `auto-memory.test.mjs`, `nested-memory.test.mjs`, `skill-doctor.test.mjs`, `learning.test.mjs` |
 | Installation, packaging, and lifecycle | `installer-scripts.test.mjs`, `desktop-package.test.mjs`, `desktop-secure-secrets.test.mjs`, `update.test.mjs`, `uninstall.test.mjs`, `license-consistency.test.mjs` |
 
 ## Important boundaries

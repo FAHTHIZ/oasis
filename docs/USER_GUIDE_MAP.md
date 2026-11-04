@@ -20,6 +20,7 @@ The [full user guide](USER_GUIDE.md) is the comprehensive behavior reference. It
 - [Workflow commands](USER_GUIDE.md#workflow-commands)
 - [Sessions and cost](USER_GUIDE.md#sessions-and-cost)
 - [Slash commands, mentions, and memory](USER_GUIDE.md#slash-commands-mentions-and-memory)
+- [Procedural learning and reusable skills](USER_GUIDE.md#procedural-learning)
 - [Useful commands](USER_GUIDE.md#useful-commands)
 
 ## Permissions, safety, and recovery
