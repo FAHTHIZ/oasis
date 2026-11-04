@@ -90,7 +90,8 @@ function printQuickHelp() {
       ['oasis setup', 'Choose a model provider or a local model'],
       ['oasis doctor', 'Check Node, Git, provider, sandbox and config'],
       ['oasis update', 'Update to the latest stable release'],
-      ['oasis init', 'Create OASIS.md project instructions']
+      ['oasis init', 'Create OASIS.md project instructions'],
+      ['oasis completion bash', 'Tab completion for bash, zsh, fish or powershell']
     ]),
     '',
     'Extend',
@@ -135,6 +136,7 @@ function printHelp() {
     '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
+    '  oasis completion bash|zsh|fish|powershell  Print a Tab-completion script for your shell',
     '  oasis web [--open] [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace (--open opens it in your browser)',
     '  oasis exec PROMPT [flags]  Same as oasis -p (non-interactive run)',
     '  oasis watch [--yes]       Act on code comments ending in AI! (change) or AI? (question)',
@@ -3077,6 +3079,13 @@ async function main() {
     }
   }
   if (process.env.OASIS_PROFILE) { const { activeProfile } = await import('./config.mjs'); activeProfile(process.env); }
+  if (rawArgs[0] === 'completion' || rawArgs[0] === 'completions') {
+    const { completionScript, completionUsage } = await import('./shell-completion.mjs');
+    const script = rawArgs[1] ? completionScript(rawArgs[1]) : null;
+    if (!script) { (rawArgs[1] ? process.stderr : stdout).write((rawArgs[1] ? 'Unknown shell: ' + rawArgs[1] + '\n\n' : '') + completionUsage()); if (rawArgs[1]) process.exitCode = 1; return; }
+    stdout.write(script);
+    return;
+  }
   if (rawArgs[0] === 'profile' || rawArgs[0] === 'profiles') {
     const { profileCommand } = await import('./profiles.mjs');
     await profileCommand(rawArgs.slice(1));
