@@ -771,6 +771,12 @@ export async function createSession({ root, config, restore = null, permissionMo
       session.imageGeneration = imageConfig;
       session.toolDefinitions = session.toolDefinitions.concat([GENERATE_IMAGE_TOOL_DEFINITION]);
     }
+    const { textToSpeechConfig, TEXT_TO_SPEECH_TOOL_DEFINITION } = await import('./tts.mjs');
+    const speechConfig = textToSpeechConfig(env, loadedSettings);
+    if (speechConfig) {
+      session.textToSpeech = speechConfig;
+      session.toolDefinitions = session.toolDefinitions.concat([TEXT_TO_SPEECH_TOOL_DEFINITION]);
+    }
   }
   if (learningEnabled(loadedSettings, env)) {
     session.proceduralLearning = true;

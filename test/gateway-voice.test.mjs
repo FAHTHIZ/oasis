@@ -75,3 +75,80 @@ test('gateway transcription is opt-in: no upload unless voice or OASIS_GATEWAY_T
     globalThis.fetch = realFetch;
   }
 });
+
+import { createTelegramGateway } from '../src/gateway-telegram.mjs';
+import { speakableText, voiceReplyMode } from '../src/tts.mjs';
+
+test('speakableText drops code, links and markup and caps length', () => {
+  const text = speakableText('## Fixed\n\nI changed `login.js`:\n\n```js\nconst a = 1;\n```\n\nSee [the docs](https://example.com) or https://x.y/z.\n\n| a | b |\n|---|---|\n\n- **All** tests pass.');
+  assert.equal(text, 'Fixed\nI changed login.js:\n(code omitted)\nSee the docs or a link.\nAll tests pass.');
+  const long = speakableText('One sentence. '.repeat(300), 200);
+  assert.ok(long.length < 260 && long.endsWith('The full reply is in the text message.'));
+  assert.equal(voiceReplyMode(''), 'off');
+  assert.equal(voiceReplyMode('auto'), 'auto');
+  assert.equal(voiceReplyMode('always'), 'always');
+});
+
+function telegramHarness(t, { voiceReply, speechConfig, transcribe }) {
+  const TOKEN = '123456:' + 'A'.repeat(30);
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    if (url.includes('/file/bot')) return new Response(Buffer.from('OggS-voice-note'));
+    if (url.endsWith('/audio/speech')) { calls.push({ method: 'speech', body: JSON.parse(init.body) }); return new Response(Buffer.concat([Buffer.from('OggS'), Buffer.alloc(40)]), { headers: { 'content-type': 'audio/ogg' } }); }
+    const method = url.split('/').pop();
+    if (method === 'sendVoice') { calls.push({ method, form: init.body }); return new Response(JSON.stringify({ ok: true, result: {} })); }
+    const body = init.body ? JSON.parse(init.body) : {};
+    calls.push({ method, body });
+    return new Response(JSON.stringify({ ok: true, result: method === 'getFile' ? { file_path: 'voice/file_1.oga' } : true }));
+  };
+  const prompts = [];
+  const agent = { createSession: async () => ({ messages: [], config: {}, permissions: { mode: 'default' } }), runAgentTurn: async (_s, text) => { prompts.push(text); return { text: 'All **12** tests pass now.\n\n```\nok\n```' }; } };
+  return {
+    calls, prompts,
+    gateway: createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl, root: t.root, voiceReply, speechConfig, transcribe, deps: { agent, config: { loadConfig: async () => ({ configured: true }) }, sessions: { saveSession: async () => ({}) } }, log: () => {} })
+  };
+}
+const settle = () => new Promise((resolve) => setTimeout(resolve, 60));
+const speechConfig = { baseUrl: 'http://127.0.0.1:1/v1', apiKey: '', model: 'tts-1', voice: 'nova', format: 'mp3' };
+
+test('Telegram: a voice note is transcribed, and with voice replies on "auto" the answer comes back as voice too', async (t) => {
+  t.root = await workspace(t);
+  const { calls, prompts, gateway } = telegramHarness(t, { voiceReply: 'auto', speechConfig, transcribe: async () => 'run the tests' });
+  await gateway.handleUpdate({ update_id: 1, message: { chat: { id: 42 }, voice: { file_id: 'v1', file_unique_id: 'u1', mime_type: 'audio/ogg' } } });
+  await settle();
+  assert.match(prompts[0], /^run the tests\n\n\[Sent as a voice message/);
+  assert.ok(calls.some((c) => c.method === 'sendMessage' && /12\*\* tests pass/.test(c.body.text)), 'the text reply is still sent');
+  const speech = calls.find((c) => c.method === 'speech');
+  assert.deepEqual({ input: speech.body.input, format: speech.body.response_format, voice: speech.body.voice }, { input: 'All 12 tests pass now.\n(code omitted)', format: 'opus', voice: 'nova' });
+  const voice = calls.find((c) => c.method === 'sendVoice');
+  assert.equal(voice.form.get('chat_id'), '42');
+  assert.equal(voice.form.get('voice').type, 'audio/ogg');
+
+  // A typed message in "auto" mode gets text only.
+  calls.length = 0;
+  await gateway.handleUpdate({ update_id: 2, message: { chat: { id: 42 }, text: 'thanks' } });
+  await settle();
+  assert.ok(calls.some((c) => c.method === 'sendMessage'));
+  assert.ok(!calls.some((c) => c.method === 'sendVoice'));
+});
+
+test('Telegram: voice replies are off by default and /voice turns them on per chat', async (t) => {
+  t.root = await workspace(t);
+  const { calls, gateway } = telegramHarness(t, { voiceReply: undefined, speechConfig, transcribe: async () => 'hi' });
+  await gateway.handleUpdate({ update_id: 1, message: { chat: { id: 42 }, voice: { file_id: 'v1', mime_type: 'audio/ogg' } } });
+  await settle();
+  assert.ok(!calls.some((c) => c.method === 'sendVoice'));
+  await gateway.handleUpdate({ update_id: 2, message: { chat: { id: 42 }, text: '/voice on' } });
+  assert.ok(calls.some((c) => c.method === 'sendMessage' && c.body.text === 'Voice replies: always.'));
+  calls.length = 0;
+  await gateway.handleUpdate({ update_id: 3, message: { chat: { id: 42 }, text: 'status?' } });
+  await settle();
+  assert.ok(calls.some((c) => c.method === 'sendVoice'));
+});
+
+test('Telegram: /voice explains when text to speech is not configured', async (t) => {
+  t.root = await workspace(t);
+  const { calls, gateway } = telegramHarness(t, { voiceReply: 'off', speechConfig: null, transcribe: null });
+  await gateway.handleUpdate({ update_id: 1, message: { chat: { id: 42 }, text: '/voice auto' } });
+  assert.match(calls.find((c) => c.method === 'sendMessage').body.text, /not configured yet/);
+});
