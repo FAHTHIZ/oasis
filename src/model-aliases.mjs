@@ -9,7 +9,7 @@ const FAMILY_DEFAULTS = {
   // stays on 4.6, as in Claude Code's model catalog.
   vertex: { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' },
   bedrock: { opus: 'us.anthropic.claude-opus-5-5', sonnet: 'us.anthropic.claude-sonnet-5-5', haiku: 'us.anthropic.claude-haiku-5-5', fable: 'us.anthropic.claude-fable-5-1' },
-  foundry: { opus: 'claude-opus-4-6', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' }
+  foundry: { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' }
 };
 export const MODEL_ALIASES = ['default', 'best', 'fable', 'opus', 'sonnet', 'haiku', 'opusplan', 'opus[1m]', 'sonnet[1m]', 'opusplan[1m]'];
 
