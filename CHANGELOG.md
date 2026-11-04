@@ -10,6 +10,7 @@ Changes after 1.0.0. Entries include feature work, reliability improvements, and
 - `oasis --help` is now one grouped screen (Start, Set up and check, Extend, Safety, More). `oasis help all` prints the full reference. `--version` and the banners say OASIS.
 - First run in the terminal: an invalid choice asks again instead of skipping setup, and `quit` or `/exit` skip it. The startup banner says the model is not set up yet instead of showing a default model that is not connected.
 - Browser workspace:
+  - Keyboard shortcuts and help guide: click Help in the sidebar or press Ctrl + / (⌘ + / on a Mac). Each shortcut is explained in plain words, the guide has a search box and a key-name glossary, and phones get a full-screen version that lists the buttons to tap.
   - The runtime prints a one-click connect link (`#token=`), which is read once and removed from the address bar.
   - Once connected, the runtime card shrinks to one status row and model setup moves to the top.
   - The setup drawer folds away when a chat starts and setup is complete.
