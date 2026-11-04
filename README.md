@@ -97,8 +97,8 @@ That installs the current `main`. Other ways in:
 
 | Option | How |
 | --- | --- |
-| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable `v*` tag to an immutable commit. No stable tag has been published yet (see [Status](#status-and-boundaries)), so it stops with an error until `v1.0.0` is released; use the source install above meanwhile. |
-| **Desktop app** | Windows x64, macOS arm64 and Linux x86_64 installers are built by CI and attached to the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) with `SHA256SUMS` once one is published (none yet). Until then, build locally with `npm run desktop:dist`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. |
+| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable release (`v1.0.0`) to an immutable commit, runs `oasis doctor` and opens setup. |
+| **Desktop app** | [Download v1.0.0](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS arm64 `.dmg`, Linux x86_64 `.AppImage` or `.deb`, with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. |
 | **Local model, no API key** | `llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080`, then `OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis`. OASIS reads the loaded context window and picks the right profile. Ollama and LM Studio work the same way. |
 | **Coming from another agent** | `oasis import claude`, `codex`, `gemini`, `cursor`, `hermes`, `opencode`, `antigravity`, `windsurf` or `cline` (add `--dry-run` to preview). Existing `CLAUDE.md` / `AGENTS.md` files are picked up as they are. |
 | **Android** | The CLI runs in Termux; see the [Termux guide](docs/TERMUX.md) for what is and isn't supported. |
@@ -232,7 +232,7 @@ The model reasons and requests tools. OASIS owns the tool contracts, workspace c
 
 ## Status and boundaries
 
-> **Current lifecycle — OASIS 1.0, stable channel, not yet published.** `main` carries version `1.0.0` on the stable channel, and CI runs the 1.0 gates in the [project plan](docs/PROJECT_PLAN.md): Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. The `v1.0.0` tag and GitHub Release have not been created yet (checked November 4, 2026: no releases and no `v*` tags), so the release links and the stable installer will not work until a maintainer runs the manual release job.
+> **Current lifecycle — OASIS 1.0, stable, released.** [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) was published on November 4, 2026 from a `main` commit that passed every 1.0 gate in the [project plan](docs/PROJECT_PLAN.md) on that same commit: Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. The release carries Windows, macOS and Linux installers with `SHA256SUMS`.
 
 What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums are provided), clean-machine install, update and uninstall are verified on CI runners rather than by hand on physical machines, and the 50-task evaluator runs on small projects, so it is a regression suite rather than a broad benchmark.
 
@@ -257,7 +257,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 OASIS provides layered controls, not a guarantee that arbitrary model output, repository code, commands, packages, MCP servers, hooks, skills or plugins are safe.
 
 - Approved commands run with the operating-system permissions of the user who launched OASIS.
-- Optional Linux/macOS OS sandboxing is off by default and does not isolate filesystem reads. Native Windows OS sandboxing is not implemented. An optional container backend (`"backend": "docker"` or `"podman"`) runs commands in a throwaway container with only the workspace mounted, on any OS including Windows (Docker Desktop); it has unit coverage for the generated arguments but has not yet been exercised against a live engine in CI. The SSH backend (`"backend": "ssh"`) runs commands on another machine you choose; it protects this machine but does not sandbox the remote host, and it copies the workspace (including files such as `.env`) there.
+- Optional Linux/macOS OS sandboxing is off by default and does not isolate filesystem reads. Native Windows OS sandboxing is not implemented. An optional container backend (`"backend": "docker"` or `"podman"`) runs commands in a throwaway container with only the workspace mounted, on any OS including Windows (Docker Desktop); on Linux, CI runs it against a live Docker engine and checks workspace-only mounts, no network, no capabilities, a non-root user and the process limit. Podman and Docker Desktop on Windows are still covered only by argument-level tests. The SSH backend (`"backend": "ssh"`) runs commands on another machine you choose; it protects this machine but does not sandbox the remote host, and it copies the workspace (including files such as `.env`) there.
 - Approval prompts and workspace checks are not operating-system isolation.
 - Third-party integrations can run code with your permissions. Enable only sources you trust.
 - The browser workspace keeps some local data in browser storage, unencrypted by OASIS.

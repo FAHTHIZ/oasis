@@ -125,7 +125,7 @@ Changes after 1.0.0. Entries include feature work, reliability improvements, and
 - **Small local windows** — when the very first request overflows the server's window (llama.cpp: "exceeds the available context size (16384 tokens)"), OASIS reads the size from the error, switches to the small-context tool set and retries, instead of failing. Overflow messages from llama.cpp are now recognised.
 - **Repository cleanup** — Beta and release-candidate badge files and the RC1 notes were removed (they remain in Git history and the `v0.4.0` tag); the social preview now says OASIS 1.0.
 
-## 1.0.0 — stable channel (prepared November 1, 2026; not yet published)
+## 1.0.0 — stable (prepared November 1, 2026; released November 4, 2026)
 
 First stable release, prepared on `main`; the `v1.0.0` tag and GitHub Release have not been created yet. Release notes: [docs/releases/v1.0.0.md](docs/releases/v1.0.0.md). Installers are unsigned and ship with `SHA256SUMS`.
 
