@@ -38,3 +38,19 @@ test('commandSpellings exposes canonical forms', () => {
   const spellings = commandSpellings('sudo env A=1 /usr/bin/git -C repo push');
   assert.ok(spellings.has('git push'));
 });
+
+test('path deny rules follow symlinks to files and folders', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-perm-'));
+  fs.writeFileSync(path.join(root, '.env'), 'x');
+  fs.mkdirSync(path.join(root, 'secrets'));
+  fs.symlinkSync(path.join(root, '.env'), path.join(root, 'innocent.txt'));
+  fs.symlinkSync(path.join(root, 'secrets'), path.join(root, 'docs'));
+  const p = new PermissionPolicy({ permissions: { deny: ['Read(.env)', 'Edit(secrets/**)'], allow: ['Read(innocent.txt)'] } }, { root });
+  assert.equal(p.evaluate('read_file', { path: 'innocent.txt' }).decision, 'deny');
+  assert.equal(p.evaluate('write_file', { path: 'docs/new-file.txt' }).decision, 'deny');
+  assert.notEqual(p.evaluate('read_file', { path: 'README.md' }).decision, 'deny');
+  fs.rmSync(root, { recursive: true, force: true });
+});
