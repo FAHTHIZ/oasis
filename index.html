@@ -64,7 +64,7 @@
 <div class="intro-row"><div><p class="page-date" id="todayLabel">Today</p><h1 class="page-title">Make room for your best work.</h1><p class="page-subtitle">A quieter home for the things you’re building. Keep the next step visible, and let the rest wait.</p></div><button class="btn btn-primary" id="newTaskTop">＋ New task</button></div>
 <div class="hero"><div class="hero-copy"><h2>Small steps. Real momentum.</h2><p>Collect your projects, turn ideas into clear next actions, and keep your working notes close. Your space, your pace.</p><div class="hero-actions"><button class="btn btn-primary" id="heroProjectBtn">＋ Create a project</button><button class="btn btn-secondary" id="heroTaskBtn">Add a task ↗</button></div><div class="hero-note"><span class="spark">✦</span> Local-first by design · No account required</div></div></div>
 <div class="stats" aria-label="Workspace statistics">
-<article class="stat"><div class="stat-top"><span>Active projects</span><span class="stat-icon">▦</span></div><div class="stat-value" id="statProjects">0</div><div class="stat-foot">Things you’re moving forward</div></article><article class="stat"><div class="stat-top"><span>Open tasks</span><span class="stat-icon">↗</span></div><div class="stat-value" id="statOpen">0</div><div class="stat-foot">One clear step at a time</div></article><article class="stat"><div class="stat-top"><span>Completed</span><span class="stat-icon">✓</span></div><div class="stat-value" id="statDone">0</div><div class="stat-foot"><b id="completionPct">0%</b> of tasks finished</div></article><article class="stat"><div class="stat-top"><span>Notes words</span><span class="stat-icon">≡</span></div><div class="stat-value" id="statNotes">0</div><div class="stat-foot">Your ideas close at hand</div></article>
+<article class="stat"><div class="stat-top"><span>Active projects</span><span class="stat-icon"><span class="gi gi-grid" aria-hidden="true"></span></span></div><div class="stat-value" id="statProjects">0</div><div class="stat-foot">Things you’re moving forward</div></article><article class="stat"><div class="stat-top"><span>Open tasks</span><span class="stat-icon">↗</span></div><div class="stat-value" id="statOpen">0</div><div class="stat-foot">One clear step at a time</div></article><article class="stat"><div class="stat-top"><span>Completed</span><span class="stat-icon">✓</span></div><div class="stat-value" id="statDone">0</div><div class="stat-foot"><b id="completionPct">0%</b> of tasks finished</div></article><article class="stat"><div class="stat-top"><span>Notes words</span><span class="stat-icon">≡</span></div><div class="stat-value" id="statNotes">0</div><div class="stat-foot">Your ideas close at hand</div></article>
 </div>
 <div class="two-col"><section><div class="section-head"><div><h2>Projects in motion</h2><div class="section-sub">Give your attention a home.</div></div><button class="text-link" data-nav="projects">All projects →</button></div><div class="project-list" id="dashboardProjects"></div></section><section><div class="section-head"><div><h2>Next up</h2><div class="section-sub">A short list, on purpose.</div></div><button class="text-link" data-nav="tasks">All tasks →</button></div><div class="panel panel-pad"><form class="quick-form" id="quickTaskForm"><label class="sr-only" for="quickTaskInput">A task to add</label><input id="quickTaskInput" maxlength="160" placeholder="What’s the next small step?" required><button class="btn btn-primary" type="submit">Add</button></form><div class="task-list" id="dashboardTasks"></div></div></section></div>
 </section>
@@ -261,18 +261,18 @@
   <div class="settings-grid">
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Workspace</h2><div class="section-sub">Your local projects, tasks, notes and runs.</div></div></div>
-      <button class="settings-row" type="button" data-nav="home"><span><strong>Overview</strong><small>Projects in motion and next steps</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="projects"><span><strong>Projects</strong><small>Manage your local project list</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="tasks"><span><strong>Tasks</strong><small>Local tasks and priorities</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="notes"><span><strong>Notes</strong><small>Your saved workspace notes</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="monitor"><span><strong>Run monitor</strong><small>Worker activity and run history</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="home"><span><strong>Overview</strong><small>Projects in motion and next steps</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="projects"><span><strong>Projects</strong><small>Manage your local project list</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="tasks"><span><strong>Tasks</strong><small>Local tasks and priorities</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="notes"><span><strong>Notes</strong><small>Your saved workspace notes</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="monitor"><span><strong>Run monitor</strong><small>Worker activity and run history</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
     </section>
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Models and connections</h2><div class="section-sub">Provider setup and repository access.</div></div></div>
-      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="provider-setup"><span><strong>Model provider</strong><small>Choose a model and test the connection</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="github-panel"><span><strong>GitHub</strong><small>Connect repositories through GitHub CLI</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="integrations"><span><strong>Integrations</strong><small>Manage connected tools</small></span><span>›</span></button>
-      <button class="settings-row" type="button" data-nav="extensions"><span><strong>Extensions</strong><small>Inspect and manage extensions</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="provider-setup"><span><strong>Model provider</strong><small>Choose a model and test the connection</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="github-panel"><span><strong>GitHub</strong><small>Connect repositories through GitHub CLI</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="integrations"><span><strong>Integrations</strong><small>Manage connected tools</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <button class="settings-row" type="button" data-nav="extensions"><span><strong>Extensions</strong><small>Inspect and manage extensions</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
     </section>
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Appearance and backup</h2><div class="section-sub">Preferences and a copy of your local workspace.</div></div></div>
@@ -280,20 +280,20 @@
       <div class="settings-control-row"><span><strong>Finished turns</strong><small>Fold a finished turn's tool steps into one "Worked for…" line.</small></span><select id="collapseWorkSelect" class="settings-select" aria-label="Finished turns"><option value="on">Fold tool steps</option><option value="off">Keep every step visible</option></select></div>
       <div class="settings-control-row"><span><strong>Chat width</strong><small>How wide the conversation column is.</small></span><select id="chatWidthSelect" class="settings-select" aria-label="Chat width"><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="full">Full width</option></select></div>
       <div class="settings-control-row"><span><strong>Send key</strong><small>Which key sends a message in the composer.</small></span><select id="sendKeySelect" class="settings-select" aria-label="Send key"><option value="enter">Enter sends, Shift+Enter new line</option><option value="mod-enter">Ctrl/⌘+Enter sends, Enter new line</option></select></div>
-      <div class="settings-control-row"><span><strong>Search</strong><small>Find local projects and tasks.</small></span><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label></div>
+      <div class="settings-control-row"><span><strong>Search</strong><small>Find local projects and tasks.</small></span><label class="search-wrap" aria-label="Search workspace"><span class="gi gi-search" aria-hidden="true"></span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label></div>
       <div class="settings-control-row"><span><strong>Backup</strong><small>Export before clearing browser data or switching devices.</small></span><div class="agent-buttons"><button class="btn btn-secondary" id="exportBtn" type="button">Export backup</button><button class="btn btn-secondary" id="importBtn" type="button">Import backup</button></div></div>
     </section>
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Help</h2><div class="section-sub">Learn the controls, read the guide, or tell us what went wrong.</div></div></div>
-      <button class="settings-row" type="button" id="settingsShortcutsBtn"><span><strong>Keyboard shortcuts and help</strong><small>Every shortcut explained in plain words, with the buttons to tap on a phone</small></span><span>›</span></button>
-      <a class="settings-row" href="https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noopener noreferrer"><span><strong>User guide</strong><small>Step-by-step help for every feature (opens GitHub)</small></span><span>›</span></a>
-      <a class="settings-row" href="https://github.com/FAHTHIZ/oasis/issues/new/choose" target="_blank" rel="noopener noreferrer"><span><strong>Report a problem or suggest an idea</strong><small>Opens a short form on GitHub. Do not paste keys or tokens.</small></span><span>›</span></a>
+      <button class="settings-row" type="button" id="settingsShortcutsBtn"><span><strong>Keyboard shortcuts and help</strong><small>Every shortcut explained in plain words, with the buttons to tap on a phone</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
+      <a class="settings-row" href="https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noopener noreferrer"><span><strong>User guide</strong><small>Step-by-step help for every feature (opens GitHub)</small></span><span class="gi gi-chev" aria-hidden="true"></span></a>
+      <a class="settings-row" href="https://github.com/FAHTHIZ/oasis/issues/new/choose" target="_blank" rel="noopener noreferrer"><span><strong>Report a problem or suggest an idea</strong><small>Opens a short form on GitHub. Do not paste keys or tokens.</small></span><span class="gi gi-chev" aria-hidden="true"></span></a>
     </section>
     <details class="panel panel-pad settings-group settings-advanced">
       <summary>Advanced · local connection and privacy</summary>
       <p>OASIS connects to a runtime on this computer by default. It is not open to the public internet by default. Remote access requires explicit server options. Never share your runtime connection token. Browser connections use a one-time token kept in this tab's session storage.</p>
       <p>Workspace notes and saved local project data stay in this browser. Export a backup before clearing browser data or switching devices.</p>
-      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="agent-setup"><span><strong>Runtime connection</strong><small>Connect or disconnect this browser from the local OASIS runtime.</small></span><span>›</span></button>
+      <button class="settings-row" type="button" data-nav="agent" data-scroll-target="agent-setup"><span><strong>Runtime connection</strong><small>Connect or disconnect this browser from the local OASIS runtime.</small></span><span class="gi gi-chev" aria-hidden="true"></span></button>
     </details>
   </div>
 </section>
@@ -708,7 +708,7 @@ function agentRenderSidebarChats(list,emptyMessage){
       if(session.running){button.classList.add('running');button.title+=' · running';var dot=document.createElement('span');dot.className='sidebar-chat-running';dot.setAttribute('aria-label','running');button.prepend(dot)}
       var row=document.createElement('div');row.className='sidebar-chat-row';
       var del=document.createElement('button');del.type='button';del.className='sidebar-chat-delete';del.dataset.sidebarDeleteId=session.id;if(session.running)del.hidden=true;
-      del.setAttribute('aria-label','Delete chat '+(session.title||'Untitled chat').slice(0,64));del.title='Delete chat';del.textContent='×';
+      del.setAttribute('aria-label','Delete chat '+(session.title||'Untitled chat').slice(0,64));del.title='Delete chat';del.innerHTML='<span class="gi gi-x" aria-hidden="true"></span>';
       row.append(button,del);root.appendChild(row);
     });
   });
@@ -1870,7 +1870,7 @@ function addActivityArtifactCard(step,artifact,previewJobId){
   var copy=document.createElement('span');copy.className='activity-artifact-copy';
   var title=document.createElement('strong');title.textContent=(artifact.action==='created'?'Created file':'Updated file')+' · '+filePath;
   var hint=document.createElement('small');hint.textContent='Preview the complete file';
-  copy.appendChild(title);copy.appendChild(hint);var arrow=document.createElement('span');arrow.className='activity-artifact-arrow';arrow.textContent='›';
+  copy.appendChild(title);copy.appendChild(hint);var arrow=document.createElement('span');arrow.className='activity-artifact-arrow gi gi-chev';arrow.setAttribute('aria-hidden','true');
   trigger.appendChild(icon);trigger.appendChild(copy);trigger.appendChild(arrow);
   var preview=document.createElement('div');preview.className='activity-file-preview';preview.hidden=true;
   var meta=document.createElement('div');meta.className='activity-file-meta';meta.textContent='The latest saved version will appear here.';
@@ -2104,7 +2104,7 @@ function renderQueue(){
     var label=document.createElement('span');label.className='agent-queue-text';label.textContent=text.length>140?text.slice(0,140)+'…':text;label.title=text;
     var tag=document.createElement('span');tag.className='agent-queue-tag';tag.textContent=i===0?'Next':'Queued';
     var edit=document.createElement('button');edit.type='button';edit.className='agent-queue-btn';edit.textContent='Edit';edit.addEventListener('click',function(){queued.splice(i,1);prompt.value=(prompt.value?prompt.value+'\n':'')+text;renderQueue();autosize();syncSend();prompt.focus()});
-    var drop=document.createElement('button');drop.type='button';drop.className='agent-queue-btn';drop.setAttribute('aria-label','Remove queued message');drop.textContent='×';drop.addEventListener('click',function(){queued.splice(i,1);renderQueue();syncSend()});
+    var drop=document.createElement('button');drop.type='button';drop.className='agent-queue-btn';drop.setAttribute('aria-label','Remove queued message');drop.innerHTML='<span class="gi gi-x" aria-hidden="true"></span>';drop.addEventListener('click',function(){queued.splice(i,1);renderQueue();syncSend()});
     row.append(tag,label,edit,drop);queueBox.appendChild(row);
   });
 }
@@ -2195,7 +2195,7 @@ function renderAttachments(){
     var chip=document.createElement('figure');chip.className='agent-attachment';
     var img=document.createElement('img');img.src=a.url;img.alt=a.name;chip.appendChild(img);
     var cap=document.createElement('figcaption');cap.textContent=a.name;chip.appendChild(cap);
-    var rm=document.createElement('button');rm.type='button';rm.className='agent-attachment-remove';rm.setAttribute('aria-label','Remove '+a.name);rm.textContent='×';
+    var rm=document.createElement('button');rm.type='button';rm.className='agent-attachment-remove';rm.setAttribute('aria-label','Remove '+a.name);rm.innerHTML='<span class="gi gi-x" aria-hidden="true"></span>';
     rm.addEventListener('click',function(){attachments.splice(i,1);renderAttachments();if(prompt)prompt.focus()});chip.appendChild(rm);
     attachBox.appendChild(chip);
   });

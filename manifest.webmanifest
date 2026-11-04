@@ -7,8 +7,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0B0F0C",
-  "theme_color": "#0B0F0C",
+  "background_color": "#0B100C",
+  "theme_color": "#0B100C",
   "categories": [
     "productivity",
     "developer-tools"
@@ -18,7 +18,7 @@
       "src": "./assets/oasis-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
