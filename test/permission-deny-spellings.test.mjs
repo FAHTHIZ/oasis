@@ -54,3 +54,19 @@ test('path deny rules follow symlinks to files and folders', async () => {
   assert.notEqual(p.evaluate('read_file', { path: 'README.md' }).decision, 'deny');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('Read and Edit deny rules apply to shell commands touching those files', async () => {
+  const { shellFileTargets } = await import('../src/permissions.mjs');
+  const p = new PermissionPolicy({ permissions: { deny: ['Read(.env)', 'Edit(secrets/**)'] } }, { root: '/tmp/oasis-perm-shell' });
+  for (const command of ['cat .env', 'cat ./.env | base64', 'grep KEY .env', 'head -1 /tmp/oasis-perm-shell/.env', 'sort < .env', 'sudo cat .env', 'bash -c "tail .env"']) {
+    assert.equal(p.evaluate('run_shell', { command }).decision, 'deny', command);
+  }
+  for (const command of ['rm secrets/key', 'echo x > secrets/key', 'sed -i s/a/b/ secrets/key', 'cp a secrets/key', 'tee secrets/key < a', 'mv secrets/key /tmp/x']) {
+    assert.equal(p.evaluate('run_shell', { command }).decision, 'deny', command);
+  }
+  for (const command of ['cat README.md', 'cat secrets/key', 'echo .env', 'ls', 'npm test 2>&1', 'echo hi > /dev/null']) {
+    assert.notEqual(p.evaluate('run_shell', { command }).decision, 'deny', command);
+  }
+  assert.equal(p.evaluate('run_command', { command: 'cat', args: ['.env'] }).decision, 'deny');
+  assert.deepEqual(shellFileTargets('cat a b > c 2>&1').writes, ['c']);
+});
