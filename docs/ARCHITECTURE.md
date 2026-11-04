@@ -311,7 +311,7 @@ There are two separate GitHub integrations:
 
 Procedural learning is an optional runtime capability that sits beside, rather than replaces, auto memory and the Agent Skills loader.
 
-- `skill_propose` creates a bounded, local proposal after the agent has identified a repeatable procedure. It is available only when learning is enabled.
+- `skill_propose` creates a bounded, local proposal after the agent has identified a repeatable procedure. It is available only when learning is enabled and the live per-turn verification gate has no blockers. Code changes require a reviewed diff and a relevant passing check after the latest edit; test-integrity and blocking language-server findings also prevent proposals.
 - Proposals are stored beneath the OASIS config directory in `learning/user/proposals/` or `learning/projects/<opaque-project-hash>/proposals/`. Project paths are hashed before being used as the scope key; proposal records do not store the absolute workspace path.
 - `/learning list` and `/learning show ID` inspect proposals. `/learning approve ID` promotes one into the existing portable skills locations; `/learning reject ID` records a rejection. There is no automatic activation or overwrite.
 - Project skills are written to `.agents/skills/NAME/SKILL.md`; user skills are written to the standard `$XDG_CONFIG_HOME/agents/skills/` directory (or `~/.config/agents/skills/`).

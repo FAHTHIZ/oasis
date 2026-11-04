@@ -11,7 +11,7 @@ The purpose is to preserve useful experience without letting an agent silently r
 
 1. **Complete the task.** The agent must finish the requested work and inspect relevant verification results after its final edit.
 2. **Recognize a reusable method.** A non-trivial task may expose a procedure worth repeating. One-off fixes and generic summaries are not useful skill candidates.
-3. **Propose.** The agent can call `skill_propose`. OASIS validates the identifier, description, required headings, size limits, and obvious secret patterns, then stores an inert proposal.
+3. **Propose.** The agent can call `skill_propose` only when OASIS's live verification gate is clear. After code changes, the runtime requires a reviewed final diff and a relevant check that passed after the latest edit. Test-integrity issues and blocking language-server findings also prevent proposals. OASIS then validates the identifier, description, required headings, size limits, and obvious secret patterns, and stores an inert proposal.
 4. **Review.** Use `/learning list` and `/learning show ID` to inspect the exact content and the agent-reported evidence.
 5. **Promote or reject.** `/learning approve ID` writes a normal portable Agent Skill. `/learning reject ID [reason]` keeps a local rejection record. Neither action is performed automatically.
 

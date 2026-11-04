@@ -51,7 +51,7 @@ import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
-import { learningEnabled, LEARNING_TOOL_DEFINITIONS } from './learning.mjs';
+import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
 import { estimateTokens, microcompact, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges, genAiProviderName } from './telemetry.mjs';
@@ -4241,6 +4241,11 @@ async function executeOneCallRaw(session, call, context, options) {
         lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, callContext, options);
       }
       if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
+      if (name === 'skill_propose') {
+        const state = context && context.verification;
+        const issues = state ? verificationIssues(state) : ['runtime verification state is unavailable'];
+        assertLearningVerification(state, issues);
+      }
       result = (name === 'read_file' ? await dedupedReadHit(session, args, callContext.env || process.env) : null) || await executeTool(name, args, callContext);
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
@@ -4629,6 +4634,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let lastToolOutcome = null;
   let loopBreakMessage = '';
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
+  // Expose the live per-turn verification state to tools that must be gated
+  // on real runtime evidence, not model-reported claims.
+  context.verification = verification;
   const claimState = newClaimState();
   let correctionNudged = false;
   let actionNudges = 0;

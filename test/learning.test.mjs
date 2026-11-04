@@ -9,7 +9,8 @@ import {
   getSkillProposal,
   approveSkillProposal,
   rejectSkillProposal,
-  learningEnabled
+  learningEnabled,
+  assertLearningVerification
 } from '../src/learning.mjs';
 import { listAvailableSkills } from '../src/tools.mjs';
 
@@ -57,6 +58,13 @@ function proposalInput(overrides = {}) {
     ...overrides
   };
 }
+
+test('skill proposals require live runtime verification state with no outstanding issues', () => {
+  assert.throws(() => assertLearningVerification(null, []), /live OASIS verification state/);
+  const state = { changedPaths: new Set(['src/example.mjs']) };
+  assert.throws(() => assertLearningVerification(state, ['the changed-file diff has not been reviewed']), /verification is complete/);
+  assert.equal(assertLearningVerification(state, []), true);
+});
 
 test('learning is enabled by default and can be disabled explicitly', () => {
   assert.equal(learningEnabled({}, {}), true);
