@@ -37,3 +37,10 @@ test('language-server notices render as a quiet, expandable note in the browser'
   assert.match(html, /if\(\/\^LSP verification unavailable\/\.test\(para\[0\]\)\)body='<details class="md-note"><summary>One extra code check was skipped\. Show why<\/summary>'\+body\+'<\/details>'/);
   assert.match(css, /\.md details\.md-note\{/);
 });
+
+test('settings has a Help section that opens the guide and links to docs and issue forms', () => {
+  assert.match(html, /<h2>Help<\/h2>/);
+  assert.match(html, /id="settingsShortcutsBtn"/);
+  assert.match(html, /\$\('settingsShortcutsBtn'\)/);
+  assert.match(html, /href="https:\/\/github\.com\/FAHTHIZ\/oasis\/issues\/new\/choose" target="_blank" rel="noopener noreferrer"/);
+});

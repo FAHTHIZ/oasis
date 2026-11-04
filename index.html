@@ -283,6 +283,12 @@
       <div class="settings-control-row"><span><strong>Search</strong><small>Find local projects and tasks.</small></span><label class="search-wrap" aria-label="Search workspace"><span>⌕</span><input id="globalSearch" type="search" placeholder="Search projects and tasks…"></label></div>
       <div class="settings-control-row"><span><strong>Backup</strong><small>Export before clearing browser data or switching devices.</small></span><div class="agent-buttons"><button class="btn btn-secondary" id="exportBtn" type="button">Export backup</button><button class="btn btn-secondary" id="importBtn" type="button">Import backup</button></div></div>
     </section>
+    <section class="panel panel-pad settings-group">
+      <div class="section-head"><div><h2>Help</h2><div class="section-sub">Learn the controls, read the guide, or tell us what went wrong.</div></div></div>
+      <button class="settings-row" type="button" id="settingsShortcutsBtn"><span><strong>Keyboard shortcuts and help</strong><small>Every shortcut explained in plain words, with the buttons to tap on a phone</small></span><span>›</span></button>
+      <a class="settings-row" href="https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noopener noreferrer"><span><strong>User guide</strong><small>Step-by-step help for every feature (opens GitHub)</small></span><span>›</span></a>
+      <a class="settings-row" href="https://github.com/FAHTHIZ/oasis/issues/new/choose" target="_blank" rel="noopener noreferrer"><span><strong>Report a problem or suggest an idea</strong><small>Opens a short form on GitHub. Do not paste keys or tokens.</small></span><span>›</span></a>
+    </section>
     <details class="panel panel-pad settings-group settings-advanced">
       <summary>Advanced · local connection and privacy</summary>
       <p>OASIS connects to a runtime on this computer by default. It is not open to the public internet by default. Remote access requires explicit server options. Never share your runtime connection token. Browser connections use a one-time token kept in this tab's session storage.</p>
@@ -2378,6 +2384,7 @@ if(prompt){
   $('shortcutsClose').addEventListener('click',function(){dlg.close()});
   dlg.addEventListener('click',function(e){if(e.target===dlg)dlg.close()});
   var help=$('sidebarHelpButton');if(help)help.addEventListener('click',function(){window.oasisShowShortcuts()});
+  var sh=$('settingsShortcutsBtn');if(sh)sh.addEventListener('click',function(){window.oasisShowShortcuts()});
 })();
 document.addEventListener('keydown',function(e){
   var typingField=/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||'')||(e.target&&e.target.isContentEditable);
