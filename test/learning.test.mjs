@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import {
   createSkillProposal,
   listSkillProposals,
@@ -148,6 +148,18 @@ test('rejection is durable and a rejected proposal cannot be promoted', async (t
   assert.equal(rejected.status, 'rejected');
   assert.equal((await getSkillProposal(root, created.id, { env })).rejectionReason, 'Not repeatable enough.');
   await assert.rejects(approveSkillProposal(root, created.id, { env }), /already rejected/);
+});
+
+test('promotion revalidates editable proposal records before creating directories', async (t) => {
+  const { root, env } = await fixture(t);
+  const created = await createSkillProposal(root, proposalInput(), { env });
+  const stored = await getSkillProposal(root, created.id, { env });
+  const record = JSON.parse(await readFile(stored.file, 'utf8'));
+  record.name = '../escape';
+  await writeFile(stored.file, JSON.stringify(record), 'utf8');
+
+  await assert.rejects(approveSkillProposal(root, created.id, { env }), /lowercase identifier/);
+  await assert.rejects(readFile(path.join(root, '.agents', 'escape', 'SKILL.md')), { code: 'ENOENT' });
 });
 
 test('promotion refuses to shadow a built-in skill', async (t) => {
