@@ -4,12 +4,34 @@
 // or OASIS_PRICE_INPUT / OASIS_PRICE_OUTPUT (per million tokens) for the active model.
 // Local models (Ollama, LM Studio, llama.cpp) cost nothing.
 
+// Sources (checked 2026-11): platform.claude.com/docs/en/about-claude/pricing and
+// developers.openai.com/api/docs/pricing. Order matters: the first match wins.
+// `long` is a per-request tier: a prompt (all input tokens, cached or not) over
+// `threshold` tokens is billed at the long-context prices.
+const OPENAI_LONG = (input, output, cacheRead) => ({ threshold: 272000, input, output, cacheRead });
 const TABLE = [
+  [/claude-(fable|mythos)-5-1/i, { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 }],
+  [/claude-(fable|mythos)/i, { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }],
+  [/claude-opus-5-5|claude-opus-5\.5/i, { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 }],
   [/claude-(opus-4-[5-9]|opus-[5-9])/i, { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 }],
   [/claude-(3-)?opus/i, { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 }],
+  [/claude-sonnet-5-5|claude-sonnet-5\.5/i, { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 }],
+  [/claude-sonnet-[5-9]/i, { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }],
   [/claude.*sonnet/i, { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }],
+  [/claude-haiku-5/i, { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125, long: { threshold: 100000, input: 0.5, output: 2.5, cacheRead: 0.05, cacheWrite: 0.625 } }],
   [/claude.*haiku-4|claude-haiku-4/i, { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 }],
   [/claude.*haiku/i, { input: 0.8, output: 4, cacheRead: 0.08, cacheWrite: 1 }],
+  [/gpt-6(?:\.\d+)?-astra/i, { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }],
+  [/gpt-6\.1-sol/i, { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 }],
+  [/gpt-6\.1-terra/i, { input: 1, output: 5, cacheRead: 0.05, cacheWrite: 1.25 }],
+  [/gpt-6(?:\.\d+)?-luna/i, { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }],
+  [/gpt-6(?:-sol)?(?![\w.])/i, { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5, long: { threshold: 272000, input: 4, output: 15, cacheRead: 0.4, cacheWrite: 5 } }],
+  [/gpt-5\.6-sol/i, { input: 4, output: 20, cacheRead: 0.4, cacheWrite: 5, long: { threshold: 272000, input: 8, output: 30, cacheRead: 0.8, cacheWrite: 10 } }],
+  [/gpt-5\.6-terra/i, { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 2.5, long: { threshold: 272000, input: 4, output: 18, cacheRead: 0.4, cacheWrite: 5 } }],
+  [/gpt-5\.6-luna/i, { input: 0.2, output: 1.2, cacheRead: 0.02, cacheWrite: 0.25 }],
+  [/gpt-5\.5-pro/i, { input: 30, output: 180, long: { threshold: 272000, input: 60, output: 270 } }],
+  [/gpt-5\.5(?![\w.])/i, { input: 5, output: 30, cacheRead: 0.5, long: OPENAI_LONG(10, 45, 1) }],
+  [/gpt-5\.3-codex/i, { input: 1.75, output: 14, cacheRead: 0.175 }],
   [/gpt-5.*nano/i, { input: 0.05, output: 0.4, cacheRead: 0.005 }],
   [/gpt-5.*mini/i, { input: 0.25, output: 2, cacheRead: 0.025 }],
   [/gpt-5/i, { input: 1.25, output: 10, cacheRead: 0.125 }],
@@ -53,8 +75,10 @@ export function priceFor(model, { config = {}, overrides = {}, env = process.env
 
 // Estimates the cost of one request's usage. Returns 0 for unknown models.
 export function estimateCostUsd(model, usage = {}, options = {}) {
-  const price = priceFor(model, options);
+  let price = priceFor(model, options);
   if (!price) return 0;
+  // Long prompts move the whole request to the long-context tier.
+  if (price.long && Number(usage.inputTokens || 0) > price.long.threshold) price = { ...price, ...price.long };
   const cacheRead = Number(usage.cacheReadTokens || 0);
   const cacheWrite = Number(usage.cacheCreationTokens || 0);
   const input = Math.max(0, Number(usage.inputTokens || 0) - cacheRead - cacheWrite);

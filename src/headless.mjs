@@ -260,6 +260,8 @@ export async function runHeadless(options) {
         usage.input_tokens += Number(step.inputTokens || 0);
         usage.output_tokens += Number(step.outputTokens || 0);
         usage.total_tokens += Number(step.totalTokens || 0);
+        if (step.cacheReadTokens) usage.cache_read_input_tokens = (usage.cache_read_input_tokens || 0) + Number(step.cacheReadTokens);
+        if (step.cacheCreationTokens) usage.cache_creation_input_tokens = (usage.cache_creation_input_tokens || 0) + Number(step.cacheCreationTokens);
         if (step.phase === undefined) requests += 1;
       }
     };
@@ -422,6 +424,8 @@ export async function runHeadless(options) {
   }
   let suggestion = '';
   if (session && promptSuggestions && !error && result && (outputFormat === 'stream-json' || onEvent)) suggestion = await suggestNextPrompt(session, { signal });
+  // The budget ledger also holds subagent, review and side-request spend.
+  if (session && session.budgetLedger && Number(session.budgetLedger.spentUsd) > costUsd) costUsd = Number(session.budgetLedger.spentUsd);
   if (session) closeSession(session);
   const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors);
   const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
