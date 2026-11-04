@@ -1714,6 +1714,18 @@ export async function runBuiltinCommand(name, argument, state) {
       if (sub === 'forget' || sub === 'delete') {
         try { const removed = await memory.deleteMemory(root, rest, { env }); return { output: 'Deleted ' + removed.deleted + '.' }; } catch (error) { return { output: error.message }; }
       }
+      if (sub === 'pending') {
+        const items = await memory.listPendingMemoryWrites(root, { env, all: rest === '--all' });
+        if (!items.length) return { output: 'No memory writes are waiting for review. Write approval is ' + memory.memoryWriteApproval(session && session.settings || {}, env) + ' (set "memoryWriteApproval": "ask" or "queue").' };
+        return { output: ['Pending memory writes:', ...items.map((item) => '  ' + item.id + '  ' + memory.describeMemoryWrite(item) + (item.root !== path.resolve(root) ? '  (from ' + item.root + ')' : '')), '', 'Use /memory approve ID|all or /memory reject ID|all.'].join('\n') };
+      }
+      if (sub === 'approve' || sub === 'reject') {
+        if (!rest) return { output: 'Usage: /memory ' + sub + ' ID|all' };
+        try {
+          const done = await memory.resolvePendingMemoryWrite(root, rest, sub === 'approve', { env });
+          return { output: done.map((item) => item.id + ': ' + item.outcome).join('\n') };
+        } catch (error) { return { output: error.message } }
+      }
       if (sub === 'path') {
         const roots = memory.memoryRoots(root, env);
         return { output: 'Project memory: ' + roots.project + '\nUser memory:    ' + roots.user };
@@ -1730,10 +1742,11 @@ export async function runBuiltinCommand(name, argument, state) {
       lines.push(...files.map((file) => '  ' + (file.exists ? '[loaded] ' : '[none]   ') + file.label + ': ' + file.path));
       const items = await memory.listMemories(root, { env });
       const enabled = memory.autoMemoryEnabled(session && session.settings || {}, env);
-      lines.push('Auto memory (' + (enabled ? 'on' : 'off') + '): ' + items.length + ' saved');
+      const pending = await memory.listPendingMemoryWrites(root, { env });
+      lines.push('Auto memory (' + (enabled ? 'on' : 'off') + '): ' + items.length + ' saved' + (pending.length ? ', ' + pending.length + ' waiting for review (/memory pending)' : '') + '; write approval ' + memory.memoryWriteApproval(session && session.settings || {}, env));
       for (const item of items.slice(0, 40)) lines.push('  ' + item.id + ' - ' + item.description.slice(0, 100));
       if (items.length > 40) lines.push('  ... ' + (items.length - 40) + ' more (/memory search WORDS)');
-      lines.push('Commands: /memory search WORDS, /memory show ID, /memory forget ID, /memory add NOTE, /memory path, /remember [focus]. Turn it off with "autoMemory": false in settings or OASIS_AUTO_MEMORY=0.');
+      lines.push('Commands: /memory search WORDS, /memory show ID, /memory forget ID, /memory add NOTE, /memory pending, /memory approve ID|all, /memory reject ID|all, /memory path, /remember [focus]. Turn it off with "autoMemory": false in settings or OASIS_AUTO_MEMORY=0.');
       lines.push('Start a message with # to save a note to the project OASIS.md instead (for example: # always run npm test before committing).');
       return { output: lines.join('\n') };
     }

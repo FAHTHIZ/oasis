@@ -126,3 +126,47 @@ test('the server answers parse errors and ignores notifications for unknown sess
   assert.equal(out[1].id, 7);
   assert.equal(out[1].error.code, -32002);
 });
+
+test('ACP clients with fs capabilities serve unsaved buffers, receive writes and get inline diffs', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-acp-home-');
+  const { writeFile: write } = await import('node:fs/promises');
+  await write(path.join(root, 'a.txt'), 'on disk\n');
+  const seen = [];
+  const { config } = await scriptedModel(t, [
+    toolCall('r1', 'read_file', { path: 'a.txt' }),
+    (payload) => { seen.push(JSON.stringify(payload.messages)); return toolCall('e1', 'edit_file', { path: 'a.txt', old_string: 'unsaved buffer', new_string: 'edited buffer' }); },
+    { content: 'Done.' }
+  ]);
+  const child = spawn(process.execPath, [CLI, 'acp'], { cwd: root, env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0', OASIS_REQUIRE_READ_BEFORE_EDIT: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  t.after(() => child.kill());
+  const buffers = new Map([[path.join(root, 'a.txt'), 'unsaved buffer\n']]);
+  const writes = [];
+  const updates = [];
+  let id = 0;
+  const waiting = new Map();
+  const send = (message) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n');
+  createInterface({ input: child.stdout }).on('line', (line) => {
+    const message = JSON.parse(line);
+    if (message.method === 'fs/read_text_file') send({ id: message.id, result: { content: buffers.get(message.params.path) ?? '' } });
+    else if (message.method === 'fs/write_text_file') { writes.push(message.params); buffers.set(message.params.path, message.params.content); send({ id: message.id, result: null }); }
+    else if (message.method === 'session/request_permission') send({ id: message.id, result: { outcome: { outcome: 'selected', optionId: 'allow_once' } } });
+    else if (message.method === 'session/update') updates.push(message.params.update);
+    else if (waiting.has(message.id)) { waiting.get(message.id)(message); waiting.delete(message.id); }
+  });
+  const call = (method, params) => { const requestId = ++id; send({ id: requestId, method, params }); return new Promise((resolve) => waiting.set(requestId, resolve)); };
+  await call('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } } });
+  const { result } = await call('session/new', { cwd: root, mcpServers: [] });
+  const done = await call('session/prompt', { sessionId: result.sessionId, prompt: [{ type: 'text', text: 'edit a.txt' }] });
+  assert.equal(done.result.stopReason, 'end_turn');
+  assert.match(seen[0], /unsaved buffer/);
+  assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'edited buffer\n');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].path, path.join(root, 'a.txt'));
+  assert.equal(writes[0].content, 'edited buffer\n');
+  const edit = updates.find((u) => u.sessionUpdate === 'tool_call_update' && u.toolCallId === 'e1');
+  const diff = edit.content.find((c) => c.type === 'diff');
+  assert.ok(diff, JSON.stringify(edit));
+  assert.equal(diff.oldText, 'on disk\n');
+  assert.equal(diff.newText, 'edited buffer\n');
+});

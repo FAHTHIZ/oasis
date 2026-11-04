@@ -304,6 +304,20 @@ export async function listWorkspaceFiles(root, options = {}) {
 
 const MAX_RANGED_FILE = 4 * 1024 * 1024;
 
+// ACP editors (Zed and others) can serve file contents from open, unsaved buffers and
+// apply writes to them; everything falls back to the disk when no client fs is present.
+async function clientReadText(context, absolute) {
+  const clientFs = context && context.session && context.session.clientFs;
+  if (!clientFs || typeof clientFs.readTextFile !== 'function') return null;
+  try { const text = await clientFs.readTextFile(absolute); return typeof text === 'string' ? text : null; } catch { return null; }
+}
+
+async function clientMirrorWrite(context, absolute, content) {
+  const clientFs = context && context.session && context.session.clientFs;
+  if (!clientFs || typeof clientFs.writeTextFile !== 'function') return;
+  try { await clientFs.writeTextFile(absolute, content); } catch {}
+}
+
 export async function readWorkspaceFile(root, rawPath, options = {}) {
   const target = await resolveWorkspacePath(root, rawPath);
   const info = await stat(target.absolute);
@@ -311,7 +325,8 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   const ranged = options.offset !== undefined || options.limit !== undefined;
   if (!ranged && info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit. Pass offset and limit to read part of it, or use a narrower search.');
   if (ranged && info.size > MAX_RANGED_FILE) throw new Error('File is larger than the 4 MiB limit even for ranged reads.');
-  const content = await readFile(target.absolute, 'utf8');
+  const fromClient = options.context ? await clientReadText(options.context, target.absolute) : null;
+  const content = fromClient !== null ? fromClient : await readFile(target.absolute, 'utf8');
   if (content.includes('\0')) throw new Error('This looks like a binary file and is not supported by read_file.');
   const relativePath = target.relative.split(path.sep).join('/');
   if (!ranged) return { path: relativePath, content };
@@ -1810,7 +1825,7 @@ export async function executeTool(name, args = {}, context = {}) {
       }
       if (isNotebookPath(args.path) && args.offset === undefined && args.limit === undefined) return await readNotebook(root, args.path);
       {
-        const read = await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit });
+        const read = await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit, context });
         const partial = read && read.totalLines && (read.startLine > 1 || read.truncated) ? 'lines ' + read.startLine + '-' + read.endLine + ' of ' + read.totalLines : '';
         await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute, { partial });
         return read;
@@ -1880,7 +1895,8 @@ export async function executeTool(name, args = {}, context = {}) {
       if (!info.isFile() || info.isSymbolicLink()) throw new Error('That path is not a regular file.');
       if (info.size > MAX_EDIT_FILE) throw new Error('File is larger than the 4 MiB limit for edits.');
       await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
-      const current = await readFile(target.absolute, 'utf8');
+      const bufferText = await clientReadText(context, target.absolute);
+      const current = bufferText !== null ? bufferText : await readFile(target.absolute, 'utf8');
       if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
       let matches = 0, offset = 0;
       while ((offset = current.indexOf(args.old_string, offset)) >= 0) { matches++; offset += args.old_string.length; }
@@ -1898,6 +1914,7 @@ export async function executeTool(name, args = {}, context = {}) {
       assertNoNewElision(args.old_string, args.new_string, editDisplayPath);
       await snapshotFile(target.root, target.absolute, 'before-agent-edit');
       await atomicWriteFile(target.absolute, next, { encoding: 'utf8' });
+      await clientMirrorWrite(context, target.absolute, next);
       await recordFileState(context, target.absolute);
       const editWarning = combineWarnings(commentWarning(current, next, editDisplayPath, context.session && context.session.commentMode), shrinkWarning(current, next, editDisplayPath), testTamperWarning(current, next, editDisplayPath), securityWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
       return { path: editDisplayPath, changed: true, ...(relaxed ? { matchedBy: relaxed.strategy, matchedAtLine: relaxed.line, note: 'old_string did not match exactly; it matched uniquely after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line + '.' } : {}), replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
@@ -1924,6 +1941,7 @@ export async function executeTool(name, args = {}, context = {}) {
       // New project files get normal permissions (umask applies) so web servers, containers and
       // teammates can read them; only secret-looking files are created owner-only.
       await atomicWriteFile(target.absolute, args.content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
+      await clientMirrorWrite(context, target.absolute, args.content);
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
       const writeWarning = previousContent === null ? combineWarnings(docWarning, commentWarning('', args.content, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', args.content, writeDisplayPath)) : combineWarnings(commentWarning(previousContent, args.content, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), securityWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
@@ -2075,7 +2093,7 @@ export async function executeTool(name, args = {}, context = {}) {
     case 'memory_read':
     case 'memory_delete': {
       const { runMemoryTool } = await import('./auto-memory.mjs');
-      return await runMemoryTool(name, args, { root, env: context.env || process.env, session: context.session });
+      return await runMemoryTool(name, args, { root, env: context.env || process.env, session: context.session, approval: context.approval, autoApprove: Boolean(context.autoApprove) });
     }
     case 'ast_grep': {
       const { runAstGrep } = await import('./ast-grep.mjs');

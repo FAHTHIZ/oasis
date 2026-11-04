@@ -10,6 +10,7 @@
 // stdout carries protocol messages exclusively.
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
+import { readFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 export const ACP_PROTOCOL_VERSION = 1;
@@ -29,6 +30,8 @@ const KIND_BY_TOOL = {
   fetch_url: 'fetch', web_search: 'fetch',
   todo_write: 'think', exit_plan_mode: 'think'
 };
+
+const DIFF_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 
 export function toolKind(name) {
   return KIND_BY_TOOL[name] || (String(name).startsWith('mcp_') ? 'other' : 'other');
@@ -157,6 +160,16 @@ export function createAcpServer(options = {}) {
     if (!session.sessionId) {
       try { const { saveSession } = await load('sessions'); session.sessionId = (await saveSession(session, { env })).id; } catch { session.sessionId = 'acp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
     }
+    // Editors that offer fs/* get reads of unsaved buffers and writes that land in the open buffer.
+    const fsCaps = clientCapabilities && clientCapabilities.fs || {};
+    if (fsCaps.readTextFile || fsCaps.writeTextFile) {
+      const sid = session.sessionId;
+      const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('client fs timed out')), ms).unref?.())]);
+      session.clientFs = {
+        ...(fsCaps.readTextFile ? { readTextFile: async (file) => { const reply = await withTimeout(request('fs/read_text_file', { sessionId: sid, path: file }), 10000); return reply && typeof reply.content === 'string' ? reply.content : null; } } : {}),
+        ...(fsCaps.writeTextFile ? { writeTextFile: async (file, content) => { await withTimeout(request('fs/write_text_file', { sessionId: sid, path: file, content }), 10000); } } : {})
+      };
+    }
     const entry = { session, root: cwd, controller: null, config };
     sessions.set(session.sessionId, entry);
     return entry;
@@ -194,6 +207,7 @@ export function createAcpServer(options = {}) {
     const controller = new AbortController();
     entry.controller = controller;
     const callIds = new Map();
+    const before = new Map();
     let counter = 0;
     let streamed = '';
     const runner = entry.session.permissions && entry.session.permissions.mode === 'plan' && typeof runAgentPlan === 'function' ? runAgentPlan : runAgentTurn;
@@ -217,6 +231,12 @@ export function createAcpServer(options = {}) {
         onToolStart: ({ name, args, call, subagent }) => {
           const toolCallId = call && call.id ? String(call.id) : 'call-' + (++counter);
           const queue = callIds.get(name) || []; queue.push(toolCallId); callIds.set(name, queue);
+          if (DIFF_TOOLS.has(name) && args && typeof args.path === 'string') {
+            const file = path.resolve(entry.root, args.path);
+            let oldText = null;
+            try { const info = statSync(file); if (info.isFile() && info.size <= 1024 * 1024) oldText = readFileSync(file, 'utf8'); } catch {}
+            before.set(toolCallId, { file, oldText });
+          }
           update(sessionId, { sessionUpdate: 'tool_call', toolCallId, title: (subagent ? '[' + subagent + '] ' : '') + toolTitle(name, args), kind: toolKind(name), status: 'in_progress', rawInput: args || {}, locations: toolLocations(entry.root, args) });
           if (name === 'todo_write' && args && Array.isArray(args.todos)) {
             update(sessionId, { sessionUpdate: 'plan', entries: args.todos.slice(0, 50).map((todo) => ({ content: String(todo.content || todo.activeForm || ''), status: ['pending', 'in_progress', 'completed'].includes(todo.status) ? todo.status : 'pending', priority: ['high', 'medium', 'low'].includes(todo.priority) ? todo.priority : 'medium' })) });
@@ -225,7 +245,16 @@ export function createAcpServer(options = {}) {
         onToolResult: ({ name, result }) => {
           const queue = callIds.get(name) || [];
           const toolCallId = queue.shift() || 'call-' + (++counter);
-          update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: isFailure(result) ? 'failed' : 'completed', content: [{ type: 'content', content: { type: 'text', text: resultText(result).slice(0, 20000) } }], rawOutput: typeof result === 'object' && result ? { exitCode: result.exitCode } : undefined });
+          const content = [{ type: 'content', content: { type: 'text', text: resultText(result).slice(0, 20000) } }];
+          const prior = before.get(toolCallId);
+          before.delete(toolCallId);
+          if (prior && !isFailure(result)) {
+            try {
+              const newText = readFileSync(prior.file, 'utf8');
+              if (newText !== prior.oldText && newText.length <= 1024 * 1024) content.unshift({ type: 'diff', path: prior.file, oldText: prior.oldText, newText });
+            } catch {}
+          }
+          update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: isFailure(result) ? 'failed' : 'completed', content, rawOutput: typeof result === 'object' && result ? { exitCode: result.exitCode } : undefined });
         },
         approval: async (message, _force = false, meta = {}) => {
           const toolName = meta && meta.tool || 'action';

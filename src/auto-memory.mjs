@@ -443,7 +443,84 @@ export const MEMORY_TOOL_DEFINITIONS = [
 
 export const MEMORY_TOOL_NAMES = new Set(MEMORY_TOOL_DEFINITIONS.map((tool) => tool.function.name));
 
-export async function runMemoryTool(name, args = {}, { root, env = process.env, session = null } = {}) {
+// ---------- write approval (Hermes-style memory.write_approval) ----------
+// "memoryWriteApproval": "ask" shows each model-initiated memory_save / memory_delete
+// for approval; "queue" stores them as pending until /memory approve. User commands
+// (/memory add, imports) are never gated.
+export function memoryWriteApproval(settings = {}, env = process.env) {
+  const fromEnv = String(env.OASIS_MEMORY_WRITE_APPROVAL || '').toLowerCase();
+  if (['ask', 'queue', 'off'].includes(fromEnv)) return fromEnv;
+  const value = String(settings && settings.memoryWriteApproval || '').toLowerCase();
+  return ['ask', 'queue'].includes(value) ? value : 'off';
+}
+
+function pendingDir(env) { return path.join(getConfigDirectory(env), 'memory', 'pending'); }
+
+export async function queueMemoryWrite(root, op, args, { env = process.env, source = null } = {}) {
+  const dir = pendingDir(env);
+  await mkdir(dir, { recursive: true });
+  const id = Date.now().toString(36) + '-' + createHash('sha256').update(JSON.stringify([op, args, Math.random()])).digest('hex').slice(0, 6);
+  const clean = op === 'save' ? { ...args, content: redactSecrets(String(args.content || args.description || '').slice(0, MAX_BODY)).text } : { id: String(args.id || '') };
+  await atomicWrite(path.join(dir, id + '.json'), JSON.stringify({ id, op, args: clean, root: path.resolve(root), source, created: new Date().toISOString() }, null, 2) + '\n');
+  return id;
+}
+
+export async function listPendingMemoryWrites(root, { env = process.env, all = false } = {}) {
+  let names = [];
+  try { names = (await readdir(pendingDir(env))).filter((name) => name.endsWith('.json')).sort(); } catch { return []; }
+  const items = [];
+  for (const name of names) {
+    try {
+      const item = JSON.parse(await readFile(path.join(pendingDir(env), name), 'utf8'));
+      if (all || item.root === path.resolve(root) || (item.op === 'save' && item.args.scope === 'user')) items.push(item);
+    } catch {}
+  }
+  return items;
+}
+
+export function describeMemoryWrite(item) {
+  if (item.op === 'delete') return 'delete memory ' + item.args.id;
+  const a = item.args;
+  return 'save ' + (a.scope === 'user' ? 'user' : 'project') + ' memory "' + oneLine(a.name, 80) + '"' + (a.category ? ' [' + a.category + ']' : '') + ': ' + oneLine(a.content || a.description, 300);
+}
+
+export async function resolvePendingMemoryWrite(root, id, approve, { env = process.env } = {}) {
+  const items = await listPendingMemoryWrites(root, { env });
+  const chosen = id === 'all' ? items : items.filter((item) => item.id === id || item.id.startsWith(String(id)));
+  if (!chosen.length) throw new Error('No pending memory write matches ' + id + '. See /memory pending.');
+  const results = [];
+  for (const item of chosen) {
+    let outcome = 'rejected';
+    if (approve) {
+      const done = item.op === 'delete' ? await deleteMemory(item.root, item.args.id, { env }) : await saveMemory(item.root, item.args, { env, source: item.source });
+      outcome = item.op === 'delete' ? 'deleted ' + done.deleted : done.action + ' ' + done.id;
+    }
+    await rm(path.join(pendingDir(env), item.id + '.json'), { force: true });
+    results.push({ id: item.id, outcome });
+  }
+  return results;
+}
+
+async function gateMemoryWrite(op, args, { root, env, session, approval, autoApprove }) {
+  const mode = memoryWriteApproval(session && session.settings || {}, env);
+  if (mode === 'off') return null;
+  const source = session && session.sessionId || null;
+  const item = { op, args: op === 'save' ? { ...args, content: redactSecrets(String(args.content || args.description || '')).text } : args };
+  if (mode === 'ask' && typeof approval === 'function') {
+    const ok = await approval('Allow the agent to ' + describeMemoryWrite(item) + '?\nMemories are loaded into future sessions. Turn this prompt off with "memoryWriteApproval": "off".', true);
+    if (ok) return null;
+    return { approved: false, message: 'The user did not approve this memory write. Do not retry it; continue the task.' };
+  }
+  // "queue", or "ask" without anyone to ask (headless, gateways without buttons).
+  const id = await queueMemoryWrite(root, op, args, { env, source });
+  return { queued: true, pending_id: id, message: 'Memory write queued for the user to review (/memory pending, /memory approve ' + id + '). Continue the task; do not assume it was saved.' };
+}
+
+export async function runMemoryTool(name, args = {}, { root, env = process.env, session = null, approval = null, autoApprove = false } = {}) {
+  if (name === 'memory_save' || name === 'memory_delete') {
+    const gated = await gateMemoryWrite(name === 'memory_save' ? 'save' : 'delete', args, { root, env, session, approval, autoApprove });
+    if (gated) return gated;
+  }
   if (name === 'memory_save') {
     const saved = await saveMemory(root, args, { env, source: session && session.sessionId || null });
     return { ...saved, note: saved.redacted ? 'Secrets or <private> text were redacted before saving.' : undefined };
