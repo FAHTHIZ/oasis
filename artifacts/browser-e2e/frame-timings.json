@@ -3,28 +3,28 @@
   "interactions": [
     {
       "interaction": "approval card opening",
-      "frames": 35,
+      "frames": 100,
       "worstFrameMs": 50,
-      "over50ms": 0,
-      "near16ms": 27
-    },
-    {
-      "interaction": "opening Worked for activity fold",
-      "frames": 18,
-      "worstFrameMs": 66.6,
-      "over50ms": 1,
-      "near16ms": 16
-    },
-    {
-      "interaction": "streaming a long assistant reply",
-      "frames": 96,
-      "worstFrameMs": 33.4,
       "over50ms": 0,
       "near16ms": 94
     },
     {
+      "interaction": "opening Worked for activity fold",
+      "frames": 19,
+      "worstFrameMs": 66.6,
+      "over50ms": 1,
+      "near16ms": 17
+    },
+    {
+      "interaction": "streaming a long assistant reply",
+      "frames": 96,
+      "worstFrameMs": 16.8,
+      "over50ms": 0,
+      "near16ms": 95
+    },
+    {
       "interaction": "switching between saved chats",
-      "frames": 27,
+      "frames": 25,
       "worstFrameMs": 33.4,
       "over50ms": 0,
       "near16ms": 22

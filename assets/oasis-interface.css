@@ -889,10 +889,9 @@ html[data-motion=full] .agent-dictate.is-listening{animation:oasis-dictate-pulse
   #agentEmptyState{margin:0;padding:0;align-self:center}
   #agentEmptyState::before{width:28px;height:28px;margin-bottom:8px}
   #agentEmptyState .empty-title{font-size:19px;margin-bottom:2px}
-  #agentEmptyState>:not(.empty-title):not(p){display:none}
 }
 @container chatlog (max-height:150px){
-  #agentEmptyState::before,#agentEmptyState p{display:none}
+  #agentEmptyState::before{display:none}
 }
 .setup-drawer[data-runtime="connected"] .agent-setup .agent-help{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .first-run-icon svg{display:block}
