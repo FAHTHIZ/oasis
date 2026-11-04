@@ -10,7 +10,7 @@ This page separates what is implemented, what has actually been measured, and wh
 
 | Measurement | What it actually measures | Evidence status | What it does not establish |
 |---|---|---|---|
-| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Historical report from 2026-11-01 at source revision `4541f1d`; CI is being updated to publish fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
+| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Historical report from 2026-11-01 at source revision `4541f1d`; CI publishes fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
 | `evals/tasks/` | 51 frozen task fixtures with disposable snapshots, reference patches, and independent verifiers | Validator is in `npm run check`; the exact 2026-11-04 HEAD quality workflow passed | Model pass rate; broad SWE-bench-scale coverage; statistically reliable performance |
 | `scripts/bench-live.mjs` | Runs selected agent CLIs on identical task fixtures and summarizes verified matched trials | Runner and fake-CLI tests exist; no live public head-to-head result is published | Same-model harness isolation unless actual routed model/version and policy differences are verified |
 | `scripts/bench-web-search.mjs` | Expected-domain retrieval, reciprocal rank, result counts, provider errors, and sequential latency on 10 fixed queries | Diagnostic utility; supports repeated counterbalanced trials | Factual correctness, completeness, source credibility, or research-answer quality |
@@ -18,6 +18,7 @@ This page separates what is implemented, what has actually been measured, and wh
 | Five-track protocol below | Proposed context durability, token efficiency, task-list fidelity, ambiguity safety, and long-horizon completion measurements | Design only; no frozen five-track task sets, scorers, controls, or results are published | Any measured OASIS score against the proposed targets |
 
 A green fixture validator means the fixture/reference-patch/verifier contract is internally consistent. A passing synthetic harness case means the specific hand-authored input received the expected runtime outcome. Neither is a real agent benchmark. Keep raw reports, revisions, model identities, configuration, and failures alongside every public comparison.
+
 ## Model-free harness benchmark (historical report dated 2026-11-01)
 
 A coding agent is a model plus a harness. This benchmark measures the harness alone: it feeds OASIS the outputs that real models actually produce (malformed tool calls, drifting edits, dangerous commands, placeholder rewrites, weakened tests, leaked credentials) and checks what the runtime does with them. No model, network or API key is needed, so anyone can reproduce it in a few seconds:

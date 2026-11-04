@@ -186,6 +186,8 @@ export function renderSummary(summary) {
     lines.push('| ' + item.label + ' | ' + (item.requestedModel || 'CLI default') + ' | ' + (item.reportedModel || 'not reported') + ' | ' + pct(item.passRate) + ' | ' + item.passedTrials + '/' + item.trials + ' | ' + seconds(item.medianTrialTimeMs) + ' | ' + (item.totalTokens ?? 'n/a') + ' | ' + (item.totalReportedCostUSD === null ? 'n/a' : '$' + item.totalReportedCostUSD.toFixed(4)) + ' |');
   }
   if (summary.caveats.length) { lines.push('', '## Interpretation limits', ''); for (const caveat of summary.caveats) lines.push('- ' + caveat); }
+  const skipped = summary.agents.filter((item) => item.skipped);
+  if (skipped.length) { lines.push('', '## Agents not run', ''); for (const item of skipped) lines.push('- ' + item.name + ': ' + item.skipped); }
   lines.push('', '## Run provenance', '', '| Agent | CLI version | Source revision | Runtime |', '|---|---|---|---|');
   for (const item of summary.agents) { if (item.skipped) continue; lines.push('| ' + item.name + ' | ' + (item.cliVersion || 'not reported') + ' | ' + (item.sourceRevision || 'unavailable') + ' | ' + (item.runtime ? [item.runtime.node, item.runtime.platform, item.runtime.arch].filter(Boolean).join(' / ') : 'not reported') + ' |'); }
   lines.push('', '## Task coverage', '');
