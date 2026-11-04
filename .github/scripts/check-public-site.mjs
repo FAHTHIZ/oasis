@@ -27,7 +27,9 @@ const required = [
   'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
   'property="og:image"', 'summary_large_image', 'OASIS 1.0 · Stable · Open source · Apache-2.0', 'docs/PROJECT_PLAN.md'
 ];
-for (const marker of required) assert.ok(html.includes(marker), 'Public homepage is missing: ' + marker);
+// Visible text can contain inline icons (for example a link arrow), so text markers also match the tag-free copy.
+const visibleText = html.replace(/<[^>]+>/g, '');
+for (const marker of required) assert.ok(html.includes(marker) || visibleText.includes(marker), 'Public homepage is missing: ' + marker);
 const heroStart = html.indexOf('<div class="hero-actions">');
 const heroEnd = heroStart >= 0 ? html.indexOf('</div>', heroStart) : -1;
 const heroActions = heroStart >= 0 && heroEnd >= 0 ? html.slice(heroStart, heroEnd + '</div>'.length) : '';
