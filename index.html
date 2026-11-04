@@ -167,7 +167,7 @@
       </div>
     </div>
     <div class="agent-messages" id="agentMessages" tabindex="0" role="log" aria-live="polite" aria-label="Oasis agent conversation"><div class="empty-state" id="agentEmptyState">
-      <p>Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
+      <p id="agentEmptyHint">Connect a runtime, then choose an example or tell Oasis what you want to build.</p>
       <div class="agent-example-prompts" aria-label="Example tasks">
         <button class="agent-example-prompt" type="button" data-agent-example="Explain this project">Explain this project<span>Read the important files and explain how they fit together.</span></button>
         <button class="agent-example-prompt" type="button" data-agent-example="Find a bug">Find a bug<span>Inspect the project, identify one likely bug, and suggest a fix before editing.</span></button>
@@ -2406,6 +2406,7 @@ function syncChips(){
   chip('setupChipGithub',ghOk?'true':'false',gh&&gh.textContent);
   var hint=drawer&&drawer.querySelector('.setup-drawer-hint');
   if(drawer)drawer.dataset.runtime=connected?'connected':'disconnected';
+  var eh=$('agentEmptyHint');if(eh)eh.textContent=!connected?'Connect a runtime, then choose an example or tell Oasis what you want to build.':(modelOk?'Choose an example or tell Oasis what you want to build, in plain words.':'Choose a model above, then pick an example or tell Oasis what you want to build.');
   if(hint)hint.textContent=connected?(modelOk?'Ready · '+model.textContent:'Runtime connected · choose a model'):'Connect the local runtime to start';
   if(drawer&&!userToggled){if(connected&&modelOk&&!autoClosed){drawer.open=false;autoClosed=true}else if(!connected){drawer.open=true;autoClosed=false}}
 }
