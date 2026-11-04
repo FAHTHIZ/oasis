@@ -150,3 +150,15 @@ test('a learned context window survives the per-turn config reload for the same 
   assert.equal(carryLearnedContextWindow(learned, { ...fresh, contextWindow: 32768 }).contextWindow, 32768);
   assert.equal(carryLearnedContextWindow(null, fresh), fresh);
 });
+
+test('OpenAI cache writes are tracked and billed at the 30-minute and 12-hour rates', async () => {
+  const { usageOrEstimate } = await import('../src/agent.mjs');
+  const { estimateCostUsd } = await import('../src/pricing.mjs');
+  const usage = usageOrEstimate({ input_tokens: 12000, output_tokens: 0, input_tokens_details: { cached_tokens: 4000, cache_write_tokens: 7000, cache_write_tokens_details: { ttl_30m_tokens: 3000, ttl_12h_tokens: 4000 } } }, '');
+  assert.equal(usage.cacheReadTokens, 4000);
+  assert.equal(usage.cacheCreationTokens, 7000);
+  assert.equal(usage.cacheWriteLongTokens, 4000);
+  // gpt-5.6-sol: $4 input, $0.40 cached, $5 (1.25x) 30-minute writes, $10 (2.5x) 12-hour writes.
+  const expected = (1000 * 4 + 4000 * 0.4 + 3000 * 5 + 4000 * 10) / 1e6;
+  assert.ok(Math.abs(estimateCostUsd('gpt-5.6-sol', usage, { env: {} }) - expected) < 1e-12);
+});

@@ -103,7 +103,10 @@ export function estimateCostUsd(model, usage = {}, options = {}) {
   const cacheWrite = Number(usage.cacheCreationTokens || 0);
   const input = Math.max(0, Number(usage.inputTokens || 0) - cacheRead - cacheWrite);
   const output = Number(usage.outputTokens || 0);
-  const cost = (input * price.input + output * price.output + cacheRead * (price.cacheRead || price.input) + cacheWrite * (price.cacheWrite || price.input)) / 1e6;
+  // OpenAI 12-hour cache writes bill at 2.5x input instead of the 30-minute 1.25x.
+  const longWrite = Math.min(cacheWrite, Number(usage.cacheWriteLongTokens || 0));
+  const longWriteRate = price.cacheWriteLong || price.input * 2.5;
+  const cost = (input * price.input + output * price.output + cacheRead * (price.cacheRead || price.input) + (cacheWrite - longWrite) * (price.cacheWrite || price.input) + longWrite * longWriteRate) / 1e6;
   return Number.isFinite(cost) ? cost : 0;
 }
 
