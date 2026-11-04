@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/FAHTHIZ/oasis/security/advisories/new
+    about: Report vulnerabilities privately. Please do not open a public issue for them.
+  - name: Read the user guide
+    url: https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md
+    about: Commands, settings, providers and troubleshooting (try `oasis doctor` first).
+  - name: OASIS website
+    url: https://fahthiz.github.io/oasis/
+    about: Install options, demos and benchmark results.

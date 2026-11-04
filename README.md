@@ -14,9 +14,11 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A522-339933.svg?style=flat&logo=node.js&logoColor=white" alt="Node.js 22 or newer" />
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555.svg?style=flat" alt="macOS, Linux and Windows" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
+  <a href="https://fahthiz.github.io/oasis/"><img src="https://img.shields.io/badge/website-fahthiz.github.io%2Foasis-7CFF5E.svg?style=flat" alt="Website" /></a>
 </p>
 
 <p align="center">
+  <a href="https://fahthiz.github.io/oasis/"><strong>Website</strong></a> ·
   <a href="#install"><strong>Install</strong></a> ·
   <a href="#terminal-or-browser">Web UI</a> ·
   <a href="#measured-not-claimed">Benchmarks</a> ·
