@@ -41,13 +41,19 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 
 ## Command-line installation
 
-The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. Once `v1.0.0` is published it is the install and update target; until then the installer exits with "No stable version tag" and you should install from source. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
+The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. `v1.0.0` is currently the install and update target. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
 Maintainer and CI smoke tests may set `OASIS_INSTALL_COMMIT` to a full 40-character Git SHA to install one exact source revision. This override is intended for validating the installer against the commit under test; normal installations should leave it unset so the installer resolves the latest stable release.
 
 ### macOS, Linux and Android/Termux
 
-Use the checksum-verified shell installer bootstrap:
+Quick install, using the script from the immutable `v1.0.0` tag:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh
+```
+
+To verify the installer's SHA-256 before it runs, use the checksum-verified bootstrap instead:
 
 ```sh
 sh -c 'set -eu; f=$(mktemp "${TMPDIR:-/tmp}/oasis-install.XXXXXX"); cleanup() { rm -f "$f"; }; trap cleanup EXIT; trap "exit 1" HUP INT TERM; url=https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh; if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$f"; elif command -v wget >/dev/null 2>&1; then wget -qO "$f" "$url"; else echo "Install curl or wget first, then retry." >&2; exit 1; fi; expected=f8993e4c4ab964f2026efa23b2771569e5fd4515868b19c3dcca2f80c92611c2; if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$f"); actual=${actual%% *}; elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$f"); actual=${actual%% *}; elif command -v openssl >/dev/null 2>&1; then actual=$(openssl dgst -sha256 "$f"); actual=${actual##*= }; else echo "No SHA-256 tool found; see docs/INSTALL.md"; rm -f "$f"; exit 1; fi; if [ "$actual" != "$expected" ]; then echo "Installer checksum mismatch. Do not run it."; rm -f "$f"; exit 1; fi; if sh "$f"; then code=0; else code=$?; fi; rm -f "$f"; exit "$code"'
