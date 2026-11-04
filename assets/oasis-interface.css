@@ -282,8 +282,7 @@ body.light .btn-primary:hover{background:#287A0F}
 .agent-connect-row{display:grid;gap:10px}
 .agent-connect-row .agent-buttons{justify-content:flex-start}
 .provider-setup .section-head h2,.github-panel .agent-chat-header strong{font-size:14px}
-.provider-setup>.agent-help:first-of-type{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:12px}
-.provider-setup>.agent-help:first-of-type:hover{-webkit-line-clamp:unset}
+.provider-setup>.agent-help:first-of-type{margin-bottom:6px}
 .provider-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .provider-fields label:nth-child(3),.provider-fields label:nth-child(4),.provider-fields label:nth-child(5){grid-column:span 1}
 .provider-setup-status,.github-state,.status-dot{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);white-space:nowrap}
@@ -916,3 +915,10 @@ dialog.shortcuts-dialog{max-width:min(960px,calc(100vw - 32px));max-height:calc(
 .search-wrap .gi{width:14px;height:14px}
 .agent-setup-title{font-size:14px;font-weight:650;margin:0;letter-spacing:0}
 .agent-setup>.agent-help{margin-top:10px}
+.provider-tips{margin:0 0 14px;font-size:12.5px;color:var(--muted)}
+.provider-tips>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;color:var(--text);font-weight:600;padding:2px 0;border-radius:6px}
+.provider-tips>summary::-webkit-details-marker{display:none}
+.provider-tips>summary::after{content:"";display:inline-block;width:.85em;height:.85em;background:currentColor;-webkit-mask:var(--gi-chev) center/contain no-repeat;mask:var(--gi-chev) center/contain no-repeat;transition:transform .15s}
+.provider-tips[open]>summary::after{transform:rotate(90deg)}
+.provider-tips>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.provider-tips ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px;line-height:1.5}
