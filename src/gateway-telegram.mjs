@@ -11,7 +11,8 @@
 // Chat commands: /new (fresh session), /stop (cancel the running turn),
 // /status, /mode default|acceptEdits|plan|auto, /help.
 import path from 'node:path';
-import { receiveAttachments } from './gateway-core.mjs';
+import { receiveAttachments, gatewayTranscriber } from './gateway-core.mjs';
+import { speakableText, synthesizeSpeech, textToSpeechConfig, voiceReplyMode } from './tts.mjs';
 
 const API = 'https://api.telegram.org';
 const MAX_MESSAGE = 4000;
@@ -53,6 +54,33 @@ export function createTelegramGateway(options = {}) {
   let offset = 0;
   let stopped = false;
   let approvalCounter = 0;
+  let speechConfig;
+  const defaultVoiceReply = voiceReplyMode(options.voiceReply !== undefined ? options.voiceReply : env.OASIS_GATEWAY_VOICE_REPLY);
+  async function speech() {
+    if (speechConfig !== undefined) return speechConfig;
+    if (options.speechConfig !== undefined) return (speechConfig = options.speechConfig);
+    let settings = options.settings || null;
+    if (!settings) { try { settings = await (await import('./settings.mjs')).loadSettings(root, { env }); } catch { settings = {}; } }
+    return (speechConfig = textToSpeechConfig(env, settings));
+  }
+
+  async function sendVoiceReply(chatId, text) {
+    const config = await speech();
+    if (!config) { log('voice reply skipped: text to speech is not configured (OASIS_TTS_API_KEY or OASIS_TTS_BASE_URL)'); return; }
+    const spoken = speakableText(text);
+    if (!spoken || spoken === '(code omitted)') return;
+    api('sendChatAction', { chat_id: chatId, action: 'record_voice' }).catch(() => {});
+    // Telegram voice messages are OGG/Opus; OpenAI-compatible "opus" output is Ogg Opus.
+    const audio = await synthesizeSpeech(config, { text: spoken, format: 'opus' }, { fetchImpl });
+    const form = new FormData();
+    form.set('chat_id', chatId);
+    form.set('voice', new Blob([audio], { type: 'audio/ogg' }), 'reply.ogg');
+    const response = await fetchImpl(base + '/bot' + token + '/sendVoice', { method: 'POST', body: form, signal: AbortSignal.timeout(60000) });
+    const data = await response.json().catch(() => ({ ok: false }));
+    if (!data.ok) throw new Error('Telegram sendVoice failed: ' + String(data.description || response.status).slice(0, 200));
+  }
+
+  const transcribe = options.transcribe !== undefined ? options.transcribe : gatewayTranscriber(env, options.settings || null, root);
 
   async function api(method, body) {
     const response = await fetchImpl(base + '/bot' + token + '/' + method, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}), signal: body && body.timeout ? AbortSignal.timeout((body.timeout + 15) * 1000) : AbortSignal.timeout(30000) });
@@ -73,7 +101,7 @@ export function createTelegramGateway(options = {}) {
     if (!config.configured) throw new Error('No model provider is configured. Run `oasis setup` first.');
     const session = await createSession({ root, config, env, permissionMode: options.permissionMode || null });
     session.headless = true;
-    const state = { session, controller: null, queue: [] };
+    const state = { session, controller: null, queue: [], voiceReply: defaultVoiceReply };
     chats.set(chatId, state);
     return state;
   }
@@ -105,7 +133,11 @@ export function createTelegramGateway(options = {}) {
       });
       try { const { saveSession } = deps.sessions || await import('./sessions.mjs'); await saveSession(state.session, { env }); } catch {}
       if (controller.signal.aborted) await say(chatId, 'Stopped.');
-      else await say(chatId, (turn && turn.text ? turn.text : 'Done.') + (tools.length ? '\n\n(' + tools.length + ' tool call' + (tools.length === 1 ? '' : 's') + ')' : ''));
+      else {
+        await say(chatId, (turn && turn.text ? turn.text : 'Done.') + (tools.length ? '\n\n(' + tools.length + ' tool call' + (tools.length === 1 ? '' : 's') + ')' : ''));
+        const mode = state.voiceReply || 'off';
+        if (turn && turn.text && (mode === 'always' || (mode === 'auto' && extra.fromVoice))) await sendVoiceReply(chatId, turn.text).catch((error) => log('voice reply failed: ' + error.message));
+      }
     } catch (error) {
       await say(chatId, controller.signal.aborted ? 'Stopped.' : 'Error: ' + String(error && error.message || error).slice(0, 1000));
     } finally {
@@ -117,7 +149,7 @@ export function createTelegramGateway(options = {}) {
   async function command(chatId, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals.'), true;
+    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies.'), true;
     if (cmd === '/new') {
       const state = chats.get(chatId);
       if (state && state.controller) state.controller.abort();
@@ -133,6 +165,14 @@ export function createTelegramGateway(options = {}) {
     if (cmd === '/status') {
       const state = chats.get(chatId);
       await say(chatId, state ? 'Workspace: ' + root + '\nModel: ' + (state.session.config && state.session.config.model) + '\nMode: ' + (state.session.permissions && state.session.permissions.mode) + '\nMessages: ' + state.session.messages.length + '\nRunning: ' + (state.controller ? 'yes' : 'no') : 'No session yet. Send a task to start one.');
+      return true;
+    }
+    if (cmd === '/voice') {
+      const choice = String(args[0] || '').toLowerCase();
+      const state = await chatState(chatId);
+      if (!['on', 'off', 'auto'].includes(choice)) { await say(chatId, 'Voice replies: ' + state.voiceReply + '. Usage: /voice on|off|auto (auto answers voice notes with voice).'); return true; }
+      state.voiceReply = choice === 'on' ? 'always' : choice;
+      await say(chatId, 'Voice replies: ' + state.voiceReply + '.' + (state.voiceReply !== 'off' && !(await speech()) ? ' Text to speech is not configured yet; set OASIS_TTS_API_KEY or OASIS_TTS_BASE_URL.' : ''));
       return true;
     }
     if (cmd === '/mode') {
@@ -172,9 +212,10 @@ export function createTelegramGateway(options = {}) {
     const files = telegramFiles(message);
     if (!text.trim() && !files.length) { await say(chatId, 'Send text, a photo or a file.'); return; }
     if (!files.length && text.startsWith('/') && await command(chatId, text)) return;
-    let prompt = text, images = [];
-    if (files.length) ({ text: prompt, images } = await receiveAttachments(root, text, files, { log }));
-    runPrompt(chatId, prompt, { images }).catch((error) => log(error.message));
+    let prompt = text, images = [], transcripts = [];
+    if (files.length) ({ text: prompt, images, transcripts } = await receiveAttachments(root, text, files, { log, transcribe }));
+    const fromVoice = Boolean(message.voice) && Array.isArray(transcripts) && transcripts.length > 0;
+    runPrompt(chatId, prompt, { images, fromVoice }).catch((error) => log(error.message));
   }
 
   // Photos (largest size), documents, videos and audio; the Bot API serves files up to 20 MB.

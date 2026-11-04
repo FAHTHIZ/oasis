@@ -275,6 +275,7 @@ export async function loadSettings(root, options = {}) {
     // Turning optional tools off never loosens anything either.
     for (const key of ['executeCode', 'sessionSearch']) if (settings[key] === false) result[key] = false;
     if (settings.imageGeneration === false) result.imageGeneration = false;
+    if (settings.textToSpeech === false) result.textToSpeech = false;
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
@@ -331,6 +332,13 @@ export async function loadSettings(root, options = {}) {
       for (const key of ['model', 'size']) if (typeof settings.imageGeneration[key] === 'string' && settings.imageGeneration[key].trim()) image[key] = settings.imageGeneration[key].trim().slice(0, 200);
       if (typeof settings.imageGeneration.baseUrl === 'string' && /^https?:\/\/[^\s]+$/.test(settings.imageGeneration.baseUrl.trim())) image.baseUrl = settings.imageGeneration.baseUrl.trim().slice(0, 500);
       result.imageGeneration = image;
+    }
+    // "textToSpeech": { "model", "baseUrl", "voice", "format" } for the text_to_speech tool (the key comes from the environment).
+    if (settings.textToSpeech && typeof settings.textToSpeech === 'object' && !Array.isArray(settings.textToSpeech)) {
+      const speech = { ...(result.textToSpeech && typeof result.textToSpeech === 'object' ? result.textToSpeech : {}) };
+      for (const key of ['model', 'voice', 'format']) if (typeof settings.textToSpeech[key] === 'string' && settings.textToSpeech[key].trim()) speech[key] = settings.textToSpeech[key].trim().slice(0, 200);
+      if (typeof settings.textToSpeech.baseUrl === 'string' && /^https?:\/\/[^\s]+$/.test(settings.textToSpeech.baseUrl.trim())) speech.baseUrl = settings.textToSpeech.baseUrl.trim().slice(0, 500);
+      result.textToSpeech = speech;
     }
     if (typeof settings.verbose === 'boolean') result.verbose = settings.verbose;
     // Session behavior switches read by createSession (previously dropped here, so they never applied).

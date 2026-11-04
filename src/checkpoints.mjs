@@ -8,7 +8,7 @@ import { lstat, mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/
 import path from 'node:path';
 import { resolveWorkspacePath } from './tools.mjs';
 
-export const FILE_CHANGING_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'delete_file']);
+export const FILE_CHANGING_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'delete_file', 'generate_image', 'text_to_speech']);
 const MAX_CHECKPOINT_FILE = 5 * 1024 * 1024;
 const MAX_CHECKPOINT_BYTES = 100 * 1024 * 1024;
 const MAX_TURNS = 50;
