@@ -269,6 +269,14 @@ body.light .btn-primary:hover{background:#287A0F}
 .setup-drawer[open] .setup-drawer-chevron{transform:rotate(180deg)}
 .setup-drawer-body{overflow:auto;padding:4px 18px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start}
 .setup-drawer-body>.first-run-wizard{grid-column:1/-1}
+/* Connected runtime: the token card shrinks to one status row and model setup leads. */
+.setup-drawer[data-runtime="connected"] .first-run-wizard{order:-2}
+.setup-drawer[data-runtime="connected"] .agent-setup{order:5;padding:12px 16px;display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px}
+.setup-drawer[data-runtime="connected"] .agent-setup .agent-connect-row label,.setup-drawer[data-runtime="connected"] .agent-setup .runtime-scope-note,.setup-drawer[data-runtime="connected"] #agentConnectBtn,.setup-drawer[data-runtime="connected"] .agent-setup-local{display:none}
+.setup-drawer[data-runtime="connected"] .agent-setup .agent-connect-row{order:3;margin:0 0 0 auto}
+.setup-drawer[data-runtime="connected"] .agent-setup .agent-help{order:2;flex:1 1 260px;margin:0;font-size:12.5px}
+.setup-drawer[data-runtime="connected"] .agent-setup-heading{margin:0}
+.setup-drawer[data-runtime="connected"] .agent-setup-kicker::after{content:" · CONNECTED";color:var(--accent,#9bff55)}
 .agent-setup-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .agent-setup-local{font-size:11.5px;color:var(--muted)}
 .agent-connect-row{display:grid;gap:10px}
@@ -875,3 +883,17 @@ html[data-motion=full] .agent-dictate.is-listening{animation:oasis-dictate-pulse
 .agent-message-images img{max-width:160px;max-height:120px;border-radius:var(--r-sm);border:1px solid var(--line);object-fit:cover}
 .agent-compose-form:has(.agent-attachments:not([hidden])){grid-template-areas:"input input" "files files" "tools actions"}
 .agent-compose-form .agent-attachments{grid-area:files}
+/* Short conversation area (setup drawer open, small laptop screens): keep the empty state legible instead of clipped behind the composer. */
+.agent-messages{container-type:size;container-name:chatlog}
+@container chatlog (max-height:300px){
+  #agentEmptyState{margin:0;padding:0;align-self:center}
+  #agentEmptyState::before{width:28px;height:28px;margin-bottom:8px}
+  #agentEmptyState .empty-title{font-size:19px;margin-bottom:2px}
+  #agentEmptyState>:not(.empty-title):not(p){display:none}
+}
+@container chatlog (max-height:150px){
+  #agentEmptyState::before,#agentEmptyState p{display:none}
+}
+.setup-drawer[data-runtime="connected"] .agent-setup .agent-help{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.first-run-icon svg{display:block}
+@media(max-width:420px){.wt-long{display:none}.worktree-toggle strong{white-space:nowrap}}
