@@ -33,6 +33,8 @@ const KIND_BY_TOOL = {
 
 const DIFF_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 
+const TERMINAL_OUTPUT_LIMIT = 256 * 1024;
+
 export function toolKind(name) {
   return KIND_BY_TOOL[name] || (String(name).startsWith('mcp_') ? 'other' : 'other');
 }
@@ -166,13 +168,65 @@ export function createAcpServer(options = {}) {
       const sid = session.sessionId;
       const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('client fs timed out')), ms).unref?.())]);
       session.clientFs = {
-        ...(fsCaps.readTextFile ? { readTextFile: async (file) => { const reply = await withTimeout(request('fs/read_text_file', { sessionId: sid, path: file }), 10000); return reply && typeof reply.content === 'string' ? reply.content : null; } } : {}),
+        // The last buffer text read per file, so a diff's "before" side matches what the editor showed.
+        recentReads: new Map(),
+        ...(fsCaps.readTextFile ? { readTextFile: async (file) => { const reply = await withTimeout(request('fs/read_text_file', { sessionId: sid, path: file }), 10000); const text = reply && typeof reply.content === 'string' ? reply.content : null; if (text !== null && text.length <= 1024 * 1024) session.clientFs.recentReads.set(file, text); return text; } } : {}),
         ...(fsCaps.writeTextFile ? { writeTextFile: async (file, content) => { await withTimeout(request('fs/write_text_file', { sessionId: sid, path: file, content }), 10000); } } : {})
       };
     }
-    const entry = { session, root: cwd, controller: null, config };
+    const entry = { session, root: cwd, controller: null, config, terminals: [], activeCallIds: null };
+    // Editors that offer terminal/* can run commands in their own terminal panel (opt-in).
+    const terminalOptIn = options.editorTerminal === true || /^(1|true|on|yes)$/i.test(String(env.OASIS_ACP_TERMINAL || '').trim());
+    if (terminalOptIn && clientCapabilities && clientCapabilities.terminal === true) {
+      session.clientTerminal = (spec) => runInEditorTerminal(entry, spec);
+    }
     sessions.set(session.sessionId, entry);
     return entry;
+  }
+
+  async function runInEditorTerminal(entry, { command, args = [], cwd, env: extraEnv = [], timeoutSeconds = 120, signal } = {}) {
+    const sessionId = entry.session.sessionId;
+    const created = await request('terminal/create', { sessionId, command, args, cwd, env: extraEnv, outputByteLimit: TERMINAL_OUTPUT_LIMIT });
+    const terminalId = created && typeof created.terminalId === 'string' ? created.terminalId : '';
+    if (!terminalId) throw new Error('The editor did not return a terminal id.');
+    entry.terminals.push(terminalId);
+    const queue = entry.activeCallIds && entry.activeCallIds.get('run_command') || [];
+    const toolCallId = queue[queue.length - 1];
+    if (toolCallId) update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'in_progress', content: [{ type: 'terminal', terminalId }] });
+    let timedOut = false; let cancelled = false; let timer = null; let onAbort = null;
+    try {
+      const stopped = new Promise((resolve) => {
+        timer = setTimeout(() => { timedOut = true; resolve(null); }, timeoutSeconds * 1000);
+        timer.unref?.();
+        onAbort = () => { cancelled = true; resolve(null); };
+        if (signal) { if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true }); }
+      });
+      const exit = await Promise.race([request('terminal/wait_for_exit', { sessionId, terminalId }), stopped]);
+      if (!exit) await request('terminal/kill', { sessionId, terminalId }).catch(() => {});
+      const out = await request('terminal/output', { sessionId, terminalId }).catch(() => null);
+      const status = (exit && typeof exit === 'object' ? exit : null) || (out && out.exitStatus) || {};
+      return {
+        exitCode: typeof status.exitCode === 'number' ? status.exitCode : null,
+        signal: typeof status.signal === 'string' ? status.signal : null,
+        stdout: out && typeof out.output === 'string' ? out.output : '',
+        stderr: '',
+        stdoutTruncated: Boolean(out && out.truncated),
+        timedOut, cancelled, editorTerminal: terminalId,
+        ...(timedOut ? { message: 'Stopped after ' + timeoutSeconds + ' seconds in the editor terminal.' } : {})
+      };
+    } catch (error) {
+      const failure = new Error('Editor terminal failed: ' + String(error && error.message || error));
+      failure.started = true;
+      throw failure;
+    } finally {
+      clearTimeout(timer);
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  async function releaseTerminals(entry) {
+    const ids = entry.terminals.splice(0);
+    for (const terminalId of ids) await request('terminal/release', { sessionId: entry.session.sessionId, terminalId }).catch(() => {});
   }
 
   function modeState(entry) {
@@ -207,6 +261,7 @@ export function createAcpServer(options = {}) {
     const controller = new AbortController();
     entry.controller = controller;
     const callIds = new Map();
+    entry.activeCallIds = callIds;
     const before = new Map();
     let counter = 0;
     let streamed = '';
@@ -235,6 +290,7 @@ export function createAcpServer(options = {}) {
             const file = path.resolve(entry.root, args.path);
             let oldText = null;
             try { const info = statSync(file); if (info.isFile() && info.size <= 1024 * 1024) oldText = readFileSync(file, 'utf8'); } catch {}
+            if (entry.session.clientFs && entry.session.clientFs.recentReads) entry.session.clientFs.recentReads.delete(file);
             before.set(toolCallId, { file, oldText });
           }
           update(sessionId, { sessionUpdate: 'tool_call', toolCallId, title: (subagent ? '[' + subagent + '] ' : '') + toolTitle(name, args), kind: toolKind(name), status: 'in_progress', rawInput: args || {}, locations: toolLocations(entry.root, args) });
@@ -249,11 +305,14 @@ export function createAcpServer(options = {}) {
           const prior = before.get(toolCallId);
           before.delete(toolCallId);
           if (prior && !isFailure(result)) {
+            const buffered = entry.session.clientFs && entry.session.clientFs.recentReads && entry.session.clientFs.recentReads.get(prior.file);
+            if (typeof buffered === 'string') prior.oldText = buffered;
             try {
               const newText = readFileSync(prior.file, 'utf8');
               if (newText !== prior.oldText && newText.length <= 1024 * 1024) content.unshift({ type: 'diff', path: prior.file, oldText: prior.oldText, newText });
             } catch {}
           }
+          if (result && typeof result === 'object' && typeof result.editorTerminal === 'string') content.unshift({ type: 'terminal', terminalId: result.editorTerminal });
           update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: isFailure(result) ? 'failed' : 'completed', content, rawOutput: typeof result === 'object' && result ? { exitCode: result.exitCode } : undefined });
         },
         approval: async (message, _force = false, meta = {}) => {
@@ -282,7 +341,7 @@ export function createAcpServer(options = {}) {
     } catch (error) {
       if (controller.signal.aborted) return { stopReason: 'cancelled' };
       throw rpcError(-32603, String(error && error.message || error));
-    } finally { entry.controller = null; }
+    } finally { entry.controller = null; entry.activeCallIds = null; await releaseTerminals(entry); }
   }
 
   async function handle(method, params = {}) {

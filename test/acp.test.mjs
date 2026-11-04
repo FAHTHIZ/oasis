@@ -167,6 +167,56 @@ test('ACP clients with fs capabilities serve unsaved buffers, receive writes and
   const edit = updates.find((u) => u.sessionUpdate === 'tool_call_update' && u.toolCallId === 'e1');
   const diff = edit.content.find((c) => c.type === 'diff');
   assert.ok(diff, JSON.stringify(edit));
-  assert.equal(diff.oldText, 'on disk\n');
+  // The "before" side is the unsaved buffer the agent edited, not the stale disk copy.
+  assert.equal(diff.oldText, 'unsaved buffer\n');
   assert.equal(diff.newText, 'edited buffer\n');
 });
+
+test('ACP editor terminals (opt-in) run approved commands in the editor and embed the terminal', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-acp-home-');
+  const { config } = await scriptedModel(t, [
+    toolCall('c1', 'run_command', { command: 'echo', args: ['hi from the editor'] }),
+    { content: 'Done.' }
+  ]);
+  const child = spawn(process.execPath, [CLI, 'acp', '--editor-terminal'], { cwd: root, env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  t.after(() => child.kill());
+  const terminals = new Map();
+  const calls = [];
+  const updates = [];
+  const permissions = [];
+  let id = 0;
+  const waiting = new Map();
+  const send = (message) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n');
+  createInterface({ input: child.stdout }).on('line', (line) => {
+    const message = JSON.parse(line);
+    if (message.method && message.method.startsWith('terminal/')) {
+      calls.push(message.method);
+      const p = message.params;
+      if (message.method === 'terminal/create') {
+        const proc = spawn(p.command, p.args, { cwd: p.cwd, env: { ...process.env, ...Object.fromEntries((p.env || []).map((e) => [e.name, e.value])) } });
+        const record = { output: '', exit: null };
+        record.done = new Promise((resolve) => { proc.stdout.on('data', (d) => { record.output += d; }); proc.on('close', (code) => { record.exit = { exitCode: code, signal: null }; resolve(record.exit); }); });
+        terminals.set('term-1', record);
+        send({ id: message.id, result: { terminalId: 'term-1' } });
+      } else if (message.method === 'terminal/wait_for_exit') terminals.get(p.terminalId).done.then((exit) => send({ id: message.id, result: exit }));
+      else if (message.method === 'terminal/output') { const r = terminals.get(p.terminalId); send({ id: message.id, result: { output: r.output, truncated: false, exitStatus: r.exit } }); }
+      else send({ id: message.id, result: null });
+    } else if (message.method === 'session/request_permission') { permissions.push(message.params); send({ id: message.id, result: { outcome: { outcome: 'selected', optionId: 'allow_once' } } }); }
+    else if (message.method === 'session/update') updates.push(message.params.update);
+    else if (waiting.has(message.id)) { waiting.get(message.id)(message); waiting.delete(message.id); }
+  });
+  const call = (method, params) => { const requestId = ++id; send({ id: requestId, method, params }); return new Promise((resolve) => waiting.set(requestId, resolve)); };
+  await call('initialize', { protocolVersion: 1, clientCapabilities: { terminal: true } });
+  const { result } = await call('session/new', { cwd: root, mcpServers: [] });
+  const done = await call('session/prompt', { sessionId: result.sessionId, prompt: [{ type: 'text', text: 'say hi' }] });
+  assert.equal(done.result.stopReason, 'end_turn');
+  assert.equal(permissions.length, 1, 'the command still needed approval');
+  assert.match(JSON.stringify(permissions[0]), /editor's terminal/);
+  assert.deepEqual(calls, ['terminal/create', 'terminal/wait_for_exit', 'terminal/output', 'terminal/release']);
+  const final = updates.filter((u) => u.sessionUpdate === 'tool_call_update' && u.toolCallId === 'c1').at(-1);
+  assert.equal(final.status, 'completed');
+  assert.deepEqual(final.content[0], { type: 'terminal', terminalId: 'term-1' });
+  assert.match(JSON.stringify(final.content), /hi from the editor/);
+});
+

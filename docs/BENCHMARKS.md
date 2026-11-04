@@ -136,6 +136,30 @@ node src/cli.mjs eval --gemini-cli --trials 3 --model gemini-3-pro --yes
 
 The resulting reports work with `--compare` like any other run, so OASIS, Claude Code, Codex and Gemini CLI can be compared pairwise on identical tasks.
 
+## Run OpenCode and Aider on the same fixtures
+
+```sh
+node src/cli.mjs eval --opencode --trials 3 --model anthropic/claude-opus-4-6 --yes
+node src/cli.mjs eval --aider --trials 3 --model openai/gpt-5.5 --yes
+```
+
+- OpenCode runs as `opencode run --format json`; tokens and cost come from its `step_finish` events when present.
+- Aider runs as `aider --message ... --yes-always --no-auto-commits`; tokens and cost come from its `Tokens: ... sent, ... received. Cost: ... session` lines.
+- Point at a specific binary with `OASIS_OPENCODE_BIN` or `OASIS_AIDER_BIN`. In both cases pass/fail comes only from the task verifier, so an unrecognized output format affects the token columns, never the score.
+
+## Head-to-head in one command
+
+`npm run bench:live` runs OASIS and every installed agent (Claude Code, Codex CLI, Gemini CLI, OpenCode, Aider) on the same tasks, then writes a dated folder, `bench/results/live-YYYY-MM-DD/`, containing each agent's full JSON report, `summary.json` and a `SUMMARY.md` table ready to commit. Agents whose CLI is missing, or that fail before verification on every trial (not signed in, unknown model, gateway down), are listed as "not run" with the reason rather than scored 0%.
+
+To compare harnesses rather than models, send every agent to the same model through one gateway. With [9Router](https://github.com/decolua/9router) or OmniRoute running locally:
+
+```sh
+export OASIS_BENCH_API_KEY=sk-...        # the gateway key; never written to the results
+npm run bench:live -- --router http://localhost:20128/v1 --model cc/claude-opus-4-6 --trials 3 --yes
+```
+
+`--router` sets each agent's own base-URL variable (`OASIS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE`, `GOOGLE_GEMINI_BASE_URL`) and key. Use `--agents oasis,claude` to choose agents, `--model-for claude=opus` for a per-agent model ID, and `--task ID` for a quick check. Only tasks every agent ran with identical fingerprints are scored.
+
 ## Run OASIS and compare reports
 
 In a separate run, configure OASIS to use the model/provider configuration you want to compare:
@@ -205,7 +229,7 @@ No authenticated live Claude Code head-to-head result is published. Do not claim
 
 ## Result status
 
-No live Claude Code results are included yet. The CLI integration is testable with a fake runner, but this task-authoring session did not run an authenticated Claude Code CLI benchmark. Before publishing head-to-head numbers, run both agents against identical task fingerprints, use the same model when comparing harnesses, publish every trial and failure, and retain the complete machine-readable reports.
+No live head-to-head results are published yet. The runners for Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider, and `npm run bench:live`, are covered by tests with fake CLIs. A live run needs model access from the machine running the benchmark (the 2026-11-04 attempt from a cloud sandbox could not reach the maintainer's local gateway, so no numbers were recorded). Before publishing head-to-head numbers, run both agents against identical task fingerprints, use the same model when comparing harnesses, publish every trial and failure, and retain the complete machine-readable reports.
 
 ## Small local model field runs (2026-11-01)
 

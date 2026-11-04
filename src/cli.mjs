@@ -128,7 +128,7 @@ function printHelp() {
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
-    '  oasis acp [--permission-mode MODE]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
+    '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -3439,7 +3439,7 @@ async function main() {
     const modeAt = rest.indexOf('--permission-mode');
     const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis acp --permission-mode must be default, acceptEdits, plan or auto.');
-    await serveAcp({ env: process.env, version: oasisVersion(), permissionMode });
+    await serveAcp({ env: process.env, version: oasisVersion(), permissionMode, editorTerminal: rest.includes('--editor-terminal') });
     return;
   }
   if (command === 'skills' && rest[0] === 'eval') {
