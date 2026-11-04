@@ -26,7 +26,7 @@ import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, 
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, BudgetExceededError } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
-import { beginCheckpoint, captureBeforeChange, FILE_CHANGING_TOOLS } from './checkpoints.mjs';
+import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
@@ -906,6 +906,10 @@ export async function createSession({ root, config, restore = null, permissionMo
     const recorded = restore.messages.find((message) => message && message.role === 'system' && typeof message.content === 'string');
     if (snapshotMode === 'on' && recorded) { session.freshSystemText = systemMessage.content; systemMessage.content = recorded.content; }
     session.messages = [systemMessage, ...restore.messages.filter((message) => message && message.role !== 'system')];
+    if (restore.checkpointsDir && checkpointPersistenceEnabled(env)) {
+      const saved = await loadCheckpoints(restore.checkpointsDir).catch(() => null);
+      if (saved && saved.turns.length) session.checkpoints = saved;
+    }
   }
   session.baseSystemPrompt = systemMessage.content;
   const tel = getTelemetry(env);

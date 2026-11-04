@@ -55,7 +55,7 @@ The [full user guide](USER_GUIDE.md) is the comprehensive behavior reference. It
 
 - [Weakened-test detection and auto-test](USER_GUIDE.md#weakened-test-detection)
 - [LSP verification and context estimates](USER_GUIDE.md#lsp-verification-and-context-estimates)
-- [Coding-agent evaluations](USER_GUIDE.md#coding-agent-evaluations-experimental)
+- [Coding-agent evaluations](USER_GUIDE.md#coding-agent-evaluations)
 - [Development and verification](USER_GUIDE.md#development-and-verification)
 - [Contributing](USER_GUIDE.md#contributing)
 

@@ -86,6 +86,8 @@ The static dashboard is included as a separate surface because it is easy to con
 | VS Code-family extension | `ide/vscode/`, `src/ide.mjs` | Editor chat, selection context, native diff review, editor diagnostics, and a local bridge to the CLI. Cursor and Windsurf are supported editor targets through their VS Code-compatible interfaces. |
 | Node.js SDK | `src/sdk.mjs` | In-process access to the agent/headless runtime, event streaming, custom tools, and tool servers. |
 | GitHub Action | `action.yml`, `src/github-action.mjs` | Runs OASIS in a GitHub Actions checkout through the SDK, filters who can trigger mention-based tasks, verifies the result, and can commit/push a branch or open a pull request according to the event. |
+| Agent Client Protocol server | `src/acp.mjs` (`oasis acp`) | JSON-RPC over stdio for Zed, JetBrains, Neovim, Emacs and other ACP editors: sessions, prompts, mode changes, tool-call reports with inline diffs, permission requests, and editor `fs/*` reads and writes when the client offers them. |
+| Messaging gateways | `src/gateway-core.mjs`, `src/gateway-telegram.mjs`, `src/gateway-discord.mjs`, `src/gateway-slack.mjs` (`oasis gateway ...`) | Long-running bots that map an allowed chat to a saved session, save incoming files to `.oasis/inbox/`, pass photos to the model, and turn approvals into chat buttons. |
 | Static dashboard / PWA shell | `index.html`, `sw.js`, `manifest.webmanifest` | Local Projects, Tasks, and Notes data in browser storage, JSON export/import, and static offline assets. It has no model loop or host-side execution by itself. |
 
 ### Process and deployment boundaries
@@ -98,6 +100,8 @@ The static dashboard is included as a separate surface because it is easy to con
 | VS Code-family integration | Editor extension host plus CLI process | The extension hosts a token-authenticated loopback RPC bridge. The CLI discovers the bridge for its workspace and requests selection, diagnostics, file navigation and native diff approval. |
 | Node.js SDK | The consuming Node.js process | Embeds OASIS in-process; it is not a remote service. `query()` streams events and `run()` provides a one-shot convenience API. |
 | GitHub Action | Separate GitHub Actions runner | Uses the SDK inside the CI job against that runner's checkout and credentials. It does not share the developer's local sessions, browser server, processes or filesystem. |
+| ACP server | Child process started by the editor | Talks JSON-RPC on stdin/stdout. The editor owns the UI and, when it advertises them, the file buffers; OASIS owns the agent loop, tools, approvals and session files. |
+| Messaging gateways | Long-running Node.js process on the user's computer or server | Polls (Telegram) or holds a socket (Discord Gateway, Slack Socket Mode) with the user's bot token. Only allow-listed chats or users can start work; tools run on the gateway host with the configured permission mode. |
 | Static dashboard / PWA | Browser process only | Reads and writes its own browser storage. It does not connect to the agent API unless the separate connected workspace is opened. |
 
 These are deployment boundaries, not separate product engines: the local surfaces reuse the same runtime modules where stated, while the GitHub Action starts a separate runtime in CI. The editor bridge and browser server are distinct loopback services with different tokens and responsibilities.
@@ -206,6 +210,7 @@ The OS sandbox is implemented in `src/sandbox.mjs` and is disabled by default.
 | macOS | `sandbox-exec` profile | Restricts writes outside permitted workspace/temp paths and can deny network access unless enabled. |
 | Windows / other unsupported hosts | No OASIS-native OS sandbox | Approval and command controls remain available, but they are not equivalent to OS isolation. Use the container backend for isolation. |
 | Any host with Docker or Podman (`sandbox.backend`) | Throwaway container per command | Only the workspace and extra directories are bind-mounted read-write; nothing else from the host is visible. All capabilities dropped, `no-new-privileges`, PID limit, `--network none` unless `network` is true; optional `memory` and `cpus` limits. |
+| Any host with `ssh` and `rsync` (`"backend": "ssh"`, `src/ssh-backend.mjs`) | Commands run on a remote machine | The workspace is copied to the remote directory before each command and changed files are copied back. This protects the local machine only; the remote host is not sandboxed, and everything in the workspace (including `.env` files) is copied there. |
 
 If the user explicitly enables the OS sandbox and the required mechanism is unavailable, OASIS refuses to run the command without the requested isolation. The sandbox is not full filesystem-read isolation. It should not be described as a hardened container or a guarantee that arbitrary project code is safe.
 

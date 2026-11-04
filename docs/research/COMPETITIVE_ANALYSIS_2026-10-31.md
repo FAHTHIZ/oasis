@@ -19,7 +19,7 @@ OASIS is an independent product with its own roadmap and engineering identity. T
 
 That establishes **broad architectural and capability overlap** with Claude Code. It does **not** establish equal success rate, patch quality, speed, reliability or security. Those are behavioral outcomes that need controlled evaluation.
 
-The most important gap supported by current evidence is **benchmark strength**: the checked-in evaluation manifest has 33 tasks (16 labelled small and 17 medium, none large). Most exercise bounded helper logic, input handling and security/configuration cases. They are useful regression tests, but not enough to support a broad “as capable as Claude Code” claim. The existing benchmark audit also records that no authenticated live head-to-head result has been published. See [Benchmark audit](../BENCHMARKS.md) and the actual [task manifest](../../evals/tasks/metadata.json).
+The most important gap supported by current evidence is **benchmark strength**: the checked-in evaluation manifest has 33 tasks (16 labelled small and 17 medium, none large). (As of November 4, 2026 it has 50 tasks; see the update at the end.) Most exercise bounded helper logic, input handling and security/configuration cases. They are useful regression tests, but not enough to support a broad “as capable as Claude Code” claim. The existing benchmark audit also records that no authenticated live head-to-head result has been published. See [Benchmark audit](../BENCHMARKS.md) and the actual [task manifest](../../evals/tasks/metadata.json).
 
 The second major caveat is execution isolation. OASIS's OS sandbox is optional, disabled by default, and targets Linux/macOS; native Windows commands use approval controls without OASIS OS sandbox enforcement. Claude Code's shell sandbox is also off by default, supports macOS/Linux/WSL2, and does not sandbox native Windows commands. In both products the sandbox is a shell-process boundary, not full OS isolation of every file tool, MCP server or hook. OASIS's built-in file tools separately constrain access to the workspace and explicitly added directories. Neither product should be called fully secure merely because sandboxing exists. See OASIS [sandbox implementation](../../src/sandbox.mjs) and Claude Code's [sandbox documentation](https://code.claude.com/docs/en/sandboxing).
 
@@ -248,3 +248,28 @@ Gaps from this analysis that are now closed in `main` (each with regression test
 | Hardening (new) | Hash-based Content-Security-Policy on the web UI (no inline scripts), Electron permission policy (only audio for dictation, notifications, clipboard write), RFC 9207 issuer check on MCP OAuth callbacks, fewer prompt-injection false positives with `.env` exfiltration now caught. |
 
 Still open: published head-to-head results, a Windows sandbox, the sandbox-on-by-default decision, and signed installers.
+
+## Update — 2026-11-04
+
+The evaluation manifest now has 50 tasks. Since the November 2 update, these gaps against Claude Code, Codex, Hermes Agent, Antigravity and OpenCode have been closed in `main`, each with regression tests:
+
+| Gap (who already had it) | What shipped |
+|---|---|
+| Container isolation on any OS (Codex, Hermes) | `"backend": "docker"` or `"podman"` runs each command in a throwaway container with only the workspace mounted, no capabilities and no network unless allowed. This is also the Windows isolation path. Unit-tested only; not yet run against a live engine in CI. |
+| Remote execution (Claude Code desktop SSH, Hermes) | `"backend": "ssh"` or `/sandbox ssh HOST [DIR]` runs commands on another machine, copying the workspace with `rsync` before each command and changed files back afterwards. |
+| Messaging gateways (Hermes) | `oasis gateway telegram`, `discord` and `slack`: one session per chat, approval buttons, allow-lists, and incoming photos and files (saved to `.oasis/inbox/`, photos shown to the model). |
+| Editor protocol (Zed, JetBrains and Neovim agents through ACP) | `oasis acp` with session load, modes, permission requests, inline diffs and editor `fs/*` buffer reads and writes. Editor terminals (`terminal/*`) are not used yet. |
+| Cross-session search (Hermes `session_search`) | `/recall` and the `session_search` tool. |
+| Programmatic tool calling (Hermes `execute_code`, Claude code mode) | `execute_code` runs a short script that calls OASIS tools in one step. |
+| Key pools (Hermes credential pools) | Several API keys per provider, rotated on rate limits. |
+| Trajectories and batch runs (Hermes) | `oasis batch` with ShareGPT and OpenAI-format trajectory export. |
+| Plugin and skill evaluation | `oasis plugin eval` scores a plugin or skill against a baseline run. |
+| Profiles (Hermes profiles) | `--profile NAME` keeps separate settings, memory and sessions. |
+| Image generation (Hermes, Codex) | `generate_image` with OpenAI-compatible image APIs, behind approval and checkpoints. |
+| Memory write approval (Hermes) | `memoryWriteApproval: "ask"` or `"queue"` with `/memory pending`, `approve` and `reject`. |
+| Rule folders of other tools (Antigravity, Cursor, Windsurf, Copilot, Kiro, Cline, Roo) | `.agent/rules`, `.cursor/rules`, `.windsurf/rules`, `.github/instructions`, `.kiro/steering`, `.clinerules/` and `.roo/rules` load with their always, glob-scoped, on-request and manual triggers. |
+| Diagrams in the terminal | Mermaid flowcharts and sequence diagrams in replies are drawn as text in the terminal. |
+| Importers | Settings, MCP servers, rules and skills import from more tools. |
+
+Still open: published head-to-head results on the same model, a live-engine container test in CI, ACP editor terminals, hosted cloud sessions, a published `v1.0.0` release, and signed installers.
+

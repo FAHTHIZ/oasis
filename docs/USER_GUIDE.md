@@ -16,7 +16,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 | Terminal and sessions | [Interactive terminal](#the-interactive-terminal) · [PTY sessions](#interactive-pty-terminal-sessions) · [Slash commands](#slash-commands-mentions-and-memory) · [Auto memory](#auto-memory) · [Clear local data](#clearing-local-data) |
 | Automation and developer tools | [Headless mode](#headless-mode-for-scripts-and-ci) · [GitHub Action](#github-mention-oasis) · [SDK](#sdk-build-on-oasis-from-node) · [OpenTelemetry](#opentelemetry) · [Subagents](#subagents) · [Workflows](#dynamic-workflows) · [Agent tools](#extra-agent-tools) · [LSP and diagnostics](#lsp-verification-and-context-estimates) · [Watch mode](#watch-mode-ai-comments-in-your-editor) · [Auto-test](#auto-test-after-edits) · [Weakened-test detection](#weakened-test-detection) |
 | Browser workspace | [Static dashboard](#static-browser-dashboard) · [Run monitor](#monitor-agent-runs-and-worker-activity) |
-| Evaluation and project upkeep | [Coding-agent evaluations](#coding-agent-evaluations-experimental) · [Development checks](#development-and-verification) · [Known limitations](#known-limitations--not-claimed-as-finished) · [Contributing](#contributing) · [License](#license) |
+| Evaluation and project upkeep | [Coding-agent evaluations](#coding-agent-evaluations) · [Development checks](#development-and-verification) · [Known limitations](#known-limitations--not-claimed-as-finished) · [Contributing](#contributing) · [License](#license) |
 
 ---
 
@@ -1040,7 +1040,7 @@ Before OASIS edits, writes, or deletes a file, it saves that file's original con
 - `/rewind 3 code` restores files from the last three turns but keeps the conversation.
 - `/rewind 1 chat` rewinds only the conversation.
 
-Checkpoints last for the current session. Changes made by shell commands (for example `npm install` or `sed -i`) are not tracked, so use Git for those. The older `oasis backups` / `oasis restore` snapshots still work too.
+Checkpoints are saved with the session (in `<id>.checkpoints/` next to it, file contents stored once by SHA-256 hash, last 50 turns, files up to 5 MB, 100 MB total), so `/rewind` still works after `oasis --resume`, `oasis --continue`, an ACP `session/load` or a restart. A stored copy whose hash no longer matches is skipped rather than restored. `OASIS_PERSIST_CHECKPOINTS=0` keeps them in memory only. Deleting or purging a session deletes its checkpoints. Changes made by shell commands (for example `npm install` or `sed -i`) are not tracked, so use Git for those. The older `oasis backups` / `oasis restore` snapshots still work too.
 
 ## Subagents
 
@@ -1343,7 +1343,7 @@ A post-edit result distinguishes diagnostics from server availability. If a conf
 
 Options: `--workspace PATH` chooses the workspace and `--yes` explicitly enables automatic approval for supported actions.
 
-## Coding-agent evaluations (experimental)
+## Coding-agent evaluations
 
 OASIS includes a reference-task harness for measuring completed work instead of relying only on a model's final response.
 
@@ -1414,7 +1414,7 @@ A passing test suite is not a full security audit or a substitute for exercising
 
 - The built-in OASIS capability-bundle catalog contains reviewed workflow-skill bundles. Separately, OASIS supports external Agent Skills, reviewed GitHub extension imports, and Claude Code-compatible plugin marketplaces through the `oasis plugin marketplace` / `oasis plugin install` commands described above. Compatibility is feature-specific: signed publisher manifests and complete support for every plugin lifecycle feature are not implemented.
 - The OS sandbox uses bubblewrap on Linux and sandbox-exec on macOS. It is off by default. There is no native Windows OS sandbox; the opt-in container backend (Docker or Podman) is available on every OS, and the SSH backend runs commands on another machine.
-- Checkpoints only track changes made through OASIS's file tools, and they live in memory for the current session; they are not saved with resumed sessions.
+- Checkpoints only track changes made through OASIS's file tools; shell-command changes are not captured.
 - Saved conversations are on by default and workspace-scoped. OASIS provides read-only plan mode (`oasis plan "task"` or `/plan task`), first-class Git status/diff inspection, and between-turn history compaction using a tool-free model summary with a bounded local fallback if summarization fails. The agent also uses bounded deterministic within-turn microcompaction to prune older bulky tool results when its estimated context nears the configured limit (default estimate 32,768 tokens; set OASIS_CONTEXT_WINDOW for the selected model).
 - MCP servers start from the user-level config and may execute third-party code; review sources and tool permissions before adding one.
 - Consecutive read-only workspace calls can run concurrently; all other calls act in their original requested order so a later read cannot overtake an earlier edit. A task checklist (`todo_write`) persists with saved sessions. Specialist reviews are available as bounded, read-only second opinions. Parallel subagents (the `task` tool) run in separate contexts, but they share one workspace, so OASIS does not resolve conflicting edits between them; give parallel agents separate files, read-only work, or `"isolation": "worktree"` so each one gets its own branch.
