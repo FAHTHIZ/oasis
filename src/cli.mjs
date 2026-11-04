@@ -122,6 +122,7 @@ function printHelp() {
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
     '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
     '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
+    '  oasis profile list|create|use|show|delete  Separate agents with their own config, memory, sessions and skills (--profile NAME)',
     '  oasis import [codex|gemini|cursor|claude|hermes|opencode|antigravity|windsurf|cline] [--dry-run] [--yes]  Import MCP servers, instructions, commands, rules, skills and memories',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
@@ -2994,6 +2995,24 @@ async function main() {
   // HTTPS_PROXY / HTTP_PROXY / NO_PROXY for every outbound request (Node's fetch ignores them).
   installProxyFromEnv();
   const rawArgs = process.argv.slice(2);
+  // --profile NAME (or -P NAME) picks an isolated agent profile before anything reads config.
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i];
+    if (arg === '--') break;
+    if (arg === '--profile' || arg === '-P' || arg.startsWith('--profile=')) {
+      const name = arg.startsWith('--profile=') ? arg.slice(10) : rawArgs[i + 1];
+      if (!name) throw new Error('--profile needs a name.');
+      process.env.OASIS_PROFILE = name;
+      rawArgs.splice(i, arg.startsWith('--profile=') ? 1 : 2);
+      i--;
+    }
+  }
+  if (process.env.OASIS_PROFILE) { const { activeProfile } = await import('./config.mjs'); activeProfile(process.env); }
+  if (rawArgs[0] === 'profile' || rawArgs[0] === 'profiles') {
+    const { profileCommand } = await import('./profiles.mjs');
+    await profileCommand(rawArgs.slice(1));
+    return;
+  }
   // `oasis exec PROMPT` is an alias for `oasis -p PROMPT` (Codex CLI muscle memory).
   if (rawArgs[0] === 'exec') rawArgs[0] = '-p';
   // `oasis resume [--last | ID]` (Codex CLI) maps to -c / -r.

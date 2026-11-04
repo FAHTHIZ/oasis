@@ -1,5 +1,6 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 import { mkdir, readFile, chmod } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';
 import path from 'node:path';
 import os from 'node:os';
@@ -53,11 +54,37 @@ export function isNodeVersionSupported(version = process.versions.node) {
   return Boolean(match && Number(match[1]) >= 22);
 }
 
-export function getConfigDirectory(env = process.env, home = os.homedir()) {
+export const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
+
+/** The base OASIS directory, ignoring profiles. */
+export function getBaseConfigDirectory(env = process.env, home = os.homedir()) {
   if (env.OASIS_CONFIG_DIR) return path.resolve(env.OASIS_CONFIG_DIR);
   if (env.OASIS_HOME) return path.resolve(env.OASIS_HOME);
   if (process.platform === 'win32' && env.APPDATA) return path.join(env.APPDATA, 'oasis');
   return path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'oasis');
+}
+
+/** Active profile name, or null for the default profile. Invalid names are rejected. */
+export function activeProfile(env = process.env, home = os.homedir()) {
+  let name = String(env.OASIS_PROFILE || '').trim();
+  // `oasis profile use NAME` stores a sticky default; OASIS_PROFILE and --profile override it.
+  if (!name && !env.OASIS_CONFIG_DIR && env.OASIS_PROFILE === undefined) {
+    try { name = readFileSync(path.join(getBaseConfigDirectory(env, home), 'active-profile'), 'utf8').trim(); } catch { name = ''; }
+    if (name && !PROFILE_NAME_PATTERN.test(name)) name = '';
+  }
+  if (!name || name === 'default') return null;
+  if (!PROFILE_NAME_PATTERN.test(name)) throw new Error('Invalid OASIS profile name "' + name + '": use letters, digits, - and _ (up to 40).');
+  return name;
+}
+
+// A profile (OASIS_PROFILE / --profile NAME) is a separate agent: its own config,
+// keys, settings, memories, sessions, skills, commands, MCP servers and cron jobs,
+// under <base>/profiles/NAME. An explicit OASIS_CONFIG_DIR always wins.
+export function getConfigDirectory(env = process.env, home = os.homedir()) {
+  const base = getBaseConfigDirectory(env, home);
+  if (env.OASIS_CONFIG_DIR) return base;
+  const profile = activeProfile(env, home);
+  return profile ? path.join(base, 'profiles', profile) : base;
 }
 
 export function getConfigPath(env = process.env, home = os.homedir()) {

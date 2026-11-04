@@ -882,6 +882,22 @@ Small local models often edit a file and then stop without looking at the result
 
 OASIS collects every AI comment in the files Git tracks or would track (ignored files and secret files such as `.env` are skipped), sends them with a few lines of surrounding code, and asks the agent to remove each comment it handled. Comments that were already present when the watcher started do not fire until you add a new `AI!` or `AI?`, and the agent's own edits do not trigger another run. Normal permissions apply: edits and commands still ask for approval unless you pass `--yes`. The conversation is kept between requests, so later comments can refer to earlier ones. Press Ctrl+C to stop.
 
+## Profiles: several separate agents
+
+A profile is a fully separate OASIS agent on the same machine: its own model and keys, settings, `OASIS.md` instructions, memories, sessions, skills, commands, subagents, MCP servers and cron jobs. Use them to keep work and personal setups apart, or to run a gateway bot with a different personality and permissions from your terminal agent.
+
+~~~sh
+oasis profile create work                  # copies config, settings, OASIS.md, MCP, commands, agents, skills
+oasis profile create bot --from work --with-memory
+oasis --profile work                       # or -P work, or OASIS_PROFILE=work
+oasis profile use work                     # make it the default; `oasis profile use default` to go back
+oasis profile list                         # * marks the active one, with session counts
+oasis profile show [NAME]                  # directory, setup state, sessions, size
+oasis profile delete bot --yes
+~~~
+
+Profiles live in `<oasis config>/profiles/NAME`; the default profile is `<oasis config>` itself. `--profile` and `OASIS_PROFILE` override the sticky choice from `profile use` (`OASIS_PROFILE=default` forces the default), and an explicit `OASIS_CONFIG_DIR` overrides profiles entirely. Sessions, memories and logs are never copied unless you pass `--with-memory` (memories only). Project files (`.oasis/`, `.claude/`, `AGENTS.md`) are shared by every profile.
+
 ## Clearing local data
 
 `oasis purge [PATH]` removes the saved transcripts and task metadata for one project, debug logs for those sessions, background-session entries and logs, the project's prompt-history lines, and its workspace-trust entry. File rewind checkpoints are kept in memory during the active session; they are not stored in the saved transcript. Without a path it opens a picker of the projects that have saved state. Options:
