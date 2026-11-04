@@ -2050,6 +2050,10 @@ export async function executeTool(name, args = {}, context = {}) {
         signal: context.signal,
         branchRules: context.session && context.session.branchRules
       });
+    case 'skill_propose': {
+      const { runLearningTool } = await import('./learning.mjs');
+      return await runLearningTool(name, args, { root, env: context.env || process.env, session: context.session });
+    }
     case 'memory_save':
     case 'memory_search':
     case 'memory_read':

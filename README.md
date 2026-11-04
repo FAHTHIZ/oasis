@@ -180,6 +180,19 @@ OASIS assumes the model might be small, quantized, or running on your laptop:
 
 See [local models and small context windows](docs/USER_GUIDE.md#local-models-and-small-context-windows) and [tool-call repair](docs/USER_GUIDE.md#tool-call-repair-for-smaller-models).
 
+## It learns from experience—with your approval
+
+OASIS separates durable memory from reusable procedural knowledge. After a non-trivial task is actually verified, the agent can propose a portable skill that captures the repeatable method, required capabilities, permission boundaries, and success criteria. The proposal stays local and inactive until you inspect it and explicitly promote it.
+
+```text
+/learning list
+/learning show PROPOSAL_ID
+/learning approve PROPOSAL_ID
+/learning reject PROPOSAL_ID [reason]
+```
+
+Project proposals stay with one workspace; user-scope proposals are reserved for workflows that genuinely apply across projects. Promotion refuses to overwrite or shadow an existing skill. It does not fine-tune model weights, prove the agent's evidence, or grant permissions—OASIS's runtime checks remain authoritative. See [Learning from experience](docs/LEARNING.md) for storage, controls, and limitations.
+
 ## Everything in the box
 
 | Area | Included |
@@ -189,6 +202,7 @@ See [local models and small context windows](docs/USER_GUIDE.md#local-models-and
 | **Safety** | Permission modes and rules, shell-risk analysis, protected paths, secret shield, bounded output, process cleanup, optional OS sandbox on Linux and macOS. |
 | **Verification** | Project checks, diagnostics and language servers, diff review, weakened-test and placeholder detection, auto-test, claim checks. |
 | **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, memory, compaction with must-keep context, rule refresh. |
+| **Learning** | Verified-work skill proposals, user/project scope, review-before-promotion, secret screening, and collision-safe portable skill creation. |
 | **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows. |
 | **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, GitHub Action, VS Code / Cursor / Windsurf bridge. |
 | **Surfaces** | Terminal CLI, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. |

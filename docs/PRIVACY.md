@@ -14,6 +14,14 @@ A local model endpoint can keep model requests on your machine, but only if the 
 - The command-line configuration remains a separate storage path. It protects the config file with restrictive permissions where the operating system supports them, but this is not the same as encrypting the key.
 - Never paste a real key into source files, bug reports, screenshots, model prompts or public issues.
 
+## Local memory and procedural learning
+
+Auto memory and learned-skill proposals are stored in the local OASIS config directory. Project-scope learning records are separated by an opaque project identifier; user-scope records are kept separately and follow the same local user account. OASIS does not send proposal records to other OASIS users or a shared training service.
+
+A promoted skill is loaded as ordinary prompt context when relevant. When using a hosted model, the skill text and other selected project context may therefore be sent to the chosen provider as part of a model request, under that provider's terms. Use project scope for repository-specific procedures, review user-scope skills carefully, and do not put secrets or private data in skill instructions. The proposal secret filter is best-effort, not a guarantee.
+
+The agent cannot activate a proposed skill without a user approval command. Disable procedural learning with \`OASIS_AUTO_LEARNING=0\` or \`autoLearning: false\` in OASIS settings. Auto memory and procedural learning are separate controls.
+
 ## Search and integrations
 
 OASIS may use configured search providers such as Tavily, Brave, Exa, Firecrawl or a self-hosted SearXNG endpoint. The keyless fallback scrapes DuckDuckGo when upstream access permits. Search queries are sent to whichever search service is used. MCP servers, hooks, skills that execute code, and third-party plugins may run with your user permissions; only enable integrations you trust.

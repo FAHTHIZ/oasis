@@ -307,6 +307,19 @@ There are two separate GitHub integrations:
 
 `oasis purge` removes selected project-scoped local state after confirmation; memory is kept unless the memory option is explicitly requested. It is not a secure-erasure tool for backups, external providers, system logs, or arbitrary files created by project commands.
 
+## Procedural learning
+
+Procedural learning is an optional runtime capability that sits beside, rather than replaces, auto memory and the Agent Skills loader.
+
+- `skill_propose` creates a bounded, local proposal after the agent has identified a repeatable procedure. It is available only when learning is enabled.
+- Proposals are stored beneath the OASIS config directory in `learning/user/proposals/` or `learning/projects/<opaque-project-hash>/proposals/`. Project paths are hashed before being used as the scope key; proposal records do not store the absolute workspace path.
+- `/learning list` and `/learning show ID` inspect proposals. `/learning approve ID` promotes one into the existing portable skills locations; `/learning reject ID` records a rejection. There is no automatic activation or overwrite.
+- Project skills are written to `.agents/skills/NAME/SKILL.md`; user skills are written to the standard `$XDG_CONFIG_HOME/agents/skills/` directory (or `~/.config/agents/skills/`).
+- The proposal validator screens for obvious secrets, enforces bounded fields and required skill headings, checks the candidate name against available skills, and refuses a symlinked destination directory. This is defense in depth, not a complete semantic security review.
+- The agent-reported evidence is not independently attested by the proposal store. The user must inspect actual tool output and verification results before promoting a candidate.
+
+A promoted skill is still untrusted Markdown context. Its text cannot grant tool permissions or bypass the runtime permission policy, sandbox, path checks, approvals, or verification gates. Learning does not update model weights or share one user's memory with another. The canonical behavior and limitations are in [Learning from experience](LEARNING.md).
+
 ## Trust boundaries
 
 The important boundaries are:

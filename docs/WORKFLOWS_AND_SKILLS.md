@@ -93,6 +93,16 @@ description: One focused, repeatable workflow.
 
 The body must define `Purpose`, `Inputs`, `Workflow`, `Required provider capabilities`, `Permissions`, and `Success criteria`. Keep skill files declarative Markdown; tools and enforcement remain in the OASIS runtime. Do not place scripts, credentials, or provider-specific API code in a portable skill.
 
+## Procedural learning proposals
+
+OASIS can propose a reusable Agent Skill after a non-trivial task has actually succeeded and the relevant checks have passed. This creates a local, inactive proposal; it does not write to the active skill directories. The user reviews the candidate with `/learning show ID`, then explicitly chooses `/learning approve ID` or `/learning reject ID [reason]`.
+
+Project-scoped proposals are tied to the current workspace. User-scoped proposals are for reusable personal workflows only. Promotion uses the existing portable locations: `.agents/skills/NAME/SKILL.md` for project skills and `$XDG_CONFIG_HOME/agents/skills/NAME/SKILL.md` (or `~/.config/agents/skills/NAME/SKILL.md`) for user skills. Existing skill names are not overwritten or shadowed.
+
+The `skill_propose` tool validates the name, size, secret patterns, and required headings. It does not execute candidate content or prove the agent's evidence. Review the actual diff, tests, permissions, security assumptions, and prompt-injection text before promotion. Skills remain untrusted instructions; runtime permissions are still enforced by code. Set `OASIS_AUTO_LEARNING=0` or `autoLearning: false` to disable this feature.
+
+See [Learning from experience](LEARNING.md) for the data layout, trust model, and implementation limits.
+
 ## Provider capability honesty
 
 All skills use text reasoning and tool calling as their baseline capabilities. File reading, editing, command execution, and image input are conditional and are not assumed just because a provider is configured.

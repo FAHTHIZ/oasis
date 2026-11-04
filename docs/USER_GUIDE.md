@@ -756,6 +756,23 @@ OASIS keeps durable notes across sessions on its own, so you don't repeat yourse
 - `/memory` lists them; `/memory search WORDS`, `/memory show ID`, `/memory forget ID`, `/memory add NOTE` (start with `user:` for every project) and `/memory path` manage them. `/remember [focus]` asks the agent to review the conversation and save what is worth keeping. The same commands work as `oasis memory ...` in a terminal.
 - Turn it off with `"autoMemory": false` in settings or `OASIS_AUTO_MEMORY=0`.
 
+## Procedural learning
+
+OASIS can preserve a repeatable procedure as a proposed Agent Skill after a non-trivial task has completed and its relevant checks have passed. This is separate from auto memory: memory saves facts and preferences, while a skill captures a reusable method.
+
+The agent may call `skill_propose` to create an inactive local proposal. Inspect it before promotion:
+
+```text
+/learning list
+/learning show PROPOSAL_ID
+/learning approve PROPOSAL_ID
+/learning reject PROPOSAL_ID [reason]
+```
+
+Project proposals are local to the current workspace. User proposals are shared across the user's own projects and should be used only for broadly reusable personal workflows. Promotion creates a standard portable skill in `.agents/skills/` or `$XDG_CONFIG_HOME/agents/skills/`. OASIS refuses to overwrite an existing skill name.
+
+A proposal's evidence is reported by the agent; it is not an independent test attestation. Check the real tool results and final diff yourself. A promoted skill is untrusted Markdown context, not a permission grant, executable script, or change to model weights. Disable procedural learning with `OASIS_AUTO_LEARNING=0` or `autoLearning: false`. See [Learning from experience](LEARNING.md) for the full lifecycle and security boundaries.
+
 ## Weakened-test detection
 
 When the agent has edited test files, OASIS compares them with `HEAD` before it accepts a final answer. Newly skipped or disabled tests (`it.skip`, `xit`, `{ skip: true }`, `@pytest.mark.skip`/`xfail`, `t.Skip`, `#[ignore]`, `@Disabled`/`@Ignore`), focused tests (`.only`, `fit`), fewer test cases, fewer assertions, or a deleted test file become a verification issue. The agent is asked once to restore the tests or explain why the change is intended, and if it does neither, the final summary lists the finding as a blocker (also in `verification.testTampering` in JSON output). Only files the agent changed are checked, so your own uncommitted edits are not blamed on it. It needs Git and does nothing in a non-Git folder. It works from patterns, not by running the tests, so a rewritten test that keeps the same counts is not flagged.

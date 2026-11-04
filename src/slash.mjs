@@ -87,6 +87,7 @@ export const BUILTIN_COMMANDS = {
   branch: 'Fork the conversation (same as /fork)',
   skills: 'List available skills',
   remember: 'Save what is worth keeping from this conversation to auto memory (/remember [focus])',
+  learning: 'Review reusable skill proposals learned from verified work (/learning [list|show ID|approve ID|reject ID])',
   loop: 'Run a prompt now and again on an interval until Ctrl+C (/loop [5m] PROMPT); omit the interval to let the model pace itself',
   cd: 'Switch the workspace to another directory and start a fresh conversation (/cd PATH)',
   sandbox: 'Show or change the OS sandbox for this session (/sandbox [on|off|network on|network off])',
@@ -212,7 +213,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const groups = [
         { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
+        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
@@ -1724,6 +1725,41 @@ export async function runBuiltinCommand(name, argument, state) {
       lines.push('Commands: /memory search WORDS, /memory show ID, /memory forget ID, /memory add NOTE, /memory path, /remember [focus]. Turn it off with "autoMemory": false in settings or OASIS_AUTO_MEMORY=0.');
       lines.push('Start a message with # to save a note to the project OASIS.md instead (for example: # always run npm test before committing).');
       return { output: lines.join('\n') };
+    }
+    case 'learning': {
+      const learning = await import('./learning.mjs');
+      const [sub = 'list', ...parts] = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      const root = (session && session.root) || state.root || process.cwd();
+      if (sub === 'list') {
+        const proposals = await learning.listSkillProposals(root, { env });
+        if (!proposals.length) return { output: 'No learned-skill proposals yet. After a non-trivial task is successfully verified, Oasis may propose a reusable skill for your review.' };
+        return { output: [
+          'Learned skill proposals:',
+          ...proposals.map((item) => '  ' + item.id + '  ' + item.status.padEnd(8) + ' ' + item.scope.padEnd(7) + ' ' + item.name + ' — ' + item.description),
+          '',
+          'Use /learning show ID to inspect a proposal, /learning approve ID to promote it, or /learning reject ID [reason] to discard it.'
+        ].join('\n') };
+      }
+      if (sub === 'show') {
+        if (!parts[0]) return { output: 'Usage: /learning show ID' };
+        const proposal = await learning.getSkillProposal(root, parts[0], { env });
+        return { output: proposal ? learning.learningProposalText(proposal) : 'No learning proposal matches ' + parts[0] + '.' };
+      }
+      if (sub === 'approve') {
+        if (!parts[0]) return { output: 'Usage: /learning approve ID' };
+        try {
+          const promoted = await learning.approveSkillProposal(root, parts[0], { env });
+          return { output: 'Promoted ' + promoted.name + ' to ' + promoted.path + '. It is now a normal Agent Skill. Run /reload-plugins or start a new session if the current session has not refreshed its skill catalogue.' };
+        } catch (error) { return { output: error.message }; }
+      }
+      if (sub === 'reject') {
+        if (!parts[0]) return { output: 'Usage: /learning reject ID [reason]' };
+        try {
+          const rejected = await learning.rejectSkillProposal(root, parts[0], parts.slice(1).join(' '), { env });
+          return { output: 'Rejected ' + rejected.name + ' (' + rejected.id + '). ' + rejected.reason };
+        } catch (error) { return { output: error.message }; }
+      }
+      return { output: 'Usage: /learning [list|show ID|approve ID|reject ID [reason]]' };
     }
     case 'remember': {
       return {

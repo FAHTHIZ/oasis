@@ -54,6 +54,7 @@ The intended 1.0 product is a unified runtime with multiple interfaces—not a c
 | Execution policy | Permission modes, approvals, command-risk analysis, protected paths/configuration, output bounds, process cleanup, and optional OS sandbox adapters. |
 | Models and providers | Multiple provider protocols, compatible endpoints, local model services, provider setup, model routing, and cost estimation. |
 | Context and memory | Sessions, project instructions, memory, context estimation, compaction, rewind, checkpoints, and saved task records. |
+| Procedural learning (post-1.0 refinement) | Local proposals for reusable skills after verified work, separate user/project scope, explicit user promotion, and no automatic permission changes or model-weight updates. |
 | Agent coordination | Bounded subagents, specialist reviews, task boards, dependency-aware dispatch, background records, and workflow automation. |
 | Integrations | MCP, hooks, Agent Skills, plugins, extension import/export, search integrations, GitHub workflows, and editor bridges. |
 | Code intelligence and verification | Diagnostics, language-server support where configured, project checks, automatic testing, weakened-test detection, diff review, and claim checks. |
