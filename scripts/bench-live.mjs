@@ -37,8 +37,11 @@ export function parseBenchArgs(argv) {
     else throw new Error('Unknown option ' + arg + '. Run with --help.');
   }
   for (const agent of options.agents) if (!ALL_AGENTS.includes(agent)) throw new Error('Unknown agent "' + agent + '". Choose from ' + ALL_AGENTS.join(', ') + '.');
-  if (!Number.isInteger(options.trials) || options.trials < 1 || options.trials > 20) throw new Error('--trials must be 1-20.');
-  if (!Number.isInteger(options.timeoutSeconds) || options.timeoutSeconds < 30) throw new Error('--timeout-seconds must be at least 30.');
+  if (!Number.isInteger(options.trials) || options.trials < 1 || options.trials > 10) throw new Error('--trials must be 1-10, matching oasis eval.');
+  if (!options.agents.length) throw new Error('--agents must name at least one agent.');
+  for (const [agent, model] of Object.entries(options.models)) { if (!ALL_AGENTS.includes(agent)) throw new Error('Unknown agent in --model-for: ' + agent + '.'); if (!model.trim()) throw new Error('--model-for needs a non-empty model ID.'); }
+  if (!Number.isInteger(options.timeoutSeconds) || options.timeoutSeconds < 30 || options.timeoutSeconds > 3600) throw new Error('--timeout-seconds must be 30-3600.');
+  if (options.router) { let parsed; try { parsed = new URL(options.router); } catch { throw new Error('--router must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--router must be a valid HTTP(S) URL.'); }
   return options;
 }
 
@@ -109,65 +112,94 @@ const pct = (value) => value === null || value === undefined ? 'n/a' : Math.roun
 const seconds = (ms) => ms === null || ms === undefined ? 'n/a' : (ms / 1000).toFixed(1) + ' s';
 
 export function summarize(runs, options, now = new Date()) {
-  const completed = runs.filter((run) => !run.skipped);
+  const completed = runs.filter((run) => !run.skipped && Array.isArray(run.results));
   const taskSets = completed.map((run) => new Set(run.results.map((row) => row.taskId)));
   const shared = taskSets.length ? [...taskSets[0]].filter((id) => taskSets.every((set) => set.has(id))).sort() : [];
-  const fingerprints = {};
-  for (const run of completed) for (const row of run.results) {
-    if (!row.taskFingerprint) continue;
-    (fingerprints[row.taskId] ||= new Set()).add(row.taskFingerprint);
+  const rowsFor = (run, id) => run.results.filter((row) => row.taskId === id);
+  const fingerprintFor = (rows) => {
+    if (!rows.length || rows.some((row) => typeof row.taskFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(row.taskFingerprint))) return null;
+    const values = [...new Set(rows.map((row) => row.taskFingerprint))];
+    return values.length === 1 ? values[0] : 'inconsistent';
+  };
+  const metadataFor = (rows) => {
+    const categories = [...new Set(rows.map((row) => row.category || null))];
+    const difficulties = [...new Set(rows.map((row) => row.difficulty || null))];
+    if (!rows.length || categories.length !== 1 || difficulties.length !== 1 || !categories[0] || !['small', 'medium', 'large'].includes(difficulties[0])) return null;
+    return { category: categories[0], difficulty: difficulties[0] };
+  };
+  const verifiedTasks = [], unverifiedTasks = [], fingerprintMismatchTasks = [], metadataMismatchTasks = [], incompleteTasks = [], taskMetadata = {};
+  for (const id of shared) {
+    const groups = completed.map((run) => rowsFor(run, id));
+    if (groups.some((rows) => rows.length !== options.trials || new Set(rows.map((row) => row.trial)).size !== options.trials || rows.some((row) => !Number.isInteger(row.trial) || row.trial < 1 || row.trial > options.trials))) { incompleteTasks.push(id); continue; }
+    const fingerprints = groups.map(fingerprintFor);
+    if (fingerprints.some((value) => value === null)) { unverifiedTasks.push(id); continue; }
+    if (fingerprints.some((value) => value === 'inconsistent') || new Set(fingerprints).size !== 1) { fingerprintMismatchTasks.push(id); continue; }
+    const metadata = groups.map(metadataFor);
+    if (metadata.some((value) => value === null) || metadata.some((value) => value.category !== metadata[0].category || value.difficulty !== metadata[0].difficulty)) { metadataMismatchTasks.push(id); continue; }
+    taskMetadata[id] = metadata[0]; verifiedTasks.push(id);
   }
-  const consistent = shared.filter((id) => !fingerprints[id] || fingerprints[id].size === 1);
+  const median = (values) => { const sorted = values.filter(Number.isFinite).sort((a, b) => a - b); if (!sorted.length) return null; const i = Math.floor(sorted.length / 2); return sorted.length % 2 ? sorted[i] : Math.round((sorted[i - 1] + sorted[i]) / 2); };
+  const mean = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const agents = runs.map((run) => {
     if (run.skipped) return { agent: run.agent, name: run.name, skipped: run.skipped };
-    const rows = run.results.filter((row) => consistent.includes(row.taskId));
-    const perTask = Object.fromEntries(consistent.map((id) => {
-      const trials = rows.filter((row) => row.taskId === id);
-      return [id, trials.length ? trials.filter((row) => row.status === 'passed').length / trials.length : null];
-    }));
-    const values = Object.values(perTask).filter((value) => value !== null);
-    const times = rows.map((row) => row.wallTimeMs).filter(Number.isFinite).sort((a, b) => a - b);
-    const tokens = rows.map((row) => row.totalTokens).filter(Number.isFinite);
-    const costs = rows.map((row) => row.costUSD);
-    return {
-      agent: run.agent, name: run.name, label: run.summary.label || run.name, file: run.file,
-      passRate: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,
-      passedTrials: rows.filter((row) => row.status === 'passed').length, trials: rows.length,
-      medianTimeMs: times.length ? times[Math.floor(times.length / 2)] : null,
-      totalTokens: tokens.length === rows.length && rows.length ? tokens.reduce((sum, value) => sum + value, 0) : null,
-      totalCostUSD: rows.length && costs.every(Number.isFinite) ? Math.round(costs.reduce((sum, value) => sum + value, 0) * 1e6) / 1e6 : null,
-      perTask
-    };
+    const rows = run.results.filter((row) => verifiedTasks.includes(row.taskId));
+    const perTask = Object.fromEntries(verifiedTasks.map((id) => { const trials = rowsFor(run, id); return [id, trials.filter((row) => row.status === 'passed').length / trials.length]; }));
+    const provider = run.summary && run.summary.provider || {};
+    const tokens = rows.map((row) => row.totalTokens), costs = rows.map((row) => row.costUSD);
+    return { agent: run.agent, name: run.name, label: run.summary && run.summary.label || run.name, file: run.file || null,
+      requestedModel: modelFor(run.agent, options) || null, reportedModel: provider.model || run.summary && run.summary.model || null,
+      cliVersion: provider.cliVersion || null, sourceRevision: run.summary && run.summary.sourceRevision || null, runtime: run.summary && run.summary.runtime || null,
+      passRate: mean(Object.values(perTask)), passedTrials: rows.filter((row) => row.status === 'passed').length, trials: rows.length,
+      medianTrialTimeMs: median(rows.map((row) => row.wallTimeMs)),
+      totalTokens: rows.length && tokens.every(Number.isFinite) ? tokens.reduce((sum, value) => sum + value, 0) : null,
+      totalReportedCostUSD: rows.length && costs.every(Number.isFinite) ? Math.round(costs.reduce((sum, value) => sum + value, 0) * 1e6) / 1e6 : null, perTask };
   });
-  return {
-    date: now.toISOString(), oasisVersion: oasisVersion(), model: options.model || null, router: options.router ? new URL(options.router).host : null,
-    trialsPerTask: options.trials, sharedTasks: consistent, excludedTasks: shared.filter((id) => !consistent.includes(id)), agents
-  };
+  const requestedModels = Object.fromEntries(options.agents.map((agent) => [agent, modelFor(agent, options) || null]));
+  const distinctModels = [...new Set(Object.values(requestedModels).filter(Boolean))];
+  const caveats = [
+    'Agent adapters do not use identical tool surfaces, approval modes, or sandbox policies. This is a configured-product comparison, not an isolated measurement of harness code.',
+    'A shared gateway URL and requested model ID do not prove that every client was served the same underlying model or model version. Verify gateway/provider logs before calling this a same-model harness comparison.',
+    'Token and cost fields are adapter-reported usage. Cost may be absent or calculated differently by providers; it is not a normalized billing audit.'
+  ];
+  if (completed.length < 2) caveats.push('Fewer than two agents completed a run; this is not a head-to-head comparison.');
+  if (verifiedTasks.length < 50) caveats.push('Only ' + verifiedTasks.length + ' task(s) have complete, identical SHA-256 fingerprints and the requested number of trials across all completed agents; the guide targets at least 50 representative tasks.');
+  if (options.trials < 3) caveats.push('Only ' + options.trials + ' trial(s) per task were requested. One trial is a smoke test; three trials are a minimum diagnostic repeat, not a confidence interval or significance test.');
+  if (!verifiedTasks.some((id) => taskMetadata[id].difficulty === 'large')) caveats.push('No verified matched task is labeled large; this run does not test larger repository-level work.');
+  if (unverifiedTasks.length) caveats.push(unverifiedTasks.length + ' shared task(s) lacked valid SHA-256 fingerprints in at least one agent report and were excluded.');
+  if (fingerprintMismatchTasks.length) caveats.push(fingerprintMismatchTasks.length + ' shared task(s) had inconsistent or different fingerprints and were excluded.');
+  if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
+  if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
+  if (!options.router) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
+  if (distinctModels.length !== 1 || options.agents.some((agent) => !requestedModels[agent])) caveats.push('The selected agents do not all have one identical, explicitly requested model ID.');
+  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : null, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, taskMetadata, caveats, agents };
 }
-
 export function renderSummary(summary) {
   const lines = [];
-  lines.push('# Head-to-head benchmark — ' + summary.date.slice(0, 10), '');
-  lines.push('OASIS ' + summary.oasisVersion + ' · ' + summary.sharedTasks.length + ' shared tasks × ' + summary.trialsPerTask + ' trial(s)' + (summary.model ? ' · requested model `' + summary.model + '`' : '') + (summary.router ? ' · all agents through `' + summary.router + '`' : '') + '.', '');
-  lines.push('Every agent got the same task text in a fresh copy of the same snapshot; pass/fail is decided by the task\'s own verifier after the agent exits, never by the agent. Pass rate averages each task\'s pass rate equally. With one trial per task, differences under about 10 points are noise.', '');
-  lines.push('| Agent | Pass rate | Passed trials | Median time | Tokens | Cost |', '|---|---:|---:|---:|---:|---:|');
-  const ranked = summary.agents.filter((item) => !item.skipped).sort((a, b) => (b.passRate ?? -1) - (a.passRate ?? -1));
-  for (const item of ranked) lines.push('| ' + item.label + ' | ' + pct(item.passRate) + ' | ' + item.passedTrials + '/' + item.trials + ' | ' + seconds(item.medianTimeMs) + ' | ' + (item.totalTokens ?? 'n/a') + ' | ' + (item.totalCostUSD === null ? 'n/a' : '$' + item.totalCostUSD.toFixed(4)) + ' |');
-  const skipped = summary.agents.filter((item) => item.skipped);
-  if (skipped.length) {
-    lines.push('', 'Not run:', '');
-    for (const item of skipped) lines.push('- ' + item.name + ': ' + item.skipped);
+  const completed = summary.agents.filter((item) => !item.skipped);
+  const heading = completed.length >= 2 ? 'Cross-agent task benchmark' : 'Agent evaluation run';
+  lines.push('# ' + heading + ' — ' + summary.date.slice(0, 10), '');
+  lines.push('OASIS ' + summary.oasisVersion + ' · ' + summary.sharedTasks.length + ' verified matched tasks × ' + summary.trialsPerTask + ' requested trial(s)' + (summary.router ? ' · shared endpoint `' + summary.router + '`' : ' · no shared endpoint') + '.', '');
+  lines.push('Headline pass rate is a macro-average of per-task pass rates. A task contributes only when every completed agent has exactly the requested number of distinct trials, complete matching SHA-256 task fingerprints, and matching category/difficulty metadata.', '');
+  lines.push('| Agent | Requested model | CLI-reported model | Pass rate | Passed trials | Median trial time | Tokens | Total reported cost |', '|---|---|---|---:|---:|---:|---:|---:|');
+  for (const item of summary.agents) {
+    if (item.skipped) { lines.push('| ' + item.name + ' | — | — | not run | — | — | — | — |'); continue; }
+    lines.push('| ' + item.label + ' | ' + (item.requestedModel || 'CLI default') + ' | ' + (item.reportedModel || 'not reported') + ' | ' + pct(item.passRate) + ' | ' + item.passedTrials + '/' + item.trials + ' | ' + seconds(item.medianTrialTimeMs) + ' | ' + (item.totalTokens ?? 'n/a') + ' | ' + (item.totalReportedCostUSD === null ? 'n/a' : '$' + item.totalReportedCostUSD.toFixed(4)) + ' |');
   }
-  if (summary.excludedTasks.length) lines.push('', 'Excluded because task fingerprints differed between runs: ' + summary.excludedTasks.join(', ') + '.');
-  if (ranked.length && summary.sharedTasks.length) {
-    lines.push('', '<details><summary>Per-task results</summary>', '', '| Task | ' + ranked.map((item) => item.name).join(' | ') + ' |', '|---|' + ranked.map(() => ':---:').join('|') + '|');
-    for (const id of summary.sharedTasks) lines.push('| `' + id + '` | ' + ranked.map((item) => item.perTask[id] === null ? '–' : item.perTask[id] === 1 ? 'pass' : item.perTask[id] === 0 ? 'fail' : pct(item.perTask[id])).join(' | ') + ' |');
+  if (summary.caveats.length) { lines.push('', '## Interpretation limits', ''); for (const caveat of summary.caveats) lines.push('- ' + caveat); }
+  lines.push('', '## Run provenance', '', '| Agent | CLI version | Source revision | Runtime |', '|---|---|---|---|');
+  for (const item of summary.agents) { if (item.skipped) continue; lines.push('| ' + item.name + ' | ' + (item.cliVersion || 'not reported') + ' | ' + (item.sourceRevision || 'unavailable') + ' | ' + (item.runtime ? [item.runtime.node, item.runtime.platform, item.runtime.arch].filter(Boolean).join(' / ') : 'not reported') + ' |'); }
+  lines.push('', '## Task coverage', '');
+  lines.push('Shared task IDs: ' + (summary.sharedTaskIds.length ? summary.sharedTaskIds.join(', ') : 'none') + '.');
+  lines.push('Verified matched tasks: ' + (summary.sharedTasks.length ? summary.sharedTasks.join(', ') : 'none') + '.');
+  if (summary.excludedTasks.length) lines.push('Excluded task IDs: ' + summary.excludedTasks.join(', ') + '.');
+  if (summary.sharedTasks.length && completed.length) {
+    lines.push('', '<details><summary>Per-task results</summary>', '', '| Task | Category | Difficulty | ' + completed.map((item) => item.name).join(' | ') + ' |', '|---|' + Array(completed.length + 2).fill('---:').join('|') + '|');
+    for (const id of summary.sharedTasks) lines.push('| `' + id + '` | ' + summary.taskMetadata[id].category + ' | ' + summary.taskMetadata[id].difficulty + ' | ' + completed.map((item) => item.perTask[id] === null ? 'n/a' : pct(item.perTask[id])).join(' | ') + ' |');
     lines.push('', '</details>');
   }
-  lines.push('', 'Raw per-trial results (verifier output, changed files, tokens) are in the JSON files next to this summary. Reproduce with `npm run bench:live -- --yes` and the options shown in [bench/README.md](../../README.md).', '');
+  lines.push('', 'Raw per-trial JSON files contain verifier output, changed files, and adapter-reported usage. Keep those files with this summary; the summary alone is not a complete audit record.', '');
   return lines.join('\n');
 }
-
 async function main() {
   const options = parseBenchArgs(process.argv.slice(2));
   if (options.help) {
