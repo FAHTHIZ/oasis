@@ -343,6 +343,7 @@ body.agent-busy .agent-runtime-state::before{background:var(--accent);animation:
 .agent-model-pill-copy strong{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .agent-model-pill-copy small{font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .agent-model-chevron{color:var(--faint);font-size:12px}
+.agent-model-glyph,.agent-model-chevron{display:inline-grid;place-items:center;flex:none}
 .agent-session-tools{display:flex;align-items:center;gap:8px}
 .agent-session-tools select{width:auto;min-height:32px;height:32px;padding:0 28px 0 10px;font-size:12.5px;background-color:var(--panel);border-color:var(--line)}
 .agent-context-meter{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px 2px;border-radius:var(--r-pill);border:1px solid var(--line);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -757,7 +758,7 @@ body.light .ws-line.del{color:#9B1C1C;background:#C23B3B12}
   .agent-session-tools select{max-width:none;width:auto}
   .agent-model-pill{max-width:150px}
 }
-@container chat (max-width:420px){.agent-model-pill{max-width:110px}}
+@container chat (max-width:420px){.agent-model-summary{flex:1 1 0;min-width:0}.agent-model-pill{flex:1 1 0;min-width:0;max-width:none}.agent-model-chevron{display:none}.agent-model-pill{padding:0 8px}}
 /* Extensions importer: URL, destination and action on one row; the button keeps its natural width. */
 .extension-form{grid-template-columns:minmax(0,1fr) minmax(180px,auto) auto}
 .extension-form>.btn{justify-self:start;white-space:nowrap}
@@ -899,3 +900,4 @@ html[data-motion=full] .agent-dictate.is-listening{animation:oasis-dictate-pulse
 .page-date{margin:0 0 6px;font-size:13px;font-weight:500;color:var(--muted)}
 .note-sidebar-title{font-size:16px;font-weight:650;letter-spacing:-.01em;margin:0 0 8px}
 .github-panel>.agent-chat-header{padding:16px 18px 0;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px}.github-panel>.agent-chat-header>span:first-child{min-width:0;flex:1 1 180px}
+.agent-messages{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent)}
