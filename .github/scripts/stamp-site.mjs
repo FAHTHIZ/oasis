@@ -36,5 +36,29 @@ if (commits.length) {
   const head = commits[0];
   html = replaceRegion(html, 'BUILD', 'Built from <a href="' + repo + '/commit/' + head.sha + '">' + head.sha.slice(0, 7) + '</a> · ' + fmt(head.date));
 }
+// Direct installer links from the latest published release (deploy-time, so they always match real assets).
+try {
+  const headers = { accept: 'application/vnd.github+json', 'user-agent': 'oasis-pages-stamp' };
+  if (process.env.GITHUB_TOKEN) headers.authorization = 'Bearer ' + process.env.GITHUB_TOKEN;
+  const res = await fetch('https://api.github.com/repos/FAHTHIZ/oasis/releases/latest', { headers, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const release = await res.json();
+  const assets = Array.isArray(release.assets) ? release.assets : [];
+  const pick = (re) => assets.find((a) => re.test(a.name));
+  const rows = [
+    ['win', 'Windows x64', pick(/\.exe$/i)],
+    ['mac', 'macOS Apple silicon', pick(/\.dmg$/i)],
+    ['linux', 'Linux AppImage', pick(/\.AppImage$/i)],
+    ['linux-deb', 'Linux .deb', pick(/\.deb$/i)],
+    ['sums', 'SHA256SUMS', pick(/^SHA256SUMS$/)]
+  ].filter((r) => r[2]);
+  const mb = (n) => (n / 1048576).toFixed(0) + ' MB';
+  if (rows.length) {
+    html = replaceRegion(html, 'DOWNLOADS', '<ul class="dl-list" aria-label="' + esc(release.tag_name || 'Latest release') + ' downloads">' + rows.map(([os, label, a]) => '<li data-os="' + os + '"><a href="' + esc(a.browser_download_url) + '" data-file="' + esc(a.name) + '">' + esc(label) + (os === 'sums' ? '' : ' <small>' + mb(a.size) + '</small>') + '</a></li>').join('') + '</ul>');
+    console.log('Stamped ' + rows.length + ' download links from ' + release.tag_name + '.');
+  }
+} catch (error) {
+  console.warn('Latest release unavailable; keeping the releases-page link only:', error.message);
+}
 await writeFile(file, html);
 console.log('Stamped homepage with ' + commits.length + ' commits' + (commits[0] ? ' (head ' + commits[0].sha.slice(0, 7) + ')' : '') + '.');
