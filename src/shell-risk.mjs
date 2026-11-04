@@ -54,6 +54,11 @@ export function splitShell(line) {
     const two = text.slice(i, i + 2);
     if (two === '&&' || two === '||') { pushCommand(two); i++; continue; }
     if (ch === ';' || ch === '|' || ch === '&' || ch === '\n') { pushCommand(ch); continue; }
+    // ${HOME}, ${HOME:?} and ${x:-y} are one parameter expansion, not a brace group.
+    if (ch === '$' && text[i + 1] === '{') {
+      const end = text.indexOf('}', i + 2);
+      if (end !== -1) { word += text.slice(i, end + 1); hasWord = true; i = end; continue; }
+    }
     if (ch === '(' || ch === ')' || ch === '{' || ch === '}' || ch === '`') { pushWord(); continue; }
     if (ch === '>' || ch === '<') {
       pushWord();
@@ -159,6 +164,7 @@ function isCriticalPath(raw) {
   return false;
 }
 
+const PRIVATE_KEY_FILE = /^(~|\$HOME|\/home\/[^/]+|\/Users\/[^/]+)\/(\.ssh\/id_[a-z0-9_]+|\.gnupg(\/(private-keys-v1\.d|secring\.gpg|pubring\.kbx))?)\/?$/;
 const SYSTEM_WRITE_TARGET = /^(\/etc\/|\/usr\/|\/bin\/|\/sbin\/|\/boot\/|\/lib\/|\/dev\/(sd|hd|nvme|disk|mmcblk|xvd)|\/System\/|(~|\$HOME)\/\.ssh\/)/;
 
 function flags(args) {
@@ -184,6 +190,12 @@ const operands = (args) => {
 };
 
 const INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'python', 'python3', 'node', 'perl', 'ruby', 'php', 'iex', 'invoke-expression', 'pwsh', 'powershell']);
+function decodesContent({ name, args }) {
+  if (/^(base64|base32|basenc)$/.test(name)) return args.some((a) => a === '--decode' || /^-[a-zA-Z]*[dD]/.test(a));
+  if (name === 'xxd') return args.some((a) => /^-[a-z]*r/.test(a));
+  if (name === 'openssl') return args.some((a) => /^(enc|base64)$/.test(a)) && args.includes('-d');
+  return /^(uudecode|gunzip|zcat|bzcat|xzcat|zstdcat|rev)$/.test(name);
+}
 const DOWNLOADERS = new Set(['curl', 'wget', 'iwr', 'invoke-webrequest', 'irm', 'invoke-restmethod', 'fetch']);
 
 // Words of a package-manager command after dropping options and their values.
@@ -222,6 +234,9 @@ function analyzeSimple(cmd, ctx = {}) {
     // `cd ~ && rm -rf *`: a relative target after cd into a critical directory.
     const relative = ops.find((a) => !/^[\/~$]|^[A-Za-z]:/.test(a));
     if (recursive && ctx.cwdCritical && relative) return { blocked: 'recursively deletes ' + relative + ' inside ' + ctx.cwdCritical };
+    // `cd .. && rm -rf .`: OASIS does not know how deep the workspace is, so a
+    // person decides whether wiping the parent folder is intended.
+    if (recursive && ctx.cwdParent && ops.some((a) => /^(\.|\*|\.\*|\.\/\*?)$/.test(a))) return { highRisk: 'recursively deletes everything in ' + ctx.cwdParent + ', outside the workspace' };
   }
   if (name === 'rm' && cmd.tokens.some((t) => base(t) === 'xargs') && (f.short.has('r') || f.short.has('R') || f.long.has('--recursive'))) {
     return { highRisk: 'deletes every path fed to it through xargs, recursively' };
@@ -237,6 +252,20 @@ function analyzeSimple(cmd, ctx = {}) {
     const writes = name === 'sed' || name === 'perl' ? (args.some((a) => /^-[a-zA-Z]*i/.test(a) || a.startsWith('--in-place')) ? ops.slice(1) : []) : (name === 'tee' || name === 'truncate' ? ops : ops.slice(-1));
     const target = writes.find((a) => SYSTEM_WRITE_TARGET.test(normalizeTarget(a)));
     if (target) return { blocked: name + ' overwrites the system file ' + target };
+  }
+  if (name === 'rsync' && [...f.long].some((o) => o.startsWith('--delete') || o === '--remove-source-files') && ops.length >= 2 && isCriticalPath(ops[ops.length - 1])) {
+    return { blocked: 'makes ' + ops[ops.length - 1] + ' match the source with rsync --delete, deleting everything else in it' };
+  }
+  if ((name === 'mv' || name === 'move' || name === 'move-item') && ops.length >= 2) {
+    const moved = ops.slice(0, -1).find(isCriticalPath);
+    if (moved) return { blocked: 'moves ' + moved + ' away, which breaks the system or the user account' };
+  }
+  if (name === 'rm' || name === 'unlink' || name === 'shred' || name === 'srm' || name === 'del' || name === 'remove-item' || name === 'ri') {
+    const key = ops.find((a) => PRIVATE_KEY_FILE.test(normalizeTarget(a)));
+    if (key) return { blocked: 'deletes the private key or keyring ' + key + ', which cannot be recovered' };
+    const sys = ops.find((a) => SYSTEM_WRITE_TARGET.test(normalizeTarget(a)) && !/^(~|\$HOME)\//.test(normalizeTarget(a)));
+    if (sys) return { blocked: 'deletes the system file ' + sys };
+    if (ops.some((a) => /^(~|\$HOME)\/\.ssh\//.test(normalizeTarget(a)))) return { highRisk: 'deletes files in ~/.ssh (keys, known hosts, authorized keys)' };
   }
   if (name === 'shred' || name === 'srm') return { highRisk: name + ' destroys files beyond recovery' };
   if ((name === 'mv' || name === 'move' || name === 'move-item') && ops.length >= 2 && /^\/dev\/null$|^nul$/i.test(ops[ops.length - 1])) {
@@ -328,6 +357,11 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
       const source = programOf(up.tokens).name;
       if (DOWNLOADERS.has(source)) return { highRisk: 'pipes a downloaded script straight into ' + name + ' without review' };
     }
+  }
+  if (SHELLS.has(name) && cmd.pipedFrom && !operands(args).length) {
+    const up = cmd.pipedFrom;
+    const source = programOf(up.tokens);
+    if (decodesContent(source)) return { highRisk: 'decodes hidden content and runs it with ' + name + ' without review' };
   }
   if ((name === 'iex' || name === 'invoke-expression') && /\b(iwr|irm|invoke-webrequest|invoke-restmethod|curl|wget|downloadstring|downloadfile|net\.webclient)\b/i.test(cmd.tokens.join(' '))) {
     return { highRisk: name + ' runs code downloaded from the network without review' };
@@ -477,14 +511,49 @@ function inlineCode(cmd) {
 function analyzeInlineCode(code, depth) {
   if (RECURSIVE_DELETE_API.test(code) && HOME_OR_ROOT.test(code)) return { blocked: 'runs inline code that recursively deletes a home or root directory' };
   let highRisk = '';
-  for (const m of code.matchAll(/(["'])((?:\\.|(?!\1).)*)\1/g)) {
-    const literal = m[2];
+  const literals = [...code.matchAll(/(["'])((?:\\.|(?!\1).)*)\1/g)].map((m) => m[2]);
+  // Perl q{} qq{} qx{} and Ruby %q{} %Q{} %x{} %{} quoting.
+  for (const m of code.matchAll(/(?:\bq[qxw]?|%[qQxw]?)\s*([{(\[<|\/!])/g)) {
+    const open = m[1];
+    const close = { '{': '}', '(': ')', '[': ']', '<': '>' }[open] || open;
+    const start = m.index + m[0].length;
+    const end = code.indexOf(close, start);
+    if (end !== -1) literals.push(code.slice(start, end));
+  }
+  for (const literal of literals) {
     if (!/\s/.test(literal) || literal.length < 4) continue;
     const r = analyze(literal, depth + 1);
     if (r.blocked) return { blocked: 'runs inline code containing a shell command that ' + r.blocked };
     if (r.highRisk && !highRisk) highRisk = r.highRisk;
   }
   return highRisk ? { highRisk } : null;
+}
+
+const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
+function rememberDefinitions(tokens, vars, aliases) {
+  if (!tokens.length) return false;
+  if (tokens.every((t) => ASSIGNMENT.test(t))) {
+    for (const t of tokens) { const [, k, v] = t.match(ASSIGNMENT); vars.set(k, v); }
+    return true;
+  }
+  if (/^(export|local|declare|typeset|readonly)$/.test(tokens[0]) && tokens.slice(1).some((t) => ASSIGNMENT.test(t)) && tokens.slice(1).every((t) => ASSIGNMENT.test(t) || t.startsWith('-'))) {
+    for (const t of tokens.slice(1)) { const m = t.match(ASSIGNMENT); if (m) vars.set(m[1], m[2]); }
+    return true;
+  }
+  if (tokens[0] === 'alias' && tokens.slice(1).some((t) => ASSIGNMENT.test(t))) {
+    for (const t of tokens.slice(1)) { const m = t.match(ASSIGNMENT); if (m) aliases.set(m[1], m[2]); }
+    return true;
+  }
+  return false;
+}
+function resolveIndirection(cmd, vars, aliases) {
+  if (!vars.size && !aliases.size) return cmd;
+  const expand = (t) => t.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (all, a, b) => (vars.has(a || b) ? vars.get(a || b) : all));
+  let tokens = cmd.tokens.map(expand);
+  if (aliases.has(tokens[0])) tokens = [...splitShell(aliases.get(tokens[0]))[0]?.tokens || [tokens[0]], ...tokens.slice(1)];
+  // A variable holding "rm -rf" expands into several words.
+  if (tokens[0] && /\s/.test(tokens[0]) && cmd.tokens[0].startsWith('$')) tokens = [...tokens[0].split(/\s+/).filter(Boolean), ...tokens.slice(1)];
+  return { ...cmd, tokens };
 }
 
 const MAX_DEPTH = 6;
@@ -499,19 +568,36 @@ function analyze(line, depth) {
     if (r.blocked) return { blocked: r.blocked + ' (inside a command substitution)' };
     note(r);
   }
-  const ctx = { cwdCritical: '' };
-  for (const cmd of splitShell(line)) {
+  const ctx = { cwdCritical: '', cwdParent: '' };
+  const vars = new Map();
+  const aliases = new Map();
+  for (const raw of splitShell(line)) {
+    // `x=rm; $x -rf ~` and `alias r=rm; r -rf ~`: substitute names defined
+    // earlier on the same line so indirection does not hide the program.
+    const cmd = resolveIndirection(raw, vars, aliases);
     cmd.substitutions = substitutions;
+    if (rememberDefinitions(cmd.tokens, vars, aliases)) continue;
     const { name, args } = programOf(cmd.tokens);
     if (name === 'cd' || name === 'pushd' || name === 'set-location' || name === 'sl' || name === 'chdir') {
       const dir = operands(args)[0];
       ctx.cwdCritical = dir === undefined || dir === '~' ? '~' : (isCriticalPath(dir) && !/^\.\./.test(dir) ? dir : '');
+      ctx.cwdParent = dir !== undefined && /^\.\.(\/|\\|$)/.test(dir) ? dir : (ctx.cwdParent && dir !== undefined && !/^[\/~$]|^[A-Za-z]:/.test(dir) ? ctx.cwdParent : '');
       continue;
     }
     for (const nested of nestedLines(cmd)) {
       const r = analyze(nested, depth + 1);
       if (r.blocked) return { blocked: r.blocked + (name === 'ssh' ? ' on a remote host' : '') };
       note(r);
+    }
+    // `echo "rm -rf ~" | sh` / `printf '...' | bash`: the piped text is the script.
+    if (SHELLS.has(name) && cmd.pipedFrom && !operands(args).length) {
+      const up = programOf(cmd.pipedFrom.tokens);
+      if (up.name === 'echo' || up.name === 'printf') {
+        const script = operands(up.args).join(' ').replace(/\\n/g, '\n');
+        const r = analyze(script, depth + 1);
+        if (r.blocked) return { blocked: r.blocked + ' (in text piped into ' + name + ')' };
+        note(r);
+      }
     }
     const code = inlineCode(cmd);
     if (code) {
