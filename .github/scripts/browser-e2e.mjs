@@ -826,7 +826,7 @@ try {
   assert.ok(mobileDocumentWidth <= 390, 'The Agent workspace must not overflow horizontally at 390px.');
   await page.locator('#agentTerminalTab').click();
   assert.equal(await page.locator('#agentWorkspaceGrid').getAttribute('data-active-panel'), 'terminal',
-    'The phone Terminal tab should select the terminal workspace.');
+    'The phone Tools tab should open the terminal, changes and tasks pane.');
   await assertAgentContrast(page, 'Agent terminal panel · 390px');
   await page.screenshot({ path: path.join(screenshotDir, 'agent-terminal-390px.png'), fullPage: true });
   await page.locator('#agentTasksUtilityTab').click();
