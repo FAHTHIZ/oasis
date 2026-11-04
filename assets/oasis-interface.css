@@ -536,7 +536,7 @@ body.light .terminal-xterm,body.light .terminal-output,body.light .cloud-run-dif
 .agent-monitor-run-meta,.agent-monitor-worker-detail{font-size:12px;color:var(--muted);margin-top:2px}
 .agent-monitor-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .agent-monitor-pill{font-size:11px;padding:2px 8px;border-radius:var(--r-pill);background:var(--raised);color:var(--muted);border:1px solid var(--line)}
-.agent-monitor-timeline-heading{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:650;margin:6px 0}
+.agent-monitor-timeline-heading{margin:14px 0 8px}.agent-monitor-timeline-heading h2{font-size:14px;font-weight:650;letter-spacing:-.01em;margin:0;text-transform:none}.agent-monitor-timeline-heading .section-sub{font-size:12.5px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-top:2px}
 .agent-monitor-event{display:flex;gap:10px}
 .agent-monitor-event-dot{position:relative;width:8px;height:8px;border-radius:50%;margin-top:6px;flex:0 0 8px;background:var(--accent-2)}
 .agent-monitor-event:not(:last-child) .agent-monitor-event-dot::after{content:"";position:absolute;top:10px;left:3.5px;width:1px;height:calc(100% + 10px);min-height:22px;background:var(--line)}
@@ -901,3 +901,5 @@ html[data-motion=full] .agent-dictate.is-listening{animation:oasis-dictate-pulse
 .note-sidebar-title{font-size:16px;font-weight:650;letter-spacing:-.01em;margin:0 0 8px}
 .github-panel>.agent-chat-header{padding:16px 18px 0;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px}.github-panel>.agent-chat-header>span:first-child{min-width:0;flex:1 1 180px}
 .agent-messages{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent)}
+.extension-hero h2{margin-top:0}
+.extension-hero h2+p{margin-top:6px}
