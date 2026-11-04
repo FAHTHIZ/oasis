@@ -1933,6 +1933,7 @@ function messageText(content) {
 export function conversationMarkdown(session) {
   const lines = ['# Oasis conversation', '', 'Workspace: ' + session.root, 'Model: ' + (session.config && session.config.model || 'unknown'), 'Exported: ' + new Date().toISOString(), ''];
   for (const message of session.messages.slice(1)) {
+    if (message.role === 'user' && typeof message.content === 'string' && message.content.startsWith('<system-reminder>')) continue;
     if (message.role === 'user') lines.push('## User', '', messageText(message.content), '');
     else if (message.role === 'assistant') {
       const text = messageText(message.content);

@@ -1707,7 +1707,8 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'GET' && sessionMatch) {
       const id = sessionMatch[1];
       const saved = await loadSession(activeRoot, id, { env });
-      const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim())
+      // System reminders (checklist, hook feedback) are for the model, not the chat view.
+      const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim() && !item.content.startsWith('<system-reminder>'))
         .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
       json(res, 200, { id, updatedAt: saved.updatedAt, messages });
       return;
