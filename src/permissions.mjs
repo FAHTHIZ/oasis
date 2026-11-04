@@ -226,15 +226,111 @@ function matchSingleCommandSpecifier(specifier, line) {
   return line === specifier;
 }
 
+// Splits one simple command into shell words: quotes and backslash escapes are
+// removed, runs of spaces/tabs and line continuations collapse. Returns null for
+// text this small parser does not understand (unbalanced quotes).
+function shellWords(text) {
+  const words = [];
+  let current = '';
+  let has = false;
+  let quote = null;
+  const source = String(text || '');
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (quote === "'") { if (char === "'") quote = null; else current += char; continue; }
+    if (quote === '"') {
+      if (char === '\\' && i + 1 < source.length && '"\\$`\n'.includes(source[i + 1])) { i++; if (source[i] !== '\n') current += source[i]; continue; }
+      if (char === '"') { quote = null; continue; }
+      current += char;
+      continue;
+    }
+    if (char === '\\') { i++; if (i < source.length && source[i] !== '\n') { current += source[i]; has = true; } continue; }
+    if (char === "'" || char === '"') { quote = char; has = true; continue; }
+    if (char === ' ' || char === '\t' || char === '\n' || char === '\r') { if (has) words.push(current); current = ''; has = false; continue; }
+    current += char;
+    has = true;
+  }
+  if (quote) return null;
+  if (has) words.push(current);
+  return words;
+}
+
+const DENY_WRAPPERS = new Set([...WRAPPERS_LIST(), 'sudo', 'doas', 'builtin', 'run0', 'pkexec']);
+function WRAPPERS_LIST() { return ['env', 'nice', 'nohup', 'timeout', 'stdbuf', 'xargs', 'time', 'command', 'exec', 'ionice', 'chrt', 'taskset', 'setsid', 'unbuffer', 'caffeinate', 'flock', 'watch', 'strace', 'ltrace', 'faketime', 'firejail', 'nsenter', 'unshare', 'chroot']; }
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'ash', 'fish', 'busybox']);
+const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env', '--super-prefix', '--list-cmds', '--attr-source']);
+
+function stripGitGlobals(words) {
+  let i = 1;
+  while (i < words.length && words[i].startsWith('-')) {
+    const flag = words[i].split('=')[0];
+    i += GIT_VALUE_OPTIONS.has(flag) && !words[i].includes('=') && !/^-[Cc]./.test(words[i]) ? 2 : 1;
+  }
+  return i > 1 && i < words.length ? [words[0], ...words.slice(i)] : null;
+}
+
+// Every spelling a deny/ask rule must see for one command: the raw text, the
+// unquoted single-spaced form, the program's basename, the command inside
+// wrappers (env, sudo, nice, timeout, xargs, command, exec, eval, ...), the script
+// of `bash -c` and friends, and `git` without global options (-C, -c, --no-pager).
+// Without this, `Bash(git push:*)` missed `git  push`, `"git" push`, `\git push`,
+// `env git push`, `sudo git push`, `bash -c "git push"` and `git -C . push`.
+export function commandSpellings(piece, depth = 0) {
+  const out = new Set([piece]);
+  if (depth > 4) return out;
+  let words = shellWords(piece);
+  if (!words || !words.length) return out;
+  for (let guard = 0; guard < 12 && words.length; guard++) {
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words = words.slice(1);
+    if (!words.length) break;
+    const base = executableBase(words[0]);
+    const named = [base, ...words.slice(1)];
+    out.add(words.join(' '));
+    out.add(named.join(' '));
+    if (base === 'git') { const plain = stripGitGlobals(named); if (plain) out.add(plain.join(' ')); }
+    if (base === 'eval') {
+      for (const inner of splitShellCommands(words.slice(1).join(' '), depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
+      break;
+    }
+    if (SHELLS.has(base)) {
+      let index = 1;
+      if (base === 'busybox' && SHELLS.has(String(words[1] || ''))) index = 2;
+      let script = null;
+      for (; index < words.length; index++) {
+        if (/^-[a-z]*c[a-z]*$/i.test(words[index]) && !words[index].startsWith('--')) { script = words[index + 1]; break; }
+        if (!words[index].startsWith('-')) break;
+      }
+      if (typeof script === 'string') for (const inner of splitShellCommands(script, depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
+      break;
+    }
+    if (!DENY_WRAPPERS.has(base)) break;
+    let inner;
+    if (base === 'sudo' || base === 'doas' || base === 'run0' || base === 'pkexec') {
+      let i = 1;
+      const valued = new Set(['-u', '--user', '-g', '--group', '-C', '-D', '--chdir', '-h', '--host', '-p', '--prompt', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-U', '--other-user']);
+      while (i < words.length && words[i].startsWith('-')) { const flag = words[i]; i++; if (flag === '--') break; if (valued.has(flag)) i++; }
+      inner = i < words.length ? [words[i], words.slice(i + 1)] : null;
+    } else if (base === 'builtin' || base === 'time' || base === 'nohup' || base === 'setsid' || base === 'unbuffer' || base === 'caffeinate') {
+      let i = 1;
+      while (i < words.length && words[i].startsWith('-')) i++;
+      inner = i < words.length ? [words[i], words.slice(i + 1)] : null;
+    } else inner = unwrap(base, words.slice(1));
+    if (!inner) break;
+    words = [inner[0], ...inner[1]];
+  }
+  return out;
+}
+
 function matchCommandSpecifier(specifier, line, options = {}) {
   const parsed = splitShellCommands(line);
   if (!parsed.commands.length) return false;
 
   // Deny/ask rules need to catch any matching piece, even when the whole line
-  // is too complex for approval. Allow rules require a safe parse and a match
-  // for every simple command (including commands found in substitutions).
+  // is too complex for approval, and in any spelling of it. Allow rules require
+  // a safe parse and a literal match for every simple command (including
+  // commands found in substitutions).
   if (options.requireEveryCommand === false) {
-    return parsed.commands.some((piece) => matchSingleCommandSpecifier(specifier, piece));
+    return parsed.commands.some((piece) => [...commandSpellings(piece)].some((spelling) => matchSingleCommandSpecifier(specifier, spelling)));
   }
   if (!parsed.safe) return false;
   return parsed.commands.every((piece) => matchSingleCommandSpecifier(specifier, piece));
