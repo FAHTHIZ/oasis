@@ -91,6 +91,17 @@ oasis --version
 
 This installs whatever is on `main`, which can include changes not yet in a tagged release.
 
+## Tab completion
+
+Let your shell finish `oasis` commands and options when you press Tab. Run the line for your shell once, or add it to the shell's start-up file:
+
+| Shell | Command | Start-up file |
+|---|---|---|
+| bash | `eval "$(oasis completion bash)"` | `~/.bashrc` |
+| zsh | `eval "$(oasis completion zsh)"` | `~/.zshrc` |
+| fish | `oasis completion fish > ~/.config/fish/completions/oasis.fish` | (saved file) |
+| PowerShell | `oasis completion powershell \| Out-String \| Invoke-Expression` | `$PROFILE` |
+
 ## First useful session
 
 Start in a project you understand. Ask OASIS to explain the repository before asking it to edit:
