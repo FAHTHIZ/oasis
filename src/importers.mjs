@@ -15,13 +15,30 @@
 //           .cursor/mcp.json                        -> project .mcp.json
 //           .cursorrules, .cursor/rules/**/*.mdc    -> .claude/rules/ (globs -> paths)
 //           .cursor/commands/*.md                   -> project commands
-import { mkdir, readFile, readdir, writeFile, lstat, rename, unlink } from 'node:fs/promises';
+//   Claude  ~/.claude/projects/<this repo>/memory/*.md -> OASIS project memories
+//   Hermes  ~/.hermes/config.yaml mcp_servers       -> user MCP servers
+//           memories/MEMORY.md, USER.md             -> OASIS user memories
+//           SOUL.md                                 -> user instructions
+//           skills/**/SKILL.md                      -> user skills (~/.config/agents/skills)
+//           .hermes.md / HERMES.md                  -> .claude/rules/hermes.md
+//   OpenCode opencode.json(c) mcp / command          -> MCP servers and commands (user and project)
+//           .opencode/commands, agents, skills      -> project commands, .claude/agents, .oasis/skills
+//           ~/.config/opencode/commands, skills     -> user commands and skills
+//   Antigravity ~/.gemini/config|antigravity|antigravity-cli: mcp_config.json, skills/, rules/, workflows/
+//           .agents/mcp_config.json, .agents/rules, .agent/rules, .agents/workflows
+//   Windsurf ~/.codeium/windsurf/mcp_config.json, memories/global_rules.md
+//           .windsurfrules, .windsurf/rules/*.md, .windsurf/workflows/*.md
+//   Cline   cline_mcp_settings.json (VS Code global storage), ~/Documents/Cline/Rules
+//           .clinerules (file or folder), .clinerules/workflows/*.md
+//   Codex also: ~/.codex/memories/*.md -> user memories, ~/.codex/skills -> user skills
+import { mkdir, readFile, readdir, writeFile, lstat, rename, unlink, cp } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
-export const IMPORT_SOURCES = ['codex', 'gemini', 'cursor'];
+export const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'];
+const MAX_SKILL_BYTES = 4 * 1024 * 1024;
 const MAX_FILE = 256 * 1024;
 
 // ---- minimal TOML (tables, dotted keys, strings, arrays, inline tables, numbers, booleans) ----
@@ -131,6 +148,100 @@ export function parseToml(text) {
   return root;
 }
 
+// ---- minimal block YAML (maps, lists, scalars, inline [..] and {..}) for Hermes config.yaml ----
+export function parseYamlSubset(text) {
+  const lines = String(text).replace(/\r\n/g, '\n').split('\n')
+    .map((raw) => ({ indent: raw.match(/^ */)[0].length, text: stripYamlComment(raw).trimEnd().trim() }))
+    .filter((line) => line.text && line.text !== '---');
+  let i = 0;
+  const scalar = (raw) => {
+    const v = raw.trim();
+    if (v === '' || v === '~' || v === 'null') return null;
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+    if ((v.startsWith('"') && v.endsWith('"'))) { try { return JSON.parse(v); } catch { return v.slice(1, -1); } }
+    if (v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1).replace(/''/g, "'");
+    if (v.startsWith('[') && v.endsWith(']')) return splitFlow(v.slice(1, -1)).map(scalar);
+    if (v.startsWith('{') && v.endsWith('}')) return Object.fromEntries(splitFlow(v.slice(1, -1)).map((pair) => { const at = pair.indexOf(':'); return [pair.slice(0, at).trim().replace(/^["']|["']$/g, ''), scalar(pair.slice(at + 1))]; }));
+    return v;
+  };
+  const block = (indent) => {
+    if (i >= lines.length) return null;
+    if (lines[i].text.startsWith('- ') || lines[i].text === '-') {
+      const list = [];
+      while (i < lines.length && lines[i].indent === indent && (lines[i].text.startsWith('- ') || lines[i].text === '-')) {
+        const rest = lines[i].text.slice(1).trim();
+        i++;
+        if (!rest) list.push(i < lines.length && lines[i].indent > indent ? block(lines[i].indent) : null);
+        else if (/^[^"'\[{][^:]*:(\s|$)/.test(rest)) {
+          // "- key: value" starts an inline map item
+          const fake = { indent: indent + 2, text: rest };
+          lines.splice(i, 0, fake);
+          list.push(block(indent + 2));
+        } else list.push(scalar(rest));
+      }
+      return list;
+    }
+    const map = {};
+    while (i < lines.length && lines[i].indent === indent) {
+      const line = lines[i].text;
+      const match = /^("[^"]*"|'[^']*'|[^:]+?)\s*:(?:\s+(.*))?$/.exec(line);
+      if (!match) { i++; continue; }
+      const key = match[1].replace(/^["']|["']$/g, '');
+      const value = match[2];
+      i++;
+      if (value !== undefined && value !== '' && value !== '|' && value !== '>') map[key] = scalar(value);
+      else if (value === '|' || value === '>') {
+        const parts = [];
+        while (i < lines.length && lines[i].indent > indent) parts.push(lines[i++].text);
+        map[key] = parts.join(value === '|' ? '\n' : ' ');
+      } else map[key] = i < lines.length && lines[i].indent > indent ? block(lines[i].indent) : null;
+    }
+    return map;
+  };
+  return lines.length ? block(lines[0].indent) : {};
+}
+function stripYamlComment(raw) {
+  let quote = null;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '#' && (i === 0 || /\s/.test(raw[i - 1]))) return raw.slice(0, i);
+  }
+  return raw;
+}
+function splitFlow(text) {
+  const parts = [];
+  let depth = 0, quote = null, start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '[' || ch === '{') depth++;
+    else if (ch === ']' || ch === '}') depth--;
+    else if (ch === ',' && depth === 0) { parts.push(text.slice(start, i)); start = i + 1; }
+  }
+  if (text.slice(start).trim()) parts.push(text.slice(start));
+  return parts.map((part) => part.trim()).filter(Boolean);
+}
+
+/** JSON with comments and trailing commas (opencode.jsonc). */
+export function parseJsonc(text) {
+  let out = '', quote = false;
+  const src = String(text);
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quote) { out += ch; if (ch === '\\') { out += src[++i] || ''; } else if (ch === '"') quote = false; continue; }
+    if (ch === '"') { quote = true; out += ch; continue; }
+    if (ch === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; out += '\n'; continue; }
+    if (ch === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i + 2); if (i < 0) break; i++; continue; }
+    out += ch;
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
+}
+
 // ---- helpers ----
 async function readText(file) {
   try {
@@ -162,7 +273,17 @@ function normalizeServer(raw, flavor) {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.enabled === false || raw.disabled === true) return null;
   const out = {};
-  const url = flavor === 'gemini' ? (raw.httpUrl || raw.url) : raw.url;
+  if (flavor === 'opencode') {
+    if (raw.type === 'remote' && raw.url) return { type: 'http', url: String(raw.url), ...(raw.headers ? { headers: { ...raw.headers } } : {}) };
+    const argv = Array.isArray(raw.command) ? raw.command.map(String) : raw.command ? [String(raw.command)] : [];
+    if (!argv.length) return null;
+    const local = { command: argv[0] };
+    if (argv.length > 1) local.args = argv.slice(1);
+    if (raw.environment && typeof raw.environment === 'object') local.env = Object.fromEntries(Object.entries(raw.environment).map(([k, v]) => [k, String(v).replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, '${$1}')]));
+    if (raw.cwd) local.cwd = String(raw.cwd);
+    return local;
+  }
+  const url = flavor === 'gemini' ? (raw.httpUrl || raw.url) : (raw.url || raw.serverUrl);
   if (url) {
     out.type = flavor === 'gemini' && raw.url && !raw.httpUrl ? 'sse' : 'http';
     out.url = String(url);
@@ -205,6 +326,44 @@ function cursorRuleToMarkdown(text, name) {
   return (lines.length > 3 ? lines.join('\n') : lines.slice(2).join('\n'));
 }
 
+/** Antigravity / Windsurf rule frontmatter (trigger: always_on | glob | model_decision | manual). */
+function triggerRuleToMarkdown(text, origin) {
+  const src = text.replace(/\r\n/g, '\n');
+  const match = /^---\n([\s\S]*?)\n---\n?/.exec(src);
+  const body = (match ? src.slice(match[0].length) : src).trim();
+  const meta = match ? parseYamlSubset(match[1]) || {} : {};
+  if (String(meta.trigger || '').replace(/-/g, '_') === 'manual') return null;
+  const lines = ['---'];
+  if (meta.description) lines.push('description: ' + JSON.stringify(String(meta.description)));
+  const globs = String(meta.trigger || '') === 'glob' ? (Array.isArray(meta.globs) ? meta.globs : String(meta.globs || '').split(',')).map((g) => String(g).trim()).filter(Boolean) : [];
+  if (globs.length) { lines.push('paths:'); for (const g of globs) lines.push('  - ' + JSON.stringify(g)); }
+  lines.push('---', '');
+  return (lines.length > 3 ? lines.join('\n') : '') + '<!-- imported from ' + origin + ' -->\n' + body + '\n';
+}
+
+/** OpenCode agent markdown -> Claude-style subagent markdown. */
+function opencodeAgentToMarkdown(text, name) {
+  const src = text.replace(/\r\n/g, '\n');
+  const match = /^---\n([\s\S]*?)\n---\n?/.exec(src);
+  const meta = match ? parseYamlSubset(match[1]) || {} : {};
+  const body = (match ? src.slice(match[0].length) : src).trim();
+  const lines = ['---', 'name: ' + name, 'description: ' + JSON.stringify(String(meta.description || 'Imported from OpenCode agent ' + name))];
+  if (meta.tools && typeof meta.tools === 'object' && !Array.isArray(meta.tools)) {
+    const map = { bash: 'Bash', read: 'Read', edit: 'Edit', write: 'Write', grep: 'Grep', glob: 'Glob', webfetch: 'WebFetch', list: 'LS' };
+    const allowed = Object.entries(meta.tools).filter(([, on]) => on === true).map(([tool]) => map[tool]).filter(Boolean);
+    if (allowed.length) lines.push('tools: ' + allowed.join(', '));
+  }
+  lines.push('---', '', body, '');
+  return lines.join('\n');
+}
+
+/** Split a Hermes MEMORY.md / USER.md into entries ("§" separated, or blank-line paragraphs). */
+export function splitMemoryEntries(text) {
+  const src = String(text || '').replace(/\r\n/g, '\n').replace(/^#.*\n/gm, '');
+  const parts = src.includes('§') ? src.split(/\n?§\n?/) : src.split(/\n\s*\n/);
+  return parts.map((part) => part.trim()).filter((part) => part.length >= 8).slice(0, 200);
+}
+
 function isWithinPath(root, target) {
   const relative = path.relative(root, target);
   return relative === '' || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
@@ -217,8 +376,9 @@ async function assertSafeImportTarget(plan, rawTarget) {
   const target = path.resolve(rawTarget);
   const workspace = path.resolve(plan.root);
   const userConfig = path.resolve(path.dirname(plan.userMcpFile));
+  const userSkills = plan.userSkillsDir ? path.resolve(plan.userSkillsDir) : null;
   const base = isWithinPath(workspace, target) ? workspace :
-    (isWithinPath(userConfig, target) ? userConfig : null);
+    (isWithinPath(userConfig, target) ? userConfig : (userSkills && isWithinPath(userSkills, target) ? userSkills : null));
   if (!base) throw new Error('Import destination must remain inside the workspace or user OASIS configuration directory.');
 
   const relative = path.relative(base, target);
@@ -236,7 +396,7 @@ async function assertSafeImportTarget(plan, rawTarget) {
   }
   try {
     const info = await lstat(target);
-    if (info.isSymbolicLink() || !info.isFile()) throw new Error('Refusing to import to a non-regular or symbolic-link destination: ' + target);
+    if (info.isSymbolicLink() || !info.isFile()) throw new Error(plan.allowDirectoryTarget ? 'Import destination already exists: ' + target : 'Refusing to import to a non-regular or symbolic-link destination: ' + target);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
@@ -295,6 +455,47 @@ export async function planImport(root, options = {}) {
     if (items.some((item) => item.target === target && item.action === 'add')) { items.push({ kind, source, name, from, target, action: 'skip', reason: 'duplicate name' }); return; }
     items.push({ kind, source, name, from, target, action: 'add', content });
   };
+  const userSkillsDir = path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'agents', 'skills');
+  const { listMemories } = await import('./auto-memory.mjs');
+  const knownMemories = new Set();
+  try { for (const memory of await listMemories(workspace, { env: { ...env, OASIS_CONFIG_DIR: configDir } })) knownMemories.add(memory.scope + ':' + String(memory.name).toLowerCase()); } catch {}
+  const addMemory = (source, from, scope, name, content, category) => {
+    const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!clean || !String(content || '').trim()) return;
+    const key = scope + ':' + clean.toLowerCase();
+    if (knownMemories.has(key)) { items.push({ kind: 'memory', source, scope, name: clean, from, action: 'skip', reason: 'already in memory' }); return; }
+    knownMemories.add(key);
+    items.push({ kind: 'memory', source, scope, name: clean, from, action: 'add', category, content: String(content).trim().slice(0, 8000) });
+  };
+  const addSkills = async (source, dir, targetDir, depth = 0) => {
+    let entries = [];
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.startsWith('.')) continue;
+      const from = path.join(dir, entry.name);
+      if (await exists(path.join(from, 'SKILL.md'))) {
+        if (!/^[A-Za-z0-9_-]{1,64}$/.test(entry.name)) { items.push({ kind: 'skill', source, name: entry.name, from, action: 'skip', reason: 'unsupported skill folder name' }); continue; }
+        const target = path.join(targetDir, entry.name);
+        if (await exists(target)) items.push({ kind: 'skill', source, name: entry.name, from, target, action: 'skip', reason: 'target exists' });
+        else if (items.some((item) => item.target === target && item.action === 'add')) items.push({ kind: 'skill', source, name: entry.name, from, target, action: 'skip', reason: 'duplicate name' });
+        else items.push({ kind: 'skill', source, name: entry.name, from, target, action: 'add' });
+      } else if (depth > 0) await addSkills(source, from, targetDir, depth - 1);
+    }
+  };
+  const addMarkdownCommands = async (source, dir, targetDir, scope) => {
+    for (const { file, parts } of await listFiles(dir, '.md')) {
+      await addFile('command', source, file, path.join(targetDir, ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), await readText(file), parts.join(':') + (scope ? ' (' + scope + ')' : ''));
+    }
+  };
+  const addTriggerRules = async (source, dir, prefix) => {
+    for (const { file, parts } of await listFiles(dir, '.md', 0)) {
+      const text = await readText(file);
+      if (!text) continue;
+      const converted = triggerRuleToMarkdown(text, path.relative(workspace, file) || file);
+      if (converted === null) { items.push({ kind: 'rule', source, name: parts.join('/'), from: file, action: 'skip', reason: 'manual rule (only applies when @-mentioned)' }); continue; }
+      await addFile('rule', source, file, path.join(workspace, '.claude', 'rules', prefix + slug(parts.join('-')) + '.md'), converted, parts.join('/'));
+    }
+  };
   const addInstructions = (source, from, text) => {
     if (!text || !text.trim()) return;
     const marker = '<!-- imported from ' + source + ': ' + from + ' -->';
@@ -313,6 +514,11 @@ export async function planImport(root, options = {}) {
     for (const { file, parts } of await listFiles(path.join(codexHome, 'prompts'), '.md', 0)) {
       await addFile('command', 'codex', file, path.join(configDir, 'commands', slug(parts.join('-')) + '.md'), await readText(file), parts.join(':'));
     }
+    for (const { file, parts } of await listFiles(path.join(codexHome, 'memories'), '.md', 1)) {
+      if (/^(memory_summary|index)$/i.test(parts[parts.length - 1])) continue;
+      addMemory('codex', file, 'user', 'Codex: ' + parts.join(' / ').replace(/[-_]+/g, ' '), await readText(file), 'reference');
+    }
+    await addSkills('codex', path.join(codexHome, 'skills'), userSkillsDir);
   }
   if (sources.includes('gemini')) {
     const geminiHome = path.join(home, '.gemini');
@@ -344,15 +550,134 @@ export async function planImport(root, options = {}) {
       await addFile('command', 'cursor', file, path.join(workspace, '.oasis', 'commands', ...parts.slice(0, -1).map(slug), slug(parts[parts.length - 1]) + '.md'), await readText(file), parts.join(':'));
     }
   }
-  return { root: workspace, sources, items, userMcpFile, projectMcpFile };
+  if (sources.includes('claude')) {
+    const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(home, '.claude');
+    const variants = [...new Set([workspace.replace(/[^A-Za-z0-9]/g, '-'), workspace.replace(/[\\/]/g, '-'), workspace.replace(/[\\/.]/g, '-')])];
+    for (const variant of variants) {
+      const dir = path.join(claudeHome, 'projects', variant, 'memory');
+      for (const { file, parts } of await listFiles(dir, '.md', 0)) {
+        if (/^MEMORY$/i.test(parts[0])) continue;
+        const text = await readText(file);
+        if (!text) continue;
+        const match = /^---\n([\s\S]*?)\n---\n?/.exec(text.replace(/\r\n/g, '\n'));
+        const meta = match ? parseYamlSubset(match[1]) || {} : {};
+        const body = match ? text.replace(/\r\n/g, '\n').slice(match[0].length) : text;
+        const type = String(meta.type || '').toLowerCase();
+        const category = type === 'user' || type === 'feedback' ? 'preferences' : type === 'reference' ? 'reference' : 'project';
+        addMemory('claude', file, 'project', String(meta.name || parts[0].replace(/[-_]+/g, ' ')), (meta.description ? meta.description + '\n\n' : '') + body, category);
+      }
+    }
+  }
+  if (sources.includes('hermes')) {
+    const hermesHome = env.HERMES_HOME || path.join(home, '.hermes');
+    const yamlText = await readText(path.join(hermesHome, 'config.yaml'));
+    if (yamlText) {
+      try { addServers((parseYamlSubset(yamlText) || {}).mcp_servers, 'hermes', 'user', 'hermes'); } catch (error) { items.push({ kind: 'mcp', source: 'hermes', name: 'config.yaml', action: 'skip', reason: 'could not parse: ' + error.message }); }
+    }
+    for (const [file, scope, category, label] of [[path.join(hermesHome, 'memories', 'MEMORY.md'), 'user', 'reference', 'Hermes memory'], [path.join(hermesHome, 'MEMORY.md'), 'user', 'reference', 'Hermes memory'], [path.join(hermesHome, 'memories', 'USER.md'), 'user', 'preferences', 'Hermes user profile'], [path.join(hermesHome, 'USER.md'), 'user', 'preferences', 'Hermes user profile']]) {
+      const entries = splitMemoryEntries(await readText(file));
+      entries.forEach((entry, index) => addMemory('hermes', file, scope, label + ' ' + (index + 1) + ': ' + entry.split('\n')[0].slice(0, 50), entry, category));
+    }
+    const soul = path.join(hermesHome, 'SOUL.md');
+    addInstructions('hermes', soul, await readText(soul));
+    await addSkills('hermes', path.join(hermesHome, 'skills'), userSkillsDir, 2);
+    for (const name of ['.hermes.md', 'HERMES.md']) {
+      const text = await readText(path.join(workspace, name));
+      if (text) { await addFile('rule', 'hermes', path.join(workspace, name), path.join(workspace, '.claude', 'rules', 'hermes.md'), '<!-- imported from ' + name + ' -->\n' + text.trim() + '\n', name); break; }
+    }
+  }
+  if (sources.includes('opencode')) {
+    const globalDir = path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode');
+    const configs = [[path.join(globalDir, 'opencode.json'), 'user'], [path.join(globalDir, 'opencode.jsonc'), 'user'], [path.join(workspace, 'opencode.json'), 'project'], [path.join(workspace, 'opencode.jsonc'), 'project'], [path.join(workspace, '.opencode', 'opencode.json'), 'project'], [path.join(workspace, '.opencode', 'opencode.jsonc'), 'project']];
+    for (const [file, scope] of configs) {
+      const text = await readText(file);
+      if (!text) continue;
+      let data;
+      try { data = parseJsonc(text); } catch (error) { items.push({ kind: 'mcp', source: 'opencode', name: path.basename(file), action: 'skip', reason: 'could not parse: ' + error.message }); continue; }
+      const mcp = data && data.mcp || {};
+      addServers(mcp.servers && typeof mcp.servers === 'object' ? mcp.servers : Object.fromEntries(Object.entries(mcp).filter(([, v]) => v && typeof v === 'object' && v.type)), 'opencode', scope, 'opencode');
+      for (const [name, command] of Object.entries(data && data.command || {})) {
+        if (!command || typeof command.template !== 'string') continue;
+        const body = (command.description ? '---\ndescription: ' + JSON.stringify(String(command.description)) + '\n---\n\n' : '') + command.template.trim() + (command.template.includes('$ARGUMENTS') ? '' : '\n\n$ARGUMENTS') + '\n';
+        await addFile('command', 'opencode', file, path.join(scope === 'user' ? path.join(configDir, 'commands') : path.join(workspace, '.oasis', 'commands'), slug(name) + '.md'), body, name + ' (' + scope + ')');
+      }
+    }
+    for (const sub of ['commands', 'command']) {
+      await addMarkdownCommands('opencode', path.join(globalDir, sub), path.join(configDir, 'commands'), 'user');
+      await addMarkdownCommands('opencode', path.join(workspace, '.opencode', sub), path.join(workspace, '.oasis', 'commands'), 'project');
+    }
+    for (const sub of ['agents', 'agent']) {
+      for (const { file, parts } of await listFiles(path.join(workspace, '.opencode', sub), '.md', 0)) {
+        const text = await readText(file);
+        if (text) await addFile('agent', 'opencode', file, path.join(workspace, '.claude', 'agents', slug(parts[0]) + '.md'), opencodeAgentToMarkdown(text, slug(parts[0])), parts[0]);
+      }
+    }
+    await addSkills('opencode', path.join(globalDir, 'skills'), userSkillsDir);
+    await addSkills('opencode', path.join(workspace, '.opencode', 'skills'), path.join(workspace, '.oasis', 'skills'));
+  }
+  if (sources.includes('antigravity')) {
+    const gemini = path.join(home, '.gemini');
+    for (const dir of [path.join(gemini, 'config'), path.join(gemini, 'antigravity'), path.join(gemini, 'antigravity-cli')]) {
+      addServers(((await readJson(path.join(dir, 'mcp_config.json'))) || {}).mcpServers, 'antigravity', 'user', 'antigravity');
+      await addSkills('antigravity', path.join(dir, 'skills'), userSkillsDir);
+      for (const { file, parts } of await listFiles(path.join(dir, 'rules'), '.md', 0)) {
+        const text = await readText(file);
+        const converted = text && triggerRuleToMarkdown(text, file);
+        if (converted) addInstructions('antigravity', file, converted.replace(/^---[\s\S]*?---\n\n?/, ''));
+        else if (text) items.push({ kind: 'rule', source: 'antigravity', name: parts[0], from: file, action: 'skip', reason: 'manual rule (only applies when @-mentioned)' });
+      }
+      for (const wf of ['workflows', 'global_workflows']) await addMarkdownCommands('antigravity', path.join(dir, wf), path.join(configDir, 'commands'), 'user');
+    }
+    for (const name of ['AGENTS.md', 'GEMINI.md']) { const file = path.join(gemini, 'config', name); addInstructions('antigravity', file, await readText(file)); }
+    await addSkills('antigravity', path.join(gemini, 'skills'), userSkillsDir);
+    addServers(((await readJson(path.join(workspace, '.agents', 'mcp_config.json'))) || {}).mcpServers, 'antigravity', 'project', 'antigravity');
+    await addTriggerRules('antigravity', path.join(workspace, '.agents', 'rules'), 'antigravity-');
+    await addTriggerRules('antigravity', path.join(workspace, '.agent', 'rules'), 'antigravity-');
+    await addSkills('antigravity', path.join(workspace, '.agent', 'skills'), path.join(workspace, '.agents', 'skills'));
+    for (const dir of ['.agents', '.agent']) await addMarkdownCommands('antigravity', path.join(workspace, dir, 'workflows'), path.join(workspace, '.oasis', 'commands'), 'project');
+  }
+  if (sources.includes('windsurf')) {
+    const windsurf = path.join(home, '.codeium', 'windsurf');
+    addServers(((await readJson(path.join(windsurf, 'mcp_config.json'))) || {}).mcpServers, 'windsurf', 'user', 'windsurf');
+    const globalRules = path.join(windsurf, 'memories', 'global_rules.md');
+    addInstructions('windsurf', globalRules, await readText(globalRules));
+    const legacy = await readText(path.join(workspace, '.windsurfrules'));
+    if (legacy) await addFile('rule', 'windsurf', path.join(workspace, '.windsurfrules'), path.join(workspace, '.claude', 'rules', 'windsurfrules.md'), '<!-- imported from .windsurfrules -->\n' + legacy.trim() + '\n', '.windsurfrules');
+    await addTriggerRules('windsurf', path.join(workspace, '.windsurf', 'rules'), 'windsurf-');
+    await addMarkdownCommands('windsurf', path.join(workspace, '.windsurf', 'workflows'), path.join(workspace, '.oasis', 'commands'), 'project');
+    await addMarkdownCommands('windsurf', path.join(windsurf, 'global_workflows'), path.join(configDir, 'commands'), 'user');
+  }
+  if (sources.includes('cline')) {
+    const storage = [
+      path.join(home, '.config', 'Code', 'User', 'globalStorage'),
+      path.join(home, 'Library', 'Application Support', 'Code', 'User', 'globalStorage'),
+      env.APPDATA ? path.join(env.APPDATA, 'Code', 'User', 'globalStorage') : null
+    ].filter(Boolean);
+    for (const dir of storage) addServers(((await readJson(path.join(dir, 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'))) || {}).mcpServers, 'cline', 'user', 'cline');
+    for (const { file } of await listFiles(path.join(home, 'Documents', 'Cline', 'Rules'), '.md', 0)) addInstructions('cline', file, await readText(file));
+    const rulesPath = path.join(workspace, '.clinerules');
+    let info = null;
+    try { info = await lstat(rulesPath); } catch {}
+    if (info && info.isFile()) {
+      const text = await readText(rulesPath);
+      if (text) await addFile('rule', 'cline', rulesPath, path.join(workspace, '.claude', 'rules', 'clinerules.md'), '<!-- imported from .clinerules -->\n' + text.trim() + '\n', '.clinerules');
+    } else if (info && info.isDirectory()) {
+      for (const { file, parts } of await listFiles(rulesPath, '.md', 0)) {
+        const text = await readText(file);
+        if (text) await addFile('rule', 'cline', file, path.join(workspace, '.claude', 'rules', 'cline-' + slug(parts[0]) + '.md'), '<!-- imported from .clinerules/' + parts[0] + '.md -->\n' + text.trim() + '\n', parts[0]);
+      }
+      await addMarkdownCommands('cline', path.join(rulesPath, 'workflows'), path.join(workspace, '.oasis', 'commands'), 'project');
+    }
+  }
+  return { root: workspace, sources, items, userMcpFile, projectMcpFile, userSkillsDir, env: { ...env, OASIS_CONFIG_DIR: configDir } };
 }
 
 export function describePlan(plan) {
   const adds = plan.items.filter((item) => item.action !== 'skip');
   const skips = plan.items.filter((item) => item.action === 'skip');
-  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md) and Cursor (~/.cursor, .cursor/, .cursorrules) configuration.';
-  const label = { mcp: 'MCP server', instructions: 'Instructions', command: 'Command', rule: 'Rule' };
-  const line = (item) => '  ' + (item.action === 'skip' ? '- ' : '+ ') + '[' + item.source + '] ' + label[item.kind] + ' ' + item.name + (item.kind === 'mcp' && item.scope ? ' (' + item.scope + ')' : '') + (item.target && item.action !== 'skip' ? ' -> ' + item.target : '') + (item.reason ? ' (skipped: ' + item.reason + ')' : '');
+  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md), Cursor (~/.cursor, .cursor/, .cursorrules), Claude Code memories (~/.claude/projects), Hermes (~/.hermes), OpenCode (opencode.json, .opencode/), Antigravity (~/.gemini/config, .agents/), Windsurf (~/.codeium/windsurf, .windsurf/) and Cline (.clinerules) configuration.';
+  const label = { mcp: 'MCP server', instructions: 'Instructions', command: 'Command', rule: 'Rule', skill: 'Skill', memory: 'Memory', agent: 'Subagent' };
+  const line = (item) => '  ' + (item.action === 'skip' ? '- ' : '+ ') + '[' + item.source + '] ' + label[item.kind] + ' ' + item.name + ((item.kind === 'mcp' || item.kind === 'memory') && item.scope ? ' (' + item.scope + ')' : '') + (item.target && item.action !== 'skip' ? ' -> ' + item.target : '') + (item.reason ? ' (skipped: ' + item.reason + ')' : '');
   return [adds.length ? 'Will import ' + adds.length + ' item' + (adds.length === 1 ? '' : 's') + ':' : 'Nothing new to import.', ...adds.map(line), ...(skips.length ? ['Skipped:', ...skips.map(line)] : [])].join('\n');
 }
 
@@ -362,7 +687,13 @@ export async function applyImport(plan) {
   // Validate every destination before the first write so one unsafe item cannot
   // leave a partially-applied import behind.
   for (const item of plan.items) {
-    if (item.action !== 'skip') await assertSafeImportTarget(plan, importItemTarget(plan, item));
+    if (item.action === 'skip' || item.kind === 'memory') continue;
+    if (item.kind === 'skill') {
+      await assertSafeImportTarget({ ...plan, allowDirectoryTarget: true }, item.target);
+      if (await exists(item.target)) throw new Error('Import destination already exists: ' + item.target);
+      continue;
+    }
+    await assertSafeImportTarget(plan, importItemTarget(plan, item));
   }
   for (const item of plan.items) {
     if (item.action === 'skip') continue;
@@ -371,6 +702,17 @@ export async function applyImport(plan) {
       if (!mcp[item.scope]) mcp[item.scope] = (await readJson(file)) || {};
       mcp[item.scope].mcpServers ||= {};
       mcp[item.scope].mcpServers[item.name] = item.server;
+      done.push(item);
+      continue;
+    }
+    if (item.kind === 'memory') {
+      const { saveMemory } = await import('./auto-memory.mjs');
+      await saveMemory(plan.root, { scope: item.scope, name: item.name, content: item.content, category: item.category }, { env: plan.env || process.env, source: 'import:' + item.source });
+      done.push(item);
+      continue;
+    }
+    if (item.kind === 'skill') {
+      await copySkillDirectory(item.from, item.target);
       done.push(item);
       continue;
     }
@@ -394,6 +736,22 @@ export async function applyImport(plan) {
   return done;
 }
 
+async function copySkillDirectory(from, target) {
+  let total = 0;
+  async function measure(dir, depth) {
+    if (depth > 6) throw new Error('Skill folder is nested too deeply: ' + from);
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) await measure(full, depth + 1);
+      else if (entry.isFile()) { total += (await lstat(full)).size; if (total > MAX_SKILL_BYTES) throw new Error('Skill folder is larger than 4 MB: ' + from); }
+    }
+  }
+  await measure(from, 0);
+  await mkdir(path.dirname(target), { recursive: true });
+  await cp(from, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true, filter: async (src) => { try { const info = await lstat(src); return !info.isSymbolicLink() && !src.split(path.sep).includes('.git'); } catch { return false; } } });
+}
+
 export function parseImportArgs(args) {
   const list = Array.isArray(args) ? args : String(args || '').split(/\s+/).filter(Boolean);
   const sources = [];
@@ -403,7 +761,7 @@ export function parseImportArgs(args) {
     if (arg === '--dry-run') dryRun = true;
     else if (arg === '--yes' || arg === '-y') yes = true;
     else if (IMPORT_SOURCES.includes(arg.toLowerCase())) sources.push(arg.toLowerCase());
-    else throw new Error('Unknown import option ' + arg + '. Usage: import [codex|gemini|cursor] [--dry-run] [--yes]');
+    else throw new Error('Unknown import option ' + arg + '. Usage: import [' + IMPORT_SOURCES.join('|') + '] [--dry-run] [--yes]');
   }
   return { sources, dryRun, yes };
 }

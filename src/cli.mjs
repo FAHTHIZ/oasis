@@ -122,7 +122,7 @@ function printHelp() {
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
     '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
     '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
-    '  oasis import [codex|gemini|cursor] [--dry-run] [--yes]  Import MCP servers, instructions, commands and rules',
+    '  oasis import [codex|gemini|cursor|claude|hermes|opencode|antigravity|windsurf|cline] [--dry-run] [--yes]  Import MCP servers, instructions, commands, rules, skills and memories',
     '  oasis mcp remove NAME         Remove a configured server',
     '  oasis mcp serve [--allow-edits] [--allow-commands]  Serve Oasis tools to other MCP clients over stdio',
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
