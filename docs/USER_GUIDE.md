@@ -1242,6 +1242,8 @@ Enable the optional OS sandbox to restrict command writes and, by default, netwo
 
 On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is read-only, the workspace is writable, `/tmp` is private, and the network is unshared unless `network` is true. On macOS it uses `sandbox-exec`. Inside the sandbox, normal (not high-risk) commands run without a prompt; set `autoAllowCommands: false` to keep prompting. `OASIS_SANDBOX=1` enables it for one run. Existing package-manager caches in your home directory (`~/.npm`, `~/.cache/pip`, `~/.cargo/registry`, `~/go/pkg/mod`, `~/.m2/repository`, `~/.gradle/caches` and similar) stay writable so installs and builds don't fail on a read-only cache; the rest of home stays read-only and credential paths stay hidden. Set `"writableCaches": false` to make them read-only too.
 
+Even inside the writable workspace, files that could run code later or change OASIS itself stay read-only for sandboxed commands: `.git/hooks` and `.git/config`, `.mcp.json`, `.oasis/settings*.json` and `.claude/settings*.json`, the `commands`, `agents`, `skills` and `hooks` folders under `.claude`/`.oasis`, and `.vscode`/`.idea`. This blocks a prompt-injected command from planting a git hook or an MCP server that would run outside the sandbox. File tools (with their own approvals) can still edit them. Set `"protectProjectConfig": false` in `sandbox` to turn this off.
+
 ### Container backend (Docker or Podman, any OS)
 
 ~~~json

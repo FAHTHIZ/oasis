@@ -16,7 +16,7 @@
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { normalizeSshSettings, detectSshRuntime, sshWrap } from './ssh-backend.mjs';
 import { spawnSync } from 'node:child_process';
-import { realpathSync, statSync } from 'node:fs';
+import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -49,6 +49,86 @@ export function collectSensitivePaths(env = process.env) {
     masked.push({ path: real, type });
   }
   return masked;
+}
+
+// Paths inside writable folders that a sandboxed command must never change,
+// because something outside the sandbox later executes or trusts them: git hooks
+// and config (run by every unsandboxed git), project settings and .mcp.json
+// (hooks and MCP servers start on the next Oasis launch), editor task folders,
+// shell rc files and Claude/Oasis command, agent and skill folders. This matches
+// the mandatory deny list of Anthropic's sandbox-runtime.
+export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
+  '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config'];
+export const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
+  '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks'];
+// Missing files that only matter once they exist and are worth a placeholder mount.
+// Missing shell rc files and .gitconfig in a project folder are not read by anything.
+const PLACEHOLDER_FILES = new Set(['.mcp.json', '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config']);
+
+function lstatOrNull(target) { try { return lstatSync(target); } catch { return null; } }
+
+// Plans the protection for each writable root: existing paths (bound read-only)
+// and missing ones (covered by a read-only placeholder at the first missing
+// path component, so nothing can be created there).
+export function protectedWritePaths(roots = []) {
+  const existing = [];
+  const missing = [];
+  const seen = new Set();
+  for (const root of roots) {
+    // Same spelling as the writable bind mounts, so the read-only binds land on them.
+    const base = path.resolve(root);
+    if (!lstatOrNull(base)) continue;
+    // In a git worktree or submodule, .git is a file pointing at the real git dir.
+    const dotGit = lstatOrNull(path.join(base, '.git'));
+    const candidates = [...PROTECTED_FILES.map((rel) => ({ rel, type: 'file' })), ...PROTECTED_DIRS.map((rel) => ({ rel, type: 'directory' }))]
+      .filter((item) => !(dotGit && dotGit.isFile() && item.rel.startsWith('.git/')));
+    if (dotGit && dotGit.isFile()) candidates.push({ rel: '.git', type: 'file' });
+    for (const item of candidates) {
+      const full = path.join(base, ...item.rel.split('/'));
+      if (seen.has(full)) continue;
+      const info = lstatOrNull(full);
+      if (info) { seen.add(full); existing.push({ path: full, type: info.isDirectory() ? 'directory' : 'file' }); continue; }
+      if (item.type === 'file' && !PLACEHOLDER_FILES.has(item.rel)) continue;
+      // First missing component: a missing .oasis folder is covered as a whole.
+      const parts = item.rel.split('/');
+      let first = null;
+      for (let i = 1; i <= parts.length; i++) {
+        const candidate = path.join(base, ...parts.slice(0, i));
+        if (!lstatOrNull(candidate)) { first = { path: candidate, type: i === parts.length ? item.type : 'directory' }; break; }
+      }
+      if (!first || seen.has(first.path)) continue;
+      seen.add(first.path);
+      missing.push(first);
+    }
+  }
+  return { existing, missing };
+}
+
+// Removes placeholder mount points bubblewrap left on the host, but only while
+// they are still empty: anything Oasis itself wrote there meanwhile is kept.
+export function removeSandboxPlaceholders(placeholders = []) {
+  for (const item of placeholders) {
+    const info = lstatOrNull(item.path);
+    if (!info) continue;
+    try {
+      if (item.type === 'directory' && info.isDirectory()) rmdirSync(item.path);
+      else if (item.type === 'file' && info.isFile() && info.size === 0) unlinkSync(item.path);
+    } catch {}
+  }
+}
+const pendingPlaceholders = new Set();
+let exitSweepInstalled = false;
+function trackPlaceholders(list) {
+  if (!list.length) return () => {};
+  for (const item of list) pendingPlaceholders.add(item);
+  if (!exitSweepInstalled) { exitSweepInstalled = true; process.once('exit', () => removeSandboxPlaceholders([...pendingPlaceholders])); }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const item of list) pendingPlaceholders.delete(item);
+    removeSandboxPlaceholders(list);
+  };
 }
 
 // Package-manager caches that installs and builds write to. With the home
@@ -135,6 +215,9 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
     seen.add(inside);
     wrapped.push('--volume', safeContainerValue(dir, 'path') + ':' + inside + ':rw');
   }
+  for (const item of protectedWritePaths(sandbox.protectedRoots || []).existing) {
+    wrapped.push('--volume', safeContainerValue(item.path, 'path') + ':' + containerPath(item.path, platform) + ':ro');
+  }
   wrapped.push('--workdir', containerPath(cwd, platform), image, command, ...args);
   return wrapped;
 }
@@ -191,6 +274,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
     maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
     writable: backend === 'os' ? writable : [root, ...additionalWritable],
+    // Project folders whose git, settings and editor files stay read-only inside.
+    protectedRoots: settings.sandbox.protectProjectConfig === false ? [] : [root, ...additionalWritable],
     writableCaches: backend === 'os' ? caches : [],
     backend,
     ...(backend === 'ssh' ? { ssh, network: true } : {}),
@@ -216,6 +301,23 @@ export function assertSandboxAvailable(sandbox) {
   }
 }
 
+function protectedSeatbeltRules(roots) {
+  const rules = [];
+  for (const root of roots) {
+    // Seatbelt matches resolved paths (/private/var for /var), so resolve the root.
+    let base;
+    try { base = realpathSync(root); } catch { base = path.resolve(root); }
+    const dotGit = lstatOrNull(path.join(base, '.git'));
+    for (const rel of PROTECTED_FILES) rules.push('(deny file-write* (literal ' + seatbeltString(path.join(base, ...rel.split('/'))) + '))');
+    for (const rel of PROTECTED_DIRS) {
+      const full = path.join(base, ...rel.split('/'));
+      rules.push('(deny file-write* (literal ' + seatbeltString(full) + ') (subpath ' + seatbeltString(full) + '))');
+    }
+    if (dotGit && dotGit.isFile()) rules.push('(deny file-write* (literal ' + seatbeltString(path.join(base, '.git')) + '))');
+  }
+  return rules;
+}
+
 export function macProfile(sandbox) {
   const writable = [...sandbox.writable, os.tmpdir(), '/private/tmp', '/private/var/folders'];
   return [
@@ -224,6 +326,7 @@ export function macProfile(sandbox) {
     '(deny file-write*)',
     ...((sandbox.maskedPaths || []).map((item) => '(deny file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
     '(allow file-write* ' + writable.map((dir) => '(subpath ' + seatbeltString(dir) + ')').join(' ') + ' (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr") (regex #"^/dev/tty"))',
+    ...protectedSeatbeltRules(sandbox.protectedRoots || []),
     sandbox.network ? '' : '(deny network*) (allow network* (remote unix-socket))'
   ].join('\n');
 }
@@ -284,9 +387,15 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
       else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);
     }
+    const guarded = protectedWritePaths(sandbox.protectedRoots || []);
+    for (const item of guarded.existing) wrapped.push('--ro-bind', item.path, item.path);
+    for (const item of guarded.missing) {
+      if (item.type === 'directory') wrapped.push('--perms', '0555', '--tmpfs', item.path, '--remount-ro', item.path);
+      else wrapped.push('--ro-bind', '/dev/null', item.path);
+    }
     if (!sandbox.network) wrapped.push('--unshare-net');
     wrapped.push('--chdir', cwd, '--', command, ...args);
-    return { command: 'bwrap', args: wrapped };
+    return { command: 'bwrap', args: wrapped, release: trackPlaceholders(guarded.missing) };
   }
   if (sandbox.kind === 'sandbox-exec') {
     return { command: 'sandbox-exec', args: ['-p', macProfile(sandbox), command, ...args] };
