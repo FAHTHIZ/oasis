@@ -244,6 +244,22 @@ Neovim (CodeCompanion, avante.nvim) and Emacs (agent-shell) take the same comman
 
 What is supported: `initialize`, `session/new` (with editor-provided MCP servers over stdio, HTTP or SSE), `session/load` (resumes a saved OASIS session and replays it), `session/prompt` with text, images, file links (turned into `@path` mentions) and embedded resources, `session/cancel`, and `session/set_mode` with the modes Ask (`default`), Accept edits, Plan and Auto. OASIS streams replies as `agent_message_chunk`, reports each tool as `tool_call` / `tool_call_update` with a kind (read, edit, execute, search, fetch, ...) and file locations, turns `todo_write` into a `plan` update, and asks for approval through `session/request_permission` (Allow, Always allow when a reusable rule exists, Reject). Start in a mode with `oasis acp --permission-mode acceptEdits`. Not yet supported: editor-side file reads/writes (`fs/*`) and editor terminals; OASIS reads and writes the workspace itself.
 
+## Telegram gateway: your agent from your phone
+
+`oasis gateway telegram` connects this workspace's agent to a Telegram bot, so you can send tasks and answer approvals from your phone.
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy its token.
+2. Start the gateway once with only the token set; message the bot and it replies with your chat ID.
+3. Run it with both variables:
+
+~~~sh
+export OASIS_TELEGRAM_BOT_TOKEN=123456:ABC...
+export OASIS_TELEGRAM_ALLOWED_CHATS=123456789        # comma-separated; group IDs start with -100
+oasis -C ~/code/my-app gateway telegram
+~~~
+
+Only allowlisted chats reach the agent; any other chat just gets its ID once so you can add it. Each chat has its own session, saved like terminal sessions (so `/recall` and `oasis --resume` see them). Anything that needs approval shows **Allow / Always / Reject** buttons; unanswered approvals are rejected after 10 minutes, and buttons only work in the chat that asked. Chat commands: `/new`, `/stop`, `/status`, `/mode default|acceptEdits|plan|auto`, `/help`. The gateway long-polls Telegram (no public URL or webhook needed) and backs off on network errors. Text messages only for now; voice and files are not handled yet. Pair it with the container sandbox (`OASIS_SANDBOX=1 OASIS_SANDBOX_BACKEND=docker`) when you approve commands remotely.
+
 ## Optional OpenHands delegation
 
 OASIS can delegate a bounded task to an already-running OpenHands Agent Server. This is an optional bridge, not an OpenHands installation wizard or a replacement for OASIS's own runtime. Set the connection details in the environment used to start OASIS:
