@@ -349,9 +349,67 @@ function normalizeRelative(p, root = process.cwd()) {
   return normalized.split(path.sep).join('/').replace(/^\.\//, '').toLowerCase();
 }
 
+const SHELL_READERS = new Set(['cat', 'head', 'tail', 'less', 'more', 'bat', 'batcat', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack', 'sed', 'awk', 'gawk', 'mawk', 'cut', 'sort', 'uniq', 'wc', 'nl', 'tac', 'od', 'xxd', 'hexdump', 'strings', 'base64', 'base32', 'diff', 'cmp', 'jq', 'yq', 'source', '.', 'vi', 'vim', 'nvim', 'nano', 'emacs', 'tr', 'fold', 'paste', 'comm', 'join', 'iconv', 'sha1sum', 'sha256sum', 'sha512sum', 'md5sum', 'shasum', 'cksum', 'cp', 'scp', 'rsync', 'tar', 'zip', 'gzip', 'zcat', 'bzcat', 'xzcat', 'dd', 'curl', 'look', 'expand', 'split', 'csplit', 'pr', 'fmt', 'column']);
+const SHELL_WRITERS = new Set(['rm', 'rmdir', 'mv', 'tee', 'touch', 'truncate', 'chmod', 'chown', 'chgrp', 'ln', 'shred', 'unlink', 'mkdir', 'install', 'vi', 'vim', 'nvim', 'nano', 'emacs', 'dd', 'patch', 'rsync']);
+
+// Files a shell line reads and writes, as far as a static look can tell: the
+// arguments of well-known file commands (cat, grep, rm, mv, tee, sed -i, ...)
+// and redirection targets. Variables and globs are not expanded.
+export function shellFileTargets(line) {
+  const reads = new Set();
+  const writes = new Set();
+  const commands = splitShellCommands(String(line || '')).commands;
+  for (const piece of commands) {
+    for (const spelling of commandSpellings(piece)) {
+      const words = shellWords(spelling);
+      if (!words || !words.length) continue;
+      const base = executableBase(words[0]);
+      const operands = [];
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        const redirect = word.match(/^(\d*|&)(>>?|<|>\|)(&?)(.*)$/);
+        if (redirect) {
+          if (redirect[3]) continue;
+          const target = redirect[4] || words[++i] || '';
+          if (!target || target.startsWith('/dev/')) continue;
+          (redirect[2] === '<' ? reads : writes).add(target);
+          continue;
+        }
+        if (base === 'dd' && /^(if|of)=/.test(word)) { (word.startsWith('if=') ? reads : writes).add(word.slice(3)); continue; }
+        if (word.startsWith('-') && word !== '-') {
+          const eq = word.indexOf('=');
+          if (eq > 0 && /^--(file|output|input|in|out)/.test(word)) operands.push(word.slice(eq + 1));
+          continue;
+        }
+        operands.push(word);
+      }
+      if (SHELL_READERS.has(base)) for (const operand of operands) reads.add(operand);
+      const inPlace = (base === 'sed' || base === 'perl') && words.some((word) => /^-[a-zA-Z]*i/.test(word) || word.startsWith('--in-place'));
+      if (SHELL_WRITERS.has(base) || inPlace) for (const operand of operands) writes.add(operand);
+      if (base === 'cp' && operands.length > 1) writes.add(operands[operands.length - 1]);
+    }
+  }
+  const clean = (set) => [...set].filter((value) => value && !/^[a-z]+:\/\//i.test(value));
+  return { reads: clean(reads), writes: clean(writes) };
+}
+
 export function ruleMatches(rule, toolName, args = {}, options = {}) {
   if (!rule) return false;
   if (rule.isMcpPrefix) return toolName === rule.tools[0] || toolName.startsWith(rule.tools[0] + '_');
+  // Read(...) and Edit(...) deny/ask rules also cover shell commands that touch
+  // the same files (`cat .env`, `sed -i ... secrets/x`, `echo > secrets/x`).
+  if (options.requireEveryCommand === false && rule.specifier && !rule.tools.includes(toolName) &&
+      (toolName === 'run_shell' || toolName === 'run_command' || toolName === 'monitor')) {
+    const coversRead = rule.tools.includes('read_file');
+    const coversWrite = rule.tools.some((tool) => EDIT_TOOLS.has(tool));
+    if (!coversRead && !coversWrite) return false;
+    const line = toolName === 'run_shell' ? String(args.command || '') : commandLine(args.command, args.args);
+    if (!line.trim()) return false;
+    const targets = shellFileTargets(line);
+    const candidates = [...(coversRead ? targets.reads : []), ...(coversWrite ? targets.writes : [])];
+    const fileTool = coversRead ? 'read_file' : rule.tools.find((tool) => EDIT_TOOLS.has(tool));
+    return candidates.some((candidate) => ruleMatches(rule, fileTool, { path: candidate }, options));
+  }
   if (!rule.tools.includes(toolName)) return false;
   if (toolName === 'run_command' || toolName === 'monitor') {
     if (toolName === 'monitor' && !args.command) return false;
