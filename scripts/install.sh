@@ -207,20 +207,30 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 say "npm is ready: $(npm --version)."
- say "Resolving the latest stable OASIS release from GitHub..."
-RELEASE_INFO=$(resolve_latest_release) || exit 1
-OASIS_VERSION=$(printf '%s\n' "$RELEASE_INFO" | sed -n '1p')
-OASIS_COMMIT=$(printf '%s\n' "$RELEASE_INFO" | sed -n '2p')
-case "$OASIS_VERSION" in
-  v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) say "GitHub returned an invalid release tag. Nothing was installed."; exit 1 ;;
-esac
-case "$OASIS_COMMIT" in
-  *[!0-9a-f]*|'') say "GitHub returned an invalid release commit. Nothing was installed."; exit 1 ;;
-esac
-[ "${#OASIS_COMMIT}" -eq 40 ] || { say "GitHub returned an invalid release commit. Nothing was installed."; exit 1; }
+ if [ -n "${OASIS_INSTALL_COMMIT:-}" ]; then
+  OASIS_COMMIT=$(printf '%s' "$OASIS_INSTALL_COMMIT" | tr 'A-F' 'a-f')
+  case "$OASIS_COMMIT" in
+    *[!0-9a-f]*|'') say "OASIS_INSTALL_COMMIT must be a full 40-character Git commit SHA."; exit 1 ;;
+  esac
+  [ "${#OASIS_COMMIT}" -eq 40 ] || { say "OASIS_INSTALL_COMMIT must be a full 40-character Git commit SHA."; exit 1; }
+  OASIS_VERSION="source commit $(printf '%s' "$OASIS_COMMIT" | cut -c1-12)"
+  say "Installing the exact source commit: $OASIS_COMMIT"
+else
+  say "Resolving the latest stable OASIS release from GitHub..."
+  RELEASE_INFO=$(resolve_latest_release) || exit 1
+  OASIS_VERSION=$(printf '%s\n' "$RELEASE_INFO" | sed -n '1p')
+  OASIS_COMMIT=$(printf '%s\n' "$RELEASE_INFO" | sed -n '2p')
+  case "$OASIS_VERSION" in
+    v[0-9]*.[0-9]*.[0-9]*) ;;
+    *) say "GitHub returned an invalid release tag. Nothing was installed."; exit 1 ;;
+  esac
+  case "$OASIS_COMMIT" in
+    *[!0-9a-f]*|'') say "GitHub returned an invalid release commit. Nothing was installed."; exit 1 ;;
+  esac
+  [ "${#OASIS_COMMIT}" -eq 40 ] || { say "GitHub returned an invalid release commit. Nothing was installed."; exit 1; }
+  say "Latest stable release: $OASIS_VERSION ($OASIS_COMMIT)"
+fi
 OASIS_ARCHIVE="https://github.com/FAHTHIZ/oasis/archive/$OASIS_COMMIT.tar.gz"
-say "Latest stable release: $OASIS_VERSION ($OASIS_COMMIT)"
 say "Git is optional for this archive-based install."
 say "OASIS will be installed for your user in: $OASIS_PREFIX"
 if ask_yes_no "May I install OASIS $OASIS_VERSION in that folder using npm?"; then
