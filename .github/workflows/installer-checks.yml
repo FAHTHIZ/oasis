@@ -28,7 +28,9 @@ jobs:
           node-version: 22
       - name: Check installer syntax
         run: sh -n scripts/install.sh
-      - name: Install pinned release and run doctor
+      - name: Install exact commit under test and run doctor
+        env:
+          OASIS_INSTALL_COMMIT: ${{ github.sha }}
         run: sh scripts/install.sh --yes --skip-setup
       - name: Check installed command version
         run: "$HOME/.local/bin/oasis --version"
@@ -52,8 +54,10 @@ jobs:
       - name: Test PowerShell release fallback parsing
         shell: pwsh
         run: ./test/installer-powershell-fallback.test.ps1
-      - name: Install pinned release and run doctor
+      - name: Install exact commit under test and run doctor
         shell: pwsh
+        env:
+          OASIS_INSTALL_COMMIT: ${{ github.sha }}
         run: ./scripts/install.ps1 -Yes -SkipSetup
       - name: Check installed command version
         shell: pwsh
