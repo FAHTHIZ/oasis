@@ -269,7 +269,13 @@ export async function multiEditFile(root, args = {}, context = {}) {
   if (!info.isFile()) throw new Error('That path is not a regular file.');
   if (info.size > MAX_EDIT_FILE) throw new Error('File is larger than the 4 MiB edit limit.');
   await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
-  const original = await readFile(target.absolute, 'utf8');
+  // ACP editors: edit the open (possibly unsaved) buffer, like edit_file does.
+  const clientFs = context && context.session && context.session.clientFs;
+  let bufferText = null;
+  if (clientFs && typeof clientFs.readTextFile === 'function') {
+    try { const text = await clientFs.readTextFile(target.absolute); if (typeof text === 'string') bufferText = text; } catch {}
+  }
+  const original = bufferText !== null ? bufferText : await readFile(target.absolute, 'utf8');
   if (original.includes('\0')) throw new Error('This looks like a binary file.');
   let next = original;
   let replacements = 0;
@@ -301,6 +307,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
   if (next === original) return { path: relative, changed: false };
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
   await atomicWriteFile(target.absolute, next, 'utf8');
+  if (clientFs && typeof clientFs.writeTextFile === 'function') { try { await clientFs.writeTextFile(target.absolute, next); } catch {} }
   await recordFileState(context, target.absolute);
   const warning = combineWarnings(commentWarning(original, next, relative, context.session && context.session.commentMode), shrinkWarning(original, next, relative), testTamperWarning(original, next, relative), securityWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
   return { path: relative, changed: true, edits: args.edits.length, replacements, beforeBytes: Buffer.byteLength(original), afterBytes: Buffer.byteLength(next), backupCreated: true, ...(relaxedNotes.length ? { note: relaxedNotes.join('; ') + '.' } : {}), ...(warning ? { warning } : {}) };

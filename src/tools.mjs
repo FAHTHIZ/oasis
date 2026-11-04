@@ -462,7 +462,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (needsApproval) {
     const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') +
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
-      '\nCommands can change project files or execute project scripts. Oasis strips common secret environment variables from the child process.' +
+      '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'Oasis strips common secret environment variables from the child process.') +
       (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + sandbox.ssh.host + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk));
     if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
   }
@@ -483,6 +483,20 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     if (!options.backgroundRegistry) throw new Error('Background commands are not available in this session.');
     const launch = wrapCommand(command, args, sandbox, root);
     return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onLine: options.onLine, onExit: options.onExit, onStuck: options.onStuck, maxSeconds: options.maxSeconds, monitor: options.monitor });
+  }
+  // ACP editors with terminal support (opt-in): the command runs in the editor's own
+  // terminal so the user can watch it. Every check and approval above still applied.
+  if (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available)) {
+    const parentEnv = options.env || process.env;
+    const extraEnv = Object.entries(env).filter(([name, value]) => parentEnv[name] !== value).map(([name, value]) => ({ name, value: String(value) }));
+    try {
+      const result = await options.clientTerminal({ command, args, cwd: root, env: extraEnv, timeoutSeconds, signal: options.signal });
+      if (result) return { command, approved: true, ...result };
+    } catch (error) {
+      if (options.signal && options.signal.aborted) return { command, args, approved: true, exitCode: null, cancelled: true, stdout: '', stderr: '', message: 'Task was cancelled.' };
+      // A terminal that never started falls back to a local process; one that did start is not re-run.
+      if (error && error.started) return { command, approved: true, exitCode: null, stdout: '', stderr: String(error.message || error), error: String(error.message || error), timedOut: false, cancelled: false };
+    }
   }
   let outputLog = null;
   if (options.persistOutputLogs !== false) {
@@ -2006,7 +2020,8 @@ export async function executeTool(name, args = {}, context = {}) {
         adoptOnExit: context.session ? backgroundExitNotifier(context.session) : undefined,
         adoptOnStuck: context.session ? backgroundStuckNotifier(context.session) : undefined,
         maxSeconds: args.max_seconds,
-        injectionHold: injectionHoldReason(context.session)
+        injectionHold: injectionHoldReason(context.session),
+        clientTerminal: context.session && typeof context.session.clientTerminal === 'function' ? context.session.clientTerminal : undefined
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
       if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {

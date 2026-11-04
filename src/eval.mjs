@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfigDirectory } from './config.mjs';
 import { createSession, runAgentTurn, closeSession } from './agent.mjs';
 import { renderComparisonHtml, saveComparisonArtifact } from './eval-report.mjs';
+import { oasisVersion } from './version.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TASKS_DIR = path.join(APP_ROOT, 'evals', 'tasks');
@@ -779,9 +780,9 @@ function parseArgs(args) {
       config.routingOptionsUsed = true;
       continue;
     }
-    if (arg === '--claude-code' || arg === '--codex' || arg === '--gemini-cli') {
-      const agent = arg === '--codex' ? 'codex' : arg === '--gemini-cli' ? 'gemini' : 'claude';
-      if (config.claudeCode && config.externalAgent !== agent) throw new Error('Choose one external agent: --claude-code, --codex or --gemini-cli.');
+    if (arg === '--claude-code' || arg === '--codex' || arg === '--gemini-cli' || arg === '--opencode' || arg === '--aider') {
+      const agent = { '--codex': 'codex', '--gemini-cli': 'gemini', '--opencode': 'opencode', '--aider': 'aider' }[arg] || 'claude';
+      if (config.claudeCode && config.externalAgent !== agent) throw new Error('Choose one external agent: --claude-code, --codex, --gemini-cli, --opencode or --aider.');
       config.claudeCode = true;
       config.externalAgent = agent;
       continue;
@@ -1031,10 +1032,67 @@ export function buildGeminiArgs(config, prompt) {
   return ['-p', prompt, '--output-format', 'json', '--approval-mode', 'yolo', ...(config.model ? ['-m', config.model] : [])];
 }
 
+function humanTokens(text) {
+  const match = String(text || '').trim().match(/^([\d.,]+)\s*([km]?)$/i);
+  if (!match) return null;
+  const value = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * (match[2].toLowerCase() === 'k' ? 1000 : match[2].toLowerCase() === 'm' ? 1000000 : 1));
+}
+
+/** Parse `opencode run --format json` JSONL. Pass/fail comes from the verifier, so this only gathers stats and never throws on unknown events. */
+export function parseOpenCodeOutput(rawOutput) {
+  let inputTokens = null; let outputTokens = null; let costUSD = null; let result = ''; let isError = false; let toolCalls = 0; let model = null; let events = 0;
+  for (const line of String(rawOutput || '').split(/\r?\n/)) {
+    const text = line.trim();
+    if (!text.startsWith('{')) continue;
+    let event;
+    try { event = JSON.parse(text); } catch { continue; }
+    events++;
+    const part = event.part && typeof event.part === 'object' ? event.part : event;
+    const type = String(event.type || part.type || '');
+    if (part.tokens && typeof part.tokens === 'object') {
+      inputTokens = (inputTokens || 0) + (finiteMetric(part.tokens.input) || 0);
+      outputTokens = (outputTokens || 0) + (finiteMetric(part.tokens.output) || 0) + (finiteMetric(part.tokens.reasoning) || 0);
+    }
+    if (typeof part.cost === 'number' && Number.isFinite(part.cost)) costUSD = (costUSD || 0) + part.cost;
+    if (typeof part.modelID === 'string') model = (part.providerID ? part.providerID + '/' : '') + part.modelID;
+    if (type === 'text' && typeof part.text === 'string') result = part.text;
+    if (type === 'tool_use' || type === 'tool') toolCalls++;
+    if (type === 'error') { isError = true; result = String((event.error && (event.error.message || event.error.data && event.error.data.message)) || event.message || 'OpenCode reported an error.'); }
+  }
+  if (!events) result = String(rawOutput || '').trim().slice(-4000);
+  return { model, inputTokens, outputTokens, totalTokens: inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens, costUSD, durationMs: null, numTurns: toolCalls || null, result, isError };
+}
+
+/** Parse Aider's plain-text output: "Tokens: 4.2k sent, 310 received. Cost: $0.01 message, $0.03 session." */
+export function parseAiderOutput(rawOutput) {
+  const raw = String(rawOutput || '');
+  let inputTokens = null; let outputTokens = null; let costUSD = null;
+  for (const match of raw.matchAll(/Tokens:\s*([\d.,]+\s*[km]?)\s*sent,\s*([\d.,]+\s*[km]?)\s*received/gi)) {
+    inputTokens = (inputTokens || 0) + (humanTokens(match[1]) || 0);
+    outputTokens = (outputTokens || 0) + (humanTokens(match[2]) || 0);
+  }
+  const sessionCosts = [...raw.matchAll(/\$([\d.]+)\s*session/gi)];
+  if (sessionCosts.length) costUSD = Number(sessionCosts.at(-1)[1]);
+  const model = (raw.match(/^Main model:\s*(\S+)/m) || raw.match(/^Model:\s*(\S+)/m) || [])[1] || null;
+  return { model, inputTokens, outputTokens, totalTokens: inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens, costUSD: Number.isFinite(costUSD) ? costUSD : null, durationMs: null, numTurns: null, result: raw.trim().slice(-4000), isError: false };
+}
+
+export function buildOpenCodeArgs(config, prompt) {
+  return ['run', '--format', 'json', ...(config.model ? ['-m', config.model] : []), prompt];
+}
+
+export function buildAiderArgs(config, prompt) {
+  return ['--message', prompt, '--yes-always', '--no-auto-commits', '--no-dirty-commits', '--no-check-update', '--no-analytics', '--no-show-model-warnings', '--no-pretty', '--no-stream', ...(config.model ? ['--model', config.model] : [])];
+}
+
 export const EXTERNAL_AGENTS = {
   claude: { name: 'Claude Code', flag: '--claude-code', binEnv: 'OASIS_CLAUDE_CODE_BIN', bin: 'claude', protocol: 'claude-code-cli', tempPrefix: 'oasis-claude-eval-', buildArgs: (config, prompt) => buildClaudeCodeArgs(config, prompt), parse: (raw) => parseClaudeCodeOutput(raw), checkVersion: (v) => versionSupportsRestrictedMode(v) ? '' : 'Claude Code ' + (v || '(unknown version)') + ' is too old or unrecognized. This benchmark requires Claude Code v2.1.248 or newer for restricted mode.', install: 'Install Claude Code, ensure it is on PATH, and sign in.' },
   codex: { name: 'Codex CLI', flag: '--codex', binEnv: 'OASIS_CODEX_BIN', bin: 'codex', protocol: 'codex-cli', tempPrefix: 'oasis-codex-eval-', buildArgs: buildCodexArgs, parse: parseCodexOutput, checkVersion: () => '', install: 'Install the Codex CLI (npm i -g @openai/codex), ensure it is on PATH, and sign in.' },
-  gemini: { name: 'Gemini CLI', flag: '--gemini-cli', binEnv: 'OASIS_GEMINI_CLI_BIN', bin: 'gemini', protocol: 'gemini-cli', tempPrefix: 'oasis-gemini-eval-', buildArgs: buildGeminiArgs, parse: parseGeminiOutput, checkVersion: () => '', install: 'Install Gemini CLI (npm i -g @google/gemini-cli), ensure it is on PATH, and sign in.' }
+  gemini: { name: 'Gemini CLI', flag: '--gemini-cli', binEnv: 'OASIS_GEMINI_CLI_BIN', bin: 'gemini', protocol: 'gemini-cli', tempPrefix: 'oasis-gemini-eval-', buildArgs: buildGeminiArgs, parse: parseGeminiOutput, checkVersion: () => '', install: 'Install Gemini CLI (npm i -g @google/gemini-cli), ensure it is on PATH, and sign in.' },
+  opencode: { name: 'OpenCode', flag: '--opencode', binEnv: 'OASIS_OPENCODE_BIN', bin: 'opencode', protocol: 'opencode-cli', tempPrefix: 'oasis-opencode-eval-', buildArgs: buildOpenCodeArgs, parse: parseOpenCodeOutput, checkVersion: () => '', install: 'Install OpenCode (npm i -g opencode-ai), ensure it is on PATH, and configure a provider.' },
+  aider: { name: 'Aider', flag: '--aider', binEnv: 'OASIS_AIDER_BIN', bin: 'aider', protocol: 'aider-cli', tempPrefix: 'oasis-aider-eval-', buildArgs: buildAiderArgs, parse: parseAiderOutput, checkVersion: () => '', install: 'Install Aider (python -m pip install aider-install && aider-install), ensure it is on PATH, and configure a model key.' }
 };
 
 function versionSupportsRestrictedMode(versionText) {
@@ -1219,7 +1277,7 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli | --opencode | --aider [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
@@ -1399,6 +1457,7 @@ export async function runEvalCommand(args = [], options = {}) {
     ? Math.round((totalCostUSD / passedCount) * 1000000) / 1000000
     : null;
   const summary = {
+    label: 'OASIS ' + oasisVersion() + ' (' + provider.model + ')',
     sourceRevision: await detectSourceRevision(env),
     runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt, completedAt: new Date().toISOString(),

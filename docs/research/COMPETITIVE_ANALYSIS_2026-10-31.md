@@ -258,7 +258,7 @@ The evaluation manifest now has 50 tasks. Since the November 2 update, these gap
 | Container isolation on any OS (Codex, Hermes) | `"backend": "docker"` or `"podman"` runs each command in a throwaway container with only the workspace mounted, no capabilities and no network unless allowed. This is also the Windows isolation path. Unit-tested only; not yet run against a live engine in CI. |
 | Remote execution (Claude Code desktop SSH, Hermes) | `"backend": "ssh"` or `/sandbox ssh HOST [DIR]` runs commands on another machine, copying the workspace with `rsync` before each command and changed files back afterwards. |
 | Messaging gateways (Hermes) | `oasis gateway telegram`, `discord` and `slack`: one session per chat, approval buttons, allow-lists, and incoming photos and files (saved to `.oasis/inbox/`, photos shown to the model). |
-| Editor protocol (Zed, JetBrains and Neovim agents through ACP) | `oasis acp` with session load, modes, permission requests, inline diffs and editor `fs/*` buffer reads and writes. Editor terminals (`terminal/*`) are not used yet. |
+| Editor protocol (Zed, JetBrains and Neovim agents through ACP) | `oasis acp` with session load, modes, permission requests, inline diffs and editor `fs/*` buffer reads and writes. Opt-in editor terminals (`terminal/*`) with `--editor-terminal`. |
 | Cross-session search (Hermes `session_search`) | `/recall` and the `session_search` tool. |
 | Programmatic tool calling (Hermes `execute_code`, Claude code mode) | `execute_code` runs a short script that calls OASIS tools in one step. |
 | Key pools (Hermes credential pools) | Several API keys per provider, rotated on rate limits. |
@@ -271,5 +271,5 @@ The evaluation manifest now has 50 tasks. Since the November 2 update, these gap
 | Diagrams in the terminal | Mermaid flowcharts and sequence diagrams in replies are drawn as text in the terminal. |
 | Importers | Settings, MCP servers, rules and skills import from more tools. |
 
-Still open: published head-to-head results on the same model, a live-engine container test in CI, ACP editor terminals, hosted cloud sessions, a published `v1.0.0` release, and signed installers.
+Still open: published head-to-head results on the same model, a live-engine container test in CI, hosted cloud sessions, a published `v1.0.0` release, and signed installers.
 

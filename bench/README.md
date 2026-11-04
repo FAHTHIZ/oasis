@@ -23,3 +23,8 @@ node bench/harness/run.mjs --check            # CI gate (part of npm run check)
 | `results/harness-latest.json` | Current scores on all sets |
 
 Once a held-out miss is fixed, that set is tuned. Publish the first untuned score as the generalization number, and write a new held-out set before claiming generalization again.
+
+## Live head-to-head benchmark
+
+`npm run bench:live -- --yes` runs OASIS and every installed coding agent (Claude Code, Codex CLI, Gemini CLI, OpenCode, Aider) on the `evals/tasks/` suite, scores each with the same hidden verifiers, and writes `results/live-YYYY-MM-DD/SUMMARY.md` with the per-agent JSON reports. Add `--router http://localhost:20128/v1 --model MODEL` to run every agent on the same model through one gateway; the key comes from `OASIS_BENCH_API_KEY` and is never saved. `npm run bench:live -- --help` lists all options, and [Head-to-head in one command](../docs/BENCHMARKS.md#head-to-head-in-one-command) explains the fairness rules.
+
