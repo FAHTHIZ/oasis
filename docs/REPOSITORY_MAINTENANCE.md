@@ -135,7 +135,7 @@ The intended public identity is:
 - Product name: **OASIS**
 - Primary tagline: **Code. Automate. Flourish.**
 - Description: Open-source, local-first agentic development workspace for coding, automation, agent orchestration, and verification.
-- Current package version: `1.0.0` (stable channel; not yet published as a GitHub Release).
+- Current package version: `1.0.0` (stable channel; published as the `v1.0.0` GitHub Release on November 4, 2026 from commit `1417117`).
 - Lifecycle: Stable channel.
 - Previous release: `v0.4.0` (historical Beta; tag and release no longer present).
 - License: Apache-2.0.

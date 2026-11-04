@@ -92,3 +92,11 @@ test('desktop release requires an explicit stable publication dispatch and same-
   assert.match(notes, /unsigned/i);
   assert.match(notes, /SHA256SUMS/);
 });
+
+test('quality runs the live Docker sandbox isolation test and requires a real engine', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/quality.yml', import.meta.url), 'utf8');
+  const job = workflow.slice(workflow.indexOf('  docker-sandbox:'), workflow.indexOf('  browser-e2e:'));
+  assert.ok(job.includes('runs-on: ubuntu-latest'));
+  assert.ok(job.includes("OASIS_REQUIRE_DOCKER: '1'"), 'a missing engine must fail the job, not skip it');
+  assert.ok(job.includes('node --test test/sandbox-docker-live.test.mjs'));
+});
