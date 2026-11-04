@@ -126,7 +126,7 @@ assert.ok(interfaceCss.includes('body.sidebar-open::after'), 'Phone navigation m
 assert.ok(interfaceCss.includes('.sidebar-new-chat'), 'The left sidebar must expose the New chat action.');
 
 
-assert.match(interfaceCss, /\.agent-message\.activity\{[^}]*font:12\.5px/);
+assert.match(interfaceCss, /\.agent-message\.activity\{[^}]*font:13px\/1\.55 var\(--font-ui\)/, "Activity lines must use the readable UI font, not monospace.");
 assert.ok(contrastRatio(palette['accent-ink'], palette.accent) >= 4.5, 'Lime actions must keep readable ink.');
 assert.ok(serviceWorker.includes("'./assets/oasis-interface.css'"), 'The visual-system stylesheet must be available offline.');
 for (const marker of required) {
