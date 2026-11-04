@@ -213,7 +213,16 @@ export class Browser {
   }
   /** Attach to a Chrome you started with --remote-debugging-port. */
   static async attach(port) { await getJson(port, '/json/version'); return new Browser({ port }); }
-  async pages() { return (await getJson(this.port, '/json/list')).filter((t) => t.type === 'page'); }
+  // While Chrome is still starting, /json/list can answer with an error object instead of
+  // the target list; retry briefly rather than failing the whole browser tool call.
+  async pages() {
+    for (let attempt = 0; ; attempt++) {
+      const list = await getJson(this.port, '/json/list');
+      if (Array.isArray(list)) return list.filter((t) => t && t.type === 'page');
+      if (attempt >= 20) throw new Error('Chrome DevTools did not return a target list.');
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
   async newPage(url = 'about:blank') {
     let target;
     try { target = await getJson(this.port, '/json/new?' + encodeURIComponent(url), 'PUT'); }
