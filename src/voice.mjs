@@ -135,7 +135,7 @@ export async function transcribe(file, options = {}) {
 }
 
 // Formats browsers record (MediaRecorder) and OpenAI-compatible endpoints accept.
-export const AUDIO_TYPES = new Map([['audio/wav', 'wav'], ['audio/x-wav', 'wav'], ['audio/webm', 'webm'], ['audio/ogg', 'ogg'], ['audio/mp4', 'mp4'], ['audio/mpeg', 'mp3'], ['audio/x-m4a', 'm4a']]);
+export const AUDIO_TYPES = new Map([['audio/wav', 'wav'], ['audio/x-wav', 'wav'], ['audio/webm', 'webm'], ['audio/ogg', 'ogg'], ['audio/mp4', 'mp4'], ['audio/mpeg', 'mp3'], ['audio/x-m4a', 'm4a'], ['audio/flac', 'flac'], ['audio/x-flac', 'flac']]);
 
 export function transcriptionReady(settings = {}, env = process.env) {
   try {
