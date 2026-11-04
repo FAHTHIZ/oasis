@@ -310,6 +310,9 @@ export async function loadSettings(root, options = {}) {
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;
       if (typeof settings.sandbox.writableCaches === 'boolean') result.sandbox.writableCaches = settings.sandbox.writableCaches;
+      // Turning the protection off is only taken from your own settings, --settings or policy;
+      // a repository's settings cannot unlock writes to its own hooks and config.
+      if (typeof settings.sandbox.protectProjectConfig === 'boolean' && (settings.sandbox.protectProjectConfig || ['user', 'flag', 'managed'].includes(scope))) result.sandbox.protectProjectConfig = settings.sandbox.protectProjectConfig;
       if (['os', 'docker', 'podman', 'ssh'].includes(settings.sandbox.backend)) result.sandbox.backend = settings.sandbox.backend;
       if (settings.sandbox.ssh && typeof settings.sandbox.ssh === 'object' && !Array.isArray(settings.sandbox.ssh)) result.sandbox.ssh = { ...(result.sandbox.ssh || {}), ...settings.sandbox.ssh };
       if (typeof settings.sandbox.image === 'string' && /^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(settings.sandbox.image)) result.sandbox.image = settings.sandbox.image;
@@ -326,6 +329,8 @@ export async function loadSettings(root, options = {}) {
     for (const key of ['executeCode', 'sessionSearch']) if (settings[key] === true) result[key] = true;
     // "autoCommit": true commits each turn's changed files (documented; previously dropped here).
     if (typeof settings.autoCommit === 'boolean') result.autoCommit = settings.autoCommit;
+    // Minutes a background run waits for `oasis bg approve|deny` before denying (1 to 1440).
+    if (Number.isFinite(settings.backgroundApprovalTimeoutMinutes) && settings.backgroundApprovalTimeoutMinutes >= 1) result.backgroundApprovalTimeoutMinutes = Math.min(1440, settings.backgroundApprovalTimeoutMinutes);
     // "imageGeneration": { "model", "baseUrl", "size" } for the generate_image tool (the key itself comes from the environment).
     if (settings.imageGeneration && typeof settings.imageGeneration === 'object' && !Array.isArray(settings.imageGeneration)) {
       const image = {};

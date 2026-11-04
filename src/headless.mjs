@@ -235,6 +235,21 @@ export async function runHeadless(options) {
           emit({ type: 'system', subtype: 'permission', tool: meta && meta.tool || null, allowed });
           if (allowed) return true;
         }
+        // A detached background run (oasis --bg) waits for `oasis bg approve|deny ID`.
+        if (!canUseTool && !permissionPromptTool && env.OASIS_BACKGROUND_ID && env.OASIS_BACKGROUND_APPROVALS !== '0') {
+          const { requestBackgroundApproval } = await import('./background-sessions.mjs');
+          const timeoutMs = Number(env.OASIS_BACKGROUND_APPROVAL_TIMEOUT_MS) || Number(session && session.settings && session.settings.backgroundApprovalTimeoutMinutes) * 60000 || undefined;
+          const answer = await requestBackgroundApproval(env.OASIS_BACKGROUND_ID, { tool: meta && meta.tool || null, message: String(message), canAlways: Boolean(meta && meta.suggestion) }, env, {
+            timeoutMs,
+            signal,
+            onRequest: (pending) => emit({ type: 'system', subtype: 'permission_request', tool: pending.tool, message: pending.message.slice(0, 300), expires_at: pending.expiresAt }),
+          }).catch(() => 'deny');
+          const allowed = answer === 'allow' || answer === 'always';
+          emit({ type: 'system', subtype: 'permission', tool: meta && meta.tool || null, allowed, via: 'background', ...(answer === 'timeout' ? { timed_out: true } : {}) });
+          if (allowed) return answer === 'always' ? 'always' : true;
+          denied.push({ tool_name: meta && meta.tool || null, detail: (answer === 'timeout' ? 'No answer before the approval timeout. ' : 'Denied with oasis bg deny. ') + String(message).replace(/\s+/g, ' ').trim().slice(0, 260) });
+          return false;
+        }
         denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
         return false;
       },
