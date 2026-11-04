@@ -224,6 +224,26 @@ Reload the editor, then run `oasis` in its integrated terminal or press Ctrl/Cmd
 
 The bridge listens only on 127.0.0.1, requires a random bearer token stored in a 0600 lock file under the OASIS config directory (`ide/<port>.lock`), and rejects browser origins. Set `OASIS_IDE=off` to never connect.
 
+## Zed, JetBrains, Neovim and other ACP editors
+
+`oasis acp` runs OASIS as an [Agent Client Protocol](https://agentclientprotocol.com) agent: newline-delimited JSON-RPC on stdin/stdout, the same protocol Zed and JetBrains use for external agents. The editor starts the process; OASIS uses your normal provider setup (run `oasis setup` once in a terminal first), settings, skills, memory and hooks.
+
+Zed (`settings.json`):
+
+~~~json
+{ "agent_servers": { "OASIS": { "command": "oasis", "args": ["acp"] } } }
+~~~
+
+JetBrains IDEs (AI Assistant → Add custom agent, or `~/.jetbrains/acp.json`):
+
+~~~json
+{ "agent_servers": { "OASIS": { "command": "oasis", "args": ["acp"] } } }
+~~~
+
+Neovim (CodeCompanion, avante.nvim) and Emacs (agent-shell) take the same command and arguments in their ACP adapter settings.
+
+What is supported: `initialize`, `session/new` (with editor-provided MCP servers over stdio, HTTP or SSE), `session/load` (resumes a saved OASIS session and replays it), `session/prompt` with text, images, file links (turned into `@path` mentions) and embedded resources, `session/cancel`, and `session/set_mode` with the modes Ask (`default`), Accept edits, Plan and Auto. OASIS streams replies as `agent_message_chunk`, reports each tool as `tool_call` / `tool_call_update` with a kind (read, edit, execute, search, fetch, ...) and file locations, turns `todo_write` into a `plan` update, and asks for approval through `session/request_permission` (Allow, Always allow when a reusable rule exists, Reject). Start in a mode with `oasis acp --permission-mode acceptEdits`. Not yet supported: editor-side file reads/writes (`fs/*`) and editor terminals; OASIS reads and writes the workspace itself.
+
 ## Optional OpenHands delegation
 
 OASIS can delegate a bounded task to an already-running OpenHands Agent Server. This is an optional bridge, not an OpenHands installation wizard or a replacement for OASIS's own runtime. Set the connection details in the environment used to start OASIS:
