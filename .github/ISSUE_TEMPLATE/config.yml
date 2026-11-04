@@ -3,6 +3,9 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/FAHTHIZ/oasis/security/advisories/new
     about: Report vulnerabilities privately. Please do not open a public issue for them.
+  - name: Ask the community
+    url: https://github.com/FAHTHIZ/oasis/discussions
+    about: Questions, ideas and show-and-tell in GitHub Discussions.
   - name: Read the user guide
     url: https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md
     about: Commands, settings, providers and troubleshooting (try `oasis doctor` first).
