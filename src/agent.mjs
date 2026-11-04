@@ -1293,7 +1293,44 @@ export function applyEffort(config = {}, level, base = {}) {
   const [reasoningEffort, thinkingBudget] = chosen || [base.reasoningEffort, base.thinkingBudget];
   if (reasoningEffort) next.reasoningEffort = reasoningEffort; else delete next.reasoningEffort;
   if (thinkingBudget) next.thinkingBudget = thinkingBudget; else delete next.thinkingBudget;
+  // Claude models with adaptive thinking take the level itself (output_config.effort).
+  const effortLevel = chosen ? level : base.effortLevel;
+  if (effortLevel) next.effortLevel = effortLevel; else delete next.effortLevel;
   return next;
+}
+
+// How a Claude model takes thinking settings (platform.claude.com, thinking docs):
+//   'budget'        thinking: { type: 'enabled', budget_tokens } (Claude 4.5 and
+//                   earlier, and Anthropic-compatible non-Claude models);
+//   'adaptive'      Claude 4.6: thinking: { type: 'adaptive' } + output_config.effort
+//                   (budget_tokens still works but is deprecated);
+//   'adaptive-only' Claude 4.7 and later (Opus 5/5.5, Sonnet 5/5.5, Fable, Mythos,
+//                   Haiku 5.5): budget_tokens and forced tool_choice return 400.
+export function claudeThinkingMode(model) {
+  const id = String(model || '').toLowerCase();
+  if (!/claude|\b(?:opus|sonnet|haiku|fable|mythos)\b/.test(id)) return 'budget';
+  if (/fable|mythos/.test(id)) return 'adaptive-only';
+  if (/claude-(?:instant|2|3)(?:[-.]|$)/.test(id)) return 'budget';
+  const match = id.match(/(opus|sonnet|haiku)-(\d+)(?:[-.](\d{1,2})(?!\d))?/);
+  if (!match) return 'budget';
+  const version = Number(match[2]) + (match[3] ? Number(match[3]) / 10 : 0);
+  if (version >= 4.7) return 'adaptive-only';
+  if (version >= 4.6) return 'adaptive';
+  return 'budget';
+}
+
+const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+// Maps /effort and think-keyword budgets onto Claude effort levels. Keywords only
+// raise effort (a plain "think" never lowers a model's default); `xhigh` exists
+// from Claude 4.7 on, so 4.6 gets `high` instead.
+export function claudeEffortFor(model, { level = '', budget = 0 } = {}) {
+  const mode = claudeThinkingMode(model);
+  if (mode === 'budget') return '';
+  const fromBudget = budget >= 63999 ? 'max' : budget >= 31999 ? 'xhigh' : budget >= 10000 ? 'high' : '';
+  const explicit = CLAUDE_EFFORTS.includes(String(level)) ? String(level) : '';
+  let effort = CLAUDE_EFFORTS.indexOf(fromBudget) > CLAUDE_EFFORTS.indexOf(explicit) ? fromBudget : explicit;
+  if (effort === 'xhigh' && mode !== 'adaptive-only') effort = 'high';
+  return effort;
 }
 
 // OpenAI reasoning models (o-series, gpt-5): the same think keywords map to
@@ -1301,7 +1338,8 @@ export function applyEffort(config = {}, level, base = {}) {
 // because other chat-completions providers reject the field.
 export function reasoningEffortFor(prompt, config = {}, env = process.env) {
   if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return '';
-  const valid = ['minimal', 'low', 'medium', 'high'];
+  // none/xhigh exist on newer OpenAI reasoning models; they are only sent when configured.
+  const valid = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
   const configured = String(env.OASIS_REASONING_EFFORT || config.reasoningEffort || '').toLowerCase();
   const explicit = valid.includes(configured);
   if (!explicit && !/^(?:[\w.-]+\/)?(?:o\d|gpt-5)/i.test(String(config.model || ''))) return '';
@@ -2030,7 +2068,10 @@ async function requestCompletionRaw(session, options = {}) {
   let outputLimit = 0;
   if (nativeAnthropic) {
     endpoint = cloudAnthropic ? cloudEndpoint(config, providerEnv, typeof options.onDelta === 'function' && cloudStreams(config.protocol)) : anthropicEndpoint(config.baseURL);
-    const converted = toAnthropicRequest(session.messages, { thinking: Boolean(session.thinkingBudget) && !options.forceTool });
+    const thinkingMode = claudeThinkingMode(config.model);
+    const adaptive = thinkingMode !== 'budget';
+    // Adaptive models return signed thinking blocks on their own; they must be replayed in tool loops.
+    const converted = toAnthropicRequest(session.messages, { thinking: adaptive || (Boolean(session.thinkingBudget) && !options.forceTool) });
     const cache = promptCachingEnabled(config, options.env || process.env);
     const anthropicTools = availableTools.map((tool) => ({
       name: tool.function.name,
@@ -2041,14 +2082,20 @@ async function requestCompletionRaw(session, options = {}) {
     const cappedThinking = options.forceTool ? 0 : Math.min(Number(session.thinkingBudget || 0), session.outputTokenCap ? Math.max(0, session.outputTokenCap - 2048) : Infinity);
     const thinkingBudget = cappedThinking >= 1024 ? cappedThinking : 0;
     outputLimit = session.outputTokenCap || maxOutputTokensFor(config, providerEnv);
+    const effort = adaptive && !options.forceTool ? claudeEffortFor(config.model, { level: session.effortLevel, budget: thinkingBudget }) : '';
+    let thinkingFields = {};
+    if (!adaptive && thinkingBudget) thinkingFields = { thinking: { type: 'enabled', budget_tokens: thinkingBudget } };
+    else if (adaptive && (thinkingBudget || effort)) thinkingFields = { thinking: { type: 'adaptive' }, ...(effort ? { output_config: { effort } } : {}) };
+    // Claude 4.7+ rejects forced tool_choice (thinking is on); the probe prompt asks for the call instead.
+    const forcedChoice = options.forceTool && thinkingMode !== 'adaptive-only' ? { type: 'tool', name: options.forceTool } : { type: 'auto' };
     bodyObject = {
       model: config.model,
       max_tokens: session.outputTokenCap ? outputLimit : outputLimit + thinkingBudget,
-      ...(thinkingBudget ? { thinking: { type: 'enabled', budget_tokens: thinkingBudget } } : {}),
+      ...thinkingFields,
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       system: converted.system,
       messages: converted.messages,
-      ...(availableTools.length ? { tools: anthropicTools, tool_choice: options.forceTool ? { type: 'tool', name: options.forceTool } : { type: 'auto' } } : {}),
+      ...(availableTools.length ? { tools: anthropicTools, tool_choice: forcedChoice } : {}),
       ...(fastRequest ? { speed: 'fast' } : {})
     };
     if (cloudAnthropic) bodyObject = cloudBody(config.protocol, bodyObject);
@@ -4489,19 +4536,36 @@ function throwIfCancelled(signal) {
   }
 }
 
+const TODO_CHECKLIST_HEADER = 'Current task checklist (authoritative; update with todo_write):';
+const TODO_REMINDER_MARK = '<system-reminder>\n' + TODO_CHECKLIST_HEADER;
+
+// Keeps the system message byte-stable and delivers the checklist as a
+// reminder message instead. Rewriting messages[0] on every todo_write change
+// invalidated the provider's prompt cache for the whole conversation, so each
+// checklist update re-billed the full prompt at the uncached input price.
 function refreshTodoPrompt(session) {
   if (!session || !Array.isArray(session.messages) || !session.messages[0] ||
       session.messages[0].role !== 'system') return;
-  const base = typeof session.baseSystemPrompt === 'string'
+  let base = typeof session.baseSystemPrompt === 'string'
     ? session.baseSystemPrompt
     : String(session.messages[0].content || '');
+  // Sessions saved by older versions carry the checklist inside the system prompt.
+  const legacy = base.indexOf('\n\n' + TODO_CHECKLIST_HEADER);
+  if (legacy >= 0) base = base.slice(0, legacy);
   session.baseSystemPrompt = base;
+  if (session.messages[0].content !== base) session.messages[0].content = base;
   const todos = Array.isArray(session.todos) ? session.todos : [];
-  const checklist = todos.length
-    ? '\n\nCurrent task checklist (authoritative; update with todo_write):\n' +
-      todos.map((item, index) => (index + 1) + '. [' + item.status + '] ' + item.content).join('\n')
-    : '';
-  session.messages[0].content = base + checklist;
+  const checklist = todos.map((item, index) => (index + 1) + '. [' + item.status + '] ' + item.content).join('\n');
+  // The newest reminder (or todo_write result) already shows this exact list.
+  let latest = null;
+  for (let index = session.messages.length - 1; index > 0; index--) {
+    const message = session.messages[index];
+    if (message && typeof message.content === 'string' && message.content.startsWith(TODO_REMINDER_MARK)) { latest = message.content; break; }
+  }
+  const body = TODO_REMINDER_MARK + '\n' + (checklist || '(empty: no open steps)') + '\n</system-reminder>';
+  if (latest === body) return;
+  if (!todos.length && latest === null) return;
+  session.messages.push({ role: 'user', content: body });
 }
 
 export async function runAgentTurn(session, prompt, options = {}) {
@@ -4746,7 +4810,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   }
   const turnConfig = inlineEffort ? applyEffort(session.config, inlineEffort) : session.config;
   session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, turnConfig, options.env || process.env) : 0;
-  if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
+  session.effortLevel = isAnthropicFamily(session.config.protocol) && !['0', 'off', 'false'].includes(String((options.env || process.env).OASIS_THINKING || '').toLowerCase()) ? (turnConfig.effortLevel || '') : '';
+  const claudeEffort = isAnthropicFamily(session.config.protocol) ? claudeEffortFor(resolveModelAlias(session.config.model, { protocol: session.config.protocol, env: options.env || process.env }), { level: session.effortLevel, budget: session.thinkingBudget }) : '';
+  if (claudeEffort) { if (typeof options.onReasoningEffort === 'function') options.onReasoningEffort(claudeEffort); }
+  else if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
   session.reasoningEffort = isAnthropicFamily(session.config.protocol) ? '' : reasoningEffortFor(request, turnConfig, options.env || process.env);
   if (session.reasoningEffort && typeof options.onReasoningEffort === 'function') options.onReasoningEffort(session.reasoningEffort);
   const activeRequestIndex = session.messages.length;
@@ -5518,7 +5585,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
 
 
 // Exported for tests of provider message conversion.
-export { toAnthropicRequest, toResponsesRequest };
+export { toAnthropicRequest, toResponsesRequest, requestCompletion };
 
 // Ask the model about the current session without tools and without changing history.
 // Used by /btw, /recap and /goal evaluation.
