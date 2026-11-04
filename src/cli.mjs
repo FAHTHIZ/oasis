@@ -716,7 +716,7 @@ async function doctor(args = [], root = process.cwd()) {
     : 'run oasis in a project folder, or oasis web --open for the browser workspace.';
   stdout.write('\nNext step: ' + nextStep + '\n\n');
   stdout.write(details.join(''));
-  await doctorWorkspaceReport(root);
+  await doctorWorkspaceReport(root, { modelConfigured, nodeOK });
 }
 
 // Workspace-level checks: tools Oasis relies on, settings/trust, sandbox, MCP,
@@ -813,7 +813,7 @@ async function doctorLocalServer(config, write = (line) => stdout.write(line)) {
   }
 }
 
-async function doctorWorkspaceReport(root) {
+async function doctorWorkspaceReport(root, status = {}) {
   const problems = [];
   stdout.write('\nTools\n');
   const rg = commandAvailable('rg');
@@ -855,7 +855,8 @@ async function doctorWorkspaceReport(root) {
   ]);
   stdout.write('  Custom commands: ' + commands.size + '; agents: ' + Object.keys(agents).length + '; output styles: ' + Object.keys(styles).length + '\n');
   if (!commandAvailable('git')) problems.push('git is not installed; checkpoints still work, but git context and /review do not.');
-  stdout.write('\n' + (problems.length ? 'Problems found:\n' + problems.map((item) => '  - ' + item).join('\n') : 'No problems found.') + '\n');
+  const pending = status.nodeOK === false ? 'Install Node.js 22 or newer to finish.' : status.modelConfigured === false ? 'One step left: run oasis setup to connect a model.' : '';
+  stdout.write('\n' + (problems.length ? 'Problems found:\n' + problems.map((item) => '  - ' + item).join('\n') : (pending ? 'No other problems found. ' + pending : 'No problems found.')) + '\n');
 }
 
 function scrubChildEnvironment() {
