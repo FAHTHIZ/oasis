@@ -197,14 +197,14 @@ Project proposals stay with one workspace; user-scope proposals are reserved for
 
 | Area | Included |
 |---|---|
-| **Agent runtime** | Multi-step tool loop, planning, codebase map, edits, verification gate, completion reports, fallback model, budget limits. |
+| **Agent runtime** | Multi-step tool loop, planning, codebase map, edits, verification gate, completion reports, fallback model, budget limits, programmatic tool calling (`execute_code`), API key pools that rotate on rate limits. |
 | **Workspace** | File search, read, write and edit; Git tools; snapshots, backups, diffs, checkpoints and rewind; isolated worktrees. |
-| **Safety** | Permission modes and rules, shell-risk analysis, protected paths, secret shield, bounded output, process cleanup, optional OS sandbox on Linux and macOS. |
+| **Safety** | Permission modes and rules, shell-risk analysis, protected paths, secret shield, bounded output, process cleanup, optional OS sandbox on Linux and macOS, or a Docker/Podman container sandbox on any OS. |
 | **Verification** | Project checks, diagnostics and language servers, diff review, weakened-test and placeholder detection, auto-test, claim checks. |
-| **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, memory, compaction with must-keep context, rule refresh. |
+| **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, memory, compaction with must-keep context, rule refresh, cross-session search (`/recall`, `session_search`). |
 | **Learning** | Verified-work skill proposals, user/project scope, review-before-promotion, secret screening, and collision-safe portable skill creation. |
-| **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows. |
-| **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, GitHub Action, VS Code / Cursor / Windsurf bridge, a [Telegram gateway](docs/USER_GUIDE.md#telegram-gateway-your-agent-from-your-phone) (`oasis gateway telegram`), and an [Agent Client Protocol](docs/USER_GUIDE.md#zed-jetbrains-neovim-and-other-acp-editors) server (`oasis acp`) for Zed, JetBrains, Neovim and Emacs. |
+| **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows, `oasis batch` runs with ShareGPT/OpenAI trajectory export, and `oasis plugin eval` for scoring plugins and skills against a baseline. |
+| **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, GitHub Action, VS Code / Cursor / Windsurf bridge, [Telegram, Discord and Slack gateways](docs/USER_GUIDE.md#telegram-gateway-your-agent-from-your-phone) (`oasis gateway telegram`, `discord`, `slack`), and an [Agent Client Protocol](docs/USER_GUIDE.md#zed-jetbrains-neovim-and-other-acp-editors) server (`oasis acp`) for Zed, JetBrains, Neovim and Emacs. |
 | **Surfaces** | Terminal CLI, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. |
 | **Accessibility** | Screen-reader mode (`--ax-screen-reader`), reduced motion, `NO_COLOR`, colorblind-friendly and light themes, `--calm` output. |
 
