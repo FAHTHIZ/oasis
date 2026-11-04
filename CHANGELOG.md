@@ -6,6 +6,8 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- Clearer "no model configured" errors: `oasis -p` lists the three ways to connect a model (`oasis setup`, `oasis web --open`, environment variables) with a link to the install guide, and the browser workspace points to Connections, Model provider instead of only the terminal.
+- Workspace polish: the compact New chat button shows a single plus icon, first-run cards and external links use SVG arrows instead of text glyphs, and a stray hidden input no longer adds a few pixels of page scroll.
 - Install in one line: `curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh` uses the installer from the immutable `v1.0.0` tag. The checksum-verified bootstrap is still documented.
 - `oasis --help` is now one grouped screen (Start, Set up and check, Extend, Safety, More). `oasis help all` prints the full reference. `--version` and the banners say OASIS.
 - First run in the terminal: an invalid choice asks again instead of skipping setup, and `quit` or `/exit` skip it. The startup banner says the model is not set up yet instead of showing a default model that is not connected.
