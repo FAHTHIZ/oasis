@@ -144,9 +144,9 @@
   </div>
 </details>
   <div class="agent-workspace-toolbar" aria-label="Agent workspace panels">
-    <div class="agent-workspace-tabs" role="tablist" aria-label="Chat or terminal">
+    <div class="agent-workspace-tabs" role="tablist" aria-label="Chat or tools">
       <button class="agent-workspace-tab" id="agentChatTab" type="button" role="tab" aria-selected="true" aria-controls="agentChatColumn">Chat</button>
-      <button class="agent-workspace-tab" id="agentTerminalTab" type="button" role="tab" aria-selected="false" aria-controls="agentTerminalColumn">Terminal</button>
+      <button class="agent-workspace-tab" id="agentTerminalTab" type="button" role="tab" aria-selected="false" aria-controls="agentTerminalColumn" title="Terminal, changes and tasks">Tools</button>
     </div>
     <button class="btn btn-secondary agent-terminal-toggle" id="agentTerminalToggle" type="button" aria-controls="agentTerminalColumn" aria-expanded="true">Hide terminal</button>
   </div>
@@ -245,7 +245,7 @@
   </div>
 <div class="agent-utility-view" id="agentChangesUtilityPanel" tabindex="0" role="tabpanel" aria-labelledby="agentChangesUtilityTab" hidden>
   <div class="panel github-panel cloud-changes-panel">
-    <div class="agent-chat-header"><span><strong>Changes</strong> · review before keeping</span><button class="btn btn-secondary" id="cloudRunTasksBackBtn" type="button"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg> All tasks</button></div>
+    <div class="agent-chat-header"><span><strong>Changes</strong> · review before keeping</span><button class="btn btn-secondary" id="cloudRunTasksBackBtn" type="button" hidden><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg> All tasks</button></div>
     <div class="panel-pad">
       <section class="ws-changes" id="wsChanges" aria-labelledby="wsChangesTitle">
         <div class="ws-changes-head"><div class="ws-changes-title"><strong id="wsChangesTitle">Working tree</strong><span id="wsChangesSummary">Connect the runtime to see uncommitted changes.</span></div><button class="btn btn-secondary btn-sm" id="wsChangesRefresh" type="button">Refresh</button></div>
@@ -983,7 +983,7 @@ document.getElementById('cloudRunMergeBtn').addEventListener('click',async funct
 });
 document.getElementById('cloudRunDiffClose').addEventListener('click',function(){document.getElementById('cloudRunDiffDetail').hidden=true});
 document.getElementById('cloudRunDetailClose').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true;var empty=document.getElementById('cloudRunChangesEmpty');if(empty){empty.hidden=false;empty.textContent='Choose a run in Tasks to inspect its activity and review isolated changes.'}});
-document.getElementById('cloudRunTasksBackBtn').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true;var empty=document.getElementById('cloudRunChangesEmpty');if(empty)empty.hidden=false;if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('tasks')});
+(function(){var back=document.getElementById('cloudRunTasksBackBtn'),detail=document.getElementById('cloudRunDetail');if(!back||!detail)return;function sync(){back.hidden=detail.hidden}sync();new MutationObserver(sync).observe(detail,{attributes:true,attributeFilter:['hidden']})})();document.getElementById('cloudRunTasksBackBtn').addEventListener('click',function(){document.getElementById('cloudRunDetail').hidden=true;var empty=document.getElementById('cloudRunChangesEmpty');if(empty)empty.hidden=false;if(window.oasisAgentSetUtilityPanel)window.oasisAgentSetUtilityPanel('tasks')});
 
 function agentScroll(){var el=document.getElementById('agentMessages');el.scrollTop=el.scrollHeight}
 function agentAppendMessage(role,text,jobId){var empty=document.getElementById('agentEmptyState');if(empty)empty.remove();var el=document.createElement('div');el.className='agent-message '+role;el.textContent=text||'';if(jobId)el.dataset.jobId=jobId;document.getElementById('agentMessages').appendChild(el);agentScroll();return el}
@@ -2327,7 +2327,7 @@ function queueMessage(){
 }
 var composeEl=document.querySelector('.agent-compose');if(composeEl)composeEl.insertBefore(queueBox,composeEl.firstChild);
 C.hook('agentSetBusy',function(prev){return function(v){
-  prev(v);if(prompt){prompt.disabled=false;prompt.placeholder=v?'Steer OASIS while it works · Enter sends now · Alt+Enter queues for after…':'Ask OASIS to build, fix or explain anything…'}syncSend();
+  prev(v);if(prompt){prompt.disabled=false;prompt.placeholder=v?((window.matchMedia&&matchMedia('(hover:none)').matches)?'Steer OASIS while it works…':'Steer OASIS while it works · Enter sends now · Alt+Enter queues for after…'):'Ask OASIS to build, fix or explain anything…'}syncSend();
   if(v||!queued.length)return;
   var state=($('agentRuntimeState')||{}).textContent||'';
   if(/Cancelled|error/i.test(state)){prompt.value=queued.join('\n\n')+(prompt.value?'\n\n'+prompt.value:'');queued=[];renderQueue();autosize();syncSend();if(typeof window.notify==='function')window.notify('The turn stopped, so your queued messages are back in the box.');return}

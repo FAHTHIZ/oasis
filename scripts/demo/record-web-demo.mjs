@@ -22,8 +22,8 @@ import { chromium } from 'playwright';
 process.env.TZ = 'Asia/Dhaka';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT_DIR = path.resolve(process.argv[2] || path.join(ROOT, 'assets', 'demo'));
-const W = 1280;
-const H = 800;
+// OASIS_DEMO_SIZE=390x844 records a phone-sized run (handy for checking the mobile layout).
+const [W, H] = (process.env.OASIS_DEMO_SIZE || '1280x800').split('x').map(Number);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- Scripted model -------------------------------------------------------
@@ -158,7 +158,8 @@ async function main() {
     await sleep(150);
   }
   await sleep(2600);
-  await page.locator('#topbarChangesBtn').click();
+  if (await page.locator('#topbarChangesBtn').isVisible()) await page.locator('#topbarChangesBtn').click();
+  else { await page.locator('#agentTerminalTab').click(); await sleep(500); await page.locator('#agentChangesUtilityTab').click(); }
   await sleep(4500);
   await page.screenshot({ path: path.join(dir, 'poster.png') });
   await context.close();
