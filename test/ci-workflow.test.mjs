@@ -2,11 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('Pages launch summary prints Markdown backticks literally', async () => {
+test('Pages deploys on every main push with the built-in token and stamps the homepage', async () => {
   const workflow = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
-  assert.ok(workflow.includes("echo 'Add the `OASIS_REPO_ADMIN_TOKEN` Actions secret"));
-  assert.ok(workflow.includes("then run this workflow again on `main`."));
-  assert.ok(!workflow.includes('echo "Add the `OASIS_REPO_ADMIN_TOKEN`'));
+  assert.ok(workflow.includes('pages: write') && workflow.includes('id-token: write'));
+  assert.ok(workflow.includes('actions/deploy-pages@'));
+  assert.ok(workflow.includes('node .github/scripts/stamp-site.mjs'));
+  assert.ok(workflow.includes('fetch-depth: 20'), 'The publish checkout needs history for the changes feed.');
+  // Deployment must not be gated on the optional admin secret; only metadata is.
+  const deploy = workflow.slice(workflow.indexOf('- name: Deploy public landing page'));
+  assert.ok(!deploy.split('- name:')[1].includes('launch-auth'), 'Deploy must not depend on OASIS_REPO_ADMIN_TOKEN.');
+  assert.ok(workflow.includes("if: ${{ steps.launch-auth.outputs.ready == 'true' }}"), 'Metadata updates stay gated on the admin secret.');
+});
+
+test('homepage keeps the stamp regions the Pages workflow fills', async () => {
+  const html = await readFile(new URL('../site/index.html', import.meta.url), 'utf8');
+  for (const name of ['CHANGES', 'BUILD']) {
+    assert.ok(html.includes('<!--OASIS:' + name + '-->') && html.includes('<!--/OASIS:' + name + '-->'), 'missing OASIS:' + name);
+  }
 });
 
 test('CI keeps latest pending concurrency per ref and lets active quality runs finish', async () => {
