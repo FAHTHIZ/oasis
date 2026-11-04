@@ -302,7 +302,8 @@ export async function loadSettings(root, options = {}) {
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;
       if (typeof settings.sandbox.writableCaches === 'boolean') result.sandbox.writableCaches = settings.sandbox.writableCaches;
-      if (['os', 'docker', 'podman'].includes(settings.sandbox.backend)) result.sandbox.backend = settings.sandbox.backend;
+      if (['os', 'docker', 'podman', 'ssh'].includes(settings.sandbox.backend)) result.sandbox.backend = settings.sandbox.backend;
+      if (settings.sandbox.ssh && typeof settings.sandbox.ssh === 'object' && !Array.isArray(settings.sandbox.ssh)) result.sandbox.ssh = { ...(result.sandbox.ssh || {}), ...settings.sandbox.ssh };
       if (typeof settings.sandbox.image === 'string' && /^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(settings.sandbox.image)) result.sandbox.image = settings.sandbox.image;
       if (typeof settings.sandbox.memory === 'string' && /^\d+(?:\.\d+)?[bkmg]?$/i.test(settings.sandbox.memory)) result.sandbox.memory = settings.sandbox.memory;
       if ((typeof settings.sandbox.cpus === 'string' || typeof settings.sandbox.cpus === 'number') && /^\d+(?:\.\d+)?$/.test(String(settings.sandbox.cpus))) result.sandbox.cpus = String(settings.sandbox.cpus);
@@ -413,7 +414,7 @@ export async function loadSettings(root, options = {}) {
   }
   if (env.OASIS_SANDBOX === '1') result.sandbox.enabled = true;
   if (env.OASIS_SANDBOX === '0') result.sandbox.enabled = false;
-  if (['os', 'docker', 'podman'].includes(env.OASIS_SANDBOX_BACKEND)) result.sandbox.backend = env.OASIS_SANDBOX_BACKEND;
+  if (['os', 'docker', 'podman', 'ssh'].includes(env.OASIS_SANDBOX_BACKEND)) result.sandbox.backend = env.OASIS_SANDBOX_BACKEND;
   if (env.OASIS_SANDBOX_IMAGE && /^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(env.OASIS_SANDBOX_IMAGE)) result.sandbox.image = env.OASIS_SANDBOX_IMAGE;
   return result;
 }

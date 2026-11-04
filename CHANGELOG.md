@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- SSH execution backend: `"sandbox": { "backend": "ssh", "ssh": { "host": ... } }`, `/sandbox ssh HOST` or `OASIS_SANDBOX_BACKEND=ssh` runs commands, background jobs and PTY sessions on a remote machine, with rsync push before and `--update` pull after each command (or `sync: none` for shared disks). Hosts, paths and excludes are validated against option injection; `oasis doctor` checks login and rsync.
 - Mermaid diagrams render in the terminal: ```mermaid fences with flowcharts (TD/LR, shapes, labeled, chained and grouped edges; cycles listed) and sequence diagrams (lifelines, messages, self calls, notes, loop/alt blocks) are drawn with box characters, falling back to an edge list when too wide and to the source for other diagram types or without color. `OASIS_MERMAID=0` turns it off.
 - Bundled `grill-me` skill: a one-question-at-a-time interview that turns a vague idea into a written brief with decisions, non-goals and acceptance criteria before any code is written.
 - `generate_image` tool: create or edit images through any OpenAI-compatible Images API (OpenAI gpt-image-1 / dall-e-3, Gemini's OpenAI endpoint, LocalAI, proxies) and save them into the workspace. Enabled by `OASIS_IMAGE_API_KEY` or `OPENAI_API_KEY`; asks before each call; checkpointed like other edits.

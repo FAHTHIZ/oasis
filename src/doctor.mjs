@@ -23,10 +23,14 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     lines.push('  Trusted: ' + (settings.trusted ? 'yes' : 'no') + '; settings files: ' + (settings.sources.length || 'none'));
     if (settings.ignoredUntrusted.length) problems.push('Ignored until you run oasis trust: ' + settings.ignoredUntrusted.join(', '));
     const backend = settings.sandbox.backend || 'os';
-    const sandbox = backend === 'os' ? detectSandbox() : detectContainerRuntime(backend);
+    let sandbox;
+    if (backend === 'ssh') {
+      const { normalizeSshSettings, detectSshRuntime } = await import('./ssh-backend.mjs');
+      sandbox = detectSshRuntime(normalizeSshSettings(settings.sandbox.ssh || {}, env, root));
+    } else sandbox = backend === 'os' ? detectSandbox() : detectContainerRuntime(backend);
     lines.push('  Sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'off') + ' (' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable: ' + sandbox.reason) + ')');
     lines.push('  Command isolation: ' + (settings.sandbox.enabled && sandbox.available
-      ? (backend === 'os' ? 'OS sandbox active' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
+      ? (backend === 'os' ? 'OS sandbox active' : backend === 'ssh' ? 'remote execution over SSH (' + String(settings.sandbox.ssh && settings.sandbox.ssh.host || env.OASIS_SSH_HOST || '') + ')' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
       : 'not active; approval controls are not OS isolation'));
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
     else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');

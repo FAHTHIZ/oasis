@@ -1424,10 +1424,10 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'sandbox': {
       const { resolveSandbox, detectSandbox } = await import('./sandbox.mjs');
       const current = session && session.sandbox || null;
-      const describe = (box) => box && box.enabled ? (box.available ? 'on (' + box.kind + (box.network ? ', network on' : ', network off') + ')' : 'on but unavailable - ' + box.reason) : 'off';
+      const describe = (box) => box && box.enabled ? (box.available ? (box.kind === 'ssh' ? 'on (commands run on ' + box.ssh.host + ' in ' + box.ssh.remoteRoot + ', sync ' + box.ssh.sync + ')' : 'on (' + box.kind + (box.network ? ', network on' : ', network off') + ')') : 'on but unavailable - ' + box.reason) : 'off';
       if (!argument) {
         const probe = detectSandbox();
-        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE]. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
+        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR]. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
       }
       if (!session) return { output: 'Start a task first; /sandbox changes the running session.' };
       const words = argument.toLowerCase().split(/\s+/);
@@ -1438,10 +1438,17 @@ export async function runBuiltinCommand(name, argument, state) {
       if (words[0] === 'on') enabled = true;
       else if (words[0] === 'off') enabled = false;
       else if (words[0] === 'network' && ['on', 'off'].includes(words[1])) { enabled = true; network = words[1] === 'on'; }
-      else if (['os', 'docker', 'podman'].includes(words[0])) { enabled = true; backend = words[0]; if (words[1]) image = words[1]; }
-      else return { output: 'Usage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE]' };
+      else if (words[0] === 'network') return { output: 'Usage: /sandbox network on | network off' };
+      let ssh = current && current.ssh ? { ...current.ssh } : (session.settings && session.settings.sandbox && session.settings.sandbox.ssh) || undefined;
+      const rawWords = argument.trim().split(/\s+/);
+      if (['os', 'docker', 'podman'].includes(words[0])) { enabled = true; backend = words[0]; if (words[1]) image = rawWords[1]; }
+      else if (words[0] === 'ssh') {
+        enabled = true; backend = 'ssh';
+        if (rawWords[1]) ssh = { ...(ssh || {}), host: rawWords[1], ...(rawWords[2] ? { remoteRoot: rawWords[2] } : {}) };
+        if (!ssh || !ssh.host) return { output: 'Usage: /sandbox ssh USER@HOST [REMOTE_DIR]' };
+      } else if (!['on', 'off', 'network'].includes(words[0])) return { output: 'Usage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR]' };
       const writable = current && current.writable || [root];
-      session.sandbox = resolveSandbox({ sandbox: { enabled, network, backend, image, memory: current && current.memory, cpus: current && current.cpus, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
+      session.sandbox = resolveSandbox({ sandbox: { enabled, network, backend, image, ssh, memory: current && current.memory, cpus: current && current.cpus, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
       if (session.sandbox.enabled && session.sandbox.backend === (current && current.backend || 'os')) session.sandbox.writable = writable;
       return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
     }
