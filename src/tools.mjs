@@ -979,7 +979,10 @@ async function configureMcpServer(args, context, root) {
     return { configured: false, cancelled: true, name: candidate.name, message: 'MCP setup was cancelled before the server started.' };
   }
 
-  const client = new McpServerClient(candidate, { root, env });
+  // Share the session's MCP host so this server's elicitation, roots and
+  // tools/list_changed notifications reach the session like startup servers do.
+  const host = context.session.mcpHost || { session: context.session, onToolsChanged: (target) => refreshSessionMcpTools(target) };
+  const client = new McpServerClient(candidate, { root, env, host });
   let configPath;
   try {
     // Start and validate the MCP handshake before making this configuration
