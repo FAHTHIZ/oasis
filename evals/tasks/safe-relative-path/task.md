@@ -1,2 +1,2 @@
-Create src/lib.mjs exporting resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and throw if it escapes via ../ or an absolute path. Use path.relative rather than string-prefix checks.
+Create src/lib.mjs exporting resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word "escapes" (for example "Path escapes the workspace: ../secret"). Use path.relative rather than string-prefix checks.
 The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.
