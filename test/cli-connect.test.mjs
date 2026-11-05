@@ -27,9 +27,10 @@ function mockOllama() {
   });
 }
 
-function run(args, input, home) {
+function run(args, input, home, extraEnv = {}) {
   const env = { ...process.env, HOME: home, USERPROFILE: home, OASIS_HOME: path.join(home, '.oasis'), NO_COLOR: '1' };
-  for (const key of Object.keys(env)) if ((key.startsWith('OASIS_') && key !== 'OASIS_HOME') || key.endsWith('_API_KEY')) delete env[key];
+  for (const key of Object.keys(env)) if ((key.startsWith('OASIS_') && key !== 'OASIS_HOME') || key.endsWith('_API_KEY') || key === 'HF_TOKEN') delete env[key];
+  Object.assign(env, extraEnv);
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI, ...args], { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
@@ -70,4 +71,29 @@ test('oasis connect: a GitHub token gets a clear message and nothing is saved', 
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test('oasis connect --help prints usage instead of treating --help as a key', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-connect-'));
+  try {
+    const { code, out } = await run(['connect', '--help'], '', home);
+    assert.equal(code, 0, out);
+    assert.match(out, /Usage: oasis connect/);
+    assert.match(out, /--from-env/);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test('a provider key already in the environment is pointed out and can be used', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-connect-'));
+  try {
+    const headless = await run(['-p', 'hi'], '', home, { GROQ_API_KEY: 'gsk_' + 'a'.repeat(40) });
+    assert.notEqual(headless.code, 0);
+    assert.match(headless.out, /GROQ_API_KEY is set/);
+    assert.match(headless.out, /oasis connect --from-env/);
+    const missing = await run(['connect', '--from-env'], '', home);
+    assert.notEqual(missing.code, 0);
+    assert.match(missing.out, /No provider API key found in the environment/);
+    const wrong = await run(['connect', '--from-env', 'mistral'], '', home, { GROQ_API_KEY: 'gsk_' + 'a'.repeat(40) });
+    assert.match(wrong.out, /No key for mistral/);
+  } finally { await rm(home, { recursive: true, force: true }); }
 });

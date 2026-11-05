@@ -5,7 +5,7 @@
 // can call tools, and locks the connection in. Nothing here touches the DOM,
 // so the same module runs in the browser and under `node --test`.
 
-import { PRESETS, ProviderError, testProvider } from './providers.mjs';
+import { PRESETS, ProviderError, testProvider, briefFailure } from './providers.mjs';
 
 /* ---------- Recognising what was pasted ---------- */
 
@@ -202,6 +202,8 @@ export function scoreModel(id) {
   if (/preview|exp\b|-exp-|beta|alpha/.test(lower)) score -= 2;
   if (/:free\b/.test(lower)) score -= 3;
   if (/vision|-vl\b|-vl-|ocr/.test(lower)) score -= 4;
+  // Specialist models answer chat requests but are tuned for something else.
+  if (/robotics|-er-\d|omni|nano-banana|learnlm|medgemma|-math\b|translate|guardian/.test(lower)) score -= 30;
   if (/base\b|-base-/.test(lower)) score -= 20;
   const params = paramsOf(lower);
   if (params) score += params < 4 ? -22 : params < 8 ? -14 : params < 15 ? -7 : params < 30 ? -2 : params >= 200 ? 4 : 2;
@@ -335,11 +337,6 @@ export function suggestedModel(message) {
   return match && /[\d-]/.test(match[1]) ? match[1] : '';
 }
 
-function shortReason(message) {
-  const text = String(message || '').replace(/\s+/g, ' ').trim();
-  const inner = /"message"\s*:\s*"([^"]{1,240})/.exec(text);
-  return (inner ? inner[1] : text).slice(0, 160);
-}
 
 /**
  * Proves a model can hold a conversation and call a tool. Tries the ranked
@@ -361,6 +358,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   let noTools = null;
   let hardFailures = 0;
   let attempts = 0;
+  let cheap = 0;
   const limit = Math.max(maxAttempts, tries, preferred.length);
   // Stop starting new probes after `budgetMs` so setup never hangs for minutes.
   const deadline = Date.now() + budgetMs;
@@ -378,6 +376,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
     if (tried.has(model)) continue;
     tried.add(model);
     attempts += 1;
+    const started = Date.now();
     onStatus({ step: 'test', text: 'Testing ' + model + '…', model });
     try {
       let result;
@@ -394,7 +393,10 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
       failures.push({ model, reason: 'answered but did not call the test tool' });
     } catch (error) {
       const kind = classifyFailure(error);
-      failures.push({ model, reason: error.message, kind });
+      failures.push({ model, reason: error.message, kind, status: error.status });
+      // An instant "no quota" or "retired" answer is free to rule out, so it
+      // does not use up an attempt; only the time budget bounds those.
+      if ((kind === 'model' || kind === 'credits' || kind === 'rate') && Date.now() - started < 3000 && cheap < 40) { attempts -= 1; cheap += 1; }
       if (kind === 'auth' || kind === 'network') throw error;
       if (kind === 'model' || kind === 'credits') unusable.push(model);
       if (!['model', 'credits', 'rate', 'server'].includes(kind)) hardFailures += 1;
@@ -409,8 +411,11 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   if (noTools) return { model: noTools, toolCalling: false, failures, unusable };
   if (!failures.length) throw new ProviderError('This connection has no chat models.');
   const allCredits = failures.every((failure) => failure.kind === 'credits');
-  const lines = failures.slice(0, 6).map((failure) => '  ' + failure.model + ': ' + shortReason(failure.reason));
-  const hint = failures.some((failure) => failure.kind === 'server' || failure.kind === 'rate')
+  const lines = failures.slice(0, 8).map((failure) => '  ' + failure.model + ': ' + briefFailure(failure.reason, failure.status));
+  if (failures.length > 8) lines.push('  …and ' + (failures.length - 8) + ' more');
+  const daily = failures.some((failure) => /per ?day|PerDay/i.test(failure.reason));
+  const hint = daily ? ' The daily quota is used up on these models; it resets within a day, or add billing.'
+    : failures.some((failure) => failure.kind === 'server' || failure.kind === 'rate')
     ? ' Some models were busy or rate limited; try again in a minute.'
     : allCredits ? ' The key has no credit or quota for these models; add billing or use another key.' : '';
   throw new ProviderError('No model on this connection answered (' + failures.length + ' tried).' + hint + '\n' + lines.join('\n'), { status: allCredits ? 402 : 0 });
