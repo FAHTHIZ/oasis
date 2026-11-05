@@ -78,7 +78,7 @@ test('a first request that overflows a small local window drops to the small-con
   assert.equal(result.text, 'Ready.');
   // The full system prompt is swapped for the compact one as well as the tools.
   assert.ok(session.messages[0].content.length < fullSystemLength, session.messages[0].content.length + ' vs ' + fullSystemLength);
-  assert.match(session.messages[0].content, /^You are Oasis OSS, a coding agent running in the user’s workspace\./);
+  assert.match(session.messages[0].content, /^You are OASIS, a coding agent running in the user’s workspace\./);
   assert.ok(toolCounts[0] > 20 && toolCounts.at(-1) <= 20, toolCounts.join(','));
   assert.equal(session.config.contextWindow, 16384);
   assert.equal(events[0].smallContextTools, true);
