@@ -2,7 +2,7 @@
 
 **Product lifecycle:** Stable  
 **Package version:** `1.0.0`  
-**Release channel:** stable (`v1.0.0` planned; not yet tagged or published as of November 4, 2026)  
+**Release channel:** stable ([`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) published November 4, 2026 from commit `1417117`)  
 **Release source:** `main`  
 **Previous release:** `v0.4.0` (historical Beta; the tag and GitHub Release are no longer present in the repository)  
 **License:** Apache-2.0
@@ -31,7 +31,7 @@ OASIS is not a hosted model or a proprietary model endpoint. The user chooses th
 
 ### Current maturity
 
-The planned 1.0.0 product scope is feature-complete on `main` as **OASIS 1.0 (stable channel)**. The `v1.0.0` tag and GitHub Release are still to be created by the manual release job.
+The planned 1.0.0 product scope is feature-complete on `main` as **OASIS 1.0 (stable channel)**. The [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) tag and GitHub Release were published on November 4, 2026 by the manual release job, from commit `1417117`.
 
 Work after 1.0 is refinement: stronger agents, better tool selection and task completion, robustness, lifecycle correctness, accessibility, platform consistency, security-boundary validation, operational recovery, and accurate packaging/documentation. The default priority is to improve and finish the existing product—not introduce substantial new product surfaces or expand scope.
 
@@ -39,8 +39,8 @@ Work after 1.0 is refinement: stronger agents, better tool selection and task co
 
 ## 2. Version and release channels
 
-- `v0.4.0` was published as Beta; its [release notes](releases/v0.4.0.md) remain in the tree, but the tag and GitHub Release are no longer present in the repository (checked November 4, 2026). The only remaining tag is `0.6.7`.
-- `package.json` is version `1.0.0` with `oasisRelease.channel` set to `stable`. The `v1.0.0` tag and GitHub Release are created by the desktop workflow (manual dispatch with `publish_release` and `confirm_stable_release`) from a verified `main` commit; the stable CLI installer then resolves `v1.0.0`. That run has not happened yet.
+- `v0.4.0` was published as Beta; its [release notes](releases/v0.4.0.md) remain in the tree, but the tag and GitHub Release are no longer present in the repository (checked November 4, 2026). The other remaining tag is `0.6.7`.
+- `package.json` is version `1.0.0` with `oasisRelease.channel` set to `stable`. The `v1.0.0` tag and GitHub Release are created by the desktop workflow (manual dispatch with `publish_release` and `confirm_stable_release`) from a verified `main` commit; the stable CLI installer then resolves `v1.0.0`. That run completed on November 4, 2026 (commit `1417117`), with Windows, macOS and Linux installers and `SHA256SUMS`.
 - Never move or retag `v0.4.0` or `v1.0.0`. Fixes after 1.0 ship as new versions (`1.0.1`, `1.1.0`, ...).
 
 ## 3. Product scope for 1.0
@@ -122,7 +122,7 @@ Remote runner infrastructure, trusted-device pairing, more editor surfaces, a na
 - [x] Explicit unsigned-distribution decision documented for 1.0, with SHA-256 checksums.
 - [x] Version, tag, release notes, checksums, assets and stable status agree (enforced by the publish job).
 - [x] 1.0.0 can be published only from a verified `main` commit (enforced by the publish job).
-- [ ] The `v1.0.0` tag and GitHub Release are actually published.
+- [x] The `v1.0.0` tag and GitHub Release are actually published (November 4, 2026, commit `1417117`).
 
 ## 8. Release and maintenance policy
 
