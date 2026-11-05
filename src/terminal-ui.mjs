@@ -397,6 +397,20 @@ function lastLine(text) {
   return lines.length ? lines[lines.length - 1] : '';
 }
 
+// The line of a failed command's output that explains the failure. Runtimes
+// end crashes with noise ("Node.js v22.20.0", a stack frame, "^"), so prefer
+// the error line itself: "AssertionError [ERR_ASSERTION]: Expected ...".
+const NOISE_LINE = /^(?:Node\.js v\d|at\s|\^+$|[~^\s]+$|\}$|\{$|throw\b|npm (?:ERR!|error) (?:A complete log|code|path|errno|command failed|cwd)|Traceback \(most recent call last\)|File ")/;
+const ERROR_LINE = /\b(?:\w*Error|Exception|FAIL(?:ED)?|panic|fatal|error)\b[:\[ ]/;
+export function failureLine(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const errors = lines.filter((line) => ERROR_LINE.test(line) && !NOISE_LINE.test(line));
+  // Python tracebacks end with the real exception; most tools lead with it.
+  if (errors.length) return /Traceback \(most recent call last\)/.test(text) ? errors[errors.length - 1] : errors[0];
+  const useful = lines.filter((line) => !NOISE_LINE.test(line));
+  return useful.length ? useful[useful.length - 1] : lastLine(text);
+}
+
 // One dim line under a tool call saying what happened, like "⎿ exit 0 · 20
 // passed, 0 failed". Failures and policy blocks are red. '' means nothing
 // worth showing (edits have their own diff summary).
@@ -413,7 +427,7 @@ export function describeToolResult(name, result, { color = true } = {}) {
     const combined = String(result.stdout || '') + '\n' + String(result.stderr || '');
     const tests = summarizeTestOutput(combined);
     const ok = result.exitCode === 0;
-    const detail = tests || (result.timedOut ? 'timed out' : clip(lastLine(ok ? result.stdout || result.stderr : result.stderr || result.stdout), 110));
+    const detail = tests || (result.timedOut ? 'timed out' : clip(ok ? lastLine(result.stdout || result.stderr) : failureLine(result.stderr || result.stdout), 110));
     const mark = ok ? green + '✓' + off + dim : red + '✗';
     return '  ⎿ ' + dim + mark + ' exit ' + result.exitCode + (detail ? ' · ' + detail : '') + off;
   }
