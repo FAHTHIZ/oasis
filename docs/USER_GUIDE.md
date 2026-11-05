@@ -10,7 +10,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 | Area | Go to |
 |---|---|
-| Getting started | [Install and set up](#install-the-terminal-agent) · [Connect the browser workspace](#connected-browser-workspace-and-runtime) · [Try plain-English tasks](#use-it-in-plain-english) |
+| Getting started | [Install and set up](#install-the-terminal-agent) · [Universal and Android app](#universal-app-and-android-app) · [Connect the browser workspace](#connected-browser-workspace-and-runtime) · [Try plain-English tasks](#use-it-in-plain-english) |
 | Product capabilities | [Implemented capabilities](#what-is-implemented) · [Native plugin packages](#native-oasis-plugin-packages) · [Plugins and integrations](#plugins-integrations-and-installation) · [Editor integration](#vs-code-cursor-and-windsurf) |
 | Safety and configuration | [Safety model](#safety-model) · [Permissions](#permission-rules-and-modes) · [MCP servers](#project-mcp-servers-mcpjson) · [Hooks](#hooks) · [Settings](#settings-pane) |
 | Terminal and sessions | [Interactive terminal](#the-interactive-terminal) · [PTY sessions](#interactive-pty-terminal-sessions) · [Slash commands](#slash-commands-mentions-and-memory) · [Auto memory](#auto-memory) · [Clear local data](#clearing-local-data) |
@@ -73,6 +73,28 @@ Supported provider shapes:
 - Environment overrides: `OASIS_BASE_URL`, `OASIS_MODEL`, and `OASIS_API_KEY`. Provider-specific keys are recognised for matching presets: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), and `OLLAMA_API_KEY` for Ollama Cloud. Run `oasis doctor --test-provider` to send a live inert-tool probe without executing the tool; a successful check confirms the model can call tools.
 
 OASIS does not include an API subscription or a model. A provider must be reachable and the selected model must support tool calling.
+
+## Universal app and Android app
+
+The universal app is OASIS for phones, tablets and any browser, with no install and no server: open [fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/) and add it to the home screen. On Android you can install the [APK](https://github.com/FAHTHIZ/oasis/releases/download/android-latest/OASIS-android.apk) instead, which bundles the same app.
+
+- **Settings** (gear): choose a provider preset or any OpenAI-compatible URL, a model and a key. Keys stay in this device's browser storage. **Test connection** sends one short request.
+- **Projects** (folder): import a GitHub repository (`owner/name` or a URL; add a token for private repositories and for pushing), a ZIP, a folder or loose files, or start empty. **Export zip** saves the project.
+- **Approval mode** (next to the message box): **Ask** approves each change, **Edits** allows file writes and edits but asks before deletes, web fetches and pushes, **Auto** runs everything except pushes, which always ask.
+- **Files**: browse, open, edit and diff files; **Revert** undoes the agent's change to one file.
+- **Push** (GitHub projects): commits the changes to a new branch, optionally opening a pull request.
+
+The agent's tools are `list_files`, `read_file`, `write_file`, `edit_file`, `delete_file`, `grep`, `glob_files`, `run_javascript` (isolated, network-free, time-limited), `fetch_url`, `load_skill`, `todo_write`, `project_changes` and `github_push`. It reads `OASIS.md`, `AGENTS.md` or `CLAUDE.md` from the project root.
+
+To serve the app from your own machine, run:
+
+```sh
+oasis app            # http://localhost:3920/app/
+oasis app --lan      # also on your network, with a QR code for your phone
+oasis app --port 8080 --open
+```
+
+See [OASIS on a phone or tablet](MOBILE.md) for limits and the other phone options.
 
 ## Terminal help and status
 
