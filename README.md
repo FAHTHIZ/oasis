@@ -118,7 +118,7 @@ Want the current `main` instead?
 
 ```bash
 git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install -g .
-oasis setup                 # pick a provider, or point it at a local model
+oasis connect               # paste an API key, model link or local server address
 ```
 
 Other ways in:

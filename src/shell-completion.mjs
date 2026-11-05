@@ -5,7 +5,8 @@
 export const COMPLETION_SHELLS = ['bash', 'zsh', 'fish', 'powershell'];
 
 export const COMPLETION_COMMANDS = {
-  web: 'Open the browser workspace',
+  web: 'Open the OASIS app in your browser',
+  connect: 'Paste an API key, model link or local server',
   setup: 'Choose a model provider or a local model',
   doctor: 'Check Node, Git, provider, sandbox and config',
   update: 'Update to the latest stable release',

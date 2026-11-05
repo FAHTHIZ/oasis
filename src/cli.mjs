@@ -83,7 +83,7 @@ function printQuickHelp() {
     ...rows([
       ['oasis', 'Chat in the terminal (this folder is the workspace)'],
       ['oasis "fix the failing test"', 'Start with a first message'],
-      ['oasis web --open', 'Open the browser workspace in your browser (local only)'],
+      ['oasis web --open', 'Open the OASIS app in your browser, working on this folder'],
       ['oasis app --lan', 'Serve the universal app to install on a phone or tablet'],
       ['oasis -p "explain src/"', 'Run once without prompts (scripts and CI)'],
       ['oasis -c  |  oasis -r ID', 'Continue the last chat, or resume a saved one']
@@ -91,7 +91,8 @@ function printQuickHelp() {
     '',
     'Set up and check',
     ...rows([
-      ['oasis setup', 'Choose a model provider or a local model'],
+      ['oasis connect', 'Paste an API key, model link or local server; OASIS does the rest'],
+      ['oasis setup', 'Same, with a step-by-step menu for every provider'],
       ['oasis doctor', 'Check Node, Git, provider, sandbox and config'],
       ['oasis update', 'Update to the latest stable release'],
       ['oasis init', 'Create OASIS.md project instructions'],
@@ -135,7 +136,8 @@ function printHelp() {
     '  oasis "fix the failing tests"  Give a task in plain English',
     '  oasis -p "task" [--output-format text|json|stream-json] [--max-turns N]  Run once without prompts (scripts/CI)',
     '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
-    '  oasis setup                   Configure a model provider',
+    '  oasis connect                 Paste an API key, model link or local server address; detects the provider, picks the best model and backups',
+    '  oasis setup                   Configure a model provider (paste first; Enter for the step-by-step menu)',
     '  oasis setup --auto            Detect this computer (CPU, memory, GPU) and running model servers, then configure the best fit',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
@@ -627,15 +629,86 @@ async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
   stdout.write('The provider is verified. Oasis can now inspect workspaces and use approved tools.\n');
 }
+// Paste-to-connect in the terminal: the same smart connect the app uses. Works
+// out the provider from a key, model link or local server address, picks the
+// best tool-calling model, keeps the next ones as automatic backups and saves.
+async function connectFromTerminalPaste(text) {
+  const { connectFromPaste } = await import('./provider-connect.mjs');
+  let last = '';
+  const result = await connectFromPaste(text, {
+    onStatus: (status) => {
+      const line = String(status && status.text || status || '').trim();
+      if (!line || line === last || status && status.step === 'download' && last.startsWith(line.split(' — ')[0])) { if (status && status.step === 'download') last = line; return; }
+      last = line;
+      stdout.write('  ' + line + '\n');
+    }
+  });
+  const configPath = await saveConfig(result.config);
+  const backups = result.config.fallbackModel ? result.config.fallbackModel.split(',').filter(Boolean) : [];
+  stdout.write('Locked in ' + result.config.model + ' on ' + result.label + '.' + (backups.length ? ' ' + backups.length + ' backup model' + (backups.length === 1 ? '' : 's') + ' ready if it runs out.' : '') + '\n');
+  stdout.write('Saved to ' + configPath + (result.masked ? ' (key ' + result.masked + ')' : '') + '.\n');
+  if (result.githubToken) stdout.write('A GitHub token was in the paste too. It was not saved; OASIS uses your git login for GitHub.\n');
+  return result;
+}
+
+async function pasteFirstSetup(root, { announce = true } = {}) {
+  if (announce) {
+    stdout.write('\nConnect a model. Paste an API key (OpenAI, Anthropic, OpenRouter, Gemini, Groq, Hugging Face and more),\n');
+    stdout.write('a model link, or a local server address like http://localhost:11434. OASIS works out the rest.\n');
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let text;
+    try { text = (await askSecret('Paste here (hidden; Enter for other options, "later" to skip): ')).trim(); }
+    catch (error) { if (/cancel/i.test(String(error && error.message))) return 'skipped'; return 'menu'; }
+    if (!text) return 'menu';
+    if (/^(?:later|skip|q|quit|exit|\/exit|\/quit|n|no)$/i.test(text)) { stdout.write('Setup skipped. Run oasis connect when you are ready.\n'); return 'skipped'; }
+    try {
+      await connectFromTerminalPaste(text);
+      return 'connected';
+    } catch (error) {
+      stdout.write('Could not connect: ' + redactSecretText(String(error && error.message || error), text) + '\n');
+      if (attempt < 2) stdout.write('Try again, or press Enter for other options.\n');
+    }
+  }
+  return 'menu';
+}
+
+function redactSecretText(message, secret) {
+  let out = message;
+  for (const part of String(secret || '').split(/\s+/)) if (part.length >= 12) out = out.split(part).join('[redacted]');
+  return out.slice(0, 1200);
+}
+
+async function connectCommand(rest, root) {
+  const inline = rest.join(' ').trim();
+  if (inline) {
+    await connectFromTerminalPaste(inline);
+    stdout.write('Tip: paste at the prompt next time (run oasis connect with nothing after it) so the key stays out of your shell history.\n');
+    return;
+  }
+  if (!stdin.isTTY || !stdout.isTTY) {
+    const chunks = [];
+    for await (const chunk of stdin) chunks.push(chunk);
+    const piped = Buffer.concat(chunks).toString('utf8').trim();
+    if (!piped) throw new Error('Usage: oasis connect, then paste a model API key, a model link or a local server address.');
+    await connectFromTerminalPaste(piped);
+    return;
+  }
+  const outcome = await pasteFirstSetup(root);
+  if (outcome === 'menu') await configureProvider(root);
+}
+
 async function ensureModelProviderSetup(root, options = {}) {
   let configured = false;
   try { configured = Boolean((await loadConfig()).configured); } catch {}
   if (configured) return true;
   if (!stdin.isTTY || !stdout.isTTY) return false;
 
-  if (options.announce !== false) {
-    stdout.write('\nNo model connection is configured yet.\n');
-    stdout.write('OASIS is the workspace; the model you choose is its brain. Choose one way to connect.\n');
+  if (options.announce !== false) stdout.write('\nNo model is connected yet.\n');
+  if (typeof stdin.setRawMode === 'function') {
+    const outcome = await pasteFirstSetup(root);
+    if (outcome === 'connected') return true;
+    if (outcome === 'skipped') return false;
   }
   stdout.write('\n  1. I have an API key (OpenAI, Anthropic, OpenRouter, Gemini, or a custom provider)\n');
   stdout.write('  2. Use a model on this computer (Ollama; smaller models may be weaker)\n');
@@ -2044,10 +2117,20 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         ' · check ' + check + ' · ' + lspStatus +
         (evidence.autoTest ? ' · auto-test ' + (evidence.autoTest.passed ? 'passed' : 'failed') + ' (' + evidence.autoTest.attempts + ' run' + (evidence.autoTest.attempts === 1 ? '' : 's') + ')' : '');
       if (richOutput()) {
-        const mark = evidence.complete ? '\x1b[32m✓ Verified\x1b[39m' : '\x1b[33m! Not fully verified\x1b[39m';
-        stdout.write('\n' + wrapRendered('  ' + mark + '\x1b[2m' + verificationLine.replace(/^(Complete|Incomplete)/, '') + '\x1b[22m', stdout.columns || 80, { indent: 4 }) + '\n');
+        // One plain line: what was checked, or what still is not. The full
+        // evidence stays in the plain output, -p JSON and /status.
+        const issues = Array.isArray(evidence.issues) ? evidence.issues : [];
+        const facts = [
+          evidence.lastCheck ? evidence.lastCheck.kind + (evidence.lastCheck.passed ? ' passed' : ' failed') : '',
+          evidence.autoTest ? 'auto-test ' + (evidence.autoTest.passed ? 'passed' : 'failed') : '',
+          lspIssues ? lspIssues + ' editor diagnostic' + (lspIssues === 1 ? '' : 's') : ''
+        ].filter(Boolean);
+        const text = evidence.complete
+          ? '\x1b[32m✓ Checked\x1b[39m' + (facts.length ? '\x1b[2m · ' + facts.join(' · ') + '\x1b[22m' : '')
+          : '\x1b[33m! Not fully checked\x1b[39m\x1b[2m' + (issues.length ? ': ' + issues.join('; ') : facts.length ? ' · ' + facts.join(' · ') : '') + '\x1b[22m';
+        stdout.write('\n' + wrapRendered('  ' + text, stdout.columns || 80, { indent: 4 }) + '\n');
       } else stdout.write('[verification] ' + verificationLine + '\n');
-      if (!evidence.complete && Array.isArray(evidence.issues) && evidence.issues.length) {
+      if (!richOutput() && !evidence.complete && Array.isArray(evidence.issues) && evidence.issues.length) {
         stdout.write('[verification] Blockers: ' + evidence.issues.join('; ') + '. Do not treat the task as fully verified yet.\n');
       }
     } else if (result.verificationIncomplete && Array.isArray(result.verificationIssues) && result.verificationIssues.length) {
@@ -2094,7 +2177,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       const saved = await saveSession(session);
       if (!session.announcedSave || session.announcedSave !== saved.id) {
         session.announcedSave = saved.id;
-        if (process.env.OASIS_QUIET_SESSIONS !== '1') stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '[session] Saved as ' + saved.id.slice(0, 8) + ' · resume with oasis -c or oasis -r ' + saved.id + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n');
+        if (process.env.OASIS_QUIET_SESSIONS === '1') {}
+        else if (richOutput()) stdout.write('\x1b[2m  Chat saved · continue later with oasis -c\x1b[22m\n');
+        else stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '[session] Saved as ' + saved.id.slice(0, 8) + ' · resume with oasis -c or oasis -r ' + saved.id + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n');
       }
     } catch (error) {
       stdout.write('[session] Could not save history: ' + error.message + '\n');
@@ -2169,7 +2254,7 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
-  if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md');
+  if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis connect        paste an API key, model link or local server address\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own
   // process group, so without this they would outlive Oasis and the job would
@@ -3566,8 +3651,13 @@ async function main() {
   if (command === 'setup') {
     // `oasis setup --auto` (or `setup auto` / `--detect`): configure from this computer's hardware and running model servers.
     if (rest[0] === 'auto' || rest.includes('--detect') || process.argv.slice(2).includes('--auto')) return await autoSetup(workspace, { dryRun: rest.includes('--dry-run') });
+    if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && !rest.length) {
+      const outcome = await pasteFirstSetup(workspace);
+      if (outcome !== 'menu') return;
+    }
     return await configureProvider(workspace);
   }
+  if (command === 'connect') return await connectCommand(rest, workspace);
   if (command === 'doctor') return await doctor(rest, workspace);
   if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
