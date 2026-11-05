@@ -11,7 +11,7 @@ import { activeAgentMonitors, startPluginMonitorsFor } from './monitors.mjs';
 
 const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'background-stuck', 'agent-notice', 'channel']);
 const WAKE_PREFIX = '[background event] ';
-import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt, steerSession, takeSteering, steeringMessage } from './agent.mjs';
+import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt, steerSession, takeSteering, steeringMessage, formatWait } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
@@ -259,7 +259,7 @@ export async function runHeadless(options) {
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       // Notice on stderr in every output format, so text results on stdout stay clean.
-      onRateLimitWait: ({ waitMs, until, attempt }) => { process.stderr.write('[rate limit] Waiting ' + Math.ceil(waitMs / 60000) + ' min for the provider limit to reset (until ' + until + ').\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt }); },
+      onRateLimitWait: ({ waitMs, until, attempt }) => { process.stderr.write('[rate limit] Waiting ' + formatWait(waitMs) + ' for the provider limit to reset (until ' + until + ').\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt }); },
       ...(includePartial && outputFormat === 'stream-json' ? { onDelta: (accumulated) => {
         const text = String(accumulated || '');
         const delta = text.startsWith(partialSoFar) ? text.slice(partialSoFar.length) : text;

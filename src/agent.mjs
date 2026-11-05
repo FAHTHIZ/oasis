@@ -1770,7 +1770,22 @@ const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 // retrying; retrying only burns time (and, on some providers, more quota).
 const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)|usage limit reached|weekly limit|monthly limit|spend(?:ing)? limit/i;
 export function isHardQuotaError(text) {
-  return HARD_QUOTA_PATTERN.test(String(text || ''));
+  return HARD_QUOTA_PATTERN.test(String(text || '')) && shortRateLimitMs(text) === null;
+}
+
+// Gemini words a per-minute limit exactly like an exhausted quota ("You
+// exceeded your current quota, please check your plan and billing details")
+// and tells the real story only in the quota id (...PerMinute...) and
+// RetryInfo. Those clear in under a minute, so they are worth one wait on the
+// same model instead of a billing error. Returns the wait in ms, or null.
+const SHORT_RATE_LIMIT_MAX_MS = 90000;
+export function shortRateLimitMs(body) {
+  const text = String(body || '');
+  if (!/PerMinute|per ?minute/i.test(text) || /PerDay|per ?day/i.test(text)) return null;
+  const delay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text) || /retry in (\d+(?:\.\d+)?)s\b/i.exec(text);
+  const ms = delay ? Number(delay[1]) * 1000 : 20000;
+  if (!Number.isFinite(ms) || ms > SHORT_RATE_LIMIT_MAX_MS) return null;
+  return Math.ceil(ms) + 500;
 }
 
 function parseRetryAfterMs(raw) {
@@ -1795,6 +1810,12 @@ function parseDurationMs(text) {
   const unit = { ms: 1, s: 1000, m: 60000, h: 3600000 };
   return parts.reduce((sum, [, n, u]) => sum + Number(n) * unit[u], 0);
 }
+// "34s" under a minute, "3 min" above.
+export function formatWait(ms) {
+  const seconds = Math.ceil(Math.max(0, Number(ms) || 0) / 1000);
+  return seconds < 60 ? seconds + 's' : Math.ceil(seconds / 60) + ' min';
+}
+
 export function rateLimitResetMs(headers, now = Date.now()) {
   const get = (name) => (headers && typeof headers.get === 'function' ? headers.get(name) : headers && headers[name]) || '';
   const retryAfter = String(get('retry-after')).trim();
@@ -2438,6 +2459,17 @@ async function requestCompletionRaw(session, options = {}) {
           attempt--;
           continue;
         }
+      }
+      const shortWait = status === 429 && attempt < 1 ? shortRateLimitMs(errorBody) : null;
+      if (shortWait !== null) {
+        clearTimeout(timer);
+        if (typeof options.onRateLimitWait === 'function') {
+          try { options.onRateLimitWait({ waitMs: shortWait, until: new Date(Date.now() + shortWait).toISOString(), attempt: 1, perMinute: true }); } catch {}
+        }
+        await waitForProviderRetry(shortWait, controller.signal);
+        timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+        attempt = MAX_PROVIDER_RETRIES - 1;
+        continue;
       }
       if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody)) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);

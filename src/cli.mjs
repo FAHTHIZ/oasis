@@ -17,7 +17,7 @@ import { defaultCloudBaseURL } from './cloud-providers.mjs';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL, carryLearnedContextWindow } from './config.mjs';
 import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
-import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, steerSession, takeSteering } from './agent.mjs';
+import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, formatWait, steerSession, takeSteering } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { loadSession, saveSession, listSessions, deleteSession, staleSessions, pruneSessions } from './sessions.mjs';
@@ -2087,7 +2087,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
       onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
-      onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write('[rate limit] Waiting ' + Math.ceil(event.waitMs / 60000) + ' min for the provider limit to reset (until ' + event.until + ').\n'); },
+      onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write('[rate limit] Waiting ' + formatWait(event.waitMs) + ' for the provider limit to reset (until ' + event.until + ').\n'); },
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
