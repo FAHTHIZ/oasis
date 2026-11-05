@@ -8,6 +8,13 @@ import { TOOL_DEFINITIONS, TOOL_NAMES, executeTool, needsApproval } from './tool
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from '../../src/tool-call-repair.mjs';
 import { resolveToolAlias } from '../../src/tool-aliases.mjs';
 
+/** Plain text of a message: images in a user message count as "[image]". */
+export function textOf(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return content == null ? '' : String(content);
+  return content.map((part) => (part && part.type === 'text' ? String(part.text ?? '') : part && part.type === 'image_url' ? '[image]' : '')).filter(Boolean).join('\n');
+}
+
 export const DEFAULT_MAX_STEPS = 40;
 const INSTRUCTION_FILES = ['OASIS.md', 'AGENTS.md', 'CLAUDE.md', '.oasis/instructions.md'];
 
@@ -16,7 +23,7 @@ const SCHEMAS = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool
 function estimateChars(messages) {
   let total = 0;
   for (const message of messages) {
-    total += typeof message.content === 'string' ? message.content.length : 0;
+    total += typeof message.content === 'string' ? message.content.length : Array.isArray(message.content) ? textOf(message.content).length + 3000 * message.content.filter((part) => part && part.type === 'image_url').length : 0;
     for (const call of message.tool_calls || []) total += (call.function.arguments || '').length + 40;
   }
   return total;
@@ -125,7 +132,7 @@ export class Agent {
     let cut = Math.max(1, this.messages.length - 8);
     while (cut < this.messages.length && this.messages[cut].role === 'tool') cut++;
     const older = this.messages.slice(0, cut);
-    const transcript = older.map((m) => m.role.toUpperCase() + ': ' + (m.content || '') + (m.tool_calls ? ' [called ' + m.tool_calls.map((c) => c.function.name).join(', ') + ']' : '')).join('\n').slice(-120000);
+    const transcript = older.map((m) => m.role.toUpperCase() + ': ' + textOf(m.content) + (m.tool_calls ? ' [called ' + m.tool_calls.map((c) => c.function.name).join(', ') + ']' : '')).join('\n').slice(-120000);
     const summary = await this.chatImpl(config, {
       messages: [
         { role: 'system', content: 'Summarise this coding session for the agent that will continue it. Keep: the user\'s goals and constraints, decisions, files changed and why, current state, open problems and next steps. Be specific and brief.' },
@@ -172,14 +179,15 @@ export class Agent {
     return true;
   }
 
-  async send(text, { maxSteps = DEFAULT_MAX_STEPS, plugins = [] } = {}) {
+  async send(text, { maxSteps = DEFAULT_MAX_STEPS, plugins = [], images = [] } = {}) {
     if (this.running) throw new Error('OASIS is already working. Stop it first.');
     this.running = true;
     this.steering = [];
     this.controller = new AbortController();
     const signal = this.controller.signal;
-    this.messages.push({ role: 'user', content: String(text) });
-    this.onEvent({ type: 'user', content: String(text) });
+    const pictures = (Array.isArray(images) ? images : []).filter((image) => image && image.mediaType && image.data).slice(0, 4);
+    this.messages.push({ role: 'user', content: pictures.length ? [{ type: 'text', text: String(text) }, ...pictures.map((image) => ({ type: 'image_url', image_url: { url: 'data:' + image.mediaType + ';base64,' + image.data } }))] : String(text) });
+    this.onEvent({ type: 'user', content: String(text), images: pictures.length });
     const recent = [];
     let finalText = '';
     let system = null;

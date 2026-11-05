@@ -138,14 +138,15 @@ export class RuntimeAgent {
     if (this.controller) this.controller.abort();
   }
 
-  async send(text, { plugins = [] } = {}) {
+  async send(text, { plugins = [], images = [] } = {}) {
     if (this.busy) throw new Error('OASIS is still working on the last message.');
     let message = String(text || '').trim();
     if (!message) return;
     this.busy = true;
     this.controller = new AbortController();
     const signal = this.controller.signal;
-    this.emit('user', { content: message });
+    const pictures = (Array.isArray(images) ? images : []).filter((image) => image && image.mediaType && image.data).slice(0, 4).map(({ mediaType, data, name }) => ({ mediaType, data, name }));
+    this.emit('user', { content: message, images: pictures.length });
     const names = plugins.map((plugin) => plugin && plugin.name).filter(Boolean);
     const skills = plugins.flatMap((plugin) => plugin && Array.isArray(plugin.skills) ? plugin.skills : []);
     if (names.length) message += '\n\n(Use the ' + names.join(', ') + ' plugin' + (names.length > 1 ? 's' : '') + (skills.length ? ': skills ' + skills.join(', ') : '') + '.)';
@@ -185,7 +186,7 @@ export class RuntimeAgent {
       const started = await this.client.api('/api/chat', {
         method: 'POST',
         signal,
-        body: { message, ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default' }
+        body: { message, ...(pictures.length ? { images: pictures } : {}), ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default' }
       });
       this.jobId = started.jobId;
       if (started.sessionId) this.sessionId = started.sessionId;

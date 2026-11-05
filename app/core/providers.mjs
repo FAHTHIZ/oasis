@@ -157,6 +157,15 @@ export function toAnthropic(messages) {
       }
       continue;
     }
+    if (Array.isArray(message.content)) {
+      // Text and pasted images (OpenAI-style parts) become Anthropic blocks.
+      for (const part of message.content) {
+        const match = part && part.type === 'image_url' && /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(String(part.image_url && part.image_url.url || ''));
+        if (match) push('user', { type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } });
+        else if (part && part.type === 'text') push('user', { type: 'text', text: String(part.text ?? '') });
+      }
+      continue;
+    }
     push('user', { type: 'text', text: String(message.content ?? '') });
   }
   return { system: system.join('\n\n'), messages: out };
