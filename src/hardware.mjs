@@ -208,13 +208,16 @@ export function recommendSetup(hw, servers = [], { configured = false } = {}) {
 }
 
 export function describeHardware(hw) {
-  const parts = [
-    ({ darwin: 'macOS', win32: 'Windows', linux: 'Linux', android: 'Android' }[hw.os] || hw.os) + ' ' + hw.arch,
-    hw.cores + ' CPU cores',
-    hw.memoryGB + ' GB memory'
-  ];
-  if (hw.appleSilicon) parts.push('Apple Silicon GPU (shared memory)');
-  else if (hw.gpu) parts.push(hw.gpu.name + ' (' + hw.gpu.vramGB + ' GB)');
+  // Every field is optional so a partial or older profile never prints "undefined".
+  const h = hw || {};
+  const osName = { darwin: 'macOS', win32: 'Windows', linux: 'Linux', android: 'Android' }[h.os || h.platform] || h.os || h.platform || '';
+  const parts = [];
+  const system = [osName, h.arch].filter(Boolean).join(' ');
+  if (system) parts.push(system);
+  if (Number(h.cores) > 0) parts.push(h.cores + ' CPU cores');
+  if (Number(h.memoryGB) > 0) parts.push(h.memoryGB + ' GB memory');
+  if (h.appleSilicon) parts.push('Apple Silicon GPU (shared memory)');
+  else if (h.gpu && h.gpu.name) parts.push(h.gpu.name + (Number(h.gpu.vramGB) > 0 ? ' (' + h.gpu.vramGB + ' GB)' : ''));
   else parts.push('no supported GPU');
   return parts.join(' · ');
 }
