@@ -1246,7 +1246,8 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
 export async function loadSkillDescriptions(root, options = {}) {
   const skills = (await listAvailableSkills(root, options)).filter((item) => item.modelInvocable !== false);
   if (!skills.length) return '';
-  return skills.map((item) => '- ' + item.name + ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']: ' + skillCatalogueLine(item.description)).join('\n').slice(0, 16000);
+  // Built-in skills carry no tag (it would repeat on every line of every request).
+  return skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + ': ' + skillCatalogueLine(item.description)).join('\n').slice(0, 16000);
 }
 
 // One catalogue line per skill: what it does plus its "Use for/when" trigger,
