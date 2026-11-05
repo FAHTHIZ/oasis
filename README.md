@@ -121,12 +121,12 @@ The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchma
 
 | What the model sends | No harness layer | OASIS, on held-out cases it was never tuned on |
 | --- | --- | --- |
-| Malformed or text-only tool calls (fences, comments, Python literals, Hermes/Qwen tags) | 1 of 20 run | **18 of 20 run**, 0 false runs |
-| Edits whose `old_string` drifted (indentation, spacing, quotes, CRLF, BOM) | 2 of 12 apply | **11 of 12 apply**, 0 wrong writes |
-| Destructive shell commands with approvals switched off | 0 of 31 stopped | **22 of 31 stopped** (23 with a scorer fix), every everyday command still runs |
-| Placeholder rewrites, weakened tests, leaked secrets | 0 of 23 caught | **16 of 23 caught**, 0 false alarms |
+| Malformed or text-only tool calls (fences, comments, Python literals, Hermes, Qwen3-Coder, GLM, Mistral, DeepSeek, gpt-oss formats) | 1 of 33 run | **23 of 33 run**, 0 false runs |
+| Edits whose `old_string` drifted (indentation, spacing, quotes, CRLF, BOM, copied line numbers) | 2 of 17 apply | **14 of 17 apply** (15 with a case fix), 0 wrong writes |
+| Destructive shell commands with approvals switched off (incl. cloud, cluster, registry, database, PowerShell) | 0 of 85 stopped | **71 of 85 stopped** (72 with a scorer fix), every everyday command still runs |
+| Placeholder rewrites, weakened tests, leaked secrets | 0 of 44 caught | **32 of 44 caught**, 0 false alarms |
 
-Every miss above was then fixed and turned into a regression test, so the current runtime scores 100% on all three case sets except one deliberate secret-scanner miss. Those post-fix numbers measure tuning, not generalization, which is why the table shows the untuned ones.
+Every miss above was then fixed and turned into a regression test, so the current runtime scores 100% on all four case sets except one deliberate secret-scanner miss. Those post-fix numbers measure tuning, not generalization, which is why the table shows the untuned ones.
 
 The agent evaluator has **52 tasks**: 33 focused fixtures plus 19 repository-level bug reports and multi-file features, scored by hidden assertions the agent never sees (`oasis eval`). Head-to-head runs against Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider on the same tasks and the same model take one command, [`npm run bench:live`](docs/BENCHMARKS.md#head-to-head-in-one-command). No results have been published yet, so OASIS does not claim to beat them. Live runs with small local models, including the failures, are in [Benchmarks](docs/BENCHMARKS.md).
 

@@ -199,7 +199,44 @@ export function relaxedReplace(current, oldString, newString) {
     const nextLines = [...fileLines.slice(0, start), ...replacedLines, ...fileLines.slice(start + needleLines.length)];
     return { next: nextLines.join('\n'), strategy: strategy.name, line: start + 1 };
   }
-  return null;
+  return lineNumberedReplace(current, oldString, newString);
+}
+
+// The model copied read output with its line numbers ("     2\tconst b = 2;",
+// "  2→const b", "2 | const b", "2: const b"). Only when every line of
+// old_string carries consecutive numbers, and the file itself does not contain
+// them, are the prefixes removed (also from new_string) and the edit retried.
+const LINE_NUMBER_PREFIX = /^\s*(\d+)(?:\t|→|\u2192| \| |\| ?|: )/;
+function stripLineNumbers(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+  const numbers = [];
+  const body = [];
+  for (const line of lines) {
+    const m = LINE_NUMBER_PREFIX.exec(line);
+    if (!m) return null;
+    numbers.push(Number(m[1]));
+    body.push(line.slice(m[0].length));
+  }
+  for (let i = 1; i < numbers.length; i++) if (numbers[i] !== numbers[i - 1] + 1) return null;
+  return { text: body.join('\n'), first: numbers[0] };
+}
+
+function lineNumberedReplace(current, oldString, newString) {
+  const old = stripLineNumbers(oldString);
+  if (!old || !old.text.trim()) return null;
+  // new_string may keep the numbers or drop them; strip them only if present on every line.
+  const replacementLines = newString.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n');
+  const numbered = replacementLines.every((line) => !line.trim() || LINE_NUMBER_PREFIX.test(line));
+  const replacement = numbered ? replacementLines.map((line) => line.replace(LINE_NUMBER_PREFIX, '')).join('\n') : newString;
+  let count = 0;
+  for (let at = current.indexOf(old.text); at >= 0; at = current.indexOf(old.text, at + old.text.length)) count++;
+  if (count > 1) return null;
+  if (count === 1) {
+    const next = current.replace(old.text, () => replacement);
+    return { next, strategy: 'line-number prefixes from read output', line: current.slice(0, current.indexOf(old.text)).split('\n').length };
+  }
+  const relaxed = relaxedReplace(current, old.text, replacement);
+  return relaxed ? { ...relaxed, strategy: 'line-number prefixes from read output and ' + relaxed.strategy } : null;
 }
 
 function similarity(a, b) {

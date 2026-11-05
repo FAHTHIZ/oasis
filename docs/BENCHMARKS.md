@@ -10,7 +10,7 @@ This page separates what is implemented, what has actually been measured, and wh
 
 | Measurement | What it actually measures | Evidence status | What it does not establish |
 |---|---|---|---|
-| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Rerun on 2026-11-05 at source revision `579145b` (`bench/results/harness-2026-11-05.json`): 100% on every track of all three sets except the one deliberate secret-scanner miss; CI publishes fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
+| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Rerun on 2026-11-05 at source revision `579145b` (`bench/results/harness-2026-11-05.json`): 100% on every track of all three sets except the one deliberate secret-scanner miss (held-out v3, added later the same day, scored 113/133 cases untuned and 133/133 after its fixes); CI publishes fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
 | `evals/tasks/` | 52 frozen task fixtures with disposable snapshots, reference patches, and independent verifiers | Validator is in `npm run check`; the exact 2026-11-04 HEAD quality workflow passed | Model pass rate; broad SWE-bench-scale coverage; statistically reliable performance |
 | `scripts/bench-live.mjs` | Runs selected agent CLIs on identical task fixtures and summarizes verified matched trials | Runner and fake-CLI tests exist; no live public head-to-head result is published | Same-model harness isolation unless actual routed model/version and policy differences are verified |
 | `scripts/bench-web-search.mjs` | Expected-domain retrieval, reciprocal rank, result counts, provider errors, and sequential latency on 10 fixed queries | Diagnostic utility; supports repeated counterbalanced trials | Factual correctness, completeness, source credibility, or research-answer quality |
@@ -36,22 +36,24 @@ Each track compares OASIS with a simple baseline that has no repair or guard lay
 - **Development set:** cases the runtime was improved against. Scores here are expected to be high and say little about generalization.
 - **Held-out v1:** written before any fix and scored once untuned (`bench/results/harness-heldout-v1.json`); its misses were fixed afterwards, so it is now a tuned set too.
 - **Held-out v2:** written after the v1 fixes and scored once untuned (`bench/results/harness-heldout-v2.json`); its real misses were then fixed.
+- **Held-out v3:** 133 cases written on 2026-11-05 by a reviewer who had not read the guard code, after v2 passed: the native text call formats of Qwen3-Coder, GLM-4.5, Mistral, Llama 3, DeepSeek and gpt-oss; cloud, cluster, registry, database and PowerShell commands; bracketed placeholders; neutered test commands. Scored once untuned (`bench/results/harness-heldout-v3.json`); every miss was then fixed.
 
 The untuned held-out scores are the generalization numbers. Report those, not the post-fix 100%.
 
-| Track | Baseline (dev) | OASIS before fixes (dev) | Held-out v1, untuned | Held-out v2, untuned | All sets now |
-| --- | --- | --- | --- | --- | --- |
-| Tool-call recovery (malformed or text-only calls) | 3/26 | 25/26 | 9/11 (baseline 1/11) | 9/9 (baseline 0/9) | 100%, 0 false runs |
-| Edit application under drift | 4/14 | 13/14, 1 wrong write | 7/7 (baseline 1/7) | 4/5 (baseline 1/5) | 100%, 0 wrong writes |
-| Destructive commands stopped with approvals off | 0/49 | 31/49 | 9/15 | 13/16 (14/16 with the scorer fix below) | 100%, every everyday command still runs |
-| Placeholder (elision) rewrites caught | 0/12 | 12/12 | 2/4 | 2/3 | 100%, 0 false alarms |
-| Weakened tests caught | 0/8 | 8/8 | 2/3 | 2/3 | 100%, 0 false alarms |
-| Secrets caught before commit | 0/10 | 8/10 | 4/5 | 4/5 | 19/20 (one deliberate miss, below), 0 false alarms |
+| Track | Baseline (dev) | OASIS before fixes (dev) | Held-out v1, untuned | Held-out v2, untuned | Held-out v3, untuned | All sets now |
+| --- | --- | --- | --- | --- | --- | --- |
+| Tool-call recovery (malformed or text-only calls) | 3/26 | 25/26 | 9/11 (baseline 1/11) | 9/9 (baseline 0/9) | 5/13 (baseline 0/13) | 100%, 0 false runs |
+| Edit application under drift | 4/14 | 13/14, 1 wrong write | 7/7 (baseline 1/7) | 4/5 (baseline 1/5) | 3/5 (4/5 with the case fix below; baseline 0/5) | 100%, 0 wrong writes |
+| Destructive commands stopped with approvals off | 0/49 | 31/49 | 9/15 | 13/16 (14/16 with the scorer fix below) | 49/54, 22/22 everyday commands run | 100%, every everyday command still runs |
+| Placeholder (elision) rewrites caught | 0/12 | 12/12 | 2/4 | 2/3 | 3/6 | 100%, 0 false alarms |
+| Weakened tests caught | 0/8 | 8/8 | 2/3 | 2/3 | 5/7 | 100%, 0 false alarms |
+| Secrets caught before commit | 0/10 | 8/10 | 4/5 | 4/5 | 8/8, 0/5 false alarms | 27/28 (one deliberate miss, below), 0 false alarms |
 
 Notes:
 
 - Negative cases are scored too: plain prose and code samples that must not run as tool calls, edits that must be refused (ambiguous or absent `old_string`), everyday commands that must still run, ordinary comments, honest test renames, env references, placeholders and UUIDs that must not trip a guard.
 - The command scorer originally decided which commands a Git safety snapshot can undo with a hard-coded ID list, so `git reset --hard HEAD~3` in v2 was scored as unprotected. Cases now carry a `recoverable` flag. The untuned v2 number above is the one recorded before that fix.
+- v3 found real runtime bugs, not just new patterns. The database-wipe check ended in `\b`, which can never match after `dropDatabase(` and let any `TRUNCATE` of a table name longer than one letter through. `kill -9 -1`, `: > ~/.bashrc` and `git config --global core.hooksPath` ran silently. Test-command changes such as `"test": "jest || true"` were never inspected because only test files were diffed. One v3 edit case (`v3-trailing-ws-in-file`) had a wrong expectation: the runtime kept the trailing spaces on the untouched line, which is correct; the first score counts it as a miss.
 - `v2-slack` is still a miss on purpose. The test token contains the sequential digits `1234567890`, which the secret scanner treats as a placeholder to avoid false alarms on documentation. Real Slack tokens do not look like that, so the filter stays.
 - "Commands stopped" means blocked, or held for approval even in bypass mode (`run_shell` high-risk commands such as `curl | sh`, `terraform destroy` or `git clean -x` always ask), or made undoable by an automatic Git safety snapshot.
 

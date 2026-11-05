@@ -144,3 +144,12 @@ test('spacing relaxation never joins two words', () => {
   assert.equal(relaxedReplace('return x;\n', 'returnx;', 'returnx + 1;'), null);
   assert.equal(relaxedReplace('const s = "a b";\n', 'const s = "ab";', 'const s = "abc";'), null);
 });
+
+test('line-number prefixes copied from read output are removed only when every line is consecutively numbered', () => {
+  const file = 'const a = 1;\nconst b = 2;\nconst c = 3;\n';
+  assert.equal(relaxedReplace(file, '     2\tconst b = 2;', '     2\tconst b = 22;').next, 'const a = 1;\nconst b = 22;\nconst c = 3;\n');
+  assert.equal(relaxedReplace(file, '  2→const b = 2;\n  3→const c = 3;', 'const b = 9;\nconst c = 9;').next, 'const a = 1;\nconst b = 9;\nconst c = 9;\n');
+  assert.equal(relaxedReplace(file, '2 | const b = 2;\n4 | const c = 3;', 'x'), null);
+  assert.equal(relaxedReplace(file, '     9\tconst z = 2;', 'y'), null);
+  assert.equal(relaxedReplace('x\n1: a\n', '1: b', 'c'), null);
+});
