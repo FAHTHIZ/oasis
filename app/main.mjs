@@ -208,6 +208,7 @@ function setPluginEnabled(id, on) {
 }
 
 async function send(text) {
+  if (dictation.listening) dictation.stop(true);
   const message = text.trim() || (attachments.length ? 'Take a look at the attached image' + (attachments.length === 1 ? '.' : 's.') : '');
   if (!message) return;
   if (RT && RT.needsToken) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
@@ -1782,6 +1783,107 @@ async function startRuntime(found) {
   await restoreChat();
 }
 
+/* ---------- Dictation ---------- */
+// The browser's own speech recognition where it works (Chrome, Edge, Safari).
+// Where it does not (the desktop app, Firefox) and OASIS runs on this
+// computer, record here and let OASIS transcribe with the configured endpoint.
+// Words land in the message box; nothing is sent until you press send.
+const dictation = { listening: false, stop() {} };
+function setupDictation() {
+  const button = $('dictateButton');
+  const input = $('input');
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const setState = (on) => {
+    dictation.listening = on;
+    button.classList.toggle('listening', on);
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    button.setAttribute('aria-label', on ? 'Stop dictation' : 'Dictate');
+    button.title = on ? 'Stop dictation' : 'Dictate';
+  };
+  const insert = (text) => {
+    const base = input.value;
+    input.value = base + (base && !/\s$/.test(base) ? ' ' : '') + text;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  };
+  if (Recognition && !/Electron\//.test(navigator.userAgent)) {
+    button.hidden = false;
+    let rec = null;
+    let base = '';
+    let spoken = '';
+    const write = (interim) => {
+      const words = (spoken + interim).replace(/\s+/g, ' ').trim();
+      input.value = base + (base && words && !/\s$/.test(base) ? ' ' : '') + words;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    dictation.stop = (discard) => { if (rec) { if (discard) rec.onresult = null; try { rec.stop(); } catch { /* already stopped */ } } };
+    button.addEventListener('click', () => {
+      if (rec) { dictation.stop(); return; }
+      rec = new Recognition();
+      rec.lang = navigator.language || 'en-US';
+      rec.interimResults = true;
+      rec.continuous = true;
+      base = input.value;
+      spoken = '';
+      rec.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) spoken += event.results[i][0].transcript + ' ';
+          else interim += event.results[i][0].transcript;
+        }
+        write(interim);
+      };
+      rec.onerror = (event) => {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') toast('Microphone access is blocked. Allow it in the browser to dictate.', 'error');
+        else if (!['no-speech', 'aborted'].includes(event.error)) toast('Dictation stopped (' + event.error + ').', 'error');
+      };
+      rec.onend = () => { rec = null; setState(false); input.focus(); };
+      try { rec.start(); setState(true); } catch { rec = null; setState(false); }
+    });
+    return;
+  }
+  if (!(RT && RT.client && window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
+  button.hidden = false;
+  let recorder = null;
+  let discard = false;
+  dictation.stop = (drop) => { discard = Boolean(drop); if (recorder && recorder.state !== 'inactive') recorder.stop(); };
+  button.addEventListener('click', async () => {
+    if (button.classList.contains('working')) return;
+    if (recorder) { dictation.stop(); return; }
+    const voice = await RT.client.api('/api/voice').catch(() => null);
+    if (!voice || !voice.transcription) {
+      toast(voice && voice.disabledByPolicy ? 'Dictation is turned off by your organization.' : 'Dictation needs a transcription service here: set OPENAI_API_KEY for OASIS, or see /voice in the terminal.', 'error');
+      return;
+    }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { toast('Microphone access is blocked. Allow it to dictate.', 'error'); return; }
+    const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+    const chunks = [];
+    discard = false;
+    recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    recorder.ondataavailable = (event) => { if (event.data && event.data.size) chunks.push(event.data); };
+    recorder.onstop = async () => {
+      const mime = (recorder.mimeType || type || 'audio/webm').split(';')[0];
+      recorder = null;
+      stream.getTracks().forEach((track) => track.stop());
+      setState(false);
+      if (discard || !chunks.length) return;
+      button.classList.add('working');
+      try {
+        const response = await fetch(RT.client.origin + '/api/transcribe', { method: 'POST', headers: { authorization: 'Bearer ' + RT.client.token, 'content-type': mime }, body: new Blob(chunks, { type: mime }), cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'error ' + response.status);
+        if (data.text) insert(String(data.text).trim()); else toast('No speech was recognised.');
+      } catch (error) { toast('Dictation failed: ' + error.message, 'error'); }
+      finally { button.classList.remove('working'); }
+    };
+    recorder.start();
+    setState(true);
+    setTimeout(() => { if (recorder) dictation.stop(); }, 300000);
+  });
+}
+
 async function boot() {
   applyTheme();
   fillProviderOptions();
@@ -1795,6 +1897,7 @@ async function boot() {
   }
   renderWelcome();
   renderPluginState();
+  setupDictation();
   // The side panel comes back open only where it sits beside the chat; on a
   // phone it would cover the conversation.
   if (innerWidth >= 1024 && (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && workspace))) toggleFiles(true);

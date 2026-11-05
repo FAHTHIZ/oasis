@@ -121,6 +121,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   const errors = [];
   page.on('Runtime.exceptionThrown', (event) => errors.push(event.exceptionDetails.exception ? event.exceptionDetails.exception.description : event.exceptionDetails.text));
   await page.send('Page.enable');
+  // A stand-in for the browser's speech service: says one sentence, then ends when stopped.
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: `window.SpeechRecognition = window.webkitSpeechRecognition = class { start() { setTimeout(() => this.onresult && this.onresult({ resultIndex: 0, results: [Object.assign([{ transcript: 'add a reset button' }], { isFinal: true })] }), 30); } stop() { setTimeout(() => this.onend && this.onend(), 10); } };` });
   // OASIS_SHOTS_DIR=/tmp/x saves screenshots of each step for design review.
   const shotsDir = process.env.OASIS_SHOTS_DIR;
   const shot = async (name) => {
@@ -219,7 +221,17 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
 
-  // 9. `!command` runs on this computer after approval, without the model,
+  // 9. Dictation writes into the message box and sends nothing by itself.
+  await waitFor(page, `Boolean(document.getElementById('input')) && !${busy} && !document.getElementById('dictateButton').hidden`, { label: 'app ready after reload, with a microphone button' });
+  await evaluate(page, type('Please'));
+  await evaluate(page, `document.getElementById('dictateButton').click(); true`);
+  await waitFor(page, `document.getElementById('dictateButton').classList.contains('listening') && document.getElementById('input').value === 'Please add a reset button'`, { label: 'dictated words appear after what was typed' });
+  await evaluate(page, `document.getElementById('dictateButton').click(); true`);
+  await waitFor(page, `!document.getElementById('dictateButton').classList.contains('listening') && document.getElementById('dictateButton').getAttribute('aria-pressed') === 'false'`, { label: 'dictation stopped' });
+  assert.equal(await evaluate(page, `document.querySelectorAll('.msg.user').length > 0 && !/reset button/.test(document.getElementById('transcript').textContent)`), true, 'nothing was sent');
+  await evaluate(page, type(''));
+
+  // 10. `!command` runs on this computer after approval, without the model,
   // and its output goes with the next message.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy}`, { label: 'app ready after reload' });
   await evaluate(page, type('!node -e "console.log(6 * 7)"'));
@@ -233,7 +245,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, submit);
   await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output', timeout: 30000 });
 
-  // 10. The desktop menu's "Connect a phone…" opens the app's phone sheet.
+  // 11. The desktop menu's "Connect a phone…" opens the app's phone sheet.
   await evaluate(page, `window.oasisConnectPhone(); true`);
   await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
   await shot('6-phone');
