@@ -95,7 +95,7 @@ test('a Gemini per-minute limit is a short wait, not a billing error', async () 
   assert.equal(formatWait(150000), '3 min');
 });
 
-async function runAgainstRateLimitedGemini({ fails, fallback = '' }) {
+async function runAgainstRateLimitedGemini({ fails, fallback = '', serverErrors = 0 }) {
   const http = await import('node:http');
   const { spawn } = await import('node:child_process');
   const fs = await import('node:fs/promises');
@@ -111,6 +111,11 @@ async function runAgainstRateLimitedGemini({ fails, fallback = '' }) {
       if (models.length <= fails) {
         res.writeHead(429, { 'content-type': 'application/json' });
         res.end(geminiQuota429('GenerateContentInputTokensPerModelPerMinute-FreeTier', 'Generate content input tokens per minute limit exceeded on Free Tier.', '0.4s', '0s'));
+        return;
+      }
+      if (models.length <= fails + serverErrors) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify([{ error: { code: 500, message: 'Internal error encountered.', status: 'INTERNAL' } }]));
         return;
       }
       const reply = { role: 'assistant', content: 'Recovered.' };
@@ -175,4 +180,60 @@ test('the browser app fails fast on daily quota and waits out per-minute limits'
   const ok = await chat(config, { messages: [{ role: 'user', content: 'x' }], onRetry: (n, e) => waits.push(e.retryAfterMs), fetchImpl: async () => (++calls === 1 ? new Response(minute, { status: 429 }) : new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200, headers: { 'content-type': 'application/json' } })) });
   assert.equal(ok.content, 'ok');
   assert.deepEqual(waits, [500]);
+});
+
+test('an input-tokens-per-minute limit switches later steps to the compact tool set', async () => {
+  const http = await import('node:http');
+  const { spawn } = await import('node:child_process');
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const body = JSON.parse(raw || '{}');
+      seen.push({ tools: (body.tools || []).length, bytes: raw.length });
+      if (seen.length === 1) {
+        res.writeHead(429, { 'content-type': 'application/json' });
+        res.end(geminiQuota429('GenerateContentInputTokensPerModelPerMinute-FreeTier', 'Generate content input tokens per minute limit exceeded on Free Tier.', '0.2s', '0s').replace('generate_content_free_tier_requests', 'generate_content_free_tier_input_token_count'));
+        return;
+      }
+      const message = seen.length === 2
+        ? { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'list_files', arguments: '{"path":"."}' } }] }
+        : { role: 'assistant', content: 'Listed.' };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop' }] }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'oasis-tpm-'));
+  try {
+    await fs.writeFile(path.join(home, 'a.txt'), 'x');
+    const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'gemma-4-31b-it', OASIS_API_KEY: '', OASIS_SANDBOX: '0', OASIS_STREAM: '0' };
+    const child = spawn(process.execPath, [new URL('../src/cli.mjs', import.meta.url).pathname, '-p', 'list the files'], { cwd: home, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (c) => { out += c; });
+    child.stderr.on('data', (c) => { err += c; });
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    assert.equal(code, 0, err);
+    assert.match(out, /Listed\./);
+    assert.equal(seen.length, 3);
+    assert.match(err, /Switched to the compact tool set/);
+    assert.ok(seen[2].tools < seen[0].tools, 'fewer tools after the limit: ' + JSON.stringify(seen));
+    assert.ok(seen[2].tools > 0 && seen[2].bytes < seen[0].bytes * 0.8, JSON.stringify(seen));
+  } finally {
+    server.close();
+    await fs.rm(home, { recursive: true, force: true });
+  }
+});
+
+
+test('server errors right after a per-minute wait still get their retries', async () => {
+  const run = await runAgainstRateLimitedGemini({ fails: 1, serverErrors: 2 });
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.out, /Recovered\./);
+  assert.equal(run.models.length, 4);
 });
