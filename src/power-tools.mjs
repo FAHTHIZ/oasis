@@ -6,7 +6,7 @@ import { securityWarning } from './security-patterns.mjs';
 //   command_output read new output from a background process
 //   kill_command   stop a background process
 //   list_background list background processes
-//   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings, OASIS_SHELL=1 or the sandbox
+//   run_shell      shell command line (pipes, &&, redirects); on by default except on Windows
 import { leadingSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';

@@ -16,6 +16,7 @@
 //   each directory also gets MEMORY.md, a generated index of abstracts.
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
@@ -31,10 +32,44 @@ export function autoMemoryEnabled(settings = {}, env = process.env) {
   return true;
 }
 
+// One project memory per repository, as in Claude Code: every subfolder and
+// every git worktree of a repository shares it. Outside git, the folder
+// itself is the project. Purely file-based (no git process).
+export function memoryProjectRoot(root) {
+  let dir = path.resolve(root);
+  for (let i = 0; i < 64; i++) {
+    const dotGit = path.join(dir, '.git');
+    let info = null;
+    try { info = statSync(dotGit); } catch { /* keep walking */ }
+    if (info && info.isDirectory()) return dir;
+    if (info && info.isFile()) {
+      // A worktree or submodule: ".git" holds "gitdir: <main>/.git/worktrees/<name>".
+      try {
+        const target = /^gitdir:\s*(.+)$/m.exec(readFileSync(dotGit, 'utf8'));
+        const gitdir = target ? path.resolve(dir, target[1].trim()) : '';
+        const worktrees = gitdir.split(path.sep).lastIndexOf('worktrees');
+        if (worktrees > 0 && path.basename(gitdir.split(path.sep).slice(0, worktrees).join(path.sep)) === '.git') return path.dirname(gitdir.split(path.sep).slice(0, worktrees).join(path.sep));
+      } catch { /* treat as a normal folder */ }
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(root);
+}
+
+const projectKey = (dir) => createHash('sha256').update(dir).digest('hex').slice(0, 20);
+
 export function memoryRoots(root, env = process.env) {
   const base = path.join(getConfigDirectory(env), 'memory');
-  const key = createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 20);
-  return { user: path.join(base, 'user'), project: path.join(base, 'projects', key) };
+  const repo = memoryProjectRoot(root);
+  const project = path.join(base, 'projects', projectKey(repo));
+  // Memory saved before this change was keyed by the exact folder; keep using
+  // it if that is all there is, so nothing seems to be forgotten.
+  const legacy = path.join(base, 'projects', projectKey(path.resolve(root)));
+  if (legacy !== project && !existsSync(project) && existsSync(legacy)) return { user: path.join(base, 'user'), project: legacy };
+  return { user: path.join(base, 'user'), project };
 }
 
 // ---------- privacy ----------

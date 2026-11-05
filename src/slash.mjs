@@ -57,6 +57,7 @@ export const BUILTIN_COMMANDS = {
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
+  add: 'Add anything: a GitHub link, owner/repo[#name], plugin@marketplace, MCP server URL, npm MCP package or registry name (/add LINK)',
   mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers; /mcp search QUERY searches the MCP Registry',
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
@@ -1604,6 +1605,17 @@ export async function runBuiltinCommand(name, argument, state) {
         : saved.find((item) => item.id === requested) || saved.find((item) => item.id.startsWith(requested));
       if (!selected) return { output: 'No saved session matches "' + requested + '".' };
       return { output: 'Resuming saved session ' + selected.id + '.', resume: selected.id };
+    }
+    case 'add': {
+      // Typing /add SOURCE is the consent; the summary says what was set up.
+      const source = String(argument || '').trim();
+      if (!source) return { output: 'Usage: /add LINK. Examples: /add obra/superpowers, /add anthropics/skills#pdf, /add https://mcp.context7.com/mcp, /add github' };
+      const { addAnything } = await import('./add-anything.mjs');
+      let summary = '';
+      try {
+        const result = await addAnything(source, { root, env: env || process.env, approve: async (text) => { summary = text; return true; } });
+        return { output: (summary ? summary + '\n' : '') + result.message, ...(result.reload && session ? { reload: 'plugins' } : {}) };
+      } catch (error) { return { output: 'Could not add ' + source + ': ' + error.message }; }
     }
     case 'mcp': {
       const mcpWords = String(argument || '').trim().split(/\s+/).filter(Boolean);
