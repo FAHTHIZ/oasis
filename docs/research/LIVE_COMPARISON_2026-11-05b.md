@@ -24,6 +24,7 @@ Read the caveats before quoting any number: one trial per task, at most three ta
 | OpenCode, evening (harness at `bb25890`, loaded at start) | pass (35,287 tokens, 242 s) | fail: "Expected 'id' to be a string" | fail: same error | 1/3 |
 | OASIS, evening (`bb25890`, loaded at start) | pass (90,093 tokens, 476 s) | pass (221,834 tokens, 1,095 s) | fail: HTTP 400 | 2/3 |
 | OASIS, taskflow-search rerun (`729816f`) | — | — | FAIL: HTTP 400 "Unknown role: assistant<\|channel\|>commentary" from the upstream after 258,409 tokens, 1,090 s. The harmony tool-name cleaning worked live and the run continued until this upstream error; `e814649` now retries it | — |
+| OASIS, second taskflow-search rerun (`66d4812`, loaded at start) | — | — | pass (188,606 tokens, 857 s, 16 tool calls, 18 requests). No upstream 400 happened this time, so the `e814649` retry was not exercised; the gateway's own log matches the reported tokens. [Summary](../../bench/results/live-2026-11-05b/taskflow-rerun2-SUMMARY.md) | — |
 
 What happened in the failures:
 
@@ -31,6 +32,7 @@ What happened in the failures:
 - **OASIS, morning clamp-integer.** The model's regex rejected negative numbers, and it never read the repository's existing `clampInteger` in `src/config.mjs`.
 - **OpenCode, "Expected 'id' to be a string".** The endpoint's stream sometimes sends a final tool-call fragment at a new index with no id or name (in one captured stream, the closing `}` of call 0 arrived as index 1). OpenCode's client stops on it. OASIS now joins such a fragment to the previous call (`2171d91`); before that, it would have built a broken, nameless call.
 - **Aider, taskflow-search.** The task says "add tests"; Aider changed the code and added none.
+- **Taken together on taskflow-search:** every agent failed it in the matched runs above. One later OASIS-only run passed it, so it is not counted in any agent's score: one pass in one trial says the task is reachable on this model, not that OASIS would pass it reliably.
 
 ### Nemotron 3 Ultra (OpenRouter free), safe-relative-path only
 
