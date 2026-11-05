@@ -95,7 +95,7 @@ cd ~/your-project && oasis
 
 The script comes from the immutable `v1.1.0` tag. It installs the latest stable release at its exact commit, asks before changing anything, runs `oasis doctor` and opens provider setup. To check its SHA-256 before running it, or to install on Windows, see the [install guide](docs/INSTALL.md#command-line-installation).
 
-On a Mac, the desktop app is also a Homebrew cask: `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install --cask fahthiz/oasis/oasis` ([details](docs/INSTALL.md#homebrew-macos)).
+With Homebrew, run `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis`, then `brew install fahthiz/oasis/oasis-cli` for the CLI (macOS and Linux) or `brew install --cask fahthiz/oasis/oasis` for the Mac desktop app ([details](docs/INSTALL.md#homebrew-macos-and-linux)).
 
 Want the current `main` instead?
 
