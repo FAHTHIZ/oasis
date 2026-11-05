@@ -22,7 +22,7 @@ export const RECOMMENDED_LOCAL_CONTEXT = 32_768;
 // Tools that cover read, search, edit, run and verify. Everything else stays
 // one tool_search away.
 export const SMALL_CONTEXT_TOOLS = Object.freeze([
-  'read_file', 'list_files', 'glob_files', 'search_files', 'grep', 'edit_file', 'write_file',
+  'read_file', 'list_files', 'glob_files', 'grep', 'edit_file', 'write_file',
   'run_command', 'command_output', 'git_status', 'git_diff', 'todo_write', 'tool_search'
 ]);
 
