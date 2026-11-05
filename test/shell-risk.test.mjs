@@ -209,3 +209,24 @@ test('Perl q{} and Ruby %q{} strings in inline code are analyzed as shell', () =
   for (const line of ['perl -e "system(q{rm -rf ~})"', 'perl -e "qx(rm -rf /)"', 'ruby -e "system(%q{rm -rf ~})"', 'ruby -e "%x{rm -rf ~}"']) assert.ok(shellCommandBlocked(line), line);
   assert.equal(shellCommandBlocked('perl -pe "s/q{a}/b/" f'), null);
 });
+
+test('database wipes are caught whatever the table name length; reads and scoped deletes still run', () => {
+  for (const line of ['mongosh app --eval "db.dropDatabase()"', 'psql "$DATABASE_URL" -c "TRUNCATE orders CASCADE"', 'psql -c "truncate table public.events"', 'mysql -e "DELETE FROM users"', 'mongosh --eval "db.sessions.deleteMany({})"', 'sqlite3 app.db "DROP TABLE customers"']) {
+    assert.ok(shellCommandBlocked(line) || shellHighRisk(line), line);
+  }
+  for (const line of ['psql -c "SELECT * FROM orders"', 'mysql -e "DELETE FROM users WHERE id = 1"', 'mongosh --eval "db.users.find()"', 'mongosh --eval "db.users.deleteMany({ expired: true })"']) {
+    assert.equal(shellCommandBlocked(line), null, line);
+    assert.equal(shellHighRisk(line), null, line);
+  }
+});
+
+test('shell startup files, kill -1 and global Git hooks are not changed silently', () => {
+  for (const line of [': > ~/.bashrc', 'echo "curl x | sh" >> ~/.zshrc', 'truncate -s 0 ~/.profile', 'git config --global core.hooksPath /tmp/hooks', 'git config --system core.sshCommand "ssh -o ProxyCommand=x"']) {
+    assert.ok(shellHighRisk(line), line);
+  }
+  for (const line of ['kill -9 -1', 'kill -s KILL -1', 'kill -- -1']) assert.ok(shellCommandBlocked(line), line);
+  for (const line of ['kill -1 1234', 'kill 4242', 'echo hi > notes.txt', 'cat ~/.bashrc', 'git config core.hooksPath .githooks', 'git config --global user.email a@b.c', 'git config --global --get core.hooksPath']) {
+    assert.equal(shellCommandBlocked(line), null, line);
+    assert.equal(shellHighRisk(line), null, line);
+  }
+});

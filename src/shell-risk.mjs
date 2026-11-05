@@ -165,6 +165,7 @@ function isCriticalPath(raw) {
 }
 
 const PRIVATE_KEY_FILE = /^(~|\$HOME|\/home\/[^/]+|\/Users\/[^/]+)\/(\.ssh\/id_[a-z0-9_]+|\.gnupg(\/(private-keys-v1\.d|secring\.gpg|pubring\.kbx))?)\/?$/;
+const USER_STARTUP_FILE = /^(~|\$HOME|\/home\/[^/]+|\/Users\/[^/]+|\/root)\/(\.(bashrc|bash_profile|bash_login|profile|zshrc|zprofile|zshenv|zlogin|cshrc|tcshrc|kshrc|inputrc|gitconfig|npmrc|pypirc|netrc|config\/fish\/config\.fish|config\/git\/config))$/;
 const SYSTEM_WRITE_TARGET = /^(\/etc\/|\/usr\/|\/bin\/|\/sbin\/|\/boot\/|\/lib\/|\/dev\/(sd|hd|nvme|disk|mmcblk|xvd)|\/System\/|(~|\$HOME)\/\.ssh\/)/;
 
 function flags(args) {
@@ -226,6 +227,23 @@ function analyzeSimple(cmd, ctx = {}) {
     }
   }
 
+  // `: > ~/.bashrc`, `> ~/.gitconfig`, `>> ~/.zshrc`: the shell startup and
+  // tool config files outside the workspace. Overwriting wipes the user's
+  // setup; appending is how a payload persists into every new shell.
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (/^>+$|^>\|$|^&>>?$/.test(tokens[i]) && USER_STARTUP_FILE.test(normalizeTarget(tokens[i + 1]))) {
+      return { highRisk: (tokens[i] === '>>' || tokens[i] === '&>>' ? 'appends to ' : 'overwrites ') + tokens[i + 1] + ', which runs in every new shell or tool session' };
+    }
+  }
+  if ((name === 'truncate' || name === 'tee') && ops.some((a) => USER_STARTUP_FILE.test(normalizeTarget(a)))) {
+    return { highRisk: name + ' rewrites ' + ops.find((a) => USER_STARTUP_FILE.test(normalizeTarget(a))) + ', which runs in every new shell or tool session' };
+  }
+  // kill -9 -1 / kill -KILL -1: signals every process the user may signal.
+  // A leading -1 is a signal number (kill -1 PID sends SIGHUP); only a final
+  // -1 after a signal or `--` targets every process.
+  if ((name === 'kill' && args.length >= 2 && args[args.length - 1] === '-1') || name === 'killall5') {
+    return { blocked: 'signals every process the user owns (kill -1), ending the session and unsaved work' };
+  }
   if (name === 'rm' || name === 'remove-item' || name === 'ri' || name === 'del' || name === 'rd' || name === 'rmdir') {
     const recursive = f.short.has('r') || f.short.has('R') || f.long.has('--recursive') || lower.some((a) => a === '-recurse' || a === '/s');
     const target = ops.find(isCriticalPath);
@@ -316,6 +334,15 @@ function analyzeGit(args, f, ops) {
       if (ops.slice(1).some((a) => /^\+/.test(a) || /(^|:)\+/.test(a))) return { blocked: 'force-pushes a refspec (+ref) over remote history' };
       if (f.long.has('--delete') || ops.slice(1).some((a) => /^:[^:]/.test(a))) return { highRisk: 'deletes a remote branch or tag' };
     }
+    // `git config --global core.hooksPath /tmp/x` runs that folder's scripts
+    // on every Git command in every repository; sshCommand, fsmonitor,
+    // credential helpers and URL rewrites have the same reach.
+    if (sub === 'config' && (f.long.has('--global') || f.long.has('--system')) && !f.long.has('--get') && !f.long.has('--list') && !f.short.has('l')) {
+      const key = ops[1] || '';
+      if (/^(core\.(hookspath|sshcommand|fsmonitor|pager|editor|askpass)|credential\..*helper|url\..*\.(insteadof|pushinsteadof)|alias\..+|include\.path|includeif\..+)$/i.test(key) && ops.length >= 3) {
+        return { highRisk: 'git config ' + (f.long.has('--system') ? '--system' : '--global') + ' ' + key + ' changes what runs for every Git command in every repository' };
+      }
+    }
     if (sub === 'filter-branch' || sub === 'filter-repo') return { highRisk: 'rewrites every commit in the repository history' };
     if (sub === 'reflog' && ops[1] === 'expire') return { highRisk: 'expires the reflog, removing the record used to recover lost commits' };
     if (sub === 'gc' && lower.some((a) => /^--prune(=now)?$/.test(a))) return { highRisk: 'permanently prunes unreachable commits' };
@@ -348,7 +375,9 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
   }
   if (/^(psql|mysql|mariadb|sqlite3|sqlcmd|mongosh|mongo|redis-cli)$/.test(name)) {
     const sql = args.join(' ');
-    if (/\b(drop\s+(database|schema|table)|truncate\s+(table\s+)?\w|delete\s+from\s+\w+\s*;?\s*$|dropDatabase\s*\(|flushall|flushdb)\b/i.test(sql)) {
+    // No trailing \b: it can never match after `(` and would only let a
+    // one-letter table name through `truncate`.
+    if (/\b(?:drop\s+(?:database|schema|table|collection)\b|truncate\s+(?:table\s+)?[\w"`.]+|delete\s+from\s+[\w"`.]+\s*;?\s*(?:["']|$)|(?:dropDatabase|deleteMany|drop)\s*\(\s*(?:\{\s*\})?\s*\)|flushall\b|flushdb\b)/i.test(sql)) {
       return { highRisk: name + ' runs a statement that drops or wipes data' };
     }
   }
