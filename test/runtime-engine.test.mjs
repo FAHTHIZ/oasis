@@ -243,11 +243,13 @@ test('pending terminal output is bounded and survives chat snapshots', () => {
 });
 
 test('failed chat submission does not consume pending terminal output', async () => {
+  const events = [];
   const agent = new RuntimeAgent({
     client: { api: async (url) => { if (url === '/api/chat') throw new Error('offline'); return {}; } },
-    onEvent: () => {}
+    onEvent: (event) => events.push(event)
   });
   agent.load({ pendingShell: [{ command: 'npm test', code: 1, output: 'one test failed' }] });
-  await assert.rejects(agent.send('fix the failure'), /offline/);
+  await agent.send('fix the failure');
+  assert.ok(events.some((event) => event.type === 'error' && /offline/.test(event.message)));
   assert.equal(agent.pendingShell.length, 1);
 });
