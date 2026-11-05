@@ -6,6 +6,8 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Update checks survive GitHub rate limits.** Unauthenticated GitHub API calls are capped at 60 an hour per IP address, which shared networks, VPNs and CI runners use up, and both `oasis update` and the desktop update check then failed with HTTP 403. When the API answers 403 or 429, OASIS now reads the release tag, asset list and tag commit from github.com pages. Downloads are still checked against `SHA256SUMS`. A `GH_TOKEN` or `GITHUB_TOKEN`, when set, is sent to the API only.
+- `oasis update --help` printed nothing useful and went straight to a real update check (it still asked before installing). It now prints usage. Unknown options are rejected with exit code 2 before any network call.
 - **Install as an app.** **Settings → Devices → Install OASIS as an app** opens the browser's own install prompt on Android and in desktop Chrome or Edge, and shows the Add to Home Screen steps on iPhone and iPad. The row is hidden once OASIS is installed and in the desktop app.
 - The optional Windows ARM64 installer build asks node-gyp for Visual Studio 2026, the only version on that runner image. It still failed in 1.1.0 because the build insisted on 2022.
 - After the release job publishes a version, it now asks the homepage workflow to run again. Before this, the download buttons kept pointing at the previous release until the next push to `main`, because releases created by CI do not trigger other workflows.

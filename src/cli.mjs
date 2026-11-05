@@ -767,6 +767,27 @@ async function doctor(args = [], root = process.cwd()) {
 // Workspace-level checks: tools Oasis relies on, settings/trust, sandbox, MCP,
 // memory and extension files. Problems are listed with a suggested fix.
 async function updateOasis(args = []) {
+  if (args.includes('--help') || args.includes('-h')) {
+    stdout.write([
+      'Usage: oasis update [--check] [--yes]',
+      '',
+      'Installs the latest stable OASIS release for this CLI install (git checkout or npm).',
+      '  --check   Show the installed and latest versions without changing anything.',
+      '  --yes     Install without asking first.',
+      '',
+      'The desktop app updates itself: it offers new versions and installs them after',
+      'checking SHA256SUMS. Set OASIS_NO_UPDATE_CHECK=1 to turn off update notices.',
+      'If GitHub rate-limits the API, OASIS reads the release from github.com instead;',
+      'setting GH_TOKEN or GITHUB_TOKEN raises the API limit.'
+    ].join('\n') + '\n');
+    return;
+  }
+  const unknown = args.filter((arg) => !['--check', '--yes', '-y'].includes(arg));
+  if (unknown.length) {
+    stderr.write('Unknown option for oasis update: ' + unknown.join(' ') + '. Run oasis update --help.\n');
+    process.exitCode = 2;
+    return;
+  }
   const { latestReleaseCommit, installedVersion, updatePlan, describeUpdate } = await import('./update.mjs');
   const checkOnly = args.includes('--check');
   const yes = args.includes('--yes') || args.includes('-y');
