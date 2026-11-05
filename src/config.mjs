@@ -1,5 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
-import { mkdir, readFile, chmod } from 'node:fs/promises';
+import { mkdir, readFile, chmod, copyFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';
 import path from 'node:path';
@@ -160,7 +160,7 @@ export async function loadConfig(options = {}) {
     const parsed = JSON.parse(await readFile(configPath, 'utf8'));
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed;
   } catch (error) {
-    if (error.code !== 'ENOENT') throw new Error('Could not read Oasis configuration: ' + error.message);
+    if (error.code !== 'ENOENT') throw new Error('Could not read Oasis configuration: ' + error.message + ' (' + configPath + '). Fix the file, or run oasis setup to replace it; setup keeps a copy of the unreadable file.');
   }
 
   let savedBaseURL = '';
@@ -225,11 +225,22 @@ export async function saveConfig(config, options = {}) {
   // preferences always carry over, gateway headers and betas only for the same
   // endpoint, and model limits (context window, output cap) only for the same model.
   let existing = {};
-  if (options.preserve !== false) {
-    try {
-      const parsed = JSON.parse(await readFile(configPath, 'utf8'));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) existing = parsed;
-    } catch {}
+  let backupPath = '';
+  let raw = null;
+  try { raw = await readFile(configPath, 'utf8'); } catch {}
+  if (raw !== null && raw.trim()) {
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { parsed = undefined; }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (options.preserve !== false) existing = parsed;
+    } else {
+      // An unreadable file (often a hand edit with a typo) would otherwise be
+      // replaced and its other settings lost: keep a copy next to it first.
+      backupPath = configPath + '.invalid-' + new Date().toISOString().replace(/[:.]/g, '-');
+      try { await copyFile(configPath, backupPath); await chmod(backupPath, 0o600).catch(() => {}); } catch { backupPath = ''; }
+      if (typeof options.onInvalidConfig === 'function') options.onInvalidConfig({ configPath, backupPath });
+      else process.emitWarning('The OASIS configuration at ' + configPath + ' was not valid JSON' + (backupPath ? '; a copy was saved to ' + backupPath : '') + ' before it was replaced.', { code: 'OASIS_CONFIG_INVALID' });
+    }
   }
   const defined = Object.fromEntries(Object.entries(config || {}).filter(([key, value]) => value !== undefined && !RUNTIME_CONFIG_KEYS.has(key)));
   const nextProtocol = validateProtocol(defined.protocol || DEFAULT_PROTOCOL);
