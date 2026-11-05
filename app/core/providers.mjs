@@ -332,6 +332,27 @@ export async function chat(config, request) {
 }
 
 /** A tiny inert tool-call probe to check a provider before saving it. */
+/**
+ * One short line for a failed request, e.g. "daily free-tier quota used up
+ * (retry in 21h11m)" or "model retired by the provider". Shared by the CLI
+ * and the app so both explain quota and retirement the same way.
+ */
+export function briefFailure(message, status = 0) {
+  let text = String(message || '').replace(/\s+/g, ' ').trim();
+  text = text.replace(/^Model provider returned HTTP \d+:\s*/i, '').replace(/\.?\s*Check the configured [^.]*\.?$/i, '');
+  const retry = /retry in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(text);
+  const parts = retry ? [retry[1] && retry[1] + 'h', retry[2] && retry[2] + 'm', !retry[1] && retry[3] && Math.ceil(Number(retry[3])) + 's'].filter(Boolean) : [];
+  const when = parts.length ? ' (retry in ' + parts.join('') + ')' : '';
+  const freeTier = /free.?tier/i.test(text) ? 'free-tier ' : '';
+  if (/per ?day|PerDay/i.test(text) && /quota|limit/i.test(text)) return 'daily ' + freeTier + 'quota used up' + when;
+  if (/per ?minute|PerMinute/i.test(text) && /quota|limit/i.test(text)) return 'per-minute rate limit' + when;
+  if (/limit: ?0\b/i.test(text) && /quota/i.test(text)) return 'this key has no ' + freeTier + 'quota for this model';
+  if (/no longer available|deprecated|decommissioned|retired/i.test(text)) return 'model retired by the provider';
+  if (/high demand|overloaded|temporarily unavailable/i.test(text)) return 'busy right now' + when;
+  const code = Number(status) || 0;
+  return (code && !/\(\d{3}\)/.test(text) ? 'HTTP ' + code + ': ' : '') + text.split(/(?<=[.!?])\s/)[0].slice(0, 140);
+}
+
 // `timeoutMs` bounds the whole probe: a busy model can hold a request open for
 // minutes, and setup should move on to the next model instead of waiting.
 export async function testProvider(config, fetchImpl, { timeoutMs = 0 } = {}) {
