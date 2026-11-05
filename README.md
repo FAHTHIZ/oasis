@@ -65,7 +65,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 <tr>
 <td width="50%" valign="top">
 
-**Any model, really.** Claude, GPT, Gemini, DeepSeek, OpenRouter, Bedrock, Vertex, Azure Foundry, or a local Ollama, LM Studio, llama.cpp or vLLM server. Small models get a compact prompt, a 13-tool profile and tool-call repair, so even a 4B local model drives the tools; whether its code is right is still up to the model. In our live runs on a 2-CPU cloud machine with no GPU, Qwen3-4B passed two of four hidden-test tasks (`parse-boolean-flag` and `dedupe-names`). `clamp-integer` failed in all three tries. `safe-task-id` passed once in two tries, but that code fails the stricter verifier added afterwards ([field runs](docs/BENCHMARKS.md#small-local-model-field-runs-2026-11-01)).
+**Any model, really.** Claude, GPT, Gemini, DeepSeek, OpenRouter, Bedrock, Vertex, Azure Foundry, or a local Ollama, LM Studio, llama.cpp or vLLM server. Small models get a compact prompt, a 12-tool profile and tool-call repair, so even a 4B local model drives the tools; whether its code is right is still up to the model. In our live runs on a 2-CPU cloud machine with no GPU, Qwen3-4B passed two of four hidden-test tasks (`parse-boolean-flag` and `dedupe-names`). `clamp-integer` failed in all three tries. `safe-task-id` passed once in two tries, but that code fails the stricter verifier added afterwards ([field runs](docs/BENCHMARKS.md#small-local-model-field-runs-2026-11-01)).
 
 </td>
 <td width="50%" valign="top">
@@ -211,7 +211,7 @@ Full reference: [keyboard shortcuts](docs/KEYS.md) and the [user guide](docs/USE
 OASIS assumes the model might be small, quantized, or running on your laptop:
 
 - **Real context windows.** OASIS reads the window actually loaded in Ollama, LM Studio and llama.cpp, and the provider's `/models` listing for hosted and self-hosted models (DeepSeek, OpenRouter, vLLM). If the first request still overflows, it reads the size (and, for llama-server, the server itself) from the error, switches to the compact prompt and small tool set, and retries; that costs one rejected request, not a prompt read.
-- **Small-context profile.** At 16K or less: a compact system prompt (about 1.3K tokens), 13 essential tools (about 3.7K tokens for the whole first request, versus about 15K by default, counted with the Qwen3 tokenizer in an empty repository), earlier compaction and trimmed tool results. Everything else stays reachable through `tool_search`.
+- **Small-context profile.** At 16K or less: a compact system prompt (about 1.4K tokens), 12 essential tools (about 3.5K tokens for the whole first request, versus about 6.6K by default, counted with the Qwen3 tokenizer in an empty repository), earlier compaction and trimmed tool results. Everything else stays reachable through `tool_search`.
 - **Tool-call repair.** Almost-valid JSON (code fences, comments, unquoted keys, trailing commas, Python literals, missing braces) is repaired, and tool calls written as text (Hermes, Qwen, Llama and XML formats) are executed. Unrepairable calls get an error that explains how to resend them.
 - **Forgiving edits.** Matching tolerates indentation, spacing and quote drift while preserving CRLF, BOMs and your formatting. Ambiguous matches are refused, never guessed.
 - **Coaching.** When a model describes a change instead of making it, claims a file it never wrote, quits after one error or stops without checking its work, OASIS tells it so and, on small models, runs the review step itself.
