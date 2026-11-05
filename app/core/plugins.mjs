@@ -30,14 +30,8 @@ export const PLUGINS = [
     starters: ['Audit this project for security problems', 'Check for leaked secrets and unsafe input handling']
   },
   {
-    id: 'feature', name: 'Feature builder', icon: 'spark', skills: ['ship-feature', 'plan'],
-    description: 'Plans a feature, builds it end to end, tests it, and summarises the change.',
-    keywords: ['add', 'feature', 'implement', 'build', 'create', 'make', 'support for', 'new page', 'new endpoint'],
-    starters: ['Add a feature:', 'Plan and build the next feature in the README roadmap']
-  },
-  {
-    id: 'web', name: 'Web app studio', icon: 'globe', skills: ['web-app-development'], actions: ['preview'],
-    description: 'Builds websites and web apps with a live preview right inside OASIS.',
+    id: 'web', name: 'Web app studio', icon: 'globe', skills: ['web-app-development'], 
+    description: 'Builds polished, responsive websites and web apps that work without a build step.',
     keywords: ['website', 'web app', 'webapp', 'html', 'css', 'landing page', 'page', 'ui', 'frontend', 'react', 'vue', 'svelte', 'tailwind', 'game', 'dashboard', 'todo app', 'portfolio'],
     starters: ['Build a polished landing page for my product in index.html', 'Make a todo app in one HTML file with local storage', 'Make a small browser game']
   },
@@ -52,24 +46,6 @@ export const PLUGINS = [
     description: 'React Native, Flutter, Swift and Kotlin know-how for phone apps.',
     keywords: ['android', 'ios', 'mobile', 'react native', 'flutter', 'swift', 'kotlin', 'expo', 'iphone', 'phone app'],
     starters: ['Explain how this mobile app is structured', 'Add a settings screen to the app']
-  },
-  {
-    id: 'explain', name: 'Project guide', icon: 'map', skills: ['init', 'environment-setup'],
-    description: 'Explains a codebase fast: architecture, entry points, how to run and where to start.',
-    keywords: ['explain', 'understand', 'overview', 'architecture', 'how does', 'what does', 'walk me through', 'onboard', 'where is', 'structure', 'setup', 'set up', 'install'],
-    starters: ['Explain this project: architecture, entry points and how to run it', 'Write an OASIS.md with the commands and conventions of this project']
-  },
-  {
-    id: 'planner', name: 'Planner', icon: 'list', skills: ['plan', 'grill-me'],
-    description: 'Turns a fuzzy idea into a concrete plan, asking the questions that matter first.',
-    keywords: ['plan', 'design', 'spec', 'idea', 'think through', 'approach', 'strategy', 'roadmap', 'architecture for', 'should i'],
-    starters: ['Help me plan this idea step by step:', 'Grill me on my plan before we build it']
-  },
-  {
-    id: 'minimal', name: 'Smallest change', icon: 'feather', skills: ['ponytail'],
-    description: 'Solves it with the least code possible. No new dependencies, no rewrites.',
-    keywords: ['minimal', 'simplest', 'smallest', 'quick fix', 'lazy', 'without rewriting', 'tiny change', 'one line'],
-    starters: ['Fix this with the smallest possible change:']
   },
   {
     id: 'docs', name: 'Docs writer', icon: 'book', skills: ['init'],
@@ -123,8 +99,5 @@ export function suggestPlugins(text, { active = [], limit = 2 } = {}) {
     for (const pattern of patterns) if (pattern.re.test(input)) score += pattern.weight;
     if (score) scored.push({ plugin, score });
   }
-  // Generic words such as "add" or "make" only count when nothing more specific matched.
-  const specific = scored.filter((entry) => entry.plugin.id !== 'feature' || entry.score >= 2);
-  const pool = specific.length ? specific : scored;
-  return pool.sort((a, b) => b.score - a.score).slice(0, limit).map((entry) => entry.plugin);
+  return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((entry) => entry.plugin);
 }
