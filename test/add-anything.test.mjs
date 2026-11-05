@@ -210,3 +210,39 @@ test('an add-on that needs a key says so, and the key the user pastes is saved w
   await addAnything('remote', { root: base, env, values: { 'X-Api-Key': 'k3' }, approve });
   assert.deepEqual(JSON.parse(await readFile(path.join(base, 'cfg', 'mcp.json'), 'utf8')).mcpServers.remote.headers, { Authorization: 'Bearer ghp_1', 'X-Api-Key': 'k3' });
 });
+
+test('an MCP server installed from the chat starts in that chat and its tool works straight away', async (t) => {
+  const SERVER = [
+    "let buffer = '';",
+    "process.stdin.setEncoding('utf8');",
+    "const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n');",
+    "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
+    "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
+    "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue;",
+    "    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-03-26', capabilities: { tools: {} } });",
+    "    else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }] });",
+    "    else if (m.method === 'tools/call') reply(m.id, { content: [{ type: 'text', text: 'pong from ' + process.env.PING_NAME }] });",
+    "    else reply(m.id, {}); } });"
+  ].join('\n');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-live-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'proj');
+  await mkdir(root);
+  const serverFile = path.join(base, 'ping-server.cjs');
+  await writeFile(serverFile, SERVER);
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(base, 'cfg'), HOME: path.join(base, 'home'), PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH };
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('a1', 'add_extension', { source: 'claude mcp add -e PING_NAME=oasis pinger -- node ' + serverFile }),
+    toolCall('p1', 'mcp_pinger_ping', {}),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  const asked = [];
+  await runAgentTurn(session, 'install this: claude mcp add pinger -- node ' + serverFile, { autoApprove: true, approval: async (q) => { asked.push(q); return true; } });
+  assert.equal(asked.filter((q) => /pinger/.test(q)).length, 1);
+  const results = session.messages.filter((m) => m.role === 'tool').map((m) => String(m.content));
+  assert.match(results[0], /"started":\["pinger"\]/);
+  assert.match(results[1], /pong from oasis/);
+  assert.ok(requests[1].tools.some((tool) => tool.function.name === 'mcp_pinger_ping') || /mcp_pinger_ping/.test(JSON.stringify(requests[1])));
+});

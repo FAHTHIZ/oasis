@@ -57,7 +57,7 @@ export const BUILTIN_COMMANDS = {
   commands: 'List custom slash commands',
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
-  add: 'Add anything: a GitHub link, owner/repo[#name], plugin@marketplace, MCP server URL, npm MCP package or registry name (/add LINK)',
+  add: 'Add anything: a GitHub link, owner/repo[#name], plugin@marketplace, MCP server URL, npm or PyPI package, registry name, or an install command from a README (/add LINK)',
   mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers; /mcp search QUERY searches the MCP Registry',
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
@@ -1614,7 +1614,14 @@ export async function runBuiltinCommand(name, argument, state) {
       let summary = '';
       try {
         const result = await addAnything(source, { root, env: env || process.env, approve: async (text) => { summary = text; return true; } });
-        return { output: (summary ? summary + '\n' : '') + result.message, ...(result.reload && session ? { reload: 'plugins' } : {}) };
+        let started = '';
+        if (result.installed && result.installed.length && session && session.mcpClients instanceof Map) {
+          const { activateNewMcpServers } = await import('./tools.mjs');
+          const active = await activateNewMcpServers(session, result.installed, { root, env: env || process.env }).catch(() => null);
+          if (active && active.started.length) started = '\nStarted in this chat: ' + active.started.join(', ') + '.';
+          if (active && active.failed.length) started += '\nCould not start: ' + active.failed.join('; ');
+        }
+        return { output: (summary ? summary + '\n' : '') + result.message + started, ...(result.reload && session ? { reload: 'plugins' } : {}) };
       } catch (error) { return { output: 'Could not add ' + source + ': ' + error.message }; }
     }
     case 'mcp': {
