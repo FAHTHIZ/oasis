@@ -119,7 +119,7 @@ Let your shell finish `oasis` commands and options when you press Tab. Run the l
 
 `oasis setup --auto` looks at this computer, then picks the best way to run a model here:
 
-- **What it checks:** the OS, CPU cores, memory and GPU (NVIDIA through `nvidia-smi`, Apple Silicon unified memory), plus any model server already running on its usual local port (Ollama, LM Studio, llama.cpp, Jan, vLLM, OmniRoute).
+- **What it checks:** the OS, CPU cores, memory and GPU (NVIDIA through `nvidia-smi`; AMD and Intel cards through Linux sysfs or the Windows registry, which reports real VRAM above 4 GB; Apple Silicon unified memory; integrated graphics under 2 GB are ignored in favour of system memory), plus any model server already running on its usual local port (Ollama, LM Studio, llama.cpp, Jan, vLLM, OmniRoute).
 - **What it chooses:** a running model that fits, a local gateway, an Ollama model sized to your memory (with the exact `ollama pull` command), or a hosted model if the device is too small.
 - **What it saves:** the route only after a real test request succeeds. Add `--dry-run` to see the recommendation without saving.
 

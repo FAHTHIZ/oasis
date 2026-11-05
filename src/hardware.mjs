@@ -8,6 +8,7 @@
 // downloaded here.
 import os from 'node:os';
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 
 const PROBE_TIMEOUT_MS = 1200;
 const GPU_TIMEOUT_MS = 2500;
@@ -32,18 +33,92 @@ export function parseNvidiaSmi(text) {
   return gpus;
 }
 
+// GPUs with less dedicated memory than this (integrated graphics, which report
+// a small carve-out) cannot hold a useful model; the CPU budget is better.
+const MIN_GPU_GB = 2;
+
+function gpuVendor(name, pciVendor = '') {
+  const id = String(pciVendor).toLowerCase();
+  if (id === '0x10de' || /nvidia|geforce|quadro|tesla|rtx/i.test(name)) return 'nvidia';
+  if (id === '0x1002' || /\bamd\b|radeon|instinct/i.test(name)) return 'amd';
+  if (id === '0x8086' || /intel|\barc\b/i.test(name)) return 'intel';
+  return 'other';
+}
+
+// Linux amdgpu (and other DRM drivers that expose it) report dedicated VRAM in
+// /sys/class/drm/cardN/device/mem_info_vram_total, in bytes. Read-only, no tools.
+export function readLinuxDrmGpus({ root = '/sys/class/drm', readdir = fs.readdirSync, readFile = fs.readFileSync } = {}) {
+  const gpus = [];
+  let entries = [];
+  try { entries = readdir(root); } catch { return gpus; }
+  for (const entry of entries) {
+    if (!/^card\d+$/.test(String(entry))) continue;
+    const dir = root + '/' + entry + '/device/';
+    const read = (file) => { try { return String(readFile(dir + file, 'utf8')).trim(); } catch { return ''; } };
+    const bytes = Number(read('mem_info_vram_total'));
+    if (!Number.isFinite(bytes) || bytes <= 0) continue;
+    const pci = read('vendor');
+    const vendor = gpuVendor(read('product_name'), pci);
+    const name = read('product_name') || (vendor === 'amd' ? 'AMD Radeon GPU' : vendor === 'intel' ? 'Intel GPU' : 'GPU');
+    gpus.push({ vendor, name, vramGB: round1(bytes / 1024 ** 3) });
+  }
+  return gpus;
+}
+
+// Windows display adapters from the registry. Win32_VideoController.AdapterRAM
+// is a 32-bit value that caps at 4 GB, so read HardwareInformation.qwMemorySize
+// (a 64-bit byte count) and DriverDesc for each adapter subkey instead.
+export const WINDOWS_DISPLAY_CLASS = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}';
+
+export function parseWindowsDisplayAdapters(memoryText, nameText) {
+  const blocks = (text, pattern) => {
+    const map = new Map();
+    let key = '';
+    for (const line of String(text || '').split(/\r?\n/)) {
+      if (/^HKEY_/i.test(line.trim())) { key = line.trim().toLowerCase(); continue; }
+      const match = line.match(pattern);
+      if (key && match) map.set(key, match[1].trim());
+    }
+    return map;
+  };
+  const memory = blocks(memoryText, /HardwareInformation\.qwMemorySize\s+REG_QWORD\s+(0x[0-9a-f]+|\d+)/i);
+  const names = blocks(nameText, /DriverDesc\s+REG_SZ\s+(.+)$/i);
+  const gpus = [];
+  for (const [key, raw] of memory) {
+    const bytes = Number(raw);
+    const name = names.get(key) || 'GPU';
+    if (!Number.isFinite(bytes) || bytes <= 0 || /basic display|remote display|virtual/i.test(name)) continue;
+    gpus.push({ vendor: gpuVendor(name), name, vramGB: round1(bytes / 1024 ** 3) });
+  }
+  return gpus;
+}
+
+const ACCELERATOR = { nvidia: 'cuda', amd: 'rocm', intel: 'vulkan', other: 'vulkan' };
+
 // Everything except the GPU query is synchronous and cheap.
 export async function detectHardware({
   platform = process.platform, arch = process.arch,
   cpus = os.cpus(), totalmem = os.totalmem(), freemem = os.freemem(),
-  env = process.env, exec = run
+  env = process.env, exec = run, drm = {}
 } = {}) {
   const memoryGB = round1(totalmem / 1024 ** 3);
   const appleSilicon = platform === 'darwin' && arch === 'arm64';
   let gpus = [];
   if (!appleSilicon && platform !== 'android' && !env.OASIS_SKIP_GPU_PROBE) {
     gpus = parseNvidiaSmi(await exec('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits']));
+    // nvidia-smi is authoritative for NVIDIA cards; add AMD and Intel ones from the OS.
+    let others = [];
+    if (platform === 'linux') others = readLinuxDrmGpus(drm);
+    else if (platform === 'win32') {
+      const [memoryText, nameText] = await Promise.all([
+        exec('reg', ['query', WINDOWS_DISPLAY_CLASS, '/s', '/v', 'HardwareInformation.qwMemorySize']),
+        exec('reg', ['query', WINDOWS_DISPLAY_CLASS, '/s', '/v', 'DriverDesc'])
+      ]);
+      others = parseWindowsDisplayAdapters(memoryText, nameText);
+    }
+    gpus = gpus.concat(others.filter((gpu) => gpu.vendor !== 'nvidia' || !gpus.length));
   }
+  gpus = gpus.filter((gpu) => gpu.vramGB >= MIN_GPU_GB);
   const termux = Boolean(env.TERMUX_VERSION || String(env.PREFIX || '').includes('com.termux'));
   const best = gpus.slice().sort((a, b) => b.vramGB - a.vramGB)[0] || null;
   return {
@@ -57,7 +132,7 @@ export async function detectHardware({
     appleSilicon,
     gpu: best,
     gpuCount: gpus.length,
-    accelerator: appleSilicon ? 'metal' : best ? 'cuda' : 'cpu',
+    accelerator: appleSilicon ? 'metal' : best ? (ACCELERATOR[best.vendor] || 'vulkan') : 'cpu',
     termux
   };
 }
@@ -195,6 +270,7 @@ export function recommendSetup(hw, servers = [], { configured = false } = {}) {
   }
 
   if (hw.accelerator === 'cpu' && primary.route.startsWith('local')) notes.push('No supported GPU was found, so a local model runs on the CPU. Expect a few tokens per second; keep tasks small.');
+  if ((hw.accelerator === 'rocm' || hw.accelerator === 'vulkan') && primary.route.startsWith('local')) notes.push('Ollama runs on ' + (hw.accelerator === 'rocm' ? 'AMD GPUs through ROCm or Vulkan' : 'this GPU through Vulkan') + ' only for supported cards; after the first reply, `ollama ps` shows whether the model is on the GPU or fell back to the CPU.');
   if (hw.termux) notes.push('On Android, run the model on another computer or use a hosted model; phone CPUs are too slow for agent work.');
   if (hw.cores && hw.cores <= 4) notes.push('With ' + hw.cores + ' CPU cores, run one agent at a time.');
   if (configured) notes.push('A model provider is already configured; this is only a suggestion.');
