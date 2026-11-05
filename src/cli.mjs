@@ -14,6 +14,8 @@ import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
 import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL, carryLearnedContextWindow } from './config.mjs';
+import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
+import { compactHistoryIfNeeded } from './agent.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, steerSession, takeSteering } from './agent.mjs';
 import { loadMcpServers, saveMcpServers, getMcpConfigPath, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
@@ -2610,7 +2612,18 @@ async function interactive(root, autoApprove, persistence = {}) {
       inputState.history.push(input);
       appendHistory(root, input).catch(() => {});
     } else {
-      try { input = await readMainInput(root, session, inputState); } catch { break; }
+      const idle = startIdleCompaction(session, {
+        minutes: idleCompactMinutes(session && session.settings, process.env),
+        compact: async (target, options) => {
+          const before = estimateTokens(target.messages);
+          const result = await compactHistoryIfNeeded(target, { ...hookOptions(target), ...options, mustPreserve: target.mustPreserve });
+          if (result && result.tokensUsed) recordUsage(USAGE, { totalTokens: result.tokensUsed, phase: 'compaction' });
+          return result && result.compacted ? { ...result, beforeTokens: before, afterTokens: estimateTokens(target.messages) } : result;
+        }
+      });
+      try { input = await readMainInput(root, session, inputState); } catch { await idle.settle(); break; }
+      const idleResult = await idle.settle();
+      if (idleResult) { stdout.write(idleCompactionNote(idleResult) + '\n'); saveSession(session).catch(() => {}); }
     }
     let text = input.trim();
     if (!text) continue;

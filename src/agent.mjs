@@ -198,7 +198,7 @@ export function undoCompaction(session) {
 
 export async function compactHistoryIfNeeded(session, options = {}) {
   const messages = session.messages || [];
-  const thresholdChars = compactionThresholdChars(session.config || {}, options.env || process.env);
+  const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
   const messageLimit = thresholdChars > HISTORY_COMPACT_THRESHOLD_CHARS ? 400 : 60;
   if (!options.force && messages.length <= messageLimit && historyTextSize(messages) <= thresholdChars) {
     return { compacted: false, tokensUsed: 0 };
@@ -247,8 +247,11 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     tokensUsed = Number(completion.usage && completion.usage.totalTokens || 0);
     costUsd += chargeAuxiliaryUsage(session, completion.usage, { env: options.env });
   } catch (error) {
+    // Idle compaction is optional: if you start typing, drop it and keep the history as it was.
+    if (options.discardOnAbort && options.signal && options.signal.aborted) return { compacted: false, tokensUsed, costUsd, cancelled: true };
     if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
   }
+  if (options.discardOnAbort && options.signal && options.signal.aborted) return { compacted: false, tokensUsed, costUsd, cancelled: true };
   if (!summary) summary = deterministicHistorySummary(oldMessages);
   if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
   const restored = await runPostCompactHooks(session, trigger, summary, options);
