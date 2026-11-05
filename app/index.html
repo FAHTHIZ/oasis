@@ -57,7 +57,7 @@
           <div class="row"><input id="connectInput" placeholder="Paste a key or link" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="btn primary" type="submit" id="connectButton">Connect</button></div>
           <ol class="connect-log" id="connectLog" aria-live="polite"></ol>
           <div class="connect-found" id="connectFound" hidden></div>
-          <p class="hint">Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Hugging Face, Ollama and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
+          <p class="hint" id="connectHint">Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Hugging Face, Ollama and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
         </form>
         <div class="setup-steps" id="setupSteps"></div>
         <div class="suggestions" id="suggestions"></div>
@@ -122,7 +122,7 @@
         <div class="row"><input id="repoInput" placeholder="owner/name or github.com URL" autocapitalize="off" spellcheck="false" inputmode="url"><button class="btn primary" type="submit">Open</button></div>
         <div class="progress" id="importProgress" hidden><div></div></div>
       </form>
-      <div class="import-card">
+      <div class="import-card" id="deviceImport">
         <label>From this device</label>
         <div class="row wrap">
           <button class="btn" id="pickFolder" type="button">Folder</button>
@@ -133,7 +133,7 @@
         <input type="file" id="filesInput" multiple hidden>
       </div>
     </div>
-    <h3 class="section-label">On this device</h3>
+    <h3 class="section-label" id="projectsListLabel">On this device</h3>
     <ul class="project-list" id="projectList"></ul>
   </div>
 </section>
@@ -143,6 +143,7 @@
   <form class="sheet-body settings" id="settingsForm">
     <fieldset>
       <legend>Models</legend>
+      <p class="hint" id="runtimeInfo" hidden></p>
       <ul class="connection-list" id="connectionList"></ul>
       <label for="settingsConnectInput">Add a key or model link</label>
       <div class="row"><input id="settingsConnectInput" placeholder="Paste an API key, a model page link or a server address" autocapitalize="off" spellcheck="false"><button class="btn" type="button" id="settingsConnectButton">Connect</button></div>
@@ -174,12 +175,14 @@
         <option value="edits">Edit files freely, ask for the rest</option>
         <option value="auto">Full auto (still asks before pushing)</option>
       </select>
-      <label for="maxStepsInput">Steps per request</label>
-      <input id="maxStepsInput" type="number" min="5" max="200" step="1">
+      <div class="field" id="maxStepsField">
+        <label for="maxStepsInput">Steps per request</label>
+        <input id="maxStepsInput" type="number" min="5" max="200" step="1">
+      </div>
       <label for="themeSelect">Theme</label>
       <select id="themeSelect"><option value="system">Match device</option><option value="dark">Dark</option><option value="light">Light</option></select>
     </fieldset>
-    <fieldset>
+    <fieldset id="githubSettings">
       <legend>GitHub</legend>
       <label for="githubToken">Personal access token</label>
       <input id="githubToken" type="password" autocomplete="off" spellcheck="false" placeholder="Needed for private repos and pushing">
@@ -231,6 +234,16 @@
       <button class="btn primary" id="allowButton">Allow</button>
     </div>
   </div>
+</section>
+
+<section class="sheet" id="questionSheet" role="dialog" aria-modal="true" aria-labelledby="questionTitle" hidden>
+  <div class="sheet-head"><h2 id="questionTitle">OASIS has a question</h2><button class="icon-btn small" data-close="questionSheet" aria-label="Skip"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <form class="sheet-body" id="questionForm" autocomplete="off">
+    <p class="approval-summary" id="questionText"></p>
+    <div class="question-options" id="questionOptions"></div>
+    <label for="questionInput" class="sr-only">Your answer</label>
+    <div class="row"><input id="questionInput" placeholder="Or type an answer" autocapitalize="sentences"><button class="btn primary" type="submit">Answer</button></div>
+  </form>
 </section>
 
 <section class="sheet" id="pushSheet" role="dialog" aria-modal="true" aria-labelledby="pushTitle" hidden>

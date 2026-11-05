@@ -50,7 +50,7 @@ Whatever you paste after the key in the same message (for example `sk-or-… fix
 
 **Self-hosting:** `oasis app` serves the same app from your computer (`--lan` shows a QR code for your phone, `--port` changes the port, default 3920). `node scripts/build-app.mjs` writes a static copy to `site/app/` that any static host can serve.
 
-**Limits.** The universal app cannot run shell commands, install packages or run Python. Use the CLI, desktop app or browser workspace for that, or connect your phone to them (below). Browser storage can be cleared by the browser under storage pressure, so export a ZIP or push to GitHub for anything you need to keep. It is tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is still in progress.
+**Limits.** On its own, the universal app cannot run shell commands, install packages or run Python. Opened from `oasis web` or the desktop app (or a phone connected to them, below), the same app drives the agent on that computer, which can. Browser storage can be cleared by the browser under storage pressure, so export a ZIP or push to GitHub for anything you need to keep. It is tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is still in progress.
 
 ## Browser workspace from your phone
 

@@ -81,7 +81,7 @@ The static dashboard is included as a separate surface because it is easy to con
 | Surface | Implementation | What it owns |
 |---|---|---|
 | Terminal CLI | `src/cli.mjs`, `src/headless.mjs` | Interactive terminal, one-shot tasks, setup, diagnostics, background commands, and non-interactive/script output. |
-| Connected browser workspace | `src/web.mjs` plus the packaged static UI | Authenticated local HTTP API, chat jobs, approvals, project/tool integrations, terminal sessions, job history, and run monitoring. It calls the same session/agent functions as the CLI. |
+| Connected browser workspace | `src/web.mjs`, serving the universal app (`app/`, runtime engine in `app/core/runtime.mjs`) at `/` and the previous workspace UI at `/classic` | Authenticated local HTTP API, chat jobs, approvals, questions, paste-to-connect (`/api/provider/connect`, loopback only), workspace files and diff, terminal sessions, job history, and run monitoring. It calls the same session/agent functions as the CLI. |
 | Electron desktop app | `desktop/main.mjs`, `desktop/secure-secrets.mjs` | Folder selection, desktop window lifecycle, local runtime startup/shutdown, renderer isolation, and OS-backed provider-key storage where available. It hosts the connected browser workspace; it is not a second agent engine. |
 | VS Code-family extension | `ide/vscode/`, `src/ide.mjs` | Editor chat, selection context, native diff review, editor diagnostics, and a local bridge to the CLI. Cursor and Windsurf are supported editor targets through their VS Code-compatible interfaces. |
 | Node.js SDK | `src/sdk.mjs` | In-process access to the agent/headless runtime, event streaming, custom tools, and tool servers. |

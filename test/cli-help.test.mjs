@@ -66,8 +66,8 @@ test('oasis web leads with the one-click link and --open is accepted', async () 
     child.on('exit', () => { clearTimeout(timer); resolve(); });
   });
   child.kill();
-  assert.match(out, /OASIS browser workspace is running for /);
-  assert.match(out, /Open this link to start: http:\/\/127\.0\.0\.1:\d+\/#token=\S+/);
-  assert.ok(out.indexOf('Open this link to start') < out.indexOf('paste this connection token'), out);
+  assert.match(out, /OASIS is running for /);
+  assert.match(out, /Open this link to start: http:\/\/127\.0\.0\.1:\d+\/app\/#token=\S+/);
+  assert.ok(out.indexOf('Open this link to start') < out.indexOf('paste the link above'), out);
   assert.match(out, /Could not open a browser automatically\. Open the link above instead\./);
 });

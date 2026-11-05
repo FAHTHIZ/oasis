@@ -26,7 +26,7 @@ test('web page is served with a hash-based Content-Security-Policy covering ever
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-csp-'));
   const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env: { OASIS_CONFIG_DIR: path.join(root, 'c'), HOME: root }, token: 'test-runtime-token-0123456789' });
   t.after(() => app.close());
-  const response = await fetch('http://127.0.0.1:' + app.port + '/');
+  const response = await fetch('http://127.0.0.1:' + app.port + '/classic');
   const html = await response.text();
   const csp = response.headers.get('content-security-policy');
   assert.match(csp, /object-src 'none'/);

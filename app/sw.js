@@ -21,6 +21,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
+  // A local OASIS runtime's API is authenticated: never cache it.
+  if (url.pathname.startsWith('/api/')) return;
   // Network first so updates arrive promptly; fall back to the cache offline.
   event.respondWith((async () => {
     const cache = await caches.open(VERSION);

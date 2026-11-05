@@ -43,7 +43,7 @@ const secureStorage = {
 const statePath = () => path.join(app.getPath('userData'), 'desktop-state.json');
 const secretsPath = () => path.join(app.getPath('userData'), 'secure-secrets.json');
 
-async function persistDesktopProviderConfig({ protocol, baseURL, model, apiKey }) {
+async function persistDesktopProviderConfig({ protocol, baseURL, model, apiKey, fallbackModel }) {
   const filePath = secretsPath();
   const previousSecret = await loadDesktopApiKey({ filePath, safeStorage: secureStorage });
   const previousEnvKey = desktopEnv.OASIS_API_KEY;
@@ -57,7 +57,7 @@ async function persistDesktopProviderConfig({ protocol, baseURL, model, apiKey }
 
     // Commit the non-secret provider details in the same host callback. The web
     // route does not separately write config after this returns.
-    await saveConfig({ protocol, baseURL, model, apiKey: '' }, { env: desktopEnv });
+    await saveConfig({ protocol, baseURL, model, apiKey: '', ...(typeof fallbackModel === 'string' ? { fallbackModel } : {}) }, { env: desktopEnv });
   } catch (error) {
     // A failed config write must not leave a newly saved key paired with the
     // previous provider details. Restore the prior encrypted secret best-effort.
@@ -162,7 +162,7 @@ function createWindow() {
     const html = crashRecoveryHtml({
       reason: details.reason || 'unknown',
       exitCode: details.exitCode,
-      restartUrl: activeOrigin + '/'
+      restartUrl: activeOrigin + '/app/'
     });
     void mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)).catch(async () => {
       recoveryScreenActive = false;
@@ -178,6 +178,8 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow;
 }
+
+function appUrl() { return activeOrigin + '/app/#token=' + encodeURIComponent(runtime.token); }
 
 async function injectRuntimeToken() {
   if (!mainWindow || mainWindow.isDestroyed() || !runtime) return;
@@ -199,7 +201,9 @@ async function openWorkspace(root) {
   activeOrigin = 'http://127.0.0.1:' + runtime.port;
   await saveWorkspace(resolved);
   const window = createWindow();
-  await window.loadURL(activeOrigin + '/');
+  // The app reads the token from the address fragment (never sent to the
+  // server or kept in history) and keeps it for this window only.
+  await window.loadURL(appUrl());
   await injectRuntimeToken();
 }
 
@@ -291,7 +295,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => {
     if (mainWindow) { mainWindow.show(); return; }
-    if (runtime) { const window = createWindow(); void window.loadURL(activeOrigin + '/').then(injectRuntimeToken); }
+    if (runtime) { const window = createWindow(); void window.loadURL(appUrl()).then(injectRuntimeToken); }
     else if (startupComplete) void chooseAndOpenWorkspace();
   });
   app.whenReady().then(async () => {

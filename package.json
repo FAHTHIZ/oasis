@@ -96,6 +96,7 @@
     "files": [
       "src/**/*",
       "desktop/**/*",
+      "app/**/*",
       "index.html",
       "manifest.webmanifest",
       "sw.js",

@@ -1,4 +1,6 @@
-// OASIS universal app: UI wiring. All agent work happens on this device.
+// OASIS universal app: UI wiring. Opened on its own, all agent work happens
+// in this browser. Opened from `oasis web` or the desktop app, the same UI
+// drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent } from './core/agent.mjs';
@@ -9,6 +11,7 @@ import { createZip, readZip } from './core/zip.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
+import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -30,6 +33,9 @@ let display = [];          // rendered history: [{ role, content, tools: [{id,na
 let currentTurn = null;    // DOM refs for the assistant reply being streamed
 let allowEditsThisSession = false;
 let deferredInstall = null;
+// Runtime engine: set at boot when a local OASIS runtime serves this page.
+// { client, status, needsToken, entry } or null for the in-browser engine.
+let RT = null;
 
 /* ---------- Settings ---------- */
 function loadSettings() {
@@ -49,6 +55,7 @@ function loadSettings() {
 }
 function saveSettings() { localStorage.setItem('oasis.settings', JSON.stringify(settings)); }
 function activeEntry() {
+  if (RT) return RT.entry || null;
   const connection = settings.connections.find((c) => c.id === settings.activeConnection) || settings.connections[0];
   if (!connection) return null;
   const model = settings.activeModel && (connection.models.includes(settings.activeModel) || connection.id === settings.activeConnection) ? settings.activeModel : connection.models[0];
@@ -61,10 +68,12 @@ function providerConfig() {
   return configFor(entry, { mode: currentMode() });
 }
 function modelReady() {
+  if (RT) return Boolean(RT.entry);
   const entry = activeEntry();
   return Boolean(entry && entry.model && (entry.connection.apiKey || entry.connection.local || /localhost|127\.0\.0\.1/.test(entry.connection.baseURL) || entry.connection.provider === 'custom'));
 }
 function setActive(connectionId, model) {
+  if (RT) { runtimeSwitchModel(model); return; }
   settings.activeConnection = connectionId;
   settings.activeModel = model;
   saveSettings();
@@ -117,6 +126,7 @@ function closeSheet(id, { fromHistory = false } = {}) {
   openSheets.splice(openSheets.indexOf(id), 1);
   if (!openSheets.length) $('backdrop').hidden = true;
   if (id === 'approvalSheet' && approvalResolve) { approvalResolve(false); approvalResolve = null; }
+  if (id === 'questionSheet' && questionResolve) { questionResolve(''); questionResolve = null; }
 }
 document.addEventListener('click', (event) => {
   const closer = event.target.closest('[data-close]');
@@ -149,7 +159,7 @@ function closeTopLayer() {
 addEventListener('popstate', () => { if (ignorePop) { ignorePop = false; return; } if (openSheets.length || !$('modeMenu').hidden) closeTopLayer(); });
 
 /* ---------- Agent ---------- */
-const agent = new Agent({
+const deviceAgent = new Agent({
   getConfig: () => ({ ...providerConfig(), maxSteps: settings.maxSteps }),
   getContext: () => ({
     workspace,
@@ -173,10 +183,13 @@ const agent = new Agent({
   }
 });
 
+let agent = deviceAgent;
+
 const SWITCH_REASONS = { credits: 'ran out of credit', rate: 'is rate limited', model: 'is not available', server: 'had a server error', auth: 'rejected the key', network: 'could not be reached', context: 'ran out of context room' };
 
 async function ensureWorkspace() {
   if (workspace) return workspace;
+  if (RT) throw new Error('OASIS on this computer has no folder open.');
   workspace = await Workspace.create(store, { name: 'Scratch project' });
   localStorage.setItem('oasis.project', workspace.project.id);
   skills.setWorkspace(workspace);
@@ -197,6 +210,7 @@ function setPluginEnabled(id, on) {
 async function send(text) {
   const message = text.trim();
   if (!message) return;
+  if (RT && RT.needsToken) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
   if (looksLikeConnection(message)) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
   if (!modelReady()) {
     $('welcome').hidden = false;
@@ -231,6 +245,7 @@ function showConnectLog(id, lines) {
 let connecting = false;
 async function connectFromText(text, { surface = 'welcome' } = {}) {
   if (connecting) return false;
+  if (RT) return runtimeConnect(text, { surface });
   const parsed = parsePaste(text);
   connecting = true;
   const lines = [];
@@ -287,6 +302,87 @@ async function connectFromText(text, { surface = 'welcome' } = {}) {
   }
 }
 
+/* ---------- Runtime engine: connect and switch models ---------- */
+function runtimeEntryFrom(status) {
+  const provider = status && status.providerConfigured && status.provider;
+  if (!provider || !provider.model) return null;
+  let host = '';
+  try { host = new URL(provider.baseURL).host; } catch { host = provider.provider || 'model'; }
+  const known = RT && RT.models && RT.models.length ? RT.models : [];
+  const models = [...new Set([provider.model, ...(status.fallbacks || []), ...known])];
+  return { connection: { id: 'runtime', provider: provider.provider || '', label: RT && RT.label || labelForHost(host), baseURL: provider.baseURL, apiKey: '', models, local: /localhost|127\.0\.0\.1/.test(provider.baseURL) }, model: provider.model };
+}
+function labelForHost(host) {
+  const known = Object.values(PRESETS).find((preset) => preset.baseURL && preset.baseURL.includes(host));
+  return known ? known.label : host;
+}
+async function refreshRuntimeStatus() {
+  if (!RT || RT.needsToken) return;
+  RT.status = await RT.client.api('/api/status');
+  RT.entry = runtimeEntryFrom(RT.status);
+}
+async function runtimeConnect(text, { surface = 'welcome' } = {}) {
+  const value = String(text || '').trim();
+  const lines = [];
+  let note = null;
+  const logId = surface === 'settings' ? 'settingsConnectLog' : 'connectLog';
+  if (surface === 'chat') { note = addMessage('note', ''); note.classList.add('connect-note'); note.innerHTML = '<ol class="connect-log"></ol>'; }
+  const render = () => {
+    if (note) { note.querySelector('ol').replaceChildren(...lines.map((line) => { const li = document.createElement('li'); li.className = line.step || 'info'; li.textContent = line.text; return li; })); scrollDown(true); }
+    else showConnectLog(logId, lines);
+  };
+  const say = (step, text_) => { lines.push({ step, text: text_ }); render(); };
+  if (RT.needsToken) {
+    const token = tokenFromPaste(value);
+    if (!token) { say('error', 'Paste the link OASIS printed in your terminal (it ends in #token=…).'); return false; }
+    saveRuntimeToken(token);
+    location.reload();
+    return true;
+  }
+  const parsed = parsePaste(value);
+  if (parsed.githubTokens.length && !parsed.keys.length && !parsed.urls.length && !parsed.local) {
+    say('info', 'Not needed here: OASIS on this computer uses its own git and GitHub CLI sign-in.');
+    return true;
+  }
+  if (!parsed.keys.length && !parsed.urls.length && !parsed.local) return false;
+  if (RT.status && RT.status.providerSetupAvailable === false) { say('error', 'Connect a model on the computer running OASIS. Keys are never sent over the phone link.'); return false; }
+  connecting = true;
+  for (const id of ['connectButton', 'settingsConnectButton']) if ($(id)) $(id).disabled = true;
+  say('detect', 'Checking ' + (parsed.keys.length ? 'the key' : 'the address') + ' and finding the best model…');
+  try {
+    const result = await RT.client.api('/api/provider/connect', { method: 'POST', body: { text: value } });
+    lines.length = 0;
+    // Once it worked, one line says what happened; the checks are not news.
+    for (const extra of result.notes || []) lines.push({ step: 'warn', text: extra });
+    RT.models = result.models || [];
+    RT.label = result.label || '';
+    await refreshRuntimeStatus();
+    const backups = (result.fallbacks || []).length;
+    lines.push({ step: 'ready', text: 'Locked in ' + result.provider.model + ' on ' + (result.label || 'your provider') + (backups ? '. ' + backups + ' backup model' + (backups === 1 ? '' : 's') + ' ready if it runs out.' : '.') + ' Saved on this computer.' });
+    render();
+    updateModeUI();
+    renderWelcome();
+    renderConnections();
+    if (surface !== 'settings') $('input').focus();
+    if (parsed.rest && surface === 'chat') { connecting = false; await send(parsed.rest); }
+    return true;
+  } catch (error) {
+    say('error', error.message);
+    return false;
+  } finally {
+    connecting = false;
+    for (const id of ['connectButton', 'settingsConnectButton']) if ($(id)) $(id).disabled = false;
+  }
+}
+async function runtimeSwitchModel(model) {
+  try {
+    await RT.client.api('/api/provider/model', { method: 'POST', body: { model } });
+    await refreshRuntimeStatus();
+  } catch (error) { toast(error.message, 'error'); }
+  updateModeUI();
+  renderWelcome();
+}
+
 $('connectForm').addEventListener('submit', (event) => {
   event.preventDefault();
   const value = $('connectInput').value.trim();
@@ -297,7 +393,7 @@ $('connectForm').addEventListener('submit', (event) => {
 function connectOnPaste(input, surface) {
   input.addEventListener('paste', (event) => {
     const text = (event.clipboardData || window.clipboardData).getData('text');
-    if (!text || !looksLikeConnection(text) || input.value.trim()) return;
+    if (!text || !(looksLikeConnection(text) || (RT && RT.needsToken && tokenFromPaste(text))) || input.value.trim()) return;
     event.preventDefault();
     input.value = surface === 'chat' ? '' : maskPasted(text);
     connectFromText(text.trim(), { surface }).then((ok) => { if (ok && surface !== 'chat') input.value = ''; });
@@ -308,7 +404,7 @@ function maskPasted(text) {
 }
 
 async function autoDetectLocal() {
-  if (modelReady()) return;
+  if (modelReady() || RT) return;
   const found = await scanLocal();
   if (!found.length || modelReady()) return;
   const box = $('connectFound');
@@ -337,11 +433,19 @@ function summarizeArgs(name, args = {}) {
   if (args.url) return args.url;
   if (args.name) return args.name;
   if (args.code) return String(args.code).split('\n')[0].slice(0, 80);
+  if (args.command) return [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ').slice(0, 100);
+  if (args.query) return String(args.query).slice(0, 80);
+  if (args.summary) return String(args.summary).slice(0, 100);
   if (args.branch) return args.branch;
   if (args.todos) return args.todos.length + ' items';
   return '';
 }
-const TOOL_LABELS = { list_files: 'List', read_file: 'Read', write_file: 'Write', edit_file: 'Edit', delete_file: 'Delete', grep: 'Search', glob_files: 'Find', run_javascript: 'Run', fetch_url: 'Fetch', load_skill: 'Skill', todo_write: 'Plan', project_changes: 'Changes', github_push: 'Push' };
+const TOOL_LABELS = { list_files: 'List', read_file: 'Read', write_file: 'Write', edit_file: 'Edit', delete_file: 'Delete', grep: 'Search', glob_files: 'Find', run_javascript: 'Run', fetch_url: 'Fetch', load_skill: 'Skill', todo_write: 'Plan', project_changes: 'Changes', github_push: 'Push',
+  // Tools of the agent on this computer (runtime engine).
+  run_command: 'Run', command_output: 'Output', kill_command: 'Stop', list_background: 'Jobs', install_package: 'Install', multi_edit: 'Edit', notebook_edit: 'Edit',
+  search_files: 'Search', repo_map: 'Map', git_status: 'Status', git_diff: 'Diff', git_log: 'History', git_commit: 'Commit', git_branch: 'Branch', git_push: 'Push', create_pull_request: 'Pull request',
+  web_search: 'Search web', list_skills: 'Skills', read_skill_resource: 'Skill', run_specialist_review: 'Review', diagnostics: 'Check', security_scan: 'Security', lsp: 'Code intel', monitor: 'Watch',
+  worktree_inspect: 'Worktree', worktree_merge: 'Merge', configure_provider: 'Model', configure_mcp_server: 'Tools', install_extension: 'Install', install_external_skill: 'Install', install_plugin: 'Install' };
 
 function toolCard(tool) {
   const el = document.createElement('details');
@@ -479,6 +583,7 @@ function handleEvent(event) {
       let tool = currentTurn.entry.tools.find((t) => t.id === event.id);
       if (!tool) { tool = { id: event.id, name: event.name, args: {} }; currentTurn.entry.tools.push(tool); currentTurn.tools.appendChild(toolCard(tool)); }
       tool.ok = event.ok;
+      if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
       tool.content = event.content.length > 6000 ? event.content.slice(0, 6000) + '\n…' : event.content;
       const card = currentTurn.tools.querySelector('[data-id="' + CSS.escape(event.id) + '"]');
       if (card) card.replaceWith(toolCard(tool));
@@ -527,7 +632,7 @@ function renderTodos(todos) {
 async function persistChat() {
   if (!workspace) return;
   const trimmed = display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) }));
-  try { await store.setValue('chat:' + workspace.project.id, { messages: agent.messages.slice(-300), display: trimmed }); } catch { /* storage full: chat stays in memory */ }
+  try { await store.setValue('chat:' + workspace.project.id, { messages: RT ? agent.snapshot() : agent.messages.slice(-300), display: trimmed }); } catch { /* storage full: chat stays in memory */ }
 }
 
 async function restoreChat() {
@@ -557,12 +662,41 @@ async function restoreChat() {
 
 /* ---------- Approvals ---------- */
 let approvalResolve = null;
-async function requestApproval({ name, args }) {
+let approvalAlways = null;
+async function requestApproval({ name, args, runtime = false }) {
   const summary = $('approvalSummary');
   const detail = $('approvalDetail');
   detail.replaceChildren();
   detail.hidden = false;
+  $('allowAllButton').textContent = 'Allow all edits';
   $('allowAllButton').hidden = !['write_file', 'edit_file'].includes(name) || settings.mode !== 'ask';
+  approvalAlways = null;
+  if (runtime) {
+    // From the agent on this computer: its own wording, diff and "always" rule.
+    // "WARNING — RISKY ACTION" becomes a badge; an indented line is the
+    // exact command, shown as code.
+    const lines = String(args.prompt || 'Allow ' + name + '?').slice(0, 1600).split('\n');
+    const risky = Boolean(args.risky) || /^WARNING\b/.test(lines[0]);
+    if (/^WARNING\b/.test(lines[0])) lines.shift();
+    summary.replaceChildren();
+    if (risky) { const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = 'Risky'; summary.appendChild(badge); }
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const el = document.createElement(/^\s{2,}\S/.test(line) ? 'code' : 'span');
+      el.className = el.tagName === 'CODE' ? 'approval-command' : 'approval-line';
+      el.textContent = line.trim();
+      summary.appendChild(el);
+    }
+    if (args.diff) renderUnifiedDiff(detail, String(args.diff)); else detail.hidden = true;
+    if (args.suggestion) {
+      approvalAlways = 'always';
+      $('allowAllButton').hidden = false;
+      $('allowAllButton').textContent = 'Always allow ' + String(args.suggestion).slice(0, 60);
+    }
+    openSheet('approvalSheet');
+    if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }
+    return new Promise((resolve) => { approvalResolve = resolve; });
+  }
   const code = (text) => '<code>' + escapeHtml(text) + '</code>';
   if (name === 'edit_file') {
     summary.innerHTML = 'Edit ' + code(args.path || '');
@@ -597,7 +731,49 @@ function answerApproval(value) {
 }
 $('allowButton').addEventListener('click', () => answerApproval(true));
 $('denyButton').addEventListener('click', () => answerApproval(false));
-$('allowAllButton').addEventListener('click', () => { allowEditsThisSession = true; updateModeUI(); answerApproval(true); });
+$('allowAllButton').addEventListener('click', () => {
+  if (approvalAlways) { answerApproval(approvalAlways); return; }
+  allowEditsThisSession = true; updateModeUI(); answerApproval(true);
+});
+function renderUnifiedDiff(container, text) {
+  const lines = [];
+  for (const line of text.split('\n')) {
+    if (/^(diff --git|index |--- |\+\+\+ )/.test(line)) continue;
+    if (line.startsWith('@@')) lines.push({ type: 'note', text: line });
+    else if (line.startsWith('+')) lines.push({ type: 'add', text: line.slice(1) });
+    else if (line.startsWith('-')) lines.push({ type: 'del', text: line.slice(1) });
+    else lines.push({ type: 'same', text: line.replace(/^ /, '') });
+  }
+  renderDiff(container, lines);
+}
+
+/* ---------- Questions from the agent (runtime engine) ---------- */
+let questionResolve = null;
+function askQuestion(question) {
+  $('questionText').textContent = String(question.question || '').slice(0, 600);
+  const box = $('questionOptions');
+  box.replaceChildren();
+  for (const option of (question.options || []).slice(0, 4)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn option';
+    button.innerHTML = '<strong></strong><span></span>';
+    button.querySelector('strong').textContent = option.label || String(option);
+    button.querySelector('span').textContent = option.description || '';
+    button.addEventListener('click', () => answerQuestion(option.label || String(option)));
+    box.appendChild(button);
+  }
+  $('questionInput').value = '';
+  openSheet('questionSheet');
+  return new Promise((resolve) => { questionResolve = resolve; });
+}
+function answerQuestion(value) {
+  const resolve = questionResolve;
+  questionResolve = null;
+  closeSheet('questionSheet');
+  if (resolve) resolve(value);
+}
+$('questionForm').addEventListener('submit', (event) => { event.preventDefault(); answerQuestion($('questionInput').value.trim()); });
 
 function renderDiff(container, diff) {
   const frag = document.createDocumentFragment();
@@ -676,7 +852,7 @@ function renderModelMenu() {
   }
   const seen = new Set();
   const rows = [];
-  for (const item of buildChain(settings, { limit: 10 })) rows.push(item);
+  if (!RT) for (const item of buildChain(settings, { limit: 10 })) rows.push(item);
   for (const model of entry.connection.models.slice(0, 12)) rows.push({ connection: entry.connection, model });
   for (const item of rows) {
     const key = item.connection.id + '|' + item.model;
@@ -694,6 +870,7 @@ function renderModelMenu() {
   }
   const toggle = document.createElement('label');
   toggle.className = 'menu-toggle';
+  toggle.hidden = Boolean(RT);
   toggle.innerHTML = '<input type="checkbox"> Switch automatically if a model fails';
   toggle.querySelector('input').checked = settings.autoSwitch !== false;
   toggle.querySelector('input').addEventListener('change', (event) => { settings.autoSwitch = event.target.checked; saveSettings(); });
@@ -744,16 +921,22 @@ function renderWelcome() {
   const ready = modelReady();
   const entry = activeEntry();
   $('connectForm').hidden = ready;
-  $('welcomeTitle').textContent = ready ? 'What should we build?' : 'Paste a key to start.';
-  $('welcomeLede').textContent = ready
-    ? 'Using ' + entry.model + ' on ' + entry.connection.label + '. Describe what you want in plain words.'
-    : 'OASIS finds the provider, picks the best model and sets everything up. It runs on this device; your code and keys go only to the model provider.';
+  $('welcomeTitle').textContent = RT && RT.needsToken ? 'Paste your OASIS link.' : ready ? 'What should we build?' : 'Paste a key to start.';
+  $('connectInput').placeholder = RT && RT.needsToken ? 'Paste the link from your terminal' : 'Paste a key or link';
+  $('connectHint').hidden = Boolean(RT && RT.needsToken);
+  $('welcomeLede').textContent = RT && RT.needsToken
+    ? 'OASIS is running on this computer. Paste the link it printed in your terminal to connect this window.'
+    : ready
+      ? (RT ? 'Working in ' + (RT.status.workspaceName || 'this folder') + ' with ' + entry.model + '. Describe what you want in plain words.' : 'Using ' + entry.model + ' on ' + entry.connection.label + '. Describe what you want in plain words.')
+      : RT
+        ? 'OASIS finds the provider, picks the best model and saves it on this computer. Then it works right in ' + (RT.status.workspaceName || 'this folder') + '.'
+        : 'OASIS finds the provider, picks the best model and sets everything up. It runs on this device; your code and keys go only to the model provider.';
   if (!ready) autoDetectLocal().catch(() => {});
   const steps = $('setupSteps');
   steps.replaceChildren();
   // Before a model is connected the paste box is the only thing to do; after,
   // only the optional project step is left, so the screen stays short.
-  const shown = ready && !workspace ? [{ title: 'Open a project (optional)', sub: 'From GitHub, a folder or a zip. Or just ask: OASIS starts a scratch project.', action: () => openProjects() }] : [];
+  const shown = ready && !workspace && !RT ? [{ title: 'Open a project (optional)', sub: 'From GitHub, a folder or a zip. Or just ask: OASIS starts a scratch project.', action: () => openProjects() }] : [];
   steps.hidden = !shown.length;
   shown.forEach((item) => {
     const button = document.createElement('button');
@@ -880,19 +1063,20 @@ function fillProviderOptions() {
 function renderConnections() {
   const list = $('connectionList');
   list.replaceChildren();
-  if (!settings.connections.length) {
+  const connections = RT ? (RT.entry ? [RT.entry.connection] : []) : settings.connections;
+  if (!connections.length) {
     list.innerHTML = '<li class="empty">No models yet. Paste an API key, a model page link or a server address below.</li>';
     return;
   }
   const entry = activeEntry();
-  for (const connection of settings.connections) {
+  for (const connection of connections) {
     const li = document.createElement('li');
     li.className = 'connection' + (entry && entry.connection.id === connection.id ? ' current' : '');
     const info = document.createElement('div');
     info.className = 'connection-info';
     info.innerHTML = '<strong></strong><span></span>';
     info.querySelector('strong').textContent = connection.label;
-    info.querySelector('span').textContent = (connection.apiKey ? maskSecret(connection.apiKey) + ' · ' : connection.local ? 'on this network · ' : '') + connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's');
+    info.querySelector('span').textContent = (RT ? 'saved on this computer · ' : connection.apiKey ? maskSecret(connection.apiKey) + ' · ' : connection.local ? 'on this network · ' : '') + connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's');
     const select = document.createElement('select');
     select.setAttribute('aria-label', 'Model for ' + connection.label);
     select.append(...connection.models.slice(0, 80).map((model) => new Option(model, model)));
@@ -908,6 +1092,7 @@ function renderConnections() {
     remove.type = 'button';
     remove.className = 'btn small ghost';
     remove.textContent = 'Remove';
+    remove.hidden = Boolean(RT);
     remove.addEventListener('click', () => {
       settings.connections = settings.connections.filter((c) => c !== connection);
       if (settings.activeConnection === connection.id) { settings.activeConnection = settings.connections[0]?.id || ''; settings.activeModel = settings.connections[0]?.models[0] || ''; }
@@ -942,6 +1127,11 @@ function openSettings() {
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
   $('versionLabel').textContent = APP_VERSION;
+  for (const id of ['manualSetup', 'githubSettings', 'maxStepsField']) if ($(id)) $(id).hidden = Boolean(RT);
+  $('autoSwitch').closest('label').hidden = Boolean(RT);
+  $('runtimeInfo').hidden = !RT;
+  if (RT && RT.status) $('runtimeInfo').textContent = 'Running on this computer in ' + (RT.status.workspacePath || RT.status.workspaceName) + '. Model keys are saved by OASIS on this computer, and backup models take over automatically.';
+  $('wipeAll').hidden = Boolean(RT);
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(({ usage, quota }) => { $('storageInfo').textContent = 'Using ' + (usage / 1048576).toFixed(1) + ' MB of ' + (quota / 1073741824).toFixed(1) + ' GB available on this device.'; });
   openSheet('settingsSheet');
 }
@@ -989,7 +1179,7 @@ $('settingsForm').addEventListener('submit', (event) => {
   event.preventDefault();
   settings = formSettings();
   const draft = manualDraft();
-  if ($('manualSetup').open && draft.model && draft.baseURL) {
+  if (!RT && $('manualSetup').open && draft.model && draft.baseURL) {
     const entry = activeEntry();
     const unchanged = entry && entry.connection.baseURL === draft.baseURL && entry.connection.apiKey === draft.apiKey && entry.model === draft.model;
     if (!unchanged) {
@@ -1005,7 +1195,7 @@ $('settingsForm').addEventListener('submit', (event) => {
   updateProjectUI();
   renderWelcome();
   closeSheet('settingsSheet');
-  toast('Settings saved on this device.');
+  toast(RT ? 'Settings saved.' : 'Settings saved on this device.');
 });
 $('clearChat').addEventListener('click', async () => {
   if (agent.busy) agent.stop();
@@ -1028,6 +1218,7 @@ $('wipeAll').addEventListener('click', async () => {
 async function openProjects() {
   const list = $('projectList');
   list.replaceChildren();
+  if (RT) { openRuntimeProjects(); return; }
   const projects = await store.listProjects();
   if (!projects.length) list.innerHTML = '<li class="empty">No projects yet.</li>';
   for (const project of projects) {
@@ -1055,6 +1246,74 @@ async function openProjects() {
     list.appendChild(li);
   }
   if ($('projectsSheet').hidden) openSheet('projectsSheet');
+}
+
+// Runtime engine: one real folder on this computer, plus GitHub clones made
+// with the computer's own GitHub CLI sign-in.
+function openRuntimeProjects() {
+  const list = $('projectList');
+  $('deviceImport').hidden = true;
+  $('projectsListLabel').textContent = 'On this computer';
+  const root = RT.rootPath || (RT.status && RT.status.workspacePath) || '';
+  const current = RT.status && RT.status.workspacePath;
+  const rows = [{ name: root.split(/[\\/]/).filter(Boolean).pop() || root, path: root }];
+  if (current && current !== root) rows.push({ name: RT.status.workspaceName, path: current });
+  for (const row of rows) {
+    const li = document.createElement('li');
+    li.className = 'project-item' + (row.path === current ? ' current' : '');
+    const open = document.createElement('button');
+    open.className = 'open';
+    open.innerHTML = '<strong></strong><span></span>';
+    open.querySelector('strong').textContent = row.name;
+    open.querySelector('span').textContent = row.path;
+    open.addEventListener('click', async () => {
+      if (row.path !== current && row.path === root) {
+        try { await RT.client.api('/api/workspace/reset', { method: 'POST', body: {} }); await useRuntimeFolder(); }
+        catch (error) { toast(error.message, 'error'); return; }
+      }
+      closeSheet('projectsSheet');
+    });
+    li.append(open);
+    list.appendChild(li);
+  }
+  const hint = document.createElement('li');
+  hint.className = 'empty';
+  hint.textContent = 'To work in another folder, run oasis web there' + (navigator.userAgent.includes('Electron') ? ', or use File → Open Folder.' : '.');
+  list.appendChild(hint);
+  if ($('projectsSheet').hidden) openSheet('projectsSheet');
+}
+async function useRuntimeFolder() {
+  await persistChat();
+  await refreshRuntimeStatus();
+  workspace = new RuntimeWorkspace(RT.client, RT.status);
+  updateProjectUI();
+  await restoreChat();
+  renderWelcome();
+  renderPluginState();
+  refreshFiles();
+}
+async function runtimeCloneRepo(value) {
+  const ref = parseRepo(value);
+  if (!ref) { toast('Use owner/name or a github.com URL.', 'error'); return; }
+  if (agent.busy) { toast('Stop the current task first.'); return; }
+  const bar = $('importProgress');
+  bar.hidden = false;
+  bar.firstElementChild.style.width = '30%';
+  try {
+    const started = await RT.client.api('/api/github/clone', { method: 'POST', body: { repository: ref.owner + '/' + ref.repo } });
+    for (let i = 0; i < 600; i++) {
+      const job = await RT.client.api('/api/jobs/' + started.jobId);
+      if (job.status === 'completed') break;
+      if (job.status === 'error' || job.status === 'cancelled') throw new Error(job.error || 'Could not open ' + ref.owner + '/' + ref.repo + '.');
+      bar.firstElementChild.style.width = Math.min(95, 30 + i * 3) + '%';
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    await useRuntimeFolder();
+    closeSheet('projectsSheet');
+    $('repoInput').value = '';
+    toast('Opened ' + ref.owner + '/' + ref.repo + ' on this computer.');
+  } catch (error) { toast(error.message, 'error'); }
+  finally { bar.hidden = true; }
 }
 
 async function switchProject(id) {
@@ -1087,6 +1346,7 @@ $('settingsButton').addEventListener('click', () => openSettings());
 $('githubForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const value = $('repoInput').value.trim();
+  if (RT) { await runtimeCloneRepo(value); return; }
   const ref = parseRepo(value);
   if (!ref) { toast('Use owner/name or a github.com URL.', 'error'); return; }
   const bar = $('importProgress');
@@ -1156,9 +1416,11 @@ for (const id of ['folderInput', 'filesInput']) {
 }
 
 function updateProjectUI() {
-  $('projectName').textContent = workspace ? workspace.project.name : 'No project';
+  $('projectName').textContent = workspace ? workspace.project.name : RT ? 'This computer' : 'No project';
   const github = workspace && workspace.project.source && workspace.project.source.type === 'github';
-  $('pushButton').hidden = !github;
+  $('pushButton').hidden = !github || Boolean(RT);
+  $('exportButton').hidden = Boolean(RT);
+  $('newFileButton').hidden = Boolean(RT);
 }
 
 /* ---------- Files panel ---------- */
@@ -1198,12 +1460,13 @@ function refreshFiles() {
     const filter = $('fileFilter').value.trim().toLowerCase();
     const paths = (await workspace.paths()).filter((p) => !filter || p.toLowerCase().includes(filter));
     if (!paths.length) list.innerHTML = '<p class="empty">' + (filter ? 'No files match.' : 'No files yet. Ask OASIS to create some.') + '</p>';
+    if (RT && workspace.cache && workspace.cache.length >= 5000) { const more = document.createElement('p'); more.className = 'empty'; more.textContent = 'Showing the first 5,000 files. Filter to find others.'; list.appendChild(more); }
     const frag = document.createDocumentFragment();
     for (const path of paths.slice(0, 3000)) frag.appendChild(fileRow(path, status.get(path)));
     list.appendChild(frag);
     const changesList = $('changesList');
     changesList.replaceChildren();
-    if (!changes.length) changesList.innerHTML = '<p class="empty">No changes since this project was opened.</p>';
+    if (!changes.length) changesList.innerHTML = '<p class="empty">' + (RT ? 'No uncommitted changes.' : 'No changes since this project was opened.') + '</p>';
     for (const change of changes) changesList.appendChild(fileRow(change.path, change.status));
   }, 60);
 }
@@ -1225,6 +1488,24 @@ function fileRow(path, status) {
 let editingPath = null;
 async function openEditor(path, status) {
   editingPath = path;
+  if (RT) {
+    // Read-only viewer: OASIS on this computer edits the real files.
+    $('editorTitle').textContent = path;
+    let content = '';
+    try { content = status === 'deleted' ? '' : await workspace.read(path); }
+    catch (error) { content = error.message; }
+    $('editor').value = content;
+    $('editor').readOnly = true;
+    for (const id of ['revertButton', 'deleteFileButton', 'saveFileButton']) $(id).hidden = true;
+    $('diffToggle').hidden = !status;
+    $('diffView').hidden = true;
+    $('editor').hidden = false;
+    $('diffToggle').textContent = 'Diff';
+    openSheet('editorSheet');
+    if (status) showDiff();
+    return;
+  }
+  $('editor').readOnly = false;
   const files = await workspace.load();
   const file = files.get(path);
   $('editorTitle').textContent = path;
@@ -1241,6 +1522,15 @@ async function openEditor(path, status) {
   openSheet('editorSheet');
 }
 async function showDiff() {
+  if (RT) {
+    let lines = workspace.fileDiff(editingPath);
+    if (!lines.length) lines = $('editor').value.split('\n').map((text) => ({ type: 'add', text }));
+    renderDiff($('diffView'), lines);
+    $('diffView').hidden = false;
+    $('editor').hidden = true;
+    $('diffToggle').textContent = 'File';
+    return;
+  }
   const file = (await workspace.load()).get(editingPath);
   renderDiff($('diffView'), lineDiff(file.original || '', file.deleted ? '' : $('editor').value));
   $('diffView').hidden = false;
@@ -1253,7 +1543,7 @@ $('revertButton').addEventListener('click', async () => { if (!confirm('Revert '
 $('deleteFileButton').addEventListener('click', async () => { if (!confirm('Delete ' + editingPath + '?')) return; await workspace.remove(editingPath); refreshFiles(); closeSheet('editorSheet'); });
 $('editor').addEventListener('keydown', (event) => {
   if (event.key === 'Tab' && !event.shiftKey) { event.preventDefault(); document.execCommand('insertText', false, '  '); }
-  if ((event.metaKey || event.ctrlKey) && event.key === 's') { event.preventDefault(); $('saveFileButton').click(); }
+  if ((event.metaKey || event.ctrlKey) && event.key === 's') { event.preventDefault(); if (!RT) $('saveFileButton').click(); }
 });
 $('newFileButton').addEventListener('click', async () => {
   await ensureWorkspace();
@@ -1306,7 +1596,7 @@ $('pushForm').addEventListener('submit', async (event) => {
 });
 
 /* ---------- Install ---------- */
-addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); deferredInstall = event; $('installButton').hidden = false; });
+addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); deferredInstall = event; $('installButton').hidden = Boolean(RT); });
 addEventListener('appinstalled', () => { $('installButton').hidden = true; deferredInstall = null; toast('OASIS installed.'); });
 $('installButton').addEventListener('click', async () => {
   if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('installButton').hidden = true; return; }
@@ -1316,19 +1606,52 @@ const standalone = matchMedia('(display-mode: standalone)').matches || navigator
 if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('installButton').hidden = false;
 
 /* ---------- Boot ---------- */
+async function startRuntime(found) {
+  document.documentElement.classList.add('runtime');
+  $('installButton').hidden = true;
+  RT = { client: found.client, status: found.status || null, needsToken: Boolean(found.needsToken), entry: null, models: [], label: '' };
+  if (RT.needsToken) {
+    updateProjectUI();
+    await restoreChat();
+    return;
+  }
+  RT.rootPath = RT.status.workspacePath;
+  // On a computer, file edits are checkpointed and undoable; approvals are
+  // about commands and other actions with effects outside the files.
+  const RUNTIME_MODES = { ask: 'Approve commands and risky actions. Edits can be undone.', edits: 'Also run routine file operations without asking.', auto: 'Decides on its own; asks only for risky actions.' };
+  for (const button of $('modeMenu').querySelectorAll('button')) button.querySelector('span').textContent = RUNTIME_MODES[button.dataset.mode];
+  for (const option of $('modeSelect').options) option.textContent = { ask: 'Ask before commands (edits can be undone)', edits: 'Allow routine file operations', auto: 'Full auto (asks only for risky actions)' }[option.value];
+  RT.entry = runtimeEntryFrom(RT.status);
+  agent = new RuntimeAgent({
+    client: RT.client,
+    onEvent: handleEvent,
+    approve: requestApproval,
+    ask: askQuestion,
+    getMode: () => currentMode()
+  });
+  workspace = new RuntimeWorkspace(RT.client, RT.status);
+  updateModeUI();
+  updateProjectUI();
+  await restoreChat();
+}
+
 async function boot() {
   applyTheme();
   fillProviderOptions();
   updateModeUI();
-  const id = localStorage.getItem('oasis.project');
-  if (id && (await store.getProject(id))) await switchProject(id);
-  else { await restoreChat(); updateProjectUI(); }
+  const found = await detectRuntime().catch(() => ({ available: false }));
+  if (found.available) await startRuntime(found);
+  else {
+    const id = localStorage.getItem('oasis.project');
+    if (id && (await store.getProject(id))) await switchProject(id);
+    else { await restoreChat(); updateProjectUI(); }
+  }
   renderWelcome();
   renderPluginState();
   if (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && innerWidth >= 1024 && workspace)) toggleFiles(true);
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:' && !RT) navigator.serviceWorker.register('sw.js').catch(() => {});
   const shared = new URLSearchParams(location.search);
   if (shared.get('repo')) { $('repoInput').value = shared.get('repo'); openProjects(); }
   if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); renderPluginSuggest(); }

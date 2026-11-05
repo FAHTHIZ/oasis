@@ -712,7 +712,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     config,
     sessionId: restore && restore.id || sessionId || null,
     sessionName: String(sessionName || restore && restore.name || '').slice(0, 120),
-    fallbackModel: fallbackModel || loadedSettings.fallbackModel || '',
+    fallbackModel: fallbackModel || loadedSettings.fallbackModel || (config && typeof config.fallbackModel === 'string' ? config.fallbackModel : '') || '',
     maxBudgetUsd: Number(maxBudgetUsd) || 0,
     costUsd: 0,
     pricing: pricing || loadedSettings.pricing || null,
