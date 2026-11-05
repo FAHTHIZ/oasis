@@ -574,7 +574,14 @@ export function describeExploration(items, { color = true } = {}) {
 export function friendlyToolError(error) {
   const text = String(error || '');
   const errno = /^(ENOENT|EACCES|EPERM|EISDIR|ENOTDIR|EEXIST): [^,]+, \w+ '([^']+)'/.exec(text);
-  if (!errno) return text;
+  if (!errno) {
+    // Edit misses carry instructions for the model; people need the gist.
+    const near = /^old_string was not found\b[\s\S]*?Closest match \((\d+)% similar\) starts at line (\d+)/.exec(text);
+    if (near) return 'Text to replace not found (closest match: line ' + near[2] + ', ' + near[1] + '% similar)';
+    if (/^old_string was not found\b/.test(text)) return 'Text to replace not found';
+    if (text.length > 160) { const first = /^[\s\S]{20,160}?[.!?](?=\s)/.exec(text); if (first) return first[0]; }
+    return text;
+  }
   const where = path.relative(process.cwd(), errno[2]) || errno[2];
   const shown = where.startsWith('..') ? errno[2] : where;
   const meaning = { ENOENT: 'Not found', EACCES: 'Permission denied', EPERM: 'Not permitted', EISDIR: 'Is a directory, not a file', ENOTDIR: 'Not a directory', EEXIST: 'Already exists' }[errno[1]];
