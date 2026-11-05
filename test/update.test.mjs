@@ -52,3 +52,20 @@ test('git checkouts fetch the release tag then detach at its resolved commit', (
   ] });
   assert.match(updatePlan({ kind: 'git', commit: SHA_A, dirty: true, root: '/r' }, latest).blocked, /uncommitted/);
 });
+
+test('Homebrew installs update through brew, never by rewriting the Cellar with npm', async () => {
+  const { isHomebrewInstall } = await import('../src/update.mjs');
+  const root = '/opt/homebrew/Cellar/oasis-cli/1.1.0/libexec/lib/node_modules/oasis-oss';
+  assert.equal(isHomebrewInstall(root), true);
+  assert.equal(isHomebrewInstall('/home/linuxbrew/.linuxbrew/Cellar/oasis-cli/1.1.0/libexec/lib/node_modules/oasis-oss'), true);
+  assert.equal(isHomebrewInstall('/usr/local/lib/node_modules/oasis-oss'), false);
+  const exec = async () => { throw new Error('git and npm must not be consulted for a Homebrew install'); };
+  const installed = await installedVersion(root, { exec, readPackage: async () => ({ version: '1.1.0' }) });
+  assert.deepEqual(installed, { kind: 'homebrew', commit: '', version: '1.1.0', root });
+  assert.deepEqual(updatePlan(installed, { tag: 'v1.1.0', sha: 'a'.repeat(40) }), { upToDate: true });
+  const plan = updatePlan(installed, { tag: 'v1.2.0', sha: 'b'.repeat(40) });
+  assert.deepEqual(plan.steps, [{ command: 'brew', args: ['upgrade', 'fahthiz/oasis/oasis-cli'] }]);
+  const text = describeUpdate(installed, { tag: 'v1.2.0', sha: 'b'.repeat(40) }, plan);
+  assert.match(text, /Installed: v1\.1\.0 \(homebrew install\)/);
+  assert.match(text, /brew "upgrade" "fahthiz\/oasis\/oasis-cli"/);
+});

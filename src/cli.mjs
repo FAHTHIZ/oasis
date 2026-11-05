@@ -826,6 +826,12 @@ async function uninstallOasis(args = []) {
   if (args.some((arg) => !['--yes', '-y'].includes(arg))) {
     throw new Error('Usage: oasis uninstall [--yes]');
   }
+  const { isHomebrewInstall } = await import('./update.mjs');
+  if (isHomebrewInstall(APP_ROOT)) {
+    stdout.write('OASIS was installed with Homebrew. Remove it with: brew uninstall oasis-cli\nYour projects, OASIS settings, saved sessions, memory and API keys are kept either way. Nothing was removed.\n');
+    process.exitCode = 1;
+    return;
+  }
   const packageFile = path.join(APP_ROOT, 'package.json');
   const { readFile } = await import('node:fs/promises');
   const installedPackage = JSON.parse(await readFile(packageFile, 'utf8'));

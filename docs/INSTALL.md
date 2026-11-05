@@ -23,7 +23,7 @@ The Electron app is configured for Windows, macOS and Linux. Choose the matching
 
 ### Homebrew (macOS)
 
-The repository is also a Homebrew tap. The cask installs the right `.dmg` for your Mac and checks it against the release checksum:
+The repository is also a Homebrew tap (the CLI formula is under [Command-line installation](#homebrew-macos-and-linux)). The cask installs the right `.dmg` for your Mac and checks it against the release checksum:
 
 ```sh
 brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
@@ -68,6 +68,15 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. `v1.1.0` is currently the install and update target. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
 Maintainer and CI smoke tests may set `OASIS_INSTALL_COMMIT` to a full 40-character Git SHA to install one exact source revision. This override is intended for validating the installer against the commit under test; normal installations should leave it unset so the installer resolves the latest stable release.
+
+### Homebrew (macOS and Linux)
+
+```sh
+brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
+brew install fahthiz/oasis/oasis-cli
+```
+
+The formula installs the tagged release source on Homebrew's Node.js and is regenerated for every stable release. `oasis update` detects a Homebrew install and runs `brew upgrade fahthiz/oasis/oasis-cli` for you instead of changing Homebrew's files; remove it with `brew uninstall oasis-cli`.
 
 ### macOS, Linux and Android/Termux
 
