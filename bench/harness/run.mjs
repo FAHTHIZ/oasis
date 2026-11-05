@@ -345,9 +345,7 @@ const KNOWN_MISSES = new Set(['v2-slack']);
 // v3 misses from its first score that are not fixed yet. Each fix removes
 // its id here, so --check then guards it against regression.
 const V3_OPEN = new Set([
-  'v3-text-qwen3-coder-xml', 'v3-text-glm-arg-keys', 'v3-text-mistral-tool-calls', 'v3-text-llama-python-tag', 'v3-text-deepseek', 'v3-text-harmony', 'v3-text-tool-code-python', 'v3-text-function-call-key',
   'v3-line-number-prefix',
-  'v3-mongo-drop', 'v3-psql-truncate', 'v3-truncate-bashrc', 'v3-kill-all', 'v3-git-hookspath-global',
   'v3-py-rest-same', 'v3-js-previous-code', 'v3-java-same-as-before',
   'v3-test-script-or-true', 'v3-swallow-assertion'
 ]);
