@@ -33,8 +33,12 @@ test('the verification gate names the check that went stale after a later edit',
   const env = { ...process.env, OASIS_CONFIG_DIR: configDir, OASIS_SANDBOX: '0' };
   const session = await createSession({ root, env, config });
   t.after(() => closeSession(session));
-  await runAgentTurn(session, 'Fix add and add a negative-number test.', { env, autoApprove: true });
+  const gates = [];
+  await runAgentTurn(session, 'Fix add and add a negative-number test.', { env, autoApprove: true, onVerificationGate: (gate) => gates.push(gate) });
   const gate = requests.flatMap((request) => request.messages).find((message) => message.role === 'user' && /post-edit verification gate/.test(String(message.content)));
   assert.ok(gate, 'the gate should fire');
   assert.match(String(gate.content), /Rerun `node test\.mjs` now: it ran before your latest edit/);
+  // The terminal shows why work continues after a streamed reply.
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].steps.includes('rerun node test.mjs'), JSON.stringify(gates[0].steps));
 });

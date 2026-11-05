@@ -3619,19 +3619,25 @@ export function untestedNewCode(state) {
 // second, contradicting final answer. Whole-file overwrites of existing files
 // still need a diff, since they can silently drop content.
 export function diffReviewComplete(state) {
-  if (state.diffReviewedAll) return true;
+  return unreviewedPaths(state).length === 0;
+}
+
+export function unreviewedPaths(state) {
+  if (state.diffReviewedAll) return [];
   const created = state.createdPaths instanceof Set ? state.createdPaths : new Set();
   const overwritten = state.overwrittenPaths instanceof Set ? state.overwrittenPaths : null;
   const checked = state.lastVerificationExitCode === 0;
-  return [...state.changedPaths].every((item) => state.diffReviewedPaths.has(item) || created.has(item) || (checked && overwritten && !overwritten.has(item)));
+  return [...state.changedPaths].filter((item) => !(state.diffReviewedPaths.has(item) || created.has(item) || (checked && overwritten && !overwritten.has(item))));
 }
 
 export function verificationIssues(state) {
   if (!state.changedPaths.size) return [];
   const changed = [...state.changedPaths];
   const issues = [];
-  if (!diffReviewComplete(state)) {
-    issues.push('the changed-file diff has not been reviewed');
+  const unreviewed = unreviewedPaths(state);
+  if (unreviewed.length) {
+    // Name the files: a model that reviewed one diff tends to stop there.
+    issues.push('the changed-file diff has not been reviewed (' + unreviewed.slice(0, 8).join(', ') + (unreviewed.length > 8 ? ', …' : '') + ')');
   }
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
@@ -5852,6 +5858,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       if (issues.length && !verification.nudgeUsed) {
         verification.nudgeUsed = true;
+        // A streamed reply is already on screen; say why work continues.
+        if (typeof options.onVerificationGate === 'function') {
+          const stale = claimState.ran && claimState.editedAfter && claimState.lastCommand ? claimState.lastCommand : '';
+          const steps = issues.map((issue) => /diff has not been reviewed/.test(issue) ? 'review the diff of ' + (/\(([^)]*)\)/.exec(issue) || [, 'the changes'])[1]
+            : /has passed after the latest code edit/.test(issue) ? (stale ? 'rerun ' + stale : 'run a check')
+            : /asked for new tests/.test(issue) ? 'add a test'
+            : /tests were weakened/.test(issue) ? 'restore weakened tests'
+            : issue.split(/[;(]/)[0].slice(0, 60));
+          try { options.onVerificationGate({ issues, steps }); } catch {}
+        }
         session.messages.push({
           role: 'user',
           content: [

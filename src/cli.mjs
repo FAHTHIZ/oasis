@@ -2223,6 +2223,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         endStream(); lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
+      onVerificationGate: (gate) => { endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + gate.steps.join(', ') + (dim ? '\x1b[22m' : '') + '\n'); },
       onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
       onStreamRestart: (info) => { const ended = endStream(); stdout.write(streamRestartNotice(info, typeof info.partialShown === 'boolean' ? info.partialShown : ended) + '\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write(info.smallContextTools ? '\n[context] The model server has a ' + info.contextWindow + '-token window; switched to the small-context tool set (others stay reachable through tool_search) and retrying.\n' : '\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
@@ -2325,9 +2326,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (line) stdout.write((richOutput() ? '\x1b[2m  ' + line + '\x1b[22m' : '[auto-commit] ' + line) + '\n');
       }
     }
-    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }) + '\x1b[22m\n');
+    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }) + '\x1b[22m\n');
     const doneSound = Date.now() - turnStartedAt >= DONE_SOUND_AFTER_MS && playSound('done', { stream: stdout });
-    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }), { elapsedMs: Date.now() - turnStartedAt, soundPlayed: doneSound, stream: stdout });
+    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }), { elapsedMs: Date.now() - turnStartedAt, soundPlayed: doneSound, stream: stdout });
   } catch (error) {
     endStream();
     if (controller.signal.aborted || error.name === 'AbortError') {

@@ -13,7 +13,7 @@ test('a file created this turn needs no separate diff review once checks pass', 
 test('an edited existing file still needs a diff review', () => {
   const state = base({ changedPaths: new Set(['src/lib.mjs', 'src/app.mjs']), createdPaths: new Set(['src/lib.mjs']) });
   assert.equal(diffReviewComplete(state), false);
-  assert.deepEqual(verificationIssues(state), ['the changed-file diff has not been reviewed']);
+  assert.deepEqual(verificationIssues(state), ['the changed-file diff has not been reviewed (src/app.mjs)']);
   state.diffReviewedPaths.add('src/app.mjs');
   assert.deepEqual(verificationIssues(state), []);
 });
