@@ -166,7 +166,7 @@ assert.ok(e2e.includes('#agentMonitorOpenSessionBtn'), 'Browser E2E must exercis
 assert.ok(e2e.includes('PASS isolated-diff review:'), 'Browser E2E must verify the run monitor can open the isolated worktree diff.');
 assert.ok(e2e.includes("import AxeBuilder from '@axe-core/playwright'"), 'Browser E2E must use axe-core for accessibility scans.');
 assert.ok(e2e.includes("new AxeBuilder({ page })"), 'Browser E2E must run axe against the real browser page.');
-assert.ok(e2e.includes(".include('#view-agent')"), 'Axe scans must target the Agent workspace.');
+assert.ok(e2e.includes("async function assertAgentContrast(page, label, selector = '#view-agent')") && e2e.includes('.include(selector)'), 'Axe scans must target the Agent workspace by default.');
 assert.ok(e2e.includes("violation.id === 'color-contrast'"), 'Agent view contrast violations must fail browser E2E.');
 assert.ok(e2e.includes("First-run setup · 390px"), 'Axe must scan the first-run screen at phone width.');
 assert.ok(qualityWorkflow.includes('@axe-core/playwright@4.14.0'), 'The CI-only axe package must use the documented exact version.');
