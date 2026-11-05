@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile, unlink, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { isTestPath, detectTestTampering, analyzeTestDiff } from '../src/test-tamper.mjs';
+import { isTestPath, detectTestTampering, analyzeTestDiff, isTestConfigPath } from '../src/test-tamper.mjs';
 import { verificationIssues } from '../src/agent.mjs';
 
 test('test files are recognized across ecosystems', () => {
@@ -80,4 +80,34 @@ test('replacing an exact assertion with an existence check is flagged', () => {
   assert.match(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBeDefined();']))[0]?.reason || '', /existence or truthiness/);
   assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  expect(x).toBe(1);'], ['  expect(x).toBe(2);'])), []);
   assert.deepEqual(analyzeTestDiff(d('test/a.test.js', ['  assert.ok(x);'], ['  assert.equal(x, 1);'])), []);
+});
+
+const configDiff = (file, removed, added) => ['diff --git a/' + file + ' b/' + file, '--- a/' + file, '+++ b/' + file, '@@ -1 +1 @@', ...removed.map((l) => '-' + l), ...added.map((l) => '+' + l)].join('\n');
+
+test('a test command made to always succeed is flagged; other script and CI changes are not', () => {
+  const flagged = [
+    ['package.json', ['    "test": "jest --ci",'], ['    "test": "jest --ci || true",']],
+    ['package.json', ['    "test": "vitest run"'], ['    "test": "vitest run --passWithNoTests"']],
+    ['Makefile', ['\tpytest'], ['\tpytest || exit 0']],
+    ['.github/workflows/ci.yml', ['      - run: npm test'], ['      - run: npm test', '        continue-on-error: true']]
+  ];
+  for (const [file, removed, added] of flagged) {
+    const found = analyzeTestDiff(configDiff(file, removed, added));
+    assert.equal(found.length, 1, file + ' ' + added.join(' '));
+    assert.match(found[0].reason, /succeed even when tests fail/);
+  }
+  const fine = [
+    ['package.json', ['    "lint": "eslint ."'], ['    "lint": "eslint . || true"']],
+    ['package.json', ['    "test": "jest"'], ['    "test": "jest --coverage"']],
+    ['package.json', ['  "version": "1.0.0",'], ['  "version": "1.0.1",']],
+    ['.github/workflows/ci.yml', ['      - run: npm run preview'], ['      - run: npm run preview', '        continue-on-error: true']]
+  ];
+  for (const [file, removed, added] of fine) assert.deepEqual(analyzeTestDiff(configDiff(file, removed, added)), [], file + ' ' + added.join(' '));
+  assert.ok(isTestConfigPath('package.json') && isTestConfigPath('.github/workflows/ci.yml') && !isTestConfigPath('src/package.js'));
+});
+
+test('catching and ignoring assertion failures in a test is flagged', () => {
+  const found = analyzeTestDiff(configDiff('tests/test_io.py', ['    assert read() == b"x"'], ['    try:', '        assert read() == b"x"', '    except AssertionError:', '        pass']));
+  assert.ok(found.some((f) => /ignores assertion failures/.test(f.reason)));
+  assert.ok(analyzeTestDiff(configDiff('test/a.test.js', ['  await expect(load()).rejects.toThrow();'], ['  await expect(load()).rejects.toThrow().catch(() => {});'])).length);
 });

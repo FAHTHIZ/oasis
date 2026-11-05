@@ -17,6 +17,15 @@ export function isTestPath(file) {
   return TEST_PATH.some((pattern) => pattern.test(normalized));
 }
 
+// Files that say how the tests run. A change there can make every test
+// "pass" without touching a test file: `"test": "jest || true"`.
+const TEST_CONFIG_PATH = /(^|\/)(package\.json|Makefile|makefile|GNUmakefile|justfile|Taskfile\.ya?ml|tox\.ini|noxfile\.py|pytest\.ini|setup\.cfg|pyproject\.toml|Cargo\.toml|\.github\/workflows\/[^/]+\.ya?ml|\.gitlab-ci\.ya?ml|\.circleci\/config\.yml|azure-pipelines\.ya?ml)$/;
+export function isTestConfigPath(file) {
+  return TEST_CONFIG_PATH.test(String(file || '').replace(/\\/g, '/'));
+}
+const TEST_RUNNER = /\b(?:test|tests|jest|vitest|mocha|ava|tap|pytest|unittest|tox|nox|go\s+test|cargo\s+(?:test|nextest)|rspec|phpunit|ctest|check)\b/i;
+const NEUTERED_RUN = /\|\|\s*(?:true|:|exit\s+0|echo\b)|;\s*(?:true|exit\s+0)\s*["']?\s*,?\s*$|--passWithNoTests\b|--no-fail-on-empty\b|continue-on-error:\s*true|allow_failure:\s*true|\bset\s+\+e\b|--exitfirst=0\b|-p\s+no:\w+|--suppress-no-test-exit-code\b/;
+
 const SKIP_PATTERNS = [
   [/\b(?:it|test|describe|context|suite)\.(?:skip|todo)\s*\(/, 'skipped a test'],
   [/\b(?:it|test|describe)\.only\s*\(|\bf(?:it|describe)\s*\(/, 'focused a test with .only (other tests stop running)'],
@@ -26,7 +35,8 @@ const SKIP_PATTERNS = [
   [/\bt\.Skip(?:Now|f)?\s*\(/, 'skipped a test'],
   [/#\[ignore\]/, 'ignored a test'],
   [/@(?:Disabled|Ignore)\b/, 'disabled a test'],
-  [/^\s*(?:skip|pending)(?:\s+['"]|\s*\(\s*['"]|\s*$)/, 'skipped a test']
+  [/^\s*(?:skip|pending)(?:\s+['"]|\s*\(\s*['"]|\s*$)/, 'skipped a test'],
+  [/\bexcept\s*\(?[^:]*\bAssertionError\b|\bcatch\s*\(\s*\w*\s*(?::\s*AssertionError)?\s*\)\s*\{\s*\}|\.catch\s*\(\s*\(\s*\w*\s*\)\s*=>\s*(?:\{\s*\}|undefined|null)\s*\)|\brescue\s+(?:Minitest::Assertion|RSpec::Expectations::ExpectationNotMetError)\b|catch\s*\(\s*(?:AssertionError|AssertionFailedError)\b/, 'catches and ignores assertion failures']
 ];
 const TEST_DECL = /^\s*(?:(?:it|test|specify)\s*\(|def\s+test_\w*\s*\(|func\s+Test\w*\s*\(|#\[test\]|@Test\b|fn\s+test_\w*\s*\()/;
 // An exact check (equality, deep equality, match) versus one that only checks
@@ -61,6 +71,12 @@ export function analyzeTestDiff(diffText) {
     else if (line.startsWith('-') && !line.startsWith('---')) current.removed.push(line.slice(1));
   }
   for (const entry of files.values()) {
+    if (isTestConfigPath(entry.file)) {
+      const touchesTests = [...entry.added, ...entry.removed].some((line) => TEST_RUNNER.test(line));
+      const hit = entry.added.find((line) => NEUTERED_RUN.test(line) && (TEST_RUNNER.test(line) || (touchesTests && /continue-on-error|allow_failure/.test(line))));
+      if (hit && !entry.removed.some((line) => NEUTERED_RUN.test(line))) findings.push({ file: entry.file, reason: 'made the test command succeed even when tests fail', line: hit.trim().slice(0, 160) });
+      if (!isTestPath(entry.file)) continue;
+    }
     // Inline test modules (Rust #[cfg(test)], doctest-style files) live outside
     // test paths; a hunk that touches a test declaration counts too.
     if (!isTestPath(entry.file) && ![...entry.added, ...entry.removed].some((line) => TEST_DECL.test(line) || /#\[(?:test|ignore)\]/.test(line))) continue;
@@ -89,7 +105,7 @@ export function analyzeTestDiff(diffText) {
 
 /** Check the given changed paths against HEAD. Resolves [] outside Git or when nothing is weakened. */
 export function detectTestTampering(root, paths, { timeoutMs = 15000 } = {}) {
-  const tests = [...new Set(paths || [])].filter(isTestPath);
+  const tests = [...new Set(paths || [])].filter((file) => isTestPath(file) || isTestConfigPath(file));
   if (!tests.length) return Promise.resolve([]);
   return new Promise((resolve) => {
     execFile('git', ['diff', '--no-color', '--no-ext-diff', '-U0', 'HEAD', '--', ...tests], { cwd: root, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
