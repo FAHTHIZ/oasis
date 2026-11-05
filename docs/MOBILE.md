@@ -1,14 +1,40 @@
 # OASIS on a phone or tablet
 
-OASIS does its work (reading files, running commands, calling the model) on a computer. A phone is a remote control for that computer. There are three ways to use it from Android, iPhone or iPad.
+OASIS runs on a phone in four ways. The universal app needs nothing else: no computer, no terminal, no account.
 
 | Option | Works on | What you need |
 | --- | --- | --- |
+| [Universal app](#universal-app) | Android, iPhone, iPad, ChromeOS, any desktop browser | A browser and a model provider key (or a local model) |
 | [Browser workspace from your phone](#browser-workspace-from-your-phone) | iPhone, iPad, Android | OASIS on a computer on the same private network |
 | [Chat with your agent](#chat-with-your-agent-telegram-discord-slack) | Any phone | A Telegram, Discord or Slack bot |
-| [Run OASIS on the phone (Termux)](#run-oasis-on-the-phone-termux) | Android only | Termux, plus a hosted model or a model on another computer |
+| [Run the CLI on the phone (Termux)](#run-oasis-on-the-phone-termux) | Android only | Termux, plus a hosted model or a model on another computer |
 
-There is no App Store or Play Store app. The browser workspace installs to the home screen as a web app instead, with its own icon, full-screen window and offline shell.
+## Universal app
+
+Open **[fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/)** and add it to the home screen:
+
+- **Android, ChromeOS, Windows, macOS, Linux (Chrome or Edge):** tap **Install** in the app, or the browser menu, then **Install app**.
+- **iPhone and iPad (Safari):** Share, then **Add to Home Screen**. The app shows this hint the first time.
+
+After installing, it opens full screen with its own icon and works offline. The whole agent runs on the device: the loop, tools, projects and chat history live in the browser, and model requests go straight from the device to the provider you pick. There is no OASIS server in between.
+
+**What it does**
+
+- Chat with an agent that reads, writes, edits, searches and deletes files in a project, with a diff for every change and **Revert** per file.
+- Runs JavaScript (CommonJS and ES modules, `assert`, and `test`/`describe`/`it`) in an isolated sandbox: a separate origin-locked frame and a worker per run, no network, no access to the app's storage, and a hard time limit that kills infinite loops.
+- Imports a GitHub repository (public, or private with a token), a ZIP file or a folder, and exports a ZIP. With a GitHub token it pushes changes as a commit to a new branch and can open a pull request. Pushing always asks first.
+- Fetches web pages as Markdown, keeps a to-do list, and loads skills on demand. Bundled skills ship with the app; project skills come from `.oasis/skills`, `.agents/skills` or `.claude/skills` in the project. Only the skill names go into the prompt until one is needed, so it stays light on small models and low-end phones.
+- Follows project instructions from `OASIS.md` (or `AGENTS.md` / `CLAUDE.md`).
+- Approval modes: **Ask** (approve every change), **Edits** (file edits allowed, risky actions ask) and **Auto**.
+- Repairs malformed and text-only tool calls from small models, detects loops, and compacts long conversations.
+
+**Providers:** OpenRouter, Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, Mistral, xAI, Ollama, or any OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM). Keys are stored only in this browser's local storage on this device. For Ollama or llama.cpp on your own computer, allow the app's origin in the server (for Ollama, `OLLAMA_ORIGINS=https://fahthiz.github.io`).
+
+**Links:** `…/app/?repo=owner/name` imports a repository on open, and `?q=…` starts a chat with that request.
+
+**Self-hosting:** `oasis app` serves the same app from your computer (`--lan` shows a QR code for your phone, `--port` changes the port, default 3920). `node scripts/build-app.mjs` writes a static copy to `site/app/` that any static host can serve.
+
+**Limits.** The universal app cannot run shell commands, install packages or run Python. Use the CLI, desktop app or browser workspace for that, or connect your phone to them (below). Browser storage can be cleared by the browser under storage pressure, so export a ZIP or push to GitHub for anything you need to keep. It is tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is still in progress.
 
 ## Browser workspace from your phone
 

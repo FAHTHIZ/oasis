@@ -24,7 +24,7 @@ const required = [
   'https://github.com/FAHTHIZ/oasis/releases', 'https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md', 'no terminal required',
   'Download OASIS 1.0', 'Install the CLI', 'https://github.com/FAHTHIZ/oasis/releases/latest', 'Download the latest release',
   'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
-  'Desktop app (no terminal required)', 'Android / Termux installation', 'No native Android APK is published yet.', 'Terminal (for developers)', 'Privacy note',
+  'Desktop app (no terminal required)', 'Universal app (phone, tablet, any computer)', 'Open the app', 'href="app/"', 'Terminal (for developers)', 'Privacy note',
   'property="og:image"', 'summary_large_image', 'OASIS 1.0 · Stable · Open source · Apache-2.0', 'docs/PROJECT_PLAN.md'
 ];
 // Visible text can contain inline icons (for example a link arrow), so text markers also match the tag-free copy.

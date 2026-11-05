@@ -45,7 +45,7 @@ export function parseBenchArgs(argv) {
   return options;
 }
 
-/** Per-agent environment. With --router, every agent talks to the same OpenAI/Anthropic-compatible gateway (9Router, OmniRoute, LiteLLM, OpenRouter). */
+/** Per-agent environment. With --router, every agent talks to the same OpenAI/Anthropic-compatible gateway (a self-hosted proxy or OpenRouter). */
 export function agentEnvironment(agent, options, env = process.env) {
   const next = { ...env };
   const key = env.OASIS_BENCH_API_KEY || '';
@@ -208,10 +208,10 @@ async function main() {
     process.stdout.write(`Usage: npm run bench:live -- [options] --yes
 
   --agents LIST        comma-separated: ${ALL_AGENTS.join(',')} (default: all; missing CLIs are skipped)
-  --model ID           model for every agent (e.g. cc/claude-opus-4-6 through 9Router)
+  --model ID           model for every agent (e.g. qwen/qwen3-coder through OpenRouter)
   --model-for A=ID     per-agent model, e.g. --model-for claude=opus
   --router URL         send every agent through one OpenAI/Anthropic-compatible gateway
-                       (9Router/OmniRoute http://localhost:20128/v1, LiteLLM, OpenRouter);
+                       (a self-hosted proxy, OpenRouter);
                        the key is read from OASIS_BENCH_API_KEY
   --trials N           trials per task (default 1; use 3+ for publishable numbers)
   --task ID            run one task

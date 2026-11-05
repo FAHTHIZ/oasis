@@ -12,7 +12,7 @@
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat&color=8A7CFF&label=release" alt="Latest release" /></a>
   <img src="https://img.shields.io/badge/stage-stable-2EA44F.svg?style=flat" alt="Stable" />
   <img src="https://img.shields.io/badge/node-%E2%89%A522-339933.svg?style=flat&logo=node.js&logoColor=white" alt="Node.js 22 or newer" />
-  <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555.svg?style=flat" alt="macOS, Linux and Windows" />
+  <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20%C2%B7%20Android%20%C2%B7%20iOS-555.svg?style=flat" alt="macOS, Linux, Windows, Android and iOS" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache-2.0 license" /></a>
   <a href="https://fahthiz.github.io/oasis/"><img src="https://img.shields.io/badge/website-fahthiz.github.io%2Foasis-7CFF5E.svg?style=flat" alt="Website" /></a>
 </p>
@@ -20,6 +20,7 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><strong>Download</strong></a> ·
   <a href="https://fahthiz.github.io/oasis/"><strong>Website</strong></a> ·
+  <a href="https://fahthiz.github.io/oasis/app/"><strong>Open the app</strong></a> ·
   <a href="#install"><strong>Install</strong></a> ·
   <a href="#terminal-or-browser">Web UI</a> ·
   <a href="#measured-not-claimed">Benchmarks</a> ·
@@ -61,7 +62,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 </td>
 <td valign="top">
 
-**Your workflow, kept.** Accepts Claude Code's CLI flags (`-p`, `--output-format stream-json`, `--allowedTools`, `--mcp-config`) and Codex and Gemini CLI ones (`exec`, `--full-auto`, `--sandbox`, `--yolo`, `--output-schema`) and Aider's (`--message`, `--test-cmd --auto-test`, `--auto-commits`), reads `AGENTS.md`, `CLAUDE.md` and the rule folders of Cursor, Windsurf, Antigravity, Copilot, Kiro, Cline and Roo as they are, loads Claude Code plugins, and imports MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Hermes Agent, OpenCode, Antigravity, Windsurf, Cline and Claude Code auto memory (`oasis import`).
+**Your setup moves in with you.** OASIS understands the common agent CLI flags (`-p`, `--output-format stream-json`, `exec`, `--full-auto`, `--sandbox`, `--allowedTools`, `--mcp-config`, `--test-cmd --auto-test` and more), reads `OASIS.md`, `AGENTS.md`, `CLAUDE.md` and the rule folders editors already keep in your repository, and loads existing plugins and skills as they are. `oasis import` brings MCP servers, instructions, commands, rules, skills and memories from the tools you used before, in one command.
 
 </td>
 </tr>
@@ -83,6 +84,17 @@ Same agent, same safety policy, two front ends. `oasis web` opens a local browse
 | Approvals | Inline prompt | Approval card with the exact command or diff | Inline in the panel |
 | Images | Ctrl+V pastes a screenshot, or `@screenshot.png` | Paste, drag and drop, or attach | Attach button or `@screenshot.png` in the chat panel |
 | Low-power devices | Lite or no animation on 2-CPU, SSH, Linux console, CI, screen readers | Respects reduced-motion, works as an offline-capable PWA | Editor theme |
+
+## On any device: the universal app
+
+OASIS also runs as an installable app on phones, tablets and computers, with nothing to set up: **[open the app](https://fahthiz.github.io/oasis/app/)** and add it to your home screen. The agent runs entirely on the device and talks straight to the model provider you choose; there is no OASIS server and no account.
+
+- Projects from GitHub, a ZIP or a folder; chat, edit with diffs and per-file revert, search, fetch web pages, and run JavaScript and its tests in an isolated, network-free sandbox with a hard time limit.
+- Commit and push to a new branch or open a pull request, always after you approve.
+- Works offline once installed. Skills load only when a task needs them, so it stays fast on low-end phones and small models.
+- Ten provider presets plus any OpenAI-compatible endpoint, including Ollama and llama.cpp on your own machine.
+
+It cannot run shell commands; for that, use the CLI or desktop app, or [connect your phone to them](docs/MOBILE.md#browser-workspace-from-your-phone). `oasis app --lan` serves the same app from your computer with a QR code. Details: [OASIS on a phone or tablet](docs/MOBILE.md#universal-app).
 
 ## Install
 
@@ -111,8 +123,8 @@ Other ways in:
 | **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable release (`v1.1.0`) to an immutable commit, runs `oasis doctor` and opens setup. |
 | **Desktop app** | [Download the latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`; macOS `.dmg` for Apple silicon and Intel; Linux `.AppImage` or `.deb` for x86_64 and arm64; with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. From v1.1.0 the app tells you when a new stable version is out and installs it after checking its SHA-256 ([updates](docs/INSTALL.md#updates)). |
 | **Local model, no API key** | `llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080`, then `OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis`. OASIS reads the loaded context window and picks the right profile. Ollama and LM Studio work the same way. |
-| **Coming from another agent** | `oasis import claude`, `codex`, `gemini`, `cursor`, `hermes`, `opencode`, `antigravity`, `windsurf` or `cline` (add `--dry-run` to preview). Existing `CLAUDE.md` / `AGENTS.md` files are picked up as they are. |
-| **Phone or tablet** | In the desktop app choose **File → Connect a phone…** (or **Settings → Devices → Connect a phone** in the browser), pick Tailscale (encrypted) or home Wi-Fi, and scan the QR code. From a terminal, run `oasis web --host 0.0.0.0` with a TLS certificate and scan the QR code it prints, and add the workspace to your home screen. You can also use a Telegram/Discord/Slack bot, or Termux on Android. See [MOBILE.md](docs/MOBILE.md). |
+| **Coming from another agent** | `oasis import <tool>` with `codex`, `gemini`, `cursor`, `claude`, `hermes`, `opencode`, `antigravity`, `windsurf` or `cline` (add `--dry-run` to preview). Existing `AGENTS.md` / `CLAUDE.md` files are picked up as they are. |
+| **Phone or tablet** | [Open the universal app](https://fahthiz.github.io/oasis/app/) and add it to the home screen: no computer needed. To drive OASIS on your computer from the phone instead, choose **File → Connect a phone…** in the desktop app (or `oasis web --host 0.0.0.0` with a TLS certificate) and scan the QR code. A Telegram/Discord/Slack bot and Termux on Android also work. See [MOBILE.md](docs/MOBILE.md). |
 | **Set up for this computer** | `oasis setup --auto` detects CPU, memory, GPU and any running Ollama / LM Studio / llama.cpp server, then saves the best model route that passes a live test. |
 
 ## Measured, not claimed
@@ -149,7 +161,7 @@ The agent evaluator has **52 tasks**: 33 focused fixtures plus 19 repository-lev
 | "I have to wait for it to finish before I can correct it." | Type while it works and press Enter: the agent reads the message at its next step, adjusts and keeps going. Nothing you send is dropped. |
 | "My local model times out on long prompts." | Requests to llama.cpp, Ollama, LM Studio or vLLM on your machine skip Node's hidden 300-second header timeout, and wait up to 15 minutes for the first token by default. The context window is read from Ollama, LM Studio and llama-server on their default ports, and a request that overflows the window is resized from the server's error instead of failing. |
 | "I switched tabs and missed that it was waiting on me." | When a turn that ran 15 s or more finishes or needs approval, OASIS notifies you: a desktop notification in iTerm2, WezTerm, Ghostty, Windows Terminal and kitty, the bell elsewhere, and a tab badge plus optional notification in the browser. `OASIS_NOTIFY=off` turns it off. |
-| "I want every change in Git history, like Aider." | `/auto-commit on` (or `OASIS_AUTO_COMMIT=1`) commits each turn's changed files as `oasis: <your request>`, and only those files; your own staged work stays out. |
+| "I want every change in Git history." | `/auto-commit on` (or `OASIS_AUTO_COMMIT=1`) commits each turn's changed files as `oasis: <your request>`, and only those files; your own staged work stays out. |
 | "It forgot my rules after compacting." | Compaction only summarizes the conversation. The system prompt, including `AGENTS.md` / `CLAUDE.md`, stays word for word. `/compact` shows a preview before changing anything, `/compact preserve rule: …` pins other text verbatim into every summary, and `/compact undo` brings the full history back. |
 | "I want to undo what it just did." | `/undo` reverts the last turn's file and conversation changes; `Esc Esc` or `/rewind` jumps to any checkpoint. |
 | "Animations stutter over SSH and on my old laptop." | Motion adapts: smooth on capable machines, a light pulse on low-power hardware, SSH and the Linux console, none in CI, for screen readers or with `OASIS_REDUCED_MOTION=1`. |
@@ -219,8 +231,8 @@ Project proposals stay with one workspace; user-scope proposals are reserved for
 | **Context** | Saved and resumable sessions, `OASIS.md` / `AGENTS.md` / `CLAUDE.md` instructions, other agents' rule folders with their always/glob/on-request triggers, memory with optional write approval, compaction with must-keep context (also while you are away, with `/compact undo`), rule refresh, cross-session search (`/recall`, `session_search`), separate agent profiles (`--profile`). |
 | **Learning** | Verified-work skill proposals, user/project scope, review-before-promotion, secret screening, and collision-safe portable skill creation. |
 | **Teams of agents** | Bounded subagents, specialist reviewers, shared task boards, background sessions, tmux teammate panes, workflows, `oasis batch` runs with ShareGPT/OpenAI trajectory export, and `oasis plugin eval` for scoring plugins and skills against a baseline. |
-| **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills and skills.sh, plugins (including Claude Code plugins), web search, Chrome browser tool, image generation (`generate_image`), text to speech (`text_to_speech`), GitHub Action, VS Code / Cursor / Windsurf bridge, [Telegram, Discord and Slack gateways](docs/USER_GUIDE.md#telegram-gateway-your-agent-from-your-phone) (`oasis gateway telegram`, `discord`, `slack`) that take text, photos, files and voice notes, and an [Agent Client Protocol](docs/USER_GUIDE.md#zed-jetbrains-neovim-and-other-acp-editors) server (`oasis acp`) for Zed, JetBrains, Neovim and Emacs with inline diffs and editor-buffer reads and writes. |
-| **Surfaces** | Terminal CLI with Markdown, syntax highlighting and Mermaid flowcharts and sequence diagrams drawn in the terminal, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. Soft, optional sound effects for finished turns, approvals, errors and completed steps (`/sounds`). |
+| **Integrations** | MCP (client over stdio, Streamable HTTP and SSE; server mode; OAuth), hooks, Agent Skills with a built-in installer for skills from any Git repository, plugins (existing plugin formats load unchanged), web search, Chrome browser tool, image generation (`generate_image`), text to speech (`text_to_speech`), GitHub Action, VS Code / Cursor / Windsurf bridge, [Telegram, Discord and Slack gateways](docs/USER_GUIDE.md#telegram-gateway-your-agent-from-your-phone) (`oasis gateway telegram`, `discord`, `slack`) that take text, photos, files and voice notes, and an [Agent Client Protocol](docs/USER_GUIDE.md#zed-jetbrains-neovim-and-other-acp-editors) server (`oasis acp`) for Zed, JetBrains, Neovim and Emacs with inline diffs and editor-buffer reads and writes. |
+| **Surfaces** | Universal app for phones, tablets and computers (offline, on-device, sandboxed JavaScript, GitHub push), terminal CLI with Markdown, syntax highlighting and Mermaid flowcharts and sequence diagrams drawn in the terminal, headless mode with JSON and stream-JSON, local browser workspace (image paste, dictation, `!` shell commands, steering, live diffs), Electron desktop app, SDK. Soft, optional sound effects for finished turns, approvals, errors and completed steps (`/sounds`). |
 | **Accessibility** | Screen-reader mode (`--ax-screen-reader`), reduced motion, `NO_COLOR`, colorblind-friendly and light themes, `--calm` output. |
 
 Capabilities are shared across surfaces but not identical on every OS, provider or editor; check the [support matrix](docs/PROJECT_PLAN.md#support-and-qualification-matrix) before relying on a platform-specific path.
@@ -230,6 +242,8 @@ Capabilities are shared across surfaces but not identical on every OS, provider 
 ```mermaid
 flowchart TD
     User["Developer and project"] --> Surfaces["CLI · Browser · Desktop · Editor · SDK · GitHub Action"]
+    User --> App["Universal app (on-device agent)"]
+    App <--> Model
     Surfaces --> Runtime["Shared OASIS runtime"]
     Runtime <--> Model["Chosen hosted or local model"]
     Runtime --> Context["Instructions · Sessions · Memory · Checkpoints"]
@@ -253,13 +267,14 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 
 | Surface | Position |
 |---|---|
-| **CLI** | Primary workflow; Node.js 22+. |
+| **CLI** | Primary workflow for repositories and automation; Node.js 22+. |
 | **Browser workspace** | Local, authenticated, backed by the shared runtime; not a hosted service. Some browser-side project, task and note state is separate from CLI state. |
 | **Desktop** | Windows x64; macOS arm64 and Intel; Linux x86_64 and arm64; built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums. |
 | **VS Code-family editors** | Supported integration; not every editor extension ecosystem is covered. |
 | **ACP editors (Zed, JetBrains, Neovim, Emacs)** | `oasis acp` implements the core Agent Client Protocol, inline edit diffs and editor `fs/*` (unsaved buffers are read, open buffers are updated). With `oasis acp --editor-terminal`, approved commands run in the editor's terminal panel (`terminal/*`); by default they run in OASIS's own process and sandbox. |
 | **SDK and GitHub Action** | Programmatic and repository automation; unattended use still needs deliberate permissions and isolation. |
-| **Android / Termux** | The CLI can be tried in Termux; Android is not a fully qualified platform and there is no native APK. |
+| **Universal app** | Installable web app for Android, iOS, iPadOS, ChromeOS and desktop browsers; runs on the device with no server. No shell commands. Tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is in progress. Not in the app stores yet. |
+| **Android / Termux** | The full CLI runs in Termux; Android is not a fully qualified CLI platform. |
 
 </details>
 
@@ -283,7 +298,7 @@ Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md) and the dated [secur
 
 | Need | Reference |
 |---|---|
-| Install, update, uninstall | [Installation](docs/INSTALL.md) · [Termux](docs/TERMUX.md) |
+| Install, update, uninstall | [Installation](docs/INSTALL.md) · [Phone and tablet](docs/MOBILE.md) · [Termux](docs/TERMUX.md) |
 | Learn by task | [User-guide map](docs/USER_GUIDE_MAP.md) |
 | Every command, setting, tool and integration | [Complete user guide](docs/USER_GUIDE.md) · [Keys](docs/KEYS.md) |
 | Workflows, skills and plugins | [Workflows and skills](docs/WORKFLOWS_AND_SKILLS.md) |

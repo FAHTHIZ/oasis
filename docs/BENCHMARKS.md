@@ -166,11 +166,11 @@ node src/cli.mjs eval --aider --trials 3 --model openai/gpt-5.5 --yes
 
 `npm run bench:live` runs OASIS and every installed agent (Claude Code, Codex CLI, Gemini CLI, OpenCode, Aider) on the same tasks, then writes a dated folder, `bench/results/live-YYYY-MM-DD/`, containing each agent's full JSON report, `summary.json` and a `SUMMARY.md` table ready to commit. Agents whose CLI is missing, or that fail before verification on every trial (not signed in, unknown model, gateway down), are listed as "not run" with the reason rather than scored 0%.
 
-To compare harnesses rather than models, send every agent to the same model through one gateway. With [9Router](https://github.com/decolua/9router) or OmniRoute running locally:
+To compare harnesses rather than models, send every agent to the same model through one gateway. Any OpenAI- and Anthropic-compatible endpoint works, for example a self-hosted proxy or OpenRouter:
 
 ```sh
 export OASIS_BENCH_API_KEY=sk-...        # the gateway key; never written to the results
-npm run bench:live -- --router http://localhost:20128/v1 --model cc/claude-opus-4-6 --trials 3 --yes
+npm run bench:live -- --router https://openrouter.ai/api/v1 --model qwen/qwen3-coder --trials 3 --yes
 ```
 
 `--router` sets each agent's own base-URL variable (`OASIS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE`, `GOOGLE_GEMINI_BASE_URL`) and key. Use `--agents oasis,claude` to choose agents, `--model-for claude=opus` for a per-agent model ID, and `--task ID` for a quick check. Only tasks every agent ran with identical fingerprints are scored.

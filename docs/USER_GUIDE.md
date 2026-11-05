@@ -1155,7 +1155,7 @@ When a reply contains a fenced `mermaid` block, the terminal draws it instead of
 
 When an image key is available, the model gets a `generate_image` tool. It creates a picture from a text prompt, or edits existing workspace images passed as `input_images`, and saves the PNG, JPEG or WebP file in the workspace (by default `images/<prompt-slug>-<id>.png`, or any workspace `path`). Use it for app icons, illustrations, placeholder art and UI mockups; the model can then open the result with `read_file`.
 
-It speaks the OpenAI-compatible Images API (`/images/generations` and `/images/edits`), so it works with OpenAI `gpt-image-1` and `dall-e-3`, Google's OpenAI-compatible Gemini endpoint, LocalAI and proxies such as LiteLLM or OmniRoute:
+It speaks the OpenAI-compatible Images API (`/images/generations` and `/images/edits`), so it works with OpenAI `gpt-image-1` and `dall-e-3`, Google's OpenAI-compatible Gemini endpoint, LocalAI and OpenAI-compatible proxies:
 
 | Setting | Default |
 | --- | --- |

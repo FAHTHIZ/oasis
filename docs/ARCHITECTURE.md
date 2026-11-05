@@ -88,6 +88,7 @@ The static dashboard is included as a separate surface because it is easy to con
 | GitHub Action | `action.yml`, `src/github-action.mjs` | Runs OASIS in a GitHub Actions checkout through the SDK, filters who can trigger mention-based tasks, verifies the result, and can commit/push a branch or open a pull request according to the event. |
 | Agent Client Protocol server | `src/acp.mjs` (`oasis acp`) | JSON-RPC over stdio for Zed, JetBrains, Neovim, Emacs and other ACP editors: sessions, prompts, mode changes, tool-call reports with inline diffs, permission requests, editor `fs/*` reads and writes when the client offers them, and opt-in editor terminals (`terminal/*`) for approved commands. |
 | Messaging gateways | `src/gateway-core.mjs`, `src/gateway-telegram.mjs`, `src/gateway-discord.mjs`, `src/gateway-slack.mjs` (`oasis gateway ...`) | Long-running bots that map an allowed chat to a saved session, save incoming files to `.oasis/inbox/`, pass photos to the model, and turn approvals into chat buttons. |
+| Universal app | `app/` (UI), `app/core/` (agent loop, providers, workspace, tools, sandbox, skills, GitHub, ZIP), `scripts/build-app.mjs`, `src/app-server.mjs` (`oasis app`) | A self-contained agent that runs on the device in any modern browser. Projects and chats live in IndexedDB, model requests go directly from the device to the chosen provider, and JavaScript runs in `app/sandbox.html`: a sandboxed frame without same-origin access whose CSP blocks all network connections, with a fresh worker per run that is terminated on timeout. It has no shell and no host-side execution. `app/core/` imports only browser-standard APIs, so the same modules run under Node for tests (`test/app-core.test.mjs`). |
 | Static dashboard / PWA shell | `index.html`, `sw.js`, `manifest.webmanifest` | Local Projects, Tasks, and Notes data in browser storage, JSON export/import, and static offline assets. It has no model loop or host-side execution by itself. |
 
 ### Process and deployment boundaries
@@ -160,7 +161,7 @@ The provider adapter code is primarily in `src/config.mjs`, `src/cloud-providers
 | Provider protocol / route | How it is connected |
 |---|---|
 | OpenAI Responses | Native Responses API path. |
-| OpenAI-compatible Chat Completions | Compatible gateways and local endpoints; the Gemini preset uses this protocol against Google's OpenAI-compatible endpoint. OmniRoute and OpenRouter are also configured through compatible endpoints. |
+| OpenAI-compatible Chat Completions | Compatible gateways and local endpoints; the Gemini preset uses this protocol against Google's OpenAI-compatible endpoint. OpenRouter and self-hosted proxies are configured through compatible endpoints. |
 | Anthropic Messages | Native Anthropic Messages API path. |
 | AWS Bedrock | Anthropic Messages-compatible request shape with Bedrock endpoint and AWS bearer-token or SigV4 authentication. Bedrock responses currently use the non-streaming invocation path. |
 | Google Vertex AI | Anthropic Messages-compatible request shape with Vertex endpoint, project/region and Google access-token authentication. |
