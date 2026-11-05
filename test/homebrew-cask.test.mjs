@@ -61,5 +61,5 @@ test('the CLI formula installs the tagged source with npm and matches its genera
   const sha = committed.match(/sha256 "([0-9a-f]{64})"/)[1];
   assert.equal(committed, renderFormula(version, sha), 'regenerate with node scripts/homebrew-cask.mjs');
   assert.equal(version, fs.readFileSync(CASK_PATH, 'utf8').match(/version "([^"]+)"/)[1], 'cask and formula track the same release');
-  assert.equal(pkg.bin.oasis, './src/cli.mjs', 'the formula links the oasis binary');
+  assert.equal(pkg.bin.oasis, './src/oasis.mjs', 'the formula links the oasis binary');
 });
