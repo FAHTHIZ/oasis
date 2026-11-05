@@ -3509,7 +3509,7 @@ export async function detectProjectTestCommand(root) {
 async function assistedVerificationCalls(root, verification) {
   const calls = [];
   const changed = [...verification.changedPaths];
-  if (!verification.diffReviewedAll && !changed.every((item) => verification.diffReviewedPaths.has(item))) {
+  if (!diffReviewComplete(verification)) {
     let git = false;
     try { await stat(path.join(root, '.git')); git = true; } catch { /* not a Git checkout */ }
     if (git) calls.push({ name: 'git_diff', args: {} });
@@ -3586,11 +3586,20 @@ async function activeLspBaseline(session, file, callContext, options) {
   }
 }
 
+// A file the agent created in this turn needs no diff review: write_file sent
+// every byte of it, so rereading only costs a model round trip. Edited and
+// overwritten files still need git_diff or a full reread.
+export function diffReviewComplete(state) {
+  if (state.diffReviewedAll) return true;
+  const created = state.createdPaths instanceof Set ? state.createdPaths : new Set();
+  return [...state.changedPaths].every((item) => state.diffReviewedPaths.has(item) || created.has(item));
+}
+
 export function verificationIssues(state) {
   if (!state.changedPaths.size) return [];
   const changed = [...state.changedPaths];
   const issues = [];
-  if (!state.diffReviewedAll && !changed.every((item) => state.diffReviewedPaths.has(item))) {
+  if (!diffReviewComplete(state)) {
     issues.push('the changed-file diff has not been reviewed');
   }
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
@@ -3675,8 +3684,7 @@ function verificationCommandKind(command, args) {
 
 function verificationSummary(state) {
   const changedPaths = [...state.changedPaths];
-  const diffReviewed = changedPaths.length === 0 || state.diffReviewedAll ||
-    changedPaths.every((item) => state.diffReviewedPaths.has(item));
+  const diffReviewed = diffReviewComplete(state);
   const checkRequired = changedPaths.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
   const lastCheck = state.lastVerificationKind
     ? {
