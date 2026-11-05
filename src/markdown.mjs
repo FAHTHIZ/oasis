@@ -66,7 +66,9 @@ export function renderMarkdownLine(line, state, options = {}) {
     if (!state.fence) {
       state.fence = fence[1]; state.lang = fence[2] || '';
       if (diagrams && state.lang.toLowerCase() === 'mermaid') { state.mermaid = []; return null; }
-      return color ? C.dim + '  ' + (state.lang || 'code') + C.noBold : null;
+      // No language label: a dim "bash" above the commands read as part of
+      // them and was copied with them. Highlighting already marks the block.
+      return null;
     }
     if (fence[1] === state.fence) {
       const source = state.mermaid;

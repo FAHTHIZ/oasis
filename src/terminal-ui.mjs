@@ -478,7 +478,7 @@ export function describeEdit({ name, args = {}, result = {} }, { color = true } 
     bodies.push(diff.text);
   }
   if (!bodies.length) return '';
-  const summary = '  ⎿ ' + (color ? ANSI.dim : '') + 'Updated ' + (args.path || 'file') + ' with ' + added + ' addition' + (added === 1 ? '' : 's') + ' and ' + removed + ' removal' + (removed === 1 ? '' : 's') + (color ? ANSI.noBold : '');
+  const summary = '  ⎿ ' + (color ? ANSI.dim : '') + 'Updated ' + (args.path || 'file') + ' with ' + changeCounts(added, removed) + (color ? ANSI.noBold : '');
   return summary + '\n' + bodies.join('\n');
 }
 
@@ -524,4 +524,12 @@ export function formatTurnSummary({ ms = 0, toolCalls = 0, tokens = 0, finished 
   const used = Number(tokens || 0);
   if (used) parts.push((used >= 1000 ? (used / 1000).toFixed(used >= 100000 ? 0 : 1) + 'k' : String(used)) + ' tokens');
   return parts.join(' · ');
+}
+
+// "1 addition and 1 removal", "2 additions", "3 removals": no "and 0 ...".
+export function changeCounts(added, removed) {
+  const parts = [];
+  if (added || !removed) parts.push(added + ' addition' + (added === 1 ? '' : 's'));
+  if (removed) parts.push(removed + ' removal' + (removed === 1 ? '' : 's'));
+  return parts.join(' and ');
 }
