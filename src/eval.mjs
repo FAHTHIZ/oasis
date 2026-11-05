@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfigDirectory } from './config.mjs';
-import { createSession, runAgentTurn, closeSession } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession, isLoopbackProvider } from './agent.mjs';
 import { renderComparisonHtml, saveComparisonArtifact } from './eval-report.mjs';
 import { oasisVersion } from './version.mjs';
 
@@ -1403,9 +1403,12 @@ export async function runEvalCommand(args = [], options = {}) {
         const routedCostKnown = Boolean(taskUsage && taskUsage.costKnown === true && typeof taskUsage.costUSD === 'number');
         // Use the explicit benchmark token rates for ordinary, single-model runs.
         // Per-model agent estimates are reserved for routed runs, where a single uniform rate is misleading.
-        const costUSD = config.routeEasyModel
+        const rated = config.routeEasyModel
           ? (routedCostKnown ? taskUsage.costUSD : null)
           : costEstimate(usage.inputTokens, usage.outputTokens, inputRate, outputRate);
+        // A model served on this machine has no per-token API charge (hardware and power are not counted).
+        const localModel = !config.routeEasyModel && rated === null && isLoopbackProvider(provider);
+        const costUSD = localModel ? 0 : rated;
         const strongModelCostUSD = taskUsage && typeof taskUsage.strongModelCostUSD === 'number'
           ? taskUsage.strongModelCostUSD
           : null;
@@ -1414,6 +1417,7 @@ export async function runEvalCommand(args = [], options = {}) {
           : null;
         const costSource = config.routeEasyModel
           ? (routedCostKnown ? 'per-model pricing estimate' : 'unknown: configure pricing for both routed models')
+          : localModel ? 'local model: no per-token API charge (hardware and power not counted)'
           : costUSD === null ? 'unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS'
             : 'uniform benchmark token-rate estimate';
         const passed = !errorText && Boolean(agentResult && agentResult.finished) && verification.exitCode === 0;
