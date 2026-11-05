@@ -203,11 +203,18 @@ document.documentElement.classList.add('js');
     if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(function(){done(true)},function(){done(false)})}
     else{var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);done(document.execCommand&&document.execCommand('copy'))}
   })});
+  // Pick the installer for this device: OS from the user agent, CPU from
+  // userAgentData (Chromium) or the WebGL renderer (Apple silicon Macs report "Apple M").
   (function(){var hint=document.getElementById('hero-os');if(!hint)return;var ua=navigator.userAgent||'',p=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'')+' '+ua,os=null;
-    if(/android|iphone|ipad/i.test(ua))os=/android/i.test(ua)?'android':null;else if(/win/i.test(p))os='win';else if(/mac/i.test(p))os='mac';else if(/linux|x11/i.test(p))os='linux';
-    if(os==='android'){hint.innerHTML='On Android? <a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md">Install with Termux</a>';hint.hidden=false;return}
-    var li=os&&document.querySelector('.dl-list li[data-os="'+os+'"]');if(!li)return;li.setAttribute('data-match','');var a=li.querySelector('a');
-    var names={win:'Windows',mac:'macOS (Apple silicon)',linux:'Linux'};hint.textContent='';hint.append('For '+names[os]+': ');var link=a.cloneNode(true);link.textContent=a.dataset.file||a.textContent;hint.append(link);hint.append(' · ');var all=document.createElement('a');all.href='#install';all.textContent='other platforms';hint.append(all);hint.hidden=false})();
+    if(/iphone|ipad|ipod/i.test(ua)||(/mac/i.test(p)&&navigator.maxTouchPoints>1))os='ios';else if(/android/i.test(ua))os='android';else if(/win/i.test(p))os='win';else if(/mac/i.test(p))os='mac';else if(/linux|x11|cros/i.test(p))os='linux';
+    if(os==='android'){hint.innerHTML='On Android? <a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/MOBILE.md">Use OASIS from your phone</a> or <a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md">install it with Termux</a>.';hint.hidden=false;return}
+    if(os==='ios'){hint.innerHTML='On iPhone or iPad? <a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/MOBILE.md">Connect to OASIS on your computer</a> and add it to your Home Screen.';hint.hidden=false;return}
+    function cpu(){var arch=/arm64|aarch64/i.test(ua)?'arm64':'x64';if(os==='mac'){arch='arm64';try{var gl=document.createElement('canvas').getContext('webgl');var ext=gl&&gl.getExtension('WEBGL_debug_renderer_info');var r=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'';if(/intel|amd|radeon/i.test(r))arch='x64'}catch(e){}}
+      var data=navigator.userAgentData;if(data&&data.getHighEntropyValues)return data.getHighEntropyValues(['architecture','bitness']).then(function(v){return v&&v.architecture==='arm'?'arm64':(v&&v.architecture==='x86'?'x64':arch)}).catch(function(){return arch});return Promise.resolve(arch)}
+    cpu().then(function(arch){var key=os+'-'+arch;var li=document.querySelector('.dl-list li[data-os="'+key+'"]')||(os==='linux'&&document.querySelector('.dl-list li[data-os="linux-deb-'+arch+'"]'))||document.querySelector('.dl-list li[data-os^="'+os+'-"]');if(!li)return;li.setAttribute('data-match','');var a=li.querySelector('a');
+      var names={'win-x64':'Windows','win-arm64':'Windows on ARM','mac-arm64':'macOS (Apple silicon)','mac-x64':'macOS (Intel)','linux-x64':'Linux','linux-arm64':'Linux on ARM'};var label=names[li.getAttribute('data-os')]||names[key]||'your computer';
+      document.querySelectorAll('a.button.primary[href$="/releases/latest"]').forEach(function(btn){btn.href=a.href;btn.setAttribute('data-auto-download',li.getAttribute('data-os'));var text=Array.prototype.find.call(btn.childNodes,function(n){return n.nodeType===3&&n.textContent.trim()});if(text)text.textContent='Download for '+label})
+      hint.textContent='';hint.append('Detected '+label+': ');var link=a.cloneNode(true);link.textContent=a.dataset.file||a.textContent;hint.append(link);hint.append(' · ');var all=document.createElement('a');all.href='#install';all.textContent='other platforms';hint.append(all);hint.hidden=false})})();
   document.querySelectorAll('video').forEach(function(v){v.addEventListener('play',function(){document.querySelectorAll('video').forEach(function(o){if(o!==v)o.pause()})})});
 })();
 </script>
