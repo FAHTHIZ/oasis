@@ -94,3 +94,19 @@ test('the desktop host answers from its updater and installs only on request', a
   const bad = await fetch(base + '/api/app/update', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'explode' }) });
   assert.equal(bad.status, 400);
 });
+
+test('Check now (?refresh=1) bypasses the six-hour cache in the CLI-hosted workspace', async (t) => {
+  const next = bump(oasisVersion());
+  let calls = 0;
+  const updateFetchImpl = async () => {
+    calls += 1;
+    return { ok: true, status: 200, json: async () => ({ tag_name: 'v' + next, name: 'OASIS v' + next, html_url: 'https://github.com/FAHTHIZ/oasis/releases/tag/v' + next, assets: [] }) };
+  };
+  const { base, auth } = await withServer(t, { updateFetchImpl });
+  await (await fetch(base + '/api/app/update', { headers: auth })).json();
+  await (await fetch(base + '/api/app/update', { headers: auth })).json();
+  assert.equal(calls, 1, 'a second plain status read comes from the cache');
+  const forced = await (await fetch(base + '/api/app/update?refresh=1', { headers: auth })).json();
+  assert.equal(calls, 2, 'Check now asks GitHub again');
+  assert.equal(forced.latest.version, next);
+});
